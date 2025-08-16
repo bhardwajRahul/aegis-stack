@@ -20,21 +20,15 @@ uv sync
 cp .env.example .env
 
 # Start development server
-make run-dev
+make run
 ```
 
 ## Development Commands
 
 ### Running the Application
 ```bash
-make run-local    # Start with Docker (recommended)
-make run-dev      # Start without Docker
-```{% if cookiecutter.include_scheduler == "yes" %}
-
-### Scheduler Component
-```bash
-make run-scheduler  # Run scheduler component locally
-```{% endif %}
+make run          # Start with Docker
+```
 
 ### Health Monitoring
 ```bash
@@ -66,7 +60,8 @@ make docs-build     # Build static documentation
 │   ├── components/     # Application components{% if cookiecutter.include_scheduler == "yes" %}
 │   │   ├── scheduler/  # Background task scheduling{% endif %}
 │   │   ├── backend/    # FastAPI web server
-│   │   └── frontend/   # Flet user interface
+│   │   ├── frontend/   # Flet user interface
+│   │   └── worker/     # Background task workers (arq)
 │   ├── core/          # Core utilities and configuration
 │   ├── services/      # Business logic services
 │   └── cli/           # Command-line interface
@@ -110,9 +105,40 @@ from app.components.backend.api import my_endpoints
 
 def include_routers(app: FastAPI) -> None:
     app.include_router(my_endpoints.router, prefix="/api", tags=["processing"])
+```
+
+### 3. Add Background Tasks
+Create worker tasks in `app/components/worker/tasks/`:
+
+```python
+# app/components/worker/tasks/my_tasks.py
+async def background_process_data(data: str) -> dict[str, str]:
+    """Process data in background."""
+    logger.info(f"Processing {data} in background")
+    
+    # Your processing logic here
+    result = f"Processed: {data}"
+    
+    return {
+        "status": "completed",
+        "result": result,
+        "timestamp": datetime.now(UTC).isoformat()
+    }
+```
+
+Register in worker queue (`app/components/worker/queues/system.py`):
+
+```python
+from app.components.worker.tasks.my_tasks import background_process_data
+
+class WorkerSettings:
+    functions = [
+        system_health_check,
+        background_process_data,  # Add your task here
+    ]
 ```{% if cookiecutter.include_scheduler == "yes" %}
 
-### 3. Add Scheduled Tasks
+### 4. Add Scheduled Tasks
 Add jobs to the scheduler component:
 
 ```python

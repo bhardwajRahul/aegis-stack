@@ -7,7 +7,7 @@ with the system health service using Python's import system.
 
 from app.core.log import logger
 from app.services.system.health import register_health_check
-from app.services.system.models import ComponentStatus
+from app.services.system.models import ComponentStatus, ComponentStatusType
 
 
 async def _backend_component_health() -> ComponentStatus:
@@ -23,7 +23,7 @@ async def _backend_component_health() -> ComponentStatus:
     if os.getenv("PYTEST_CURRENT_TEST") or "pytest" in os.getenv("_", ""):
         return ComponentStatus(
             name="backend",
-            healthy=True,
+            status=ComponentStatusType.HEALTHY,
             message="FastAPI backend available (test mode)",
             response_time_ms=None,
             metadata={
@@ -41,7 +41,7 @@ async def _backend_component_health() -> ComponentStatus:
         
         return ComponentStatus(
             name="backend",
-            healthy=True,
+            status=ComponentStatusType.HEALTHY,
             message="FastAPI backend active (internal check)",
             response_time_ms=None,
             metadata={
@@ -53,7 +53,7 @@ async def _backend_component_health() -> ComponentStatus:
     except Exception as e:
         return ComponentStatus(
             name="backend",
-            healthy=False,
+            status=ComponentStatusType.UNHEALTHY,
             message=f"Backend component check failed: {str(e)}",
             response_time_ms=None,
             metadata={
@@ -80,7 +80,7 @@ async def _frontend_component_health() -> ComponentStatus:
 
         return ComponentStatus(
             name="frontend",
-            healthy=True,
+            status=ComponentStatusType.HEALTHY,
             message="Flet frontend component available",
             response_time_ms=None,
             metadata={
@@ -93,7 +93,7 @@ async def _frontend_component_health() -> ComponentStatus:
     except ImportError as e:
         return ComponentStatus(
             name="frontend",
-            healthy=False,
+            status=ComponentStatusType.UNHEALTHY,
             message="Frontend component not found",
             response_time_ms=None,
             metadata={
@@ -105,7 +105,7 @@ async def _frontend_component_health() -> ComponentStatus:
     except Exception as e:
         return ComponentStatus(
             name="frontend",
-            healthy=False,
+            status=ComponentStatusType.UNHEALTHY,
             message=f"Frontend component error: {str(e)}",
             response_time_ms=None,
             metadata={
@@ -128,7 +128,7 @@ async def _scheduler_enabled_status() -> ComponentStatus:
     """
     return ComponentStatus(
         name="scheduler",
-        healthy=True,
+        status=ComponentStatusType.HEALTHY,
         message="Scheduler component activated",
         response_time_ms=None,
         metadata={
@@ -164,6 +164,13 @@ async def startup_hook() -> None:
     # Register scheduler as enabled component (shows user it's activated)
     register_health_check("scheduler", _scheduler_enabled_status)
     logger.info("Scheduler component enabled (shows as activated)")
+    {%- endif %}
+
+    {%- if cookiecutter.include_worker == "yes" %}
+    # Register worker health check (shows queue status and job metrics)
+    from app.services.system.health import check_worker_health
+    register_health_check("worker", check_worker_health)
+    logger.info("Worker component health check registered")
     {%- endif %}
 
     # Future: Database and cache component detection will be added here

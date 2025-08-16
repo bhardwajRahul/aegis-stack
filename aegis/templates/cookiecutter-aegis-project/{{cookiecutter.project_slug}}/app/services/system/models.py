@@ -6,16 +6,28 @@ All models provide runtime validation and automatic FastAPI integration.
 """
 
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
+
+
+class ComponentStatusType(str, Enum):
+    """Component status levels."""
+    HEALTHY = "healthy"
+    INFO = "info" 
+    WARNING = "warning"
+    UNHEALTHY = "unhealthy"
 
 
 class ComponentStatus(BaseModel):
     """Status of a single system component."""
 
     name: str = Field(..., description="Component name")
-    healthy: bool = Field(..., description="Whether component is healthy")
+    status: ComponentStatusType = Field(
+        default=ComponentStatusType.HEALTHY, 
+        description="Detailed status level (healthy/info/warning/unhealthy)"
+    )
     message: str = Field(..., description="Status message or error description")
     response_time_ms: float | None = Field(
         None, description="Response time in milliseconds"
@@ -27,6 +39,17 @@ class ComponentStatus(BaseModel):
         default_factory=dict, 
         description="Sub-components (e.g., system metrics under backend)"
     )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def healthy(self) -> bool:
+        """
+        Component is healthy if status is not UNHEALTHY.
+
+        WARNING and INFO statuses are considered healthy (functional but with concerns),
+        only UNHEALTHY is considered not healthy (non-functional).
+        """
+        return self.status != ComponentStatusType.UNHEALTHY
 
 
 class SystemStatus(BaseModel):

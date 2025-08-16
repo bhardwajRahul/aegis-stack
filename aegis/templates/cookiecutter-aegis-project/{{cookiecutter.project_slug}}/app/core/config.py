@@ -6,6 +6,8 @@ This module centralizes application settings, allowing them to be loaded
 from environment variables for easy configuration in different environments.
 """
 
+from typing import Any
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,7 +36,7 @@ class Settings(BaseSettings):
     # Health monitoring and alerting
     HEALTH_CHECK_ENABLED: bool = True
     HEALTH_CHECK_INTERVAL_MINUTES: int = 5
-    
+
     # Health check performance settings
     HEALTH_CHECK_TIMEOUT_SECONDS: float = 2.0
     SYSTEM_METRICS_CACHE_SECONDS: int = 5
@@ -48,7 +50,57 @@ class Settings(BaseSettings):
     DISK_THRESHOLD_PERCENT: float = 85.0
     CPU_THRESHOLD_PERCENT: float = 95.0
 
+    # Redis settings for arq background tasks
+    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_DB: int = 0
+
+    # arq worker settings (shared across all workers)
+    WORKER_KEEP_RESULT_SECONDS: int = 3600  # Keep job results for 1 hour
+    WORKER_MAX_TRIES: int = 3
+
+    # PURE ARQ IMPLEMENTATION - NO CONFIGURATION NEEDED!
+    # Worker configuration comes from individual WorkerSettings classes
+    # in app/components/worker/queues/ - just import and use as arq intended!
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
 settings = Settings()
+
+
+# Pure arq queue helper functions - use dynamic discovery
+def get_available_queues() -> list[str]:
+    """Get all available queue names via dynamic discovery."""
+    try:
+        from app.components.worker.registry import discover_worker_queues
+        queues: list[str] = discover_worker_queues()
+        return queues
+    except ImportError:
+        # Worker components not available
+        return []
+
+
+def get_default_queue() -> str:
+    """Get the default queue name for load testing."""
+    # Prefer load_test queue if it exists, otherwise use first available
+    available = get_available_queues()
+    if "load_test" in available:
+        return "load_test"
+    return available[0] if available else "system"
+
+
+def get_load_test_queue() -> str:
+    """Get the queue name for load testing."""
+    available = get_available_queues()
+    return "load_test" if "load_test" in available else get_default_queue()
+
+
+def is_valid_queue(queue_name: str) -> bool:
+    """Check if a queue name is valid."""
+    try:
+        from app.components.worker.registry import validate_queue_name
+        result: bool = validate_queue_name(queue_name)
+        return result
+    except ImportError:
+        # Worker components not available, no queues are valid
+        return False

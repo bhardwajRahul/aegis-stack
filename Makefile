@@ -48,6 +48,76 @@ cli-test: ## Test CLI commands locally
 	@uv run python -m aegis --help
 	@echo "✅ CLI command working"
 
+# ============================================================================
+# REDIS DEVELOPMENT COMMANDS  
+# For experimenting with Redis/arq without generating new projects
+# ============================================================================
+
+redis-start: ## Start Redis container for arq experiments
+	@echo "🚀 Starting Redis for arq development..."
+	@docker run -d --name aegis-redis -p 6379:6379 --rm redis:7-alpine redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+	@echo "✅ Redis running on localhost:6379"
+	@echo "💡 Use 'make redis-stop' to stop"
+
+redis-stop: ## Stop Redis container
+	@echo "⏹️  Stopping Redis..."
+	@docker stop aegis-redis 2>/dev/null || echo "Redis container not running"
+
+redis-cli: ## Connect to Redis CLI  
+	@echo "🔧 Connecting to Redis CLI..."
+	@docker exec -it aegis-redis redis-cli
+
+redis-logs: ## Show Redis logs
+	@echo "📋 Showing Redis logs..."
+	@docker logs -f aegis-redis
+
+redis-stats: ## Show Redis memory and connection stats
+	@echo "📊 Redis stats..."
+	@docker exec -it aegis-redis redis-cli info memory
+	@echo ""
+	@docker exec -it aegis-redis redis-cli info clients
+
+redis-reset: ## Reset Redis (clear all data)
+	@echo "🔄 Resetting Redis data..."
+	@docker exec -it aegis-redis redis-cli flushall
+	@echo "✅ Redis data cleared"
+
+redis-queues: ## Show all arq queues and their depths
+	@echo "📋 arq Queue Status:"
+	@echo "===================="
+	@echo -n "default: "; docker exec -it aegis-redis redis-cli zcard arq:queue 2>/dev/null | tr -d '\r' || echo "0"; echo " jobs"
+	@echo ""
+	@echo "📊 Additional Queue Info:"
+	@echo -n "In Progress: "; docker exec -it aegis-redis redis-cli hlen arq:in-progress 2>/dev/null | tr -d '\r' || echo "0"
+	@echo -n "Results: "; docker exec -it aegis-redis redis-cli --raw eval "return #redis.call('keys', 'arq:result:*')" 0 2>/dev/null || echo "0"
+
+redis-workers: ## Show active arq workers
+	@echo "👷 Active Workers:"
+	@echo "=================="
+	@docker exec -it aegis-redis redis-cli smembers arq:workers 2>/dev/null || echo "No active workers"
+
+redis-failed: ## Show failed job count  
+	@echo "❌ Failed Jobs:"
+	@echo "==============="
+	@docker exec -it aegis-redis redis-cli hlen arq:failed 2>/dev/null || echo "0"
+
+redis-monitor: ## Monitor Redis commands in real-time
+	@echo "👀 Monitoring Redis commands (Ctrl+C to stop)..."
+	@docker exec -it aegis-redis redis-cli monitor
+
+redis-info: ## Show comprehensive Redis info
+	@echo "ℹ️  Redis System Information:"
+	@echo "============================="
+	@docker exec -it aegis-redis redis-cli info server
+	@echo ""
+	@echo "📊 Memory Usage:"
+	@echo "================"
+	@docker exec -it aegis-redis redis-cli info memory
+	@echo ""
+	@echo "👥 Client Connections:"
+	@echo "======================"
+	@docker exec -it aegis-redis redis-cli info clients
+
 # Show help
 help: ## Show this help message
 	@echo "Available commands:"
@@ -115,11 +185,99 @@ test-template-with-components: ## Test template with scheduler component include
 
 clean-test-projects: ## Remove all generated test project directories
 	@echo "🧹 Cleaning up test projects..."
-	@chmod -R +w ../test-basic-stack ../test-component-stack 2>/dev/null || true
-	@rm -rf ../test-basic-stack ../test-component-stack 2>/dev/null || true
+	@chmod -R +w ../test-basic-stack ../test-component-stack ../test-worker-stack ../test-full-stack 2>/dev/null || true
+	@rm -rf ../test-basic-stack ../test-component-stack ../test-worker-stack ../test-full-stack 2>/dev/null || true
 	@echo "✅ Test projects cleaned up"
 
-.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test test-template-quick test-template test-template-with-components clean-test-projects help
+# ============================================================================
+# STACK MATRIX TESTING TARGETS
+# For comprehensive testing of all component combinations
+# 
+# These targets implement the Stack Generation Matrix Testing plan:
+#   1. test-stacks: Test generation of all valid combinations
+#   2. test-stacks-build: Test that all stacks build and pass checks
+#   3. test-stacks-runtime: Test Docker runtime integration (future)
+#   4. test-stacks-full: Complete matrix testing pipeline
+# ============================================================================
+
+test-stacks: ## Test all stack combinations generation (fast)
+	@echo "🧪 Testing all stack combination generation..."
+	@uv run pytest tests/cli/test_stack_generation.py -v --tb=short
+	@echo "✅ All stack combinations generate successfully!"
+
+test-stacks-build: ## Test all stacks build and pass checks (slow)
+	@echo "🔨 Testing all stacks build and validation..."
+	@echo "⚠️  This is slow - testing dependency installation and code quality for all combinations"
+	@uv run pytest tests/cli/test_stack_validation.py -v -m "slow" --tb=short
+	@echo "✅ All stacks build and pass quality checks!"
+
+test-stacks-runtime: ## Test all stacks runtime integration with Docker (future)
+	@echo "🐳 Runtime integration testing not yet implemented"
+	@echo "ℹ️  Will test Docker Compose startup and health checks for all combinations"
+
+test-stacks-full: ## Full stack matrix testing pipeline (comprehensive but slow)
+	@echo "🌟 Running complete stack matrix testing pipeline..."
+	@echo "📋 Phase 1: Stack Generation Testing"
+	@make test-stacks
+	@echo ""
+	@echo "📋 Phase 2: Stack Build and Validation Testing"
+	@make test-stacks-build
+	@echo ""
+	@echo "📋 Phase 3: Stack Runtime Testing (skipped - not implemented)"
+	@echo "ℹ️  Runtime testing will be added in future iterations"
+	@echo ""
+	@echo "🎉 Complete stack matrix testing completed successfully!"
+	@echo "   All component combinations can generate, build, and pass quality checks"
+
+# Enhanced template testing with specific component combinations
+test-template-worker: ## Test template with worker component
+	@echo "🔧 Testing worker component template..."
+	@chmod -R +w ../test-worker-stack 2>/dev/null || true
+	@rm -rf ../test-worker-stack
+	@env -u VIRTUAL_ENV uv run aegis init test-worker-stack --components worker --output-dir .. --no-interactive --force --yes
+	@echo "📦 Installing dependencies and CLI..."
+	@cd ../test-worker-stack && chmod -R +w .venv 2>/dev/null || true && rm -rf .venv && env -u VIRTUAL_ENV uv sync --extra dev --extra docs
+	@cd ../test-worker-stack && env -u VIRTUAL_ENV uv pip install -e .
+	@echo "🔍 Running validation checks..."
+	@cd ../test-worker-stack && env -u VIRTUAL_ENV make check
+	@echo "🧪 Testing CLI script installation..."
+	@cd ../test-worker-stack && env -u VIRTUAL_ENV uv run test-worker-stack --help >/dev/null && echo "✅ CLI script 'test-worker-stack --help' works" || echo "⚠️  CLI script test failed"
+	@cd ../test-worker-stack && env -u VIRTUAL_ENV uv run test-worker-stack health status --help >/dev/null && echo "✅ Health commands available" || echo "⚠️  Health command test failed"
+	@echo "✅ Worker template test completed successfully!"
+	@echo "   Test project available in ../test-worker-stack/"
+
+test-template-full: ## Test template with all components (worker + scheduler)
+	@echo "🌟 Testing full component template..."
+	@chmod -R +w ../test-full-stack 2>/dev/null || true
+	@rm -rf ../test-full-stack
+	@env -u VIRTUAL_ENV uv run aegis init test-full-stack --components worker,scheduler --output-dir .. --no-interactive --force --yes
+	@echo "📦 Installing dependencies and CLI..."
+	@cd ../test-full-stack && chmod -R +w .venv 2>/dev/null || true && rm -rf .venv && env -u VIRTUAL_ENV uv sync --extra dev --extra docs
+	@cd ../test-full-stack && env -u VIRTUAL_ENV uv pip install -e .
+	@echo "🔍 Running validation checks..."
+	@cd ../test-full-stack && env -u VIRTUAL_ENV make check
+	@echo "🧪 Testing CLI script installation..."
+	@cd ../test-full-stack && env -u VIRTUAL_ENV uv run test-full-stack --help >/dev/null && echo "✅ CLI script 'test-full-stack --help' works" || echo "⚠️  CLI script test failed"
+	@cd ../test-full-stack && env -u VIRTUAL_ENV uv run test-full-stack health status --help >/dev/null && echo "✅ Health commands available" || echo "⚠️  Health command test failed"
+	@echo "✅ Full stack template test completed successfully!"
+	@echo "   Test project available in ../test-full-stack/"
+	@echo "   Includes: backend, frontend, worker queues, scheduler, Redis"
+
+# Quick component testing for development workflow
+test-component-quick: ## Quick test of specific component (set COMPONENT=worker|scheduler)
+ifndef COMPONENT
+	@echo "❌ Usage: make test-component-quick COMPONENT=worker"
+	@echo "   Available components: worker, scheduler"
+	@exit 1
+endif
+	@echo "⚡ Quick testing $(COMPONENT) component..."
+	@chmod -R +w ../test-$(COMPONENT)-quick 2>/dev/null || true
+	@rm -rf ../test-$(COMPONENT)-quick
+	@env -u VIRTUAL_ENV uv run aegis init test-$(COMPONENT)-quick --components $(COMPONENT) --output-dir .. --no-interactive --force --yes
+	@echo "✅ $(COMPONENT) component generated successfully in ../test-$(COMPONENT)-quick/"
+	@echo "   Run 'cd ../test-$(COMPONENT)-quick && make check' to validate"
+
+.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test redis-start redis-stop redis-cli redis-logs redis-stats redis-reset redis-queues redis-workers redis-failed redis-monitor redis-info test-template-quick test-template test-template-with-components test-template-worker test-template-full test-component-quick test-stacks test-stacks-build test-stacks-runtime test-stacks-full clean-test-projects help
 
 # Default target
 .DEFAULT_GOAL := help

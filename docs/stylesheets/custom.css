@@ -1,0 +1,48 @@
+/* Custom styles for Aegis Stack documentation */
+
+/* Make all tables stretch to full width */
+.md-typeset table {
+    width: 100%;
+    display: table;
+}
+
+/* Ensure table cells use available space properly */
+.md-typeset table:not([class]) {
+    display: table;
+    width: 100%;
+}
+
+/* Override Material theme's max-width for tables if needed */
+.md-typeset__table {
+    width: 100%;
+}
+
+/* Make the table wrapper full width */
+.md-typeset__scrollwrap {
+    width: 100%;
+}
+
+/* Ensure responsive tables also stretch */
+.md-typeset .md-typeset__table table {
+    width: 100%;
+}
+
+/* For comparison tables, distribute columns more evenly */
+.md-typeset table th,
+.md-typeset table td {
+    padding: 0.8rem 1.2rem;
+}
+
+/* Optional: Make specific columns wider/narrower as needed */
+/* Target the first column (usually labels) to be slightly narrower */
+.md-typeset table td:first-child,
+.md-typeset table th:first-child {
+    width: 20%;
+    font-weight: 600;
+}
+
+/* Make the "Use Cases" column in queue tables wider */
+.md-typeset table td:last-child,
+.md-typeset table th:last-child {
+    width: 35%;
+}

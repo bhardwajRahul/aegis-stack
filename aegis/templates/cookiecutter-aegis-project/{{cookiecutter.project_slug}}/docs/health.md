@@ -20,7 +20,7 @@
 
 ### Basic Health Check
 ```bash
-{{ cookiecutter.project_slug }} health check
+{{ cookiecutter.project_slug }} health status
 ```
 
 **Output:**
@@ -44,7 +44,7 @@
 
 ### Detailed Health Check
 ```bash
-{{ cookiecutter.project_slug }} health check --detailed
+{{ cookiecutter.project_slug }} health status --detailed
 ```
 
 Shows comprehensive system information including:
@@ -55,7 +55,7 @@ Shows comprehensive system information including:
 
 ### JSON Output
 ```bash
-{{ cookiecutter.project_slug }} health check --json
+{{ cookiecutter.project_slug }} health status --json
 ```
 
 Returns structured JSON for integration with monitoring systems:
@@ -85,12 +85,12 @@ Returns structured JSON for integration with monitoring systems:
 }
 ```
 
-### Quick Health Check
+### Health Probe
 ```bash
-{{ cookiecutter.project_slug }} health quick
+{{ cookiecutter.project_slug }} health probe
 ```
 
-Returns simple healthy/unhealthy status for use in scripts.
+Returns simple healthy/unhealthy status for use in scripts and monitoring.
 
 ## Using Health Checks in Development
 
@@ -101,14 +101,7 @@ Convenient make targets are available:
 make health         # Basic health check
 make health-detailed # Detailed health information  
 make health-json    # JSON health output
-make health-quick   # Quick healthy/unhealthy check
-```
-
-### Fallback Method
-If CLI installation fails, use the fallback method:
-
-```bash
-make health-fallback  # Uses uv run directly
+make health-probe   # Health probe for monitoring
 ```
 
 ## Health Check Components

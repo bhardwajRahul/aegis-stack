@@ -40,6 +40,7 @@ def process_j2_templates():
             "version": "{{ cookiecutter.version }}",
             "python_version": "{{ cookiecutter.python_version }}",
             "include_scheduler": "{{ cookiecutter.include_scheduler }}",
+            "include_worker": "{{ cookiecutter.include_worker }}",
             "include_database": "{{ cookiecutter.include_database }}",
             "include_cache": "{{ cookiecutter.include_cache }}",
         }
@@ -126,6 +127,16 @@ def main():
         remove_file("tests/components/test_scheduler.py")
         remove_file("docs/components/scheduler.md")
 
+    if "{{ cookiecutter.include_worker }}" != "yes":
+        # Remove worker-specific files
+        remove_dir("app/components/worker")
+        remove_file("app/cli/load_test.py")
+        remove_file("app/services/load_test.py")
+        remove_file("app/services/load_test_models.py")
+        remove_file("tests/services/test_load_test_models.py")
+        remove_file("tests/services/test_load_test_service.py")
+        remove_file("tests/services/test_worker_health_registration.py")
+
     if "{{ cookiecutter.include_database }}" != "yes":
         # remove_file("app/services/database_service.py")
         # remove_dir("app/models")
@@ -139,6 +150,7 @@ def main():
     # Clean up empty docs/components directory if no components selected
     if (
         "{{ cookiecutter.include_scheduler }}" != "yes"
+        and "{{ cookiecutter.include_worker }}" != "yes"
         and "{{ cookiecutter.include_database }}" != "yes"
         and "{{ cookiecutter.include_cache }}" != "yes"
     ):

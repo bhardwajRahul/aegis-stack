@@ -18,7 +18,7 @@ pip install aegis-stack
 aegis init my-api
 
 # Create with background processing  
-aegis init task-processor --components scheduler
+aegis init task-processor --components scheduler,worker
 
 # Start building
 cd my-project && uv sync && source .venv/bin/activate && make run-local
@@ -30,6 +30,7 @@ cd my-project && uv sync && source .venv/bin/activate && make run-local
 |-----------|---------|--------|
 | **Core** (FastAPI + Flet) | Web API + Frontend | ✅ **Included** |
 | **Scheduler** | Background tasks, cron jobs | ✅ **Available** |
+| **Worker** | Async task queues, job processing | ✅ **Available** |
 | **Database** | PostgreSQL + SQLAlchemy + Alembic | 🚧 **Coming Soon** |
 | **Cache** | Redis caching and sessions | 🚧 **Coming Soon** |
 
@@ -38,6 +39,7 @@ cd my-project && uv sync && source .venv/bin/activate && make run-local
 - **FastAPI backend** with automatic API documentation
 - **Flet frontend** with system health dashboard  
 - **CLI management** with health monitoring commands
+- **Worker queues** with async task processing and load testing
 - **Production ready** with structured logging and containerization
 - **Async-first** architecture for high-concurrency workloads
 

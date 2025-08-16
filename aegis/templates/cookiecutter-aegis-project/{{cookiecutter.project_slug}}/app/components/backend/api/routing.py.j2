@@ -1,8 +1,14 @@
 from fastapi import FastAPI
 
 from app.components.backend.api import health
+{%- if cookiecutter.include_worker == "yes" %}
+from app.components.backend.api import tasks
+{%- endif %}
 
 
 def include_routers(app: FastAPI) -> None:
     """Include all API routers in the FastAPI app"""
     app.include_router(health.router, prefix="/health", tags=["health"])
+    {%- if cookiecutter.include_worker == "yes" %}
+    app.include_router(tasks.router, prefix="/api/v1", tags=["tasks"])
+    {%- endif %}

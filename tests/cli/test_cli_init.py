@@ -8,110 +8,22 @@ These tests validate:
 - Component integration
 """
 
-from collections.abc import Generator
 from pathlib import Path
-import re
-import subprocess
-import tempfile
 from typing import Any
 
 import pytest
 
-
-def find_project_root() -> Path:
-    """Find the project root directory by looking for pyproject.toml."""
-    current_path = Path(__file__).resolve()
-    for parent in current_path.parents:
-        if (parent / "pyproject.toml").exists() and (parent / "aegis").exists():
-            return parent
-    raise RuntimeError("Could not find project root directory")
-
-
-PROJECT_ROOT = find_project_root()
-
-
-class CLITestResult:
-    """Container for CLI test results."""
-
-    def __init__(self, returncode: int, stdout: str, stderr: str, project_path: Path):
-        self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
-        self.project_path = project_path
-        self.success = returncode == 0
-
-
-@pytest.fixture
-def temp_output_dir() -> Generator[Path, None, None]:
-    """Create a temporary directory for test project generation."""
-    with tempfile.TemporaryDirectory() as temp_dir:
-        yield Path(temp_dir)
-
-
-def run_aegis_init(
-    project_name: str,
-    components: list[str] | None = None,
-    output_dir: Path = Path.cwd(),
-    interactive: bool = False,
-    force: bool = True,
-    yes: bool = True,
-) -> CLITestResult:
-    """
-    Run the aegis init command and return results.
-
-    Args:
-        project_name: Name of the project to create
-        components: List of components to include
-        output_dir: Directory to create project in
-        interactive: Whether to use interactive mode
-        force: Whether to force overwrite
-        yes: Whether to skip confirmation
-
-    Returns:
-        CLITestResult with command results and project path
-    """
-    cmd = ["uv", "run", "python", "-m", "aegis", "init", project_name]
-
-    if components:
-        cmd.extend(["--components", ",".join(components)])
-    if output_dir:
-        cmd.extend(["--output-dir", str(output_dir)])
-    if not interactive:
-        cmd.append("--no-interactive")
-    if force:
-        cmd.append("--force")
-    if yes:
-        cmd.append("--yes")
-
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        cwd=PROJECT_ROOT,  # Run from aegis-stack root
-    )
-
-    project_path = output_dir / project_name
-    return CLITestResult(result.returncode, result.stdout, result.stderr, project_path)
-
-
-def assert_file_exists(project_path: Path, relative_path: str) -> None:
-    """Assert that a file exists in the generated project."""
-    file_path = project_path / relative_path
-    assert file_path.exists(), f"Expected file not found: {relative_path}"
+from .test_utils import (
+    assert_file_contains,
+    assert_file_exists,
+    run_aegis_init,
+)
 
 
 def assert_file_not_exists(project_path: Path, relative_path: str) -> None:
     """Assert that a file does not exist in the generated project."""
     file_path = project_path / relative_path
     assert not file_path.exists(), f"Unexpected file found: {relative_path}"
-
-
-def assert_file_contains(project_path: Path, relative_path: str, content: str) -> None:
-    """Assert that a file contains specific content."""
-    file_path = project_path / relative_path
-    assert file_path.exists(), f"File not found: {relative_path}"
-    file_content = file_path.read_text()
-    assert content in file_content, f"Content '{content}' not found in {relative_path}"
 
 
 def assert_no_template_files(project_path: Path) -> None:
@@ -149,10 +61,12 @@ class TestCLIInit:
         assert "✅ Project created successfully!" in result.stdout
 
         # Assert project structure
-        self._assert_scheduler_project_structure(result.project_path)
+        project_path = result.project_path
+        assert project_path is not None, "Project path is None"
+        self._assert_scheduler_project_structure(project_path)
 
         # Assert template processing
-        self._assert_scheduler_template_processing(result.project_path)
+        self._assert_scheduler_template_processing(project_path)
 
     @pytest.mark.slow
     def test_init_without_components(
@@ -172,11 +86,11 @@ class TestCLIInit:
         assert "apscheduler" not in result.stdout
 
         # Assert project structure (no scheduler files)
-        self._assert_core_project_structure(result.project_path)
-        assert_file_not_exists(result.project_path, "app/components/scheduler.py")
-        assert_file_not_exists(
-            result.project_path, "tests/components/test_scheduler.py"
-        )
+        project_path = result.project_path
+        assert project_path is not None, "Project path is None"
+        self._assert_core_project_structure(project_path)
+        assert_file_not_exists(project_path, "app/components/scheduler.py")
+        assert_file_not_exists(project_path, "tests/components/test_scheduler.py")
 
     @pytest.mark.slow
     def test_init_invalid_component(
@@ -207,7 +121,9 @@ class TestCLIInit:
         )
 
         assert result.success, f"CLI command failed: {result.stderr}"
-        self._assert_scheduler_project_structure(result.project_path)
+        project_path = result.project_path
+        assert project_path is not None, "Project path is None"
+        self._assert_scheduler_project_structure(project_path)
 
     @pytest.mark.slow
     def test_template_variable_substitution(
@@ -224,17 +140,17 @@ class TestCLIInit:
         assert result.success
 
         # Check that project name was substituted in scheduler component
+        project_path = result.project_path
+        assert project_path is not None, "Project path is None"
         expected_title = project_name.replace("-", " ").title()
         assert_file_contains(
-            result.project_path,
+            project_path,
             "app/components/scheduler/main.py",
             f"🕒 Starting {expected_title} Scheduler",
         )
 
         # Check pyproject.toml has correct name
-        assert_file_contains(
-            result.project_path, "pyproject.toml", f'name = "{project_name}"'
-        )
+        assert_file_contains(project_path, "pyproject.toml", f'name = "{project_name}"')
 
     @pytest.mark.slow
     def test_project_quality_checks(
@@ -251,47 +167,59 @@ class TestCLIInit:
 
         # Run quality checks on generated project
         project_path = result.project_path
+        assert project_path is not None, "Project path is None"
 
-        # Install dependencies first
-        install_result = subprocess.run(
-            ["uv", "sync", "--all-extras"],
-            cwd=project_path,
-            capture_output=True,
-            text=True,
-        )
-        assert install_result.returncode == 0, (
-            f"Failed to install deps: {install_result.stderr}"
-        )
+        # Run quality checks using unified system
+        from .test_utils import run_quality_checks
 
-        # Run linting (allow fixes)
-        lint_result = subprocess.run(
-            ["uv", "run", "ruff", "check", "--fix", "."],
-            cwd=project_path,
-            capture_output=True,
-            text=True,
-        )
+        quality_results = run_quality_checks(project_path)
+
+        dep_result = quality_results[0]  # Dependency installation
+        lint_result = quality_results[2]  # Linting
+        type_result = quality_results[3]  # Type checking
+        test_result = quality_results[4]  # Tests
+
+        assert dep_result.success, f"Failed to install deps: {dep_result.stderr}"
+
         # Linting should either pass or only have fixable issues
         assert lint_result.returncode in [0, 1], f"Linting failed: {lint_result.stderr}"
 
-        # Run type checking
-        typecheck_result = subprocess.run(
-            ["uv", "run", "mypy", "."], cwd=project_path, capture_output=True, text=True
-        )
-        assert typecheck_result.returncode == 0, (
-            f"Type checking failed: {typecheck_result.stdout}"
-        )
+        assert type_result.success, f"Type checking failed: {type_result.stdout}"
 
-        # Run tests
-        test_result = subprocess.run(
-            ["uv", "run", "pytest", "-v"],
-            cwd=project_path,
-            capture_output=True,
-            text=True,
-        )
         # Tests may have some issues but should at least run
         assert test_result.returncode in [0, 1], (
             f"Tests completely failed: {test_result.stdout}"
         )
+
+    @pytest.mark.slow
+    def test_init_with_worker_component(
+        self, temp_output_dir: Any, skip_slow_tests: Any
+    ) -> None:
+        """Test generating a project with worker component."""
+        result = run_aegis_init(
+            project_name="test-worker",
+            components=["worker"],
+            output_dir=temp_output_dir,
+        )
+
+        # Assert command succeeded
+        assert result.success, f"CLI command failed: {result.stderr}"
+
+        # Assert expected CLI output content
+        assert "🛡️  Aegis Stack Project Initialization" in result.stdout
+        assert "📦 Infrastructure: redis, worker" in result.stdout
+        assert "• app/components/worker/" in result.stdout
+        assert "👷 Worker Queues:" in result.stdout
+        assert "• arq==0.25.0" in result.stdout
+        assert "✅ Project created successfully!" in result.stdout
+
+        # Assert project structure
+        project_path = result.project_path
+        assert project_path is not None, "Project path is None"
+        self._assert_worker_project_structure(project_path)
+
+        # Assert template processing
+        self._assert_worker_template_processing(project_path)
 
     def _assert_core_project_structure(self, project_path: Path) -> None:
         """Assert that core project files exist."""
@@ -359,36 +287,71 @@ class TestCLIInit:
         assert 'module = "apscheduler.*"' in pyproject_content
         assert "ignore_missing_imports = true" in pyproject_content
 
+    def _assert_worker_project_structure(self, project_path: Path) -> None:
+        """Assert worker-specific project structure."""
+        self._assert_core_project_structure(project_path)
 
-class TestCLIHelp:
-    """Test CLI help and version commands."""
+        # Worker-specific files
+        worker_files = [
+            "app/components/worker/queues/system.py",
+            "app/components/worker/queues/load_test.py",
+            "app/components/worker/queues/media.py",
+            "app/components/worker/tasks/simple_system_tasks.py",
+            "app/components/worker/tasks/load_tasks.py",
+            "app/components/worker/constants.py",
+            "app/components/worker/registry.py",
+            "app/components/worker/pools.py",
+            "app/services/load_test.py",
+            "app/services/load_test_models.py",
+        ]
 
-    def test_cli_help(self) -> None:
-        """Test that CLI help works."""
-        result = subprocess.run(
-            ["uv", "run", "python", "-m", "aegis", "--help"],
-            capture_output=True,
-            text=True,
-            cwd=Path(__file__).parent.parent.parent,
+        for file_path in worker_files:
+            assert_file_exists(project_path, file_path)
+
+        # Task API files should exist
+        api_files = [
+            "app/components/backend/api/tasks.py",
+            "app/components/backend/api/models.py",
+            "app/components/backend/api/routing.py",
+        ]
+
+        for file_path in api_files:
+            assert_file_exists(project_path, file_path)
+
+    def _assert_worker_template_processing(self, project_path: Path) -> None:
+        """Assert that worker templates were processed correctly."""
+        # Check that component health includes worker registration
+        component_health_file = (
+            project_path
+            / Path("app/components/backend/startup")
+            / "component_health.py"
         )
+        component_health_content = component_health_file.read_text()
 
-        assert result.returncode == 0
-        assert "Aegis Stack CLI" in result.stdout
-        assert "init" in result.stdout
+        # CRITICAL: This is what we're testing - worker health registration
+        expected_import = "from app.services.system.health import check_worker_health"
+        assert expected_import in component_health_content
 
-    def test_init_help(self) -> None:
-        """Test that init command help works."""
-        result = subprocess.run(
-            ["uv", "run", "python", "-m", "aegis", "init", "--help"],
-            capture_output=True,
-            text=True,
-            cwd=PROJECT_ROOT,
-        )
+        registration_snippet = 'register_health_check("worker", check_worker_health)'
+        assert registration_snippet in component_health_content
+        assert "Worker component health check registered" in component_health_content
 
-        # Remove ANSI color codes for reliable string matching
-        clean_output = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+        # Check that routing includes task endpoints
+        routing_file = project_path / "app/components/backend/api/routing.py"
+        routing_content = routing_file.read_text()
+        assert "health, tasks" in routing_content  # From import line
+        assert 'tasks.router, prefix="/api/v1"' in routing_content
 
-        assert result.returncode == 0
-        assert "Initialize a new Aegis Stack project" in clean_output
-        assert "--components" in clean_output
-        assert "scheduler,database,cache" in clean_output
+        # Check pyproject.toml includes arq
+        pyproject_content = (project_path / "pyproject.toml").read_text()
+        assert "arq==0.25.0" in pyproject_content
+
+        # Check worker configuration files exist and have correct structure
+        system_worker_file = project_path / "app/components/worker/queues/system.py"
+        system_worker_content = system_worker_file.read_text()
+        assert "class WorkerSettings:" in system_worker_content
+        assert "system_health_check" in system_worker_content
+        assert "cleanup_temp_files" in system_worker_content
+
+
+# Note: CLI help tests moved to test_cli_basic.py to avoid duplication

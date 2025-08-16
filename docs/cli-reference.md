@@ -17,7 +17,7 @@ aegis init PROJECT_NAME [OPTIONS]
 
 **Options:**
 
-- `--components, -c TEXT` - Comma-separated list of components (scheduler,database,cache)
+- `--components, -c TEXT` - Comma-separated list of components (scheduler,worker,database,cache)
 - `--interactive / --no-interactive, -i / -ni` - Use interactive component selection (default: interactive)
 - `--force, -f` - Overwrite existing directory if it exists
 - `--output-dir, -o PATH` - Directory to create the project in (default: current directory) 
@@ -28,11 +28,14 @@ aegis init PROJECT_NAME [OPTIONS]
 # Simple API project
 aegis init my-api
 
-# Background processing system
+# Background processing system with scheduler  
 aegis init task-processor --components scheduler
 
+# Background processing system with worker
+aegis init task-processor --components worker
+
 # Full stack (future)
-aegis init webapp --components scheduler,database,cache
+aegis init webapp --components scheduler,worker,database,cache
 
 # Non-interactive with custom location
 aegis init my-app --components scheduler --no-interactive --output-dir /projects --yes
@@ -43,6 +46,7 @@ aegis init my-app --components scheduler --no-interactive --output-dir /projects
 | Component | Status | Description |
 |-----------|--------|-------------|
 | `scheduler` | ✅ Available | APScheduler-based async task scheduling |
+| `worker` | ✅ Available | Pure arq worker with multiple queues for background processing |
 | `database` | 🚧 Coming Soon | SQLAlchemy + asyncpg for PostgreSQL |
 | `cache` | 🚧 Coming Soon | Redis-based async caching |
 
@@ -91,7 +95,8 @@ my-project/
 │   ├── components/
 │   │   ├── backend/        # FastAPI backend
 │   │   ├── frontend/       # Flet frontend  
-│   │   └── scheduler.py    # APScheduler (if included)
+│   │   ├── scheduler.py    # APScheduler (if included)
+│   │   └── worker/         # arq worker queues (if included)
 │   ├── core/              # Framework utilities
 │   ├── services/          # Business logic
 │   └── integrations/      # App composition
