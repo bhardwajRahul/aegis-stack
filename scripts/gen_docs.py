@@ -4,37 +4,39 @@ A script to dynamically generate documentation files for MkDocs.
 This is run automatically by the mkdocs-gen-files plugin.
 """
 
-import mkdocs_gen_files  # noqa: F401
+import mkdocs_gen_files
 
 print("--- Running gen_docs.py ---")
 
 # Copy the root README.md to be the documentation's index page.
 # This allows us to maintain a single source of truth for the project's
 # main landing page, which is visible on both GitHub and the docs site.
-# We need to convert GitHub-style relative links to MkDocs-compatible links.
 with open("README.md") as readme:
     content = readme.read()
 
-    # Convert GitHub-style relative links to MkDocs-compatible links
-    content = content.replace("docs/images/dashboard.png", "images/dashboard.png")
-    content = content.replace("docs/index.md", "index.md")
-    content = content.replace("docs/components/index.md", "components/index.md")
-    content = content.replace("docs/cli-reference.md", "cli-reference.md")
+    # Fix paths for documentation context
+    # Remove 'docs/' prefix from image paths (both light and dark versions)
     content = content.replace(
-        "docs/guides/project-creation.md", "guides/project-creation.md"
+        "![System Health Dashboard](docs/images/dashboard-light.png#only-light)",
+        "![System Health Dashboard](images/dashboard-light.png#only-light)",
     )
-    content = content.replace("docs/philosophy.md", "philosophy.md")
+    content = content.replace(
+        "![System Health Dashboard](docs/images/dashboard-dark.png#only-dark)",
+        "![System Health Dashboard](images/dashboard-dark.png#only-dark)",
+    )
+    # Handle legacy single image if it exists
+    content = content.replace(
+        "![System Health Dashboard](docs/images/dashboard.png)",
+        "![System Health Dashboard](images/dashboard.png)",
+    )
 
-    # Only write if content has changed to avoid infinite rebuild loops
-    try:
-        with open("docs/index.md") as existing:
-            existing_content = existing.read()
-            if existing_content == content:
-                print("✓ docs/index.md is already up to date")
-                exit()
-    except FileNotFoundError:
-        pass  # File doesn't exist yet, we'll create it
+    # Fix links to documentation pages (remove 'docs/' prefix)
+    content = content.replace("](docs/cli-reference.md)", "](cli-reference.md)")
+    content = content.replace("](docs/components/index.md)", "](components/index.md)")
+    content = content.replace("](docs/philosophy.md)", "](philosophy.md)")
 
-    with open("docs/index.md", "w") as index:
+    # Use mkdocs_gen_files to create a virtual file instead of writing directly
+    # This prevents triggering file change detection loops
+    with mkdocs_gen_files.open("index.md", "w") as index:
         index.write(content)
-        print("✓ Copied README.md to docs/index.md with MkDocs-compatible links")
+        print("✓ Generated virtual index.md from README.md with fixed paths")

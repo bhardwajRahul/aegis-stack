@@ -10,7 +10,7 @@ import httpx
 from app.core.config import settings
 from app.core.log import logger
 from app.services.system.health import register_health_check
-from app.services.system.models import ComponentStatus
+from app.services.system.models import ComponentStatus, ComponentStatusType
 
 
 async def _backend_component_health() -> ComponentStatus:
@@ -26,7 +26,7 @@ async def _backend_component_health() -> ComponentStatus:
     if os.getenv("PYTEST_CURRENT_TEST") or "pytest" in os.getenv("_", ""):
         return ComponentStatus(
             name="backend",
-            healthy=True,
+            status=ComponentStatusType.HEALTHY,
             message="FastAPI backend available (test mode)",
             response_time_ms=None,
             metadata={
@@ -45,9 +45,10 @@ async def _backend_component_health() -> ComponentStatus:
 
         if response.status_code == 200:
             data = response.json()
+            backend_status = ComponentStatusType.HEALTHY if data.get("healthy", True) else ComponentStatusType.UNHEALTHY
             return ComponentStatus(
                 name="backend",
-                healthy=data.get("healthy", True),
+                status=backend_status,
                 message=f"FastAPI server responding ({response.status_code})",
                 response_time_ms=None,  # Will be set by health check runner
                 metadata={
@@ -60,7 +61,7 @@ async def _backend_component_health() -> ComponentStatus:
         else:
             return ComponentStatus(
                 name="backend",
-                healthy=False,
+                status=ComponentStatusType.UNHEALTHY,
                 message=f"FastAPI server error ({response.status_code})",
                 response_time_ms=None,
                 metadata={
@@ -73,7 +74,7 @@ async def _backend_component_health() -> ComponentStatus:
     except httpx.ConnectError:
         return ComponentStatus(
             name="backend",
-            healthy=False,
+            status=ComponentStatusType.UNHEALTHY,
             message="FastAPI server not reachable",
             response_time_ms=None,
             metadata={
@@ -85,7 +86,7 @@ async def _backend_component_health() -> ComponentStatus:
     except httpx.TimeoutException:
         return ComponentStatus(
             name="backend",
-            healthy=False,
+            status=ComponentStatusType.UNHEALTHY,
             message="FastAPI server timeout",
             response_time_ms=None,
             metadata={
@@ -97,7 +98,7 @@ async def _backend_component_health() -> ComponentStatus:
     except Exception as e:
         return ComponentStatus(
             name="backend",
-            healthy=False,
+            status=ComponentStatusType.UNHEALTHY,
             message=f"Backend health check failed: {str(e)}",
             response_time_ms=None,
             metadata={
@@ -124,7 +125,7 @@ async def _frontend_component_health() -> ComponentStatus:
 
         return ComponentStatus(
             name="frontend",
-            healthy=True,
+            status=ComponentStatusType.HEALTHY,
             message="Flet frontend component available",
             response_time_ms=None,
             metadata={
@@ -137,7 +138,7 @@ async def _frontend_component_health() -> ComponentStatus:
     except ImportError as e:
         return ComponentStatus(
             name="frontend",
-            healthy=False,
+            status=ComponentStatusType.UNHEALTHY,
             message="Frontend component not found",
             response_time_ms=None,
             metadata={
@@ -149,7 +150,7 @@ async def _frontend_component_health() -> ComponentStatus:
     except Exception as e:
         return ComponentStatus(
             name="frontend",
-            healthy=False,
+            status=ComponentStatusType.UNHEALTHY,
             message=f"Frontend component error: {str(e)}",
             response_time_ms=None,
             metadata={
@@ -172,7 +173,7 @@ async def _scheduler_enabled_status() -> ComponentStatus:
     """
     return ComponentStatus(
         name="scheduler",
-        healthy=True,
+        status=ComponentStatusType.HEALTHY,
         message="Scheduler component activated",
         response_time_ms=None,
         metadata={
@@ -210,6 +211,16 @@ async def startup_hook() -> None:
     logger.info("Scheduler component enabled (shows as activated)")
     {%- endif %}
 
-    # Future: Database and cache component detection will be added here
+    # Register worker health check (shows queue status and job metrics)
+    from app.services.system.health import check_worker_health
+    register_health_check("worker", check_worker_health)
+    logger.info("Worker component health check registered")
+
+    # Register cache health check (Redis connectivity and operations)
+    from app.services.system.health import check_cache_health
+    register_health_check("cache", check_cache_health)
+    logger.info("Cache component health check registered")
+
+    # Future: Database component detection will be added here
 
     logger.info("✅ Component health detection complete")

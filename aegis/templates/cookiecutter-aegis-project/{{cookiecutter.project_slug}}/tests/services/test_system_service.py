@@ -18,7 +18,6 @@ class TestSystemService:
         """Test component status Pydantic model."""
         status = ComponentStatus(
             name="test_component",
-            healthy=True,
             message="All good",
             response_time_ms=100.0,
             metadata={"version": "1.0"},
@@ -75,7 +74,6 @@ class TestSystemService:
         async def custom_check() -> ComponentStatus:
             return ComponentStatus(
                 name="custom_test",
-                healthy=True,
                 message="Custom check passed",
                 response_time_ms=None,
             )
@@ -83,8 +81,16 @@ class TestSystemService:
         # Register custom check
         register_health_check("custom_test", custom_check)
 
-        # Get status and verify custom check is included
-        status = await get_system_status()
-        assert "custom_test" in status.components
-        assert status.components["custom_test"].name == "custom_test"
-        assert status.components["custom_test"].healthy is True
+        try:
+            # Get status and verify custom check is included under aegis component
+            status = await get_system_status()
+            assert "aegis" in status.components
+            aegis_component = status.components["aegis"]
+            assert "custom_test" in aegis_component.sub_components
+            assert aegis_component.sub_components["custom_test"].name == "custom_test"
+            assert aegis_component.sub_components["custom_test"].healthy is True
+        finally:
+            # Clean up the custom health check registration
+            from app.services.system.health import _health_checks
+            if "custom_test" in _health_checks:
+                del _health_checks["custom_test"]

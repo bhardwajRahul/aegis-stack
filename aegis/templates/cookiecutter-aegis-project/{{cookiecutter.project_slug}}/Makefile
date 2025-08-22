@@ -1,149 +1,211 @@
-# {{cookiecutter.project_name}} - Aegis Stack Project
+# {{ cookiecutter.project_name }} - Aegis Stack Project
+# Developer-friendly commands for Docker workflow
 
-# Environment isolation check
-check-env:
-	@if [ -n "$$VIRTUAL_ENV" ] && [ "$$(basename $$VIRTUAL_ENV)" != ".venv" ]; then \
-		echo "⚠️  Warning: You're in a different virtual environment ($$VIRTUAL_ENV)"; \
-		echo "   This may cause 'uv' warnings. Consider running: unset VIRTUAL_ENV"; \
-	fi
-	@if [ "$$VIRTUAL_ENV" = "/code/.venv" ]; then \
-		echo "⚠️  Warning: You appear to be in a Docker environment ($$VIRTUAL_ENV)"; \
-		echo "   For local development, run: unset VIRTUAL_ENV && source .venv/bin/activate"; \
-	fi
+#=============================================================================
+# CORE DOCKER COMMANDS
+#=============================================================================
 
-# Run the application locally via Docker
-run-local: ## Run the application locally via Docker (all dev services)
+build: ## Build all Docker images (safe, sequential)
+	@echo "🔨 Building Docker images..."
+	@docker compose build
+
+serve: ## Run all services (assumes images are built)
+	@echo "🚀 Starting services... (Press Ctrl+C to stop)"
 	@docker compose --profile dev up
 
-# Run the application locally without Docker (for development)
-run-dev: check-env ## Run the application locally without Docker
-	@uv run python -m app.entrypoints.webserver
+serve-bg: ## Run all services in background
+	@echo "🚀 Starting services in background..."
+	@docker compose --profile dev up -d
 
-{% if cookiecutter.include_scheduler == "yes" %}# Run scheduler component locally
-run-scheduler: check-env ## Run the scheduler component locally
-	@uv run python -m app.entrypoints.scheduler{% endif %}
+stop: ## Gracefully stop all services
+	@echo "⏹️  Stopping services..."
+	@docker compose --profile dev down
 
-# Run tests
-test: check-env ## Run tests
+clean: ## Nuclear cleanup - remove containers, networks, and images
+	@echo "🧹 Nuclear cleanup - removing everything..."
+	@docker compose down --remove-orphans --volumes --rmi all 2>/dev/null || true
+	@docker system prune -f
+
+#=============================================================================
+# DEVELOPER WORKFLOW COMMANDS (the ones you'll actually use)
+#=============================================================================
+
+rebuild: build serve ## Build images and start services
+
+refresh: clean build serve ## Nuclear reset - clean everything and rebuild
+
+restart: stop serve ## Quick restart (no rebuild)
+
+#=============================================================================
+# DEBUGGING AND LOGS
+#=============================================================================
+
+logs: ## Follow logs from all services
+	@echo "📋 Following all service logs..."
+	@docker compose logs -f
+
+logs-web: ## Follow webserver logs only
+	@echo "📋 Following webserver logs..."
+	@docker compose logs -f webserver
+
+logs-worker: ## Follow worker logs only
+	@echo "📋 Following worker logs..."
+	@docker compose logs -f worker-system worker-load-test
+
+logs-redis: ## Follow Redis logs only
+	@echo "📋 Following Redis logs..."
+	@docker compose logs -f redis{% if cookiecutter.include_scheduler == "yes" %}
+
+logs-scheduler: ## Follow scheduler logs only
+	@echo "📋 Following scheduler logs..."
+	@docker compose logs -f scheduler{% endif %}
+
+shell: ## Open shell in webserver container
+	@echo "🐚 Opening shell in webserver container..."
+	@docker compose exec webserver /bin/bash
+
+shell-worker: ## Open shell in worker container
+	@echo "🐚 Opening shell in worker container..."
+	@docker compose exec worker-system /bin/bash
+
+ps: ## Show running containers
+	@echo "📊 Docker containers status:"
+	@docker compose ps
+
+#=============================================================================
+# REDIS DEBUGGING
+#=============================================================================
+
+redis-cli: ## Connect to Redis CLI
+	@echo "🔧 Connecting to Redis CLI..."
+	@docker compose exec redis redis-cli
+
+redis-stats: ## Show Redis memory and stats
+	@echo "📊 Redis statistics:"
+	@docker compose exec redis redis-cli info memory
+
+redis-keys: ## Show all Redis keys
+	@echo "🔑 Redis keys:"
+	@docker compose exec redis redis-cli keys "*"
+
+redis-reset: ## Clear all Redis data
+	@echo "🔄 Clearing all Redis data..."
+	@docker compose exec redis redis-cli flushall
+
+#=============================================================================
+# HEALTH AND TESTING
+#=============================================================================
+
+health: ## Check system health status
+	@echo "🩺 Checking system health..."
+	@uv run {{ cookiecutter.project_slug }} health status
+
+health-detailed: ## Detailed system health information
+	@echo "🩺 Detailed system health..."
+	@uv run {{ cookiecutter.project_slug }} health status --detailed
+
+health-json: ## System health as JSON
+	@uv run {{ cookiecutter.project_slug }} health status --json
+
+health-probe: ## Health probe (exits 1 if unhealthy)
+	@uv run {{ cookiecutter.project_slug }} health probe
+
+test: ## Run tests locally
+	@echo "🧪 Running tests..."
 	@uv run pytest
 
-# Health monitoring commands (with lazy CLI installation)
-health: ensure-cli ## Show system health status (always exits 0)
-	@uv run {{cookiecutter.project_slug}} health status
+test-verbose: ## Run tests with verbose output
+	@echo "🧪 Running tests (verbose)..."
+	@uv run pytest -v
 
-health-detailed: ensure-cli ## Show system health with detailed information
-	@uv run {{cookiecutter.project_slug}} health status --detailed
+#=============================================================================
+# CODE QUALITY (local development tools)
+#=============================================================================
 
-health-json: ensure-cli ## Show system health and output as JSON
-	@uv run {{cookiecutter.project_slug}} health status --json
-
-health-probe: ensure-cli ## Health probe for monitoring (exits 1 if unhealthy)
-	@uv run {{cookiecutter.project_slug}} health probe
-
-# Fallback health commands using uv run (if CLI installation fails)
-health-fallback: check-env ## Health status via uv run (fallback method)
-	@echo "🔄 Using fallback method..."
-	@uv run python -m app.cli.health status
-
-# Run linting	
-lint: check-env ## Run linting with ruff
+lint: ## Check code style with ruff
+	@echo "🔍 Running linting..."
 	@uv run ruff check .
 
-# Auto-fix linting and formatting issues
-fix: check-env ## Auto-fix linting and formatting issues
+fix: ## Auto-fix linting and formatting issues
+	@echo "🔧 Auto-fixing code issues..."
 	@uv run ruff check . --fix
 	@uv run ruff format .
 
-# Format code only
-format: check-env ## Format code with ruff
+format: ## Format code with ruff
+	@echo "💄 Formatting code..."
 	@uv run ruff format .
 
-# Run type checking
-typecheck: check-env ## Run type checking with mypy
-	@uv run mypy .
-
-# Run all checks (lint + typecheck + test)
-check: ## Run all checks
-	@echo "🔍 Running linting..."
-	@$(MAKE) lint
+typecheck: ## Run type checking with mypy
 	@echo "🔍 Running type checking..."
-	@$(MAKE) typecheck  
-	@echo "🔍 Running tests..."
-	@$(MAKE) test
+	@uv run mypy app/ --no-error-summary
+
+check: lint typecheck test ## Run all code quality checks
 	@echo "✅ All checks completed successfully!"
 
-# Install dependencies
-install: check-env ## Install dependencies with uv
-	uv sync --all-extras
+#=============================================================================
+# PROJECT MANAGEMENT
+#=============================================================================
 
-# Ensure CLI commands are available (lazy installation)
-ensure-cli: check-env
-	@if ! uv run {{cookiecutter.project_slug}} --help >/dev/null 2>&1; then \
-		echo "🔧 CLI command not found, installing automatically..."; \
-		uv pip install -e . >/dev/null 2>&1; \
-		if uv run {{cookiecutter.project_slug}} --help >/dev/null 2>&1; then \
-			echo "✅ CLI command '{{cookiecutter.project_slug}}' installed successfully"; \
-		else \
-			echo "⚠️  CLI installation failed. Try: make install-cli"; \
-		fi; \
-	fi
+install: ## Install/sync dependencies with uv
+	@echo "📦 Installing dependencies..."
+	@uv sync --all-extras
 
-# Manual CLI installation (for troubleshooting)
-install-cli: check-env ## Manually install CLI command ({{cookiecutter.project_slug}})
-	@echo "🔧 Installing CLI command for local development..."
-	@uv pip install -e .
-	@echo "✅ CLI command installed:"
-	@echo "   uv run {{cookiecutter.project_slug}} health status          # Health status (always exits 0)"
-	@echo "   uv run {{cookiecutter.project_slug}} health status --detailed"
-	@echo "   uv run {{cookiecutter.project_slug}} health probe           # Health probe (exits 1 if unhealthy)"
-	@echo "   uv run {{cookiecutter.project_slug}} --help"
-	@echo ""
-	@echo "💡 Alternative (activate virtual environment first):"
-	@echo "   source .venv/bin/activate"
-	@echo "   {{cookiecutter.project_slug}} health status"
-	@echo "   {{cookiecutter.project_slug}} health probe"
+deps-update: ## Update dependencies
+	@echo "📦 Updating dependencies..."
+	@uv sync --upgrade
 
-# Clean up cache files
-clean: ## Clean up cache files
+clean-cache: ## Clean Python cache files
+	@echo "🧹 Cleaning Python cache files..."
 	@find . -type d -name "__pycache__" -exec rm -rf {} +
 	@find . -type f -name "*.pyc" -delete
 
-# Serve documentation locally
-docs-serve: check-env ## Serve documentation locally with live reload on port 8001
+#=============================================================================
+# DOCUMENTATION
+#=============================================================================
+
+docs-serve: ## Serve documentation locally (http://localhost:8001)
+	@echo "📚 Serving documentation on http://localhost:8001"
 	@uv run mkdocs serve --dev-addr 0.0.0.0:8001
 
-# Build documentation
-docs-build: check-env ## Build the static documentation site
+docs-build: ## Build static documentation
+	@echo "📚 Building documentation..."
 	@uv run mkdocs build
 
-# Docker commands
-docker-build: ## Build the Docker image
-	@docker build -t aegis-stack:latest .
+#=============================================================================
+# WORKER DEBUGGING (arq)
+#=============================================================================
 
-docker-up: ## Start development services
-	@docker compose --profile dev up -d
+worker-test: ## Test workers in burst mode (process and exit)
+	@echo "🧪 Testing system worker in burst mode..."
+	@uv run python -m arq app.components.worker.queues.system.WorkerSettings --burst
 
-docker-down: ## Stop all services
-	@docker compose down
+#=============================================================================
+# HELP AND INFO
+#=============================================================================
 
-docker-logs: ## Follow logs for all services
-	@docker compose logs -f
+status: ## Show current system status
+	@echo "📊 Current system status:"
+	@echo
+	@echo "🐳 Docker containers:"
+	@docker compose ps || echo "No containers running"
+	@echo
+	@echo "📦 Dependencies:"
+	@uv pip list | head -20 || echo "Dependencies not installed"
 
-docker-webserver: ## Run only webserver service in Docker
-	@docker compose --profile dev up webserver
-
-{% if cookiecutter.include_scheduler == "yes" %}docker-scheduler: ## Run only scheduler service in Docker
-	@docker compose --profile dev up scheduler{% endif %}
-
-docker-test: ## Run tests in Docker
-	@docker compose --profile test run --rm test_runner
-
-# Show help
 help: ## Show this help message
-	@echo "Available commands:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $1, $2}'
+	@echo "{{ cookiecutter.project_name }} development commands:"
+	@echo
+	@echo "🚀 WORKFLOW COMMANDS (start here):"
+	@echo "  make refresh      - Nuclear reset (clean + build + serve)"
+	@echo "  make rebuild      - Build and serve"
+	@echo "  make restart      - Quick restart"
+	@echo
+	@echo "🔧 CORE COMMANDS:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@echo
+	@echo "💡 TIP: Use 'make refresh' when everything is broken!"
 
-.PHONY: run-local run-dev{% if cookiecutter.include_scheduler == "yes" %} run-scheduler{% endif %} test health health-detailed health-json health-probe health-fallback lint fix format typecheck check install ensure-cli install-cli clean docs-serve docs-build docker-build docker-up docker-down docker-logs docker-webserver{% if cookiecutter.include_scheduler == "yes" %} docker-scheduler{% endif %} docker-test help
+.PHONY: build serve stop clean rebuild refresh restart logs logs-web logs-worker logs-redis{% if cookiecutter.include_scheduler == "yes" %} logs-scheduler{% endif %} shell shell-worker ps redis-cli redis-stats redis-keys redis-reset health health-detailed health-json health-probe test test-verbose lint fix format typecheck check install deps-update clean-cache docs-serve docs-build worker-test status help
 
-# Default target
+# Default target - show help
 .DEFAULT_GOAL := help

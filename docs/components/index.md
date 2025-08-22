@@ -31,6 +31,7 @@ graph TB
     
     subgraph "Optional Components"
         Scheduler[Scheduler<br/>APScheduler]
+        Worker[Worker<br/>arq + Redis Queues]
         Database[Database<br/>PostgreSQL + SQLAlchemy]
         Cache[Cache<br/>Redis]
     end
@@ -45,6 +46,7 @@ graph TB
     API --> Frontend
     API --> Services
     Services --> Scheduler
+    Services --> Worker
     Services --> Database
     Services --> Cache
     Services --> Constants
@@ -54,6 +56,7 @@ graph TB
     style API fill:#e8f5e8
     style Frontend fill:#fff3e0
     style Scheduler fill:#f3e5f5
+    style Worker fill:#e8f5e8
     style Database fill:#f3e5f5
     style Cache fill:#f3e5f5
 ```
@@ -64,6 +67,7 @@ graph TB
 |-----------|---------|----------------|--------|
 | **Core** (Backend + Frontend + CLI) | API + UI + Management | [FastAPI](https://fastapi.tiangolo.com/) + [Flet](https://flet.dev/) + [Typer](https://typer.tiangolo.com/) | ✅ Always included |
 | **[Scheduler](./scheduler.md)** | Background tasks, cron jobs | [APScheduler](https://apscheduler.readthedocs.io/) | ✅ Available |
+| **[Worker](./worker/index.md)** | Async task queues, job processing | [arq](https://arq-docs.helpmanual.io/) + [Redis](https://redis.io/) | ✅ Available |
 | **Database** | Data persistence, migrations | [PostgreSQL](https://postgresql.org/) + [SQLAlchemy](https://sqlalchemy.org/) | 🚧 Coming soon |
 | **Cache** | Session storage, performance | [Redis](https://redis.io/) | 🚧 Coming soon |
 
@@ -74,6 +78,7 @@ Each component integrates proven open-source technologies:
 - **Backend**: [FastAPI](https://fastapi.tiangolo.com/) provides async web serving with automatic API documentation
 - **Frontend**: [Flet](https://flet.dev/) enables Python-native cross-platform UI development  
 - **CLI Integration**: [Typer](https://typer.tiangolo.com/) creates command-line interfaces that hook directly into your Python logic
+- **Task Processing**: [arq](https://arq-docs.helpmanual.io/) provides high-performance async task queues with Redis
 - **Monitoring**: [Rich](https://rich.readthedocs.io/) provides terminal formatting for CLI commands and health displays
 - **System Monitoring**: [psutil](https://psutil.readthedocs.io/) enables cross-platform system health monitoring
 
@@ -84,4 +89,5 @@ Components are designed as **capability interfaces** - the current implementatio
 - **[Backend Component](./webserver.md)** - FastAPI backend configuration
 - **[Frontend Component](./frontend.md)** - Building user interfaces with Flet  
 - **[Scheduler Component](./scheduler.md)** - Scheduling and cron job system
+- **[Worker Component](./worker/index.md)** - Async task processing and queue management
 - **[Philosophy Guide](../philosophy.md)** - Component design principles and architecture

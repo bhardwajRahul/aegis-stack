@@ -38,21 +38,17 @@ graph TB
 
 ## Running the Scheduler
 
-### Local Development
-```bash
-# Run scheduler component directly
-make run-scheduler
-
-# Or run all services together
-make run-local
-```
+The scheduler runs as a Docker service. Use these commands:
 
 ### Docker Deployment
 ```bash
 # Run only scheduler service
 docker compose --profile dev up scheduler
 
-# Run all services
+# Run all services including scheduler
+make run
+
+# Or use docker compose directly
 docker compose --profile dev up
 ```
 
