@@ -11,7 +11,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.core.log import logger
 from app.services.system.health import check_system_status, register_health_check
-from app.services.system.models import ComponentStatus
+from app.services.system.models import ComponentStatus, ComponentStatusType
 
 # Global scheduler instance for health checking
 _scheduler: AsyncIOScheduler | None = None
@@ -24,7 +24,7 @@ async def _check_scheduler_health() -> ComponentStatus:
     if _scheduler is None:
         return ComponentStatus(
             name="scheduler",
-            healthy=False,
+            status=ComponentStatusType.UNHEALTHY,
             message="Scheduler not initialized",
             response_time_ms=None,
         )
@@ -32,7 +32,7 @@ async def _check_scheduler_health() -> ComponentStatus:
     if not _scheduler.running:
         return ComponentStatus(
             name="scheduler",
-            healthy=False,
+            status=ComponentStatusType.UNHEALTHY,
             message="Scheduler is not running",
             response_time_ms=None,
         )
@@ -46,9 +46,14 @@ async def _check_scheduler_health() -> ComponentStatus:
         state = _scheduler.state
         healthy = state == 1  # STATE_RUNNING = 1
 
+        status = (
+            ComponentStatusType.HEALTHY
+            if healthy
+            else ComponentStatusType.UNHEALTHY
+        )
         return ComponentStatus(
             name="scheduler",
-            healthy=healthy,
+            status=status,
             message=f"Scheduler running with {job_count} jobs",
             response_time_ms=None,
             metadata={
@@ -60,7 +65,7 @@ async def _check_scheduler_health() -> ComponentStatus:
     except Exception as e:
         return ComponentStatus(
             name="scheduler",
-            healthy=False,
+            status=ComponentStatusType.UNHEALTHY,
             message=f"Scheduler health check failed: {str(e)}",
             response_time_ms=None,
         )

@@ -472,6 +472,7 @@ async def _check_cpu_usage() -> ComponentStatus:
         )
 
 
+{% if cookiecutter.include_redis == "yes" %}
 async def check_cache_health() -> ComponentStatus:
     """
     Check cache connectivity and basic functionality.
@@ -558,8 +559,10 @@ async def check_cache_health() -> ComponentStatus:
                 "error": str(e),
             },
         )
+{% endif %}
 
 
+{% if cookiecutter.include_worker == "yes" %}
 async def check_worker_health() -> ComponentStatus:
     """
     Check arq worker status using arq's native health checks and queue configuration.
@@ -921,3 +924,4 @@ async def check_worker_health() -> ComponentStatus:
             },
             sub_components={},
         )
+{% endif %}

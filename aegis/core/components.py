@@ -86,6 +86,13 @@ COMPONENTS: dict[str, ComponentSpec] = {
         docker_services=["scheduler"],
         template_files=["app/components/scheduler.py", "app/entrypoints/scheduler.py"],
     ),
+    "database": ComponentSpec(
+        name="database",
+        type=ComponentType.INFRASTRUCTURE,
+        description="SQLite database with SQLModel ORM",
+        pyproject_deps=["sqlmodel>=0.0.14", "sqlalchemy>=2.0.0", "aiosqlite>=0.19.0"],
+        template_files=["app/core/db.py"],
+    ),
 }
 
 

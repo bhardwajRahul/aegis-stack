@@ -173,6 +173,11 @@ async def startup_hook() -> None:
     logger.info("Worker component health check registered")
     {%- endif %}
 
-    # Future: Database and cache component detection will be added here
+    {%- if cookiecutter.include_redis == "yes" %}
+    # Register cache health check (Redis connectivity and operations)
+    from app.services.system.health import check_cache_health
+    register_health_check("cache", check_cache_health)
+    logger.info("Cache component health check registered")
+    {%- endif %}
 
     logger.info("✅ Component health detection complete")

@@ -39,6 +39,7 @@ def process_j2_templates():
             "author_email": "{{ cookiecutter.author_email }}",
             "version": "{{ cookiecutter.version }}",
             "python_version": "{{ cookiecutter.python_version }}",
+            "include_redis": "{{ cookiecutter.include_redis }}",
             "include_scheduler": "{{ cookiecutter.include_scheduler }}",
             "include_worker": "{{ cookiecutter.include_worker }}",
             "include_database": "{{ cookiecutter.include_database }}",
@@ -138,10 +139,7 @@ def main():
         remove_file("tests/services/test_worker_health_registration.py")
 
     if "{{ cookiecutter.include_database }}" != "yes":
-        # remove_file("app/services/database_service.py")
-        # remove_dir("app/models")
-        # remove_dir("alembic")
-        pass  # Placeholder for database component
+        remove_file("app/core/db.py")
 
     if "{{ cookiecutter.include_cache }}" != "yes":
         # remove_file("app/services/cache_service.py")

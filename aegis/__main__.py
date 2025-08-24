@@ -13,7 +13,12 @@ from pathlib import Path
 import typer
 
 from aegis import __version__
-from aegis.core.components import COMPONENTS, ComponentType, get_components_by_type
+from aegis.core.components import (
+    COMPONENTS,
+    ComponentSpec,
+    ComponentType,
+    get_components_by_type,
+)
 from aegis.core.dependency_resolver import DependencyResolver
 from aegis.core.template_generator import TemplateGenerator
 
@@ -22,7 +27,7 @@ app = typer.Typer(
     name="aegis",
     help=(
         "Aegis Stack CLI - Component generation and project management. "
-        "Available components: redis, worker, scheduler"
+        "Available components: redis, worker, scheduler, database"
     ),
     add_completion=False,
 )
@@ -138,7 +143,7 @@ def init(
         "--components",
         "-c",
         callback=validate_and_resolve_components,
-        help="Comma-separated list of components (redis,worker,scheduler)",
+        help="Comma-separated list of components (redis,worker,scheduler,database)",
     ),
     interactive: bool = typer.Option(
         True,
@@ -166,8 +171,8 @@ def init(
     Examples:\n
         - aegis init my-app\n
         - aegis init my-app --components redis,worker\n
-        - aegis init my-app --components redis,worker,scheduler --no-interactive\n
-    """
+        - aegis init my-app --components redis,worker,scheduler,database --no-interactive\n
+    """  # noqa
 
     # Validate project name first
     validate_project_name(project_name)
@@ -304,6 +309,18 @@ def init(
         raise typer.Exit(1)
 
 
+def get_interactive_infrastructure_components() -> list[ComponentSpec]:
+    """Get infrastructure components available for interactive selection."""
+    # Get all infrastructure components
+    infra_components = []
+    for component_spec in COMPONENTS.values():
+        if component_spec.type == ComponentType.INFRASTRUCTURE:
+            infra_components.append(component_spec)
+
+    # Sort by name for consistent ordering
+    return sorted(infra_components, key=lambda x: x.name)
+
+
 def interactive_component_selection() -> list[str]:
     """Interactive component selection with dependency awareness."""
 
@@ -313,20 +330,41 @@ def interactive_component_selection() -> list[str]:
 
     selected = []
 
-    # Infrastructure components
+    # Get all infrastructure components from registry
+    infra_components = get_interactive_infrastructure_components()
+
     typer.echo("🏗️  Infrastructure Components:")
-    if typer.confirm("  Add Redis (caching, message queues)?"):
-        selected.append("redis")
 
-    if "redis" in selected:
-        if typer.confirm("  Add worker infrastructure (background tasks)?"):
-            selected.append("worker")
-    else:
-        if typer.confirm("  Add worker infrastructure? (will auto-add Redis)"):
-            selected.extend(["redis", "worker"])
+    # Process components in a specific order to handle dependencies
+    component_order = ["redis", "worker", "scheduler", "database"]
 
-    if typer.confirm("  Add scheduler infrastructure (scheduled tasks)?"):
-        selected.append("scheduler")
+    for component_name in component_order:
+        # Find the component spec
+        component_spec = next(
+            (c for c in infra_components if c.name == component_name), None
+        )
+        if not component_spec:
+            continue  # Skip if component doesn't exist in registry
+
+        # Handle special worker dependency logic
+        if component_name == "worker":
+            if "redis" in selected:
+                # Redis already selected, simple worker prompt
+                prompt = f"  Add {component_spec.description.lower()}?"
+                if typer.confirm(prompt):
+                    selected.append("worker")
+            else:
+                # Redis not selected, offer to add both
+                prompt = (
+                    f"  Add {component_spec.description.lower()}? (will auto-add Redis)"
+                )
+                if typer.confirm(prompt):
+                    selected.extend(["redis", "worker"])
+        else:
+            # Standard prompt for other components
+            prompt = f"  Add {component_spec.description}?"
+            if typer.confirm(prompt):
+                selected.append(component_name)
 
     return selected
 

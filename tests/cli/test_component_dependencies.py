@@ -379,7 +379,7 @@ def test_infrastructure_component_types() -> None:
     }
 
     # Should include our expected infrastructure components
-    expected_infra = {"redis", "worker", "scheduler"}
+    expected_infra = {"redis", "worker", "scheduler", "database"}
     actual_infra = set(infrastructure_components.keys())
 
     assert expected_infra.issubset(actual_infra), (
@@ -406,4 +406,61 @@ def test_dependency_resolution_performance() -> None:
     # Should complete 100 resolutions in under 1 second
     assert duration < 1.0, (
         f"Dependency resolution too slow: {duration:.3f}s for 100 iterations"
+    )
+
+
+def test_interactive_selection_registry_sync() -> None:
+    """Test that interactive selection includes all infrastructure components."""
+    from aegis.__main__ import get_interactive_infrastructure_components
+
+    # Get components from registry
+    infra_components = get_interactive_infrastructure_components()
+    infra_names = {comp.name for comp in infra_components}
+
+    # Get infrastructure components directly from registry
+    registry_infra_names = {
+        name
+        for name, spec in COMPONENTS.items()
+        if spec.type == ComponentType.INFRASTRUCTURE
+    }
+
+    # Interactive selection should include all infrastructure components
+    assert infra_names == registry_infra_names, (
+        f"Interactive selection components ({infra_names}) don't match "
+        f"registry infrastructure components ({registry_infra_names}). "
+        f"Missing from interactive: {registry_infra_names - infra_names}, "
+        f"Extra in interactive: {infra_names - registry_infra_names}"
+    )
+
+    # Should include database component (our recent addition)
+    assert "database" in infra_names, (
+        "Database component should be available in interactive selection"
+    )
+
+    # Should include all expected components
+    expected_components = {"redis", "worker", "scheduler", "database"}
+    assert expected_components.issubset(infra_names), (
+        f"Missing expected components from interactive selection. "
+        f"Expected: {expected_components}, Got: {infra_names}"
+    )
+
+
+def test_interactive_selection_component_ordering() -> None:
+    """Test that interactive selection returns components in consistent order."""
+    from aegis.__main__ import get_interactive_infrastructure_components
+
+    # Get components multiple times
+    components1 = get_interactive_infrastructure_components()
+    components2 = get_interactive_infrastructure_components()
+
+    # Should be identical (same order)
+    names1 = [comp.name for comp in components1]
+    names2 = [comp.name for comp in components2]
+
+    assert names1 == names2, f"Component ordering not consistent: {names1} vs {names2}"
+
+    # Should be sorted alphabetically
+    sorted_names = sorted(names1)
+    assert names1 == sorted_names, (
+        f"Components not in alphabetical order: {names1}, expected: {sorted_names}"
     )
