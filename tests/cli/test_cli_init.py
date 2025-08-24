@@ -353,5 +353,76 @@ class TestCLIInit:
         assert "system_health_check" in system_worker_content
         assert "cleanup_temp_files" in system_worker_content
 
+    @pytest.mark.slow
+    def test_init_with_database_component(
+        self, temp_output_dir: Any, skip_slow_tests: Any
+    ) -> None:
+        """Test generating a project with database component."""
+        result = run_aegis_init(
+            project_name="test-database",
+            components=["database"],
+            output_dir=temp_output_dir,
+        )
+
+        # Assert command succeeded
+        assert result.success, f"CLI command failed: {result.stderr}"
+
+        # Assert expected CLI output content
+        assert "🛡️  Aegis Stack Project Initialization" in result.stdout
+        assert "📦 Infrastructure: database" in result.stdout
+        assert "• app/core/db.py" in result.stdout
+        assert "• sqlmodel>=0.0.14" in result.stdout
+        assert "• sqlalchemy>=2.0.0" in result.stdout
+        assert "• aiosqlite>=0.19.0" in result.stdout
+        assert "✅ Project created successfully!" in result.stdout
+
+        # Assert project structure
+        project_path = result.project_path
+        assert project_path is not None, "Project path is None"
+        self._assert_database_project_structure(project_path)
+        self._assert_database_template_processing(project_path)
+
+        # Assert no template files remain
+        assert_no_template_files(project_path)
+
+    def _assert_database_project_structure(self, project_path: Path) -> None:
+        """Assert database-specific project structure."""
+        self._assert_core_project_structure(project_path)
+
+        # Database-specific files
+        assert_file_exists(project_path, "app/core/db.py")
+
+        # Database component should not create additional directories
+        # (unlike scheduler and worker which create component directories)
+
+    def _assert_database_template_processing(self, project_path: Path) -> None:
+        """Assert that database templates were processed correctly."""
+        from .test_utils import (
+            assert_database_config_present,
+            assert_db_file_uses_settings,
+        )
+
+        # Check config.py includes database settings
+        config_file = project_path / "app/core/config.py"
+        config_content = config_file.read_text()
+        assert_database_config_present(config_content)
+
+        # Check db.py uses configuration settings
+        db_file = project_path / "app/core/db.py"
+        db_content = db_file.read_text()
+        assert_db_file_uses_settings(db_content)
+
+        # Check for database-specific content
+        assert "PRAGMA foreign_keys=ON" in db_content
+
+        # Check pyproject.toml includes database dependencies
+        pyproject_content = (project_path / "pyproject.toml").read_text()
+        assert "sqlmodel>=0.0.14" in pyproject_content
+        assert "sqlalchemy>=2.0.0" in pyproject_content
+        assert "aiosqlite>=0.19.0" in pyproject_content
+
+        # Check mypy overrides for SQLModel
+        assert 'module = "sqlmodel.*"' in pyproject_content
+
 
 # Note: CLI help tests moved to test_cli_basic.py to avoid duplication

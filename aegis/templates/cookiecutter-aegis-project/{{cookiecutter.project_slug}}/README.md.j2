@@ -12,7 +12,7 @@ This Aegis Stack project includes the following components:
 - **✅ Scheduler**: APScheduler-based async task scheduling
 {%- endif %}
 {%- if cookiecutter.include_database == "yes" %}
-- **✅ Database**: SQLAlchemy + asyncpg for PostgreSQL
+- **✅ Database**: SQLite database with SQLModel ORM
 {%- endif %}
 {%- if cookiecutter.include_cache == "yes" %}
 - **✅ Cache**: Redis-based async caching
@@ -44,7 +44,22 @@ This Aegis Stack project includes the following components:
    # Edit .env with your configuration
    ```
 
+{%- if cookiecutter.include_database == "yes" %}
+
+4. **Set up database:**
+   ```bash
+   # Create data directory for SQLite database
+   mkdir -p data
+   
+   # Database will be created automatically on first run
+   # Default location: data/app.db
+   ```
+
+5. **Run the application:**
+{%- else %}
+
 4. **Run the application:**
+{%- endif %}
    ```bash
    make run-local
    ```
@@ -111,6 +126,41 @@ docker compose --profile dev up
 docker compose --profile prod up
 ```
 
+{%- if cookiecutter.include_database == "yes" %}
+
+## Configuration
+
+### Database Settings
+
+The database component uses SQLite with the following default configuration:
+
+```bash
+# Environment variables (add to .env file)
+DATABASE_URL=sqlite:///data/app.db          # Database file location
+DATABASE_ENGINE_ECHO=false                  # Enable SQL query logging
+```
+
+### Database Usage
+
+```python
+from app.core.db import db_session
+from sqlmodel import SQLModel, Field, select
+
+# Define a model
+class User(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    email: str
+
+# Use the database
+with db_session() as session:
+    user = User(name="John Doe", email="john@example.com")
+    session.add(user)
+    # Auto-committed by context manager
+```
+
+{%- endif %}
+
 ## Project Structure
 
 ```
@@ -126,6 +176,9 @@ docker compose --profile prod up
 │   ├── core/              # Core utilities
 │   │   ├── config.py      # Environment-dependent configuration
 │   │   ├── constants.py   # Immutable constants (12-Factor App)
+{%- if cookiecutter.include_database == "yes" %}
+│   │   ├── db.py          # Database connection and session management
+{%- endif %}
 │   │   └── log.py         # Structured logging
 │   ├── entrypoints/       # Execution entry points
 │   ├── integrations/      # App composition layer
