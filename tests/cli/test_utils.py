@@ -421,6 +421,30 @@ def assert_file_contains(project_path: Path, relative_path: str, content: str) -
     assert content in file_content, f"Content '{content}' not found in {relative_path}"
 
 
+def assert_database_config_present(config_content: str) -> None:
+    """Assert that database configuration is present in config content."""
+    assert "DATABASE_URL" in config_content
+    assert "sqlite:///data/app.db" in config_content
+    assert "DATABASE_ENGINE_ECHO" in config_content
+    assert "DATABASE_CONNECT_ARGS" in config_content
+    assert "check_same_thread" in config_content
+
+
+def assert_database_config_absent(config_content: str) -> None:
+    """Assert that database configuration is absent from config content."""
+    assert "DATABASE_URL" not in config_content
+    assert "DATABASE_ENGINE_ECHO" not in config_content
+    assert "DATABASE_CONNECT_ARGS" not in config_content
+
+
+def assert_db_file_uses_settings(db_content: str) -> None:
+    """Assert that db.py properly uses settings."""
+    assert "from app.core.config import settings" in db_content
+    assert "settings.DATABASE_URL" in db_content
+    assert "settings.DATABASE_CONNECT_ARGS" in db_content
+    assert "settings.DATABASE_ENGINE_ECHO" in db_content
+
+
 def run_cli_help_command(*args: str, timeout: int | None = None) -> CLITestResult:
     """
     Run CLI help commands with shorter timeout for quick tests.

@@ -84,6 +84,12 @@ Shows project information and available components.
 
 ## Coding Standards
 
+### Git and Version Control
+**DO NOT perform git operations unless explicitly requested.** This includes:
+- No `git add`, `git commit`, or `git push` commands
+- No creating pull requests
+- Wait for explicit user approval before committing changes
+
 ### Python Style Guidelines
 
 **Type Hints (MANDATORY - Fortress-Level Type Safety):**
