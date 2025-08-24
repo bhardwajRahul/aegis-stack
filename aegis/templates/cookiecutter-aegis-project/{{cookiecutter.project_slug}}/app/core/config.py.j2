@@ -50,10 +50,13 @@ class Settings(BaseSettings):
     DISK_THRESHOLD_PERCENT: float = 85.0
     CPU_THRESHOLD_PERCENT: float = 95.0
 
+{% if cookiecutter.include_redis == "yes" %}
     # Redis settings for arq background tasks
     REDIS_URL: str = "redis://localhost:6379"
     REDIS_DB: int = 0
+{% endif %}
 
+{% if cookiecutter.include_worker == "yes" %}
     # arq worker settings (shared across all workers)
     WORKER_KEEP_RESULT_SECONDS: int = 3600  # Keep job results for 1 hour
     WORKER_MAX_TRIES: int = 3
@@ -61,6 +64,14 @@ class Settings(BaseSettings):
     # PURE ARQ IMPLEMENTATION - NO CONFIGURATION NEEDED!
     # Worker configuration comes from individual WorkerSettings classes
     # in app/components/worker/queues/ - just import and use as arq intended!
+{% endif %}
+
+{% if cookiecutter.include_database == "yes" %}
+    # Database settings (SQLite)
+    DATABASE_URL: str = "sqlite:///data/app.db"
+    DATABASE_ENGINE_ECHO: bool = False
+    DATABASE_CONNECT_ARGS: dict[str, Any] = {"check_same_thread": False}
+{% endif %}
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
@@ -68,6 +79,7 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
+{% if cookiecutter.include_worker == "yes" %}
 # Pure arq queue helper functions - use dynamic discovery
 def get_available_queues() -> list[str]:
     """Get all available queue names via dynamic discovery."""
@@ -104,3 +116,4 @@ def is_valid_queue(queue_name: str) -> bool:
     except ImportError:
         # Worker components not available, no queues are valid
         return False
+{% endif %}

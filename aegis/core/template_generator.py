@@ -49,6 +49,7 @@ class TemplateGenerator:
             "include_redis": "yes" if "redis" in self.components else "no",
             "include_worker": "yes" if "worker" in self.components else "no",
             "include_scheduler": "yes" if "scheduler" in self.components else "no",
+            "include_database": "yes" if "database" in self.components else "no",
             # Derived flags for template logic
             "has_background_infrastructure": any(
                 name in self.components for name in ["worker", "scheduler"]

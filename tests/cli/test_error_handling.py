@@ -58,7 +58,7 @@ ERROR_TEST_CASES = [
     ErrorTestCase(
         name="nonexistent_component",
         project_name="test-nonexistent",
-        components=["database"],  # Not implemented yet
+        components=["nosql"],  # Not implemented component
         expected_error_indicators=["unknown", "component", "available"],
         description="Nonexistent component should show available options",
     ),

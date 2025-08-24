@@ -33,9 +33,9 @@ dependencies = [
     "arq==0.25.0",
 {%- endif %}
 {%- if cookiecutter.include_database == "yes" %}
-    "sqlalchemy[asyncio]==2.0.36",
-    "asyncpg==0.29.0", 
-    "alembic==1.13.3",
+    "sqlmodel>=0.0.14",
+    "sqlalchemy>=2.0.0",
+    "aiosqlite>=0.19.0",
 {%- endif %}
 {%- if cookiecutter.include_cache == "yes" %}
     "redis[hiredis]==5.0.8",
@@ -54,8 +54,10 @@ dev = [
     "types-psutil==7.0.0.20250801",
     "pre-commit==4.2.0",
     "pip-audit==2.9.0",
+{%- if cookiecutter.include_worker == "yes" %}
     # Development auto-reload for workers
     "watchdog==4.0.2",
+{%- endif %}
 ]
 docs = [
     "mkdocs==1.6.1",
@@ -108,9 +110,12 @@ module = "apscheduler.*"
 ignore_missing_imports = true
 {%- endif %}
 
+{%- if cookiecutter.include_redis == "yes" %}
+
 [[tool.mypy.overrides]]
 module = "redis.*"
 ignore_missing_imports = true
+{%- endif %}
 
 {%- if cookiecutter.include_worker == "yes" %}
 
@@ -122,7 +127,7 @@ ignore_missing_imports = true
 {%- if cookiecutter.include_database == "yes" %}
 
 [[tool.mypy.overrides]]
-module = "alembic.*"
+module = "sqlmodel.*"
 ignore_missing_imports = true
 {%- endif %}
 
