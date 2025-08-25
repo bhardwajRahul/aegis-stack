@@ -399,7 +399,7 @@ class TestCLIInit:
         """Assert that database templates were processed correctly."""
         from .test_utils import (
             assert_database_config_present,
-            assert_db_file_uses_settings,
+            assert_db_file_structure,
         )
 
         # Check config.py includes database settings
@@ -407,13 +407,10 @@ class TestCLIInit:
         config_content = config_file.read_text()
         assert_database_config_present(config_content)
 
-        # Check db.py uses configuration settings
+        # Check db.py has complete structure
         db_file = project_path / "app/core/db.py"
         db_content = db_file.read_text()
-        assert_db_file_uses_settings(db_content)
-
-        # Check for database-specific content
-        assert "PRAGMA foreign_keys=ON" in db_content
+        assert_db_file_structure(db_content)
 
         # Check pyproject.toml includes database dependencies
         pyproject_content = (project_path / "pyproject.toml").read_text()

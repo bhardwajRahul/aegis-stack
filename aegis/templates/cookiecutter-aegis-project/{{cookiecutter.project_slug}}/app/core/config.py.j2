@@ -68,7 +68,7 @@ class Settings(BaseSettings):
 
 {% if cookiecutter.include_database == "yes" %}
     # Database settings (SQLite)
-    DATABASE_URL: str = "sqlite:///data/app.db"
+    DATABASE_URL: str = "sqlite:///./data/app.db"
     DATABASE_ENGINE_ECHO: bool = False
     DATABASE_CONNECT_ARGS: dict[str, Any] = {"check_same_thread": False}
 {% endif %}
