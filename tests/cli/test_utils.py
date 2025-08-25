@@ -424,7 +424,7 @@ def assert_file_contains(project_path: Path, relative_path: str, content: str) -
 def assert_database_config_present(config_content: str) -> None:
     """Assert that database configuration is present in config content."""
     assert "DATABASE_URL" in config_content
-    assert "sqlite:///data/app.db" in config_content
+    assert "sqlite:///./data/app.db" in config_content
     assert "DATABASE_ENGINE_ECHO" in config_content
     assert "DATABASE_CONNECT_ARGS" in config_content
     assert "check_same_thread" in config_content
@@ -443,6 +443,38 @@ def assert_db_file_uses_settings(db_content: str) -> None:
     assert "settings.DATABASE_URL" in db_content
     assert "settings.DATABASE_CONNECT_ARGS" in db_content
     assert "settings.DATABASE_ENGINE_ECHO" in db_content
+
+
+def assert_db_file_structure(db_content: str) -> None:
+    """Assert that db.py has complete structure including session management."""
+    # First check basic settings usage
+    assert_db_file_uses_settings(db_content)
+
+    # Check imports
+    assert "from contextlib import contextmanager" in db_content
+    assert "from sqlalchemy import create_engine, event" in db_content
+    assert "from sqlalchemy.orm import sessionmaker" in db_content
+    assert "from sqlmodel import Session" in db_content
+
+    # Check engine creation
+    assert "engine = create_engine(" in db_content
+
+    # Check foreign key pragma
+    assert '@event.listens_for(engine, "connect")' in db_content
+    assert "PRAGMA foreign_keys=ON" in db_content
+
+    # Check SessionLocal factory
+    assert "SessionLocal = sessionmaker(" in db_content
+    assert "class_=Session" in db_content
+    assert "autoflush=False" in db_content
+    assert "autocommit=False" in db_content
+
+    # Check context manager
+    assert "@contextmanager" in db_content
+    assert "def db_session(autocommit: bool = True)" in db_content
+    assert "db_session.commit()" in db_content
+    assert "db_session.rollback()" in db_content
+    assert "db_session.close()" in db_content
 
 
 def run_cli_help_command(*args: str, timeout: int | None = None) -> CLITestResult:

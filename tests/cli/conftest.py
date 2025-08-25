@@ -84,3 +84,128 @@ def get_generated_stack(
         return generated_stacks[name]
 
     return _get_stack
+
+
+# Database Runtime Testing Fixtures
+# Following ee-toolset pattern for proper fixture-based testing
+
+
+@pytest.fixture(scope="session")
+def generated_db_project(session_temp_dir: Path) -> CLITestResult:
+    """
+    Generate a project with database component once per session.
+
+    This fixture generates a project and installs its dependencies
+    so we can import and test the generated db.py module.
+    """
+    print("🗄️  Generating database project for runtime testing...")
+
+    result = run_aegis_init(
+        "test-database-runtime",
+        ["database"],
+        session_temp_dir,
+        timeout=60,
+    )
+
+    if not result.success:
+        raise RuntimeError(f"Failed to generate database project: {result.stderr}")
+
+    # Install dependencies in the generated project
+    print("📦 Installing dependencies in generated project...")
+    from .test_utils import run_project_command
+
+    assert result.project_path is not None, "Project path should not be None"
+    install_result = run_project_command(
+        ["uv", "sync", "--extra", "dev"],
+        result.project_path,
+        timeout=120,
+        step_name="Install Dependencies",
+        env_overrides={"VIRTUAL_ENV": ""},  # Ensure clean environment
+    )
+
+    if not install_result.success:
+        raise RuntimeError(f"Failed to install dependencies: {install_result.stderr}")
+
+    print("✅ Database project ready for runtime testing!")
+    return result
+
+
+@pytest.fixture(scope="session")
+def db_module(generated_db_project: CLITestResult) -> dict[str, Any]:
+    """
+    Import the generated database module.
+
+    This allows us to test the actual generated code,
+    not just check that files exist.
+    """
+    import sys
+
+    # Add generated project to Python path
+    project_path = str(generated_db_project.project_path)
+    if project_path not in sys.path:
+        sys.path.insert(0, project_path)
+
+    # Add generated project's site-packages to access its dependencies
+    # This is safe because we control version pinning in both environments
+    import glob
+
+    site_packages_paths = glob.glob(f"{project_path}/.venv/lib/python*/site-packages")
+    if site_packages_paths:
+        sys.path.insert(0, site_packages_paths[0])
+
+    # Import the generated db module
+    # NOTE: These imports are from the dynamically generated project, not aegis-stack
+    # MyPy can't see them during static analysis, hence the type: ignore comments
+    from sqlalchemy.exc import IntegrityError  # type: ignore[import-not-found]
+
+    # Also import SQLModel classes from the generated project
+    from sqlmodel import Field, SQLModel  # type: ignore[import-not-found]
+
+    from app.core.db import (  # type: ignore[import-not-found]
+        SessionLocal,
+        db_session,
+        engine,
+    )
+
+    # Create model factory function
+    def create_test_models() -> dict[str, Any]:
+        """Create test model classes using the generated project's SQLModel."""
+
+        class TestUser(SQLModel, table=True):  # type: ignore[misc,call-arg]
+            """Simple test model for database tests."""
+
+            __tablename__ = "test_users"
+            id: int | None = Field(default=None, primary_key=True)
+            name: str
+            email: str | None = None
+
+        class Parent(SQLModel, table=True):  # type: ignore[misc,call-arg]
+            """Parent model for foreign key testing."""
+
+            __tablename__ = "parents"
+            id: int | None = Field(default=None, primary_key=True)
+            name: str
+
+        class Child(SQLModel, table=True):  # type: ignore[misc,call-arg]
+            """Child model for foreign key testing."""
+
+            __tablename__ = "children"
+            id: int | None = Field(default=None, primary_key=True)
+            name: str
+            parent_id: int = Field(foreign_key="parents.id")
+
+        return {
+            "TestUser": TestUser,
+            "Parent": Parent,
+            "Child": Child,
+        }
+
+    return {
+        "db_session": db_session,
+        "engine": engine,
+        "SessionLocal": SessionLocal,
+        "SQLModel": SQLModel,
+        "Field": Field,
+        "IntegrityError": IntegrityError,
+        "create_test_models": create_test_models,
+    }

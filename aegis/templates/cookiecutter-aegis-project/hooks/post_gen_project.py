@@ -27,6 +27,7 @@ def process_j2_templates():
     """
     Process all .j2 template files in the generated project.
     Renders them with cookiecutter context and removes the .j2 originals.
+    Returns list of output files that were created.
     """
     # Cookiecutter context variables - these template strings are processed
     # by cookiecutter before this hook runs, so they contain actual values
@@ -50,6 +51,7 @@ def process_j2_templates():
     # Find all .j2 files in the project
     project_path = Path(PROJECT_DIRECTORY)
     j2_files = list(project_path.rglob("*.j2"))
+    processed_files = []
 
     for j2_file in j2_files:
         # Read the template content
@@ -69,12 +71,15 @@ def process_j2_templates():
         # Remove the original .j2 file
         j2_file.unlink()
 
-        print(f"Processed template: {j2_file.name} -> {output_file.name}")
+        # Track processed files for later reporting
+        processed_files.append(output_file)
 
         # Ensure file ends with newline
         if not rendered_content.endswith("\n"):
             with open(output_file, "a", encoding="utf-8") as f:
                 f.write("\n")
+
+    return processed_files
 
 
 def run_auto_formatting():
@@ -118,7 +123,7 @@ def main():
     components and process template files.
     """
     # Process .j2 template files first
-    process_j2_templates()
+    processed_files = process_j2_templates()
 
     # Remove components not selected
     if "{{ cookiecutter.include_scheduler }}" != "yes":
@@ -153,6 +158,11 @@ def main():
         and "{{ cookiecutter.include_cache }}" != "yes"
     ):
         remove_dir("docs/components")
+
+    # Print only templates that survived cleanup
+    for file_path in processed_files:
+        if file_path.exists():
+            print(f"Processed template: {file_path.name}")
 
     # Run auto-formatting after all processing is complete
     run_auto_formatting()

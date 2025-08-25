@@ -94,7 +94,7 @@ class TestDatabaseConfiguration:
     ) -> None:
         """Test db.py file generated when database component selected."""
         from tests.cli.test_utils import (
-            assert_db_file_uses_settings,
+            assert_db_file_structure,
             assert_file_exists,
             run_aegis_init,
         )
@@ -109,7 +109,8 @@ class TestDatabaseConfiguration:
 
         db_file = result.project_path / "app" / "core" / "db.py"
         db_content = db_file.read_text()
-        assert_db_file_uses_settings(db_content)
+        # Use enhanced validation that checks complete structure
+        assert_db_file_structure(db_content)
 
     def test_database_file_not_generated_without_component(
         self, temp_output_dir: Path
