@@ -562,6 +562,103 @@ async def check_cache_health() -> ComponentStatus:
 {% endif %}
 
 
+{% if cookiecutter.include_database == "yes" %}
+async def check_database_health() -> ComponentStatus:
+    """
+    Check database connectivity and basic functionality.
+
+    Returns:
+        ComponentStatus indicating database health
+    """
+    try:
+        # Import db_session from generated project
+        from app.core.db import db_session
+        from pathlib import Path
+        
+        # Check if database file exists for SQLite
+        db_url = settings.DATABASE_URL
+        if db_url.startswith("sqlite:///"):
+            # Extract path from SQLite URL
+            db_path = db_url.replace("sqlite:///", "").lstrip("./")
+            
+            # Check if database file exists
+            if not Path(db_path).exists():
+                return ComponentStatus(
+                    name="database",
+                    status=ComponentStatusType.WARNING,
+                    message="Database not initialized - file does not exist",
+                    response_time_ms=None,
+                    metadata={
+                        "implementation": "sqlite",
+                        "database_exists": False,
+                        "expected_path": db_path,
+                        "url": settings.DATABASE_URL,
+                        "recommendation": "Run database migrations or create database file",
+                    },
+                )
+
+        # Test database connection with simple query
+        with db_session(autocommit=False) as session:
+            # Execute a simple query to test connectivity
+            from sqlalchemy import text
+            session.execute(text("SELECT 1"))
+            # No need to commit since we're just testing connectivity
+
+        return ComponentStatus(
+            name="database",
+            status=ComponentStatusType.HEALTHY,
+            message="Database connection successful",
+            response_time_ms=None,  # Will be set by caller
+            metadata={
+                "implementation": "sqlite",
+                "url": settings.DATABASE_URL,
+                "database_exists": True,
+                "engine_echo": settings.DATABASE_ENGINE_ECHO,
+            },
+        )
+
+    except ImportError:
+        return ComponentStatus(
+            name="database",
+            status=ComponentStatusType.UNHEALTHY,
+            message="Database module not available",
+            response_time_ms=None,
+            metadata={
+                "implementation": "sqlite",
+                "error": "Database module not imported or configured",
+            },
+        )
+    except Exception as e:
+        # Check if it's a file not found error
+        error_str = str(e).lower()
+        if "unable to open database file" in error_str or "no such file" in error_str:
+            return ComponentStatus(
+                name="database",
+                status=ComponentStatusType.WARNING,
+                message="Database file not accessible",
+                response_time_ms=None,
+                metadata={
+                    "implementation": "sqlite",
+                    "url": settings.DATABASE_URL,
+                    "error": str(e),
+                    "recommendation": "Check database file path and permissions",
+                },
+            )
+        
+        return ComponentStatus(
+            name="database",
+            status=ComponentStatusType.UNHEALTHY,
+            message=f"Database connection failed: {str(e)}",
+            response_time_ms=None,
+            metadata={
+                "implementation": "sqlite",
+                "url": settings.DATABASE_URL,
+                "error": str(e),
+            },
+        )
+{% endif %}
+
+
 {% if cookiecutter.include_worker == "yes" %}
 async def check_worker_health() -> ComponentStatus:
     """
