@@ -180,4 +180,11 @@ async def startup_hook() -> None:
     logger.info("Cache component health check registered")
     {%- endif %}
 
+    {%- if cookiecutter.include_database == "yes" %}
+    # Register database health check (SQLite connectivity and basic operations)
+    from app.services.system.health import check_database_health
+    register_health_check("database", check_database_health)
+    logger.info("Database component health check registered")
+    {%- endif %}
+
     logger.info("✅ Component health detection complete")

@@ -406,3 +406,124 @@ class TestComponentMetadata:
         assert status_dict["metadata"]["key"] == "value"
         assert "sub1" in status_dict["sub_components"]
         assert status_dict["sub_components"]["sub1"]["status"] == "healthy"
+
+
+{% if cookiecutter.include_database == "yes" %}
+class TestDatabaseHealthCheck:
+    """Test database health check functionality."""
+
+    @pytest.mark.asyncio
+    async def test_database_health_check_success(self, db_session) -> None:
+        """Test successful database health check with mocked database."""
+        from app.services.system.health import check_database_health
+        
+        # Mock everything to simulate successful database connection
+        with patch('app.services.system.health.settings') as mock_settings, \
+             patch('pathlib.Path.exists', return_value=True), \
+             patch('app.core.db.db_session') as mock_db_session:
+            
+            mock_settings.DATABASE_URL = "sqlite:///./data/test.db"
+            
+            # Mock successful db_session
+            mock_session = MagicMock()
+            mock_session.execute.return_value = None  # Successful query
+            mock_db_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+            mock_db_session.return_value.__exit__ = MagicMock(return_value=None)
+            
+            result = await check_database_health()
+            
+            assert result.name == "database"
+            assert result.status == ComponentStatusType.HEALTHY
+            assert result.message == "Database connection successful"
+            assert result.metadata["implementation"] == "sqlite"
+            assert result.metadata["database_exists"] is True
+
+    @pytest.mark.asyncio
+    async def test_database_health_check_import_error(self) -> None:
+        """Test database health check when db module not available."""
+        from app.services.system.health import check_database_health
+        
+        # Mock ImportError when trying to import db_session from app.core.db
+        import builtins
+        real_import = builtins.__import__
+        
+        def mock_import(name, *args, **kwargs):
+            if name == 'app.core.db':
+                raise ImportError("No db module")
+            return real_import(name, *args, **kwargs)
+        
+        with patch('builtins.__import__', side_effect=mock_import):
+            result = await check_database_health()
+            
+            assert result.name == "database"
+            assert result.status == ComponentStatusType.UNHEALTHY
+            assert result.message == "Database module not available"
+            assert result.metadata["error"] == "Database module not imported or configured"
+
+    @pytest.mark.asyncio
+    async def test_database_health_check_missing_file(self) -> None:
+        """Test database health check when database file doesn't exist."""
+        from app.services.system.health import check_database_health
+        
+        # Patch settings.DATABASE_URL to point to non-existent file
+        with patch('app.services.system.health.settings') as mock_settings:
+            mock_settings.DATABASE_URL = "sqlite:///./nonexistent/test.db"
+            
+            result = await check_database_health()
+            
+            assert result.name == "database"
+            assert result.status == ComponentStatusType.WARNING
+            assert "Database not initialized" in result.message
+            assert result.metadata["database_exists"] is False
+            assert "nonexistent/test.db" in result.metadata["expected_path"]
+
+    @pytest.mark.asyncio
+    async def test_database_health_check_connection_failure(self) -> None:
+        """Test database health check when connection fails due to permissions."""
+        from app.services.system.health import check_database_health
+        
+        # Mock settings and Path.exists to simulate file exists but connection fails
+        with patch('app.services.system.health.settings') as mock_settings, \
+             patch('pathlib.Path.exists', return_value=True), \
+             patch('app.core.db.db_session') as mock_db_session:
+            
+            # File exists but connection fails
+            mock_settings.DATABASE_URL = "sqlite:///./data/test.db"
+            
+            # Mock db_session to simulate connection error
+            mock_session = MagicMock()
+            mock_session.execute.side_effect = Exception("unable to open database file")
+            mock_db_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+            mock_db_session.return_value.__exit__ = MagicMock(return_value=None)
+            
+            result = await check_database_health()
+            
+            assert result.name == "database"
+            assert result.status == ComponentStatusType.WARNING
+            assert result.message == "Database file not accessible"
+            assert "unable to open database file" in result.metadata["error"]
+
+    def test_database_status_metadata_structure(self) -> None:
+        """Test that database health check includes proper metadata."""
+        from app.services.system.models import ComponentStatus, ComponentStatusType
+        
+        # Test successful database component metadata
+        database_metadata = {
+            "implementation": "sqlite",
+            "url": "sqlite:///:memory:",
+            "database_exists": True,
+            "engine_echo": False,
+        }
+
+        database_status = ComponentStatus(
+            name="database",
+            status=ComponentStatusType.HEALTHY,
+            message="Database connection successful",
+            metadata=database_metadata,
+        )
+
+        assert database_status.metadata["implementation"] == "sqlite"
+        assert "sqlite://" in database_status.metadata["url"]
+        assert database_status.metadata["database_exists"] is True
+        assert database_status.metadata["engine_echo"] is False
+{% endif %}
