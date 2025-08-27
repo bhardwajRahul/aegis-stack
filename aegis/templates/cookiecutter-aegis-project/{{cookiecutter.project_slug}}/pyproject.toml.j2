@@ -98,6 +98,7 @@ known-first-party = ["app"]
 [tool.mypy]
 python_version = "{{ cookiecutter.python_version }}"
 strict = true
+plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = "flet.*"

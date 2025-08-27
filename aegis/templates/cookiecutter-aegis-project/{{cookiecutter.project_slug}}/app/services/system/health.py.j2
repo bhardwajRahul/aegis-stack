@@ -648,7 +648,9 @@ async def check_database_health() -> ComponentStatus:
             except Exception as e:
                 # If any enhanced metadata collection fails, log but don't break
                 # health check
-                logger.debug("Failed to collect enhanced database metadata", exc_info=True)
+                logger.debug(
+                    "Failed to collect enhanced database metadata", exc_info=True
+                )
         
         # Test database connection and collect PRAGMA settings
         with db_session(autocommit=False) as session:
@@ -682,7 +684,9 @@ async def check_database_health() -> ComponentStatus:
                     
                 except Exception as e:
                     # PRAGMA queries can fail in some SQLite configurations
-                    logger.debug("Failed to collect SQLite PRAGMA settings", exc_info=True)
+                    logger.debug(
+                        "Failed to collect SQLite PRAGMA settings", exc_info=True
+                    )
             
             # No need to commit since we're just testing connectivity
 

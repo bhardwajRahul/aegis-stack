@@ -146,6 +146,28 @@ STACK_COMBINATIONS = [
         ],
         expected_pyproject_deps=["fastapi", "flet", "arq", "apscheduler", "redis"],
     ),
+    StackCombination(
+        name="database",
+        components=["database"],
+        description="Base stack with SQLite database",
+        expected_files=[
+            "app/components/backend/",
+            "app/components/frontend/",
+            "app/core/db.py",  # Database-specific file
+            "app/entrypoints/webserver.py",
+            "docker-compose.yml",
+            "pyproject.toml",
+            "Makefile",
+        ],
+        expected_docker_services=["webserver"],  # No database service for SQLite
+        expected_pyproject_deps=[
+            "fastapi",
+            "flet",
+            "sqlmodel",
+            "sqlalchemy",
+            "aiosqlite",
+        ],
+    ),
 ]
 
 
@@ -239,7 +261,7 @@ def test_stack_combinations_comprehensive() -> None:
     # Verify we have tests for basic patterns
     combination_names = {combo.name for combo in STACK_COMBINATIONS}
 
-    expected_combinations = {"base", "redis", "scheduler", "worker", "full"}
+    expected_combinations = {"base", "redis", "scheduler", "worker", "full", "database"}
     assert combination_names == expected_combinations, (
         f"Missing expected combinations. "
         f"Expected: {expected_combinations}, "

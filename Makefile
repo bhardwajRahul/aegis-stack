@@ -185,8 +185,8 @@ test-template-with-components: ## Test template with scheduler component include
 
 clean-test-projects: ## Remove all generated test project directories
 	@echo "🧹 Cleaning up test projects..."
-	@chmod -R +w ../test-basic-stack ../test-component-stack ../test-worker-stack ../test-full-stack 2>/dev/null || true
-	@rm -rf ../test-basic-stack ../test-component-stack ../test-worker-stack ../test-full-stack 2>/dev/null || true
+	@chmod -R +w ../test-basic-stack ../test-component-stack ../test-worker-stack ../test-database-stack ../test-full-stack 2>/dev/null || true
+	@rm -rf ../test-basic-stack ../test-component-stack ../test-worker-stack ../test-database-stack ../test-full-stack 2>/dev/null || true
 	@echo "✅ Test projects cleaned up"
 
 # ============================================================================
@@ -230,6 +230,22 @@ test-stacks-full: ## Full stack matrix testing pipeline (comprehensive but slow)
 	@echo "   All component combinations can generate, build, and pass quality checks"
 
 # Enhanced template testing with specific component combinations
+test-template-database: ## Test template with database component
+	@echo "🗄️  Testing database component template..."
+	@chmod -R +w ../test-database-stack 2>/dev/null || true
+	@rm -rf ../test-database-stack
+	@env -u VIRTUAL_ENV uv run aegis init test-database-stack --components database --output-dir .. --no-interactive --force --yes
+	@echo "📦 Installing dependencies and CLI..."
+	@cd ../test-database-stack && chmod -R +w .venv 2>/dev/null || true && rm -rf .venv && env -u VIRTUAL_ENV uv sync --extra dev --extra docs
+	@cd ../test-database-stack && env -u VIRTUAL_ENV uv pip install -e .
+	@echo "🔍 Running validation checks..."
+	@cd ../test-database-stack && env -u VIRTUAL_ENV make check
+	@echo "🧪 Testing CLI script installation..."
+	@cd ../test-database-stack && env -u VIRTUAL_ENV uv run test-database-stack --help >/dev/null && echo "✅ CLI script 'test-database-stack --help' works" || echo "⚠️  CLI script test failed"
+	@cd ../test-database-stack && env -u VIRTUAL_ENV uv run test-database-stack health status --help >/dev/null && echo "✅ Health commands available" || echo "⚠️  Health command test failed"
+	@echo "✅ Database template test completed successfully!"
+	@echo "   Test project available in ../test-database-stack/"
+
 test-template-worker: ## Test template with worker component
 	@echo "🔧 Testing worker component template..."
 	@chmod -R +w ../test-worker-stack 2>/dev/null || true
@@ -246,11 +262,11 @@ test-template-worker: ## Test template with worker component
 	@echo "✅ Worker template test completed successfully!"
 	@echo "   Test project available in ../test-worker-stack/"
 
-test-template-full: ## Test template with all components (worker + scheduler)
+test-template-full: ## Test template with all components (worker + scheduler + database)
 	@echo "🌟 Testing full component template..."
 	@chmod -R +w ../test-full-stack 2>/dev/null || true
 	@rm -rf ../test-full-stack
-	@env -u VIRTUAL_ENV uv run aegis init test-full-stack --components worker,scheduler --output-dir .. --no-interactive --force --yes
+	@env -u VIRTUAL_ENV uv run aegis init test-full-stack --components worker,scheduler,database --output-dir .. --no-interactive --force --yes
 	@echo "📦 Installing dependencies and CLI..."
 	@cd ../test-full-stack && chmod -R +w .venv 2>/dev/null || true && rm -rf .venv && env -u VIRTUAL_ENV uv sync --extra dev --extra docs
 	@cd ../test-full-stack && env -u VIRTUAL_ENV uv pip install -e .
@@ -261,7 +277,7 @@ test-template-full: ## Test template with all components (worker + scheduler)
 	@cd ../test-full-stack && env -u VIRTUAL_ENV uv run test-full-stack health status --help >/dev/null && echo "✅ Health commands available" || echo "⚠️  Health command test failed"
 	@echo "✅ Full stack template test completed successfully!"
 	@echo "   Test project available in ../test-full-stack/"
-	@echo "   Includes: backend, frontend, worker queues, scheduler, Redis"
+	@echo "   Includes: backend, frontend, worker queues, scheduler, Redis, database"
 
 # Quick component testing for development workflow
 test-component-quick: ## Quick test of specific component (set COMPONENT=worker|scheduler)
@@ -277,7 +293,7 @@ endif
 	@echo "✅ $(COMPONENT) component generated successfully in ../test-$(COMPONENT)-quick/"
 	@echo "   Run 'cd ../test-$(COMPONENT)-quick && make check' to validate"
 
-.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test redis-start redis-stop redis-cli redis-logs redis-stats redis-reset redis-queues redis-workers redis-failed redis-monitor redis-info test-template-quick test-template test-template-with-components test-template-worker test-template-full test-component-quick test-stacks test-stacks-build test-stacks-runtime test-stacks-full clean-test-projects help
+.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test redis-start redis-stop redis-cli redis-logs redis-stats redis-reset redis-queues redis-workers redis-failed redis-monitor redis-info test-template-quick test-template test-template-with-components test-template-database test-template-worker test-template-full test-component-quick test-stacks test-stacks-build test-stacks-runtime test-stacks-full clean-test-projects help
 
 # Default target
 .DEFAULT_GOAL := help
