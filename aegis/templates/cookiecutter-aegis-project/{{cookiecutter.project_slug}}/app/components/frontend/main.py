@@ -322,6 +322,54 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                         ),
                     ]
 
+                    # Add database-specific metadata display
+                    if comp_name == "database" and component.metadata:
+                        db_info = []
+                        
+                        # Show SQLite version if available
+                        if "version" in component.metadata:
+                            db_info.append(f"SQLite v{component.metadata['version']}")
+                        
+                        # Show file size if available
+                        if "file_size_human" in component.metadata:
+                            size = component.metadata['file_size_human']
+                            db_info.append(f"Size: {size}")
+                        
+                        # Show WAL status if available
+                        if "wal_enabled" in component.metadata:
+                            wal_enabled = component.metadata["wal_enabled"]
+                            wal_status = "WAL" if wal_enabled else "DELETE"
+                            db_info.append(f"Mode: {wal_status}")
+                        
+                        # Show connection pool size if available
+                        if "connection_pool_size" in component.metadata:
+                            pool_size = component.metadata['connection_pool_size']
+                            db_info.append(f"Pool: {pool_size}")
+                        
+                        # Add database info to card if we have any
+                        if db_info:
+                            card_content.append(
+                                ft.Container(
+                                    content=ft.Column(
+                                        [
+                                            ft.Text(
+                                                "Database Info:",
+                                                size=10,
+                                                weight=ft.FontWeight.BOLD,
+                                                color=text_color,
+                                            ),
+                                            ft.Text(
+                                                " • ".join(db_info),
+                                                size=10,
+                                                color=text_color,
+                                            ),
+                                        ],
+                                        spacing=2,
+                                    ),
+                                    margin=ft.margin.only(top=8),
+                                )
+                            )
+
                     # Add sub-component indicators
                     if component.sub_components:
                         sub_status = []
@@ -481,6 +529,113 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                             padding=15,
                             bgcolor=queue_bg_color,
                             border=ft.border.all(1, ft.Colors.PURPLE),
+                            border_radius=8,
+                            width=300,
+                        )
+                    )
+
+                # Database details card (if database component exists)
+                database_comp = components.get("database")
+                if database_comp and database_comp.metadata:
+                    db_bg_color = (
+                        ft.Colors.CYAN_100 if is_light_mode else ft.Colors.CYAN_900
+                    )
+                    db_text_color = (
+                        ft.Colors.CYAN_800 if is_light_mode else ft.Colors.CYAN_100
+                    )
+
+                    db_content = [
+                        ft.Text(
+                            "Database Details",
+                            size=14,
+                            weight=ft.FontWeight.BOLD,
+                            color=db_text_color,
+                        )
+                    ]
+
+                    # Show detailed database metadata
+                    metadata = database_comp.metadata
+                    
+                    # Version and implementation
+                    if "version" in metadata and "implementation" in metadata:
+                        db_content.append(
+                            ft.Text(
+                                f"{metadata['implementation'].upper()} "
+                                f"v{metadata['version']}",
+                                size=12,
+                                weight=ft.FontWeight.BOLD,
+                                color=db_text_color,
+                            )
+                        )
+                    
+                    # File info
+                    if "file_size_human" in metadata and "file_size_bytes" in metadata:
+                        db_content.append(
+                            ft.Text(
+                                f"File Size: {metadata['file_size_human']} "
+                                f"({metadata['file_size_bytes']:,} bytes)",
+                                size=11,
+                                color=db_text_color,
+                            )
+                        )
+                    
+                    # Connection info
+                    if "connection_pool_size" in metadata:
+                        db_content.append(
+                            ft.Text(
+                                f"Connection Pool: "
+                                f"{metadata['connection_pool_size']} connections",
+                                size=11,
+                                color=db_text_color,
+                            )
+                        )
+                    
+                    # SQLite PRAGMA settings
+                    if "pragma_settings" in metadata:
+                        pragma = metadata["pragma_settings"]
+                        pragma_info = []
+                        
+                        if "foreign_keys" in pragma:
+                            fk_status = "ON" if pragma["foreign_keys"] else "OFF"
+                            pragma_info.append(f"Foreign Keys: {fk_status}")
+                        
+                        if "journal_mode" in pragma:
+                            journal_mode = pragma["journal_mode"].upper()
+                            pragma_info.append(f"Journal: {journal_mode}")
+                        
+                        if "cache_size" in pragma:
+                            # Remove negative sign
+                            cache_size = abs(pragma["cache_size"])
+                            if cache_size > 1000:
+                                cache_display = f"{cache_size // 1000}K pages"
+                            else:
+                                cache_display = f"{cache_size} pages"
+                            pragma_info.append(f"Cache: {cache_display}")
+                        
+                        if pragma_info:
+                            db_content.append(
+                                ft.Text(
+                                    "Configuration:",
+                                    size=11,
+                                    weight=ft.FontWeight.BOLD,
+                                    color=db_text_color,
+                                )
+                            )
+                            for info in pragma_info:
+                                db_content.append(
+                                    ft.Text(
+                                        f"  • {info}",
+                                        size=10,
+                                        color=db_text_color,
+                                    )
+                                )
+
+                    bottom_cards.append(
+                        ft.Container(
+                            content=ft.Column(db_content, spacing=4),
+                            padding=15,
+                            bgcolor=db_bg_color,
+                            border=ft.border.all(1, ft.Colors.CYAN),
                             border_radius=8,
                             width=300,
                         )

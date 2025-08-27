@@ -9,6 +9,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 import os
+import sqlite3
 import sys
 from typing import Any, cast
 
@@ -22,6 +23,22 @@ from .models import ComponentStatus, ComponentStatusType, SystemStatus
 
 # Global registry for custom health checks
 _health_checks: dict[str, Callable[[], Awaitable[ComponentStatus]]] = {}
+
+
+def format_bytes(size: int) -> str:
+    """Format bytes into human-readable string."""
+    if size == 0:
+        return "0 B"
+    
+    size_float = float(size)
+    for unit in ['B', 'KB', 'MB', 'GB']:
+        if size_float < 1024.0:
+            if unit == 'B':
+                return f"{int(size_float)} {unit}"
+            else:
+                return f"{size_float:.1f} {unit}"
+        size_float /= 1024.0
+    return f"{size_float:.1f} TB"
 
 
 def propagate_status(child_statuses: list[ComponentStatusType]) -> ComponentStatusType:
@@ -593,15 +610,80 @@ async def check_database_health() -> ComponentStatus:
                         "database_exists": False,
                         "expected_path": db_path,
                         "url": settings.DATABASE_URL,
-                        "recommendation": "Run database migrations or create database file",
+                        "recommendation": (
+                            "Run database migrations or create database file"
+                        ),
                     },
                 )
 
-        # Test database connection with simple query
+        # Test database connection with simple query and collect enhanced metadata
+        enhanced_metadata = {
+            "implementation": "sqlite",
+            "url": settings.DATABASE_URL,
+            "database_exists": True,
+            "engine_echo": settings.DATABASE_ENGINE_ECHO,
+        }
+        
+        # Collect additional metadata for SQLite databases
+        if db_url.startswith("sqlite:///"):
+            try:
+                # Add SQLite version
+                enhanced_metadata["version"] = sqlite3.sqlite_version
+                
+                # Extract and add file size information
+                db_path = db_url.replace("sqlite:///", "").lstrip("./")
+                if Path(db_path).exists():
+                    file_size = Path(db_path).stat().st_size
+                    enhanced_metadata["file_size_bytes"] = file_size
+                    enhanced_metadata["file_size_human"] = format_bytes(file_size)
+                
+                # Get engine and connection pool information
+                from app.core.db import engine
+                if hasattr(engine.pool, 'size'):
+                    enhanced_metadata["connection_pool_size"] = engine.pool.size()
+                else:
+                    # SQLite typically uses NullPool or StaticPool with size 1
+                    enhanced_metadata["connection_pool_size"] = 1
+                    
+            except Exception as e:
+                # If any enhanced metadata collection fails, log but don't break
+                # health check
+                logger.debug("Failed to collect enhanced database metadata", exc_info=True)
+        
+        # Test database connection and collect PRAGMA settings
         with db_session(autocommit=False) as session:
             # Execute a simple query to test connectivity
             from sqlalchemy import text
             session.execute(text("SELECT 1"))
+            
+            # Collect SQLite PRAGMA settings for additional metadata
+            if db_url.startswith("sqlite:///"):
+                try:
+                    pragma_settings = {}
+                    
+                    # Get foreign keys setting
+                    result = session.execute(text("PRAGMA foreign_keys")).fetchone()
+                    if result:
+                        pragma_settings["foreign_keys"] = bool(result[0])
+                    
+                    # Get journal mode
+                    result = session.execute(text("PRAGMA journal_mode")).fetchone()
+                    if result:
+                        journal_mode = result[0].lower()
+                        pragma_settings["journal_mode"] = journal_mode
+                        enhanced_metadata["wal_enabled"] = journal_mode == "wal"
+                    
+                    # Add cache size if available
+                    result = session.execute(text("PRAGMA cache_size")).fetchone()
+                    if result:
+                        pragma_settings["cache_size"] = result[0]
+                    
+                    enhanced_metadata["pragma_settings"] = pragma_settings
+                    
+                except Exception as e:
+                    # PRAGMA queries can fail in some SQLite configurations
+                    logger.debug("Failed to collect SQLite PRAGMA settings", exc_info=True)
+            
             # No need to commit since we're just testing connectivity
 
         return ComponentStatus(
@@ -609,12 +691,7 @@ async def check_database_health() -> ComponentStatus:
             status=ComponentStatusType.HEALTHY,
             message="Database connection successful",
             response_time_ms=None,  # Will be set by caller
-            metadata={
-                "implementation": "sqlite",
-                "url": settings.DATABASE_URL,
-                "database_exists": True,
-                "engine_echo": settings.DATABASE_ENGINE_ECHO,
-            },
+            metadata=enhanced_metadata,
         )
 
     except ImportError:
