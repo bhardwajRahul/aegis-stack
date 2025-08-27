@@ -18,6 +18,30 @@ from app.services.system.health import (
 
 
 
+class TestHealthUtilityFunctions:
+    """Test utility functions used in health checks."""
+    
+    def test_format_bytes(self) -> None:
+        """Test format_bytes utility function."""
+        from app.services.system.health import format_bytes
+        
+        # Test various byte sizes
+        assert format_bytes(0) == "0 B"
+        assert format_bytes(512) == "512 B"
+        assert format_bytes(1024) == "1.0 KB"
+        assert format_bytes(1536) == "1.5 KB"
+        assert format_bytes(2048) == "2.0 KB"
+        assert format_bytes(1048576) == "1.0 MB"
+        assert format_bytes(1572864) == "1.5 MB"
+        assert format_bytes(1073741824) == "1.0 GB"
+        assert format_bytes(1099511627776) == "1.0 TB"
+        
+        # Test edge cases
+        assert format_bytes(1) == "1 B"
+        assert format_bytes(1023) == "1023 B"
+        assert format_bytes(8192) == "8.0 KB"
+
+
 class TestComponentStatusPropagation:
     """Test warning status propagation through component hierarchies."""
 
@@ -417,26 +441,83 @@ class TestDatabaseHealthCheck:
         """Test successful database health check with mocked database."""
         from app.services.system.health import check_database_health
         
-        # Mock everything to simulate successful database connection
+        # Mock everything to simulate successful database connection with
+        # enhanced metadata
         with patch('app.services.system.health.settings') as mock_settings, \
              patch('pathlib.Path.exists', return_value=True), \
-             patch('app.core.db.db_session') as mock_db_session:
+             patch('pathlib.Path.stat') as mock_stat, \
+             patch('app.core.db.db_session') as mock_db_session, \
+             patch('app.core.db.engine') as mock_engine, \
+             patch('app.services.system.health.sqlite3') as mock_sqlite3:
             
             mock_settings.DATABASE_URL = "sqlite:///./data/test.db"
+            mock_settings.DATABASE_ENGINE_ECHO = False
             
-            # Mock successful db_session
+            # Mock SQLite version
+            mock_sqlite3.sqlite_version = "3.43.2"
+            
+            # Mock file size
+            mock_stat_result = MagicMock()
+            mock_stat_result.st_size = 8192
+            mock_stat.return_value = mock_stat_result
+            
+            # Mock engine pool
+            mock_engine.pool.size.return_value = 5
+            
+            # Mock successful db_session with PRAGMA queries
             mock_session = MagicMock()
-            mock_session.execute.return_value = None  # Successful query
-            mock_db_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+            
+            # Mock PRAGMA query results
+            def mock_execute(query):
+                query_str = str(query).lower()
+                if "pragma foreign_keys" in query_str:
+                    result = MagicMock()
+                    result.fetchone.return_value = [1]  # foreign_keys = ON
+                    return result
+                elif "pragma journal_mode" in query_str:
+                    result = MagicMock()
+                    result.fetchone.return_value = ["delete"]  # journal_mode = delete
+                    return result
+                elif "pragma cache_size" in query_str:
+                    result = MagicMock()
+                    result.fetchone.return_value = [2000]  # cache_size = 2000
+                    return result
+                else:
+                    # For "SELECT 1" query
+                    return None
+            
+            mock_session.execute.side_effect = mock_execute
+            mock_db_session.return_value.__enter__ = MagicMock(
+                return_value=mock_session
+            )
             mock_db_session.return_value.__exit__ = MagicMock(return_value=None)
             
             result = await check_database_health()
             
+            # Test basic health status
             assert result.name == "database"
             assert result.status == ComponentStatusType.HEALTHY
             assert result.message == "Database connection successful"
+            
+            # Test existing metadata fields
             assert result.metadata["implementation"] == "sqlite"
             assert result.metadata["database_exists"] is True
+            assert result.metadata["engine_echo"] is False
+            assert result.metadata["url"] == "sqlite:///./data/test.db"
+            
+            # Test enhanced metadata fields
+            assert result.metadata["version"] == "3.43.2"
+            assert result.metadata["file_size_bytes"] == 8192
+            assert result.metadata["file_size_human"] == "8.0 KB"
+            assert result.metadata["connection_pool_size"] == 5
+            
+            # Test PRAGMA settings
+            assert "pragma_settings" in result.metadata
+            pragma_settings = result.metadata["pragma_settings"]
+            assert pragma_settings["foreign_keys"] is True
+            assert pragma_settings["journal_mode"] == "delete"
+            assert pragma_settings["cache_size"] == 2000
+            assert result.metadata["wal_enabled"] is False
 
     @pytest.mark.asyncio
     async def test_database_health_check_import_error(self) -> None:
@@ -458,7 +539,9 @@ class TestDatabaseHealthCheck:
             assert result.name == "database"
             assert result.status == ComponentStatusType.UNHEALTHY
             assert result.message == "Database module not available"
-            assert result.metadata["error"] == "Database module not imported or configured"
+            assert result.metadata["error"] == (
+                "Database module not imported or configured"
+            )
 
     @pytest.mark.asyncio
     async def test_database_health_check_missing_file(self) -> None:
@@ -493,7 +576,9 @@ class TestDatabaseHealthCheck:
             # Mock db_session to simulate connection error
             mock_session = MagicMock()
             mock_session.execute.side_effect = Exception("unable to open database file")
-            mock_db_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+            mock_db_session.return_value.__enter__ = MagicMock(
+                return_value=mock_session
+            )
             mock_db_session.return_value.__exit__ = MagicMock(return_value=None)
             
             result = await check_database_health()
@@ -507,12 +592,22 @@ class TestDatabaseHealthCheck:
         """Test that database health check includes proper metadata."""
         from app.services.system.models import ComponentStatus, ComponentStatusType
         
-        # Test successful database component metadata
+        # Test successful database component metadata with enhanced fields
         database_metadata = {
             "implementation": "sqlite",
             "url": "sqlite:///:memory:",
             "database_exists": True,
             "engine_echo": False,
+            "version": "3.43.2",
+            "file_size_bytes": 8192,
+            "file_size_human": "8.0 KB",
+            "connection_pool_size": 1,
+            "pragma_settings": {
+                "foreign_keys": True,
+                "journal_mode": "delete",
+                "cache_size": 2000
+            },
+            "wal_enabled": False,
         }
 
         database_status = ComponentStatus(
@@ -522,8 +617,17 @@ class TestDatabaseHealthCheck:
             metadata=database_metadata,
         )
 
+        # Test existing fields
         assert database_status.metadata["implementation"] == "sqlite"
         assert "sqlite://" in database_status.metadata["url"]
         assert database_status.metadata["database_exists"] is True
         assert database_status.metadata["engine_echo"] is False
+        
+        # Test enhanced metadata fields
+        assert database_status.metadata["version"] == "3.43.2"
+        assert database_status.metadata["file_size_bytes"] == 8192
+        assert database_status.metadata["file_size_human"] == "8.0 KB"
+        assert database_status.metadata["connection_pool_size"] == 1
+        assert isinstance(database_status.metadata["pragma_settings"], dict)
+        assert database_status.metadata["wal_enabled"] is False
 {% endif %}

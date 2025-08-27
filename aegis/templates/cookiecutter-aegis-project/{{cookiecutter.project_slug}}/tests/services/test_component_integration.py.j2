@@ -19,14 +19,22 @@ from app.services.system.health import (
     _check_cpu_usage,
     _check_disk_space,
     _check_memory,
-    check_cache_health,
-    check_worker_health,
 )
+{% if cookiecutter.include_redis == "yes" %}
+from app.services.system.health import check_cache_health
+{% endif %}
+{% if cookiecutter.include_database == "yes" %}
+from app.services.system.health import check_database_health
+{% endif %}
+{% if cookiecutter.include_worker == "yes" %}
+from app.services.system.health import check_worker_health
+{% endif %}
 
 
 class TestComponentIntegration:
     """Test component health checks with controlled failure scenarios."""
 
+{% if cookiecutter.include_redis == "yes" %}
     @pytest.mark.asyncio
     async def test_cache_health_redis_connection_failure(self) -> None:
         """Test cache health check when Redis connection fails."""
@@ -91,7 +99,9 @@ class TestComponentIntegration:
             assert cache_status.metadata["implementation"] == "redis"
             assert cache_status.metadata["version"] == "7.0.0"
             assert cache_status.metadata["connected_clients"] == 2
+{% endif %}
 
+{% if cookiecutter.include_worker == "yes" %}
     @pytest.mark.asyncio
     async def test_worker_health_redis_connection_failure(self) -> None:
         """Test worker health check when Redis connection fails."""
@@ -165,6 +175,7 @@ class TestComponentIntegration:
             assert (
                 queue_sub_components["load_test"].status == ComponentStatusType.HEALTHY
             )
+{% endif %}
 
     @pytest.mark.asyncio
     async def test_system_metrics_high_thresholds(self) -> None:
