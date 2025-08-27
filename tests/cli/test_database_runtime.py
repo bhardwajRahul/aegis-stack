@@ -6,6 +6,7 @@ at runtime using proper fixture-based testing (ee-toolset pattern).
 No string-based test scripts!
 """
 
+from collections.abc import Generator
 from typing import Any
 
 import pytest
@@ -22,8 +23,10 @@ class TestDatabaseRuntimeBehavior:
         return result
 
     @pytest.fixture(autouse=True)
-    def setup_tables(self, db_module: dict[str, Any], models: dict[str, Any]) -> None:
-        """Create test tables before each test."""
+    def setup_tables(
+        self, db_module: dict[str, Any], models: dict[str, Any]
+    ) -> Generator[None, None, None]:
+        """Create test tables before each test and clean up after."""
         # Create data directory for database if it doesn't exist
         import os
 
@@ -32,6 +35,16 @@ class TestDatabaseRuntimeBehavior:
         # Create all tables for our test models
         engine = db_module["engine"]
         sql_model = db_module["SQLModel"]
+        sql_model.metadata.create_all(engine)
+
+        # Run the test
+        yield
+
+        # Clean up after test - drop all tables to ensure clean state
+        # This ensures test isolation without breaking the database connection
+        sql_model.metadata.drop_all(engine)
+
+        # Recreate tables for next test (they'll be empty)
         sql_model.metadata.create_all(engine)
 
     @pytest.mark.slow
