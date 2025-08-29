@@ -36,6 +36,12 @@ COMPONENTS: dict[str, ComponentSpec] = {
         description="Scheduled task execution with APScheduler",
         type=ComponentType.INFRASTRUCTURE,
     ),
+    "database": ComponentSpec(
+        name="database",
+        description="SQLite database with SQLModel ORM",
+        type=ComponentType.INFRASTRUCTURE,
+        requires=[],  # Standalone component
+    ),
 }
 ```
 
@@ -169,6 +175,12 @@ class TemplateGenerator:
                 "app/components/worker/tasks/system_tasks.py",
                 "app/services/load_test.py",
                 "tests/services/test_worker_health_registration.py",
+            ])
+        
+        if "database" in self.components:
+            files.extend([
+                "app/core/db.py",
+                "tests/conftest.py",  # Database testing fixtures
             ])
         
         return sorted(files)

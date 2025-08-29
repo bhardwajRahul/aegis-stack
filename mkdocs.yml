@@ -30,6 +30,7 @@ nav:
   - Components:
     - Overview: components/index.md
     - Backend: components/webserver.md
+    - Database: components/database.md
     - Frontend:
       - Getting Started: components/frontend.md
       - Extras:
@@ -58,6 +59,15 @@ plugins:
           options:
             show_root_heading: true
             show_source: true
+  - glightbox:
+      touchNavigation: true
+      loop: false
+      effect: zoom
+      slide_effect: slide
+      width: 100%
+      height: auto
+      zoomable: true
+      draggable: true
 
 # Markdown extensions
 markdown_extensions:
@@ -68,6 +78,8 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
+  - attr_list
+  - md_in_html
 
 extra_css:
   - stylesheets/custom.css

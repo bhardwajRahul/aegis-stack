@@ -4,6 +4,22 @@ This guide covers documentation standards and patterns for Aegis Stack component
 
 ## Documentation Standards
 
+### Progressive Documentation Philosophy (v0.1.0+)
+
+**Architecture-First Documentation**: Documentation should trail real implementations, not lead them.
+
+**Core Principles:**
+- **Lean Start**: Begin with infrastructure capabilities and basic setup
+- **Real Examples**: Add concrete examples only after building actual services  
+- **Avoid Hypotheticals**: No theoretical User/Post models until auth exists
+- **Progressive Enhancement**: Documentation grows as the system evolves
+
+**Implementation Strategy:**
+- **Database Component**: Infrastructure setup only, real patterns come with User service
+- **Worker Component**: Task execution patterns, real examples with scheduler integration  
+- **Scheduler Component**: Basic scheduling, real patterns with job persistence
+- **Integration Docs**: Added when multiple components work together
+
 ### Components Documentation (Voltron Philosophy)
 
 **Components represent swappable capabilities** (web serving, scheduling, caching) with multiple implementation choices.
@@ -13,8 +29,11 @@ This guide covers documentation standards and patterns for Aegis Stack component
 docs/components/
 ├── index.md           # Overview of all components
 ├── webserver.md       # Web server capability (FastAPI impl)
+├── database.md        # Database capability (SQLite/SQLModel impl) - v0.1.0
 ├── frontend.md        # Frontend capability (Flet impl)  
-└── scheduling.md      # Future: Scheduling capability (APScheduler/schedule)
+├── worker.md          # Worker capability (arq/Redis impl)
+├── scheduler.md       # Scheduler capability (APScheduler impl)
+└── future/            # Future components as needs emerge
 ```
 
 **Component Documentation Pattern:**

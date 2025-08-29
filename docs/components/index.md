@@ -15,8 +15,8 @@ aegis init my-project
 # Add scheduler capability
 aegis init my-project --components scheduler
 
-# Multiple components (future)
-aegis init my-project --components scheduler,database,cache
+# Multiple components
+aegis init my-project --components worker,scheduler,database
 ```
 
 ## Component Architecture
@@ -32,7 +32,7 @@ graph TB
     subgraph "Optional Components"
         Scheduler[Scheduler<br/>APScheduler]
         Worker[Worker<br/>arq + Redis Queues]
-        Database[Database<br/>PostgreSQL + SQLAlchemy]
+        Database[Database<br/>SQLite + SQLModel]
         Cache[Cache<br/>Redis]
     end
     
@@ -66,9 +66,9 @@ graph TB
 | Component | Purpose | Implementation | Status |
 |-----------|---------|----------------|--------|
 | **Core** (Backend + Frontend + CLI) | API + UI + Management | [FastAPI](https://fastapi.tiangolo.com/) + [Flet](https://flet.dev/) + [Typer](https://typer.tiangolo.com/) | ✅ Always included |
+| **[Database](./database.md)** | Data persistence, ORM | [SQLite](https://sqlite.org/) + [SQLModel](https://sqlmodel.tiangolo.com/) | ✅ Available |
 | **[Scheduler](./scheduler.md)** | Background tasks, cron jobs | [APScheduler](https://apscheduler.readthedocs.io/) | ✅ Available |
-| **[Worker](./worker/index.md)** | Async task queues, job processing | [arq](https://arq-docs.helpmanual.io/) + [Redis](https://redis.io/) | ✅ Available |
-| **Database** | Data persistence, migrations | [PostgreSQL](https://postgresql.org/) + [SQLAlchemy](https://sqlalchemy.org/) | 🚧 Coming soon |
+| **[Worker](./worker/index.md)** | Async task queues, job processing | [arq](https://arq-docs.helpmanual.io/) + [Redis](https://redis.io/) | 🧪 Experimental |
 | **Cache** | Session storage, performance | [Redis](https://redis.io/) | 🚧 Coming soon |
 
 ### Technology Integration
@@ -87,7 +87,8 @@ Components are designed as **capability interfaces** - the current implementatio
 ## Next Steps
 
 - **[Backend Component](./webserver.md)** - FastAPI backend configuration
-- **[Frontend Component](./frontend.md)** - Building user interfaces with Flet  
+- **[Frontend Component](./frontend.md)** - Building user interfaces with Flet
+- **[Database Component](./database.md)** - SQLite database with SQLModel ORM
 - **[Scheduler Component](./scheduler.md)** - Scheduling and cron job system
 - **[Worker Component](./worker/index.md)** - Async task processing and queue management
 - **[Philosophy Guide](../philosophy.md)** - Component design principles and architecture

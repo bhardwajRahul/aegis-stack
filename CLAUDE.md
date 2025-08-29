@@ -11,6 +11,20 @@ The architecture follows this pattern:
 - **Generated Projects**: Full-stack containerized applications created by the CLI
 - **Templates**: Cookiecutter templates that define generated project structure
 
+## Release Status: v0.1.0 (LIVE on PyPI!)
+
+**First Official Release** - August 2024
+- ✅ **CLI Tool**: Published to PyPI as `aegis-stack`
+- ✅ **Database Component**: SQLite + SQLModel ORM with health monitoring
+- ✅ **Foundation Stack**: FastAPI backend + Flet frontend + Docker containerization
+- ✅ **Worker Component**: arq + Redis for background job processing
+- ✅ **Scheduler Component**: APScheduler for scheduled tasks
+- ✅ **Documentation**: Progressive documentation philosophy - grows with real implementations
+
+**Install**: `pip install aegis-stack`
+**PyPI**: https://pypi.org/project/aegis-stack/
+**GitHub Release**: https://github.com/lbedner/aegis-stack/releases/tag/v0.1.0
+
 ## Development Commands
 
 This project uses `uv` for dependency management and a `Makefile` for CLI development tasks.
