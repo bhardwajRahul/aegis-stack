@@ -4,10 +4,52 @@ version = "0.1.0"
 description = "A production-ready Python foundation for builders who refuse to wait"
 readme = "README.md"
 requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Leonard Bedner", email = "gamecoder99@gmail.com"}
+]
+keywords = [
+    "cli",
+    "scaffold",
+    "generator",
+    "fastapi",
+    "cookiecutter",
+    "python",
+    "template",
+    "boilerplate",
+    "stack",
+    "database",
+    "worker",
+    "scheduler",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Typing :: Typed",
+]
 dependencies = [
     "typer>=0.9.0",
     "cookiecutter>=2.6.0",
+    "rich>=13.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/lbedner/aegis-stack"
+Documentation = "https://github.com/lbedner/aegis-stack#readme"
+Repository = "https://github.com/lbedner/aegis-stack"
+Issues = "https://github.com/lbedner/aegis-stack/issues"
+Changelog = "https://github.com/lbedner/aegis-stack/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
@@ -36,6 +78,24 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["aegis"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/aegis",
+    "/tests",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/pyproject.toml",
+]
+exclude = [
+    "/.github",
+    "/stacks",
+    "/test-*",
+    "*.pyc",
+    "__pycache__",
+    "/.pytest_cache",
+    "/.*-debug",
+]
 
 [tool.ruff]
 line-length = 88
@@ -84,7 +144,9 @@ markers = [
 
 [dependency-groups]
 dev = [
+    "build>=1.3.0",
     "httpx>=0.28.1",
+    "twine>=6.1.0",
 ]
 docs = [
     "pymdown-extensions>=10.16.1",
