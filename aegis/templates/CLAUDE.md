@@ -48,7 +48,8 @@ aegis/templates/cookiecutter-aegis-project/
     "version": "0.1.0",
     "python_version": "3.11",
     "include_scheduler": "no",
-    "include_worker": "no"
+    "include_worker": "no",
+    "include_database": "no"
 }
 ```
 
@@ -72,6 +73,10 @@ aegis/templates/cookiecutter-aegis-project/
 
 {% if cookiecutter.include_worker == "yes" %}
 # Worker-specific content
+{% endif %}
+
+{% if cookiecutter.include_database == "yes" %}
+# Database-specific content
 {% endif %}
 ```
 
@@ -102,6 +107,11 @@ dependencies = [
     "arq>=0.26.1",
     "redis>=5.2.1",
 {% endif %}
+{% if cookiecutter.include_database == "yes" %}
+    "sqlmodel>=0.0.14",
+    "sqlalchemy>=2.0.0", 
+    "aiosqlite>=0.19.0",
+{% endif %}
 ]
 ```
 
@@ -122,6 +132,11 @@ if "{{ cookiecutter.include_new_component }}" != "yes":
     remove_dir("app/components/new_component")
     remove_file("app/entrypoints/new_component.py")
     remove_file("tests/components/test_new_component.py")
+
+# Database component logic
+if "{{ cookiecutter.include_database }}" != "yes":
+    remove_file("app/core/db.py")
+    remove_sections_from_conftest("tests/conftest.py", ["database"])
 ```
 
 ### File Removal Patterns

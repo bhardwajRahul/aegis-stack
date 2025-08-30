@@ -38,7 +38,8 @@ make check         # Run lint + typecheck + unit tests
 make test-template                # Full template validation
 make test-template-quick         # Fast template generation only
 make test-template-with-components  # Test with scheduler component
-make test-template-worker        # Test worker component specifically
+make test-template-worker        # Test worker component specifically  
+make test-template-database      # Test database component specifically (v0.1.0)
 make test-template-full          # Test all components (worker + scheduler)
 make clean-test-projects         # Remove all generated test projects
 ```
@@ -209,6 +210,54 @@ make clean-test-projects
 - **Template syntax errors** → Check Jinja2 syntax in `.j2` files
 - **Linting failures** → Template tests auto-fix most issues
 - **Permission denied** → Use `chmod -R +w` before cleanup
+
+## Database Testing Patterns (v0.1.0+)
+
+### Database Component Testing
+The database component includes comprehensive testing infrastructure:
+
+**Test Files Generated:**
+- `tests/conftest.py` - Database fixtures with transaction rollback
+- `tests/cli/test_database_runtime.py` - Database integration tests
+- Health check integration tests
+
+**Testing Philosophy:**
+- **In-memory databases** for test speed
+- **Transaction rollback** for test isolation
+- **Real database operations** to validate ORM setup
+- **Health check integration** to ensure monitoring works
+
+### Database Test Patterns
+```python
+# Test database connectivity and basic operations
+def test_database_session_management(db_session):
+    """Test basic database session operations."""
+    # Tests use real SQLModel operations
+    # Transaction rollback ensures clean state
+
+# Test health check integration  
+def test_database_health_check():
+    """Test database component health monitoring."""
+    # Validates file existence, connectivity, metadata
+```
+
+**Key Testing Approach:**
+- **No mock models** - Only test infrastructure until real models exist
+- **Session management validation** - Ensure context managers work
+- **Health integration testing** - Database monitoring functions correctly
+- **Future expansion ready** - Fixtures ready for User/Auth service testing
+
+### Template Testing for Database
+```bash
+# Test database component in isolation
+make test-template-database
+
+# Generated project includes:
+# - app/core/db.py with session management
+# - tests/conftest.py with database fixtures  
+# - Health check integration
+# - Clean project passes all quality checks
+```
 
 ## Test Development Best Practices
 

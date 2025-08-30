@@ -29,6 +29,16 @@ with open("README.md") as readme:
         "![System Health Dashboard](docs/images/dashboard.png)",
         "![System Health Dashboard](images/dashboard.png)",
     )
+    # Fix Ron Swanson GIF path
+    content = content.replace(
+        "![Ron Swanson](docs/images/ron-swanson.gif)",
+        "![Ron Swanson](images/ron-swanson.gif)",
+    )
+    # Fix CLI health check image path
+    content = content.replace(
+        "![CLI Health Check](docs/images/cli_health_check.png)",
+        "![CLI Health Check](images/cli_health_check.png)",
+    )
 
     # Fix links to documentation pages (remove 'docs/' prefix)
     content = content.replace("](docs/cli-reference.md)", "](cli-reference.md)")

@@ -24,14 +24,26 @@ aegis init task-processor --components scheduler,worker
 cd my-project && uv sync && source .venv/bin/activate && make run-local
 ```
 
+## 🔨 Know What You're Doing?
+
+![Ron Swanson: I know more than you](https://tenor.com/d4GaMe0YmEt.gif)
+
+**"I know more than you."** - Got it. Here's what you can build with:
+
+```bash
+aegis init my-project --components worker,scheduler,database
+```
+
+Your stack. Your rules. No hand-holding.
+
 ## 🧩 Available Components
 
 | Component | Purpose | Status |
 |-----------|---------|--------|
-| **Core** (FastAPI + Flet) | Web API + Frontend | ✅ **Included** |
+| **Core** (FastAPI + Flet) | Web API + Frontend | ✅ **Always Included** |
+| **Database** | SQLite + SQLModel ORM | ✅ **Available** |
 | **Scheduler** | Background tasks, cron jobs | ✅ **Available** |
-| **Worker** | Async task queues, job processing | ✅ **Available** |
-| **Database** | PostgreSQL + SQLAlchemy + Alembic | 🚧 **Coming Soon** |
+| **Worker** | Async task queues (arq + Redis) | 🧪 **Experimental** |
 | **Cache** | Redis caching and sessions | 🚧 **Coming Soon** |
 
 ## What You Get
