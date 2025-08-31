@@ -15,7 +15,13 @@ with open("README.md") as readme:
     content = readme.read()
 
     # Fix paths for documentation context
-    # Remove 'docs/' prefix from image paths (both light and dark versions)
+    # Convert single dark dashboard image to dual light/dark for MkDocs
+    content = content.replace(
+        "![System Health Dashboard](docs/images/dashboard-dark.png)",
+        "![System Health Dashboard](images/dashboard-light.png#only-light)\n"
+        "![System Health Dashboard](images/dashboard-dark.png#only-dark)",
+    )
+    # Handle existing light/dark syntax (remove docs/ prefix)
     content = content.replace(
         "![System Health Dashboard](docs/images/dashboard-light.png#only-light)",
         "![System Health Dashboard](images/dashboard-light.png#only-light)",
@@ -38,6 +44,33 @@ with open("README.md") as readme:
     content = content.replace(
         "![CLI Health Check](docs/images/cli_health_check.png)",
         "![CLI Health Check](images/cli_health_check.png)",
+    )
+    # Convert GitHub picture element to MkDocs light/dark syntax
+    picture_element = (
+        "<picture>\n"
+        '  <source media="(prefers-color-scheme: dark)" '
+        'srcset="docs/images/aegis-manifesto-dark.png">\n'
+        '  <img src="docs/images/aegis-manifesto.png" alt="Aegis Stack" width="400">\n'
+        "</picture>"
+    )
+
+    mkdocs_syntax = (
+        '<img src="images/aegis-manifesto.png#only-light" '
+        'alt="Aegis Stack" width="400">\n'
+        '<img src="images/aegis-manifesto-dark.png#only-dark" '
+        'alt="Aegis Stack" width="400">'
+    )
+
+    content = content.replace(picture_element, mkdocs_syntax)
+
+    # Fallback: Fix standalone manifesto image paths
+    content = content.replace(
+        '<img src="docs/images/aegis-manifesto.png"',
+        '<img src="images/aegis-manifesto.png"',
+    )
+    content = content.replace(
+        '<img src="docs/images/aegis-manifesto-dark.png"',
+        '<img src="images/aegis-manifesto-dark.png"',
     )
 
     # Fix links to documentation pages (remove 'docs/' prefix)

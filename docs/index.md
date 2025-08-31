@@ -1,10 +1,11 @@
-# Aegis Stack 🛡️
+<img src="images/aegis-manifesto.png#only-light" alt="Aegis Stack" width="400">
+<img src="images/aegis-manifesto-dark.png#only-dark" alt="Aegis Stack" width="400">
+
+**Build production-ready Python applications with your chosen components.**
 
 [![CI](https://github.com/lbedner/aegis-stack/workflows/CI/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/ci.yml)
 [![Documentation](https://github.com/lbedner/aegis-stack/workflows/Deploy%20Documentation/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/docs.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-
-**Build production-ready Python applications with your chosen components.**
 
 Aegis Stack is a CLI-driven framework for creating custom Python applications. Select exactly the components you need - no bloat, no unused dependencies.
 

@@ -1,4 +1,7 @@
-# Aegis Stack 🛡️
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/aegis-manifesto-dark.png">
+  <img src="docs/images/aegis-manifesto.png" alt="Aegis Stack" width="400">
+</picture>
 
 **Build production-ready Python applications with your chosen components.**
 
@@ -38,8 +41,7 @@ cd my-project && uv sync && source .venv/bin/activate && make run-local
 
 ### System Health Dashboard
 
-![System Health Dashboard](docs/images/dashboard-light.png#only-light)
-![System Health Dashboard](docs/images/dashboard-dark.png#only-dark)
+![System Health Dashboard](docs/images/dashboard-dark.png)
 
 Real-time monitoring with component status, health percentages, and cross-platform deployment (web, desktop, mobile).
 
