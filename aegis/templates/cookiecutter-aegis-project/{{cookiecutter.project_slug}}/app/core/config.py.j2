@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     DISK_THRESHOLD_PERCENT: float = 85.0
     CPU_THRESHOLD_PERCENT: float = 95.0
 
+    # Flet frontend settings
+    FLET_ASSETS_DIR: str = "assets"  # Directory for Flet static assets (images, etc.)
+
 {% if cookiecutter.include_redis == "yes" %}
     # Redis settings for arq background tasks
     REDIS_URL: str = "redis://localhost:6379"

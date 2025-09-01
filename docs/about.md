@@ -12,11 +12,9 @@ Such is the circle of life...
 
 ## What I've Learned
 
-You know, I was blessed to start my career working within a well-oiled machine, so I know what one looks like. Outside of pair-programming *(I didn't need someone lurking over my shoulder like a gargoyle telling me I missed a semi-colon on line 46)*, the methodology worked. Even that "write your tests first" shit was legit, something I never thought I would say. Test-driven development isn't just a buzzword - it's the difference between "I think this works" and "I know this works." It's why SQLite has more test code than actual code, with coverage that would make most projects weep.
+You know, I was blessed to start my career working within a well-oiled machine, so I know what one looks like. Outside of pair-programming *(I didn't need someone lurking over my shoulder like a gargoyle telling me I missed a semi-colon on line 46)*, the XTreme Programming methodology the company used worked. Even that "write your tests first" shit was legit, something I never thought I would say. Test-driven development isn't just a buzzword - it's the difference between "I think this works" and "I know this works." It's why SQLite has more test code than actual code, with coverage that would make most projects weep (I've been recently having a love affair with SQLite, you'll have to excuse me).
 
 Experience teaches you what works and what doesn't. I've seen teams paralyzed by fear of deployments, and I've seen teams that push multiple times a day with confidence. The difference? Good tooling and testing.
-
-
 
 I've seen what happens when you don't have that foundation. When you're scared to refactor because something might break. When deployments are weekend affairs that require all hands on deck. When asking a question about the codebase gets you a shrug.
 
@@ -26,7 +24,7 @@ It doesn't have to be like this, and I'm tired of it being the norm.
 
 Eventually, I started noticing the same patterns everywhere. Every project needed the same foundation: a web API, some background jobs, maybe a database, health checks, containerization. The requirements were always slightly different, but the core components? Always the same.
 
-Years ago, I had a boss who got it. We'd sit in his office dreaming about automation tools, sketching ideas, making plans. He even started working on something on the side. But that manager was long gone by the time I brought it to fruition. 
+Years ago, I had a boss who got it. We'd sit in one of the conference rooms dreaming about automation tools, sketching ideas, making plans. He even started working on something on the side. But that manager was long gone by the time I brought it to fruition. 
 
 Post-pandemic, I discovered Streamlit and got tired of waiting for permission. So I built what I would later name, Overseer, myself. It actually worked - I actively used it to automate monotonous domain-specific tasks that were eating up our days.
 

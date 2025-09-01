@@ -7,6 +7,7 @@ import flet.fastapi as flet_fastapi
 from app.components.backend.hooks import backend_hooks
 from app.components.backend.main import create_backend_app
 from app.components.frontend.main import create_frontend_app
+from app.core.config import settings
 from app.core.log import logger
 
 
@@ -55,7 +56,7 @@ def create_integrated_app() -> FastAPI:
     # Create and mount the Flet app using the flet.fastapi module
     # First, get the actual session handler function from the factory
     session_handler = create_frontend_app()
-    flet_app = flet_fastapi.app(session_handler)
+    flet_app = flet_fastapi.app(session_handler, assets_dir=settings.FLET_ASSETS_DIR)
     # Mount Flet at /dashboard to avoid intercepting FastAPI routes like /health
     app.mount("/dashboard", flet_app)
     return app
