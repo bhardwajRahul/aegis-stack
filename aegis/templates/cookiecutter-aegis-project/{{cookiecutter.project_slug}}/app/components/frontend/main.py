@@ -1,27 +1,72 @@
+"""Stunning marketing-grade dashboard with professional component cards."""
+
 import asyncio
 from collections.abc import Awaitable, Callable
-
 from typing import Any
 
 import flet as ft
 
 from app.services.system import get_system_status
-from app.services.system.ui import get_status_icon, get_component_label
 
-from .core.theme import ThemeManager
+from .dashboard.cards import (
+    DatabaseCard,
+    FastAPICard,
+    RedisCard,
+    SchedulerCard,
+    WorkerCard,
+)
+from .dashboard.cards.card_utils import create_health_status_indicator
+from .theme import ThemeManager
+
+# Use simple filenames - Flet should auto-resolve from assets_dir
+DEFAULT_LOGO_PATH = "aegis-manifesto.png"
+DEFAULT_DARK_LOGO_PATH = "aegis-manifesto-dark.png"
+
+# Load both light and dark logos as base64
+def get_logo_base64(dark_mode: bool = False) -> str:
+    """Get the logo as base64 for light or dark mode."""
+    try:
+        import base64
+        from pathlib import Path
+        filename = "aegis-manifesto-dark.png" if dark_mode else "aegis-manifesto.png"
+        logo_path = Path(__file__).parent.parent.parent.parent / "assets" / filename
+        with open(logo_path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except Exception:
+        # Fallback to tiny red pixel if file read fails
+        return (
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHg"
+            "gJ/PchI7wAAAABJRU5ErkJggg=="
+        )
 
 
 def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
-    """Returns the Flet target function - system health dashboard"""
+    """Returns the Flet target function - simple system health dashboard."""
 
     async def flet_main(page: ft.Page) -> None:
         page.title = "Aegis Stack - System Dashboard"
-        page.padding = 20
+        page.padding = ft.padding.only(
+            left=20, right=20, top=20, bottom=20
+        )  # Proper left padding
         page.scroll = ft.ScrollMode.AUTO
 
-        # Initialize theme system
+        # Simple theme setup
         theme_manager = ThemeManager(page)
         await theme_manager.initialize_themes()
+
+        # Aegis Stack logo - bigger size and theme-aware loading
+        logo_image = ft.Image(
+            src_base64=get_logo_base64(theme_manager.is_dark_mode),  
+            width=300,  # Bigger logo
+            height=90,  # Bigger logo
+            fit=ft.ImageFit.CONTAIN,
+            error_content=ft.Text(
+                "AEGIS STACK",
+                size=20,
+                weight=ft.FontWeight.BOLD,
+                color=ft.Colors.ON_SURFACE,
+            ),
+        )
 
         # Theme toggle button
         theme_button = ft.IconButton(
@@ -30,658 +75,196 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             icon_size=24,
         )
 
+        async def update_logo() -> None:
+            """Update logo based on current theme."""
+            # Update the base64 source for the current theme
+            logo_image.src_base64 = get_logo_base64(theme_manager.is_dark_mode)
+            logo_image.src = None  # Clear the src to use src_base64
+
         async def toggle_theme(_: Any) -> None:
-            """Toggle theme and update button icon"""
+            """Toggle theme and update button icon and logo."""
             await theme_manager.toggle_theme()
-            # Update button icon based on new theme
             if theme_manager.is_dark_mode:
                 theme_button.icon = ft.Icons.LIGHT_MODE
                 theme_button.tooltip = "Switch to Light Mode"
             else:
                 theme_button.icon = ft.Icons.DARK_MODE
                 theme_button.tooltip = "Switch to Dark Mode"
+
+            # Update logo immediately after theme change
+            await update_logo()
+            logo_image.update()
             page.update()
 
         theme_button.on_click = toggle_theme
 
-        # Dashboard header with theme switch
+        # Set initial logo based on current theme after theme manager is ready
+        await update_logo()
+
+        # Health status indicator with circular progress - create before header
+        health_status_indicator = create_health_status_indicator(
+            0, 0
+        )  # Start with loading state
+
+        # Professional header with Aegis Stack logo positioned further left
         header = ft.Container(
             content=ft.Row(
                 [
-                    # Left side - title and subtitle
-                    ft.Column(
+                    ft.Row(
                         [
-                            ft.Text(
-                                "🏛️ Aegis Stack",
-                                size=36,
-                                weight=ft.FontWeight.BOLD,
-                                color=ft.Colors.PRIMARY,
+                            ft.Container(
+                                content=logo_image,
+                                margin=ft.margin.only(left=-20),  # Adjust for padding
                             ),
-                            ft.Text(
-                                "System Health Dashboard",
-                                size=18,
-                                color=ft.Colors.GREY_700,
+                            ft.Container(
+                                content=ft.Text(
+                                    "System Health Dashboard",
+                                    size=24,
+                                    weight=ft.FontWeight.W_400,
+                                    color=ft.Colors.ON_SURFACE,
+                                ),
+                                margin=ft.margin.only(left=10),  # Logo spacing
                             ),
                         ],
-                        spacing=5,
+                        alignment=ft.MainAxisAlignment.START,
                     ),
-                    # Center - status summary (will be updated)
                     ft.Container(
-                        content=ft.Text(
-                            "Loading...", size=16, color=ft.Colors.ON_SURFACE
-                        ),
-                        padding=15,
-                        bgcolor=ft.Colors.SURFACE,
-                        border_radius=8,
+                        content=health_status_indicator,
+                        margin=ft.margin.only(right=20),  # Space before theme button
                     ),
-                    # Right side - theme toggle
-                    ft.Container(
-                        content=theme_button,
-                        padding=10,
-                    ),
+                    ft.Container(content=theme_button, padding=10),
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             ),
-            margin=ft.margin.only(bottom=30),
-        )
-
-        # Create responsive grid layout containers
-        # Top row - System metrics
-        metrics_row = ft.Container(
-            content=ft.Row([], spacing=15),
             margin=ft.margin.only(bottom=20),
+            padding=ft.padding.only(left=0, right=0),  # Remove any default padding
         )
-
-        # Middle row - Main components
-        components_row = ft.Container(
-            content=ft.Column(
-                [
-                    ft.Text(
-                        "🏗️ Infrastructure Components",
-                        size=22,
-                        weight=ft.FontWeight.BOLD,
-                        color=ft.Colors.PRIMARY,
-                    ),
-                    ft.Row([], spacing=15, wrap=True),
-                ]
+        # Responsive grid container - force 2 columns always
+        component_cards_container = ft.Container(
+            content=ft.ResponsiveRow(
+                controls=[],  # Will be populated with cards
+                spacing=20,  # Space between cards
+                run_spacing=20,  # Space between rows
             ),
-            margin=ft.margin.only(bottom=20),
+            alignment=ft.alignment.center,
         )
 
-        # Bottom row - System info and queues
-        details_row = ft.Container(
-            content=ft.Row([], spacing=15),
-            margin=ft.margin.only(bottom=20),
-        )
-
-        # Add components to page with new horizontal layout
+        # Add everything to page with modern layout
         page.add(
             header,
-            metrics_row,
-            components_row,
-            details_row,
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Divider(color=ft.Colors.OUTLINE_VARIANT),
+                        ft.Text(
+                            "System Components",
+                            size=24,
+                            weight=ft.FontWeight.W_600,
+                            color=ft.Colors.ON_SURFACE,
+                        ),
+                        component_cards_container,
+                    ],
+                    spacing=20,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                alignment=ft.alignment.top_center,
+            ),
         )
 
-        async def refresh_status() -> None:
-            """Refresh system status data using Material Design color tokens"""
+        def create_component_card(
+            component_name: str, component_data: Any
+        ) -> ft.Container:
+            """Create stunning marketing-grade component cards."""
+            if not component_data:
+                return ft.Container()
+
+            # Map component names to their stunning card classes
+            if component_name == "backend":
+                return FastAPICard(component_data).build()
+            elif component_name == "worker":
+                return WorkerCard(component_data).build()
+            elif component_name == "redis":
+                return RedisCard(component_data).build()
+            elif component_name == "database":
+                return DatabaseCard(component_data).build()
+            elif component_name == "scheduler":
+                return SchedulerCard(component_data).build()
+            else:
+                # Fallback for unknown components - should not happen in practice
+                return ft.Container(
+                    content=ft.Text(f"Unknown component: {component_name}"),
+                    padding=20,
+                    bgcolor=ft.Colors.SURFACE,
+                    border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                    border_radius=16,
+                    width=800,
+                    height=240,
+                )
+
+        async def refresh_dashboard() -> None:
+            """Refresh the stunning marketing-grade dashboard."""
             try:
                 status = await get_system_status()
 
-                # Get current theme state directly from page (most reliable)
-                is_light_mode = page.theme_mode == ft.ThemeMode.LIGHT
-
-                # Extract aegis component and its sub-components
-                aegis_component = None
-                if "aegis" in status.components:
-                    aegis_component = status.components["aegis"]
-
-                if not aegis_component or not aegis_component.sub_components:
-                    return
-
-                components = aegis_component.sub_components
-
-                # Update header status summary
-                status_color = (
-                    ft.Colors.GREEN if status.overall_healthy else ft.Colors.ERROR
-                )
-                status_icon = "✅" if status.overall_healthy else "❌"
-                status_text = (
-                    "System Healthy" if status.overall_healthy else "Issues Detected"
-                )
-
-                header.content.controls[1].content = ft.Column(
-                    [
-                        ft.Row(
-                            [
-                                ft.Text(status_icon, size=18),
-                                ft.Text(
-                                    status_text,
-                                    size=16,
-                                    weight=ft.FontWeight.BOLD,
-                                    color=status_color,
-                                ),
-                            ],
-                            spacing=8,
-                        ),
-                        ft.Text(
-                            f"{status.health_percentage:.1f}% • "
-                            f"{len(status.healthy_components)} healthy",
-                            size=12,
-                            color=ft.Colors.GREY_700,
-                        ),
-                        ft.Text(
-                            f"Updated: {status.timestamp.strftime('%H:%M:%S')}",
-                            size=10,
-                            color=ft.Colors.GREY_700,
-                        ),
-                    ],
-                    spacing=2,
-                )
-
-                # Update header status container background
-                header.content.controls[1].bgcolor = ft.Colors.SURFACE
-
-                # Create system metrics cards (horizontal row)
-                metrics_cards = []
-                backend_component = components.get("backend")
-                if backend_component and backend_component.sub_components:
-                    for metric_name, metric in backend_component.sub_components.items():
-                        if metric.healthy:
-                            bg_color = (
-                                ft.Colors.GREEN_100
-                                if is_light_mode
-                                else ft.Colors.GREEN_900
-                            )
-                            text_color = (
-                                ft.Colors.GREEN_800
-                                if is_light_mode
-                                else ft.Colors.GREEN_100
-                            )
-                            border_color = ft.Colors.GREEN
-                        else:
-                            bg_color = (
-                                ft.Colors.RED_100
-                                if is_light_mode
-                                else ft.Colors.RED_900
-                            )
-                            text_color = (
-                                ft.Colors.RED_800
-                                if is_light_mode
-                                else ft.Colors.RED_100
-                            )
-                            border_color = ft.Colors.ERROR
-                        icon = get_status_icon(metric.status)
-
-                        # Extract percentage from message
-                        percentage = "0%"
-                        if "%" in metric.message:
-                            percentage = metric.message.split(":")[1].strip()
-
-                        metrics_cards.append(
-                            ft.Container(
-                                content=ft.Column(
-                                    [
-                                        ft.Row(
-                                            [
-                                                ft.Text(icon, size=14),
-                                                ft.Text(
-                                                    metric_name.upper(),
-                                                    size=12,
-                                                    weight=ft.FontWeight.BOLD,
-                                                    color=text_color,
-                                                ),
-                                            ],
-                                            alignment=ft.MainAxisAlignment.CENTER,
-                                        ),
-                                        ft.Text(
-                                            percentage,
-                                            size=20,
-                                            weight=ft.FontWeight.BOLD,
-                                            color=text_color,
-                                        ),
-                                        ft.Text(
-                                            metric.message.split(":")[0],
-                                            size=10,
-                                            color=text_color,
-                                        ),
-                                    ],
-                                    alignment=ft.MainAxisAlignment.CENTER,
-                                    spacing=4,
-                                ),
-                                padding=15,
-                                bgcolor=bg_color,
-                                border=ft.border.all(1, border_color),
-                                border_radius=8,
-                                width=120,
-                                height=100,
-                            )
-                        )
-
-                metrics_row.content.controls = metrics_cards
-
-                # Create main component cards (horizontal grid)
-                component_cards = []
-
-                for comp_name, component in components.items():
-                    # Show backend as a component card too, for consistency
-
-                    if component.healthy:
-                        bg_color = (
-                            ft.Colors.GREEN_100
-                            if is_light_mode
-                            else ft.Colors.GREEN_900
-                        )
-                        text_color = (
-                            ft.Colors.GREEN_800
-                            if is_light_mode
-                            else ft.Colors.GREEN_100
-                        )
-                        border_color = ft.Colors.GREEN
-                    else:
-                        bg_color = (
-                            ft.Colors.RED_100 if is_light_mode else ft.Colors.RED_900
-                        )
-                        text_color = (
-                            ft.Colors.RED_800 if is_light_mode else ft.Colors.RED_100
-                        )
-                        border_color = ft.Colors.ERROR
-                    icon = get_status_icon(component.status)
-                    tech_name = get_component_label(comp_name)
-
-                    # Build card content
-                    card_content = [
-                        ft.Row(
-                            [
-                                ft.Text(icon, size=16),
-                                ft.Column(
-                                    [
-                                        ft.Text(
-                                            comp_name.title(),
-                                            size=16,
-                                            weight=ft.FontWeight.BOLD,
-                                            color=text_color,
-                                        ),
-                                        ft.Text(
-                                            tech_name,
-                                            size=12,
-                                            color=text_color,
-                                            weight=ft.FontWeight.BOLD,
-                                        ),
-                                    ],
-                                    spacing=0,
-                                ),
-                            ],
-                            spacing=10,
-                        ),
-                        ft.Text(
-                            component.message[:50] + "..."
-                            if len(component.message) > 50
-                            else component.message,
-                            size=11,
-                            color=text_color,
-                        ),
-                    ]
-
-                    # Add database-specific metadata display
-                    if comp_name == "database" and component.metadata:
-                        db_info = []
-                        
-                        # Show SQLite version if available
-                        if "version" in component.metadata:
-                            db_info.append(f"SQLite v{component.metadata['version']}")
-                        
-                        # Show file size if available
-                        if "file_size_human" in component.metadata:
-                            size = component.metadata['file_size_human']
-                            db_info.append(f"Size: {size}")
-                        
-                        # Show WAL status if available
-                        if "wal_enabled" in component.metadata:
-                            wal_enabled = component.metadata["wal_enabled"]
-                            wal_status = "WAL" if wal_enabled else "DELETE"
-                            db_info.append(f"Mode: {wal_status}")
-                        
-                        # Show connection pool size if available
-                        if "connection_pool_size" in component.metadata:
-                            pool_size = component.metadata['connection_pool_size']
-                            db_info.append(f"Pool: {pool_size}")
-                        
-                        # Add database info to card if we have any
-                        if db_info:
-                            card_content.append(
-                                ft.Container(
-                                    content=ft.Column(
-                                        [
-                                            ft.Text(
-                                                "Database Info:",
-                                                size=10,
-                                                weight=ft.FontWeight.BOLD,
-                                                color=text_color,
-                                            ),
-                                            ft.Text(
-                                                " • ".join(db_info),
-                                                size=10,
-                                                color=text_color,
-                                            ),
-                                        ],
-                                        spacing=2,
-                                    ),
-                                    margin=ft.margin.only(top=8),
-                                )
-                            )
-
-                    # Add sub-component indicators
-                    if component.sub_components:
-                        sub_status = []
-                        for sub_name, sub_comp in component.sub_components.items():
-                            sub_icon = get_status_icon(sub_comp.status)
-                            sub_status.append(f"{sub_icon} {sub_name}")
-
-                        if (
-                            comp_name == "worker"
-                            and "queues" in component.sub_components
-                        ):
-                            # Special handling for worker queues
-                            queues_comp = component.sub_components["queues"]
-                            if queues_comp.sub_components:
-                                queue_icons = [
-                                    get_status_icon(q.status)
-                                    for q in queues_comp.sub_components.values()
-                                ]
-                                card_content.append(
-                                    ft.Container(
-                                        content=ft.Row(
-                                            [
-                                                ft.Text(
-                                                    "Queues:",
-                                                    size=10,
-                                                    weight=ft.FontWeight.BOLD,
-                                                    color=text_color,
-                                                ),
-                                                ft.Text(" ".join(queue_icons), size=12),
-                                            ],
-                                            spacing=5,
-                                        ),
-                                        margin=ft.margin.only(top=8),
-                                    )
-                                )
-                        else:
-                            # Show sub-components as compact indicators
-                            if len(sub_status) <= 3:
-                                card_content.append(
-                                    ft.Container(
-                                        content=ft.Text(
-                                            " | ".join(sub_status),
-                                            size=10,
-                                            color=text_color,
-                                        ),
-                                        margin=ft.margin.only(top=8),
-                                    )
-                                )
-
-                    component_cards.append(
-                        ft.Container(
-                            content=ft.Column(card_content, spacing=8),
-                            padding=15,
-                            bgcolor=bg_color,
-                            border=ft.border.all(1, border_color),
-                            border_radius=8,
-                            width=240,
-                            height=140,
-                        )
-                    )
-
-                components_row.content.controls[1].controls = component_cards
-
-                # Create bottom row with system info and detailed worker queues
-                bottom_cards = []
-
-                # System info card
-                info_bg_color = (
-                    ft.Colors.BLUE_100 if is_light_mode else ft.Colors.BLUE_900
-                )
-                info_text_color = (
-                    ft.Colors.BLUE_800 if is_light_mode else ft.Colors.BLUE_100
-                )
-
-                sys_info_content = [
-                    ft.Text(
-                        "System Info",
-                        size=14,
-                        weight=ft.FontWeight.BOLD,
-                        color=info_text_color,
-                    )
-                ]
-                if status.system_info:
-                    for key, value in status.system_info.items():
-                        sys_info_content.append(
-                            ft.Text(
-                                f"{key.replace('_', ' ').title()}: {value}",
-                                size=11,
-                                color=info_text_color,
-                            )
-                        )
-
-                bottom_cards.append(
-                    ft.Container(
-                        content=ft.Column(sys_info_content, spacing=4),
-                        padding=15,
-                        bgcolor=info_bg_color,
-                        border=ft.border.all(1, ft.Colors.PRIMARY),
-                        border_radius=8,
-                        width=300,
-                    )
-                )
-
-                # Worker queues detailed card
-                worker_comp = components.get("worker")
+                # Update health status indicator with correct component counting
+                components = {}
                 if (
-                    worker_comp
-                    and worker_comp.sub_components
-                    and "queues" in worker_comp.sub_components
+                    "aegis" in status.components
+                    and status.components["aegis"].sub_components
                 ):
-                    queues_comp = worker_comp.sub_components["queues"]
-                    queue_bg_color = (
-                        ft.Colors.PURPLE_100 if is_light_mode else ft.Colors.PURPLE_900
-                    )
-                    queue_text_color = (
-                        ft.Colors.PURPLE_800 if is_light_mode else ft.Colors.PURPLE_100
-                    )
+                    components = status.components["aegis"].sub_components
+                
+                total_components = len(components)
+                healthy_components = (
+                    len([c for c in components.values() if c.status.value == "healthy"])
+                    if components
+                    else 0
+                )
 
-                    queue_content = [
-                        ft.Text(
-                            "Worker Queues",
-                            size=14,
-                            weight=ft.FontWeight.BOLD,
-                            color=queue_text_color,
-                        )
-                    ]
+                # Update health status indicator in the header
+                new_health_indicator = create_health_status_indicator(
+                    healthy_components, total_components
+                )
 
-                    if queues_comp.sub_components:
-                        for queue_name, queue in queues_comp.sub_components.items():
-                            icon = get_status_icon(queue.status)
-                            # Extract job count from message
-                            job_info = ""
-                            if "completed" in queue.message:
-                                job_info = queue.message.split(":")[-1].strip()
+                # Update header health indicator
+                header_row = page.controls[0].content  # header container -> Row
+                header_row.controls[1].content = new_health_indicator
 
-                            queue_content.append(
-                                ft.Row(
-                                    [
-                                        ft.Text(icon, size=12),
-                                        ft.Text(
-                                            queue_name,
-                                            size=12,
-                                            weight=ft.FontWeight.BOLD,
-                                            color=queue_text_color,
-                                        ),
-                                        ft.Text(
-                                            job_info, size=10, color=queue_text_color
-                                        ),
-                                    ],
-                                    spacing=8,
-                                )
-                            )
+                # Components already extracted above for health calculation
 
-                    bottom_cards.append(
-                        ft.Container(
-                            content=ft.Column(queue_content, spacing=6),
-                            padding=15,
-                            bgcolor=queue_bg_color,
-                            border=ft.border.all(1, ft.Colors.PURPLE),
-                            border_radius=8,
-                            width=300,
-                        )
-                    )
+                # Clear existing cards and create stunning new ones in responsive grid
+                component_cards_container.content.controls.clear()
 
-                # Database details card (if database component exists)
-                database_comp = components.get("database")
-                if database_comp and database_comp.metadata:
-                    db_bg_color = (
-                        ft.Colors.CYAN_100 if is_light_mode else ft.Colors.CYAN_900
-                    )
-                    db_text_color = (
-                        ft.Colors.CYAN_800 if is_light_mode else ft.Colors.CYAN_100
-                    )
-
-                    db_content = [
-                        ft.Text(
-                            "Database Details",
-                            size=14,
-                            weight=ft.FontWeight.BOLD,
-                            color=db_text_color,
-                        )
-                    ]
-
-                    # Show detailed database metadata
-                    metadata = database_comp.metadata
+                # Create cards for all available components with responsive sizing
+                for component_name, component_data in components.items():
+                    card = create_component_card(component_name, component_data)
+                    if (
+                        isinstance(card.content, ft.Text)
+                        and "Unknown component" in card.content.value
+                    ):
+                        continue  # Skip unknown components
                     
-                    # Version and implementation
-                    if "version" in metadata and "implementation" in metadata:
-                        db_content.append(
-                            ft.Text(
-                                f"{metadata['implementation'].upper()} "
-                                f"v{metadata['version']}",
-                                size=12,
-                                weight=ft.FontWeight.BOLD,
-                                color=db_text_color,
-                            )
-                        )
-                    
-                    # File info
-                    if "file_size_human" in metadata and "file_size_bytes" in metadata:
-                        db_content.append(
-                            ft.Text(
-                                f"File Size: {metadata['file_size_human']} "
-                                f"({metadata['file_size_bytes']:,} bytes)",
-                                size=11,
-                                color=db_text_color,
-                            )
-                        )
-                    
-                    # Connection info
-                    if "connection_pool_size" in metadata:
-                        db_content.append(
-                            ft.Text(
-                                f"Connection Pool: "
-                                f"{metadata['connection_pool_size']} connections",
-                                size=11,
-                                color=db_text_color,
-                            )
-                        )
-                    
-                    # SQLite PRAGMA settings
-                    if "pragma_settings" in metadata:
-                        pragma = metadata["pragma_settings"]
-                        pragma_info = []
-                        
-                        if "foreign_keys" in pragma:
-                            fk_status = "ON" if pragma["foreign_keys"] else "OFF"
-                            pragma_info.append(f"Foreign Keys: {fk_status}")
-                        
-                        if "journal_mode" in pragma:
-                            journal_mode = pragma["journal_mode"].upper()
-                            pragma_info.append(f"Journal: {journal_mode}")
-                        
-                        if "cache_size" in pragma:
-                            # Remove negative sign
-                            cache_size = abs(pragma["cache_size"])
-                            if cache_size > 1000:
-                                cache_display = f"{cache_size // 1000}K pages"
-                            else:
-                                cache_display = f"{cache_size} pages"
-                            pragma_info.append(f"Cache: {cache_display}")
-                        
-                        if pragma_info:
-                            db_content.append(
-                                ft.Text(
-                                    "Configuration:",
-                                    size=11,
-                                    weight=ft.FontWeight.BOLD,
-                                    color=db_text_color,
-                                )
-                            )
-                            for info in pragma_info:
-                                db_content.append(
-                                    ft.Text(
-                                        f"  • {info}",
-                                        size=10,
-                                        color=db_text_color,
-                                    )
-                                )
-
-                    bottom_cards.append(
-                        ft.Container(
-                            content=ft.Column(db_content, spacing=4),
-                            padding=15,
-                            bgcolor=db_bg_color,
-                            border=ft.border.all(1, ft.Colors.CYAN),
-                            border_radius=8,
-                            width=300,
-                        )
-                    )
-
-                details_row.content.controls = bottom_cards
+                    # Add card with responsive column sizing (6 = 50% = 2 columns)
+                    card.col = {"xs": 12, "sm": 12, "md": 6, "lg": 6, "xl": 6}
+                    component_cards_container.content.controls.append(card)
 
                 page.update()
 
             except Exception as e:
-                # Show error in header status
-                header.content.controls[1].content = ft.Column(
-                    [
-                        ft.Row(
-                            [
-                                ft.Text("❌", size=18),
-                                ft.Text(
-                                    "Error",
-                                    size=16,
-                                    weight=ft.FontWeight.BOLD,
-                                    color=ft.Colors.ERROR,
-                                ),
-                            ],
-                            spacing=8,
-                        ),
-                        ft.Text(
-                            str(e)[:40] + "..." if len(str(e)) > 40 else str(e),
-                            size=10,
-                            color=ft.Colors.GREY_700,
-                        ),
-                    ],
-                    spacing=2,
-                )
-                header.content.controls[1].bgcolor = ft.Colors.SURFACE
+                # Show error indicator in header
+                error_indicator = create_health_status_indicator(0, 1)
+                header_row = page.controls[0].content
+                header_row.controls[1].content = error_indicator
                 page.update()
 
         async def auto_refresh() -> None:
-            # Wait initial delay before starting auto-refresh cycle
-            await asyncio.sleep(30)
+            """Simple auto-refresh loop."""
             while True:
-                await refresh_status()
+                await refresh_dashboard()
                 await asyncio.sleep(30)
 
-        # Initial load
-        await refresh_status()
-        # Start auto-refresh task (will wait 30s before first auto-refresh)
+        # Initial load and start refresh
+        await refresh_dashboard()
         asyncio.create_task(auto_refresh())
 
     return flet_main
