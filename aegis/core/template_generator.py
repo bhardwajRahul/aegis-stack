@@ -8,6 +8,7 @@ the template rendering process based on selected components.
 from pathlib import Path
 from typing import Any
 
+from .component_utils import extract_base_component_name, extract_engine_info
 from .components import COMPONENTS
 
 
@@ -24,13 +25,26 @@ class TemplateGenerator:
         """
         self.project_name = project_name
         self.project_slug = project_name.lower().replace(" ", "-").replace("_", "-")
+
         # Always include core components
         all_components = ["backend", "frontend"] + selected_components
         # Remove duplicates, preserve order
         self.components = list(dict.fromkeys(all_components))
-        self.component_specs = {
-            name: COMPONENTS[name] for name in self.components if name in COMPONENTS
-        }
+
+        # Extract database engine from database[engine] format for template context
+        self.database_engine = None
+        for component in self.components:
+            if extract_base_component_name(component) == "database":
+                self.database_engine = extract_engine_info(component)
+                if self.database_engine:
+                    break
+
+        # Build component specs using base names
+        self.component_specs = {}
+        for name in self.components:
+            base_name = extract_base_component_name(name)
+            if base_name in COMPONENTS:
+                self.component_specs[base_name] = COMPONENTS[base_name]
 
     def get_template_context(self) -> dict[str, Any]:
         """
@@ -42,6 +56,9 @@ class TemplateGenerator:
         # Store the originally selected components (without core)
         selected_only = [c for c in self.components if c not in ["backend", "frontend"]]
 
+        # Check for components using base names
+        has_database = any(c.startswith("database") for c in self.components)
+
         return {
             "project_name": self.project_name,
             "project_slug": self.project_slug,
@@ -49,7 +66,9 @@ class TemplateGenerator:
             "include_redis": "yes" if "redis" in self.components else "no",
             "include_worker": "yes" if "worker" in self.components else "no",
             "include_scheduler": "yes" if "scheduler" in self.components else "no",
-            "include_database": "yes" if "database" in self.components else "no",
+            "include_database": "yes" if has_database else "no",
+            # Database engine selection
+            "database_engine": self.database_engine or "sqlite",
             # Derived flags for template logic
             "has_background_infrastructure": any(
                 name in self.components for name in ["worker", "scheduler"]
