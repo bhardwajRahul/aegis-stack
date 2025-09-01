@@ -13,6 +13,11 @@ from pathlib import Path
 import typer
 
 from aegis import __version__
+from aegis.core.component_utils import (
+    clean_component_names,
+    extract_base_component_name,
+    restore_engine_info,
+)
 from aegis.core.components import (
     COMPONENTS,
     ComponentSpec,
@@ -205,12 +210,22 @@ def init(
 
         # Resolve dependencies for interactively selected components
         if selected_components:
-            selected_components = DependencyResolver.resolve_dependencies(
-                selected_components
-            )
+            # Clean component names for dependency resolution (remove engine info)
+            # Save original with engine info
+            original_selected = list(selected_components)
+            clean_components = clean_component_names(selected_components)
 
-            auto_added = DependencyResolver.get_missing_dependencies(
+            resolved_clean = DependencyResolver.resolve_dependencies(clean_components)
+
+            # Restore engine info for display components
+            selected_components = restore_engine_info(resolved_clean, original_selected)
+
+            # Calculate auto-added components using clean names
+            clean_selected_only = clean_component_names(
                 [c for c in selected_components if c not in ["backend", "frontend"]]
+            )
+            auto_added = DependencyResolver.get_missing_dependencies(
+                clean_selected_only
             )
             if auto_added:
                 typer.echo(f"\n📦 Auto-added dependencies: {', '.join(auto_added)}")
@@ -225,11 +240,16 @@ def init(
     typer.echo("   ✅ Core: backend, frontend")
 
     # Show infrastructure components
-    infra_components = [
-        name
-        for name in selected_components
-        if name in COMPONENTS and COMPONENTS[name].type == ComponentType.INFRASTRUCTURE
-    ]
+    infra_components = []
+    for name in selected_components:
+        # Handle database[engine] format
+        base_name = extract_base_component_name(name)
+        if (
+            base_name in COMPONENTS
+            and COMPONENTS[base_name].type == ComponentType.INFRASTRUCTURE
+        ):
+            infra_components.append(name)
+
     if infra_components:
         typer.echo(f"   📦 Infrastructure: {', '.join(infra_components)}")
 
@@ -329,6 +349,8 @@ def interactive_component_selection() -> list[str]:
     typer.echo("✅ Core components (backend + frontend) included automatically\n")
 
     selected = []
+    database_engine = None  # Track database engine selection
+    database_added_by_scheduler = False  # Track if database was added by scheduler
 
     # Get all infrastructure components from registry
     infra_components = get_interactive_infrastructure_components()
@@ -360,11 +382,73 @@ def interactive_component_selection() -> list[str]:
                 )
                 if typer.confirm(prompt):
                     selected.extend(["redis", "worker"])
+        elif component_name == "scheduler":
+            # Enhanced scheduler selection with persistence and database options
+            prompt = f"  Add {component_spec.description}?"
+            if typer.confirm(prompt):
+                selected.append("scheduler")
+
+                # Follow-up: persistence question
+                typer.echo("\n💾 Scheduler Persistence:")
+                persistence_prompt = (
+                    "  Do you want to persist scheduled jobs? "
+                    "(Enables job history, recovery after restarts) [y/N]"
+                )
+                if typer.confirm(persistence_prompt):
+                    # Database engine selection (SQLite only for now)
+                    typer.echo("\n🗃️  Database Engine:")
+                    typer.echo("  SQLite will be configured for job persistence")
+                    typer.echo("  (PostgreSQL support coming in future releases)")
+
+                    # Show SQLite limitations
+                    typer.echo("\n⚠️  SQLite Limitations:")
+                    typer.echo(
+                        "  • Multi-container API access works in development only "
+                        "(shared volumes)"
+                    )
+                    typer.echo("  • Production deployment will be single-container")
+                    typer.echo(
+                        "  • Use PostgreSQL for full production multi-container support"
+                    )
+
+                    if typer.confirm("  Continue with SQLite? [Y/n]", default=True):
+                        database_engine = "sqlite"
+                        selected.append("database")
+                        database_added_by_scheduler = True
+                        typer.echo("✅ Scheduler + SQLite database configured")
+
+                        # Show bonus backup job message only when database is added
+                        typer.echo("\n🎯 Bonus: Adding database backup job")
+                        typer.echo(
+                            "✅ Scheduled daily database backup job included "
+                            "(runs at 2 AM)"
+                        )
+                    else:
+                        typer.echo("⏹️  Scheduler persistence cancelled")
+                        # Don't add database if user declines SQLite
+
+                typer.echo()  # Extra spacing after scheduler section
+        elif component_name == "database":
+            # Skip generic database prompt if already added by scheduler
+            if database_added_by_scheduler:
+                continue
+
+            # Standard database prompt (when not added by scheduler)
+            prompt = f"  Add {component_spec.description}?"
+            if typer.confirm(prompt):
+                selected.append("database")
         else:
             # Standard prompt for other components
             prompt = f"  Add {component_spec.description}?"
             if typer.confirm(prompt):
                 selected.append(component_name)
+
+    # Update selected list with database engine info for display
+    if "database" in selected and database_engine:
+        # Replace "database" with formatted version for display
+        db_index = selected.index("database")
+        if "scheduler" in selected:
+            selected[db_index] = f"database[{database_engine}]"
 
     return selected
 
