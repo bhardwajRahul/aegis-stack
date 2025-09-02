@@ -133,6 +133,11 @@ def main():
         remove_file("tests/components/test_scheduler.py")
         remove_file("docs/components/scheduler.md")
 
+    # Remove scheduler service if scheduler persistence is not enabled
+    # The service is only useful when we can read from the database
+    if "{{ cookiecutter.scheduler_with_persistence }}" != "yes":
+        remove_dir("app/services/scheduler")
+
     if "{{ cookiecutter.include_worker }}" != "yes":
         # Remove worker-specific files
         remove_dir("app/components/worker")

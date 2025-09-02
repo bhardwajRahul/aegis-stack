@@ -2,8 +2,12 @@
 # This Makefile is for developing the Aegis Stack CLI tool itself.
 # Generated projects have their own Makefiles for application development.
 
-# Run tests
-test: ## Run tests
+# Run tests (excluding slow tests)
+test: ## Run tests (excluding slow tests - use 'test-all' for everything)
+	@uv run pytest -m "not slow"
+
+# Run all tests including slow ones
+test-all: ## Run all tests including slow ones (for CI/CD)
 	@uv run pytest
 
 # Run linting	
@@ -23,8 +27,11 @@ format: ## Format code with ruff
 typecheck: ## Run type checking with mypy
 	@uv run mypy .
 
-# Run all checks (lint + typecheck + test)
-check: lint typecheck test ## Run all checks
+# Run all checks (lint + typecheck + fast tests)
+check: lint typecheck test ## Run all checks (fast tests only)
+
+# Run comprehensive checks (includes slow tests)  
+check-all: lint typecheck test-all ## Run comprehensive checks (includes slow tests)
 
 # Install dependencies
 install: ## Install dependencies with uv
