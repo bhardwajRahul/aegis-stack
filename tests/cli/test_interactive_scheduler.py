@@ -27,11 +27,12 @@ class TestInteractiveSchedulerFlow:
             True,
         ]  # redis, worker, scheduler, persistence, continue with SQLite
 
-        result = interactive_component_selection()
+        components, scheduler_with_persistence = interactive_component_selection()
 
         # Should return scheduler and database with SQLite engine info
-        assert "scheduler" in result
-        assert "database[sqlite]" in result
+        assert "scheduler" in components
+        assert "database[sqlite]" in components
+        assert scheduler_with_persistence is True
 
         # Verify correct calls were made
         assert mock_confirm.call_count == 5
@@ -65,11 +66,12 @@ class TestInteractiveSchedulerFlow:
             False,
         ]  # redis, worker, scheduler, no persistence, database=no
 
-        result = interactive_component_selection()
+        components, scheduler_with_persistence = interactive_component_selection()
 
         # Should only return scheduler, no database
-        assert "scheduler" in result
-        assert not any(c.startswith("database") for c in result)
+        assert "scheduler" in components
+        assert not any(c.startswith("database") for c in components)
+        assert scheduler_with_persistence is False
 
     @patch("typer.confirm")
     def test_scheduler_not_selected(self, mock_confirm: Any) -> None:
@@ -82,12 +84,13 @@ class TestInteractiveSchedulerFlow:
             False,
         ]  # All components declined
 
-        result = interactive_component_selection()
+        components, scheduler_with_persistence = interactive_component_selection()
 
         # Should return empty list (no infrastructure components)
-        assert "scheduler" not in result
-        assert not any(c.startswith("database") for c in result)
-        assert result == []
+        assert "scheduler" not in components
+        assert not any(c.startswith("database") for c in components)
+        assert components == []
+        assert scheduler_with_persistence is False
 
     @patch("typer.confirm")
     def test_scheduler_skips_generic_database_prompt(self, mock_confirm: Any) -> None:
@@ -103,11 +106,12 @@ class TestInteractiveSchedulerFlow:
             True,
         ]  # redis, worker, scheduler, persistence, continue SQLite
 
-        result = interactive_component_selection()
+        components, scheduler_with_persistence = interactive_component_selection()
 
         # Should have scheduler and database
-        assert "scheduler" in result
-        assert "database[sqlite]" in result
+        assert "scheduler" in components
+        assert "database[sqlite]" in components
+        assert scheduler_with_persistence is True
 
         # Should not have been prompted for generic database
         # (5 confirms: redis, worker, scheduler, persist, continue)
@@ -127,11 +131,12 @@ class TestInteractiveSchedulerFlow:
             False,
         ]  # redis, worker, scheduler, persistence, decline SQLite, database=no
 
-        result = interactive_component_selection()
+        components, scheduler_with_persistence = interactive_component_selection()
 
         # Should have scheduler but no database
-        assert "scheduler" in result
-        assert not any(c.startswith("database") for c in result)
+        assert "scheduler" in components
+        assert not any(c.startswith("database") for c in components)
+        assert scheduler_with_persistence is False
 
     @patch("typer.confirm")
     def test_redis_worker_then_scheduler_sqlite(self, mock_confirm: Any) -> None:
@@ -146,14 +151,15 @@ class TestInteractiveSchedulerFlow:
             True,
         ]  # redis=no, worker=yes, scheduler=yes, persistence=yes, continue=yes
 
-        result = interactive_component_selection()
+        components, scheduler_with_persistence = interactive_component_selection()
 
         # Should have redis (from worker), worker, scheduler, database[sqlite]
-        assert "redis" in result
-        assert "worker" in result
-        assert "scheduler" in result
-        assert "database[sqlite]" in result
-        assert len(result) == 4
+        assert "redis" in components
+        assert "worker" in components
+        assert "scheduler" in components
+        assert "database[sqlite]" in components
+        assert len(components) == 4
+        assert scheduler_with_persistence is True
 
     @patch("typer.confirm")
     def test_standalone_database_selection_still_works(self, mock_confirm: Any) -> None:
@@ -161,8 +167,9 @@ class TestInteractiveSchedulerFlow:
         # Mock responses: redis=no, worker=no, scheduler=no, database=yes
         mock_confirm.side_effect = [False, False, False, True]
 
-        result = interactive_component_selection()
+        components, scheduler_with_persistence = interactive_component_selection()
 
         # Should have just database (no engine suffix when not from scheduler)
-        assert result == ["database"]
-        assert "scheduler" not in result
+        assert components == ["database"]
+        assert "scheduler" not in components
+        assert scheduler_with_persistence is False
