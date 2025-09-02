@@ -15,16 +15,23 @@ from .components import COMPONENTS
 class TemplateGenerator:
     """Handles template context generation for cookiecutter."""
 
-    def __init__(self, project_name: str, selected_components: list[str]):
+    def __init__(
+        self,
+        project_name: str,
+        selected_components: list[str],
+        scheduler_with_persistence: bool = False,
+    ):
         """
         Initialize template generator.
 
         Args:
             project_name: Name of the project being generated
             selected_components: List of component names to include
+            scheduler_with_persistence: Whether scheduler uses database persistence
         """
         self.project_name = project_name
         self.project_slug = project_name.lower().replace(" ", "-").replace("_", "-")
+        self.scheduler_with_persistence = scheduler_with_persistence
 
         # Always include core components
         all_components = ["backend", "frontend"] + selected_components
@@ -69,6 +76,10 @@ class TemplateGenerator:
             "include_database": "yes" if has_database else "no",
             # Database engine selection
             "database_engine": self.database_engine or "sqlite",
+            # Scheduler persistence flag - only when explicitly selected for scheduler
+            "scheduler_with_persistence": (
+                "yes" if self.scheduler_with_persistence else "no"
+            ),
             # Derived flags for template logic
             "has_background_infrastructure": any(
                 name in self.components for name in ["worker", "scheduler"]

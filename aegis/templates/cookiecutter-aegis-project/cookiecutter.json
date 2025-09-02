@@ -14,6 +14,7 @@
   "include_worker": "no",
   "include_database": "no", 
   "include_cache": "no",
+  "scheduler_with_persistence": "no",
   
   "_comment_internal": "Internal variables for template logic",
   "_has_additional_components": "{% if cookiecutter.include_scheduler == 'yes' or cookiecutter.include_redis == 'yes' or cookiecutter.include_worker == 'yes' or cookiecutter.include_database == 'yes' or cookiecutter.include_cache == 'yes' %}yes{% else %}no{% endif %}",

@@ -204,9 +204,12 @@ def init(
 
     # Interactive component selection
     selected_components = components if components else []
+    scheduler_with_persistence = False
 
     if interactive and not components:
-        selected_components = interactive_component_selection()
+        selected_components, scheduler_with_persistence = (
+            interactive_component_selection()
+        )
 
         # Resolve dependencies for interactively selected components
         if selected_components:
@@ -230,8 +233,10 @@ def init(
             if auto_added:
                 typer.echo(f"\n📦 Auto-added dependencies: {', '.join(auto_added)}")
 
-    # Create template generator
-    template_gen = TemplateGenerator(project_name, list(selected_components))
+    # Create template generator with scheduler persistence context
+    template_gen = TemplateGenerator(
+        project_name, list(selected_components), scheduler_with_persistence
+    )
 
     # Show selected configuration
     typer.echo()
@@ -341,8 +346,13 @@ def get_interactive_infrastructure_components() -> list[ComponentSpec]:
     return sorted(infra_components, key=lambda x: x.name)
 
 
-def interactive_component_selection() -> list[str]:
-    """Interactive component selection with dependency awareness."""
+def interactive_component_selection() -> tuple[list[str], bool]:
+    """
+    Interactive component selection with dependency awareness.
+
+    Returns:
+        Tuple of (selected_components, scheduler_with_persistence)
+    """
 
     typer.echo("🎯 Component Selection")
     typer.echo("=" * 40)
@@ -351,6 +361,7 @@ def interactive_component_selection() -> list[str]:
     selected = []
     database_engine = None  # Track database engine selection
     database_added_by_scheduler = False  # Track if database was added by scheduler
+    scheduler_with_persistence = False  # Track scheduler persistence config
 
     # Get all infrastructure components from registry
     infra_components = get_interactive_infrastructure_components()
@@ -415,6 +426,8 @@ def interactive_component_selection() -> list[str]:
                         database_engine = "sqlite"
                         selected.append("database")
                         database_added_by_scheduler = True
+                        # Mark scheduler as using persistence
+                        scheduler_with_persistence = True
                         typer.echo("✅ Scheduler + SQLite database configured")
 
                         # Show bonus backup job message only when database is added
@@ -450,7 +463,7 @@ def interactive_component_selection() -> list[str]:
         if "scheduler" in selected:
             selected[db_index] = f"database[{database_engine}]"
 
-    return selected
+    return selected, scheduler_with_persistence
 
 
 # This is what runs when you do: aegis

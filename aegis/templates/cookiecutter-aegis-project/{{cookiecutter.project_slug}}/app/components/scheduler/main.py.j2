@@ -8,6 +8,11 @@ Add your own jobs by importing service functions and calling scheduler.add_job()
 import asyncio
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+{% if cookiecutter.scheduler_with_persistence == "yes" %}
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from app.core.db import engine, init_database
+from app.services.system.backup import backup_database_job
+{% endif %}
 
 from app.core.log import logger
 from app.services.system.health import check_system_status, register_health_check
@@ -73,7 +78,20 @@ async def _check_scheduler_health() -> ComponentStatus:
 
 def create_scheduler() -> AsyncIOScheduler:
     """Create and configure the scheduler with all jobs."""
+{% if cookiecutter.scheduler_with_persistence == "yes" %}
+    # Ensure database is initialized before creating jobstore
+    init_database()
+    
+    # Configure SQLAlchemy jobstore for persistence
+    jobstore = SQLAlchemyJobStore(engine=engine, tablename='apscheduler_jobs')
+    jobstores = {'default': jobstore}
+    scheduler = AsyncIOScheduler(jobstores=jobstores)
+    logger.info("📊 Scheduler using SQLite database for job persistence")
+{% else %}
+    # Use in-memory jobstore (default)
     scheduler = AsyncIOScheduler()
+    logger.info("🕒 Scheduler running in memory mode (jobs won't persist across restarts)")
+{% endif %}
 
     # ============================================================================
     # JOB SCHEDULE CONFIGURATION
@@ -94,6 +112,20 @@ def create_scheduler() -> AsyncIOScheduler:
         max_instances=1,  # Prevent overlapping health checks
         coalesce=True,  # Coalesce missed executions
     )
+
+{% if cookiecutter.scheduler_with_persistence == "yes" %}
+    # Database backup job (runs daily at 2 AM when persistence is enabled)
+    scheduler.add_job(
+        backup_database_job,
+        trigger="cron",
+        hour=2,
+        minute=0,
+        id="database_backup",
+        name="Daily Database Backup",
+        max_instances=1,
+        coalesce=True,
+    )
+{% endif %}
 
     # Add your own scheduled jobs here by importing service functions
     # and calling scheduler.add_job() with your custom business logic
