@@ -2,9 +2,9 @@
 Database backup service for {{ cookiecutter.project_name }}.
 
 Provides database backup functionality for scheduled backup jobs.
-Only included when scheduler persistence is enabled.
+Included when scheduler and database components are both present.
 """
-{% if cookiecutter.scheduler_with_persistence == "yes" %}
+{% if cookiecutter.scheduler_with_persistence == "yes" or (cookiecutter.include_scheduler == "yes" and cookiecutter.include_database == "yes") %}
 
 import asyncio
 import shutil
