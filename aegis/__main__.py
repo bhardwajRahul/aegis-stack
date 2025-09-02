@@ -9,6 +9,7 @@ Usage:
 """
 
 from pathlib import Path
+from typing import cast
 
 import typer
 
@@ -203,8 +204,19 @@ def init(
             typer.echo(f"⚠️  Overwriting existing directory: {project_path}")
 
     # Interactive component selection
-    selected_components = components if components else []
+    # Note: components is list[str] after callback, despite str annotation
+    selected_components = cast(list[str], components) if components else []
     scheduler_with_persistence = False
+
+    # Auto-detect scheduler persistence in non-interactive mode
+    if components and not interactive:
+        # Check if both scheduler and database are provided
+        # Note: components is list[str] after callback, despite str annotation
+        components_list = cast(list[str], components)
+        clean_names = clean_component_names(components_list)
+        if "scheduler" in clean_names and "database" in clean_names:
+            scheduler_with_persistence = True
+            typer.echo("📊 Auto-detected: Scheduler with database persistence")
 
     if interactive and not components:
         selected_components, scheduler_with_persistence = (
