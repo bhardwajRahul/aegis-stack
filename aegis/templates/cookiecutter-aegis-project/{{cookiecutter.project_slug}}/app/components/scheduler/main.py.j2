@@ -12,6 +12,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from app.core.db import engine, init_database
 from app.services.system.backup import backup_database_job
+{% elif cookiecutter.include_scheduler == "yes" and cookiecutter.include_database == "yes" %}
+from app.services.system.backup import backup_database_job
 {% endif %}
 
 from app.core.log import logger
@@ -113,8 +115,8 @@ def create_scheduler() -> AsyncIOScheduler:
         coalesce=True,  # Coalesce missed executions
     )
 
-{% if cookiecutter.scheduler_with_persistence == "yes" %}
-    # Database backup job (runs daily at 2 AM when persistence is enabled)
+{% if cookiecutter.scheduler_with_persistence == "yes" or (cookiecutter.include_scheduler == "yes" and cookiecutter.include_database == "yes") %}
+    # Database backup job (runs daily at 2 AM when database is available)
     scheduler.add_job(
         backup_database_job,
         trigger="cron",

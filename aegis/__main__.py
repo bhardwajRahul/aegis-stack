@@ -450,6 +450,13 @@ def interactive_component_selection() -> tuple[list[str], bool]:
             prompt = f"  Add {component_spec.description}?"
             if typer.confirm(prompt):
                 selected.append("database")
+
+                # Show bonus backup job message when database added with scheduler
+                if "scheduler" in selected:
+                    typer.echo("\n🎯 Bonus: Adding database backup job")
+                    typer.echo(
+                        "✅ Scheduled daily database backup job included (runs at 2 AM)"
+                    )
         else:
             # Standard prompt for other components
             prompt = f"  Add {component_spec.description}?"

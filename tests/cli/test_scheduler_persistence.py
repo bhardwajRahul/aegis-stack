@@ -105,6 +105,67 @@ class TestSchedulerPersistenceTracking:
         assert scheduler_with_persistence is True
 
 
+class TestBackupJobInclusionLogic:
+    """Test that backup job is included in the right scenarios."""
+
+    def test_backup_job_included_with_scheduler_persistence(self) -> None:
+        """Test backup job included when scheduler_with_persistence=True."""
+        components = ["scheduler", "database[sqlite]"]
+        template_gen = TemplateGenerator(
+            "test-project", components, scheduler_with_persistence=True
+        )
+
+        context = template_gen.get_template_context()
+
+        # Both conditions should be true for backup job
+        assert context["scheduler_with_persistence"] == "yes"
+        assert context["include_scheduler"] == "yes"
+        assert context["include_database"] == "yes"
+
+    def test_backup_job_included_with_independent_selection(self) -> None:
+        """Test backup job included when scheduler + database selected independently."""
+        components = ["scheduler", "database[sqlite]"]
+        template_gen = TemplateGenerator(
+            "test-project", components, scheduler_with_persistence=False
+        )
+
+        context = template_gen.get_template_context()
+
+        # Independent selection: scheduler_with_persistence=False but both present
+        assert context["scheduler_with_persistence"] == "no"
+        assert context["include_scheduler"] == "yes"
+        assert context["include_database"] == "yes"
+        # This combination should now include backup job with our changes
+
+    def test_backup_job_not_included_scheduler_only(self) -> None:
+        """Test backup job NOT included when only scheduler selected."""
+        components = ["scheduler"]
+        template_gen = TemplateGenerator(
+            "test-project", components, scheduler_with_persistence=False
+        )
+
+        context = template_gen.get_template_context()
+
+        assert context["scheduler_with_persistence"] == "no"
+        assert context["include_scheduler"] == "yes"
+        assert context["include_database"] == "no"
+        # This combination should NOT include backup job
+
+    def test_backup_job_not_included_database_only(self) -> None:
+        """Test backup job NOT included when only database selected."""
+        components = ["database[sqlite]"]
+        template_gen = TemplateGenerator(
+            "test-project", components, scheduler_with_persistence=False
+        )
+
+        context = template_gen.get_template_context()
+
+        assert context["scheduler_with_persistence"] == "no"
+        assert context["include_scheduler"] == "no"
+        assert context["include_database"] == "yes"
+        # This combination should NOT include backup job
+
+
 class TestTemplateGeneratorPersistenceContext:
     """Test template generator handling of scheduler persistence context."""
 
