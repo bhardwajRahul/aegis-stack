@@ -1,16 +1,17 @@
-{%- if cookiecutter.include_worker == "yes" %}
+{%- if cookiecutter.include_worker == "yes" or cookiecutter.scheduler_with_persistence == "yes" %}
 """
-API models for background tasks and responses.
+API models for{%- if cookiecutter.include_worker == "yes" %} background tasks{%- endif %}{%- if cookiecutter.include_worker == "yes" and cookiecutter.scheduler_with_persistence == "yes" %} and{%- endif %}{%- if cookiecutter.scheduler_with_persistence == "yes" %} scheduled tasks{%- endif %} and responses.
 
 This module contains all Pydantic models used by the API layer for
 task management, status tracking, and response formatting.
 """
 
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
+{%- if cookiecutter.include_worker == "yes" %}
 from app.components.worker.constants import LoadTestTypes
 
 
@@ -24,10 +25,10 @@ class TaskRequest(BaseModel):
     args: list[Any] = Field(
         default_factory=list, description="Positional arguments for the task"
     )
-    kwargs: Dict[str, Any] = Field(
+    kwargs: dict[str, Any] = Field(
         default_factory=dict, description="Keyword arguments for the task"
     )
-    delay_seconds: Optional[int] = Field(
+    delay_seconds: int | None = Field(
         None, description="Delay task execution by this many seconds"
     )
 
@@ -39,7 +40,7 @@ class TaskResponse(BaseModel):
     task_name: str
     queue_type: str
     queued_at: datetime
-    estimated_start: Optional[datetime] = None
+    estimated_start: datetime | None = None
     message: str
 
 
@@ -48,7 +49,7 @@ class TaskListResponse(BaseModel):
 
     available_tasks: list[str]
     total_count: int
-    queues: Dict[str, list[str]]
+    queues: dict[str, list[str]]
 
 
 class TaskStatusResponse(BaseModel):
@@ -59,17 +60,17 @@ class TaskStatusResponse(BaseModel):
         ...,
         description="Task status: queued, in_progress, complete, failed, unknown",
     )
-    enqueue_time: Optional[datetime] = Field(
+    enqueue_time: datetime | None = Field(
         None, description="When the task was enqueued"
     )
-    start_time: Optional[datetime] = Field(
+    start_time: datetime | None = Field(
         None, description="When the task started processing"
     )
-    finish_time: Optional[datetime] = Field(None, description="When the task completed")
+    finish_time: datetime | None = Field(None, description="When the task completed")
     result_available: bool = Field(
         False, description="Whether task result is available"
     )
-    error: Optional[str] = Field(None, description="Error message if task failed")
+    error: str | None = Field(None, description="Error message if task failed")
 
 
 class TaskResultResponse(BaseModel):
@@ -78,13 +79,13 @@ class TaskResultResponse(BaseModel):
     task_id: str
     status: str = Field(..., description="Task completion status")
     result: Any = Field(..., description="The actual task result data")
-    enqueue_time: Optional[datetime] = Field(
+    enqueue_time: datetime | None = Field(
         None, description="When the task was enqueued"
     )
-    start_time: Optional[datetime] = Field(
+    start_time: datetime | None = Field(
         None, description="When the task started processing"
     )
-    finish_time: Optional[datetime] = Field(None, description="When the task completed")
+    finish_time: datetime | None = Field(None, description="When the task completed")
 
 
 class LoadTestRequest(BaseModel):
@@ -207,7 +208,7 @@ class LoadTestStatus(BaseModel):
     tasks_failed: int = Field(0, description="Number of tasks that failed") 
     elapsed_seconds: float = Field(..., description="Time elapsed since test start")
     current_throughput: float = Field(..., description="Current tasks per second")
-    estimated_completion: Optional[datetime] = Field(
+    estimated_completion: datetime | None = Field(
         None, description="Estimated completion time"
     )
     queue_depth: int = Field(0, description="Current queue depth")
@@ -227,7 +228,7 @@ class LoadTestResults(BaseModel):
     
     # Timing metrics
     start_time: datetime = Field(..., description="Test start time")
-    end_time: Optional[datetime] = Field(None, description="Test end time")
+    end_time: datetime | None = Field(None, description="Test end time")
     total_duration_seconds: float = Field(..., description="Total test duration")
     
     # Performance metrics
@@ -236,7 +237,7 @@ class LoadTestResults(BaseModel):
     failure_rate: float = Field(..., description="Percentage of tasks that failed")
     
     # Queue metrics
-    final_queue_metrics: Dict[str, Any] = Field(
+    final_queue_metrics: dict[str, Any] = Field(
         ..., description="Final arq queue health data"
     )
     
@@ -244,4 +245,34 @@ class LoadTestResults(BaseModel):
     performance_summary: str = Field(
         ..., description="Human readable performance summary"
     )
+
+
+{%- endif %}
+
+{%- if cookiecutter.scheduler_with_persistence == "yes" %}
+# Import scheduler service models for proper typing
+from app.services.scheduler.models import ScheduledTask, TaskStatistics
+
+# ============================================================================
+# SCHEDULED TASK API MODELS
+# ============================================================================
+
+class ScheduledTaskListResponse(BaseModel):
+    """Response model for listing scheduled tasks."""
+    
+    tasks: list[ScheduledTask] = Field(..., description="List of scheduled tasks")
+    total_count: int = Field(..., description="Total number of scheduled tasks")
+    
+    
+class ScheduledTaskDetailResponse(BaseModel):
+    """Response model for scheduled task details."""
+    
+    task: ScheduledTask = Field(..., description="Detailed scheduled task information")
+    
+
+class ScheduledTaskStatisticsResponse(BaseModel):
+    """Response model for scheduled task statistics."""
+    
+    statistics: TaskStatistics = Field(..., description="Task statistics summary")
+{%- endif %}
 {%- endif %}
