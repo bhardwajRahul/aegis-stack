@@ -6,7 +6,7 @@ from typing import Any
 
 import flet as ft
 
-from app.services.system import get_system_status
+from app.services.system.models import ComponentStatus, ComponentStatusType
 
 from .dashboard.cards import (
     DatabaseCard,
@@ -183,7 +183,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 return FastAPICard(component_data).build()
             elif component_name == "worker":
                 return WorkerCard(component_data).build()
-            elif component_name == "redis":
+            elif component_name == "cache":
                 return RedisCard(component_data).build()
             elif component_name == "database":
                 return DatabaseCard(component_data).build()
@@ -204,22 +204,45 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
         async def refresh_dashboard() -> None:
             """Refresh the stunning marketing-grade dashboard."""
             try:
-                status = await get_system_status()
-
-                # Update health status indicator with correct component counting
-                components = {}
-                if (
-                    "aegis" in status.components
-                    and status.components["aegis"].sub_components
-                ):
-                    components = status.components["aegis"].sub_components
+                # Use the single /health/ endpoint for all health data
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    response = await client.get("http://localhost:8000/health/")
+                    data = response.json()
+                    
+                # Extract components from health API response (navigate the aegis structure)
+                if "components" in data and "aegis" in data["components"]:
+                    aegis_component = data["components"]["aegis"]
+                    if "sub_components" in aegis_component:
+                        api_components = aegis_component["sub_components"]
+                    else:
+                        api_components = {}
+                else:
+                    api_components = {}
                 
+                # Convert API data back to ComponentStatus objects for the cards
+                def convert_component(comp_data: dict) -> ComponentStatus:
+                    """Recursively convert API component data to ComponentStatus."""
+                    sub_components = {}
+                    if "sub_components" in comp_data:
+                        for sub_name, sub_data in comp_data["sub_components"].items():
+                            sub_components[sub_name] = convert_component(sub_data)
+                    
+                    return ComponentStatus(
+                        name=comp_data["name"],
+                        status=ComponentStatusType.HEALTHY if comp_data["healthy"] else ComponentStatusType.UNHEALTHY,
+                        message=comp_data["message"],
+                        response_time_ms=comp_data.get("response_time_ms"),
+                        metadata=comp_data.get("metadata", {}),
+                        sub_components=sub_components
+                    )
+                
+                components = {}
+                for name, comp_data in api_components.items():
+                    components[name] = convert_component(comp_data)
+
                 total_components = len(components)
-                healthy_components = (
-                    len([c for c in components.values() if c.status.value == "healthy"])
-                    if components
-                    else 0
-                )
+                healthy_components = len([c for c in components.values() if c.healthy])
 
                 # Update health status indicator in the header
                 new_health_indicator = create_health_status_indicator(
@@ -229,8 +252,6 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 # Update header health indicator
                 header_row = page.controls[0].content  # header container -> Row
                 header_row.controls[1].content = new_health_indicator
-
-                # Components already extracted above for health calculation
 
                 # Clear existing cards and create stunning new ones in responsive grid
                 component_cards_container.content.controls.clear()
@@ -243,14 +264,14 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                         and "Unknown component" in card.content.value
                     ):
                         continue  # Skip unknown components
-                    
+
                     # Add card with responsive column sizing (6 = 50% = 2 columns)
                     card.col = {"xs": 12, "sm": 12, "md": 6, "lg": 6, "xl": 6}
                     component_cards_container.content.controls.append(card)
 
                 page.update()
 
-            except Exception as e:
+            except Exception:
                 # Show error indicator in header
                 error_indicator = create_health_status_indicator(0, 1)
                 header_row = page.controls[0].content

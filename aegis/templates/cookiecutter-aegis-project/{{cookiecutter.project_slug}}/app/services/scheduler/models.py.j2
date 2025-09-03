@@ -1,4 +1,3 @@
-{% if cookiecutter.scheduler_with_persistence == "yes" %}
 """Models for scheduled task management - both database and service layer."""
 
 import pickle
@@ -6,10 +5,13 @@ from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+{% if cookiecutter.scheduler_with_persistence == "yes" %}
 from sqlalchemy import Column, Float, LargeBinary, String
 from sqlmodel import Field as SQLField, SQLModel
+{% endif %}
 
 
+{% if cookiecutter.scheduler_with_persistence == "yes" %}
 # ============================================================================
 # DATABASE MODELS (SQLModel)
 # ============================================================================
@@ -84,4 +86,27 @@ class TaskStatistics(BaseModel):
     total_tasks: int = Field(0, description="Total number of scheduled tasks")
     active_tasks: int = Field(0, description="Number of active tasks")
     paused_tasks: int = Field(0, description="Number of paused tasks")
+
+
 {% endif %}
+
+
+# ============================================================================
+# HEALTH MONITORING MODELS (Available for all scheduler modes)
+# ============================================================================
+
+class UpcomingTask(BaseModel):
+    """Information about an upcoming scheduled task."""
+    id: str = Field(..., description="Task identifier")
+    name: str = Field(..., description="Human-readable task name")
+    next_run: str = Field(..., description="ISO datetime string of next execution")
+    schedule: str = Field(..., description="Human-readable schedule description")
+
+
+class SchedulerHealthMetadata(BaseModel):
+    """Health metadata for scheduler components."""
+    total_tasks: int = Field(0, description="Total number of scheduled tasks")
+    active_tasks: int = Field(0, description="Number of active tasks")
+    paused_tasks: int = Field(0, description="Number of paused tasks")
+    upcoming_tasks: list[UpcomingTask] = Field(default_factory=list, description="List of upcoming tasks (max 5)")
+    scheduler_state: str = Field("unknown", description="Scheduler state description")

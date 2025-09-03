@@ -33,6 +33,58 @@ def _get_status_icon_and_color(status: ComponentStatusType) -> tuple[str, str]:
     return get_status_icon(status), get_status_color_name(status)
 
 
+def _is_scheduler_metadata(metadata: dict[str, Any]) -> bool:
+    """Check if metadata contains scheduler-specific task information."""
+    return "total_tasks" in metadata and "upcoming_tasks" in metadata
+
+
+def _display_scheduler_metadata(metadata: dict[str, Any], base_indent: str, is_last: bool, detailed: bool = False) -> None:
+    """Display scheduler metadata in a structured, readable format."""
+    tree_indent = f"{base_indent}    " if is_last else f"{base_indent}│   "
+    
+    # Task statistics
+    total_tasks = metadata.get("total_tasks", 0)
+    active_tasks = metadata.get("active_tasks", 0)
+    paused_tasks = metadata.get("paused_tasks", 0)
+    
+    console.print(f"{tree_indent}[dim]Task Statistics:[/dim]")
+    console.print(f"{tree_indent}  [dim]• Total: {total_tasks}, Active: {active_tasks}, Paused: {paused_tasks}[/dim]")
+    
+    # Upcoming tasks
+    upcoming_tasks = metadata.get("upcoming_tasks", [])
+    if upcoming_tasks:
+        console.print(f"{tree_indent}[dim]Upcoming Tasks:[/dim]")
+        # In detailed mode, show all tasks. Otherwise show top 3
+        max_tasks = len(upcoming_tasks) if detailed else 3
+        for task in upcoming_tasks[:max_tasks]:
+            task_name = task.get("name", task.get("id", "Unknown"))
+            next_run = task.get("next_run", "Unknown")
+            schedule = task.get("schedule", "Unknown")
+            
+            # Format next run time more human-readable
+            if next_run and next_run != "Unknown":
+                try:
+                    from datetime import datetime
+                    if next_run.endswith('+00:00') or next_run.endswith('Z'):
+                        dt = datetime.fromisoformat(next_run.replace('Z', '+00:00'))
+                        formatted_time = dt.strftime("%Y-%m-%d %H:%M UTC")
+                    else:
+                        formatted_time = next_run
+                except Exception:
+                    formatted_time = next_run
+            else:
+                formatted_time = "Unknown"
+            
+            console.print(f"{tree_indent}  [dim]• {task_name} - Next: {formatted_time}[/dim]")
+            
+        # Show "and X more..." if there are more tasks (only in non-detailed mode)
+        if not detailed and len(upcoming_tasks) > 3:
+            remaining = len(upcoming_tasks) - 3
+            console.print(f"{tree_indent}  [dim]• ... and {remaining} more task{'s' if remaining > 1 else ''}[/dim]")
+    else:
+        console.print(f"{tree_indent}[dim]No upcoming tasks scheduled[/dim]")
+
+
 async def get_health_data(
     endpoint: str = APIEndpoints.HEALTH_BASIC,
 ) -> HealthResponse | DetailedHealthResponse:
@@ -183,13 +235,18 @@ def _display_sub_components(
 
         # Show metadata for sub-components if detailed and available
         elif detailed and sub_component.metadata:
-            metadata_str = json.dumps(sub_component.metadata, separators=(",", ":"))
-            max_length = CLI.MAX_METADATA_DISPLAY_LENGTH
-            if len(metadata_str) > max_length:
-                metadata_str = metadata_str[: max_length - 3] + "..."
-            # Adjust tree indent based on whether this is the last item
-            tree_indent = f"{base_indent}    " if is_last else f"{base_indent}│   "
-            console.print(f"{tree_indent}[dim]({metadata_str})[/dim]")
+            # Special handling for scheduler component
+            if sub_name == "scheduler" and _is_scheduler_metadata(sub_component.metadata):
+                _display_scheduler_metadata(sub_component.metadata, base_indent, is_last, detailed)
+            else:
+                # Generic metadata display for other components
+                metadata_str = json.dumps(sub_component.metadata, separators=(",", ":"))
+                max_length = CLI.MAX_METADATA_DISPLAY_LENGTH
+                if len(metadata_str) > max_length:
+                    metadata_str = metadata_str[: max_length - 3] + "..."
+                # Adjust tree indent based on whether this is the last item
+                tree_indent = f"{base_indent}    " if is_last else f"{base_indent}│   "
+                console.print(f"{tree_indent}[dim]({metadata_str})[/dim]")
 
 
 def _display_health_status(
@@ -294,11 +351,16 @@ def _display_health_status(
 
         # Show metadata for main components if detailed and available
         elif detailed and component.metadata:
-            metadata_str = json.dumps(component.metadata, separators=(",", ":"))
-            max_length = CLI.MAX_METADATA_DISPLAY_LENGTH
-            if len(metadata_str) > max_length:
-                metadata_str = metadata_str[: max_length - 3] + "..."
-            console.print(f"    [dim]({metadata_str})[/dim]")
+            # Special handling for scheduler component
+            if name == "scheduler" and _is_scheduler_metadata(component.metadata):
+                _display_scheduler_metadata(component.metadata, "", True, detailed)
+            else:
+                # Generic metadata display for other components
+                metadata_str = json.dumps(component.metadata, separators=(",", ":"))
+                max_length = CLI.MAX_METADATA_DISPLAY_LENGTH
+                if len(metadata_str) > max_length:
+                    metadata_str = metadata_str[: max_length - 3] + "..."
+                console.print(f"    [dim]({metadata_str})[/dim]")
 
     # System information (only in detailed mode)
     if detailed and isinstance(health_data, DetailedHealthResponse):

@@ -118,14 +118,48 @@ async def _frontend_component_health() -> ComponentStatus:
 {%- if cookiecutter.include_scheduler == "yes" %}
 
 
-async def _scheduler_enabled_status() -> ComponentStatus:
+async def _scheduler_component_health() -> ComponentStatus:
     """
-    Shows scheduler as an enabled/activated component.
-
-    This indicates the scheduler component is configured in the project
-    and running in its own container, but we can't health check it
-    without cross-container communication.
+    Check scheduler component health from backend.
+    
+    {% if cookiecutter.scheduler_with_persistence == "yes" %}
+    With persistence: Gets real task data from database
+    {% else %}
+    Without persistence: Shows component as activated only
+    {% endif %}
     """
+    {% if cookiecutter.scheduler_with_persistence == "yes" %}
+    try:
+        from app.services.scheduler.task_monitor import TaskHealthMonitor
+        monitor = TaskHealthMonitor()
+        health_data = await monitor.get_health_metadata(None)  # No scheduler instance in backend
+        
+        # Format message based on task data
+        total_tasks = health_data.total_tasks
+        message = f"Scheduler running with {total_tasks} tasks" if total_tasks > 0 else "Scheduler running (no tasks)"
+        
+        return ComponentStatus(
+            name="scheduler",
+            status=ComponentStatusType.HEALTHY,
+            message=message,
+            response_time_ms=None,
+            metadata=health_data.model_dump(),
+        )
+    except Exception as e:
+        logger.error("Failed to get scheduler health data", error=str(e))
+        # Fallback to basic status
+        return ComponentStatus(
+            name="scheduler",
+            status=ComponentStatusType.WARNING,
+            message="Scheduler enabled, health data unavailable",
+            response_time_ms=None,
+            metadata={
+                "type": "component_status",
+                "error": "health_check_failed",
+                "error_details": str(e),
+            },
+        )
+    {% else %}
     return ComponentStatus(
         name="scheduler",
         status=ComponentStatusType.HEALTHY,
@@ -135,12 +169,10 @@ async def _scheduler_enabled_status() -> ComponentStatus:
             "type": "component_status",
             "deployment": "separate_container",
             "status": "activated",
-            "note": (
-                "Runs independently - health monitoring requires database "
-                "component"
-            ),
+            "note": "Memory-only mode - no cross-container health monitoring",
         },
     )
+    {% endif %}
 {%- endif %}
 
 
@@ -161,9 +193,13 @@ async def startup_hook() -> None:
     logger.info("️Frontend component health check registered")
 
     {%- if cookiecutter.include_scheduler == "yes" %}
-    # Register scheduler as enabled component (shows user it's activated)
-    register_health_check("scheduler", _scheduler_enabled_status)
+    # Register scheduler component health check
+    register_health_check("scheduler", _scheduler_component_health)
+    {% if cookiecutter.scheduler_with_persistence == "yes" %}
+    logger.info("Scheduler component health check registered (with task data)")
+    {% else %}
     logger.info("Scheduler component enabled (shows as activated)")
+    {% endif %}
     {%- endif %}
 
     {%- if cookiecutter.include_worker == "yes" %}

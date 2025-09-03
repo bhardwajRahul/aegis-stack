@@ -11,7 +11,7 @@ complete projects and validate they work correctly.
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytest
 
-from app.components.scheduler.main import _check_scheduler_health, create_scheduler
+from app.components.scheduler.main import create_scheduler
 from app.services.system.health import check_system_status
 
 
@@ -45,32 +45,3 @@ async def test_system_service_can_be_scheduled() -> None:
     assert system_job.func == check_system_status
 
 
-@pytest.mark.asyncio
-async def test_scheduler_health_check() -> None:
-    """Test the scheduler health check functionality."""
-    # Test health check when scheduler is not initialized
-    health_status = await _check_scheduler_health()
-    assert not health_status.healthy
-    assert "not initialized" in health_status.message
-
-    # Test with created but not started scheduler
-    scheduler = create_scheduler()
-    import app.components.scheduler.main as scheduler_module
-
-    scheduler_module._scheduler = scheduler
-
-    health_status = await _check_scheduler_health()
-    assert not health_status.healthy
-    assert "not running" in health_status.message
-
-    # Test with running scheduler
-    scheduler.start()
-    try:
-        health_status = await _check_scheduler_health()
-        assert health_status.healthy
-        assert "running with" in health_status.message
-        assert health_status.metadata is not None
-        assert "job_count" in health_status.metadata
-    finally:
-        scheduler.shutdown()
-        scheduler_module._scheduler = None

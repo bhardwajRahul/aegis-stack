@@ -19,11 +19,6 @@ from app.services.system.backup import backup_database_job
 {% endif %}
 
 from app.core.log import logger
-from app.services.system.health import register_health_check
-from app.services.system.models import ComponentStatus, ComponentStatusType
-
-# Global scheduler instance for health checking
-_scheduler: AsyncIOScheduler | None = None
 
 {% if cookiecutter.scheduler_with_persistence == "yes" %}
 
@@ -45,58 +40,6 @@ def _job_exists_in_database(job_id: str) -> bool:
 {% endif %}
 
 
-async def _check_scheduler_health() -> ComponentStatus:
-    """Health check for the scheduler component."""
-    global _scheduler
-
-    if _scheduler is None:
-        return ComponentStatus(
-            name="scheduler",
-            status=ComponentStatusType.UNHEALTHY,
-            message="Scheduler not initialized",
-            response_time_ms=None,
-        )
-
-    if not _scheduler.running:
-        return ComponentStatus(
-            name="scheduler",
-            status=ComponentStatusType.UNHEALTHY,
-            message="Scheduler is not running",
-            response_time_ms=None,
-        )
-
-    # Get scheduler statistics
-    jobs = _scheduler.get_jobs()
-    job_count = len(jobs)
-
-    # Check if scheduler is responsive
-    try:
-        state = _scheduler.state
-        healthy = state == 1  # STATE_RUNNING = 1
-
-        status = (
-            ComponentStatusType.HEALTHY
-            if healthy
-            else ComponentStatusType.UNHEALTHY
-        )
-        return ComponentStatus(
-            name="scheduler",
-            status=status,
-            message=f"Scheduler running with {job_count} jobs",
-            response_time_ms=None,
-            metadata={
-                "job_count": job_count,
-                "state": state,
-                "jobs": [{"id": job.id, "name": job.name} for job in jobs[:5]],
-            },
-        )
-    except Exception as e:
-        return ComponentStatus(
-            name="scheduler",
-            status=ComponentStatusType.UNHEALTHY,
-            message=f"Scheduler health check failed: {str(e)}",
-            response_time_ms=None,
-        )
 
 
 def create_scheduler() -> AsyncIOScheduler:
@@ -181,12 +124,10 @@ def create_scheduler() -> AsyncIOScheduler:
 
 async def run_scheduler() -> None:
     """Main scheduler runner with lifecycle management."""
-    global _scheduler
 
     logger.info("🕒 Starting {{ cookiecutter.project_name }} Scheduler")
 
     scheduler = create_scheduler()
-    _scheduler = scheduler  # Store for health checking
 
     try:
         scheduler.start()
@@ -196,9 +137,6 @@ async def run_scheduler() -> None:
         for job in scheduler.get_jobs():
             logger.info(f"   • {job.name} - {job.trigger}")
 
-        # Register scheduler health check with the system health service
-        register_health_check("scheduler", _check_scheduler_health)
-        logger.info("🩺 Scheduler health check registered")
 
         # Keep the scheduler running
         while True:
@@ -213,4 +151,3 @@ async def run_scheduler() -> None:
         if scheduler.running:
             scheduler.shutdown()
             logger.info("✅ Scheduler stopped gracefully")
-        _scheduler = None  # Clear global reference
