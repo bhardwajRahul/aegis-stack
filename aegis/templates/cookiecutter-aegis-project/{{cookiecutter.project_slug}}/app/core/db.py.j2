@@ -13,9 +13,10 @@ from typing import Any
 from urllib.parse import urlparse
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, SQLModel
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 from app.core.log import logger
@@ -85,9 +86,10 @@ SessionLocal = sessionmaker(
     class_=Session, bind=engine, autoflush=False, autocommit=False
 )
 
-# Configure async session factory
+# Configure async session factory using SQLModel's AsyncSession
 AsyncSessionLocal = async_sessionmaker(
     async_engine,
+    class_=AsyncSession,
     expire_on_commit=False,
 )
 

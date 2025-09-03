@@ -6,22 +6,43 @@ Add your own jobs by importing service functions and calling scheduler.add_job()
 """
 
 import asyncio
+import os
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 {% if cookiecutter.scheduler_with_persistence == "yes" %}
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-from app.core.db import engine, init_database
+from app.core.db import engine, init_database, db_session
+from app.services.scheduler.models import APSchedulerJob
 from app.services.system.backup import backup_database_job
 {% elif cookiecutter.include_scheduler == "yes" and cookiecutter.include_database == "yes" %}
 from app.services.system.backup import backup_database_job
 {% endif %}
 
 from app.core.log import logger
-from app.services.system.health import check_system_status, register_health_check
+from app.services.system.health import register_health_check
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 # Global scheduler instance for health checking
 _scheduler: AsyncIOScheduler | None = None
+
+{% if cookiecutter.scheduler_with_persistence == "yes" %}
+
+def _job_exists_in_database(job_id: str) -> bool:
+    """Check if a job already exists in the persistence database using SQLModel."""
+    try:
+        from sqlmodel import select
+        
+        with db_session() as session:
+            # Query for job by ID using modern SQLModel pattern
+            result = session.exec(select(APSchedulerJob).where(APSchedulerJob.id == job_id))
+            job = result.first()
+            return job is not None
+    except Exception as e:
+        logger.warning(f"Could not check for existing job {job_id}: {e}")
+        # If we can't check, assume it doesn't exist (safer to add than skip)
+        return False
+
+{% endif %}
 
 
 async def _check_scheduler_health() -> ComponentStatus:
@@ -92,41 +113,64 @@ def create_scheduler() -> AsyncIOScheduler:
 {% else %}
     # Use in-memory jobstore (default)
     scheduler = AsyncIOScheduler()
-    logger.info("🕒 Scheduler running in memory mode (jobs won't persist across restarts)")
+    logger.info(
+        "🕒 Scheduler running in memory mode (jobs won't persist across restarts)"
+    )
 {% endif %}
 
     # ============================================================================
     # JOB SCHEDULE CONFIGURATION
-    # Add your scheduled jobs below - import service functions and schedule them!
+    # 
+    # PERSISTENCE BEHAVIOR:
+    # - Jobs are checked against the database first
+    # - Existing jobs are preserved (respects runtime modifications)
+    # - New jobs are added from code configuration
+    # - Set SCHEDULER_FORCE_UPDATE=true to override all jobs from code
+    #
+    # To update schedules during deployment:
+    #   SCHEDULER_FORCE_UPDATE=true docker-compose up -d scheduler
     # ============================================================================
 
-    # System health check every 5 minutes
-    # Adjust this interval based on your monitoring needs:
-    # - Production systems: 1-5 minutes
-    # - Development: 10-15 minutes
-    # - High-availability: 30 seconds - 1 minute
-    scheduler.add_job(
-        check_system_status,
-        trigger="interval",
-        minutes=1,
-        id="system_status_check",
-        name="System Health Check",
-        max_instances=1,  # Prevent overlapping health checks
-        coalesce=True,  # Coalesce missed executions
-    )
+    # Check environment flag for force updates (useful during deployments)
+    force_update = os.getenv("SCHEDULER_FORCE_UPDATE", "false").lower() == "true"
 
 {% if cookiecutter.scheduler_with_persistence == "yes" or (cookiecutter.include_scheduler == "yes" and cookiecutter.include_database == "yes") %}
     # Database backup job (runs daily at 2 AM when database is available)
-    scheduler.add_job(
-        backup_database_job,
-        trigger="cron",
-        hour=2,
-        minute=0,
-        id="database_backup",
-        name="Daily Database Backup",
-        max_instances=1,
-        coalesce=True,
-    )
+    job_id = "database_backup"
+{% if cookiecutter.scheduler_with_persistence == "yes" %}
+    # For persistent schedulers, check database directly since scheduler hasn't loaded jobs yet
+    job_exists = _job_exists_in_database(job_id)
+{% else %}
+    # For memory schedulers, scheduler.get_job() works fine
+    existing_job = scheduler.get_job(job_id)
+    job_exists = existing_job is not None
+{% endif %}
+    
+    if not job_exists or force_update:
+        if job_exists and force_update:
+            logger.info(f"🔄 Force updating job '{job_id}' from code configuration")
+        else:
+            logger.info(f"➕ Adding new job '{job_id}'")
+            
+        scheduler.add_job(
+            backup_database_job,
+            trigger="cron",
+            hour=2,
+            minute=0,
+            id=job_id,
+            name="Daily Database Backup",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True  # Safe to use since we check first
+        )
+    else:
+{% if cookiecutter.scheduler_with_persistence == "yes" %}
+        logger.info(f"✅ Job '{job_id}' exists in database, preserving current configuration")
+{% else %}
+        logger.info(
+            f"✅ Job '{job_id}' exists, preserving current configuration: {existing_job.trigger}"
+        )
+{% endif %}
 {% endif %}
 
     # Add your own scheduled jobs here by importing service functions

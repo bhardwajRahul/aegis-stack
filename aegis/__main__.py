@@ -415,7 +415,7 @@ def interactive_component_selection() -> tuple[list[str], bool]:
                 typer.echo("\n💾 Scheduler Persistence:")
                 persistence_prompt = (
                     "  Do you want to persist scheduled jobs? "
-                    "(Enables job history, recovery after restarts) [y/N]"
+                    "(Enables job history, recovery after restarts)"
                 )
                 if typer.confirm(persistence_prompt):
                     # Database engine selection (SQLite only for now)
@@ -434,7 +434,7 @@ def interactive_component_selection() -> tuple[list[str], bool]:
                         "  • Use PostgreSQL for full production multi-container support"
                     )
 
-                    if typer.confirm("  Continue with SQLite? [Y/n]", default=True):
+                    if typer.confirm("  Continue with SQLite?", default=True):
                         database_engine = "sqlite"
                         selected.append("database")
                         database_added_by_scheduler = True

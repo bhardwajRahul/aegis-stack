@@ -1,10 +1,5 @@
 {%- if cookiecutter.include_worker == "yes" %}
-"""
-Background tasks API endpoints.
-
-Provides endpoints for enqueueing and monitoring background tasks
-using the arq worker infrastructure.
-"""
+"""Worker task API endpoints."""
 
 from datetime import datetime, timedelta
 from typing import Any
@@ -25,26 +20,17 @@ from app.components.worker.tasks import get_task_by_name, list_available_tasks
 from app.core.config import get_default_queue
 from app.core.log import logger
 
-router = APIRouter(prefix="/tasks", tags=["tasks"])
+router = APIRouter(prefix="/worker", tags=["worker"])
 
 
-@router.get("/", response_model=TaskListResponse)
+@router.get("/tasks", response_model=TaskListResponse)
 async def list_tasks() -> TaskListResponse:
-    """
-    Get list of all available background tasks.
-
-    Returns:
-        List of available task names organized by functional queue
-    """
+    """Get list of all available background tasks."""
     available_tasks = list_available_tasks()
 
-    # Import here to avoid circular imports
     from app.components.worker.tasks import get_queue_for_task
-
-    # Organize tasks by their appropriate functional queues
-    from app.core.config import settings
-
     from app.core.config import get_available_queues
+
     queues: dict[str, list[str]] = {
         queue_type: [] for queue_type in get_available_queues()
     }
@@ -62,23 +48,11 @@ async def list_tasks() -> TaskListResponse:
 
 @router.post("/enqueue", response_model=TaskResponse)
 async def enqueue_task(task_request: TaskRequest) -> TaskResponse:
-    """
-    Enqueue a background task for processing.
-
-    Args:
-        task_request: Task details including name, priority, and arguments
-
-    Returns:
-        Task enqueue confirmation with task ID
-
-    Raises:
-        HTTPException: If task name is invalid or enqueueing fails
-    """
+    """Enqueue a background task for processing."""
     logger.info(
         f"Enqueueing task: {task_request.task_name} (queue: {task_request.queue_type})"
     )
 
-    # Validate task exists
     task_func = get_task_by_name(task_request.task_name)
     if not task_func:
         available_tasks = list_available_tasks()
@@ -90,9 +64,6 @@ async def enqueue_task(task_request: TaskRequest) -> TaskResponse:
                 "available_tasks": available_tasks,
             },
         )
-
-    # Validate queue type
-    from app.core.config import settings
 
     from app.core.config import is_valid_queue, get_available_queues
     
@@ -107,10 +78,8 @@ async def enqueue_task(task_request: TaskRequest) -> TaskResponse:
         )
 
     try:
-        # Get appropriate queue pool and queue name
         pool, queue_name = await get_queue_pool(task_request.queue_type)
 
-        # Enqueue the task with the specific queue name
         job = await pool.enqueue_job(
             task_request.task_name,
             *task_request.args,
@@ -124,7 +93,7 @@ async def enqueue_task(task_request: TaskRequest) -> TaskResponse:
         if task_request.delay_seconds:
             estimated_start = queued_at + timedelta(seconds=task_request.delay_seconds)
 
-        await pool.aclose()  # Use aclose() instead of close()
+        await pool.aclose()
 
         if job is None:
             raise HTTPException(status_code=500, detail="Failed to enqueue task")
@@ -156,24 +125,13 @@ async def enqueue_task(task_request: TaskRequest) -> TaskResponse:
 
 @router.get("/status/{task_id}", response_model=TaskStatusResponse)
 async def get_task_status(task_id: str) -> TaskStatusResponse:
-    """
-    Get the status of a background task.
-
-    Args:
-        task_id: The task ID returned when enqueueing
-
-    Returns:
-        Task status information
-    """
+    """Get the status of a background task."""
     try:
-        # Get Redis pool to check job status (use default queue for status checks)
         pool, _ = await get_queue_pool(get_default_queue())
 
-        # Check if job exists in Redis using arq's key patterns
         job_key = f"arq:job:{task_id}"
         result_key = f"arq:result:{task_id}"
 
-        # Check if job data exists
         job_exists = await pool.exists(job_key)
         result_exists = await pool.exists(result_key)
 
@@ -187,9 +145,7 @@ async def get_task_status(task_id: str) -> TaskStatusResponse:
                 },
             )
 
-        # Determine status based on what exists in Redis
         if result_exists:
-            # Task completed (successfully or failed)
             result_data = await pool.get(result_key)
             if result_data:
                 try:
@@ -209,9 +165,6 @@ async def get_task_status(task_id: str) -> TaskStatusResponse:
                 status = "complete"
                 error = None
         elif job_exists:
-            # Job is queued or in progress
-            # We can't easily distinguish queued vs in_progress without more
-            # Redis inspection
             status = "queued"
             error = None
         else:
@@ -239,28 +192,16 @@ async def get_task_status(task_id: str) -> TaskStatusResponse:
 
 @router.get("/result/{task_id}", response_model=TaskResultResponse)
 async def get_task_result(task_id: str) -> TaskResultResponse:
-    """
-    Get the result of a completed background task.
-
-    Args:
-        task_id: The task ID returned when enqueueing
-
-    Returns:
-        Task result data
-    """
+    """Get the result of a completed background task."""
     try:
-        # Get Redis pool to check job result (use default queue for result checks)
         pool, _ = await get_queue_pool(get_default_queue())
 
-        # Check if result exists
         result_key = f"arq:result:{task_id}"
         result_exists = await pool.exists(result_key)
 
         if not result_exists:
-            # Check if job exists at all
             job_key = f"arq:job:{task_id}"
             job_exists = await pool.exists(job_key)
-
             await pool.aclose()
 
             if not job_exists:
@@ -281,7 +222,6 @@ async def get_task_result(task_id: str) -> TaskResultResponse:
                     },
                 )
 
-        # Get the result data
         result_data = await pool.get(result_key)
         await pool.aclose()
 
@@ -294,13 +234,11 @@ async def get_task_result(task_id: str) -> TaskResultResponse:
                 },
             )
 
-        # Deserialize the result
         try:
             import pickle
 
             result = pickle.loads(result_data)
 
-            # Handle error results (failed tasks store exception objects)
             if isinstance(result, Exception):
                 result_data = {
                     "error_type": type(result).__name__,
@@ -309,15 +247,13 @@ async def get_task_result(task_id: str) -> TaskResultResponse:
                 }
                 task_status = "failed"
             else:
-                # For successful results, ensure they're JSON-serializable
                 try:
                     import json
 
-                    json.dumps(result)  # Test if it's serializable
+                    json.dumps(result)
                     result_data = result
                     task_status = "completed"
                 except (TypeError, ValueError):
-                    # If not serializable, convert to string representation
                     result_data = {
                         "result_type": type(result).__name__,
                         "result_str": str(result),
@@ -354,32 +290,15 @@ async def get_task_result(task_id: str) -> TaskResultResponse:
 
 @router.post("/load-test", response_model=TaskResponse)
 async def start_load_test(load_test_config: LoadTestRequest) -> TaskResponse:
-    """
-    Start a comprehensive load test that measures queue throughput.
-
-    This orchestrates many lightweight tasks to stress test the queue
-    infrastructure and provide meaningful performance metrics including
-    task-type-specific verification and analysis.
-
-    Args:
-        load_test_config: Load test configuration with parameters
-
-    Returns:
-        Task response with load test orchestrator job ID
-    """
+    """Start a comprehensive load test that measures queue throughput."""
     from app.components.worker.constants import TaskNames
-    from app.services.load_test import (
-        LoadTestConfiguration,
-        LoadTestService,
-    )
+    from app.services.load_test import LoadTestConfiguration, LoadTestService
 
     logger.info(
         f"🚀 Starting load test: {load_test_config.num_tasks} "
         f"{load_test_config.task_type} tasks"
     )
 
-    # Convert to service layer configuration
-    # Validate task type against known types
     valid_types = [
         LoadTestTypes.CPU_INTENSIVE,
         LoadTestTypes.IO_SIMULATION,
@@ -433,11 +352,7 @@ async def start_load_test(load_test_config: LoadTestRequest) -> TaskResponse:
 
 @router.post("/examples/load-test-small", response_model=TaskResponse)
 async def enqueue_small_load_test() -> TaskResponse:
-    """
-    Example: Small load test with 50 CPU tasks.
-
-    Good for testing basic queue functionality and getting quick results.
-    """
+    """Example: Small load test with 50 CPU tasks."""
     load_test_config = LoadTestRequest(
         num_tasks=50,
         task_type=LoadTestTypes.CPU_INTENSIVE,
@@ -445,17 +360,12 @@ async def enqueue_small_load_test() -> TaskResponse:
         delay_ms=0,
         target_queue=get_default_queue(),
     )
-
     return await start_load_test(load_test_config)
 
 
 @router.post("/examples/load-test-medium", response_model=TaskResponse)
 async def enqueue_medium_load_test() -> TaskResponse:
-    """
-    Example: Medium load test with 200 I/O tasks.
-
-    Tests concurrent async task handling with realistic batching.
-    """
+    """Example: Medium load test with 200 I/O tasks."""
     load_test_config = LoadTestRequest(
         num_tasks=200,
         task_type=LoadTestTypes.IO_SIMULATION,
@@ -463,17 +373,12 @@ async def enqueue_medium_load_test() -> TaskResponse:
         delay_ms=50,
         target_queue=get_default_queue(),
     )
-
     return await start_load_test(load_test_config)
 
 
 @router.post("/examples/load-test-large", response_model=TaskResponse)
 async def enqueue_large_load_test() -> TaskResponse:
-    """
-    Example: Large load test with 1000 memory tasks.
-
-    Stress tests queue capacity and worker performance under heavy load.
-    """
+    """Example: Large load test with 1000 memory tasks."""
     load_test_config = LoadTestRequest(
         num_tasks=1000,
         task_type=LoadTestTypes.MEMORY_OPERATIONS,
@@ -481,7 +386,6 @@ async def enqueue_large_load_test() -> TaskResponse:
         delay_ms=0,
         target_queue=get_default_queue(),
     )
-
     return await start_load_test(load_test_config)
 
 
@@ -489,20 +393,7 @@ async def enqueue_large_load_test() -> TaskResponse:
 async def get_load_test_result(
     task_id: str, target_queue: str | None = None
 ) -> dict[str, Any]:
-    """
-    Get enhanced load test results with analysis and verification.
-
-    Returns comprehensive load test results including performance analysis,
-    test type verification, and recommendations for optimization.
-
-    Args:
-        task_id: The load test orchestrator task ID
-        target_queue: Queue where the test was run (defaults to configured
-            load_test queue)
-
-    Returns:
-        Enhanced load test results with analysis
-    """
+    """Get enhanced load test results with analysis and verification."""
     from app.services.load_test import LoadTestService
 
     try:
@@ -536,21 +427,12 @@ async def get_load_test_result(
 
 @router.get("/load-test-types")
 async def get_load_test_types() -> dict[str, Any]:
-    """
-    Get information about available load test types.
-
-    Returns detailed information about each test type including
-    expected metrics, performance characteristics, and usage guidance.
-
-    Returns:
-        Dictionary of test type information
-    """
+    """Get information about available load test types."""
     from app.components.worker.constants import LoadTestTypes
     from app.services.load_test import LoadTestService
 
     test_types = {}
 
-    # Get info for all available test types
     all_types = [
         LoadTestTypes.CPU_INTENSIVE,
         LoadTestTypes.IO_SIMULATION,
