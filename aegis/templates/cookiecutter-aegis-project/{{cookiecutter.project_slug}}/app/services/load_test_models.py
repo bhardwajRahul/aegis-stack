@@ -125,7 +125,7 @@ class PerformanceAnalysis(BaseModel):
     )
     queue_pressure: str = Field(
         ...,
-        pattern=r"^(unknown|low|moderate|high)$",
+        pattern=r"^(unknown|low|medium|high)$",
         description="Queue saturation level"
     )
 
