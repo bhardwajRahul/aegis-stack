@@ -194,7 +194,6 @@ class FastAPICard:
             hover_handler=create_hover_handler(None)  # Will set after container creation
         )
 
-        # Set the hover handler with the actual container
-        self._card_container.on_hover = create_hover_handler(self._card_container)
+        # Hover effects disabled
 
         return self._card_container

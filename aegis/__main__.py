@@ -208,8 +208,8 @@ def init(
     selected_components = cast(list[str], components) if components else []
     scheduler_with_persistence = False
 
-    # Auto-detect scheduler persistence in non-interactive mode
-    if components and not interactive:
+    # Auto-detect scheduler persistence when components are specified
+    if components:
         # Check if both scheduler and database are provided
         # Note: components is list[str] after callback, despite str annotation
         components_list = cast(list[str], components)

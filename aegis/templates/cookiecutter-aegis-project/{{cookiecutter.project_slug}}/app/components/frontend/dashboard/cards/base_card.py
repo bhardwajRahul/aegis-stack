@@ -146,14 +146,6 @@ class BaseCard(ABC):
             alignment=ft.alignment.top_left,
         )
 
-    def _on_card_hover(self, e: ft.ControlEvent) -> None:
-        """Handle card hover effects with scale animation."""
-        if e.data == "true":  # Mouse enter
-            self._card_container.scale = 1.05
-        else:  # Mouse leave
-            self._card_container.scale = 1.0
-
-        self._card_container.update()
 
     @abstractmethod
     def _get_technology_info(self) -> dict[str, Any]:
@@ -257,9 +249,6 @@ class BaseCard(ABC):
             border=ft.border.all(1, border_color),
             border_radius=16,
             padding=0,
-            scale=1,
-            animate_scale=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
-            on_hover=self._on_card_hover,
             width=widths["total"],
             height=240,
         )

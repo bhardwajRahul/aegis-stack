@@ -35,24 +35,17 @@ def get_status_colors(component_data: ComponentStatus) -> tuple[str, str, str]:
         return (ft.Colors.RED, ft.Colors.SURFACE, ft.Colors.RED)
 
 
-def create_hover_handler(card_container: ft.Container) -> Callable[[ft.ControlEvent], None]:
+def create_hover_handler(card_container: ft.Container) -> Callable[[ft.ControlEvent], None] | None:
     """
     Create a hover event handler for any card.
     
     Args:
-        card_container: The card container to animate
+        card_container: The card container (unused now)
         
     Returns:
-        Hover event handler function
+        None (hover effects disabled)
     """
-    def _on_card_hover(e: ft.ControlEvent) -> None:
-        if e.data == "true":  # Mouse enter
-            card_container.scale = 1.05
-        else:  # Mouse leave
-            card_container.scale = 1.0
-        card_container.update()
-
-    return _on_card_hover
+    return None
 
 
 def create_responsive_3_section_layout(
