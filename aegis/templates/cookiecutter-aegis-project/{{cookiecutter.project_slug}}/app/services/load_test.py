@@ -136,11 +136,15 @@ class LoadTestService:
         pool, queue_name = await get_queue_pool(config.target_queue)
 
         try:
-            # Enqueue the orchestrator task
+            # Enqueue the orchestrator task with enum preserved
             job = await pool.enqueue_job(
                 "load_test_orchestrator",
                 _queue_name=queue_name,
-                **config.model_dump(),
+                num_tasks=config.num_tasks,
+                task_type=config.task_type,  # Preserve enum instead of serializing
+                batch_size=config.batch_size,
+                delay_ms=config.delay_ms,
+                target_queue=config.target_queue,
             )
 
             await pool.aclose()
