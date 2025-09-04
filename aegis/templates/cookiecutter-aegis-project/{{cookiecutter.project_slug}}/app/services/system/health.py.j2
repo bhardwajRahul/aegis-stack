@@ -781,8 +781,8 @@ async def check_worker_health() -> ComponentStatus:
             queue_name = queue_config["queue_name"]
 
             try:
-                # Get queue length (actual queued jobs)
-                queue_length_result = redis_client.llen(queue_name)
+                # Get queue length (actual queued jobs) - arq uses sorted sets
+                queue_length_result = redis_client.zcard(queue_name)
                 if hasattr(queue_length_result, '__await__'):
                     queue_length = await queue_length_result
                 else:
