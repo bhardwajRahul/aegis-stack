@@ -2,60 +2,48 @@
 
 The **Scheduler Component** provides background task scheduling and cron job capabilities using [APScheduler](https://apscheduler.readthedocs.io/).
 
-## Component Composition Options
+!!! info "Memory-Based Scheduling"
+    Generate a project with scheduler component and start immediately:
+    
+    ```bash
+    aegis init my-app --components scheduler
+    cd my-app
+    make serve
+    ```
+    
+    Jobs run in memory and reset on restart - perfect for development and simple deployments.
 
-### Memory-Based Scheduling (Scheduler Only)
+## What You Get
 
-```bash
-aegis init my-app --components scheduler
-```
+- **APScheduler with in-memory job storage** - Industry-standard Python scheduler
+- **Cron and interval-based scheduling** - Flexible timing patterns
+- **Async job execution** - Non-blocking task processing
+- **Fast setup with no dependencies** - Perfect for simple recurring tasks
+- **Optional extras** - Database persistence and task monitoring
 
-**What you get:**
-
-- APScheduler with in-memory job storage
-- Jobs are reset on application restart
-- Perfect for simple recurring tasks
-- Fast setup with no persistence dependencies
-
-### Persistent Scheduling (Scheduler + Database)
-
-```bash
-aegis init my-app --components scheduler,database
-```
-
-**What you get:**
-
-- APScheduler with SQLAlchemy job storage
-- Jobs survive application restarts
-- **Automatic daily database backup job included**
-- SQLite with shared volumes for development
-- Job history and recovery capabilities
-
-## Component Architecture
+## Architecture
 
 ```mermaid
 graph TB
-    subgraph "Memory Mode (scheduler)"
-        S1[APScheduler<br/>In-Memory Store]
-        J1[Jobs<br/>Lost on restart]
+    subgraph "Scheduler Container"
+        Triggers[Triggers<br/>Cron & Intervals]
+        Scheduler[APScheduler<br/>Engine]
+        Jobs[(Job Queue<br/>In-Memory)]
+        Tasks[Your Tasks<br/>Custom Functions]
     end
     
-    subgraph "Persistent Mode (scheduler + database)"
-        S2[APScheduler<br/>SQLAlchemy Store]
-        DB[(SQLite Database<br/>apscheduler_jobs table)]
-        BJ[Automatic Backup Job<br/>Daily at 2 AM]
-    end
+    Triggers --> Scheduler
+    Scheduler --> Jobs
+    Jobs --> Tasks
+    Tasks -.-> Scheduler
     
-    S1 --> J1
-    S2 --> DB
-    S2 --> BJ
-    BJ --> DB
-    
-    style S1 fill:#fff3e0
-    style S2 fill:#e8f5e8
-    style DB fill:#f3e5f5
-    style BJ fill:#e1f5fe
+    style Scheduler fill:#fff3e0
+    style Jobs fill:#f3e5f5
+    style Tasks fill:#e8f5e8
+    style Triggers fill:#e1f5fe
 ```
+
+*Jobs run in memory and reset on container restart. For persistent scheduling, see [Database Persistence](scheduler/extras/persistence.md).*
 
 ## Adding Scheduled Tasks
 
@@ -112,77 +100,71 @@ def create_scheduler() -> AsyncIOScheduler:
     return scheduler
 ```
 
-## Automatic Database Integration
 
-When both scheduler and database components are selected, the scheduler automatically:
+## Job Management
 
-**Detects Database Availability:**
+### Listing Jobs
 
 ```python
-# The scheduler automatically configures persistence
-def create_scheduler() -> AsyncIOScheduler:
-    try:
-        from app.core.db import engine
-        from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-        
-        # Database available - use persistent store
-        jobstore = SQLAlchemyJobStore(engine=engine, tablename='apscheduler_jobs')
-        scheduler = AsyncIOScheduler(jobstores={'default': jobstore})
-        logger.info("📊 Scheduler using database for job persistence")
-        
-    except ImportError:
-        # No database - use memory store
-        scheduler = AsyncIOScheduler()
-        logger.info("🕒 Scheduler running in memory mode")
+# Get all scheduled jobs
+jobs = scheduler.get_jobs()
+for job in jobs:
+    print(f"Job: {job.name}, Next run: {job.next_run_time}")
 ```
 
-**Includes Backup Job:**  
-A daily database backup job is automatically added when both components are selected, demonstrating the synergy between scheduler and database.
-
-## Common Scheduling Patterns
-
-### Cron-based Tasks
+### Modifying Jobs
 
 ```python
-# Daily at 6:30 AM
-scheduler.add_job(my_function, trigger="cron", hour=6, minute=30)
+# Pause a job
+scheduler.pause_job("daily_reports")
 
-# Weekdays at 9 AM  
-scheduler.add_job(my_function, trigger="cron", day_of_week="mon-fri", hour=9)
+# Resume a job  
+scheduler.resume_job("daily_reports")
 
-# Every Monday at 8 AM
-scheduler.add_job(my_function, trigger="cron", day_of_week="mon", hour=8)
+# Remove a job
+scheduler.remove_job("old_job_id")
+
+# Modify job schedule
+scheduler.modify_job("daily_reports", hour=7)  # Change to 7 AM
 ```
 
-### Interval-based Tasks
+## Configuration
+
+The scheduler uses APScheduler's default settings. The only environment variable is:
+
+- `SCHEDULER_FORCE_UPDATE`: Set to "true" to force update jobs from code during restart (persistence mode only)
+
+Individual jobs can configure their own behavior when defined:
 
 ```python
-# Every 30 minutes
-scheduler.add_job(my_function, trigger="interval", minutes=30)
-
-# Every 2 hours
-scheduler.add_job(my_function, trigger="interval", hours=2)
-
-# Every day
-scheduler.add_job(my_function, trigger="interval", days=1)
+scheduler.add_job(
+    my_task,
+    trigger="interval",
+    hours=1,
+    max_instances=1,      # Only one instance can run at a time
+    coalesce=True,        # Coalesce missed runs into one
+    misfire_grace_time=30 # Grace time for misfired jobs
+)
 ```
 
 ## Best Practices
 
 - **Keep jobs idempotent** - Safe to run multiple times
-- **Use proper async patterns** - Leverage asyncio for concurrent operations  
+- **Use proper async patterns** - Leverage asyncio for concurrent operations
 - **Handle errors gracefully** - Log failures and implement retry logic
 - **Monitor execution times** - Track job performance and resource usage
+- **Use descriptive job IDs** - Makes debugging and monitoring easier
 
 ## Component Evolution
 
-**Current:** SQLite with shared volumes for development
+**Current:** In-memory scheduling perfect for development and simple deployments
 
-**Future:** PostgreSQL option for production multi-container deployments with full API access and remote job management
+**Next:** Add database persistence for production deployments with the extras below
 
 ---
 
-**Next:** Explore component integration patterns:
+**Next Steps:**
 
+- **[Examples](scheduler/examples.md)** - Real-world scheduling patterns and timing examples
+- **[Database Persistence](scheduler/extras/persistence.md)** - Job persistence and monitoring
 - **[Component Overview](./index.md)** - How components work together
-- **[Database Component](./database.md)** - Data persistence and ORM patterns
