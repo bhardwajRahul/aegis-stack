@@ -46,3 +46,34 @@
 .md-typeset table th:last-child {
     width: 35%;
 }
+
+/* Mermaid diagram fixes for dark mode */
+[data-md-color-scheme="slate"] .mermaid {
+    background-color: transparent !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .node text,
+[data-md-color-scheme="slate"] .mermaid .edgeLabel text,
+[data-md-color-scheme="slate"] .mermaid .messageText,
+[data-md-color-scheme="slate"] .mermaid .labelText {
+    fill: #ffffff !important;
+    color: #ffffff !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .node rect,
+[data-md-color-scheme="slate"] .mermaid .node circle,
+[data-md-color-scheme="slate"] .mermaid .node polygon {
+    stroke: #64748b !important;
+}
+
+[data-md-color-scheme="slate"] .mermaid .edgePath .path {
+    stroke: #64748b !important;
+}
+
+/* Light mode - ensure visibility */
+[data-md-color-scheme="default"] .mermaid .node text,
+[data-md-color-scheme="default"] .mermaid .edgeLabel text {
+    fill: #1e293b !important;
+    color: #1e293b !important;
+}
+

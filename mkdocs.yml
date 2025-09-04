@@ -36,7 +36,11 @@ nav:
       - Getting Started: components/frontend.md
       - Extras:
         - Health Dashboard: components/frontend/extras/dashboard.md
-    - Scheduler: components/scheduler.md
+    - Scheduler:
+      - Getting Started: components/scheduler.md
+      - Examples: components/scheduler/examples.md
+      - Extras:
+        - Database Persistence: components/scheduler/extras/persistence.md
     - Worker:
       - Getting Started: components/worker/index.md
       - Configuration: components/worker/configuration.md
