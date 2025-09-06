@@ -100,7 +100,7 @@ class TestScheduledTaskManager:
             mock_session_instance = AsyncMock()
             mock_session.return_value.__aenter__.return_value = mock_session_instance
             
-            mock_result = AsyncMock()
+            mock_result = MagicMock()
             mock_result.all.return_value = [mock_apscheduler_job]
             mock_session_instance.exec.return_value = mock_result
             
@@ -122,7 +122,7 @@ class TestScheduledTaskManager:
             mock_session_instance = AsyncMock()
             mock_session.return_value.__aenter__.return_value = mock_session_instance
             
-            mock_result = AsyncMock()
+            mock_result = MagicMock()
             mock_result.all.return_value = []
             mock_session_instance.exec.return_value = mock_result
             
@@ -138,7 +138,7 @@ class TestScheduledTaskManager:
             mock_session_instance = AsyncMock()
             mock_session.return_value.__aenter__.return_value = mock_session_instance
             
-            mock_result = AsyncMock()
+            mock_result = MagicMock()
             mock_result.first.return_value = mock_apscheduler_job
             mock_session_instance.exec.return_value = mock_result
             
@@ -156,7 +156,7 @@ class TestScheduledTaskManager:
             mock_session_instance = AsyncMock()
             mock_session.return_value.__aenter__.return_value = mock_session_instance
             
-            mock_result = AsyncMock()
+            mock_result = MagicMock()
             mock_result.first.return_value = None
             mock_session_instance.exec.return_value = mock_result
             

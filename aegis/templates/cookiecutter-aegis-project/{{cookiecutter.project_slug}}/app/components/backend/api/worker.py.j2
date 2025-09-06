@@ -20,10 +20,10 @@ from app.components.worker.tasks import get_task_by_name, list_available_tasks
 from app.core.config import get_default_queue
 from app.core.log import logger
 
-router = APIRouter(prefix="/worker", tags=["worker"])
+router = APIRouter(prefix="/tasks", tags=["worker"])
 
 
-@router.get("/tasks", response_model=TaskListResponse)
+@router.get("/", response_model=TaskListResponse)
 async def list_tasks() -> TaskListResponse:
     """Get list of all available background tasks."""
     available_tasks = list_available_tasks()
@@ -85,7 +85,7 @@ async def enqueue_task(task_request: TaskRequest) -> TaskResponse:
             *task_request.args,
             _queue_name=queue_name,
             _defer_by=task_request.delay_seconds,
-            **task_request.kwargs,
+            **task_request.task_kwargs,
         )
 
         queued_at = datetime.now()

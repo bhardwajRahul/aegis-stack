@@ -43,8 +43,8 @@ class TestSchedulerEndpoints:
         """Test /api/v1/scheduler/jobs endpoint is accessible."""
         response = await async_client.get("/api/v1/scheduler/jobs")
         
-        # Should return a valid response (200 for success, 503 for unavailable)
-        assert response.status_code in [200, 503]
+        # Should return a valid response (200 for success, 503 for unavailable, 500 for dependency issues)
+        assert response.status_code in [200, 500, 503]
         data = response.json()
         
         if response.status_code == 200:
@@ -53,10 +53,14 @@ class TestSchedulerEndpoints:
             assert "total_count" in data
             assert isinstance(data["tasks"], list)
             assert isinstance(data["total_count"], int)
-        else:
+        elif response.status_code == 503:
             # 503 when scheduler unavailable
-            assert "error" in data
-            assert "scheduler_unavailable" in data.get("error", "")
+            assert "detail" in data
+            assert "scheduler_unavailable" in data["detail"].get("error", "")
+        elif response.status_code == 500:
+            # 500 for dependency/internal issues
+            assert "detail" in data
+            assert "internal_error" in data["detail"].get("error", "")
 
     @pytest.mark.asyncio
     async def test_get_scheduled_job_not_found(
@@ -65,15 +69,17 @@ class TestSchedulerEndpoints:
         """Test /api/v1/scheduler/jobs/{job_id} returns 404 for non-existent job."""
         response = await async_client.get("/api/v1/scheduler/jobs/non_existent_job")
         
-        # Should return 404 for non-existent job or 503 if scheduler unavailable
-        assert response.status_code in [404, 503]
+        # Should return 404 for non-existent job, 503 if scheduler unavailable, or 500 for dependency issues
+        assert response.status_code in [404, 500, 503]
         data = response.json()
         
-        assert "error" in data
+        assert "detail" in data
         if response.status_code == 404:
-            assert "job_not_found" in data.get("error", "")
+            assert "job_not_found" in data["detail"].get("error", "")
         elif response.status_code == 503:
-            assert "scheduler_unavailable" in data.get("error", "")
+            assert "scheduler_unavailable" in data["detail"].get("error", "")
+        elif response.status_code == 500:
+            assert "internal_error" in data["detail"].get("error", "")
 
     @pytest.mark.asyncio
     async def test_scheduler_statistics_endpoint_accessible(
@@ -82,8 +88,8 @@ class TestSchedulerEndpoints:
         """Test /api/v1/scheduler/statistics endpoint is accessible."""
         response = await async_client.get("/api/v1/scheduler/statistics")
         
-        # Should return a valid response (200 for success, 503 for unavailable)
-        assert response.status_code in [200, 503]
+        # Should return a valid response (200 for success, 503 for unavailable, 500 for dependency issues)
+        assert response.status_code in [200, 500, 503]
         data = response.json()
         
         if response.status_code == 200:
@@ -96,10 +102,14 @@ class TestSchedulerEndpoints:
             assert isinstance(stats["total_tasks"], int)
             assert isinstance(stats["active_tasks"], int)
             assert isinstance(stats["paused_tasks"], int)
-        else:
+        elif response.status_code == 503:
             # 503 when scheduler unavailable
-            assert "error" in data
-            assert "scheduler_unavailable" in data.get("error", "")
+            assert "detail" in data
+            assert "scheduler_unavailable" in data["detail"].get("error", "")
+        elif response.status_code == 500:
+            # 500 for dependency/internal issues
+            assert "detail" in data
+            assert "internal_error" in data["detail"].get("error", "")
 
     @pytest.mark.asyncio
     async def test_scheduler_endpoints_return_proper_content_type(

@@ -267,11 +267,13 @@ class TestLoadTestServiceIntegration:
 
         # Verify results
         assert task_id == "test-job-123"
+        from app.components.worker.constants import LoadTestTypes
+        
         mock_pool.enqueue_job.assert_called_once_with(
             "load_test_orchestrator",
             _queue_name="arq:queue:load_test",
             num_tasks=50,
-            task_type="cpu_intensive",
+            task_type=LoadTestTypes.CPU_INTENSIVE,
             batch_size=10,
             delay_ms=0,
             target_queue="load_test",
