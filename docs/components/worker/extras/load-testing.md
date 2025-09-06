@@ -28,6 +28,15 @@ full-stack load-test memory --tasks 200
 full-stack load-test results <task_id>
 ```
 
+### See It In Action
+
+![Load Testing Demo](../../../images/load_tests.gif)
+
+!!! note "About This Demo"
+    This GIF shows CPU-intensive tasks being processed. Since CPU tasks don't run async by default, you'll notice the recommendation to increase worker count for better throughput. 
+    
+    Had we run I/O or memory tests instead, they would demonstrate much faster async processing with fewer workers needed.
+
 ## Architecture
 
 The load testing extra adds one additional queue:

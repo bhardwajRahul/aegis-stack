@@ -2,11 +2,12 @@
 
 Async background task processing using standard [arq](https://arq-docs.helpmanual.io/) patterns.
 
-Use `aegis init my-project --components worker` to include this component.
+!!! info "Adding Worker to Your Project"
+    Use `aegis init my-project --components worker` to include this component.
 
 ## What You Get
 
-- **Background task processing** - Async tasks without blocking your API
+- **Background task processing** - Runs any code without blocking your API (async tasks get the best performance)
 - **System queue** - For maintenance and background operations (15 concurrent jobs, 300s timeout)
 - **Auto-reload** - Built-in development mode with file watching
 - **Optional extras** - Load testing queue and future media processing
@@ -46,7 +47,7 @@ make serve  # Starts Redis + workers + webserver
 # In another terminal, trigger a background task
 curl -X POST http://localhost:8000/api/v1/tasks/enqueue \
   -H "Content-Type: application/json" \
-  -d '{"task_name": "cpu_intensive_task", "queue_type": "load_test"}'
+  -d '{"task_name": "io_simulation_task", "queue_type": "load_test"}'
 
 # Check the result (replace {task_id} with actual ID from response)
 curl http://localhost:8000/api/v1/tasks/result/{task_id}
@@ -54,11 +55,29 @@ curl http://localhost:8000/api/v1/tasks/result/{task_id}
 
 **What just happened?**
 
-1. Worker processed `cpu_intensive_task` in the background
+1. Worker processed `io_simulation_task` in the background
 2. Task ran asynchronously without blocking your API
 3. Result was stored in Redis for retrieval
 
 Try the dashboard at [http://localhost:8000/dashboard](http://localhost:8000/dashboard) to see health status including worker queues!
+
+### Dashboard Monitoring
+
+The Worker component provides comprehensive queue monitoring through the dashboard interface:
+
+<img src="../../images/dashboard-light-worker.png#only-light" alt="Worker Queue Dashboard">
+<img src="../../images/dashboard-dark-worker.png#only-dark" alt="Worker Queue Dashboard">
+
+!!! info "Worker Dashboard Features"
+    The Worker dashboard showcases queue monitoring:
+    
+    - **Row-based queue display** - Compact table format showing multiple queues at once
+    - **Intelligent status messages** - Context-aware status reporting:
+        - "worker offline" - When Redis connection is lost
+        - "no tasks defined" - When queue exists but no functions are registered 
+        - "ready" - When worker is healthy and ready for tasks
+    - **Real-time metrics** - Live updates of queue counts and job status
+    - **Theme-aware design** - Optimized visibility in both light and dark modes
 
 ## Adding Your First Task
 
@@ -103,7 +122,6 @@ That's it! The worker will process it automatically.
 
 ## Development Workflow
 
-### Docker (Recommended)
 ```bash
 make serve           # Start everything
 make logs-worker     # Watch workers live
@@ -145,27 +163,6 @@ curl -X POST http://localhost:8000/api/v1/tasks/examples/load-test-small
 curl -X POST http://localhost:8000/api/v1/tasks/examples/load-test-medium
 curl -X POST http://localhost:8000/api/v1/tasks/examples/load-test-large
 ```
-
-## Monitoring
-
-```bash
-# Quick health check
-make health-detailed
-
-# Watch worker logs
-make logs-worker
-
-# Check Redis queues directly
-make redis-cli
-> KEYS arq:*
-```
-
-The health system tracks:
-
-- ✅ Worker connectivity
-- ✅ Jobs processed/failed
-- ✅ Queue depths
-- ✅ Performance metrics
 
 ## Next Steps
 
