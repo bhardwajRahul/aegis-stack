@@ -291,7 +291,7 @@ class TestPerformanceAnalysis:
     def test_all_valid_rating_combinations(self):
         """Test all valid rating value combinations."""
         valid_ratings = ["unknown", "poor", "fair", "good", "excellent"]
-        valid_pressures = ["unknown", "low", "moderate", "high"]
+        valid_pressures = ["unknown", "low", "medium", "high"]
         
         for throughput in valid_ratings:
             for efficiency in valid_ratings:

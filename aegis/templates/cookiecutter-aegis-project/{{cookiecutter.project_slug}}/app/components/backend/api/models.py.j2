@@ -25,7 +25,7 @@ class TaskRequest(BaseModel):
     args: list[Any] = Field(
         default_factory=list, description="Positional arguments for the task"
     )
-    kwargs: dict[str, Any] = Field(
+    task_kwargs: dict[str, Any] = Field(
         default_factory=dict, description="Keyword arguments for the task"
     )
     delay_seconds: int | None = Field(
