@@ -11,11 +11,8 @@ Production-ready system monitoring interface that demonstrates Flet's capabiliti
 
 A complete monitoring interface that provides real-time visibility into your application's health and performance:
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="/aegis-stack/images/dashboard-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="/aegis-stack/images/dashboard-light.png">
-  <img alt="System Health Dashboard" src="/aegis-stack/images/dashboard-light.png">
-</picture>
+<img src="/aegis-stack/images/dashboard-light.png#only-light" alt="System Health Dashboard">
+<img src="/aegis-stack/images/dashboard-dark.png#only-dark" alt="System Health Dashboard">
 
 !!! success "Dashboard Features"
     The health dashboard showcases enterprise-grade UI patterns:
