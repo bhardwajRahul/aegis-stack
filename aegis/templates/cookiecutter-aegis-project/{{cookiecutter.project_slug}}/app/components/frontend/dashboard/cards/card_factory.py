@@ -5,7 +5,6 @@ Provides common patterns and utilities for creating dashboard card components,
 reducing duplication across different card types.
 """
 
-
 import flet as ft
 
 from app.components.frontend.controls import (
@@ -57,7 +56,7 @@ class CardFactory:
     ) -> ft.Container:
         """
         Create a standardized metric indicator box.
-        
+
         Args:
             label: Label for the metric (e.g., "LOAD_TEST")
             value: Value to display (e.g., "0 jobs")
@@ -65,7 +64,7 @@ class CardFactory:
             color: Border and accent color
             width: Width of the indicator
             height: Height of the indicator
-            
+
         Returns:
             Container with the metric indicator
         """
@@ -93,17 +92,18 @@ class CardFactory:
         )
 
     @staticmethod
-    def create_progress_indicator(label: str, value: float, details: str,
-                                 color: str) -> ft.Container:
+    def create_progress_indicator(
+        label: str, value: float, details: str, color: str
+    ) -> ft.Container:
         """
         Create a progress indicator with label, progress bar, and details.
-        
+
         Args:
             label: Label for the progress indicator
             value: Progress value (0-100)
             details: Additional details text
             color: Color for the progress bar
-            
+
         Returns:
             Container with the progress indicator
         """
@@ -150,16 +150,18 @@ class CardFactory:
         )
 
     @staticmethod
-    def create_circular_gauge(label: str, value: float, unit: str, color: str) -> ft.Container:
+    def create_circular_gauge(
+        label: str, value: float, unit: str, color: str
+    ) -> ft.Container:
         """
         Create a circular gauge-style metric display.
-        
+
         Args:
             label: Label for the gauge
             value: Numeric value to display
             unit: Unit text (e.g., "MB", "%")
             color: Color for the gauge border
-            
+
         Returns:
             Container with the circular gauge
         """
@@ -193,17 +195,18 @@ class CardFactory:
         )
 
     @staticmethod
-    def create_section_with_title(title: str, content: list[ft.Control],
-                                 width: int, spacing: int = 8) -> ft.Container:
+    def create_section_with_title(
+        title: str, content: list[ft.Control], width: int, spacing: int = 8
+    ) -> ft.Container:
         """
         Create a section container with title and content.
-        
+
         Args:
             title: Section title
             content: List of controls for the section content
             width: Width of the section
             spacing: Spacing between elements
-            
+
         Returns:
             Container with titled section
         """

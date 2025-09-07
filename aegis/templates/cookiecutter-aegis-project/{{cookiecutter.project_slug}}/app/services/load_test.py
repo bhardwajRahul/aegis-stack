@@ -69,9 +69,7 @@ class LoadTestService:
                 "performance_signature": (
                     "I/O bound - should show async concurrency benefits"
                 ),
-                "typical_duration_ms": (
-                    "5-30ms per task (includes simulated delays)"
-                ),
+                "typical_duration_ms": ("5-30ms per task (includes simulated delays)"),
                 "concurrency_impact": (
                     "Excellent with async - many tasks can run concurrently"
                 ),
@@ -107,9 +105,7 @@ class LoadTestService:
                     "Mixed - tests resilience and error handling paths"
                 ),
                 "typical_duration_ms": "1-10ms per task (when successful)",
-                "concurrency_impact": (
-                    "Tests worker recovery and error isolation"
-                ),
+                "concurrency_impact": ("Tests worker recovery and error isolation"),
                 "validation_keys": ["status"],
             },
         }
@@ -211,9 +207,7 @@ class LoadTestService:
             elif isinstance(result, dict):
                 # Check if it's a direct load test result
                 if result.get("task") == "load_test_orchestrator":
-                    analyzed_result = LoadTestService._analyze_load_test_result(
-                        result
-                    )
+                    analyzed_result = LoadTestService._analyze_load_test_result(result)
                     return analyzed_result.model_dump()
                 # Check if it's an arq job result with embedded data
                 elif "r" in result and isinstance(result["r"], dict):
@@ -227,20 +221,14 @@ class LoadTestService:
                     ):
                         try:
                             # Validate and transform using Pydantic models
-                            orchestrator_result = OrchestratorRawResult(
-                                **actual_result
-                            )
-                            load_test_result = (
-                                orchestrator_result.to_load_test_result()
-                            )
+                            orchestrator_result = OrchestratorRawResult(**actual_result)
+                            load_test_result = orchestrator_result.to_load_test_result()
                             analyzed_result = LoadTestService._analyze_load_test_result(
                                 load_test_result
                             )
                             return analyzed_result.model_dump()
                         except ValidationError as e:
-                            logger.error(
-                                f"Failed to validate orchestrator result: {e}"
-                            )
+                            logger.error(f"Failed to validate orchestrator result: {e}")
                             # Fall back to manual transformation if validation fails
                             transformed_result = (
                                 LoadTestService._transform_orchestrator_result(
@@ -367,7 +355,7 @@ class LoadTestService:
                         failure_rate_percent=0.0,
                         completion_percentage=0.0,
                         average_throughput_per_second=0.0,
-                        monitor_duration_seconds=0.0
+                        monitor_duration_seconds=0.0,
                     ),
                     start_time=None,
                     end_time=None,
@@ -435,9 +423,7 @@ class LoadTestService:
         # Analyze efficiency (completion rate)
         tasks_sent = metrics.get("tasks_sent", 1)
         tasks_completed = metrics.get("tasks_completed", 0)
-        completion_rate = (
-            (tasks_completed / tasks_sent) * 100 if tasks_sent > 0 else 0
-        )
+        completion_rate = (tasks_completed / tasks_sent) * 100 if tasks_sent > 0 else 0
 
         if completion_rate >= 95:
             analysis["efficiency_rating"] = "excellent"
@@ -534,9 +520,7 @@ class LoadTestService:
         # Analyze efficiency (completion rate)
         tasks_sent = result.metrics.tasks_sent
         tasks_completed = result.metrics.tasks_completed
-        completion_rate = (
-            (tasks_completed / tasks_sent) * 100 if tasks_sent > 0 else 0
-        )
+        completion_rate = (tasks_completed / tasks_sent) * 100 if tasks_sent > 0 else 0
 
         if completion_rate >= 95:
             efficiency_rating = "excellent"

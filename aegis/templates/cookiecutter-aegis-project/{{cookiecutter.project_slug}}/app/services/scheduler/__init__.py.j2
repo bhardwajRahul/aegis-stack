@@ -1,12 +1,18 @@
-{% if cookiecutter.scheduler_with_persistence == "yes" %}
+{% if cookiecutter.scheduler_backend != "memory" %}
 """Scheduler service layer for async task management."""
 
-from .models import APSchedulerJob, ScheduledTask, TaskStatistics, SchedulerHealthMetadata, UpcomingTask
+from .models import (
+    APSchedulerJob,
+    ScheduledTask,
+    TaskStatistics,
+    SchedulerHealthMetadata,
+    UpcomingTask,
+)
 from .scheduled_task_manager import ScheduledTaskManager
 
 __all__ = [
     "ScheduledTaskManager",
-    "ScheduledTask", 
+    "ScheduledTask",
     "TaskStatistics",
     "APSchedulerJob",
     "SchedulerHealthMetadata",

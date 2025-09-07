@@ -32,13 +32,14 @@ async def get_queue_pool(queue_type: str | None = None) -> tuple[ArqRedis, str]:
     if queue_type is None:
         queue_type = get_default_queue()
 
-    from app.core.config import is_valid_queue, get_available_queues
-    
+    from app.core.config import get_available_queues, is_valid_queue
+
     if not is_valid_queue(queue_type):
         available = get_available_queues()
         raise ValueError(f"Invalid queue type '{queue_type}'. Available: {available}")
 
     from app.components.worker.registry import get_queue_metadata
+
     queue_name = get_queue_metadata(queue_type)["queue_name"]
 
     # Check cache first to avoid creating new Redis connections

@@ -5,10 +5,12 @@ These components automatically use semantic Flet colors that adapt to light/dark
 following the same patterns as ee-toolset for consistent visual design.
 """
 
+from typing import Any
+
 import flet as ft
 
 
-class PrimaryText(ft.Text):
+class PrimaryText(ft.Text):  # type: ignore[misc]
     """
     Primary text component using theme-aware ON_SURFACE color.
 
@@ -16,7 +18,7 @@ class PrimaryText(ft.Text):
     Use for main content text, labels, and primary information.
     """
 
-    def __init__(self, value: str, opacity: float = 1.0, **kwargs) -> None:
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
         super().__init__(
             value=value,
             opacity=opacity,
@@ -29,7 +31,7 @@ class PrimaryText(ft.Text):
         )
 
 
-class SecondaryText(ft.Text):
+class SecondaryText(ft.Text):  # type: ignore[misc]
     """
     Secondary text component using theme-aware ON_SURFACE_VARIANT color.
 
@@ -38,7 +40,7 @@ class SecondaryText(ft.Text):
     """
 
     def __init__(
-        self, value: str, opacity: float = 1.0, no_wrap: bool = False, **kwargs
+        self, value: str, opacity: float = 1.0, no_wrap: bool = False, **kwargs: Any
     ) -> None:
         super().__init__(
             value=value,
@@ -52,14 +54,14 @@ class SecondaryText(ft.Text):
         )
 
 
-class TitleText(ft.Text):
+class TitleText(ft.Text):  # type: ignore[misc]
     """
     Title text component for headings and prominent labels.
 
     Uses theme-aware colors with larger size and bold weight.
     """
 
-    def __init__(self, value: str, opacity: float = 1.0, **kwargs) -> None:
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
         # Set defaults, but allow kwargs to override
         defaults = {
             "color": ft.Colors.ON_SURFACE,  # Theme-aware primary text color
@@ -77,14 +79,14 @@ class TitleText(ft.Text):
         )
 
 
-class ConfirmationText(ft.Text):
+class ConfirmationText(ft.Text):  # type: ignore[misc]
     """
     Confirmation/error text component with error coloring.
 
     Uses theme-aware error colors for warnings, confirmations, and alerts.
     """
 
-    def __init__(self, value: str, opacity: float = 1.0, **kwargs) -> None:
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
         super().__init__(
             value=value,
             opacity=opacity,
@@ -96,14 +98,14 @@ class ConfirmationText(ft.Text):
         )
 
 
-class MetricText(ft.Text):
+class MetricText(ft.Text):  # type: ignore[misc]
     """
     Specialized text for displaying metrics and numerical values.
 
     Uses bold weight and primary color for emphasis on data points.
     """
 
-    def __init__(self, value: str, opacity: float = 1.0, **kwargs) -> None:
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
         super().__init__(
             value=value,
             opacity=opacity,
@@ -115,14 +117,14 @@ class MetricText(ft.Text):
         )
 
 
-class LabelText(ft.Text):
+class LabelText(ft.Text):  # type: ignore[misc]
     """
     Label text component for form labels and small descriptive text.
 
     Uses smaller size with medium weight for clear labeling.
     """
 
-    def __init__(self, value: str, opacity: float = 1.0, **kwargs) -> None:
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
         # Set defaults, but allow kwargs to override
         defaults = {
             "color": ft.Colors.GREY_600,  # Theme-aware secondary color

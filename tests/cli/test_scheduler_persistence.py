@@ -17,28 +17,28 @@ class TestSchedulerPersistenceTracking:
     """Test scheduler persistence context tracking in interactive flow."""
 
     @patch("typer.confirm")
-    def test_scheduler_with_persistence_selected(self, mock_confirm: Any) -> None:
-        """Test scheduler + persistence sets scheduler_with_persistence=True."""
+    def test_scheduler_backend_selected(self, mock_confirm: Any) -> None:
+        """Test scheduler + persistence sets scheduler_backend="sqlite"."""
         # Simulate: no redis, no worker, yes scheduler, yes persistence, yes sqlite
         mock_confirm.side_effect = [False, False, True, True, True]
 
-        components, scheduler_with_persistence = interactive_component_selection()
+        components, scheduler_backend = interactive_component_selection()
 
-        assert "scheduler" in components
+        assert "scheduler[sqlite]" in components
         assert "database[sqlite]" in components
-        assert scheduler_with_persistence is True
+        assert scheduler_backend == "sqlite"
 
     @patch("typer.confirm")
     def test_scheduler_without_persistence(self, mock_confirm: Any) -> None:
-        """Test scheduler without persistence keeps scheduler_with_persistence=False."""
+        """Test scheduler without persistence keeps scheduler_backend="memory"."""
         # Simulate: no redis, no worker, yes scheduler, no persistence, no database
         mock_confirm.side_effect = [False, False, True, False, False]
 
-        components, scheduler_with_persistence = interactive_component_selection()
+        components, scheduler_backend = interactive_component_selection()
 
         assert "scheduler" in components
         assert "database[sqlite]" not in components
-        assert scheduler_with_persistence is False
+        assert scheduler_backend == "memory"
 
     @patch("typer.confirm")
     def test_scheduler_persistence_declined_sqlite(self, mock_confirm: Any) -> None:
@@ -46,23 +46,23 @@ class TestSchedulerPersistenceTracking:
         # Simulate: scheduler, persistence, no sqlite, no database
         mock_confirm.side_effect = [False, False, True, True, False, False]
 
-        components, scheduler_with_persistence = interactive_component_selection()
+        components, scheduler_backend = interactive_component_selection()
 
         assert "scheduler" in components
         assert "database[sqlite]" not in components
-        assert scheduler_with_persistence is False
+        assert scheduler_backend == "memory"
 
     @patch("typer.confirm")
     def test_scheduler_not_selected(self, mock_confirm: Any) -> None:
-        """Test no scheduler selection keeps scheduler_with_persistence=False."""
+        """Test no scheduler selection keeps scheduler_backend="memory"."""
         # Simulate: no redis, no worker, no scheduler, yes database
         mock_confirm.side_effect = [False, False, False, True]
 
-        components, scheduler_with_persistence = interactive_component_selection()
+        components, scheduler_backend = interactive_component_selection()
 
         assert "scheduler" not in components
         assert "database" in components
-        assert scheduler_with_persistence is False
+        assert scheduler_backend == "memory"
 
     @patch("typer.confirm")
     def test_database_selected_independently_of_scheduler(
@@ -72,11 +72,11 @@ class TestSchedulerPersistenceTracking:
         # Simulate: no redis, no worker, no scheduler, yes database
         mock_confirm.side_effect = [False, False, False, True]
 
-        components, scheduler_with_persistence = interactive_component_selection()
+        components, scheduler_backend = interactive_component_selection()
 
         assert "scheduler" not in components
         assert "database" in components
-        assert scheduler_with_persistence is False
+        assert scheduler_backend == "memory"
 
     @patch("typer.confirm")
     def test_both_scheduler_and_independent_database(self, mock_confirm: Any) -> None:
@@ -84,11 +84,11 @@ class TestSchedulerPersistenceTracking:
         # Simulate: no redis, no worker, yes scheduler, no persistence, yes database
         mock_confirm.side_effect = [False, False, True, False, True]
 
-        components, scheduler_with_persistence = interactive_component_selection()
+        components, scheduler_backend = interactive_component_selection()
 
         assert "scheduler" in components
         assert "database" in components
-        assert scheduler_with_persistence is False
+        assert scheduler_backend == "memory"
 
     @patch("typer.confirm")
     def test_full_stack_with_scheduler_persistence(self, mock_confirm: Any) -> None:
@@ -96,23 +96,23 @@ class TestSchedulerPersistenceTracking:
         # Simulate: yes redis, yes worker, yes scheduler, yes persistence, yes sqlite
         mock_confirm.side_effect = [True, True, True, True, True]
 
-        components, scheduler_with_persistence = interactive_component_selection()
+        components, scheduler_backend = interactive_component_selection()
 
         assert "redis" in components
         assert "worker" in components
-        assert "scheduler" in components
+        assert "scheduler[sqlite]" in components
         assert "database[sqlite]" in components
-        assert scheduler_with_persistence is True
+        assert scheduler_backend == "sqlite"
 
 
 class TestBackupJobInclusionLogic:
     """Test that backup job is included in the right scenarios."""
 
     def test_backup_job_included_with_scheduler_persistence(self) -> None:
-        """Test backup job included when scheduler_with_persistence=True."""
+        """Test backup job included when scheduler_backend="sqlite"."""
         components = ["scheduler", "database[sqlite]"]
         template_gen = TemplateGenerator(
-            "test-project", components, scheduler_with_persistence=True
+            "test-project", components, scheduler_backend="sqlite"
         )
 
         context = template_gen.get_template_context()
@@ -126,12 +126,12 @@ class TestBackupJobInclusionLogic:
         """Test backup job included when scheduler + database selected independently."""
         components = ["scheduler", "database[sqlite]"]
         template_gen = TemplateGenerator(
-            "test-project", components, scheduler_with_persistence=False
+            "test-project", components, scheduler_backend="memory"
         )
 
         context = template_gen.get_template_context()
 
-        # Independent selection: scheduler_with_persistence=False but both present
+        # Independent selection: scheduler_backend="memory" but both present
         assert context["scheduler_with_persistence"] == "no"
         assert context["include_scheduler"] == "yes"
         assert context["include_database"] == "yes"
@@ -141,7 +141,7 @@ class TestBackupJobInclusionLogic:
         """Test backup job NOT included when only scheduler selected."""
         components = ["scheduler"]
         template_gen = TemplateGenerator(
-            "test-project", components, scheduler_with_persistence=False
+            "test-project", components, scheduler_backend="memory"
         )
 
         context = template_gen.get_template_context()
@@ -155,7 +155,7 @@ class TestBackupJobInclusionLogic:
         """Test backup job NOT included when only database selected."""
         components = ["database[sqlite]"]
         template_gen = TemplateGenerator(
-            "test-project", components, scheduler_with_persistence=False
+            "test-project", components, scheduler_backend="memory"
         )
 
         context = template_gen.get_template_context()
@@ -170,10 +170,10 @@ class TestTemplateGeneratorPersistenceContext:
     """Test template generator handling of scheduler persistence context."""
 
     def test_template_context_with_scheduler_persistence(self) -> None:
-        """Test template context when scheduler_with_persistence=True."""
+        """Test template context when scheduler_backend="sqlite"."""
         components = ["scheduler", "database[sqlite]"]
         template_gen = TemplateGenerator(
-            "test-project", components, scheduler_with_persistence=True
+            "test-project", components, scheduler_backend="sqlite"
         )
 
         context = template_gen.get_template_context()
@@ -184,10 +184,10 @@ class TestTemplateGeneratorPersistenceContext:
         assert context["database_engine"] == "sqlite"
 
     def test_template_context_without_scheduler_persistence(self) -> None:
-        """Test template context when scheduler_with_persistence=False."""
+        """Test template context when scheduler_backend="memory"."""
         components = ["scheduler"]
         template_gen = TemplateGenerator(
-            "test-project", components, scheduler_with_persistence=False
+            "test-project", components, scheduler_backend="memory"
         )
 
         context = template_gen.get_template_context()
@@ -200,7 +200,7 @@ class TestTemplateGeneratorPersistenceContext:
         """Test template context with database but no scheduler persistence."""
         components = ["scheduler", "database[sqlite]"]
         template_gen = TemplateGenerator(
-            "test-project", components, scheduler_with_persistence=False
+            "test-project", components, scheduler_backend="memory"
         )
 
         context = template_gen.get_template_context()
@@ -211,7 +211,7 @@ class TestTemplateGeneratorPersistenceContext:
         assert context["database_engine"] == "sqlite"
 
     def test_template_context_default_persistence_false(self) -> None:
-        """Test template context defaults scheduler_with_persistence to False."""
+        """Test template context defaults scheduler_backend to False."""
         components = ["scheduler", "database[sqlite]"]
         template_gen = TemplateGenerator("test-project", components)
 
@@ -223,7 +223,7 @@ class TestTemplateGeneratorPersistenceContext:
         """Test template context when database selected independently of scheduler."""
         components = ["database[sqlite]"]
         template_gen = TemplateGenerator(
-            "test-project", components, scheduler_with_persistence=False
+            "test-project", components, scheduler_backend="memory"
         )
 
         context = template_gen.get_template_context()
@@ -243,11 +243,11 @@ class TestSchedulerPersistenceLogic:
         # We can't easily test the echo output, but we can test the logic flow
         mock_confirm.side_effect = [False, False, True, True, True]
 
-        components, scheduler_with_persistence = interactive_component_selection()
+        components, scheduler_backend = interactive_component_selection()
 
         # Verify the logic worked correctly
-        assert scheduler_with_persistence is True
-        assert "scheduler" in components
+        assert scheduler_backend == "sqlite"
+        assert "scheduler[sqlite]" in components
         assert any("database[" in comp for comp in components)
 
     def test_scheduler_persistence_component_format(self) -> None:
@@ -255,7 +255,7 @@ class TestSchedulerPersistenceLogic:
         with patch("typer.confirm") as mock_confirm:
             mock_confirm.side_effect = [False, False, True, True, True]
 
-            components, scheduler_with_persistence = interactive_component_selection()
+            components, scheduler_backend = interactive_component_selection()
 
             # Should have database with engine info when added by scheduler
             database_components = [c for c in components if c.startswith("database")]

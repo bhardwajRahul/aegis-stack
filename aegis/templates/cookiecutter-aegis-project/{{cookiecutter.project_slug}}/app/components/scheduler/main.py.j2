@@ -9,7 +9,7 @@ import asyncio
 import os
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-{% if cookiecutter.scheduler_with_persistence == "yes" %}
+{% if cookiecutter.scheduler_backend != "memory" %}
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from app.core.db import engine, init_database, db_session
 from app.services.scheduler.models import APSchedulerJob
@@ -20,16 +20,17 @@ from app.services.system.backup import backup_database_job
 
 from app.core.log import logger
 
-{% if cookiecutter.scheduler_with_persistence == "yes" %}
+{% if cookiecutter.scheduler_backend != "memory" %}
 
 def _job_exists_in_database(job_id: str) -> bool:
     """Check if a job already exists in the persistence database using SQLModel."""
     try:
         from sqlmodel import select
-        
+
         with db_session() as session:
             # Query for job by ID using modern SQLModel pattern
-            result = session.exec(select(APSchedulerJob).where(APSchedulerJob.id == job_id))
+            query = select(APSchedulerJob).where(APSchedulerJob.id == job_id)
+            result = session.exec(query)
             job = result.first()
             return job is not None
     except Exception as e:
@@ -44,10 +45,10 @@ def _job_exists_in_database(job_id: str) -> bool:
 
 def create_scheduler() -> AsyncIOScheduler:
     """Create and configure the scheduler with all jobs."""
-{% if cookiecutter.scheduler_with_persistence == "yes" %}
+{% if cookiecutter.scheduler_backend != "memory" %}
     # Ensure database is initialized before creating jobstore
     init_database()
-    
+
     # Configure SQLAlchemy jobstore for persistence
     jobstore = SQLAlchemyJobStore(engine=engine, tablename='apscheduler_jobs')
     jobstores = {'default': jobstore}
@@ -63,7 +64,7 @@ def create_scheduler() -> AsyncIOScheduler:
 
     # ============================================================================
     # JOB SCHEDULE CONFIGURATION
-    # 
+    #
     # PERSISTENCE BEHAVIOR:
     # - Jobs are checked against the database first
     # - Existing jobs are preserved (respects runtime modifications)
@@ -74,27 +75,27 @@ def create_scheduler() -> AsyncIOScheduler:
     #   SCHEDULER_FORCE_UPDATE=true docker-compose up -d scheduler
     # ============================================================================
 
+{% if cookiecutter.scheduler_backend != "memory" or (cookiecutter.include_scheduler == "yes" and cookiecutter.include_database == "yes") %}
     # Check environment flag for force updates (useful during deployments)
     force_update = os.getenv("SCHEDULER_FORCE_UPDATE", "false").lower() == "true"
-
-{% if cookiecutter.scheduler_with_persistence == "yes" or (cookiecutter.include_scheduler == "yes" and cookiecutter.include_database == "yes") %}
     # Database backup job (runs daily at 2 AM when database is available)
     job_id = "database_backup"
-{% if cookiecutter.scheduler_with_persistence == "yes" %}
-    # For persistent schedulers, check database directly since scheduler hasn't loaded jobs yet
+{% if cookiecutter.scheduler_backend != "memory" %}
+    # For persistent schedulers, check database directly since
+    # scheduler hasn't loaded jobs yet
     job_exists = _job_exists_in_database(job_id)
 {% else %}
     # For memory schedulers, scheduler.get_job() works fine
     existing_job = scheduler.get_job(job_id)
     job_exists = existing_job is not None
 {% endif %}
-    
+
     if not job_exists or force_update:
         if job_exists and force_update:
             logger.info(f"🔄 Force updating job '{job_id}' from code configuration")
         else:
             logger.info(f"➕ Adding new job '{job_id}'")
-            
+
         scheduler.add_job(
             backup_database_job,
             trigger="cron",
@@ -107,8 +108,9 @@ def create_scheduler() -> AsyncIOScheduler:
             replace_existing=True  # Safe to use since we check first
         )
     else:
-{% if cookiecutter.scheduler_with_persistence == "yes" %}
-        logger.info(f"✅ Job '{job_id}' exists in database, preserving current configuration")
+{% if cookiecutter.scheduler_backend != "memory" %}
+        msg = f"✅ Job '{job_id}' exists in database, preserving current configuration"
+        logger.info(msg)
 {% else %}
         logger.info(
             f"✅ Job '{job_id}' exists, preserving current configuration: {existing_job.trigger}"

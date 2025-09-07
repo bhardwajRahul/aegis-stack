@@ -14,6 +14,7 @@
   "include_worker": "no",
   "include_database": "no", 
   "include_cache": "no",
+  "scheduler_backend": "memory",
   "scheduler_with_persistence": "no",
   
   "_comment_internal": "Internal variables for template logic",

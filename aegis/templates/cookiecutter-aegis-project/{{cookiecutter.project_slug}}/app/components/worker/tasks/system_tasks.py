@@ -95,9 +95,9 @@ async def load_test_orchestrator(
         logger.info(f"✅ All {tasks_sent} tasks enqueued to {queue_name}")
 
         # Monitor task completion with timeout based on queue configuration
-        from app.core.config import settings
 
         from app.components.worker.registry import get_queue_metadata
+
         queue_metadata = get_queue_metadata(target_queue)
         monitor_timeout = queue_metadata.get("timeout", 300)  # Use queue's timeout
 

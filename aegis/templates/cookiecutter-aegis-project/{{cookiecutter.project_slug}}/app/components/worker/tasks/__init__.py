@@ -90,6 +90,7 @@ def get_queue_functions(queue_type: str) -> list[Callable[..., Any]]:
     }
 
     from typing import cast
+
     return cast(list[Callable[..., Any]], queue_function_map.get(queue_type, []))
 
 

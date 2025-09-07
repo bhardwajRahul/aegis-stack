@@ -39,6 +39,7 @@ nav:
     - Scheduler:
       - Getting Started: components/scheduler.md
       - Examples: components/scheduler/examples.md
+      - CLI Interface: components/scheduler/cli.md
       - Extras:
         - Database Persistence: components/scheduler/extras/persistence.md
     - Worker:

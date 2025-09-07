@@ -66,7 +66,7 @@ async def enqueue_task(task_request: TaskRequest) -> TaskResponse:
         )
 
     from app.core.config import is_valid_queue, get_available_queues
-    
+
     if not is_valid_queue(task_request.queue_type):
         available_queues = get_available_queues()
         raise HTTPException(
@@ -174,9 +174,9 @@ async def get_task_status(task_id: str) -> TaskStatusResponse:
         await pool.aclose()
 
         return TaskStatusResponse(
-            task_id=task_id, 
-            status=status, 
-            result_available=result_exists, 
+            task_id=task_id,
+            status=status,
+            result_available=result_exists,
             error=error,
             enqueue_time=None,
             start_time=None,
@@ -262,8 +262,8 @@ async def get_task_result(task_id: str) -> TaskResultResponse:
                     task_status = "completed"
 
             return TaskResultResponse(
-                task_id=task_id, 
-                status=task_status, 
+                task_id=task_id,
+                status=task_status,
                 result=result_data,
                 enqueue_time=None,
                 start_time=None,

@@ -114,9 +114,7 @@ async def cpu_intensive_task(ctx: dict[str, Any], **kwargs: Any) -> dict[str, An
         "task_id": task_id,
         # CPU work proof
         "fibonacci_n": n,
-        "fibonacci_result": (
-            str(b)[:10] + "..." if len(str(b)) > 10 else str(b)
-        ),
+        "fibonacci_result": (str(b)[:10] + "..." if len(str(b)) > 10 else str(b)),
         "sorted_data_size": len(sorted_data),
         "hash_operations": hash_operations,
         "hash_sample": hash_results[:3],  # First 3 hashes as proof
@@ -138,9 +136,7 @@ async def cpu_intensive_task(ctx: dict[str, Any], **kwargs: Any) -> dict[str, An
         # Async event loop impact
         "async_event_loop_blocked_ms": round(duration_ms, 2),
         "event_loop_warning": event_loop_warning,
-        "concurrency_impact": (
-            "HIGH - Blocks entire event loop during execution"
-        ),
+        "concurrency_impact": ("HIGH - Blocks entire event loop during execution"),
         # Verification signature
         "work_type": "CPU_COMPUTATION_WITH_ENCODING",
         "verification": (
@@ -180,9 +176,7 @@ async def io_simulation_task(ctx: dict[str, Any], **kwargs: Any) -> dict[str, An
             "operation_type": "database_read",
             "table": f"users_{read_id}",
             "simulated_delay_ms": 1,
-            "actual_duration_ms": round(
-            (op_end - op_start).total_seconds() * 1000, 3
-        ),
+            "actual_duration_ms": round((op_end - op_start).total_seconds() * 1000, 3),
             "rows_returned": random.randint(10, 100),
         }
 
@@ -197,9 +191,7 @@ async def io_simulation_task(ctx: dict[str, Any], **kwargs: Any) -> dict[str, An
             "operation_type": "api_call",
             "endpoint": f"/api/data/{api_id}",
             "simulated_delay_ms": 1,
-            "actual_duration_ms": round(
-            (op_end - op_start).total_seconds() * 1000, 3
-        ),
+            "actual_duration_ms": round((op_end - op_start).total_seconds() * 1000, 3),
             "status_code": random.choice([200, 200, 200, 201, 404]),
         }
 
@@ -214,9 +206,7 @@ async def io_simulation_task(ctx: dict[str, Any], **kwargs: Any) -> dict[str, An
             "operation_type": "cache_read",
             "cache_key": f"user_session_{cache_id}",
             "simulated_delay_ms": 0.5,
-            "actual_duration_ms": round(
-            (op_end - op_start).total_seconds() * 1000, 3
-        ),
+            "actual_duration_ms": round((op_end - op_start).total_seconds() * 1000, 3),
             "cache_hit": random.choice([True, True, True, False]),
         }
 
@@ -344,9 +334,7 @@ async def memory_operations_task(ctx: dict[str, Any], **kwargs: Any) -> dict[str
 
     # Memory allocation pattern 2: Dictionary with string values
     dict_size = list_size // 4
-    data_dict = {
-        i: f"memory_test_value_{i}_{'x' * 10}" for i in range(dict_size)
-    }
+    data_dict = {i: f"memory_test_value_{i}_{'x' * 10}" for i in range(dict_size)}
 
     # Memory allocation pattern 3: Nested structures
     nested_data: list[dict[str, Any]] = []
@@ -380,9 +368,7 @@ async def memory_operations_task(ctx: dict[str, Any], **kwargs: Any) -> dict[str
         temp_objects.append(temp_obj)
 
     # Process temp objects then clean up
-    temp_sum = sum(
-        sum(cast(list[int], obj["temp_data"])) for obj in temp_objects
-    )
+    temp_sum = sum(sum(cast(list[int], obj["temp_data"])) for obj in temp_objects)
     del temp_objects  # Explicit cleanup
 
     # Calculate memory usage estimates (approximate)
@@ -420,14 +406,11 @@ async def memory_operations_task(ctx: dict[str, Any], **kwargs: Any) -> dict[str
         "temp_sum": temp_sum,
         # Memory metrics
         "estimated_peak_memory_bytes": total_estimated_bytes,
-        "estimated_peak_memory_mb": round(
-            total_estimated_bytes / (1024 * 1024), 2
-        ),
+        "estimated_peak_memory_mb": round(total_estimated_bytes / (1024 * 1024), 2),
         "memory_operations_count": 8,  # Major allocation/processing operations
         "duration_ms": round(duration_ms, 2),
         "memory_throughput_mb_per_sec": round(
-            (total_estimated_bytes / (1024 * 1024)) / max(duration_ms / 1000, 0.001),
-            2
+            (total_estimated_bytes / (1024 * 1024)) / max(duration_ms / 1000, 0.001), 2
         ),
         "start_time": start_time.isoformat(),
         "end_time": end_time.isoformat(),
@@ -481,9 +464,7 @@ async def failure_testing_task(ctx: dict[str, Any], **kwargs: Any) -> dict[str, 
         raise Exception(error_message)
 
     # Success path: minimal work with timing
-    work_type = random.choice(
-        ["quick_sleep", "light_calculation", "simple_operation"]
-    )
+    work_type = random.choice(["quick_sleep", "light_calculation", "simple_operation"])
 
     if work_type == "quick_sleep":
         delay_ms = random.randint(5, 15)

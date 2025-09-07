@@ -15,6 +15,7 @@ from app.core.config import get_load_test_queue
 
 class LoadTestError(Exception):
     """Custom exception for load test operations."""
+
     pass
 
 
@@ -35,7 +36,7 @@ class LoadTestConfiguration(BaseModel):
         default=None, description="Target queue for testing"
     )
 
-    @field_validator('target_queue')
+    @field_validator("target_queue")
     @classmethod
     def set_default_queue(cls, v: str | None) -> str:
         """Set default queue if not specified."""
@@ -116,17 +117,17 @@ class PerformanceAnalysis(BaseModel):
     throughput_rating: str = Field(
         ...,
         pattern=r"^(unknown|poor|fair|good|excellent)$",
-        description="Throughput performance rating"
+        description="Throughput performance rating",
     )
     efficiency_rating: str = Field(
         ...,
         pattern=r"^(unknown|poor|fair|good|excellent)$",
-        description="Task completion efficiency"
+        description="Task completion efficiency",
     )
     queue_pressure: str = Field(
         ...,
         pattern=r"^(unknown|low|medium|high)$",
-        description="Queue saturation level"
+        description="Queue saturation level",
     )
 
 
@@ -142,7 +143,7 @@ class ValidationStatus(BaseModel):
     performance_signature_match: str = Field(
         default="unknown",
         pattern=r"^(unknown|verified|partial|failed)$",
-        description="Performance matches expected patterns"
+        description="Performance matches expected patterns",
     )
     issues: list[str] = Field(default_factory=list, description="Validation issues")
 
@@ -177,7 +178,7 @@ class LoadTestResult(BaseModel):
     status: str = Field(
         ...,
         pattern=r"^(completed|failed|timed_out)$",
-        description="Test execution status"
+        description="Test execution status",
     )
     test_id: str = Field(..., description="Unique test identifier")
     configuration: LoadTestConfiguration = Field(..., description="Test configuration")
@@ -186,14 +187,12 @@ class LoadTestResult(BaseModel):
     end_time: str | None = Field(None, description="Test end time")
     task_ids: list[str] = Field(default_factory=list, description="Individual task IDs")
     error: str | None = Field(None, description="Error message if failed")
-    analysis: LoadTestAnalysis | None = Field(
-        None, description="Performance analysis"
-    )
+    analysis: LoadTestAnalysis | None = Field(None, description="Performance analysis")
 
-    @model_validator(mode='after')
-    def validate_status_consistency(self) -> 'LoadTestResult':
+    @model_validator(mode="after")
+    def validate_status_consistency(self) -> "LoadTestResult":
         """Validate status consistency with error field."""
-        if self.status == 'failed' and not self.error:
+        if self.status == "failed" and not self.error:
             raise ValueError("Failed status requires error message")
         return self
 
@@ -259,9 +258,7 @@ class LoadTestErrorModel(BaseModel):
 
     task: str = Field(default="load_test_orchestrator", description="Task name")
     status: str = Field(
-        ...,
-        pattern=r"^(failed|timed_out)$",
-        description="Error status"
+        ..., pattern=r"^(failed|timed_out)$", description="Error status"
     )
     test_id: str = Field(..., description="Unique test identifier")
     error: str = Field(..., description="Error message")

@@ -8,7 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.core.log import logger
 from .models import SchedulerHealthMetadata, UpcomingTask
 
-{% if cookiecutter.scheduler_with_persistence == "yes" %}
+{% if cookiecutter.scheduler_backend != "memory" %}
 from .scheduled_task_manager import ScheduledTaskManager
 {% endif %}
 
@@ -16,30 +16,32 @@ from .scheduled_task_manager import ScheduledTaskManager
 class TaskHealthMonitor:
     """
     Service for providing rich task health data for scheduler health checks.
-    
+
     Works with both persistent and non-persistent scheduler modes:
     - Persistent mode: Uses ScheduledTaskManager for detailed task info
     - Non-persistent mode: Uses scheduler.get_jobs() directly
     """
     
     def __init__(self) -> None:
-        {% if cookiecutter.scheduler_with_persistence == "yes" %}
+        {% if cookiecutter.scheduler_backend != "memory" %}
         self.task_manager = ScheduledTaskManager()
         {% endif %}
     
-    async def get_health_metadata(self, scheduler: AsyncIOScheduler | None) -> SchedulerHealthMetadata:
+    async def get_health_metadata(
+        self, scheduler: AsyncIOScheduler | None
+    ) -> SchedulerHealthMetadata:
         """
         Get comprehensive health metadata for scheduler component.
-        
+
         Args:
             scheduler: The AsyncIOScheduler instance, or None if not available
-            
+
         Returns:
             SchedulerHealthMetadata with task statistics and upcoming task information
         """
         try:
             # First, try to get enhanced data if persistence is available
-            {% if cookiecutter.scheduler_with_persistence == "yes" %}
+            {% if cookiecutter.scheduler_backend != "memory" %}
             if await self.task_manager.has_persistence():
                 return await self._get_persistent_metadata()
             {% endif %}
@@ -71,7 +73,7 @@ class TaskHealthMonitor:
                     scheduler_state="error"
                 )
     
-    {% if cookiecutter.scheduler_with_persistence == "yes" %}
+    {% if cookiecutter.scheduler_backend != "memory" %}
     async def _get_persistent_metadata(self) -> SchedulerHealthMetadata:
         """Get detailed metadata using ScheduledTaskManager (persistent mode)."""
         try:
@@ -85,7 +87,7 @@ class TaskHealthMonitor:
             for task in tasks:
                 if task.next_run_time and task.status == "active":
                     upcoming_tasks.append(UpcomingTask(
-                        id=task.id,
+                        job_id=task.job_id,
                         name=task.name,
                         next_run=task.next_run_time.isoformat(),
                         schedule=task.schedule
@@ -108,7 +110,9 @@ class TaskHealthMonitor:
             raise
     {% endif %}
     
-    async def _get_direct_scheduler_metadata(self, scheduler: AsyncIOScheduler) -> SchedulerHealthMetadata:
+    async def _get_direct_scheduler_metadata(
+        self, scheduler: AsyncIOScheduler
+    ) -> SchedulerHealthMetadata:
         """Get basic metadata by inspecting scheduler directly (non-persistent mode)."""
         try:
             jobs = scheduler.get_jobs()
@@ -125,7 +129,7 @@ class TaskHealthMonitor:
             
             for job in active_jobs[:5]:
                 upcoming_tasks.append(UpcomingTask(
-                    id=job.id,
+                    job_id=job.id,
                     name=job.name or job.id,
                     next_run=job.next_run_time.isoformat(),
                     schedule=self._format_trigger_simple(job.trigger)

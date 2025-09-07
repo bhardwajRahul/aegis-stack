@@ -50,7 +50,7 @@ This Aegis Stack project includes the following components:
    ```bash
    # Create data directory for SQLite database
    mkdir -p data
-   
+
    # Database will be created automatically on first run
    # Default location: data/app.db
    ```
@@ -84,7 +84,7 @@ Your project gets its own CLI command **automatically installed** when first use
 
 ```bash
 # Health monitoring (auto-installs CLI if needed)
-make health                     # Basic health check  
+make health                     # Basic health check
 make health-detailed            # Detailed component status
 make health-json               # JSON output for scripts
 make health-quick              # Quick healthy/unhealthy check
@@ -103,7 +103,7 @@ make health-quick              # Quick healthy/unhealthy check
 **Environment Issues?** If CLI commands don't work:
 ```bash
 # Ensure you're in the project's virtual environment
-unset VIRTUAL_ENV               # Clear Docker contamination  
+unset VIRTUAL_ENV               # Clear Docker contamination
 source .venv/bin/activate       # Activate local venv
 make health                     # This will auto-install CLI
 # Or manually: make install-cli
@@ -172,7 +172,7 @@ with db_session() as session:
 {%- if cookiecutter.include_scheduler == "yes" %}
 │   │   └── scheduler/     # APScheduler background tasks
 {%- endif %}
-│   ├── cli/               # CLI commands and health monitoring  
+│   ├── cli/               # CLI commands and health monitoring
 │   ├── core/              # Core utilities
 │   │   ├── config.py      # Environment-dependent configuration
 │   │   ├── constants.py   # Immutable constants (12-Factor App)

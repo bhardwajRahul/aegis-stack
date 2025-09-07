@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # Health checks are available via API endpoints (/health/)
     # Use external monitoring tools (Prometheus, DataDog, etc.) to poll these endpoints
     HEALTH_CHECK_ENABLED: bool = True
-    HEALTH_CHECK_INTERVAL_MINUTES: int = 5  # Recommended interval for external monitoring
+    HEALTH_CHECK_INTERVAL_MINUTES: int = 5  # Recommended interval for monitoring
 
     # Health check performance settings
     HEALTH_CHECK_TIMEOUT_SECONDS: float = 2.0

@@ -1,4 +1,4 @@
-{% if cookiecutter.scheduler_with_persistence == "yes" %}
+{% if cookiecutter.scheduler_backend != "memory" %}
 """Async scheduled task manager using SQLModel for database abstraction."""
 
 from datetime import datetime
@@ -17,11 +17,11 @@ from .models import APSchedulerJob, ScheduledTask, TaskStatistics
 class ScheduledTaskManager:
     """
     Manages scheduled tasks via async database operations.
-    
+
     Uses SQLModel for database abstraction, supporting SQLite, PostgreSQL, MySQL.
-    Only available when scheduler persistence is enabled - reads from apscheduler_jobs table.
+    Only available when scheduler persistence is enabled - reads from
+    apscheduler_jobs table.
     """
-    
     async def has_persistence(self) -> bool:
         """Check if apscheduler_jobs table exists."""
         try:
@@ -34,14 +34,13 @@ class ScheduledTaskManager:
         except Exception as e:
             logger.error(f"Error checking persistence: {e}")
             return False
-    
     async def list_tasks(self) -> list[ScheduledTask]:
         """
         List all scheduled tasks from the database.
-        
+
         Returns:
             list[ScheduledTask]: List of all scheduled tasks with their details.
-            
+
         Raises:
             RuntimeError: If persistence is not available.
         """
@@ -50,28 +49,28 @@ class ScheduledTaskManager:
                 "Scheduled task listing requires persistence. "
                 "The apscheduler_jobs table was not found in the database."
             )
-        
+
         async with get_async_session() as session:
             # Query all jobs ordered by next run time (nulls last)
             result = await session.exec(
                 select(APSchedulerJob).order_by(
-                    APSchedulerJob.next_run_time.desc().nulls_last()
+                    APSchedulerJob.next_run_time.desc().nulls_last()  # type: ignore[union-attr]
                 )
             )
             jobs = result.all()
-            
+
             tasks = []
             for job in jobs:
                 try:
                     job_data = job.get_job_data()
                     task = ScheduledTask(
-                        id=job.id,
+                        job_id=job.id,
                         name=job_data.get("name", job.id),
                         function=job_data.get("func", "unknown"),
                         schedule=self._format_trigger(job_data.get("trigger")),
                         trigger_type=self._get_trigger_type(job_data.get("trigger")),
                         next_run_time=(
-                            datetime.fromtimestamp(job.next_run_time) 
+                            datetime.fromtimestamp(job.next_run_time)
                             if job.next_run_time else None
                         ),
                         status="active" if job.next_run_time else "paused",
@@ -82,16 +81,16 @@ class ScheduledTaskManager:
                 except Exception as e:
                     logger.error(f"Error processing job {job.id}: {e}")
                     continue
-            
+
             return tasks
-    
+
     async def get_task(self, task_id: str) -> ScheduledTask | None:
         """
         Get a specific task by ID.
-        
+
         Args:
             task_id: The unique identifier of the task.
-            
+
         Returns:
             ScheduledTask | None: The task if found, None otherwise.
         """
@@ -100,20 +99,20 @@ class ScheduledTaskManager:
                 select(APSchedulerJob).where(APSchedulerJob.id == task_id)
             )
             job = result.first()
-            
+
             if not job:
                 return None
-            
+
             try:
                 job_data = job.get_job_data()
                 return ScheduledTask(
-                    id=job.id,
+                    job_id=job.id,
                     name=job_data.get("name", job.id),
                     function=job_data.get("func", "unknown"),
                     schedule=self._format_trigger(job_data.get("trigger")),
                     trigger_type=self._get_trigger_type(job_data.get("trigger")),
                     next_run_time=(
-                        datetime.fromtimestamp(job.next_run_time) 
+                        datetime.fromtimestamp(job.next_run_time)
                         if job.next_run_time else None
                     ),
                     status="active" if job.next_run_time else "paused",
@@ -123,11 +122,11 @@ class ScheduledTaskManager:
             except Exception as e:
                 logger.error(f"Error processing job {task_id}: {e}")
                 return None
-    
+
     async def get_statistics(self) -> TaskStatistics:
         """
         Get task statistics.
-        
+
         Returns:
             TaskStatistics: Summary statistics about all scheduled tasks.
         """
@@ -135,28 +134,28 @@ class ScheduledTaskManager:
         tasks = await self.list_tasks()
         active = sum(1 for t in tasks if t.status == "active")
         paused = sum(1 for t in tasks if t.status == "paused")
-        
+
         return TaskStatistics(
             total_tasks=len(tasks),
             active_tasks=active,
             paused_tasks=paused,
         )
-    
+
     def _format_trigger(self, trigger: Any) -> str:
         """
         Convert APScheduler trigger to human-readable string.
-        
+
         Args:
             trigger: APScheduler trigger object (IntervalTrigger, CronTrigger, etc.)
-            
+
         Returns:
             str: Human-readable schedule description.
         """
         if not trigger:
             return "Unknown"
-        
+
         trigger_type = type(trigger).__name__
-        
+
         if trigger_type == "IntervalTrigger":
             if hasattr(trigger, "interval"):
                 seconds = trigger.interval.total_seconds()
@@ -174,7 +173,7 @@ class ScheduledTaskManager:
                 else:
                     days = int(seconds / 86400)
                     return f"Every {days}d"
-        
+
         elif trigger_type == "CronTrigger":
             if hasattr(trigger, "fields"):
                 parts = []
@@ -185,26 +184,26 @@ class ScheduledTaskManager:
                 if parts:
                     return "Cron: " + ", ".join(parts)
                 return "Cron: * * * * *"
-        
+
         elif trigger_type == "DateTrigger":
             if hasattr(trigger, "run_date"):
                 return f"Once at {trigger.run_date.strftime('%Y-%m-%d %H:%M:%S')}"
-        
+
         return trigger_type.replace("Trigger", "")
-    
+
     def _get_trigger_type(self, trigger: Any) -> str:
         """
         Extract trigger type as string.
-        
+
         Args:
             trigger: APScheduler trigger object.
-            
+
         Returns:
             str: Trigger type name (interval, cron, date, unknown).
         """
         if not trigger:
             return "unknown"
-        
+
         trigger_name = type(trigger).__name__
         if "Interval" in trigger_name:
             return "interval"
@@ -213,4 +212,62 @@ class ScheduledTaskManager:
         elif "Date" in trigger_name:
             return "date"
         return "unknown"
+
+    # Placeholder methods for CLI functionality
+    async def get_job_statistics(self, job_id: str) -> dict[str, Any]:
+        """Get statistics for a specific job."""
+        # TODO: Implement job-specific statistics
+        task = await self.get_task(job_id)
+        if not task:
+            return {}
+
+        return {
+            "job_id": job_id,
+            "total_executions": 0,  # Would need execution history table
+            "successful_executions": 0,
+            "failed_executions": 0,
+            "success_rate_percent": 0.0,
+            "avg_duration_ms": 0.0,
+            "min_duration_ms": 0.0,
+            "max_duration_ms": 0.0,
+            "last_execution": "Never",
+            "next_run": (
+                task.next_run_time.isoformat()
+                if task.next_run_time
+                else "Not scheduled"
+            ),
+        }
+
+    async def get_overall_statistics(self) -> dict[str, Any]:
+        """Get overall scheduler statistics."""
+        stats = await self.get_statistics()
+        return {
+            "total_jobs": stats.total_tasks,
+            "active_jobs": stats.active_tasks,
+            "paused_jobs": stats.paused_tasks,
+            "total_executions": 0,  # Would need execution history table
+            "successful_executions": 0,
+            "failed_executions": 0,
+            "success_rate_percent": 0.0,
+            "avg_duration_ms": 0.0,
+            "uptime": "Unknown",
+            "last_activity": "No recent activity",
+        }
+
+    async def get_job_history(
+        self, limit: int, job_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Get recent job execution history."""
+        # TODO: Implement execution history - would need additional table
+        return []
+
+    async def trigger_job(
+        self, job_id: str, wait: bool = True, timeout: int = 30
+    ) -> dict[str, Any]:
+        """Trigger manual job execution."""
+        # TODO: Implement job triggering - would need scheduler integration
+        return {
+            "status": "error",
+            "error": "Manual job triggering not yet implemented",
+        }
 {% endif %}

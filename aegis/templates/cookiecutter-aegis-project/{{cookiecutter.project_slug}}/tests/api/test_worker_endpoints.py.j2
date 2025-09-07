@@ -3,7 +3,7 @@
 Tests for worker API endpoints.
 
 These tests focus on the worker HTTP endpoints that handle task enqueuing,
-ensuring TaskRequest model works correctly with task_kwargs field and 
+ensuring TaskRequest model works correctly with task_kwargs field and
 validates the API contract.
 """
 
@@ -21,12 +21,12 @@ class TestWorkerEndpoints:
     async def async_client(self) -> AsyncClient:
         """Async HTTP client for testing."""
         app = create_integrated_app()
-        
+
         # Manually trigger startup for health check registration
         from app.components.backend.hooks import backend_hooks
         await backend_hooks.discover_lifespan_hooks()
         await backend_hooks.execute_startup_hooks()
-        
+
         transport = ASGITransport(app=app)
         async with AsyncClient(
             transport=transport, base_url="http://test"
@@ -39,16 +39,16 @@ class TestWorkerEndpoints:
         # Clear cache to ensure fresh mock
         from app.components.worker.pools import clear_pool_cache
         await clear_pool_cache()
-        
+
         # Mock pool and job
         mock_pool = AsyncMock()
         mock_job = MagicMock()
         mock_job.job_id = "test-job-123"
         mock_pool.enqueue_job.return_value = mock_job
-        
+
         # Mock the get_queue_pool function to return our mocked pool
         mock_create_pool.return_value = mock_pool
-        
+
         # Test data with task_kwargs
         task_request = {
             "task_name": "cpu_intensive_task",
@@ -60,20 +60,20 @@ class TestWorkerEndpoints:
             },
             "delay_seconds": None
         }
-        
+
         # Make the API call
         response = await async_client.post(
             "/api/v1/tasks/enqueue",
             json=task_request
         )
-        
+
         # Verify response
         assert response.status_code == 200
         response_data = response.json()
         assert response_data["task_id"] == "test-job-123"
         assert response_data["task_name"] == "cpu_intensive_task"
         assert response_data["queue_type"] == "system"
-        
+
         # Verify that enqueue_job was called with task_kwargs unpacked
         mock_pool.enqueue_job.assert_called_once_with(
             "cpu_intensive_task",
@@ -91,32 +91,32 @@ class TestWorkerEndpoints:
         # Clear cache to ensure fresh mock
         from app.components.worker.pools import clear_pool_cache
         await clear_pool_cache()
-        
+
         # Mock pool and job
         mock_pool = AsyncMock()
         mock_job = MagicMock()
         mock_job.job_id = "test-job-456"
         mock_pool.enqueue_job.return_value = mock_job
         mock_create_pool.return_value = mock_pool
-        
+
         # Test data without task_kwargs (should default to empty dict)
         task_request = {
             "task_name": "io_simulation_task",
             "queue_type": "system",
             "args": [],
         }
-        
+
         # Make the API call
         response = await async_client.post(
             "/api/v1/tasks/enqueue",
             json=task_request
         )
-        
+
         # Verify response
         assert response.status_code == 200
         response_data = response.json()
         assert response_data["task_id"] == "test-job-456"
-        
+
         # Verify enqueue_job called with no extra kwargs
         mock_pool.enqueue_job.assert_called_once_with(
             "io_simulation_task",
@@ -132,12 +132,12 @@ class TestWorkerEndpoints:
             "args": [],
             "task_kwargs": {}
         }
-        
+
         response = await async_client.post(
             "/api/v1/tasks/enqueue",
             json=task_request
         )
-        
+
         # Should return 400 for invalid queue type
         assert response.status_code == 400
         response_data = response.json()
@@ -152,12 +152,12 @@ class TestWorkerEndpoints:
             "args": [],
             "task_kwargs": {}
         }
-        
+
         response = await async_client.post(
             "/api/v1/tasks/enqueue",
             json=invalid_request
         )
-        
+
         # Should return 422 for validation error
         assert response.status_code == 422
 {% endif %}

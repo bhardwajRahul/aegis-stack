@@ -276,3 +276,53 @@ class TestEdgeCases:
         base, engine = parse_component_name(f"{long_name}[{long_engine}]")
         assert base == long_name
         assert engine == long_engine
+
+
+class TestSchedulerBackendParsing:
+    """Test scheduler[backend] parsing specifically."""
+
+    def test_scheduler_with_sqlite_backend(self) -> None:
+        """Test parsing scheduler[sqlite] syntax."""
+        base, engine = parse_component_name("scheduler[sqlite]")
+        assert base == "scheduler"
+        assert engine == "sqlite"
+
+    def test_scheduler_with_postgres_backend(self) -> None:
+        """Test parsing scheduler[postgres] syntax."""
+        base, engine = parse_component_name("scheduler[postgres]")
+        assert base == "scheduler"
+        assert engine == "postgres"
+
+    def test_scheduler_memory_backend(self) -> None:
+        """Test parsing simple scheduler (memory backend)."""
+        base, engine = parse_component_name("scheduler")
+        assert base == "scheduler"
+        assert engine is None
+
+    def test_extract_scheduler_backends(self) -> None:
+        """Test extracting scheduler backends from component lists."""
+        components = ["scheduler[sqlite]", "redis", "worker"]
+
+        # Should find scheduler with sqlite backend
+        scheduler_components = find_components_with_engine(components, "scheduler")
+        assert scheduler_components == ["scheduler[sqlite]"]
+
+        # Should extract backend correctly
+        scheduler_backend = extract_engine_info("scheduler[sqlite]")
+        assert scheduler_backend == "sqlite"
+
+    def test_clean_scheduler_component_names(self) -> None:
+        """Test cleaning scheduler component names removes backends."""
+        components = ["scheduler[sqlite]", "database[postgres]", "redis"]
+        clean = clean_component_names(components)
+        assert clean == ["scheduler", "database", "redis"]
+
+    def test_restore_scheduler_engine_info(self) -> None:
+        """Test restoring scheduler backend info."""
+        resolved = ["redis", "scheduler", "database"]
+        original = ["scheduler[sqlite]", "database[postgres]"]
+
+        restored = restore_engine_info(resolved, original)
+        assert "scheduler[sqlite]" in restored
+        assert "database[postgres]" in restored
+        assert "redis" in restored

@@ -40,9 +40,10 @@ console = Console()
 
 class QueueChoice(str, Enum):
     """Available queue types for load testing."""
+
     load_test = "load_test"
     system = "system"  # Legacy option
-    media = "media"    # Legacy option
+    media = "media"  # Legacy option
 
     @classmethod
     def get_default(cls) -> str:
@@ -86,7 +87,7 @@ def run_load_test(
         task_type=task_type,
         batch_size=batch_size,
         delay_ms=delay_ms,
-        target_queue=target_queue.value
+        target_queue=target_queue.value,
     )
 
     # Display test configuration
@@ -340,10 +341,10 @@ def _display_test_configuration(config: LoadTestConfiguration, test_type: str) -
 🎯 [cyan]Queue:[/cyan] {config.target_queue}
 
 [bold yellow]Test Type Details[/bold yellow]
-📋 [yellow]Name:[/yellow] {test_info.get('name', 'Unknown')}
-📝 [yellow]Description:[/yellow] {test_info.get('description', 'No description')}
-⚡ [yellow]Performance:[/yellow] {test_info.get('performance_signature', 'Unknown')}
-🏃 [yellow]Concurrency:[/yellow] {test_info.get('concurrency_impact', 'Unknown')}
+📋 [yellow]Name:[/yellow] {test_info.get("name", "Unknown")}
+📝 [yellow]Description:[/yellow] {test_info.get("description", "No description")}
+⚡ [yellow]Performance:[/yellow] {test_info.get("performance_signature", "Unknown")}
+🏃 [yellow]Concurrency:[/yellow] {test_info.get("concurrency_impact", "Unknown")}
     """.strip()
 
     console.print(Panel(config_text, title="🚀 Load Test Setup", border_style="blue"))
@@ -353,21 +354,21 @@ def _display_test_type_info(test_type: str, info: dict[str, Any]) -> None:
     """Display detailed information about a specific test type."""
 
     info_text = f"""
-[bold cyan]{info.get('name', 'Unknown Test Type')}[/bold cyan]
+[bold cyan]{info.get("name", "Unknown Test Type")}[/bold cyan]
 
 [bold yellow]Description[/bold yellow]
-{info.get('description', 'No description available')}
+{info.get("description", "No description available")}
 
 [bold yellow]Performance Characteristics[/bold yellow]
-🔍 [yellow]Signature:[/yellow] {info.get('performance_signature', 'Unknown')}
-⏱️  [yellow]Duration:[/yellow] {info.get('typical_duration_ms', 'Unknown')}
-🔄 [yellow]Concurrency:[/yellow] {info.get('concurrency_impact', 'Unknown')}
+🔍 [yellow]Signature:[/yellow] {info.get("performance_signature", "Unknown")}
+⏱️  [yellow]Duration:[/yellow] {info.get("typical_duration_ms", "Unknown")}
+🔄 [yellow]Concurrency:[/yellow] {info.get("concurrency_impact", "Unknown")}
 
 [bold yellow]Expected Metrics[/bold yellow]
-📊 {', '.join(info.get('expected_metrics', ['No metrics specified']))}
+📊 {", ".join(info.get("expected_metrics", ["No metrics specified"]))}
 
 [bold yellow]Validation Keys[/bold yellow]
-🔑 {', '.join(info.get('validation_keys', ['No validation keys']))}
+🔑 {", ".join(info.get("validation_keys", ["No validation keys"]))}
     """.strip()
 
     console.print(
@@ -392,7 +393,6 @@ def _wait_for_completion_and_display_results(
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-
         wait_task = progress.add_task(
             "Waiting for load test to complete...", total=None
         )
@@ -514,38 +514,42 @@ def _display_error_result(result: dict[str, Any], status: str) -> None:
     partial_info = result.get("partial_info", "")
 
     if status == "timed_out":
-        console.print(Panel(
-            f"[bold red]⏰ Load Test Timed Out[/bold red]\n\n"
-            f"[cyan]Test ID:[/cyan] {test_id}\n"
-            f"[cyan]Error:[/cyan] {error}\n\n"
-            f"[yellow]What this means:[/yellow]\n"
-            f"The orchestrator task timed out, but individual worker tasks "
-            f"may have completed successfully.\n"
-            f"This often happens with large load tests that exceed the "
-            f"queue timeout.\n\n"
-            f"[blue]To investigate:[/blue]\n"
-            f"• Check worker logs for individual task completion\n"
-            f"• Consider using smaller batch sizes for large tests\n"
-            f"• Check queue metrics for actual task completion counts",
-            title="🔍 Load Test Analysis",
-            border_style="red"
-        ))
+        console.print(
+            Panel(
+                f"[bold red]⏰ Load Test Timed Out[/bold red]\n\n"
+                f"[cyan]Test ID:[/cyan] {test_id}\n"
+                f"[cyan]Error:[/cyan] {error}\n\n"
+                f"[yellow]What this means:[/yellow]\n"
+                f"The orchestrator task timed out, but individual worker tasks "
+                f"may have completed successfully.\n"
+                f"This often happens with large load tests that exceed the "
+                f"queue timeout.\n\n"
+                f"[blue]To investigate:[/blue]\n"
+                f"• Check worker logs for individual task completion\n"
+                f"• Consider using smaller batch sizes for large tests\n"
+                f"• Check queue metrics for actual task completion counts",
+                title="🔍 Load Test Analysis",
+                border_style="red",
+            )
+        )
 
         if partial_info:
             console.print(f"\n📝 [dim]{partial_info}[/dim]")
 
     elif status == "failed":
-        console.print(Panel(
-            f"[bold red]❌ Load Test Failed[/bold red]\n\n"
-            f"[cyan]Test ID:[/cyan] {test_id}\n"
-            f"[cyan]Error:[/cyan] {error}\n\n"
-            f"[blue]Next steps:[/blue]\n"
-            f"• Check worker logs for detailed error information\n"
-            f"• Verify queue connectivity and worker status\n"
-            f"• Try a smaller test to isolate the issue",
-            title="🔍 Load Test Analysis",
-            border_style="red"
-        ))
+        console.print(
+            Panel(
+                f"[bold red]❌ Load Test Failed[/bold red]\n\n"
+                f"[cyan]Test ID:[/cyan] {test_id}\n"
+                f"[cyan]Error:[/cyan] {error}\n\n"
+                f"[blue]Next steps:[/blue]\n"
+                f"• Check worker logs for detailed error information\n"
+                f"• Verify queue connectivity and worker status\n"
+                f"• Try a smaller test to isolate the issue",
+                title="🔍 Load Test Analysis",
+                border_style="red",
+            )
+        )
 
     # Show basic troubleshooting info
     console.print("\n💡 [bold yellow]Troubleshooting Tips[/bold yellow]")
@@ -629,7 +633,7 @@ def _get_rating_color(rating: str) -> str:
         "good": "blue",
         "fair": "yellow",
         "poor": "red",
-        "unknown": "dim"
+        "unknown": "dim",
     }
     return color_map.get(rating, "dim")
 

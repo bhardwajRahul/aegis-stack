@@ -126,3 +126,58 @@ class TestComponentValidation:
         assert (
             "Unknown component: invalid" in result.stderr
         )  # Updated to match actual error message
+
+    def test_scheduler_backend_syntax_validation(self) -> None:
+        """Test scheduler[backend] syntax is accepted."""
+        result = run_aegis_command(
+            "init",
+            "test-project",
+            "--components",
+            "scheduler[sqlite]",
+            "--no-interactive",
+            "--yes",
+            timeout=10,
+        )
+        # Should not fail validation (though may fail due to no output dir)
+        # The key thing is it shouldn't reject scheduler[sqlite] as invalid component
+        assert "Unknown component" not in result.stderr
+        assert (
+            "scheduler[sqlite]" not in result.stderr
+            or "invalid" not in result.stderr.lower()
+        )
+
+    def test_scheduler_auto_dependency_message(self) -> None:
+        """Test that scheduler[sqlite] shows auto-dependency message."""
+        result = run_aegis_command(
+            "init",
+            "test-project",
+            "--components",
+            "scheduler[sqlite]",
+            "--no-interactive",
+            "--yes",
+            timeout=10,
+        )
+        # Should show auto-added database message (even if command fails for other
+        # reasons)
+        assert "Auto-added database[sqlite]" in result.stdout
+
+    def test_scheduler_backend_detection_message(self) -> None:
+        """Test scheduler backend detection message."""
+        result = run_aegis_command(
+            "init",
+            "test-project",
+            "--components",
+            "scheduler[sqlite]",
+            "--no-interactive",
+            "--yes",
+            "--force",
+            timeout=10,
+        )
+        # Should show scheduler backend detection (the actual message is slightly
+        # different)
+        assert (
+            "Auto-detected: Scheduler with sqlite persistence" in result.stdout
+            or "📊 Auto-detected: Scheduler with sqlite persistence" in result.stdout
+            or "Auto-detected: Scheduler with sqlite persistence" in result.stderr
+            or "📊 Auto-detected: Scheduler with sqlite persistence" in result.stderr
+        )

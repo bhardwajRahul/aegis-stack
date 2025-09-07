@@ -5,9 +5,11 @@ Modern, visually striking card component that displays scheduled jobs,
 job statistics, and scheduling information using shared utility functions.
 """
 
+from datetime import UTC
+
 import flet as ft
 
-from app.components.frontend.controls import LabelText, PrimaryText
+from app.components.frontend.controls import PrimaryText
 from app.services.system.models import ComponentStatus
 
 from .card_utils import (
@@ -22,7 +24,7 @@ from .card_utils import (
 
 class SchedulerCard:
     """
-    A visually stunning, wide component card for displaying Scheduler/APScheduler metrics.
+    Visually stunning, wide component card for displaying Scheduler/APScheduler metrics.
 
     Features:
     - Modern Material Design 3 styling
@@ -49,24 +51,23 @@ class SchedulerCard:
             return "Unknown"
 
         try:
-            from datetime import datetime, timezone
-            import math
+            from datetime import datetime
 
             # Handle both timezone-aware and naive datetimes
-            if iso_time_str.endswith('Z'):
+            if iso_time_str.endswith("Z"):
                 next_run = datetime.fromisoformat(iso_time_str.replace("Z", "+00:00"))
-            elif '+' in iso_time_str or iso_time_str.endswith('00:00'):
+            elif "+" in iso_time_str or iso_time_str.endswith("00:00"):
                 next_run = datetime.fromisoformat(iso_time_str)
             else:
                 # Assume UTC if no timezone info
-                next_run = datetime.fromisoformat(iso_time_str).replace(tzinfo=timezone.utc)
-                
-            now = datetime.now(timezone.utc)
-            
+                next_run = datetime.fromisoformat(iso_time_str).replace(tzinfo=UTC)
+
+            now = datetime.now(UTC)
+
             # Make sure both datetimes are timezone-aware
             if next_run.tzinfo is None:
-                next_run = next_run.replace(tzinfo=timezone.utc)
-                
+                next_run = next_run.replace(tzinfo=UTC)
+
             delta = next_run - now
             total_seconds = delta.total_seconds()
 
@@ -86,14 +87,14 @@ class SchedulerCard:
             else:
                 days = int(total_seconds / 86400)
                 return f"in {days}d"
-        except Exception as e:
+        except Exception:
             return "Unknown"
 
     def _format_schedule_human_readable(self, schedule: str) -> str:
         """Convert schedule format to human readable."""
         if not schedule or "Unknown" in schedule:
             return "Unknown schedule"
-        
+
         # Handle common cron patterns
         if "hour=2, minute=0, second=0" in schedule:
             return "Daily at 2:00 AM UTC"
@@ -101,8 +102,9 @@ class SchedulerCard:
             # Extract hour and minute from the schedule string
             try:
                 import re
-                hour_match = re.search(r'hour=([0-9]+)', schedule)
-                minute_match = re.search(r'minute=([0-9]+)', schedule)
+
+                hour_match = re.search(r"hour=([0-9]+)", schedule)
+                minute_match = re.search(r"minute=([0-9]+)", schedule)
                 if hour_match and minute_match:
                     hour = int(hour_match.group(1))
                     minute = int(minute_match.group(1))
@@ -110,7 +112,7 @@ class SchedulerCard:
                     return f"Daily at {time_str} UTC"
             except Exception:
                 pass
-        
+
         # Fallback to original schedule
         return schedule
 
@@ -118,7 +120,7 @@ class SchedulerCard:
         """Simple hover handler that works with event source."""
         container = e.control
         buttons = container.content.controls[0].controls[2]  # Access the buttons row
-        
+
         if e.data == "true":  # Mouse enter
             container.border = ft.border.all(1, ft.Colors.GREY_400)
             buttons.opacity = 1.0
@@ -156,14 +158,16 @@ class SchedulerCard:
             # Format next run time
             next_run_display = self._format_next_run_time(task.get("next_run", ""))
             schedule = task.get("schedule", "Unknown schedule")
-            
+
             job_list_items.append(
                 ft.Container(
                     content=ft.Column(
                         [
                             ft.Row(
                                 [
-                                    ft.Icon(ft.Icons.SCHEDULE, size=16, color=ft.Colors.GREY),
+                                    ft.Icon(
+                                        ft.Icons.SCHEDULE, size=16, color=ft.Colors.GREY
+                                    ),
                                     ft.Text(
                                         task.get("name", task.get("id", "Unknown")),
                                         size=15,
@@ -195,7 +199,7 @@ class SchedulerCard:
                                             ),
                                         ],
                                         spacing=0,
-                                        opacity=0.0,  # Invisible by default but still takes space
+                                        opacity=0.0,  # Hidden by default
                                     ),
                                 ],
                                 spacing=8,
@@ -233,7 +237,11 @@ class SchedulerCard:
                 ft.Container(
                     content=ft.Row(
                         [
-                            ft.Icon(ft.Icons.SCHEDULE_OUTLINED, size=20, color=ft.Colors.GREY),
+                            ft.Icon(
+                                ft.Icons.SCHEDULE_OUTLINED,
+                                size=20,
+                                color=ft.Colors.GREY,
+                            ),
                             ft.Text("No active jobs", color=ft.Colors.GREY),
                         ],
                         spacing=8,
@@ -247,14 +255,16 @@ class SchedulerCard:
 
         return ft.Container(
             content=ft.Container(
-                        content=ft.Column(
-                            job_list_items,
-                            spacing=2,
-                            scroll=ft.ScrollMode.AUTO,
-                        ),
-                        height=250,  # Fixed height to force scrolling
-                        padding=ft.padding.all(0),  # Remove any default padding from inner container
-                    ),
+                content=ft.Column(
+                    job_list_items,
+                    spacing=2,
+                    scroll=ft.ScrollMode.AUTO,
+                ),
+                height=250,  # Fixed height to force scrolling
+                padding=ft.padding.all(
+                    0
+                ),  # Remove any default padding from inner container
+            ),
             width=400,  # Section width
             padding=ft.padding.only(left=12, right=12, bottom=12, top=0),
             alignment=ft.alignment.top_left,

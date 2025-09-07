@@ -14,8 +14,9 @@ from pydantic import BaseModel, Field, computed_field
 
 class ComponentStatusType(str, Enum):
     """Component status levels."""
+
     HEALTHY = "healthy"
-    INFO = "info" 
+    INFO = "info"
     WARNING = "warning"
     UNHEALTHY = "unhealthy"
 
@@ -25,8 +26,8 @@ class ComponentStatus(BaseModel):
 
     name: str = Field(..., description="Component name")
     status: ComponentStatusType = Field(
-        default=ComponentStatusType.HEALTHY, 
-        description="Detailed status level (healthy/info/warning/unhealthy)"
+        default=ComponentStatusType.HEALTHY,
+        description="Detailed status level (healthy/info/warning/unhealthy)",
     )
     message: str = Field(..., description="Status message or error description")
     response_time_ms: float | None = Field(
@@ -36,8 +37,8 @@ class ComponentStatus(BaseModel):
         default_factory=dict, description="Additional component metadata"
     )
     sub_components: dict[str, "ComponentStatus"] = Field(
-        default_factory=dict, 
-        description="Sub-components (e.g., system metrics under backend)"
+        default_factory=dict,
+        description="Sub-components (e.g., system metrics under backend)",
     )
 
     @computed_field  # type: ignore[prop-decorator]
@@ -78,7 +79,8 @@ class SystemStatus(BaseModel):
     def healthy_components(self) -> list[str]:
         """List of healthy component names (including sub-components)."""
         return [
-            name for name, component in self._get_all_components_flat() 
+            name
+            for name, component in self._get_all_components_flat()
             if component.healthy
         ]
 
@@ -86,7 +88,8 @@ class SystemStatus(BaseModel):
     def unhealthy_components(self) -> list[str]:
         """List of unhealthy component names (including sub-components)."""
         return [
-            name for name, component in self._get_all_components_flat() 
+            name
+            for name, component in self._get_all_components_flat()
             if not component.healthy
         ]
 

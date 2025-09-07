@@ -421,5 +421,121 @@ class TestCLIInit:
         # Check mypy overrides for SQLModel
         assert 'module = "sqlmodel.*"' in pyproject_content
 
+    @pytest.mark.slow
+    def test_init_with_scheduler_sqlite_backend(
+        self, temp_output_dir: Any, skip_slow_tests: Any
+    ) -> None:
+        """Test generating project with scheduler[sqlite] syntax."""
+        result = run_aegis_init(
+            project_name="test-scheduler-sqlite",
+            components=["scheduler[sqlite]"],
+            output_dir=temp_output_dir,
+        )
+
+        # Assert command succeeded
+        assert result.success, f"CLI command failed: {result.stderr}"
+
+        # Assert scheduler[sqlite] auto-added database[sqlite]
+        assert "📦 Auto-added database[sqlite]" in result.stdout
+        assert "📊 Auto-detected: Scheduler with sqlite persistence" in result.stdout
+
+        # Assert project structure includes both scheduler and database
+        project_path = result.project_path
+        assert project_path is not None, "Project path is None"
+
+        # Check scheduler component exists
+        assert_file_exists(project_path, "app/components/scheduler.py")
+        assert_file_exists(project_path, "app/entrypoints/scheduler.py")
+
+        # Check database component exists (auto-added)
+        assert_file_exists(project_path, "app/core/db.py")
+
+        # Check scheduler service layer exists (persistence enabled)
+        assert_file_exists(project_path, "app/services/scheduler/__init__.py")
+        assert_file_exists(
+            project_path, "app/services/scheduler/scheduled_task_manager.py"
+        )
+
+        # Check CLI tasks exists (persistence enabled)
+        assert_file_exists(project_path, "app/cli/tasks.py")
+
+        # Check API endpoints exist (persistence enabled)
+        assert_file_exists(project_path, "app/components/backend/api/scheduler.py")
+
+        # Check template processing - scheduler backend
+        config_file = project_path / "app/core/config.py"
+        assert config_file.exists()
+
+        # Verify no .j2 files remain
+        assert_no_template_files(project_path)
+
+    @pytest.mark.slow
+    def test_init_with_scheduler_memory_backend(
+        self, temp_output_dir: Any, skip_slow_tests: Any
+    ) -> None:
+        """Test generating project with basic scheduler (memory backend)."""
+        result = run_aegis_init(
+            project_name="test-scheduler-memory",
+            components=["scheduler"],
+            output_dir=temp_output_dir,
+        )
+
+        # Assert command succeeded
+        assert result.success, f"CLI command failed: {result.stderr}"
+
+        # Assert no auto-detected persistence
+        assert "Auto-detected: Scheduler with" not in result.stdout
+
+        # Assert project structure
+        project_path = result.project_path
+        assert project_path is not None, "Project path is None"
+
+        # Check scheduler component exists
+        assert_file_exists(project_path, "app/components/scheduler.py")
+        assert_file_exists(project_path, "app/entrypoints/scheduler.py")
+
+        # Check database component does NOT exist
+        assert_file_not_exists(project_path, "app/core/db.py")
+
+        # Check scheduler service layer does NOT exist (memory only)
+        assert_file_not_exists(project_path, "app/services/scheduler/")
+
+        # Check CLI tasks does NOT exist (memory only)
+        assert_file_not_exists(project_path, "app/cli/tasks.py")
+
+        # Check API endpoints do NOT exist (memory only)
+        assert_file_not_exists(project_path, "app/components/backend/api/scheduler.py")
+
+        # Verify no .j2 files remain
+        assert_no_template_files(project_path)
+
+    @pytest.mark.slow
+    def test_scheduler_backend_dependency_expansion(
+        self, temp_output_dir: Any, skip_slow_tests: Any
+    ) -> None:
+        """Test that scheduler[sqlite] automatically adds database[sqlite]."""
+        result = run_aegis_init(
+            project_name="test-scheduler-expansion",
+            components=["scheduler[sqlite]"],
+            output_dir=temp_output_dir,
+        )
+
+        assert result.success, f"CLI command failed: {result.stderr}"
+
+        # Should show auto-added database
+        assert "Auto-added database[sqlite]" in result.stdout
+
+        project_path = result.project_path
+        assert project_path is not None
+
+        # Should have both scheduler and database components
+        assert_file_exists(project_path, "app/components/scheduler.py")
+        assert_file_exists(project_path, "app/core/db.py")
+
+        # Should include dependencies for both
+        pyproject_content = (project_path / "pyproject.toml").read_text()
+        assert "apscheduler>=3.10.4" in pyproject_content  # scheduler
+        assert "sqlmodel>=0.0.14" in pyproject_content  # database
+
 
 # Note: CLI help tests moved to test_cli_basic.py to avoid duplication

@@ -13,13 +13,14 @@ from typing import Any
 from urllib.parse import urlparse
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 from app.core.log import logger
+
 
 # Extract database file path from URL for backup operations
 def _extract_database_path(database_url: str) -> str:
@@ -32,7 +33,7 @@ def _extract_database_path(database_url: str) -> str:
             # sqlite:///./path/file.db -> ./path/file.db
             return path[1:]
         elif parsed.netloc == "" and not path.startswith("/"):
-            # sqlite://./path/file.db -> ./path/file.db  
+            # sqlite://./path/file.db -> ./path/file.db
             return path
         else:
             # sqlite:///absolute/path/file.db -> /absolute/path/file.db
@@ -68,7 +69,11 @@ async_engine = create_async_engine(
     _get_async_database_url(settings.DATABASE_URL),
     echo=settings.DATABASE_ENGINE_ECHO,
     # Only add connect_args for SQLite
-    connect_args=settings.DATABASE_CONNECT_ARGS if "sqlite" in settings.DATABASE_URL else {},
+    connect_args=(
+        settings.DATABASE_CONNECT_ARGS
+        if "sqlite" in settings.DATABASE_URL
+        else {}
+    ),
 )
 
 
@@ -147,7 +152,7 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
 def init_database() -> None:
     """
     Initialize the database by creating tables and ensuring directory structure.
-    
+
     This function:
     1. Creates the database directory if it doesn't exist
     2. Creates all tables defined by SQLModel models
@@ -157,15 +162,15 @@ def init_database() -> None:
         # Ensure database directory exists
         db_path = Path(DATABASE_PATH)
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Create all tables
         SQLModel.metadata.create_all(engine)
-        
+
         if db_path.exists():
             logger.info(f"✅ Database initialized: {DATABASE_PATH}")
         else:
             logger.info(f"✅ Database will be created on first use: {DATABASE_PATH}")
-            
+
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
         raise
