@@ -1,4 +1,4 @@
-{%- if cookiecutter.scheduler_with_persistence == "yes" %}
+{%- if cookiecutter.scheduler_backend != "memory" %}
 """Scheduled job API endpoints."""
 
 from fastapi import APIRouter, Depends, HTTPException

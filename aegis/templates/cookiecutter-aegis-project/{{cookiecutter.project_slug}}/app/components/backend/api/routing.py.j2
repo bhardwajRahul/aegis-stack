@@ -4,7 +4,7 @@ from app.components.backend.api import health
 {%- if cookiecutter.include_worker == "yes" %}
 from app.components.backend.api import worker
 {%- endif %}
-{%- if cookiecutter.scheduler_with_persistence == "yes" %}
+{%- if cookiecutter.scheduler_backend != "memory" %}
 from app.components.backend.api import scheduler
 {%- endif %}
 
@@ -15,6 +15,6 @@ def include_routers(app: FastAPI) -> None:
     {%- if cookiecutter.include_worker == "yes" %}
     app.include_router(worker.router, prefix="/api/v1", tags=["worker"])
     {%- endif %}
-    {%- if cookiecutter.scheduler_with_persistence == "yes" %}
+    {%- if cookiecutter.scheduler_backend != "memory" %}
     app.include_router(scheduler.router, prefix="/api/v1", tags=["scheduler"])
     {%- endif %}

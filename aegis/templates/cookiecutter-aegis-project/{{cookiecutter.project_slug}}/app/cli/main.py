@@ -12,7 +12,7 @@ import typer
 from app.cli import health
 
 if TYPE_CHECKING:
-    from app.cli import load_test
+    pass
 
 app = typer.Typer(
     name="full-stack",
@@ -29,6 +29,14 @@ try:
     app.add_typer(load_test_module.app, name="load-test")
 except ImportError:
     # Worker components not available, skip load-test commands
+    pass
+
+# Conditionally register tasks command if scheduler components are available
+try:
+    tasks_module = importlib.import_module("app.cli.tasks")
+    app.add_typer(tasks_module.app, name="tasks")
+except ImportError:
+    # Scheduler components not available, skip tasks commands
     pass
 
 

@@ -7,9 +7,9 @@ The Scheduler Component provides background task processing and cron job capabil
 {{ cookiecutter.project_name }} includes a scheduler component that runs as an independent service, enabling:
 
 - **Background job processing**
-- **Cron-style scheduled tasks**  
+- **Cron-style scheduled tasks**
 - **Async job execution**
-{% if cookiecutter.scheduler_with_persistence == "yes" -%}
+{% if cookiecutter.scheduler_backend != "memory" -%}
 - **Job persistence and recovery**
 - **Real-time job monitoring**
 - **Task statistics tracking**
@@ -19,7 +19,7 @@ The Scheduler Component provides background task processing and cron job capabil
 
 ## Architecture
 
-{% if cookiecutter.scheduler_with_persistence == "yes" -%}
+{% if cookiecutter.scheduler_backend != "memory" -%}
 ```mermaid
 graph TB
     subgraph "{{ cookiecutter.project_name }} Architecture"
@@ -28,20 +28,20 @@ graph TB
         Database[(SQLite Database<br/>Job Persistence)]
         Jobs[(Job Queue<br/>Persistent)]
     end
-    
+
     subgraph "Job Types"
         BackupJob[Database Backup<br/>Daily at 2 AM]
         SystemJobs[System Maintenance<br/>Configurable]
         CustomJobs[Custom Jobs<br/>User-defined]
     end
-    
+
     API -.-> Scheduler
     Scheduler --> Database
     Database --> Jobs
     Jobs --> BackupJob
     Jobs --> SystemJobs
     Jobs --> CustomJobs
-    
+
     style Scheduler fill:#f9f,stroke:#333,stroke-width:2px
     style Database fill:#bbf,stroke:#333,stroke-width:2px
     style BackupJob fill:#bfb,stroke:#333,stroke-width:2px
@@ -54,17 +54,17 @@ graph TB
         Scheduler[Scheduler Service<br/>Background Jobs]
         Jobs[(Job Queue<br/>In-Memory)]
     end
-    
+
     subgraph "Job Types"
         SystemJobs[System Maintenance<br/>Every 6 hours]
         CustomJobs[Custom Jobs<br/>User-defined]
     end
-    
+
     API -.-> Scheduler
     Scheduler --> Jobs
     Jobs --> SystemJobs
     Jobs --> CustomJobs
-    
+
     style Scheduler fill:#f9f,stroke:#333,stroke-width:2px
     style Jobs fill:#bbf,stroke:#333,stroke-width:2px
 ```
@@ -86,7 +86,7 @@ make run
 docker compose --profile dev up
 ```
 
-{% if cookiecutter.scheduler_with_persistence == "yes" -%}
+{% if cookiecutter.scheduler_backend != "memory" -%}
 ## Database Persistence Features
 
 Your scheduler includes persistence capabilities through SQLAlchemy jobstore:
@@ -106,7 +106,7 @@ Your scheduler includes persistence capabilities through SQLAlchemy jobstore:
 
 # Example Output:
 ✓ scheduler         Scheduler running with 3 tasks
-  └─ Tasks: 3 total, 3 active, 0 paused  
+  └─ Tasks: 3 total, 3 active, 0 paused
      └─ Upcoming Tasks (Next 3):
         ├─ database_backup: Daily at 2:00 AM UTC → in 5h
         ├─ cleanup_temp: Every 6 hours → in 2h
@@ -131,11 +131,11 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 def create_scheduler() -> AsyncIOScheduler:
-{% if cookiecutter.scheduler_with_persistence == "yes" -%}
+{% if cookiecutter.scheduler_backend != "memory" -%}
     # Configured with SQLAlchemy jobstore for persistence
     from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
     from app.core.db import engine, init_database
-    
+
     init_database()
     jobstore = SQLAlchemyJobStore(engine=engine, tablename='apscheduler_jobs')
     scheduler = AsyncIOScheduler(jobstores={'default': jobstore})
@@ -143,7 +143,7 @@ def create_scheduler() -> AsyncIOScheduler:
     # Memory-only scheduler (jobs reset on restart)
     scheduler = AsyncIOScheduler()
 {% endif -%}
-    
+
     # Add your jobs here
     scheduler.add_job(
         func=system_maintenance_job,
@@ -152,11 +152,11 @@ def create_scheduler() -> AsyncIOScheduler:
         name="System Maintenance",
         replace_existing=True
     )
-    
+
     return scheduler
 ```
 
-{% if cookiecutter.scheduler_with_persistence == "yes" -%}
+{% if cookiecutter.scheduler_backend != "memory" -%}
 ### Pre-configured Jobs
 
 Your scheduler includes these automatic jobs:
@@ -199,18 +199,18 @@ from app.core.log import logger
 async def process_daily_reports():
     """Generate daily reports."""
     logger.info("Starting daily report generation")
-    
+
     # Your job logic here
     await asyncio.sleep(1)  # Simulate work
-    
+
     logger.info("Daily reports completed")
 
 async def cleanup_old_files():
     """Clean up old temporary files."""
     logger.info("Starting file cleanup")
-    
+
     # Your cleanup logic here
-    
+
     logger.info("File cleanup completed")
 ```
 
@@ -222,13 +222,13 @@ Add jobs to the scheduler configuration:
 from app.services.my_jobs import process_daily_reports, cleanup_old_files
 
 def create_scheduler() -> AsyncIOScheduler:
-{% if cookiecutter.scheduler_with_persistence == "yes" -%}
+{% if cookiecutter.scheduler_backend != "memory" -%}
     # Configure persistent scheduler (already initialized above)
     scheduler = AsyncIOScheduler(jobstores={'default': jobstore})
-    
+
     # Check for existing jobs to respect runtime modifications
     force_update = os.getenv("SCHEDULER_FORCE_UPDATE", "false").lower() == "true"
-    
+
     # Daily report at 6 AM (check if exists first)
     if not _job_exists_in_database("daily_reports") or force_update:
         scheduler.add_job(
@@ -238,20 +238,20 @@ def create_scheduler() -> AsyncIOScheduler:
             name="Daily Report Generation",
             replace_existing=True
         )
-    
+
     # Weekly cleanup on Sundays at midnight
     if not _job_exists_in_database("weekly_cleanup") or force_update:
         scheduler.add_job(
             func=cleanup_old_files,
             trigger=CronTrigger(day_of_week="sun", hour=0, minute=0),
-            id="weekly_cleanup", 
+            id="weekly_cleanup",
             name="Weekly File Cleanup",
             replace_existing=True
         )
 {% else -%}
     # Configure memory scheduler
     scheduler = AsyncIOScheduler()
-    
+
     # Daily report at 6 AM
     scheduler.add_job(
         func=process_daily_reports,
@@ -259,16 +259,16 @@ def create_scheduler() -> AsyncIOScheduler:
         id="daily_reports",
         name="Daily Report Generation"
     )
-    
+
     # Weekly cleanup on Sundays at midnight
     scheduler.add_job(
         func=cleanup_old_files,
         trigger=CronTrigger(day_of_week="sun", hour=0, minute=0),
-        id="weekly_cleanup", 
+        id="weekly_cleanup",
         name="Weekly File Cleanup"
     )
 {% endif -%}
-    
+
     return scheduler
 ```
 
@@ -281,7 +281,7 @@ from apscheduler.triggers.cron import CronTrigger
 # Every day at 2:30 AM
 CronTrigger(hour=2, minute=30)
 
-# Every Monday at 9:00 AM  
+# Every Monday at 9:00 AM
 CronTrigger(day_of_week="mon", hour=9, minute=0)
 
 # Every 15 minutes
@@ -312,7 +312,7 @@ from datetime import datetime, timedelta
 # Run once in 1 hour
 scheduler.add_job(
     func=one_time_task,
-    trigger="date", 
+    trigger="date",
     run_date=datetime.now() + timedelta(hours=1),
     id="one_time_task"
 )
@@ -333,7 +333,7 @@ for job in jobs:
 # Pause a job
 scheduler.pause_job("daily_reports")
 
-# Resume a job  
+# Resume a job
 scheduler.resume_job("daily_reports")
 
 # Remove a job
@@ -343,7 +343,7 @@ scheduler.remove_job("old_job_id")
 scheduler.modify_job("daily_reports", hour=7)  # Change to 7 AM
 ```
 
-{% if cookiecutter.scheduler_with_persistence == "yes" -%}
+{% if cookiecutter.scheduler_backend != "memory" -%}
 ### Production Job Updates
 
 For persistent schedulers, use environment variables to control job updates:
@@ -370,12 +370,12 @@ async def robust_job():
     """A job with proper error handling."""
     try:
         logger.info("Starting robust job")
-        
+
         # Job logic here
         result = await some_async_operation()
-        
+
         logger.info(f"Job completed successfully: {result}")
-        
+
     except Exception as e:
         logger.error(f"Job failed: {str(e)}", exc_info=True)
         # Optionally send alerts or retry logic
@@ -403,7 +403,7 @@ The scheduler health is included in system health checks:
 {{ cookiecutter.project_slug }} health check --detailed
 ```
 
-{% if cookiecutter.scheduler_with_persistence == "yes" -%}
+{% if cookiecutter.scheduler_backend != "memory" -%}
 Shows scheduler status, task statistics, active jobs, and next execution times.
 {% else -%}
 Shows scheduler status and basic job information.
@@ -415,7 +415,7 @@ All job executions are logged with structured logging:
 ```json
 {
   "timestamp": "2024-01-01T02:00:00Z",
-  "level": "INFO", 
+  "level": "INFO",
   "logger": "scheduler",
   "message": "Job executed successfully",
   "job_id": "system_maintenance",
@@ -432,14 +432,14 @@ from app.core.log import logger
 
 async def monitored_job():
     start_time = time.time()
-    
+
     try:
         # Job work here
         await do_work()
-        
+
         execution_time = time.time() - start_time
         logger.info(f"Job completed in {execution_time:.2f}s")
-        
+
     except Exception as e:
         execution_time = time.time() - start_time
         logger.error(f"Job failed after {execution_time:.2f}s: {e}")
@@ -462,7 +462,7 @@ class Settings(BaseSettings):
     }
 ```
 
-{% if cookiecutter.scheduler_with_persistence == "yes" -%}
+{% if cookiecutter.scheduler_backend != "memory" -%}
 ### Persistence Configuration
 The scheduler automatically uses SQLAlchemy jobstore with your database:
 
@@ -531,7 +531,7 @@ async def dependent_job():
     if not await check_prerequisite_completed():
         logger.warning("Prerequisite not completed, skipping job")
         return
-    
+
     await perform_dependent_work()
 ```
 
@@ -542,7 +542,7 @@ async def idempotent_job():
     if await is_work_already_done_today():
         logger.info("Work already completed today")
         return
-    
+
     await perform_work()
     await mark_work_completed()
 ```
@@ -553,11 +553,11 @@ async def idempotent_job():
 
 **Jobs not executing:**
 - Check if scheduler service is running
-- Verify job is properly registered  
+- Verify job is properly registered
 - Check timezone settings
 - Review job logs for errors
 
-{% if cookiecutter.scheduler_with_persistence == "yes" -%}
+{% if cookiecutter.scheduler_backend != "memory" -%}
 **Database connection issues:**
 - Verify database service is running
 - Check SQLite file permissions
@@ -588,7 +588,7 @@ async def idempotent_job():
 # View scheduler logs
 docker compose logs scheduler
 
-{% if cookiecutter.scheduler_with_persistence == "yes" -%}
+{% if cookiecutter.scheduler_backend != "memory" -%}
 # Check database for jobs
 sqlite3 app.db "SELECT id, name, next_run_time FROM apscheduler_jobs;"
 
@@ -604,7 +604,7 @@ for job in scheduler.get_jobs():
 
 ## Production Considerations
 
-{% if cookiecutter.scheduler_with_persistence == "yes" -%}
+{% if cookiecutter.scheduler_backend != "memory" -%}
 1. **Database Backups**: Your automatic backup job handles database persistence
 2. **Job Monitoring**: Use the built-in task statistics for monitoring
 3. **Resource Limits**: Configure appropriate memory and CPU limits
@@ -613,7 +613,7 @@ for job in scheduler.get_jobs():
 6. **Job Updates**: Use SCHEDULER_FORCE_UPDATE for deployment job updates
 {% else -%}
 1. **Job Persistence**: Consider upgrading to database component for persistence
-2. **Monitoring**: Set up alerts for job failures and long execution times  
+2. **Monitoring**: Set up alerts for job failures and long execution times
 3. **Resource Limits**: Configure appropriate memory and CPU limits
 4. **Timezone Handling**: Always use UTC for job scheduling
 5. **Error Notifications**: Implement alerting for critical job failures

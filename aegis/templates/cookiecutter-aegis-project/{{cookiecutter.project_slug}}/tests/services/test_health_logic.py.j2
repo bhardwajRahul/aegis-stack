@@ -20,11 +20,11 @@ from app.services.system.health import (
 
 class TestHealthUtilityFunctions:
     """Test utility functions used in health checks."""
-    
+
     def test_format_bytes(self) -> None:
         """Test format_bytes utility function."""
         from app.services.system.health import format_bytes
-        
+
         # Test various byte sizes
         assert format_bytes(0) == "0 B"
         assert format_bytes(512) == "512 B"
@@ -35,7 +35,7 @@ class TestHealthUtilityFunctions:
         assert format_bytes(1572864) == "1.5 MB"
         assert format_bytes(1073741824) == "1.0 GB"
         assert format_bytes(1099511627776) == "1.0 TB"
-        
+
         # Test edge cases
         assert format_bytes(1) == "1 B"
         assert format_bytes(1023) == "1023 B"
@@ -89,7 +89,7 @@ class TestComponentStatusPropagation:
         )
 
         sub_component_warning = ComponentStatus(
-            name="sub_warning", 
+            name="sub_warning",
             status=ComponentStatusType.WARNING,
             message="Sub-component has warnings",
         )
@@ -120,7 +120,7 @@ class TestSystemStatusWarningPropagation:
     @pytest.mark.asyncio
     async def test_system_status_with_mixed_component_health(self) -> None:
         """Test system status calculation with components having different states."""
-        
+
         # Mock the health check registry to have controlled components
         mock_healthy_component = AsyncMock(return_value=ComponentStatus(
             name="healthy_service",
@@ -161,7 +161,7 @@ class TestSystemStatusWarningPropagation:
 
         with patch('app.services.system.health._health_checks', {
             'healthy_service': mock_healthy_component,
-            'warning_service': mock_warning_component, 
+            'warning_service': mock_warning_component,
             'unhealthy_service': mock_unhealthy_component,
         }), patch(
             'app.services.system.health._get_cached_system_metrics',
@@ -179,7 +179,7 @@ class TestSystemStatusWarningPropagation:
             # Check that components are present in aegis structure
             assert "aegis" in system_status.components
             aegis_component = system_status.components["aegis"]
-            
+
             # Check that our test components are included
             assert "healthy_service" in aegis_component.sub_components
             assert "warning_service" in aegis_component.sub_components
@@ -204,7 +204,7 @@ class TestSystemStatusWarningPropagation:
     @pytest.mark.asyncio
     async def test_system_status_with_only_warnings_stays_healthy(self) -> None:
         """Test that system with only warnings remains overall healthy."""
-        
+
         mock_warning_component = AsyncMock(return_value=ComponentStatus(
             name="warning_service",
             status=ComponentStatusType.WARNING,
@@ -245,7 +245,7 @@ class TestWorkerHealthLogic:
 
     def test_queue_status_determination_logic(self) -> None:
         """Test the logic for determining queue component status."""
-        
+
         # Test case 1: Worker with no functions should be WARNING but healthy
         def check_empty_worker_status(
             queue_type: str,
@@ -264,7 +264,7 @@ class TestWorkerHealthLogic:
                     if queue_healthy
                     else ComponentStatusType.UNHEALTHY
                 )
-            
+
             return queue_healthy, queue_status
 
         # Empty worker (media/system queues)
@@ -298,12 +298,12 @@ class TestWorkerHealthLogic:
             queues_healthy = all(
                 queue.healthy for queue in sub_components.values()
             )
-            
+
             has_warnings = any(
                 queue.status == ComponentStatusType.WARNING
                 for queue in sub_components.values()
             )
-            
+
             if has_warnings and queues_healthy:
                 return ComponentStatusType.WARNING
             elif queues_healthy:
@@ -319,7 +319,7 @@ class TestWorkerHealthLogic:
                 message="No tasks configured",
             ),
             "system": ComponentStatus(
-                name="system", 
+                name="system",
                 status=ComponentStatusType.WARNING,
                 message="No tasks configured",
             ),
@@ -352,7 +352,7 @@ class TestComponentMetadata:
 
     def test_component_status_with_complex_metadata(self) -> None:
         """Test ComponentStatus with complex metadata for different component types."""
-        
+
         # Worker component metadata
         worker_metadata = {
             "total_queued": 5,
@@ -402,7 +402,7 @@ class TestComponentMetadata:
 
     def test_component_status_serialization(self) -> None:
         """Test that ComponentStatus can be properly serialized (for API responses)."""
-        
+
         status = ComponentStatus(
             name="test_component",
             status=ComponentStatusType.WARNING,
@@ -440,7 +440,7 @@ class TestDatabaseHealthCheck:
     async def test_database_health_check_success(self, db_session) -> None:
         """Test successful database health check with mocked database."""
         from app.services.system.health import check_database_health
-        
+
         # Mock everything to simulate successful database connection with
         # enhanced metadata
         with patch('app.services.system.health.settings') as mock_settings, \
@@ -449,24 +449,24 @@ class TestDatabaseHealthCheck:
              patch('app.core.db.db_session') as mock_db_session, \
              patch('app.core.db.engine') as mock_engine, \
              patch('app.services.system.health.sqlite3') as mock_sqlite3:
-            
+
             mock_settings.DATABASE_URL = "sqlite:///./data/test.db"
             mock_settings.DATABASE_ENGINE_ECHO = False
-            
+
             # Mock SQLite version
             mock_sqlite3.sqlite_version = "3.43.2"
-            
+
             # Mock file size
             mock_stat_result = MagicMock()
             mock_stat_result.st_size = 8192
             mock_stat.return_value = mock_stat_result
-            
+
             # Mock engine pool
             mock_engine.pool.size.return_value = 5
-            
+
             # Mock successful db_session with PRAGMA queries
             mock_session = MagicMock()
-            
+
             # Mock PRAGMA query results
             def mock_execute(query):
                 query_str = str(query).lower()
@@ -485,32 +485,32 @@ class TestDatabaseHealthCheck:
                 else:
                     # For "SELECT 1" query
                     return None
-            
+
             mock_session.execute.side_effect = mock_execute
             mock_db_session.return_value.__enter__ = MagicMock(
                 return_value=mock_session
             )
             mock_db_session.return_value.__exit__ = MagicMock(return_value=None)
-            
+
             result = await check_database_health()
-            
+
             # Test basic health status
             assert result.name == "database"
             assert result.status == ComponentStatusType.HEALTHY
             assert result.message == "Database connection successful"
-            
+
             # Test existing metadata fields
             assert result.metadata["implementation"] == "sqlite"
             assert result.metadata["database_exists"] is True
             assert result.metadata["engine_echo"] is False
             assert result.metadata["url"] == "sqlite:///./data/test.db"
-            
+
             # Test enhanced metadata fields
             assert result.metadata["version"] == "3.43.2"
             assert result.metadata["file_size_bytes"] == 8192
             assert result.metadata["file_size_human"] == "8.0 KB"
             assert result.metadata["connection_pool_size"] == 5
-            
+
             # Test PRAGMA settings
             assert "pragma_settings" in result.metadata
             pragma_settings = result.metadata["pragma_settings"]
@@ -523,19 +523,19 @@ class TestDatabaseHealthCheck:
     async def test_database_health_check_import_error(self) -> None:
         """Test database health check when db module not available."""
         from app.services.system.health import check_database_health
-        
+
         # Mock ImportError when trying to import db_session from app.core.db
         import builtins
         real_import = builtins.__import__
-        
+
         def mock_import(name, *args, **kwargs):
             if name == 'app.core.db':
                 raise ImportError("No db module")
             return real_import(name, *args, **kwargs)
-        
+
         with patch('builtins.__import__', side_effect=mock_import):
             result = await check_database_health()
-            
+
             assert result.name == "database"
             assert result.status == ComponentStatusType.UNHEALTHY
             assert result.message == "Database module not available"
@@ -547,13 +547,13 @@ class TestDatabaseHealthCheck:
     async def test_database_health_check_missing_file(self) -> None:
         """Test database health check when database file doesn't exist."""
         from app.services.system.health import check_database_health
-        
+
         # Patch settings.DATABASE_URL to point to non-existent file
         with patch('app.services.system.health.settings') as mock_settings:
             mock_settings.DATABASE_URL = "sqlite:///./nonexistent/test.db"
-            
+
             result = await check_database_health()
-            
+
             assert result.name == "database"
             assert result.status == ComponentStatusType.WARNING
             assert "Database not initialized" in result.message
@@ -564,15 +564,15 @@ class TestDatabaseHealthCheck:
     async def test_database_health_check_connection_failure(self) -> None:
         """Test database health check when connection fails due to permissions."""
         from app.services.system.health import check_database_health
-        
+
         # Mock settings and Path.exists to simulate file exists but connection fails
         with patch('app.services.system.health.settings') as mock_settings, \
              patch('pathlib.Path.exists', return_value=True), \
              patch('app.core.db.db_session') as mock_db_session:
-            
+
             # File exists but connection fails
             mock_settings.DATABASE_URL = "sqlite:///./data/test.db"
-            
+
             # Mock db_session to simulate connection error
             mock_session = MagicMock()
             mock_session.execute.side_effect = Exception("unable to open database file")
@@ -580,9 +580,9 @@ class TestDatabaseHealthCheck:
                 return_value=mock_session
             )
             mock_db_session.return_value.__exit__ = MagicMock(return_value=None)
-            
+
             result = await check_database_health()
-            
+
             assert result.name == "database"
             assert result.status == ComponentStatusType.WARNING
             assert result.message == "Database file not accessible"
@@ -591,7 +591,7 @@ class TestDatabaseHealthCheck:
     def test_database_status_metadata_structure(self) -> None:
         """Test that database health check includes proper metadata."""
         from app.services.system.models import ComponentStatus, ComponentStatusType
-        
+
         # Test successful database component metadata with enhanced fields
         database_metadata = {
             "implementation": "sqlite",
@@ -622,7 +622,7 @@ class TestDatabaseHealthCheck:
         assert "sqlite://" in database_status.metadata["url"]
         assert database_status.metadata["database_exists"] is True
         assert database_status.metadata["engine_echo"] is False
-        
+
         # Test enhanced metadata fields
         assert database_status.metadata["version"] == "3.43.2"
         assert database_status.metadata["file_size_bytes"] == 8192

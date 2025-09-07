@@ -11,7 +11,7 @@ from .text import (
 
 __all__ = [
     "PrimaryText",
-    "SecondaryText", 
+    "SecondaryText",
     "TitleText",
     "ConfirmationText",
     "MetricText",

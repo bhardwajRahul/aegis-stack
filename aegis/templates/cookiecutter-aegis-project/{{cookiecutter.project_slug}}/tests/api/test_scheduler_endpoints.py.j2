@@ -1,10 +1,12 @@
-{%- if cookiecutter.scheduler_with_persistence == "yes" %}
+{%- if cookiecutter.scheduler_backend != "memory" %}
 """
 Tests for scheduler API endpoints.
 
 These tests focus on the HTTP endpoints for scheduled task management,
 ensuring API responses match expected format and handle errors correctly.
 """
+
+from collections.abc import AsyncGenerator
 
 import pytest
 from unittest.mock import AsyncMock, patch
@@ -18,21 +20,21 @@ class TestSchedulerEndpoints:
     """Test scheduler API endpoints with various states."""
 
     @pytest.fixture
-    async def async_client(self) -> AsyncClient:
+    async def async_client(self) -> AsyncGenerator[AsyncClient, None]:
         """Async HTTP client for testing."""
         app = create_integrated_app()
-        
+
         # Manually trigger startup for component registration
         from app.components.backend.hooks import backend_hooks
         await backend_hooks.discover_lifespan_hooks()
         await backend_hooks.execute_startup_hooks()
-        
+
         transport = ASGITransport(app=app)
         async with AsyncClient(
             transport=transport, base_url="http://test"
         ) as client:
             yield client
-            
+
         # Clean up after test
         await backend_hooks.execute_shutdown_hooks()
 
@@ -42,11 +44,12 @@ class TestSchedulerEndpoints:
     ) -> None:
         """Test /api/v1/scheduler/jobs endpoint is accessible."""
         response = await async_client.get("/api/v1/scheduler/jobs")
-        
-        # Should return a valid response (200 for success, 503 for unavailable, 500 for dependency issues)
+
+        # Should return a valid response (200 for success, 503 for unavailable,
+        # 500 for dependency issues)
         assert response.status_code in [200, 500, 503]
         data = response.json()
-        
+
         if response.status_code == 200:
             # Verify response structure matches ScheduledTaskListResponse
             assert "tasks" in data
@@ -68,11 +71,12 @@ class TestSchedulerEndpoints:
     ) -> None:
         """Test /api/v1/scheduler/jobs/{job_id} returns 404 for non-existent job."""
         response = await async_client.get("/api/v1/scheduler/jobs/non_existent_job")
-        
-        # Should return 404 for non-existent job, 503 if scheduler unavailable, or 500 for dependency issues
+
+        # Should return 404 for non-existent job, 503 if scheduler unavailable,
+        # or 500 for dependency issues
         assert response.status_code in [404, 500, 503]
         data = response.json()
-        
+
         assert "detail" in data
         if response.status_code == 404:
             assert "job_not_found" in data["detail"].get("error", "")
@@ -87,11 +91,12 @@ class TestSchedulerEndpoints:
     ) -> None:
         """Test /api/v1/scheduler/statistics endpoint is accessible."""
         response = await async_client.get("/api/v1/scheduler/statistics")
-        
-        # Should return a valid response (200 for success, 503 for unavailable, 500 for dependency issues)
+
+        # Should return a valid response (200 for success, 503 for unavailable,
+        # 500 for dependency issues)
         assert response.status_code in [200, 500, 503]
         data = response.json()
-        
+
         if response.status_code == 200:
             # Verify response structure matches ScheduledTaskStatisticsResponse
             assert "statistics" in data
@@ -121,7 +126,7 @@ class TestSchedulerEndpoints:
             "/api/v1/scheduler/jobs/test_job",
             "/api/v1/scheduler/statistics"
         ]
-        
+
         for endpoint in endpoints:
             response = await async_client.get(endpoint)
             assert "application/json" in response.headers.get("content-type", "")
@@ -133,32 +138,41 @@ class TestSchedulerEndpoints:
         """Test job detail response has correct structure when job exists."""
         # Try to get any existing job first
         list_response = await async_client.get("/api/v1/scheduler/jobs")
-        
+
         if list_response.status_code == 200:
             data = list_response.json()
             tasks = data.get("tasks", [])
-            
+
             if tasks:
                 # Test detail endpoint with first available job
                 job_id = tasks[0]["id"]
-                detail_response = await async_client.get(f"/api/v1/scheduler/jobs/{job_id}")
-                
+                url = f"/api/v1/scheduler/jobs/{job_id}"
+                detail_response = await async_client.get(url)
+
                 if detail_response.status_code == 200:
                     detail_data = detail_response.json()
                     assert "task" in detail_data
-                    
+
                     task = detail_data["task"]
                     # Verify task structure matches ScheduledTask model
-                    required_fields = ["id", "name", "function", "schedule", "trigger_type", "status"]
+                    required_fields = [
+                        "job_id",
+                        "name",
+                        "function",
+                        "schedule",
+                        "trigger_type",
+                        "status",
+                    ]
                     for field in required_fields:
                         assert field in task, f"Missing required field: {field}"
-                    
+
                     # Verify field types
-                    assert isinstance(task["id"], str)
+                    assert isinstance(task["job_id"], str)
                     assert isinstance(task["name"], str)
                     assert isinstance(task["function"], str)
                     assert isinstance(task["schedule"], str)
-                    assert task["trigger_type"] in ["interval", "cron", "date", "unknown"]
+                    valid_trigger_types = ["interval", "cron", "date", "unknown"]
+                    assert task["trigger_type"] in valid_trigger_types
                     assert task["status"] in ["active", "paused"]
 
     @pytest.mark.asyncio
@@ -169,31 +183,32 @@ class TestSchedulerEndpoints:
         # Mock the service layer to return predictable data
         mock_tasks = [
             ScheduledTask(
-                id="test_job",
+                job_id="test_job",
                 name="Test Job",
                 function="test.module.function",
                 schedule="Every 5m",
-                trigger_type="interval", 
+                trigger_type="interval",
                 status="active",
                 max_instances=1,
                 coalesce=True
             )
         ]
-        
-        with patch("app.components.backend.api.scheduler.ScheduledTaskManager") as mock_manager_class:
+
+        manager_path = "app.components.backend.api.scheduler.ScheduledTaskManager"
+        with patch(manager_path) as mock_manager_class:
             mock_manager = AsyncMock()
             mock_manager.list_tasks.return_value = mock_tasks
             mock_manager_class.return_value = mock_manager
-            
+
             response = await async_client.get("/api/v1/scheduler/jobs")
-            
+
             # Verify the dependency was called
             mock_manager_class.assert_called_once()
             mock_manager.list_tasks.assert_called_once()
-            
+
             # Verify response structure
             assert response.status_code == 200
             data = response.json()
             assert len(data["tasks"]) == 1
-            assert data["tasks"][0]["id"] == "test_job"
+            assert data["tasks"][0]["job_id"] == "test_job"
 {%- endif %}

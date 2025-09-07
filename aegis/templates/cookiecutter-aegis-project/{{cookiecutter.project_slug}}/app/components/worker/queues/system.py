@@ -6,26 +6,26 @@ Handles system maintenance and monitoring tasks using native arq patterns.
 
 from arq.connections import RedisSettings
 
-from app.core.config import settings
-
 # Import system tasks
 from app.components.worker.tasks.simple_system_tasks import (
-    system_health_check,
     cleanup_temp_files,
+    system_health_check,
 )
+from app.core.config import settings
+
 
 class WorkerSettings:
     """System maintenance worker configuration."""
-    
+
     # Human-readable description
     description = "System maintenance and monitoring tasks"
-    
+
     # Task functions for this queue
     functions = [
         system_health_check,
         cleanup_temp_files,
     ]
-    
+
     # arq configuration
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
     queue_name = "arq:queue:system"

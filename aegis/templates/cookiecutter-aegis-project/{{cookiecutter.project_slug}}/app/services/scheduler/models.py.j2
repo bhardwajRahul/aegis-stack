@@ -5,13 +5,13 @@ from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-{% if cookiecutter.scheduler_with_persistence == "yes" %}
+{% if cookiecutter.scheduler_backend != "memory" %}
 from sqlalchemy import Column, Float, LargeBinary, String
 from sqlmodel import Field as SQLField, SQLModel
 {% endif %}
 
 
-{% if cookiecutter.scheduler_with_persistence == "yes" %}
+{% if cookiecutter.scheduler_backend != "memory" %}
 # ============================================================================
 # DATABASE MODELS (SQLModel)
 # ============================================================================
@@ -20,12 +20,12 @@ class APSchedulerJob(SQLModel, table=True):
     """
     Mirror of APScheduler's job persistence table.
     This model allows us to read APScheduler data using SQLModel's async capabilities.
-    
+
     Note: APScheduler creates this table, we only read from it.
     The table structure matches APScheduler 3.x exactly.
     """
     __tablename__ = "apscheduler_jobs"
-    
+
     # Use SA Column types for exact compatibility with APScheduler's table structure
     id: str = SQLField(
         sa_column=Column(String(191), primary_key=True)
@@ -36,19 +36,19 @@ class APSchedulerJob(SQLModel, table=True):
     job_state: bytes = SQLField(
         sa_column=Column(LargeBinary, nullable=False)
     )
-    
+
     def get_job_data(self) -> dict[str, Any]:
         """
         Deserialize the pickled job state.
-        
+
         Returns:
-            dict: Job data with keys like 'name', 'func', 'trigger', 'max_instances', etc.
-            
+            dict: Job data with standard APScheduler keys.
+
         Note:
             This is safe because we're reading APScheduler's own data format.
             APScheduler writes pickled job data to this table - we're just reading it.
         """
-        return pickle.loads(self.job_state)
+        return pickle.loads(self.job_state)  # type: ignore[no-any-return]
 
 
 # ============================================================================
@@ -60,7 +60,7 @@ class ScheduledTask(BaseModel):
     Represents a scheduled task with all relevant information.
     This is the clean data model used by CLI/API consumers.
     """
-    id: str = Field(..., description="Unique task identifier")
+    job_id: str = Field(..., description="Unique task identifier")
     name: str = Field(..., description="Human-readable task name")
     function: str = Field(..., description="Function reference (module:function)")
     schedule: str = Field(..., description="Human-readable schedule (e.g., 'Every 5m')")
@@ -80,6 +80,11 @@ class ScheduledTask(BaseModel):
         True, description="Whether to coalesce missed runs"
     )
 
+    @property
+    def is_active(self) -> bool:
+        """Check if the task is currently active."""
+        return self.status == "active"
+
 
 class TaskStatistics(BaseModel):
     """Statistics about scheduled tasks in the system."""
@@ -97,7 +102,7 @@ class TaskStatistics(BaseModel):
 
 class UpcomingTask(BaseModel):
     """Information about an upcoming scheduled task."""
-    id: str = Field(..., description="Task identifier")
+    job_id: str = Field(..., description="Task identifier")
     name: str = Field(..., description="Human-readable task name")
     next_run: str = Field(..., description="ISO datetime string of next execution")
     schedule: str = Field(..., description="Human-readable schedule description")
@@ -108,5 +113,7 @@ class SchedulerHealthMetadata(BaseModel):
     total_tasks: int = Field(0, description="Total number of scheduled tasks")
     active_tasks: int = Field(0, description="Number of active tasks")
     paused_tasks: int = Field(0, description="Number of paused tasks")
-    upcoming_tasks: list[UpcomingTask] = Field(default_factory=list, description="List of upcoming tasks (max 5)")
+    upcoming_tasks: list[UpcomingTask] = Field(
+        default_factory=list, description="List of upcoming tasks (max 5)"
+    )
     scheduler_state: str = Field("unknown", description="Scheduler state description")

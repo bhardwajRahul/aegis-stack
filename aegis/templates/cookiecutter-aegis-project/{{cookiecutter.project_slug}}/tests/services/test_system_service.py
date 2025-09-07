@@ -92,5 +92,6 @@ class TestSystemService:
         finally:
             # Clean up the custom health check registration
             from app.services.system.health import _health_checks
+
             if "custom_test" in _health_checks:
                 del _health_checks["custom_test"]

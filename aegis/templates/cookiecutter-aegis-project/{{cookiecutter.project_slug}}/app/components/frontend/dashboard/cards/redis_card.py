@@ -5,7 +5,6 @@ Modern, visually striking card component that displays rich Redis metrics,
 memory usage, connection statistics, and cache performance data.
 """
 
-
 import flet as ft
 
 from app.components.frontend.controls import (
@@ -23,7 +22,7 @@ from .card_utils import create_responsive_3_section_layout
 class RedisCard:
     """
     A visually stunning, wide component card for displaying Redis/Cache metrics.
-    
+
     Features:
     - Modern Material Design 3 styling
     - Three-section layout (badge, metrics, performance)
@@ -35,7 +34,7 @@ class RedisCard:
     def __init__(self, component_data: ComponentStatus) -> None:
         """
         Initialize the Redis card with component data.
-        
+
         Args:
             component_data: ComponentStatus containing Redis health and metrics
         """
@@ -45,7 +44,7 @@ class RedisCard:
     def _get_status_colors(self) -> tuple[str, str, str]:
         """
         Get status-aware colors for the card.
-        
+
         Returns:
             Tuple of (primary_color, background_color, border_color)
         """
@@ -60,7 +59,9 @@ class RedisCard:
         else:  # UNHEALTHY
             return (ft.Colors.RED, ft.Colors.SURFACE, ft.Colors.RED)
 
-    def _create_metric_gauge(self, label: str, value: float, unit: str, color: str) -> ft.Container:
+    def _create_metric_gauge(
+        self, label: str, value: float, unit: str, color: str
+    ) -> ft.Container:
         """Create a circular gauge-style metric indicator."""
         return ft.Container(
             content=ft.Column(
@@ -141,9 +142,11 @@ class RedisCard:
             metrics_controls.append(
                 self._create_metric_gauge(
                     label,
-                    data["used"] if "used" in data else data.get("active", data.get("rate", 0)),
+                    data["used"]
+                    if "used" in data
+                    else data.get("active", data.get("rate", 0)),
                     data["unit"],
-                    data["color"]
+                    data["color"],
                 )
             )
 
@@ -151,14 +154,15 @@ class RedisCard:
             [
                 PrimaryText("Cache Metrics"),
                 ft.Divider(height=1, color=ft.Colors.GREY_300),
-                ft.Row(metrics_controls, spacing=15, alignment=ft.MainAxisAlignment.CENTER),
+                ft.Row(
+                    metrics_controls, spacing=15, alignment=ft.MainAxisAlignment.CENTER
+                ),
             ],
             spacing=8,
         )
 
     def _create_performance_section(self) -> ft.Container:
         """Create the Redis performance and statistics section."""
-        response_time = self.component_data.response_time_ms or 0.0
 
         # Sample Redis performance stats
         performance_stats = {
@@ -186,22 +190,23 @@ class RedisCard:
             )
 
         # Add status info
-        perf_content.extend([
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
-            ft.Row(
-                [
-                    SecondaryText("Status:"),
-                    LabelText(
-                        self.component_data.status.value.title(),
-                        color=self._get_status_colors()[0],
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            ),
-        ])
+        perf_content.extend(
+            [
+                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                ft.Row(
+                    [
+                        SecondaryText("Status:"),
+                        LabelText(
+                            self.component_data.status.value.title(),
+                            color=self._get_status_colors()[0],
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+            ]
+        )
 
         return ft.Column(perf_content, spacing=6)
-
 
     def build(self) -> ft.Container:
         """Build and return the complete Redis card with responsive layout."""
@@ -211,7 +216,7 @@ class RedisCard:
         content = create_responsive_3_section_layout(
             left_content=self._create_technology_badge(),
             middle_content=self._create_metrics_section(),
-            right_content=self._create_performance_section()
+            right_content=self._create_performance_section(),
         )
 
         self._card_container = ft.Container(

@@ -29,7 +29,7 @@ def format_bytes(size: int) -> str:
     """Format bytes into human-readable string."""
     if size == 0:
         return "0 B"
-    
+
     size_float = float(size)
     for unit in ['B', 'KB', 'MB', 'GB']:
         if size_float < 1024.0:
@@ -59,7 +59,7 @@ def propagate_status(child_statuses: list[ComponentStatusType]) -> ComponentStat
     """
     if not child_statuses:
         return ComponentStatusType.HEALTHY
-        
+
     if any(status == ComponentStatusType.UNHEALTHY for status in child_statuses):
         return ComponentStatusType.UNHEALTHY
     elif any(status == ComponentStatusType.WARNING for status in child_statuses):
@@ -126,19 +126,19 @@ async def get_system_status() -> SystemStatus:
     if "backend" in component_results:
         # Backend exists - recreate with system metrics as sub-components
         backend_component = component_results["backend"]
-        
+
         # Propagate status from system metrics and original backend status
         system_metrics_statuses = [
-            getattr(metric, 'status', ComponentStatusType.HEALTHY) 
+            getattr(metric, 'status', ComponentStatusType.HEALTHY)
             for metric in system_metrics.values()
         ]
         original_backend_status = getattr(
             backend_component, 'status', ComponentStatusType.HEALTHY
         )
         all_backend_statuses = system_metrics_statuses + [original_backend_status]
-        
+
         backend_status = propagate_status(all_backend_statuses)
-        
+
         component_results["backend"] = ComponentStatus(
             name=backend_component.name,
             status=backend_status,
@@ -151,14 +151,14 @@ async def get_system_status() -> SystemStatus:
         # Backend doesn't exist - create a virtual backend component to hold
         # system metrics
         backend_healthy = all(metric.healthy for metric in system_metrics.values())
-        
+
         # Propagate status from system metrics only
         system_metrics_statuses = [
-            getattr(metric, 'status', ComponentStatusType.HEALTHY) 
+            getattr(metric, 'status', ComponentStatusType.HEALTHY)
             for metric in system_metrics.values()
         ]
         backend_status = propagate_status(system_metrics_statuses)
-        
+
         backend_message = (
             "System container metrics"
             if backend_healthy
@@ -182,14 +182,14 @@ async def get_system_status() -> SystemStatus:
 
     # Create Aegis root structure with components underneath
     aegis_healthy = all(status.healthy for status in all_statuses)
-    
+
     # Propagate status from all top-level components
     component_statuses = [
         getattr(component, 'status', ComponentStatusType.HEALTHY)
         for component in component_results.values()
     ]
     aegis_status = propagate_status(component_statuses)
-    
+
     aegis_message = (
         "Aegis Stack application" if aegis_healthy else "Aegis Stack has issues"
     )
@@ -349,7 +349,7 @@ async def _run_health_check(
             return ComponentStatus(
                 name=name,
                 status=(
-                    ComponentStatusType.HEALTHY if bool(result) 
+                    ComponentStatusType.HEALTHY if bool(result)
                     else ComponentStatusType.UNHEALTHY
                 ),
                 message="OK" if result else "Failed",
@@ -591,13 +591,13 @@ async def check_database_health() -> ComponentStatus:
         # Import db_session from generated project
         from app.core.db import db_session
         from pathlib import Path
-        
+
         # Check if database file exists for SQLite
         db_url = settings.DATABASE_URL
         if db_url.startswith("sqlite:///"):
             # Extract path from SQLite URL
             db_path = db_url.replace("sqlite:///", "").lstrip("./")
-            
+
             # Check if database file exists
             if not Path(db_path).exists():
                 return ComponentStatus(
@@ -623,20 +623,20 @@ async def check_database_health() -> ComponentStatus:
             "database_exists": True,
             "engine_echo": settings.DATABASE_ENGINE_ECHO,
         }
-        
+
         # Collect additional metadata for SQLite databases
         if db_url.startswith("sqlite:///"):
             try:
                 # Add SQLite version
                 enhanced_metadata["version"] = sqlite3.sqlite_version
-                
+
                 # Extract and add file size information
                 db_path = db_url.replace("sqlite:///", "").lstrip("./")
                 if Path(db_path).exists():
                     file_size = Path(db_path).stat().st_size
                     enhanced_metadata["file_size_bytes"] = file_size
                     enhanced_metadata["file_size_human"] = format_bytes(file_size)
-                
+
                 # Get engine and connection pool information
                 from app.core.db import engine
                 if hasattr(engine.pool, 'size'):
@@ -644,50 +644,50 @@ async def check_database_health() -> ComponentStatus:
                 else:
                     # SQLite typically uses NullPool or StaticPool with size 1
                     enhanced_metadata["connection_pool_size"] = 1
-                    
+
             except Exception as e:
                 # If any enhanced metadata collection fails, log but don't break
                 # health check
                 logger.debug(
                     "Failed to collect enhanced database metadata", exc_info=True
                 )
-        
+
         # Test database connection and collect PRAGMA settings
         with db_session(autocommit=False) as session:
             # Execute a simple query to test connectivity
             from sqlalchemy import text
             session.execute(text("SELECT 1"))
-            
+
             # Collect SQLite PRAGMA settings for additional metadata
             if db_url.startswith("sqlite:///"):
                 try:
                     pragma_settings = {}
-                    
+
                     # Get foreign keys setting
                     result = session.execute(text("PRAGMA foreign_keys")).fetchone()
                     if result:
                         pragma_settings["foreign_keys"] = bool(result[0])
-                    
+
                     # Get journal mode
                     result = session.execute(text("PRAGMA journal_mode")).fetchone()
                     if result:
                         journal_mode = result[0].lower()
                         pragma_settings["journal_mode"] = journal_mode
                         enhanced_metadata["wal_enabled"] = journal_mode == "wal"
-                    
+
                     # Add cache size if available
                     result = session.execute(text("PRAGMA cache_size")).fetchone()
                     if result:
                         pragma_settings["cache_size"] = result[0]
-                    
+
                     enhanced_metadata["pragma_settings"] = pragma_settings
-                    
+
                 except Exception as e:
                     # PRAGMA queries can fail in some SQLite configurations
                     logger.debug(
                         "Failed to collect SQLite PRAGMA settings", exc_info=True
                     )
-            
+
             # No need to commit since we're just testing connectivity
 
         return ComponentStatus(
@@ -725,7 +725,7 @@ async def check_database_health() -> ComponentStatus:
                     "recommendation": "Check database file path and permissions",
                 },
             )
-        
+
         return ComponentStatus(
             name="database",
             status=ComponentStatusType.UNHEALTHY,
@@ -757,7 +757,7 @@ async def check_worker_health() -> ComponentStatus:
         # Create Redis connection
         # Step 1: Call untyped function with explicit ignore
         redis_connection = aioredis.from_url(  # type: ignore[no-untyped-call]
-            settings.REDIS_URL, 
+            settings.REDIS_URL,
             db=settings.REDIS_DB
         )
         # Step 2: Cast the result to proper type
@@ -862,7 +862,7 @@ async def check_worker_health() -> ComponentStatus:
                     if worker_alive
                     else 100
                 )
-                
+
                 if not worker_alive and not has_functions:
                     # Queue configured but no functions - show as INFO
                     queue_status = ComponentStatusType.INFO
@@ -872,7 +872,7 @@ async def check_worker_health() -> ComponentStatus:
                 elif failure_rate > 25:  # Unhealthy threshold at 25%
                     queue_status = ComponentStatusType.UNHEALTHY
                 elif failure_rate > 10:  # Warning threshold at 10%
-                    queue_status = ComponentStatusType.WARNING  
+                    queue_status = ComponentStatusType.WARNING
                 else:
                     queue_status = ComponentStatusType.HEALTHY
 
@@ -922,13 +922,13 @@ async def check_worker_health() -> ComponentStatus:
             except aioredis.ConnectionError as e:
                 logger.error(f"Redis connection failed for {queue_type}: {e}")
                 overall_healthy = False
-                
+
                 # Extract more specific connection error details
                 error_details = str(e).lower()
                 if "connection refused" in error_details:
                     connection_issue = "Redis server not running"
                 elif (
-                    "name or service not known" in error_details 
+                    "name or service not known" in error_details
                     or "nodename nor servname" in error_details
                 ):
                     connection_issue = "Redis server DNS resolution failed"
@@ -936,7 +936,7 @@ async def check_worker_health() -> ComponentStatus:
                     connection_issue = "Redis server connection timeout"
                 else:
                     connection_issue = "Redis server unreachable"
-                
+
                 queue_sub_components[queue_type] = ComponentStatus(
                     name=queue_type,
                     status=ComponentStatusType.UNHEALTHY,
@@ -965,7 +965,7 @@ async def check_worker_health() -> ComponentStatus:
                     message = f"Redis operation failed"
                     recommendation = "Check Redis configuration and permissions"
                     error_type = "redis_response_error"
-                    
+
                 overall_healthy = False
                 queue_sub_components[queue_type] = ComponentStatus(
                     name=queue_type,
@@ -1028,7 +1028,7 @@ async def check_worker_health() -> ComponentStatus:
         queue_statuses = [queue.status for queue in queue_sub_components.values()]
         queues_status = propagate_status(queue_statuses)
 
-        
+
         queues_message = f"{len(functional_queues)} functional queues configured"
         if active_workers < len(functional_queues):
             queues_message += f" ({active_workers} active)"

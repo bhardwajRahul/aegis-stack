@@ -268,7 +268,7 @@ class TestLoadTestServiceIntegration:
         # Verify results
         assert task_id == "test-job-123"
         from app.components.worker.constants import LoadTestTypes
-        
+
         mock_pool.enqueue_job.assert_called_once_with(
             "load_test_orchestrator",
             _queue_name="arq:queue:load_test",
@@ -285,8 +285,9 @@ class TestLoadTestServiceIntegration:
         """Test load test enqueueing failure."""
         # Clear cache to ensure fresh mock
         from app.components.worker.pools import clear_pool_cache
+
         await clear_pool_cache()
-        
+
         # Mock create_pool to raise an exception
         mock_create_pool.side_effect = Exception("Redis connection failed")
 
@@ -299,14 +300,13 @@ class TestLoadTestServiceIntegration:
         # No pool cleanup needed since create_pool failed
 
     @patch("app.components.worker.pools.create_pool")
-    async def test_get_load_test_result_success(
-        self, mock_create_pool
-    ):  # noqa
+    async def test_get_load_test_result_success(self, mock_create_pool):  # noqa
         """Test successful result retrieval with Pydantic validation."""
         # Clear cache to ensure fresh mock
         from app.components.worker.pools import clear_pool_cache
+
         await clear_pool_cache()
-        
+
         # Mock Redis data (realistic orchestrator result)
         raw_result_data = {
             "test_id": "test-123",
@@ -357,14 +357,13 @@ class TestLoadTestServiceIntegration:
         mock_pool.aclose.assert_called_once()
 
     @patch("app.components.worker.pools.create_pool")
-    async def test_get_load_test_result_not_found(
-        self, mock_create_pool
-    ):  # noqa
+    async def test_get_load_test_result_not_found(self, mock_create_pool):  # noqa
         """Test result retrieval when task doesn't exist."""
         # Clear cache to ensure fresh mock
         from app.components.worker.pools import clear_pool_cache
+
         await clear_pool_cache()
-        
+
         # Mock pool with no results
         mock_pool = AsyncMock()
         mock_pool.exists.return_value = False
@@ -384,8 +383,9 @@ class TestLoadTestServiceIntegration:
         """Test fallback when Pydantic validation fails."""
         # Clear cache to ensure fresh mock
         from app.components.worker.pools import clear_pool_cache
+
         await clear_pool_cache()
-        
+
         # Create invalid data that will fail validation
         invalid_result_data = {
             "test_id": "test-123",
@@ -419,8 +419,9 @@ class TestLoadTestServiceIntegration:
         """Test exception handling during result retrieval."""
         # Clear cache to ensure fresh mock
         from app.components.worker.pools import clear_pool_cache
+
         await clear_pool_cache()
-        
+
         # Mock create_pool to raise exception
         mock_create_pool.side_effect = Exception("Redis connection lost")
 

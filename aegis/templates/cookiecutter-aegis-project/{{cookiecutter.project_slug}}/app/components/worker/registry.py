@@ -46,14 +46,14 @@ def discover_worker_queues() -> list[str]:
         Sorted list of queue names
     """
     queues_dir = Path(__file__).parent / "queues"
-    
+
     if not queues_dir.exists():
         logger.warning(f"Worker queues directory not found: {queues_dir}")
         return []
-    
+
     queue_files = queues_dir.glob("*.py")
     queues = []
-    
+
     for file in queue_files:
         # Skip __init__.py and other special files
         if file.stem not in ["__init__", "__pycache__"]:
@@ -64,7 +64,7 @@ def discover_worker_queues() -> list[str]:
             except (ImportError, AttributeError):
                 logger.debug(f"Skipping '{file.stem}' - no valid WorkerSettings class")
                 continue
-    
+
     return sorted(queues)
 
 
@@ -84,7 +84,7 @@ def get_queue_metadata(queue_name: str) -> dict[str, Any]:
     """
     try:
         settings_class = get_worker_settings(queue_name)
-        
+
         metadata = {
             "queue_name": getattr(
                 settings_class, "queue_name", f"arq:queue:{queue_name}"
@@ -93,7 +93,7 @@ def get_queue_metadata(queue_name: str) -> dict[str, Any]:
             "timeout": getattr(settings_class, "job_timeout", 300),
             "functions": [f.__name__ for f in getattr(settings_class, "functions", [])],
         }
-        
+
         # Add description if available
         if hasattr(settings_class, "description"):
             metadata["description"] = settings_class.description
@@ -101,9 +101,9 @@ def get_queue_metadata(queue_name: str) -> dict[str, Any]:
             metadata["description"] = settings_class.__doc__.strip()
         else:
             metadata["description"] = f"{queue_name.title()} worker queue"
-            
+
         return metadata
-        
+
     except (ImportError, AttributeError) as e:
         logger.error(f"Failed to get metadata for queue '{queue_name}': {e}")
         return {

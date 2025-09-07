@@ -11,7 +11,6 @@ complete projects and validate they work correctly.
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytest
 
-from app.components.scheduler.main import create_scheduler
 from app.services.system.health import check_system_status
 
 
@@ -43,5 +42,3 @@ async def test_system_service_can_be_scheduled() -> None:
     system_job = scheduler.get_job("system")
 
     assert system_job.func == check_system_status
-
-

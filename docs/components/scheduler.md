@@ -147,6 +147,7 @@ scheduler.add_job(
 )
 ```
 
+
 ## Best Practices
 
 - **Keep jobs idempotent** - Safe to run multiple times
@@ -165,6 +166,7 @@ scheduler.add_job(
 
 **Next Steps:**
 
+- **[CLI Interface](scheduler/cli.md)** - Command-line task management (requires persistence)
 - **[Examples](scheduler/examples.md)** - Real-world scheduling patterns and timing examples
 - **[Database Persistence](scheduler/extras/persistence.md)** - Job persistence and monitoring
 - **[Component Overview](./index.md)** - How components work together

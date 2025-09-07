@@ -22,12 +22,14 @@ from .theme import ThemeManager
 DEFAULT_LOGO_PATH = "aegis-manifesto.png"
 DEFAULT_DARK_LOGO_PATH = "aegis-manifesto-dark.png"
 
+
 # Load both light and dark logos as base64
 def get_logo_base64(dark_mode: bool = False) -> str:
     """Get the logo as base64 for light or dark mode."""
     try:
         import base64
         from pathlib import Path
+
         filename = "aegis-manifesto-dark.png" if dark_mode else "aegis-manifesto.png"
         logo_path = Path(__file__).parent.parent.parent.parent / "assets" / filename
         with open(logo_path, "rb") as f:
@@ -56,7 +58,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
 
         # Aegis Stack logo - bigger size and theme-aware loading
         logo_image = ft.Image(
-            src_base64=get_logo_base64(theme_manager.is_dark_mode),  
+            src_base64=get_logo_base64(theme_manager.is_dark_mode),
             width=300,  # Bigger logo
             height=90,  # Bigger logo
             fit=ft.ImageFit.CONTAIN,
@@ -206,11 +208,12 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             try:
                 # Use the single /health/ endpoint for all health data
                 import httpx
+
                 async with httpx.AsyncClient() as client:
                     response = await client.get("http://localhost:8000/health/")
                     data = response.json()
-                    
-                # Extract components from health API response (navigate the aegis structure)
+
+                # Extract components from health API response (navigate structure)
                 if "components" in data and "aegis" in data["components"]:
                     aegis_component = data["components"]["aegis"]
                     if "sub_components" in aegis_component:
@@ -219,24 +222,26 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                         api_components = {}
                 else:
                     api_components = {}
-                
+
                 # Convert API data back to ComponentStatus objects for the cards
-                def convert_component(comp_data: dict) -> ComponentStatus:
+                def convert_component(comp_data: dict[str, Any]) -> ComponentStatus:
                     """Recursively convert API component data to ComponentStatus."""
                     sub_components = {}
                     if "sub_components" in comp_data:
                         for sub_name, sub_data in comp_data["sub_components"].items():
                             sub_components[sub_name] = convert_component(sub_data)
-                    
+
                     return ComponentStatus(
                         name=comp_data["name"],
-                        status=ComponentStatusType.HEALTHY if comp_data["healthy"] else ComponentStatusType.UNHEALTHY,
+                        status=ComponentStatusType.HEALTHY
+                        if comp_data["healthy"]
+                        else ComponentStatusType.UNHEALTHY,
                         message=comp_data["message"],
                         response_time_ms=comp_data.get("response_time_ms"),
                         metadata=comp_data.get("metadata", {}),
-                        sub_components=sub_components
+                        sub_components=sub_components,
                     )
-                
+
                 components = {}
                 for name, comp_data in api_components.items():
                     components[name] = convert_component(comp_data)

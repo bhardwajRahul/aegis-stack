@@ -5,7 +5,6 @@ Modern, visually striking card component that displays rich database metrics,
 connection statistics, query performance, and table information.
 """
 
-
 import flet as ft
 
 from app.components.frontend.controls import (
@@ -22,7 +21,7 @@ from .card_utils import create_responsive_3_section_layout
 class DatabaseCard:
     """
     A visually stunning, wide component card for displaying Database/SQLite metrics.
-    
+
     Features:
     - Modern Material Design 3 styling
     - Three-section layout (badge, metrics, performance)
@@ -34,7 +33,7 @@ class DatabaseCard:
     def __init__(self, component_data: ComponentStatus) -> None:
         """
         Initialize the Database card with component data.
-        
+
         Args:
             component_data: ComponentStatus containing database health and metrics
         """
@@ -44,7 +43,7 @@ class DatabaseCard:
     def _get_status_colors(self) -> tuple[str, str, str]:
         """
         Get status-aware colors for the card.
-        
+
         Returns:
             Tuple of (primary_color, background_color, border_color)
         """
@@ -59,7 +58,9 @@ class DatabaseCard:
         else:  # UNHEALTHY
             return (ft.Colors.RED, ft.Colors.SURFACE, ft.Colors.RED)
 
-    def _create_table_indicator(self, table_name: str, record_count: int) -> ft.Container:
+    def _create_table_indicator(
+        self, table_name: str, record_count: int
+    ) -> ft.Container:
         """Create a table status indicator with record count."""
         return ft.Container(
             content=ft.Column(
@@ -131,7 +132,14 @@ class DatabaseCard:
         table_controls = []
         for table_data in tables_data:
             table_controls.append(
-                self._create_table_indicator(table_data["name"], table_data["records"])
+                self._create_table_indicator(
+                    str(table_data["name"]), 
+                    (
+                        int(table_data["records"]) 
+                        if isinstance(table_data["records"], int | str) 
+                        else 0
+                    )
+                )
             )
 
         return ft.Container(
@@ -152,7 +160,6 @@ class DatabaseCard:
 
     def _create_performance_section(self) -> ft.Container:
         """Create the database performance and statistics section."""
-        response_time = self.component_data.response_time_ms or 0.0
 
         # Sample database performance stats
         db_stats = {
@@ -181,26 +188,27 @@ class DatabaseCard:
             )
 
         # Add status info
-        perf_content.extend([
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
-            ft.Row(
-                [
-                    SecondaryText("Status:"),
-                    LabelText(
-                        self.component_data.status.value.title(),
-                        color=self._get_status_colors()[0],
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            ),
-        ])
+        perf_content.extend(
+            [
+                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                ft.Row(
+                    [
+                        SecondaryText("Status:"),
+                        LabelText(
+                            self.component_data.status.value.title(),
+                            color=self._get_status_colors()[0],
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+            ]
+        )
 
         return ft.Container(
             content=ft.Column(perf_content, spacing=6),
             padding=ft.padding.all(16),
             width=260,  # Wider stats section
         )
-
 
     def build(self) -> ft.Container:
         """Build and return the complete Database card with responsive layout."""
@@ -210,7 +218,7 @@ class DatabaseCard:
         content = create_responsive_3_section_layout(
             left_content=self._create_technology_badge(),
             middle_content=self._create_tables_section(),
-            right_content=self._create_performance_section()
+            right_content=self._create_performance_section(),
         )
 
         self._card_container = ft.Container(

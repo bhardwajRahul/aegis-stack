@@ -7,8 +7,6 @@ patterns.
 
 from arq.connections import RedisSettings
 
-from app.core.config import settings
-
 # Import load test tasks
 from app.components.worker.tasks.load_tasks import (
     cpu_intensive_task,
@@ -19,14 +17,15 @@ from app.components.worker.tasks.load_tasks import (
 from app.components.worker.tasks.system_tasks import (
     load_test_orchestrator,
 )
+from app.core.config import settings
 
 
 class WorkerSettings:
     """Load testing worker configuration."""
-    
+
     # Human-readable description
     description = "Load testing and performance testing"
-    
+
     # Task functions for this queue
     functions = [
         # Load test orchestrator
@@ -37,8 +36,8 @@ class WorkerSettings:
         memory_operations_task,
         failure_testing_task,
     ]
-    
-    # arq configuration  
+
+    # arq configuration
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
     queue_name = "arq:queue:load_test"
     max_jobs = 50  # High concurrency for load testing

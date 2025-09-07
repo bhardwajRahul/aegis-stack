@@ -5,7 +5,6 @@ Modern, visually striking card component that displays rich Worker/arq metrics,
 queue statistics, and job processing data using ee-toolset design standards.
 """
 
-
 import flet as ft
 
 from app.components.frontend.controls import (
@@ -16,15 +15,13 @@ from app.components.frontend.controls import (
 )
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
-from .card_utils import create_responsive_3_section_layout
-
 
 class WorkerCard:
     """
     A visually stunning, wide component card for displaying Worker/arq metrics.
 
     Features:
-    - Modern Material Design 3 styling  
+    - Modern Material Design 3 styling
     - Three-section layout (badge, queues, stats)
     - Real-time queue metrics from health check data
     - Comprehensive job statistics (queued, processing, completed, failed)
@@ -50,7 +47,7 @@ class WorkerCard:
                 - queued_jobs: jobs waiting in this queue
                 - jobs_ongoing: jobs currently processing
                 - jobs_completed: total completed for this queue
-                - jobs_failed: total failed for this queue  
+                - jobs_failed: total failed for this queue
                 - failure_rate_percent: failure rate for this queue
                 - worker_alive: boolean indicating if worker is responsive
         """
@@ -72,13 +69,15 @@ class WorkerCard:
             metadata = self.component_data.metadata or {}
             active_workers = metadata.get("active_workers", 0)
             total_queued = metadata.get("total_queued", 0)
-            
+
             if active_workers > 0:
                 # Some workers are running - this is WARNING, not UNHEALTHY
                 if total_queued > 0:
-                    return (ft.Colors.ORANGE, ft.Colors.SURFACE, ft.Colors.ORANGE)  # WARNING: queued jobs with some workers down
+                    # WARNING: queued jobs with some workers down
+                    return (ft.Colors.ORANGE, ft.Colors.SURFACE, ft.Colors.ORANGE)
                 else:
-                    return (ft.Colors.BLUE, ft.Colors.SURFACE, ft.Colors.BLUE)  # INFO: some workers offline but no backlog
+                    # INFO: some workers offline but no backlog
+                    return (ft.Colors.BLUE, ft.Colors.SURFACE, ft.Colors.BLUE)
             else:
                 # No workers running - truly unhealthy
                 return (ft.Colors.RED, ft.Colors.SURFACE, ft.Colors.RED)
@@ -135,15 +134,18 @@ class WorkerCard:
                         height=3,
                         bgcolor=queue_color,
                         border_radius=1,
-                        margin=ft.margin.symmetric(vertical=2)
+                        margin=ft.margin.symmetric(vertical=2),
                     ),
                     # Metrics in compact format
                     ft.Column(
                         [
                             LabelText(f"Q:{queued_jobs} A:{jobs_ongoing}", size=8),
                             LabelText(f"✓{jobs_completed} ✗{jobs_failed}", size=8),
-                            LabelText(f"{failure_rate:.1f}%" if worker_alive else "OFFLINE",
-                                    size=8, color=queue_color),
+                            LabelText(
+                                f"{failure_rate:.1f}%" if worker_alive else "OFFLINE",
+                                size=8,
+                                color=queue_color,
+                            ),
                         ],
                         spacing=1,
                         alignment=ft.MainAxisAlignment.CENTER,
@@ -157,13 +159,13 @@ class WorkerCard:
             border=ft.border.all(1, queue_color),
             border_radius=8,
             width=110,  # Slightly wider for more metrics
-            height=80,   # Slightly taller for more content
+            height=80,  # Slightly taller for more content
         )
 
     def _create_technology_badge(self) -> ft.Container:
         """Create the Worker/arq technology badge section."""
         primary_color, _, _ = self._get_status_colors()
-        
+
         return ft.Container(
             content=ft.Column(
                 [
@@ -247,7 +249,7 @@ class WorkerCard:
                             wrap=True,
                             alignment=ft.MainAxisAlignment.CENTER,
                         ),
-                        width=400,  # Further expanded width for comprehensive queue metrics
+                        width=400,  # Expanded width for queue metrics
                         alignment=ft.alignment.center,
                     ),
                 ],
@@ -314,19 +316,21 @@ class WorkerCard:
             )
 
         # Add status info
-        stats_content.extend([
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
-            ft.Row(
-                [
-                    SecondaryText("Status:"),
-                    LabelText(
-                        self.component_data.status.value.title(),
-                        color=self._get_status_colors()[0],
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            ),
-        ])
+        stats_content.extend(
+            [
+                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                ft.Row(
+                    [
+                        SecondaryText("Status:"),
+                        LabelText(
+                            self.component_data.status.value.title(),
+                            color=self._get_status_colors()[0],
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+            ]
+        )
 
         return ft.Container(
             content=ft.Column(
@@ -337,18 +341,19 @@ class WorkerCard:
             alignment=ft.alignment.top_left,  # Ensure proper alignment
         )
 
-
-    def _create_queue_row(self, queue_name: str, queue_data: ComponentStatus) -> ft.Container:
+    def _create_queue_row(
+        self, queue_name: str, queue_data: ComponentStatus
+    ) -> ft.Container:
         """Create a single row for a queue with all metrics."""
         metadata = queue_data.metadata if queue_data else {}
-        
+
         queued = metadata.get("queued_jobs", 0)
         active = metadata.get("jobs_ongoing", 0)
         completed = metadata.get("jobs_completed", 0)
         failed = metadata.get("jobs_failed", 0)
         failure_rate = metadata.get("failure_rate_percent", 0)
         worker_alive = metadata.get("worker_alive", False)
-        
+
         # Get status icon
         if not worker_alive:
             status_icon = "⚫"
@@ -362,73 +367,87 @@ class WorkerCard:
         else:
             status_icon = "🟢"
             status_color = ft.Colors.GREEN
-        
+
         # Calculate success rate
         total_jobs = completed + failed
-        success_rate = f"{((completed / total_jobs) * 100):.1f}%" if total_jobs > 0 else "N/A"
-        
+        success_rate = (
+            f"{((completed / total_jobs) * 100):.1f}%" if total_jobs > 0 else "N/A"
+        )
+
         return ft.Container(
-            content=ft.Row([
-                # Queue name with status icon
-                ft.Container(
-                    content=ft.Text(f"{status_icon} {queue_name}", 
-                                   weight=ft.FontWeight.W_500,
-                                   color=ft.Colors.ON_SURFACE),
-                    width=120,
-                ),
-                # Queued
-                ft.Container(
-                    content=ft.Text(f"{queued:,}", color=ft.Colors.ON_SURFACE),
-                    width=60,
-                    alignment=ft.alignment.center_right,
-                ),
-                # Active
-                ft.Container(
-                    content=ft.Text(f"{active:,}", color=ft.Colors.ON_SURFACE),
-                    width=50,
-                    alignment=ft.alignment.center_right,
-                ),
-                # Completed
-                ft.Container(
-                    content=ft.Text(f"{completed:,}", color=ft.Colors.ON_SURFACE),
-                    width=70,
-                    alignment=ft.alignment.center_right,
-                ),
-                # Failed
-                ft.Container(
-                    content=ft.Text(f"{failed:,}", 
-                                   color=ft.Colors.ERROR if failed > 0 else ft.Colors.ON_SURFACE),
-                    width=50,
-                    alignment=ft.alignment.center_right,
-                ),
-                # Success rate
-                ft.Container(
-                    content=ft.Text(success_rate, 
-                                   color=status_color,
-                                   weight=ft.FontWeight.W_500),
-                    width=60,
-                    alignment=ft.alignment.center_right,
-                ),
-            ], alignment=ft.MainAxisAlignment.START),
+            content=ft.Row(
+                [
+                    # Queue name with status icon
+                    ft.Container(
+                        content=ft.Text(
+                            f"{status_icon} {queue_name}",
+                            weight=ft.FontWeight.W_500,
+                            color=ft.Colors.ON_SURFACE,
+                        ),
+                        width=120,
+                    ),
+                    # Queued
+                    ft.Container(
+                        content=ft.Text(f"{queued:,}", color=ft.Colors.ON_SURFACE),
+                        width=60,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Active
+                    ft.Container(
+                        content=ft.Text(f"{active:,}", color=ft.Colors.ON_SURFACE),
+                        width=50,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Completed
+                    ft.Container(
+                        content=ft.Text(f"{completed:,}", color=ft.Colors.ON_SURFACE),
+                        width=70,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Failed
+                    ft.Container(
+                        content=ft.Text(
+                            f"{failed:,}",
+                            color=ft.Colors.ERROR
+                            if failed > 0
+                            else ft.Colors.ON_SURFACE,
+                        ),
+                        width=50,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Success rate
+                    ft.Container(
+                        content=ft.Text(
+                            success_rate, color=status_color, weight=ft.FontWeight.W_500
+                        ),
+                        width=60,
+                        alignment=ft.alignment.center_right,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.START,
+            ),
             padding=ft.padding.symmetric(horizontal=15, vertical=8),
             bgcolor=(
-                ft.Colors.with_opacity(0.05, ft.Colors.GREY) 
-                if not worker_alive else None
+                ft.Colors.with_opacity(0.05, ft.Colors.GREY)
+                if not worker_alive
+                else None
             ),
             border_radius=8,
         )
-        
-    def _create_compact_queue_row(self, queue_name: str, queue_data: ComponentStatus) -> ft.Container:
+
+    def _create_compact_queue_row(
+        self, queue_name: str, queue_data: ComponentStatus
+    ) -> ft.Container:
         """Create a compact queue row for the 2-section layout."""
         metadata = queue_data.metadata if queue_data else {}
-        
+
         queued = metadata.get("queued_jobs", 0)
         active = metadata.get("jobs_ongoing", 0)
         completed = metadata.get("jobs_completed", 0)
         failed = metadata.get("jobs_failed", 0)
         failure_rate = metadata.get("failure_rate_percent", 0)
         worker_alive = metadata.get("worker_alive", False)
-        
+
         # Get status icon and smart status message (Option B)
         if not worker_alive:
             # Check if this is media queue with no tasks defined
@@ -445,12 +464,16 @@ class WorkerCard:
             status_icon = "🔴"
             status_color = ft.Colors.RED
             total_jobs = completed + failed
-            status_message = f"{((completed / total_jobs) * 100):.1f}%" if total_jobs > 0 else "N/A"
+            status_message = (
+                f"{((completed / total_jobs) * 100):.1f}%" if total_jobs > 0 else "N/A"
+            )
         elif failure_rate > 5:
             status_icon = "🟠"
             status_color = ft.Colors.ORANGE
             total_jobs = completed + failed
-            status_message = f"{((completed / total_jobs) * 100):.1f}%" if total_jobs > 0 else "N/A"
+            status_message = (
+                f"{((completed / total_jobs) * 100):.1f}%" if total_jobs > 0 else "N/A"
+            )
         else:
             status_icon = "🟢"
             status_color = ft.Colors.GREEN
@@ -459,7 +482,7 @@ class WorkerCard:
                 status_message = f"{((completed / total_jobs) * 100):.1f}%"
             else:
                 status_message = "ready"
-        
+
         # Calculate speed/performance metric
         if not worker_alive:
             speed_display = "-"
@@ -473,63 +496,86 @@ class WorkerCard:
             # since worker startup, not a time-windowed rate.
             speed_display = "-"
             speed_color = ft.Colors.GREY_600
-        
+
         return ft.Container(
-            content=ft.Row([
-                # Queue name with status icon
-                ft.Container(
-                    content=ft.Text(f"{status_icon} {queue_name}", 
-                                   weight=ft.FontWeight.W_400, size=11,
-                                   color=ft.Colors.ON_SURFACE),
-                    width=90,
-                ),
-                # Queued
-                ft.Container(
-                    content=ft.Text(f"{queued}", color=ft.Colors.ON_SURFACE, size=11),
-                    width=50,
-                    alignment=ft.alignment.center_right,
-                ),
-                # Active
-                ft.Container(
-                    content=ft.Text(f"{active}", color=ft.Colors.ON_SURFACE, size=11),
-                    width=40,
-                    alignment=ft.alignment.center_right,
-                ),
-                # Completed
-                ft.Container(
-                    content=ft.Text(f"{completed}", color=ft.Colors.ON_SURFACE, size=11),
-                    width=50,
-                    alignment=ft.alignment.center_right,
-                ),
-                # Failed
-                ft.Container(
-                    content=ft.Text(f"{failed}", 
-                                   color=ft.Colors.ERROR if failed > 0 else ft.Colors.ON_SURFACE,
-                                   size=11),
-                    width=40,
-                    alignment=ft.alignment.center_right,
-                ),
-                # Speed/Performance metric
-                ft.Container(
-                    content=ft.Text(speed_display, 
-                                   color=speed_color,
-                                   weight=ft.FontWeight.W_400, size=11),
-                    width=60,
-                    alignment=ft.alignment.center_right,
-                ),
-                # Smart status (rate or message) - last column
-                ft.Container(
-                    content=ft.Text(status_message, 
-                                   color=status_color,
-                                   weight=ft.FontWeight.W_400, size=11),
-                    width=90,
-                    alignment=ft.alignment.center_right,
-                ),
-            ], alignment=ft.MainAxisAlignment.START),
+            content=ft.Row(
+                [
+                    # Queue name with status icon
+                    ft.Container(
+                        content=ft.Text(
+                            f"{status_icon} {queue_name}",
+                            weight=ft.FontWeight.W_400,
+                            size=11,
+                            color=ft.Colors.ON_SURFACE,
+                        ),
+                        width=90,
+                    ),
+                    # Queued
+                    ft.Container(
+                        content=ft.Text(
+                            f"{queued}", color=ft.Colors.ON_SURFACE, size=11
+                        ),
+                        width=50,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Active
+                    ft.Container(
+                        content=ft.Text(
+                            f"{active}", color=ft.Colors.ON_SURFACE, size=11
+                        ),
+                        width=40,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Completed
+                    ft.Container(
+                        content=ft.Text(
+                            f"{completed}", color=ft.Colors.ON_SURFACE, size=11
+                        ),
+                        width=50,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Failed
+                    ft.Container(
+                        content=ft.Text(
+                            f"{failed}",
+                            color=ft.Colors.ERROR
+                            if failed > 0
+                            else ft.Colors.ON_SURFACE,
+                            size=11,
+                        ),
+                        width=40,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Speed/Performance metric
+                    ft.Container(
+                        content=ft.Text(
+                            speed_display,
+                            color=speed_color,
+                            weight=ft.FontWeight.W_400,
+                            size=11,
+                        ),
+                        width=60,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Smart status (rate or message) - last column
+                    ft.Container(
+                        content=ft.Text(
+                            status_message,
+                            color=status_color,
+                            weight=ft.FontWeight.W_400,
+                            size=11,
+                        ),
+                        width=90,
+                        alignment=ft.alignment.center_right,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.START,
+            ),
             padding=ft.padding.symmetric(horizontal=10, vertical=6),
             bgcolor=(
-                ft.Colors.with_opacity(0.05, ft.Colors.GREY) 
-                if not worker_alive else None
+                ft.Colors.with_opacity(0.05, ft.Colors.GREY)
+                if not worker_alive
+                else None
             ),
             border_radius=4,
         )
@@ -537,50 +583,102 @@ class WorkerCard:
     def build(self) -> ft.Container:
         """Build and return the Worker card with 2-section layout."""
         primary_color, background_color, border_color = self._get_status_colors()
-        
+
         # Get queue data
         queues_data = {}
         if (
-            self.component_data.sub_components and 
-            "queues" in self.component_data.sub_components
+            self.component_data.sub_components
+            and "queues" in self.component_data.sub_components
         ):
             queues_data = (
                 self.component_data.sub_components["queues"].sub_components or {}
             )
-        
+
         # Header for queue table
         header_row = ft.Container(
-            content=ft.Row([
-                ft.Container(ft.Text("Queue", weight=ft.FontWeight.W_500, 
-                                   size=12, color=ft.Colors.GREY_600), width=90),
-                ft.Container(ft.Text("Queued", weight=ft.FontWeight.W_500,
-                                   size=12, color=ft.Colors.GREY_600), 
-                           width=50, alignment=ft.alignment.center_right),
-                ft.Container(ft.Text("Active", weight=ft.FontWeight.W_500,
-                                   size=12, color=ft.Colors.GREY_600),
-                           width=40, alignment=ft.alignment.center_right),
-                ft.Container(ft.Text("Done", weight=ft.FontWeight.W_500,
-                                   size=12, color=ft.Colors.GREY_600),
-                           width=50, alignment=ft.alignment.center_right),
-                ft.Container(ft.Text("Failed", weight=ft.FontWeight.W_500,
-                                   size=12, color=ft.Colors.GREY_600),
-                           width=40, alignment=ft.alignment.center_right),
-                ft.Container(ft.Text("Speed", weight=ft.FontWeight.W_500,
-                                   size=12, color=ft.Colors.GREY_600),
-                           width=60, alignment=ft.alignment.center_right),
-                ft.Container(ft.Text("Status", weight=ft.FontWeight.W_500,
-                                   size=12, color=ft.Colors.GREY_600),
-                           width=90, alignment=ft.alignment.center_right),
-            ], alignment=ft.MainAxisAlignment.START),
+            content=ft.Row(
+                [
+                    ft.Container(
+                        ft.Text(
+                            "Queue",
+                            weight=ft.FontWeight.W_500,
+                            size=12,
+                            color=ft.Colors.GREY_600,
+                        ),
+                        width=90,
+                    ),
+                    ft.Container(
+                        ft.Text(
+                            "Queued",
+                            weight=ft.FontWeight.W_500,
+                            size=12,
+                            color=ft.Colors.GREY_600,
+                        ),
+                        width=50,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    ft.Container(
+                        ft.Text(
+                            "Active",
+                            weight=ft.FontWeight.W_500,
+                            size=12,
+                            color=ft.Colors.GREY_600,
+                        ),
+                        width=40,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    ft.Container(
+                        ft.Text(
+                            "Done",
+                            weight=ft.FontWeight.W_500,
+                            size=12,
+                            color=ft.Colors.GREY_600,
+                        ),
+                        width=50,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    ft.Container(
+                        ft.Text(
+                            "Failed",
+                            weight=ft.FontWeight.W_500,
+                            size=12,
+                            color=ft.Colors.GREY_600,
+                        ),
+                        width=40,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    ft.Container(
+                        ft.Text(
+                            "Speed",
+                            weight=ft.FontWeight.W_500,
+                            size=12,
+                            color=ft.Colors.GREY_600,
+                        ),
+                        width=60,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    ft.Container(
+                        ft.Text(
+                            "Status",
+                            weight=ft.FontWeight.W_500,
+                            size=12,
+                            color=ft.Colors.GREY_600,
+                        ),
+                        width=90,
+                        alignment=ft.alignment.center_right,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.START,
+            ),
             padding=ft.padding.symmetric(horizontal=10, vertical=8),
             border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.GREY_300)),
         )
-        
+
         # Queue rows (adjusted widths for smaller space)
         queue_rows = []
         for queue_name, queue_data in queues_data.items():
             queue_rows.append(self._create_compact_queue_row(queue_name, queue_data))
-        
+
         # Queue Status header
         queue_status_header = ft.Container(
             content=ft.Text(
@@ -591,32 +689,36 @@ class WorkerCard:
             ),
             padding=ft.padding.only(top=10, bottom=10),
         )
-        
+
         # Queue table content with header
-        table_content = ft.Column([
-            queue_status_header,
-            header_row,
-            *queue_rows,
-        ], spacing=0)
-        
-        # 2-section layout: Left badge + Right table  
-        content = ft.Row([
-            # Left: Technology badge (same width as other cards)
-            ft.Container(
-                content=self._create_technology_badge(),
-                expand=2,  # Same as other cards
-                width=100,  # Minimum width like other cards
-            ),
-            ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
-            
-            # Right: Queue table
-            ft.Container(
-                content=table_content,
-                expand=8,  # Takes remaining space (2:8 ratio matches 2:5:3 proportions)
-                padding=ft.padding.all(10),
-                width=200,  # Minimum width
-            ),
-        ])
+        table_content = ft.Column(
+            [
+                queue_status_header,
+                header_row,
+                *queue_rows,
+            ],
+            spacing=0,
+        )
+
+        # 2-section layout: Left badge + Right table
+        content = ft.Row(
+            [
+                # Left: Technology badge (same width as other cards)
+                ft.Container(
+                    content=self._create_technology_badge(),
+                    expand=2,  # Same as other cards
+                    width=100,  # Minimum width like other cards
+                ),
+                ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
+                # Right: Queue table
+                ft.Container(
+                    content=table_content,
+                    expand=8,  # Takes remaining space (2:8 ratio)
+                    padding=ft.padding.all(10),
+                    width=200,  # Minimum width
+                ),
+            ]
+        )
 
         self._card_container = ft.Container(
             content=content,

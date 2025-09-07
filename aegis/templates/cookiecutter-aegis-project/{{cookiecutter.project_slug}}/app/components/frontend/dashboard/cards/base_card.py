@@ -129,10 +129,12 @@ class BaseCard(ABC):
         """
         section_content = []
         if title:
-            section_content.extend([
-                ft.Text(title, size=16, weight=ft.FontWeight.BOLD),
-                ft.Divider(height=1, color=ft.Colors.GREY_300),
-            ])
+            section_content.extend(
+                [
+                    ft.Text(title, size=16, weight=ft.FontWeight.BOLD),
+                    ft.Divider(height=1, color=ft.Colors.GREY_300),
+                ]
+            )
         section_content.extend(content)
 
         return ft.Container(
@@ -145,7 +147,6 @@ class BaseCard(ABC):
             padding=ft.padding.all(16),
             alignment=ft.alignment.top_left,
         )
-
 
     @abstractmethod
     def _get_technology_info(self) -> dict[str, Any]:
@@ -186,17 +187,17 @@ class BaseCard(ABC):
         """
         # Default responsive widths - can be overridden by subclasses
         return {
-            "left": 140,      # Technology badge - fixed but smaller
-            "middle": 420,    # Main content - gets most space (was 400)
-            "right": 220,     # Details - compact but functional (was 240)
-            "total": 800      # Total card width
+            "left": 140,  # Technology badge - fixed but smaller
+            "middle": 420,  # Main content - gets most space (was 400)
+            "right": 220,  # Details - compact but functional (was 240)
+            "total": 800,  # Total card width
         }
-    
+
     @abstractmethod
     def _get_card_width(self) -> int:
         """
         Get the total width for this card type.
-        
+
         Returns:
             Card width in pixels
         """
@@ -216,7 +217,7 @@ class BaseCard(ABC):
                 badge_text=tech_info["badge_text"],
                 icon=tech_info["icon"],
                 badge_color=tech_info["badge_color"],
-                width=widths["left"]
+                width=widths["left"],
             ),
             width=widths["left"],
         )

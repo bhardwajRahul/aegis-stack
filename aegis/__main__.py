@@ -17,6 +17,7 @@ from aegis import __version__
 from aegis.core.component_utils import (
     clean_component_names,
     extract_base_component_name,
+    extract_engine_info,
     restore_engine_info,
 )
 from aegis.core.components import (
@@ -28,12 +29,69 @@ from aegis.core.components import (
 from aegis.core.dependency_resolver import DependencyResolver
 from aegis.core.template_generator import TemplateGenerator
 
+
+def detect_scheduler_backend(components: list[str]) -> str:
+    """
+    Detect scheduler backend from component list.
+
+    Args:
+        components: List of component names, possibly including scheduler[backend]
+
+    Returns:
+        Backend name: "memory", "sqlite", or "postgres"
+    """
+    for component in components:
+        base_name = extract_base_component_name(component)
+        if base_name == "scheduler":
+            engine = extract_engine_info(component)
+            if engine:
+                # Direct scheduler[backend] syntax
+                return engine
+            else:
+                # Check if database is also present (legacy detection)
+                clean_names = clean_component_names(components)
+                if "database" in clean_names:
+                    return "sqlite"  # Default database backend
+    return "memory"  # Default to memory-only
+
+
+def expand_scheduler_dependencies(components: list[str]) -> list[str]:
+    """
+    Expand scheduler[backend] to include required database dependencies.
+
+    Args:
+        components: List of component names
+
+    Returns:
+        Expanded component list with auto-added dependencies
+    """
+    result = list(components)  # Copy the list
+
+    for component in components:
+        base_name = extract_base_component_name(component)
+        if base_name == "scheduler":
+            backend = extract_engine_info(component)
+            if backend and backend != "memory":
+                # Auto-add database with same backend if not already present
+                database_component = f"database[{backend}]"
+                existing_clean = clean_component_names(result)
+
+                if "database" not in existing_clean:
+                    result.append(database_component)
+                    typer.echo(
+                        f"📦 Auto-added database[{backend}] for "
+                        f"scheduler[{backend}] persistence"
+                    )
+
+    return result
+
+
 # Create the main Typer application
 app = typer.Typer(
     name="aegis",
     help=(
         "Aegis Stack CLI - Component generation and project management. "
-        "Available components: redis, worker, scheduler, database"
+        "Available components: redis, worker, scheduler, scheduler[sqlite], database"
     ),
     add_completion=False,
 )
@@ -88,23 +146,31 @@ def validate_and_resolve_components(
 
     selected = [c for c in components_raw if c]
 
-    # Validate components exist
-    errors = DependencyResolver.validate_components(selected)
+    # Expand scheduler[backend] dependencies first
+    selected = expand_scheduler_dependencies(selected)
+
+    # Validate components exist (use clean names for validation)
+    clean_selected = clean_component_names(selected)
+    errors = DependencyResolver.validate_components(clean_selected)
     if errors:
         for error in errors:
             typer.echo(f"❌ {error}", err=True)
         raise typer.Exit(1)
 
-    # Resolve dependencies
-    resolved = DependencyResolver.resolve_dependencies(selected)
+    # Resolve dependencies (using clean names)
+    resolved_clean = DependencyResolver.resolve_dependencies(clean_selected)
 
-    # Show dependency resolution
-    auto_added = DependencyResolver.get_missing_dependencies(selected)
+    # Restore engine info to resolved components
+    resolved = restore_engine_info(resolved_clean, selected)
+
+    # Show dependency resolution (use clean names for dependency calculation)
+    original_clean = clean_component_names(selected)
+    auto_added = DependencyResolver.get_missing_dependencies(original_clean)
     if auto_added:
         typer.echo(f"📦 Auto-added dependencies: {', '.join(auto_added)}")
 
     # Show recommendations
-    recommendations = DependencyResolver.get_recommendations(resolved)
+    recommendations = DependencyResolver.get_recommendations(resolved_clean)
     if recommendations:
         rec_list = ", ".join(recommendations)
         typer.echo(f"💡 Recommended: {rec_list}")
@@ -206,22 +272,20 @@ def init(
     # Interactive component selection
     # Note: components is list[str] after callback, despite str annotation
     selected_components = cast(list[str], components) if components else []
-    scheduler_with_persistence = False
+    scheduler_backend = "memory"  # Default to in-memory scheduler
 
-    # Auto-detect scheduler persistence when components are specified
+    # Auto-detect scheduler backend when components are specified
     if components:
-        # Check if both scheduler and database are provided
-        # Note: components is list[str] after callback, despite str annotation
+        # Check for scheduler[backend] syntax or scheduler+database combination
         components_list = cast(list[str], components)
-        clean_names = clean_component_names(components_list)
-        if "scheduler" in clean_names and "database" in clean_names:
-            scheduler_with_persistence = True
-            typer.echo("📊 Auto-detected: Scheduler with database persistence")
+        scheduler_backend = detect_scheduler_backend(components_list)
+        if scheduler_backend != "memory":
+            typer.echo(
+                f"📊 Auto-detected: Scheduler with {scheduler_backend} persistence"
+            )
 
     if interactive and not components:
-        selected_components, scheduler_with_persistence = (
-            interactive_component_selection()
-        )
+        selected_components, scheduler_backend = interactive_component_selection()
 
         # Resolve dependencies for interactively selected components
         if selected_components:
@@ -245,9 +309,9 @@ def init(
             if auto_added:
                 typer.echo(f"\n📦 Auto-added dependencies: {', '.join(auto_added)}")
 
-    # Create template generator with scheduler persistence context
+    # Create template generator with scheduler backend context
     template_gen = TemplateGenerator(
-        project_name, list(selected_components), scheduler_with_persistence
+        project_name, list(selected_components), scheduler_backend
     )
 
     # Show selected configuration
@@ -358,12 +422,12 @@ def get_interactive_infrastructure_components() -> list[ComponentSpec]:
     return sorted(infra_components, key=lambda x: x.name)
 
 
-def interactive_component_selection() -> tuple[list[str], bool]:
+def interactive_component_selection() -> tuple[list[str], str]:
     """
     Interactive component selection with dependency awareness.
 
     Returns:
-        Tuple of (selected_components, scheduler_with_persistence)
+        Tuple of (selected_components, scheduler_backend)
     """
 
     typer.echo("🎯 Component Selection")
@@ -373,7 +437,7 @@ def interactive_component_selection() -> tuple[list[str], bool]:
     selected = []
     database_engine = None  # Track database engine selection
     database_added_by_scheduler = False  # Track if database was added by scheduler
-    scheduler_with_persistence = False  # Track scheduler persistence config
+    scheduler_backend = "memory"  # Track scheduler backend: memory, sqlite, postgres
 
     # Get all infrastructure components from registry
     infra_components = get_interactive_infrastructure_components()
@@ -438,8 +502,8 @@ def interactive_component_selection() -> tuple[list[str], bool]:
                         database_engine = "sqlite"
                         selected.append("database")
                         database_added_by_scheduler = True
-                        # Mark scheduler as using persistence
-                        scheduler_with_persistence = True
+                        # Mark scheduler backend as sqlite
+                        scheduler_backend = "sqlite"
                         typer.echo("✅ Scheduler + SQLite database configured")
 
                         # Show bonus backup job message only when database is added
@@ -475,14 +539,18 @@ def interactive_component_selection() -> tuple[list[str], bool]:
             if typer.confirm(prompt):
                 selected.append(component_name)
 
-    # Update selected list with database engine info for display
+    # Update selected list with engine info for display
     if "database" in selected and database_engine:
         # Replace "database" with formatted version for display
         db_index = selected.index("database")
-        if "scheduler" in selected:
-            selected[db_index] = f"database[{database_engine}]"
+        selected[db_index] = f"database[{database_engine}]"
 
-    return selected, scheduler_with_persistence
+    # Update scheduler with backend info if not memory
+    if "scheduler" in selected and scheduler_backend != "memory":
+        scheduler_index = selected.index("scheduler")
+        selected[scheduler_index] = f"scheduler[{scheduler_backend}]"
+
+    return selected, scheduler_backend
 
 
 # This is what runs when you do: aegis

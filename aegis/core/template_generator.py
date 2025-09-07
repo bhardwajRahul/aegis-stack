@@ -19,7 +19,7 @@ class TemplateGenerator:
         self,
         project_name: str,
         selected_components: list[str],
-        scheduler_with_persistence: bool = False,
+        scheduler_backend: str = "memory",
     ):
         """
         Initialize template generator.
@@ -27,11 +27,11 @@ class TemplateGenerator:
         Args:
             project_name: Name of the project being generated
             selected_components: List of component names to include
-            scheduler_with_persistence: Whether scheduler uses database persistence
+            scheduler_backend: Scheduler backend: "memory", "sqlite", "postgres"
         """
         self.project_name = project_name
         self.project_slug = project_name.lower().replace(" ", "-").replace("_", "-")
-        self.scheduler_with_persistence = scheduler_with_persistence
+        self.scheduler_backend = scheduler_backend
 
         # Always include core components
         all_components = ["backend", "frontend"] + selected_components
@@ -44,6 +44,15 @@ class TemplateGenerator:
             if extract_base_component_name(component) == "database":
                 self.database_engine = extract_engine_info(component)
                 if self.database_engine:
+                    break
+
+        # Extract scheduler backend from scheduler[backend] format or use passed param
+        # If scheduler[backend] syntax is used, it overrides the passed parameter
+        for component in self.components:
+            if extract_base_component_name(component) == "scheduler":
+                backend = extract_engine_info(component)
+                if backend:
+                    self.scheduler_backend = backend
                     break
 
         # Build component specs using base names
@@ -72,13 +81,17 @@ class TemplateGenerator:
             # Component flags for template conditionals - cookiecutter needs yes/no
             "include_redis": "yes" if "redis" in self.components else "no",
             "include_worker": "yes" if "worker" in self.components else "no",
-            "include_scheduler": "yes" if "scheduler" in self.components else "no",
+            "include_scheduler": "yes"
+            if any(c.startswith("scheduler") for c in self.components)
+            else "no",
             "include_database": "yes" if has_database else "no",
             # Database engine selection
             "database_engine": self.database_engine or "sqlite",
-            # Scheduler persistence flag - only when explicitly selected for scheduler
+            # Scheduler backend selection
+            "scheduler_backend": self.scheduler_backend,
+            # Legacy scheduler persistence flag for backwards compatibility
             "scheduler_with_persistence": (
-                "yes" if self.scheduler_with_persistence else "no"
+                "yes" if self.scheduler_backend != "memory" else "no"
             ),
             # Derived flags for template logic
             "has_background_infrastructure": any(
@@ -130,8 +143,9 @@ class TemplateGenerator:
         """
         files = []
         for component_name in self.components:
-            if component_name in self.component_specs:
-                spec = self.component_specs[component_name]
+            base_name = extract_base_component_name(component_name)
+            if base_name in self.component_specs:
+                spec = self.component_specs[base_name]
                 if spec.template_files:
                     files.extend(spec.template_files)
         return list(dict.fromkeys(files))  # Preserve order, remove duplicates
@@ -147,8 +161,9 @@ class TemplateGenerator:
 
         # Check component specs for actual entrypoint files
         for component_name in self.components:
-            if component_name in self.component_specs:
-                spec = self.component_specs[component_name]
+            base_name = extract_base_component_name(component_name)
+            if base_name in self.component_specs:
+                spec = self.component_specs[base_name]
                 if spec.template_files:
                     for template_file in spec.template_files:
                         if (
@@ -169,7 +184,7 @@ class TemplateGenerator:
         queues: list[str] = []
 
         # Only check if worker component is included
-        if "worker" not in self.components:
+        if not any(c.startswith("worker") for c in self.components):
             return queues
 
         # Discover queue files from the template directory

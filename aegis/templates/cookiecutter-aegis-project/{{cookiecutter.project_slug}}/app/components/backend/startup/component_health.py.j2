@@ -121,22 +121,27 @@ async def _frontend_component_health() -> ComponentStatus:
 async def _scheduler_component_health() -> ComponentStatus:
     """
     Check scheduler component health from backend.
-    
-    {% if cookiecutter.scheduler_with_persistence == "yes" %}
+{%- if cookiecutter.scheduler_backend != "memory" %}
+
     With persistence: Gets real task data from database
-    {% else %}
+{%- else %}
+
     Without persistence: Shows component as activated only
-    {% endif %}
+{%- endif %}
     """
-    {% if cookiecutter.scheduler_with_persistence == "yes" %}
+    {% if cookiecutter.scheduler_backend != "memory" %}
     try:
         from app.services.scheduler.task_monitor import TaskHealthMonitor
         monitor = TaskHealthMonitor()
-        health_data = await monitor.get_health_metadata(None)  # No scheduler instance in backend
+        # No scheduler instance available in backend
+        health_data = await monitor.get_health_metadata(None)
         
         # Format message based on task data
         total_tasks = health_data.total_tasks
-        message = f"Scheduler running with {total_tasks} tasks" if total_tasks > 0 else "Scheduler running (no tasks)"
+        if total_tasks > 0:
+            message = f"Scheduler running with {total_tasks} tasks"
+        else:
+            message = "Scheduler running (no tasks)"
         
         return ComponentStatus(
             name="scheduler",
@@ -195,7 +200,7 @@ async def startup_hook() -> None:
     {%- if cookiecutter.include_scheduler == "yes" %}
     # Register scheduler component health check
     register_health_check("scheduler", _scheduler_component_health)
-    {% if cookiecutter.scheduler_with_persistence == "yes" %}
+    {% if cookiecutter.scheduler_backend != "memory" %}
     logger.info("Scheduler component health check registered (with task data)")
     {% else %}
     logger.info("Scheduler component enabled (shows as activated)")

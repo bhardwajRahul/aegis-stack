@@ -22,7 +22,7 @@ from app.services.system.models import (
     DetailedHealthResponse,
     HealthResponse,
 )
-from app.services.system.ui import get_status_icon, get_status_color_name
+from app.services.system.ui import get_status_color_name, get_status_icon
 
 app = typer.Typer(name="health", help="System health monitoring commands")
 console = Console()
@@ -38,18 +38,23 @@ def _is_scheduler_metadata(metadata: dict[str, Any]) -> bool:
     return "total_tasks" in metadata and "upcoming_tasks" in metadata
 
 
-def _display_scheduler_metadata(metadata: dict[str, Any], base_indent: str, is_last: bool, detailed: bool = False) -> None:
+def _display_scheduler_metadata(
+    metadata: dict[str, Any], base_indent: str, is_last: bool, detailed: bool = False
+) -> None:
     """Display scheduler metadata in a structured, readable format."""
     tree_indent = f"{base_indent}    " if is_last else f"{base_indent}│   "
-    
+
     # Task statistics
     total_tasks = metadata.get("total_tasks", 0)
     active_tasks = metadata.get("active_tasks", 0)
     paused_tasks = metadata.get("paused_tasks", 0)
-    
+
     console.print(f"{tree_indent}[dim]Task Statistics:[/dim]")
-    console.print(f"{tree_indent}  [dim]• Total: {total_tasks}, Active: {active_tasks}, Paused: {paused_tasks}[/dim]")
-    
+    console.print(
+        f"{tree_indent}  [dim]• Total: {total_tasks}, Active: {active_tasks}, "
+        f"Paused: {paused_tasks}[/dim]"
+    )
+
     # Upcoming tasks
     upcoming_tasks = metadata.get("upcoming_tasks", [])
     if upcoming_tasks:
@@ -59,14 +64,14 @@ def _display_scheduler_metadata(metadata: dict[str, Any], base_indent: str, is_l
         for task in upcoming_tasks[:max_tasks]:
             task_name = task.get("name", task.get("id", "Unknown"))
             next_run = task.get("next_run", "Unknown")
-            schedule = task.get("schedule", "Unknown")
-            
+
             # Format next run time more human-readable
             if next_run and next_run != "Unknown":
                 try:
                     from datetime import datetime
-                    if next_run.endswith('+00:00') or next_run.endswith('Z'):
-                        dt = datetime.fromisoformat(next_run.replace('Z', '+00:00'))
+
+                    if next_run.endswith("+00:00") or next_run.endswith("Z"):
+                        dt = datetime.fromisoformat(next_run.replace("Z", "+00:00"))
                         formatted_time = dt.strftime("%Y-%m-%d %H:%M UTC")
                     else:
                         formatted_time = next_run
@@ -74,13 +79,18 @@ def _display_scheduler_metadata(metadata: dict[str, Any], base_indent: str, is_l
                     formatted_time = next_run
             else:
                 formatted_time = "Unknown"
-            
-            console.print(f"{tree_indent}  [dim]• {task_name} - Next: {formatted_time}[/dim]")
-            
+
+            console.print(
+                f"{tree_indent}  [dim]• {task_name} - Next: {formatted_time}[/dim]"
+            )
+
         # Show "and X more..." if there are more tasks (only in non-detailed mode)
         if not detailed and len(upcoming_tasks) > 3:
             remaining = len(upcoming_tasks) - 3
-            console.print(f"{tree_indent}  [dim]• ... and {remaining} more task{'s' if remaining > 1 else ''}[/dim]")
+            task_word = "task" if remaining == 1 else "tasks"
+            console.print(
+                f"{tree_indent}  [dim]• ... and {remaining} more {task_word}[/dim]"
+            )
     else:
         console.print(f"{tree_indent}[dim]No upcoming tasks scheduled[/dim]")
 
@@ -236,8 +246,12 @@ def _display_sub_components(
         # Show metadata for sub-components if detailed and available
         elif detailed and sub_component.metadata:
             # Special handling for scheduler component
-            if sub_name == "scheduler" and _is_scheduler_metadata(sub_component.metadata):
-                _display_scheduler_metadata(sub_component.metadata, base_indent, is_last, detailed)
+            if sub_name == "scheduler" and _is_scheduler_metadata(
+                sub_component.metadata
+            ):
+                _display_scheduler_metadata(
+                    sub_component.metadata, base_indent, is_last, detailed
+                )
             else:
                 # Generic metadata display for other components
                 metadata_str = json.dumps(sub_component.metadata, separators=(",", ":"))
@@ -265,7 +279,7 @@ def _display_health_status(
         health_percentage = health_data.health_percentage
         # For detailed response, use the component counts from API
         if hasattr(health_data, "healthy_components"):
-            if hasattr(health_data, 'unhealthy_components'):
+            if hasattr(health_data, "unhealthy_components"):
                 healthy_count = len(health_data.healthy_components)
                 total_count = len(health_data.healthy_components) + len(
                     health_data.unhealthy_components
