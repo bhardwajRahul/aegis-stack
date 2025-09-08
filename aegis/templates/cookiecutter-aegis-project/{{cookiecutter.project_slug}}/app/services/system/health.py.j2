@@ -830,8 +830,12 @@ async def check_worker_health() -> ComponentStatus:
                         j_ongoing = int(j_ongoing_match.group(1))
                         total_ongoing += j_ongoing
 
+                    # Worker is alive if we have health check data
+                    # arq health checks expire automatically, having data means recent
                     worker_alive = True
-                    active_workers += 1
+                    
+                    if worker_alive:
+                        active_workers += 1
 
                 # Create queue status message
                 status_parts = []

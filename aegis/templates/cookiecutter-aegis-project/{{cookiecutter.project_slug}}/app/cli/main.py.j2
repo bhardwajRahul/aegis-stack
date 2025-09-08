@@ -1,7 +1,7 @@
 """
 Main CLI application entry point.
 
-Command-line interface for full-stack management tasks.
+Command-line interface for {{ cookiecutter.project_slug }} management tasks.
 """
 
 import importlib
@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     pass
 
 app = typer.Typer(
-    name="full-stack",
-    help="full-stack management CLI",
+    name="{{ cookiecutter.project_slug }}",
+    help="{{ cookiecutter.project_slug }} management CLI",
     no_args_is_help=True,
 )
 

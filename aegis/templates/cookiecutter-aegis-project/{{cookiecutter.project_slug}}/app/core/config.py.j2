@@ -66,6 +66,14 @@ class Settings(BaseSettings):
     WORKER_KEEP_RESULT_SECONDS: int = 3600  # Keep job results for 1 hour
     WORKER_MAX_TRIES: int = 3
 
+    # Redis connection settings for arq workers
+    REDIS_CONN_TIMEOUT: int = 5  # Connection timeout in seconds (default: 1)
+    REDIS_CONN_RETRIES: int = 5  # Connection retry attempts (default: 5)
+    REDIS_CONN_RETRY_DELAY: int = 1  # Delay between retries (default: 1)
+
+    # Worker health check settings
+    WORKER_HEALTH_CHECK_INTERVAL: int = 15  # In seconds (default: 15)
+
     # PURE ARQ IMPLEMENTATION - NO CONFIGURATION NEEDED!
     # Worker configuration comes from individual WorkerSettings classes
     # in app/components/worker/queues/ - just import and use as arq intended!

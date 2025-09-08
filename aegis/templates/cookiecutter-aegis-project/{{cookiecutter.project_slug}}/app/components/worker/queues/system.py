@@ -26,11 +26,20 @@ class WorkerSettings:
         cleanup_temp_files,
     ]
 
-    # arq configuration
-    redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
+    # arq configuration with improved connection settings
+    base_settings = RedisSettings.from_dsn(settings.REDIS_URL)
+    redis_settings = RedisSettings(
+        host=base_settings.host,
+        port=base_settings.port,
+        database=base_settings.database,
+        password=base_settings.password,
+        conn_timeout=settings.REDIS_CONN_TIMEOUT,
+        conn_retries=settings.REDIS_CONN_RETRIES,
+        conn_retry_delay=settings.REDIS_CONN_RETRY_DELAY,
+    )
     queue_name = "arq:queue:system"
     max_jobs = 15  # Moderate concurrency for administrative operations
     job_timeout = 300  # 5 minutes
     keep_result = settings.WORKER_KEEP_RESULT_SECONDS
     max_tries = settings.WORKER_MAX_TRIES
-    health_check_interval = 30
+    health_check_interval = settings.WORKER_HEALTH_CHECK_INTERVAL
