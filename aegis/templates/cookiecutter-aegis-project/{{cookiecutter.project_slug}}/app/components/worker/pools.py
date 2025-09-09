@@ -57,8 +57,17 @@ async def get_queue_pool(queue_type: str | None = None) -> tuple[ArqRedis, str]:
             logger.debug(f"Removing stale pool from cache: {cache_key}")
             del _pool_cache[cache_key]
 
-    # Create new Redis pool and cache it
-    redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
+    # Create new Redis pool and cache it with improved connection settings
+    base_settings = RedisSettings.from_dsn(settings.REDIS_URL)
+    redis_settings = RedisSettings(
+        host=base_settings.host,
+        port=base_settings.port,
+        database=base_settings.database,
+        password=base_settings.password,
+        conn_timeout=settings.REDIS_CONN_TIMEOUT,
+        conn_retries=settings.REDIS_CONN_RETRIES,
+        conn_retry_delay=settings.REDIS_CONN_RETRY_DELAY,
+    )
     pool = await create_pool(redis_settings)
     _pool_cache[cache_key] = pool
 

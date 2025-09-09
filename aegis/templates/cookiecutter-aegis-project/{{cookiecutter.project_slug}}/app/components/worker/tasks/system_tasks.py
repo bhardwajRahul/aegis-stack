@@ -53,101 +53,103 @@ async def load_test_orchestrator(
         f"(batches of {batch_size})"
     )
 
+    # Initialize tasks_sent before try block to prevent UnboundLocalError
+    tasks_sent = 0
+    
     try:
         # Import here to avoid circular imports
         from app.components.worker.pools import get_queue_pool
 
         # Get queue pool for enqueueing
         pool, queue_name = await get_queue_pool(target_queue)
+        
+        try:
+            # Spawn tasks in batches
+            task_ids = []
 
-        # Spawn tasks in batches
-        task_ids = []
-        tasks_sent = 0
+            for batch_start in range(0, num_tasks, batch_size):
+                batch_end = min(batch_start + batch_size, num_tasks)
+                current_batch_size = batch_end - batch_start
 
-        for batch_start in range(0, num_tasks, batch_size):
-            batch_end = min(batch_start + batch_size, num_tasks)
-            current_batch_size = batch_end - batch_start
+                # Enqueue batch of tasks
+                # Map task type to actual function name
+                task_func = _get_task_function_name(task_type)
 
-            # Enqueue batch of tasks
-            # Map task type to actual function name
-            task_func = _get_task_function_name(task_type)
+                batch_jobs = []
+                for _ in range(current_batch_size):
+                    job = await pool.enqueue_job(task_func, _queue_name=queue_name)
+                    if job is not None:
+                        batch_jobs.append(job)
+                        task_ids.append(job.job_id)
 
-            batch_jobs = []
-            for _ in range(current_batch_size):
-                job = await pool.enqueue_job(task_func, _queue_name=queue_name)
-                if job is not None:
-                    batch_jobs.append(job)
-                    task_ids.append(job.job_id)
+                tasks_sent += current_batch_size
+                logger.info(
+                    f"📤 Sent batch: {current_batch_size} tasks "
+                    f"(total: {tasks_sent}/{num_tasks})"
+                )
 
-            tasks_sent += current_batch_size
+                # Add configurable delay between batches if specified
+                if delay_ms > 0 and batch_end < num_tasks:
+                    await asyncio.sleep(delay_ms / 1000.0)
+
+            logger.info(f"✅ All {tasks_sent} tasks enqueued to {queue_name}")
+
+            # Monitor task completion with timeout based on queue configuration
+            from app.components.worker.registry import get_queue_metadata
+
+            queue_metadata = get_queue_metadata(target_queue)
+            monitor_timeout = queue_metadata.get("timeout", 300)  # Use queue's timeout
+
             logger.info(
-                f"📤 Sent batch: {current_batch_size} tasks "
-                f"(total: {tasks_sent}/{num_tasks})"
+                f"⏱️ Monitoring task completion (timeout: {monitor_timeout}s)..."
             )
 
-            # Add configurable delay between batches if specified
-            if delay_ms > 0 and batch_end < num_tasks:
-                await asyncio.sleep(delay_ms / 1000.0)
-
-        # Don't close the pool yet - we need it for monitoring!
-        # await pool.aclose()
-
-        logger.info(f"✅ All {tasks_sent} tasks enqueued to {queue_name}")
-
-        # Monitor task completion with timeout based on queue configuration
-
-        from app.components.worker.registry import get_queue_metadata
-
-        queue_metadata = get_queue_metadata(target_queue)
-        monitor_timeout = queue_metadata.get("timeout", 300)  # Use queue's timeout
-
-        logger.info(f"⏱️ Monitoring task completion (timeout: {monitor_timeout}s)...")
-
-        completion_result = await _monitor_task_completion(
-            task_ids=task_ids,
-            pool=pool,
-            expected_tasks=tasks_sent,
-            timeout_seconds=monitor_timeout,  # Use configured timeout
-        )
-
-        # NOW we can close the pool after monitoring is done
-        await pool.aclose()
-
-        end_time = datetime.now()
-        total_duration = (end_time - start_time).total_seconds()
-
-        # Combine orchestrator stats with completion monitoring
-        result = {
-            "test_id": test_id,
-            "task_type": task_type.value,
-            "tasks_sent": tasks_sent,
-            "task_ids": task_ids[:10],  # Sample of IDs for debugging
-            "batch_size": batch_size,
-            "delay_ms": delay_ms,
-            "target_queue": target_queue,
-            "start_time": start_time.isoformat(),
-            "end_time": end_time.isoformat(),
-            "total_duration_seconds": round(total_duration, 2),
-            **completion_result,  # Merge in the monitoring results
-        }
-
-        # Calculate overall throughput based on completed tasks
-        if result.get("tasks_completed", 0) > 0:
-            result["overall_throughput_per_second"] = round(
-                result["tasks_completed"] / total_duration, 2
+            completion_result = await _monitor_task_completion(
+                task_ids=task_ids,
+                pool=pool,
+                expected_tasks=tasks_sent,
+                timeout_seconds=monitor_timeout,  # Use configured timeout
             )
-        else:
-            result["overall_throughput_per_second"] = 0
 
-        logger.info(
-            f"🏁 Load test complete: {result['tasks_completed']}/{tasks_sent} "
-            f"tasks in {total_duration:.1f}s"
-        )
-        logger.info(
-            f"📈 Throughput: {result['overall_throughput_per_second']} tasks/sec"
-        )
+            end_time = datetime.now()
+            total_duration = (end_time - start_time).total_seconds()
 
-        return result
+            # Combine orchestrator stats with completion monitoring
+            result = {
+                "test_id": test_id,
+                "task_type": task_type.value,
+                "tasks_sent": tasks_sent,
+                "task_ids": task_ids[:10],  # Sample of IDs for debugging
+                "batch_size": batch_size,
+                "delay_ms": delay_ms,
+                "target_queue": target_queue,
+                "start_time": start_time.isoformat(),
+                "end_time": end_time.isoformat(),
+                "total_duration_seconds": round(total_duration, 2),
+                **completion_result,  # Merge in the monitoring results
+            }
+
+            # Calculate overall throughput based on completed tasks
+            if result.get("tasks_completed", 0) > 0:
+                result["overall_throughput_per_second"] = round(
+                    result["tasks_completed"] / total_duration, 2
+                )
+            else:
+                result["overall_throughput_per_second"] = 0
+
+            logger.info(
+                f"🏁 Load test complete: {result['tasks_completed']}/{tasks_sent} "
+                f"tasks in {total_duration:.1f}s"
+            )
+            logger.info(
+                f"📈 Throughput: {result['overall_throughput_per_second']} tasks/sec"
+            )
+
+            return result
+            
+        finally:
+            # Always close the pool, even if errors occur
+            await pool.aclose()
 
     except Exception as e:
         logger.error(f"Load test orchestrator failed: {e}")

@@ -1,4 +1,3 @@
-{%- if cookiecutter.include_worker == "yes" or cookiecutter.scheduler_backend != "memory" %}
 """
 API models for{%- if cookiecutter.include_worker == "yes" %} background tasks{%- endif %}{%- if cookiecutter.include_worker == "yes" and cookiecutter.scheduler_backend != "memory" %} and{%- endif %}{%- if cookiecutter.scheduler_backend != "memory" %} scheduled tasks{%- endif %} and responses.
 
@@ -16,9 +15,10 @@ from app.components.worker.constants import LoadTestTypes
 {%- endif %}
 
 {%- if cookiecutter.scheduler_backend != "memory" %}
-# Import scheduler service models for proper typing
 from app.services.scheduler.models import ScheduledTask, TaskStatistics
+{%- endif %}
 
+{%- if cookiecutter.include_worker == "yes" %}
 
 class TaskRequest(BaseModel):
     """Request model for enqueueing a background task."""
@@ -250,8 +250,6 @@ class LoadTestResults(BaseModel):
     performance_summary: str = Field(
         ..., description="Human readable performance summary"
     )
-
-
 {%- endif %}
 
 {%- if cookiecutter.scheduler_backend != "memory" %}
@@ -277,5 +275,4 @@ class ScheduledTaskStatisticsResponse(BaseModel):
     """Response model for scheduled task statistics."""
 
     statistics: TaskStatistics = Field(..., description="Task statistics summary")
-{%- endif %}
 {%- endif %}

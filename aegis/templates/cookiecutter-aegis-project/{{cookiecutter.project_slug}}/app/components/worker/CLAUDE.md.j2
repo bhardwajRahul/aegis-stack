@@ -163,7 +163,7 @@ docker compose logs -f
 ```
 
 **Load Test Debugging Workflow:**
-1. **Run Load Test**: `uv run full-stack load-test run --type io_simulation --tasks 10`
+1. **Run Load Test**: `uv run {{ cookiecutter.project_slug }} load-test run --type io_simulation --tasks 10`
 2. **Monitor Worker Logs**: `docker compose logs -f worker-load-test` (in separate terminal)
 3. **Look for**: 
    - `TypeError` messages indicating parameter mismatches
@@ -183,7 +183,7 @@ docker compose logs -f
 docker compose ps
 
 # Check system health via API
-uv run full-stack health status --detailed
+uv run {{ cookiecutter.project_slug }} health status --detailed
 
 # Monitor Redis connection
 docker compose logs redis
