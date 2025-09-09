@@ -1,5 +1,10 @@
 """Frontend UI controls for styled components."""
 
+from .table import (
+    TableCellText,
+    TableHeaderText,
+    TableNameText,
+)
 from .text import (
     ConfirmationText,
     LabelText,
@@ -16,4 +21,7 @@ __all__ = [
     "ConfirmationText",
     "MetricText",
     "LabelText",
+    "TableHeaderText",
+    "TableCellText",
+    "TableNameText",
 ]

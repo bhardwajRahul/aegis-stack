@@ -11,6 +11,9 @@ from app.components.frontend.controls import (
     LabelText,
     PrimaryText,
     SecondaryText,
+    TableCellText,
+    TableHeaderText,
+    TableNameText,
     TitleText,
 )
 from app.services.system.models import ComponentStatus, ComponentStatusType
@@ -502,68 +505,52 @@ class WorkerCard:
                 [
                     # Queue name with status icon
                     ft.Container(
-                        content=ft.Text(
-                            f"{status_icon} {queue_name}",
-                            weight=ft.FontWeight.W_400,
-                            size=11,
-                            color=ft.Colors.ON_SURFACE,
-                        ),
+                        content=TableNameText(f"{status_icon} {queue_name}"),
                         width=90,
                     ),
                     # Queued
                     ft.Container(
-                        content=ft.Text(
-                            f"{queued}", color=ft.Colors.ON_SURFACE, size=11
-                        ),
+                        content=TableCellText(f"{queued}"),
                         width=50,
                         alignment=ft.alignment.center_right,
                     ),
                     # Active
                     ft.Container(
-                        content=ft.Text(
-                            f"{active}", color=ft.Colors.ON_SURFACE, size=11
-                        ),
+                        content=TableCellText(f"{active}"),
                         width=40,
                         alignment=ft.alignment.center_right,
                     ),
                     # Completed
                     ft.Container(
-                        content=ft.Text(
-                            f"{completed}", color=ft.Colors.ON_SURFACE, size=11
-                        ),
+                        content=TableCellText(f"{completed}"),
                         width=50,
                         alignment=ft.alignment.center_right,
                     ),
                     # Failed
                     ft.Container(
-                        content=ft.Text(
+                        content=TableCellText(
                             f"{failed}",
-                            color=ft.Colors.ERROR
-                            if failed > 0
-                            else ft.Colors.ON_SURFACE,
-                            size=11,
+                            color=(
+                                ft.Colors.ERROR if failed > 0 else ft.Colors.ON_SURFACE
+                            ),
                         ),
                         width=40,
                         alignment=ft.alignment.center_right,
                     ),
                     # Speed/Performance metric
                     ft.Container(
-                        content=ft.Text(
+                        content=TableCellText(
                             speed_display,
                             color=speed_color,
-                            weight=ft.FontWeight.W_400,
-                            size=11,
                         ),
                         width=60,
                         alignment=ft.alignment.center_right,
                     ),
                     # Smart status (rate or message) - last column
                     ft.Container(
-                        content=ft.Text(
+                        content=TableCellText(
                             status_message,
                             color=status_color,
-                            weight=ft.FontWeight.W_400,
-                            size=11,
                         ),
                         width=90,
                         alignment=ft.alignment.center_right,
@@ -599,71 +586,36 @@ class WorkerCard:
             content=ft.Row(
                 [
                     ft.Container(
-                        ft.Text(
-                            "Queue",
-                            weight=ft.FontWeight.W_500,
-                            size=12,
-                            color=ft.Colors.GREY_600,
-                        ),
+                        TableHeaderText("Queue"),
                         width=90,
                     ),
                     ft.Container(
-                        ft.Text(
-                            "Queued",
-                            weight=ft.FontWeight.W_500,
-                            size=12,
-                            color=ft.Colors.GREY_600,
-                        ),
+                        TableHeaderText("Queued"),
                         width=50,
                         alignment=ft.alignment.center_right,
                     ),
                     ft.Container(
-                        ft.Text(
-                            "Active",
-                            weight=ft.FontWeight.W_500,
-                            size=12,
-                            color=ft.Colors.GREY_600,
-                        ),
+                        TableHeaderText("Active"),
                         width=40,
                         alignment=ft.alignment.center_right,
                     ),
                     ft.Container(
-                        ft.Text(
-                            "Done",
-                            weight=ft.FontWeight.W_500,
-                            size=12,
-                            color=ft.Colors.GREY_600,
-                        ),
+                        TableHeaderText("Done"),
                         width=50,
                         alignment=ft.alignment.center_right,
                     ),
                     ft.Container(
-                        ft.Text(
-                            "Failed",
-                            weight=ft.FontWeight.W_500,
-                            size=12,
-                            color=ft.Colors.GREY_600,
-                        ),
+                        TableHeaderText("Failed"),
                         width=40,
                         alignment=ft.alignment.center_right,
                     ),
                     ft.Container(
-                        ft.Text(
-                            "Speed",
-                            weight=ft.FontWeight.W_500,
-                            size=12,
-                            color=ft.Colors.GREY_600,
-                        ),
+                        TableHeaderText("Speed"),
                         width=60,
                         alignment=ft.alignment.center_right,
                     ),
                     ft.Container(
-                        ft.Text(
-                            "Status",
-                            weight=ft.FontWeight.W_500,
-                            size=12,
-                            color=ft.Colors.GREY_600,
-                        ),
+                        TableHeaderText("Status"),
                         width=90,
                         alignment=ft.alignment.center_right,
                     ),
