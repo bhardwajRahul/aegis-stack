@@ -658,6 +658,51 @@ async def check_database_health() -> ComponentStatus:
             from sqlalchemy import text
             session.execute(text("SELECT 1"))
 
+            # Collect table information for SQLite databases
+            table_info = []
+            if db_url.startswith("sqlite:///"):
+                try:
+                    # Get all table names and row counts
+                    from sqlalchemy import inspect
+                    inspector = inspect(session.bind)
+                    if inspector is None:
+                        # Skip table introspection if inspector is None
+                        table_names = []
+                    else:
+                        table_names = inspector.get_table_names()
+                    
+                    for table_name in table_names:
+                        try:
+                            # Get row count for each table using quoted identifier
+                            from sqlalchemy import quoted_name
+                            quoted_table = quoted_name(table_name, quote=True)
+                            count_result = session.execute(
+                                text(f"SELECT COUNT(*) FROM {quoted_table}")
+                            ).fetchone()
+                            row_count = count_result[0] if count_result else 0
+                            
+                            table_info.append({
+                                "name": table_name,
+                                "rows": row_count
+                            })
+                        except Exception as e:
+                            # If we can't count rows for a table, still include it
+                            logger.debug(
+                                f"Failed to count rows for table {table_name}: {e}"
+                            )
+                            table_info.append({
+                                "name": table_name,
+                                "rows": 0
+                            })
+                    
+                    enhanced_metadata["tables"] = table_info
+                    enhanced_metadata["table_count"] = len(table_names)
+                    
+                except Exception as e:
+                    logger.debug("Failed to collect table information", exc_info=True)
+                    enhanced_metadata["tables"] = []
+                    enhanced_metadata["table_count"] = 0
+
             # Collect SQLite PRAGMA settings for additional metadata
             if db_url.startswith("sqlite:///"):
                 try:
