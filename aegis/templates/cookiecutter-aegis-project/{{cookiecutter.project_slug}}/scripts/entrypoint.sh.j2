@@ -29,29 +29,18 @@ if [ -d ".venv" ]; then
     fi
 fi
 
-# Configure UV environment based on execution context
-if [ -n "$DOCKER_CONTAINER" ] || [ "$USER" = "root" ]; then
-    echo "🐳 Running in Docker container, configuring UV for containerized environment..."
+# Configure UV for Docker container (this is always a Docker entrypoint)
+echo "🐳 Configuring UV for Docker container..."
 
-    # Set Docker-specific UV configuration
-    export UV_PROJECT_ENVIRONMENT=/code/.venv
-    export UV_LINK_MODE=copy
-    export VIRTUAL_ENV=/code/.venv
+# Set Docker-specific UV configuration
+export UV_PROJECT_ENVIRONMENT=/code/.venv
+export UV_LINK_MODE=copy
+export VIRTUAL_ENV=/code/.venv
 
-    # Ensure .venv path is in PATH for CLI commands
-    export PATH="/code/.venv/bin:$PATH"
+# Ensure .venv path is in PATH for CLI commands
+export PATH="/code/.venv/bin:$PATH"
 
-    echo "✅ UV configured for Docker: UV_PROJECT_ENVIRONMENT=/code/.venv"
-else
-    echo "🖥️  Running in local environment, UV will use project defaults"
-
-    # Ensure we don't inherit Docker environment variables
-    unset UV_PROJECT_ENVIRONMENT
-    unset UV_SYSTEM_PYTHON
-
-    # Let UV auto-detect local .venv
-    echo "✅ UV configured for local development"
-fi
+echo "✅ UV configured for Docker: UV_PROJECT_ENVIRONMENT=/code/.venv"
 
 # Pop run_command from arguments
 run_command="$1"

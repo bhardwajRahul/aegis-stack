@@ -43,7 +43,8 @@ async def get_queue_pool(queue_type: str | None = None) -> tuple[ArqRedis, str]:
     queue_name = get_queue_metadata(queue_type)["queue_name"]
 
     # Check cache first to avoid creating new Redis connections
-    cache_key = f"{queue_type}_{settings.REDIS_URL}"
+    redis_url = settings.redis_url_effective if hasattr(settings, 'redis_url_effective') else settings.REDIS_URL
+    cache_key = f"{queue_type}_{redis_url}"
 
     if cache_key in _pool_cache:
         # Reuse existing pool
@@ -58,7 +59,8 @@ async def get_queue_pool(queue_type: str | None = None) -> tuple[ArqRedis, str]:
             del _pool_cache[cache_key]
 
     # Create new Redis pool and cache it with improved connection settings
-    base_settings = RedisSettings.from_dsn(settings.REDIS_URL)
+    redis_url = settings.redis_url_effective if hasattr(settings, 'redis_url_effective') else settings.REDIS_URL
+    base_settings = RedisSettings.from_dsn(redis_url)
     redis_settings = RedisSettings(
         host=base_settings.host,
         port=base_settings.port,

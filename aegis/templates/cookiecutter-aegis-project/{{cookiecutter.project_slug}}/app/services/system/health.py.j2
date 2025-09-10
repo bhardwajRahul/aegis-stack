@@ -528,14 +528,42 @@ async def check_cache_health() -> ComponentStatus:
         if retrieved_value.decode() != test_value:
             raise Exception("Redis set/get test failed")
 
-        # Get Redis info for metadata
+        # Get comprehensive Redis info for detailed monitoring
         redis_info_connection = aioredis.from_url(  # type: ignore[no-untyped-call]
             settings.REDIS_URL, db=settings.REDIS_DB
         )
         redis_info_client: aioredis.Redis = cast(aioredis.Redis, redis_info_connection)
+        
+        # Get multiple INFO sections for comprehensive metrics
         info = await redis_info_client.info()
+        stats_info = await redis_info_client.info('stats')
+        memory_info = await redis_info_client.info('memory')
+        clients_info = await redis_info_client.info('clients')
+        keyspace_info = await redis_info_client.info('keyspace')
+        
         await redis_info_client.aclose()
-
+        
+        # Calculate derived metrics
+        keyspace_hits = stats_info.get('keyspace_hits', 0)
+        keyspace_misses = stats_info.get('keyspace_misses', 0)
+        total_keyspace_ops = keyspace_hits + keyspace_misses
+        hit_rate = (keyspace_hits / max(total_keyspace_ops, 1)) * 100
+        
+        # Extract total keys from all databases
+        total_keys = 0
+        keys_with_expiry = 0
+        for key, value in keyspace_info.items():
+            if key.startswith('db'):
+                # Redis info('keyspace') returns nested dict format
+                if isinstance(value, dict):
+                    total_keys += value.get('keys', 0)
+                    keys_with_expiry += value.get('expires', 0)
+        
+        # Memory usage calculations
+        used_memory = memory_info.get('used_memory', 0)
+        used_memory_peak = memory_info.get('used_memory_peak', 0)
+        mem_fragmentation_ratio = memory_info.get('mem_fragmentation_ratio', 1.0)
+        
         return ComponentStatus(
             name="cache",
             status=ComponentStatusType.HEALTHY,
@@ -544,11 +572,52 @@ async def check_cache_health() -> ComponentStatus:
             metadata={
                 "implementation": "redis",
                 "version": info.get("redis_version", "unknown"),
-                "connected_clients": info.get("connected_clients", 0),
-                "used_memory_human": info.get("used_memory_human", "unknown"),
-                "uptime_in_seconds": info.get("uptime_in_seconds", 0),
                 "url": settings.REDIS_URL,
                 "db": settings.REDIS_DB,
+                
+                # Connection and client metrics
+                "connected_clients": clients_info.get("connected_clients", 0),
+                "blocked_clients": clients_info.get("blocked_clients", 0),
+                "client_longest_output_list": clients_info.get(
+                    "client_longest_output_list", 0
+                ),
+                
+                # Server uptime
+                "uptime_in_seconds": info.get("uptime_in_seconds", 0),
+                
+                # Memory metrics
+                "used_memory": used_memory,
+                "used_memory_human": memory_info.get("used_memory_human", "unknown"),
+                "used_memory_peak": used_memory_peak,
+                "used_memory_peak_human": memory_info.get(
+                    "used_memory_peak_human", "unknown"
+                ),
+                "mem_fragmentation_ratio": mem_fragmentation_ratio,
+                "maxmemory": memory_info.get("maxmemory", 0),
+                "maxmemory_human": memory_info.get("maxmemory_human", "0B"),
+                
+                # Performance and cache metrics
+                "instantaneous_ops_per_sec": stats_info.get(
+                    "instantaneous_ops_per_sec", 0
+                ),
+                "keyspace_hits": keyspace_hits,
+                "keyspace_misses": keyspace_misses,
+                "hit_rate_percent": hit_rate,
+                "evicted_keys": stats_info.get("evicted_keys", 0),
+                "expired_keys": stats_info.get("expired_keys", 0),
+                
+                # Keyspace statistics
+                "total_keys": total_keys,
+                "keys_with_expiry": keys_with_expiry,
+                
+                # Additional useful stats
+                "total_commands_processed": stats_info.get(
+                    "total_commands_processed", 0
+                ),
+                "total_connections_received": stats_info.get(
+                    "total_connections_received", 0
+                ),
+                "rejected_connections": stats_info.get("rejected_connections", 0),
             },
         )
 
@@ -574,6 +643,15 @@ async def check_cache_health() -> ComponentStatus:
                 "url": settings.REDIS_URL,
                 "db": settings.REDIS_DB,
                 "error": str(e),
+                # Provide fallback values for card display
+                "connected_clients": 0,
+                "used_memory_human": "unknown",
+                "uptime_in_seconds": 0,
+                "instantaneous_ops_per_sec": 0,
+                "hit_rate_percent": 0,
+                "total_keys": 0,
+                "evicted_keys": 0,
+                "expired_keys": 0,
             },
         )
 {% endif %}
