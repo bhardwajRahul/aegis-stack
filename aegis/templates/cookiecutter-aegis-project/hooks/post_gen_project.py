@@ -132,12 +132,20 @@ def main():
         remove_dir("app/components/scheduler")
         remove_file("tests/components/test_scheduler.py")
         remove_file("docs/components/scheduler.md")
+        # Remove scheduler API endpoints (empty when scheduler not included)
+        remove_file("app/components/backend/api/scheduler.py")
+        remove_file("tests/api/test_scheduler_endpoints.py")
+        # Remove scheduler card (should not display when scheduler not included)
+        remove_file("app/components/frontend/dashboard/cards/scheduler_card.py")
 
     # Remove scheduler service if scheduler backend is memory
     # The service is only useful when we can persist to a database
     if "{{ cookiecutter.scheduler_backend }}" == "memory":
         remove_dir("app/services/scheduler")
         remove_file("app/cli/tasks.py")
+        # Remove scheduler API endpoints (empty when using memory backend)
+        remove_file("app/components/backend/api/scheduler.py")
+        remove_file("tests/api/test_scheduler_endpoints.py")
 
     if "{{ cookiecutter.include_worker }}" != "yes":
         # Remove worker-specific files
@@ -148,6 +156,11 @@ def main():
         remove_file("tests/services/test_load_test_models.py")
         remove_file("tests/services/test_load_test_service.py")
         remove_file("tests/services/test_worker_health_registration.py")
+        # Remove worker API endpoints (empty when worker not included)
+        remove_file("app/components/backend/api/worker.py")
+        remove_file("tests/api/test_worker_endpoints.py")
+        # Remove worker card (should not display when worker not included)
+        remove_file("app/components/frontend/dashboard/cards/worker_card.py")
 
     if "{{ cookiecutter.include_database }}" != "yes":
         remove_file("app/core/db.py")

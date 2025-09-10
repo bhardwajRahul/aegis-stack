@@ -135,19 +135,21 @@ class FastAPICard:
         )
 
     def _create_details_section(self) -> ft.Container:
-        """Create the additional details section."""
+        """Create the additional details section with real route data."""
         response_time = self.component_data.response_time_ms or 0.0
-
-        # Sample API endpoints (in real app, this would come from FastAPI introspection)
-        api_endpoints = [
-            "GET /health/",
-            "GET /docs",
-            "POST /api/v1/users",
-            "GET /api/v1/status",
-        ]
-
+        metadata = self.component_data.metadata or {}
+        
+        # Get real route data from metadata
+        routes_data = metadata.get("routes", [])
+        total_routes = metadata.get("total_routes", 0)
+        total_endpoints = metadata.get("total_endpoints", 0)
+        method_counts = metadata.get("method_counts", {})
+        route_groups = metadata.get("route_groups", {})
+        has_docs = metadata.get("has_docs", False)
+        has_health = metadata.get("has_health", False)
+        
         details_content = [
-            PrimaryText("Performance"),
+            PrimaryText("API Overview"),
             ft.Divider(height=1, color=ft.Colors.GREY_300),
             create_stats_row("Response Time", f"{response_time:.1f}ms"),
             create_stats_row(
@@ -155,15 +157,92 @@ class FastAPICard:
                 self.component_data.status.value.title(),
                 get_status_colors(self.component_data)[0],
             ),
-            create_stats_row("Endpoints", f"{len(api_endpoints)} routes"),
         ]
-
-        # Add API endpoints list
-        for endpoint in api_endpoints[:3]:  # Show first 3
-            details_content.append(LabelText(f"• {endpoint}"))
-
-        if len(api_endpoints) > 3:
-            details_content.append(LabelText(f"• +{len(api_endpoints) - 3} more..."))
+        
+        # Add route statistics
+        if total_routes > 0:
+            details_content.extend([
+                create_stats_row("Routes", str(total_routes)),
+                create_stats_row("Endpoints", str(total_endpoints)),
+            ])
+            
+            # Add method breakdown if available
+            if method_counts:
+                method_summary = ", ".join([
+                    f"{count} {method}" 
+                    for method, count in sorted(method_counts.items())
+                ])
+                details_content.append(create_stats_row("Methods", method_summary))
+        else:
+            details_content.append(create_stats_row("Routes", "No routes found"))
+        
+        # Add feature indicators
+        features = []
+        if has_docs:
+            features.append("Docs")
+        if has_health:
+            features.append("Health")
+        if features:
+            details_content.append(create_stats_row("Features", ", ".join(features)))
+        
+        # Add route groups summary if available
+        if route_groups and total_routes > 0:
+            details_content.extend([
+                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                PrimaryText("Route Groups"),
+            ])
+            
+            # Show top route groups (max 4)
+            for group, count in sorted(
+                route_groups.items(), key=lambda x: x[1], reverse=True
+            )[:4]:
+                group_display = group if group != "root" else "/"
+                details_content.append(
+                    create_stats_row(f"{group_display}", f"{count} routes")
+                )
+        
+        # Add sample routes if available
+        if routes_data and total_routes > 0:
+            details_content.extend([
+                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                PrimaryText("Sample Routes"),
+            ])
+            
+            # Show first few routes  
+            for route in routes_data[:4]:  # Show max 4 routes
+                if isinstance(route, dict):
+                    # Handle dict format (fallback compatibility)
+                    methods = route.get("methods", [])
+                    path = route.get("path", "")
+                else:
+                    # Handle Pydantic model format (new standard)
+                    methods = (
+                        route.get("methods", []) if hasattr(route, 'get') 
+                        else getattr(route, 'methods', [])
+                    )
+                    path = (
+                        route.get("path", "") if hasattr(route, 'get') 
+                        else getattr(route, 'path', "")
+                    )
+                
+                # Format route display
+                method_str = "|".join(m for m in methods if m != "HEAD")
+                route_display = f"{method_str} {path}"
+                
+                details_content.append(LabelText(f"• {route_display}"))
+            
+            # Show "+X more" if there are additional routes
+            if total_routes > 4:
+                remaining = total_routes - 4
+                details_content.append(LabelText(f"• +{remaining} more..."))
+        
+        # Handle fallback case (no route data available)
+        elif not routes_data and metadata.get("fallback"):
+            details_content.extend([
+                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                LabelText("Route introspection unavailable", color=ft.Colors.ORANGE),
+                LabelText("Using fallback display", size=11),
+            ])
 
         return ft.Column(details_content, spacing=6)
 
