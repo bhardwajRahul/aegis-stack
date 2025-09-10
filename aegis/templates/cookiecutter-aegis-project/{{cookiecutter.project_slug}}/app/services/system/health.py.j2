@@ -501,8 +501,9 @@ async def check_cache_health() -> ComponentStatus:
         import redis.asyncio as aioredis
 
         # Create Redis connection with timeout
+        redis_url = settings.redis_url_effective if hasattr(settings, 'redis_url_effective') else settings.REDIS_URL
         redis_connection = aioredis.from_url(  # type: ignore[no-untyped-call]
-            settings.REDIS_URL,
+            redis_url,
             db=settings.REDIS_DB,
             socket_timeout=settings.HEALTH_CHECK_TIMEOUT_SECONDS,
             socket_connect_timeout=settings.HEALTH_CHECK_TIMEOUT_SECONDS,
@@ -530,7 +531,7 @@ async def check_cache_health() -> ComponentStatus:
 
         # Get comprehensive Redis info for detailed monitoring
         redis_info_connection = aioredis.from_url(  # type: ignore[no-untyped-call]
-            settings.REDIS_URL, db=settings.REDIS_DB
+            redis_url, db=settings.REDIS_DB
         )
         redis_info_client: aioredis.Redis = cast(aioredis.Redis, redis_info_connection)
         
@@ -572,7 +573,7 @@ async def check_cache_health() -> ComponentStatus:
             metadata={
                 "implementation": "redis",
                 "version": info.get("redis_version", "unknown"),
-                "url": settings.REDIS_URL,
+                "url": redis_url,
                 "db": settings.REDIS_DB,
                 
                 # Connection and client metrics
@@ -640,7 +641,7 @@ async def check_cache_health() -> ComponentStatus:
             response_time_ms=None,
             metadata={
                 "implementation": "redis",
-                "url": settings.REDIS_URL,
+                "url": settings.redis_url_effective if hasattr(settings, 'redis_url_effective') else settings.REDIS_URL,
                 "db": settings.REDIS_DB,
                 "error": str(e),
                 # Provide fallback values for card display
