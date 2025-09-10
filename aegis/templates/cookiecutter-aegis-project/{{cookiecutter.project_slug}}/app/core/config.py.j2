@@ -57,8 +57,26 @@ class Settings(BaseSettings):
 
 {% if cookiecutter.include_redis == "yes" %}
     # Redis settings for arq background tasks
-    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_URL: str = "redis://redis:6379"  # Docker service name by default
+    REDIS_URL_LOCAL: str | None = None  # Override for local CLI usage
     REDIS_DB: int = 0
+
+    @property
+    def redis_url_effective(self) -> str:
+        """Get effective Redis URL, preferring local override when not in Docker."""
+        # If explicitly overridden for local use
+        if self.REDIS_URL_LOCAL and not self.is_docker:
+            return self.REDIS_URL_LOCAL
+        return self.REDIS_URL
+
+    @property 
+    def is_docker(self) -> bool:
+        """Detect if running inside Docker container."""
+        import os
+        return (
+            os.path.exists("/.dockerenv") or 
+            bool(os.getenv("DOCKER_CONTAINER"))
+        )
 {% endif %}
 
 {% if cookiecutter.include_worker == "yes" %}

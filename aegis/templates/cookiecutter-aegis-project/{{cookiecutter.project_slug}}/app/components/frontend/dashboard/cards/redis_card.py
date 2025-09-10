@@ -1,8 +1,9 @@
 """
 Stunning Redis/Cache Component Card
 
-Modern, visually striking card component that displays rich Redis metrics,
-memory usage, connection statistics, and cache performance data.
+Modern, visually striking card component that displays real Redis metrics
+from Redis INFO command, including memory usage, cache hit rates, operations
+per second, connection statistics, and comprehensive performance data.
 """
 
 import flet as ft
@@ -21,14 +22,15 @@ from .card_utils import create_responsive_3_section_layout
 
 class RedisCard:
     """
-    A visually stunning, wide component card for displaying Redis/Cache metrics.
+    A visually stunning, wide component card for displaying real Redis metrics.
 
     Features:
-    - Modern Material Design 3 styling
-    - Three-section layout (badge, metrics, performance)
-    - Redis-specific statistics and cache hit/miss ratios
-    - Memory usage and connection monitoring
-    - Status-aware coloring and hover effects
+    - Modern Material Design 3 styling with circular gauge indicators
+    - Three-section layout (badge, real-time metrics, performance stats)
+    - Real Redis INFO command data: hit rates, memory usage, ops/sec
+    - Comprehensive statistics: uptime, keys, connections, evictions
+    - Health-aware coloring based on cache performance thresholds
+    - Graceful fallback for unavailable metrics
     """
 
     def __init__(self, component_data: ComponentStatus) -> None:
@@ -63,6 +65,16 @@ class RedisCard:
         self, label: str, value: float, unit: str, color: str
     ) -> ft.Container:
         """Create a circular gauge-style metric indicator."""
+        # Format value appropriately based on size
+        if value >= 1000:
+            formatted_value = f"{value/1000:.1f}k"
+        elif value >= 1000000:
+            formatted_value = f"{value/1000000:.1f}M"
+        else:
+            formatted_value = (
+                f"{value:.1f}" if isinstance(value, float) else str(int(value))
+            )
+        
         return ft.Container(
             content=ft.Column(
                 [
@@ -70,7 +82,7 @@ class RedisCard:
                     ft.Container(
                         content=ft.Column(
                             [
-                                MetricText(f"{value:.1f}"),
+                                MetricText(formatted_value),
                                 LabelText(unit),
                             ],
                             alignment=ft.MainAxisAlignment.CENTER,
@@ -129,22 +141,66 @@ class RedisCard:
 
     def _create_metrics_section(self) -> ft.Container:
         """Create the Redis metrics section with memory and connection stats."""
-        # Sample Redis metrics (in real app, this would come from Redis INFO command)
+        # Extract real Redis metrics from component metadata
+        metadata = self.component_data.metadata or {}
+        
+        # Calculate hit rate with proper color coding
+        hit_rate = metadata.get("hit_rate_percent", 0)
+        hit_rate_color = (
+            ft.Colors.GREEN if hit_rate >= 90
+            else ft.Colors.ORANGE if hit_rate >= 70
+            else ft.Colors.RED
+        )
+        
+        # Calculate memory usage percentage if maxmemory is set
+        used_memory = metadata.get("used_memory", 0)
+        max_memory = metadata.get("maxmemory", 0)
+        
+        if max_memory > 0:
+            memory_percent = (used_memory / max_memory) * 100
+            memory_value = memory_percent
+            memory_unit = "%"
+            # Set color based on memory usage percentage
+            if memory_percent >= 90:
+                memory_color = ft.Colors.RED
+            elif memory_percent >= 70:
+                memory_color = ft.Colors.ORANGE
+            else:
+                memory_color = ft.Colors.BLUE
+        else:
+            # Show absolute memory usage in MB
+            memory_value = used_memory / (1024 * 1024) if used_memory > 0 else 0
+            memory_unit = "MB"
+            memory_color = ft.Colors.BLUE
+        
+        # Get operations per second
+        ops_per_sec = metadata.get("instantaneous_ops_per_sec", 0)
+        
         redis_metrics = {
-            "memory": {"used": 45.2, "unit": "MB", "color": ft.Colors.BLUE},
-            "connections": {"active": 12, "unit": "conn", "color": ft.Colors.GREEN},
-            "hit_ratio": {"rate": 94.7, "unit": "%", "color": ft.Colors.PURPLE},
+            "hit_ratio": {
+                "value": hit_rate,
+                "unit": "%",
+                "color": hit_rate_color,
+            },
+            "memory": {
+                "value": memory_value,
+                "unit": memory_unit,
+                "color": memory_color,
+            },
+            "ops_sec": {
+                "value": ops_per_sec,
+                "unit": "/sec",
+                "color": ft.Colors.PURPLE,
+            },
         }
 
         metrics_controls = []
         for metric_key, data in redis_metrics.items():
-            label = metric_key.replace("_", " ").title()
+            label = metric_key.replace("_", " ").replace("ops sec", "Ops").title()
             metrics_controls.append(
                 self._create_metric_gauge(
                     label,
-                    data["used"]
-                    if "used" in data
-                    else data.get("active", data.get("rate", 0)),
+                    data["value"],
                     data["unit"],
                     data["color"],
                 )
@@ -163,14 +219,38 @@ class RedisCard:
 
     def _create_performance_section(self) -> ft.Container:
         """Create the Redis performance and statistics section."""
-
-        # Sample Redis performance stats
+        
+        # Extract real Redis performance stats from metadata
+        metadata = self.component_data.metadata or {}
+        
+        # Format uptime from seconds to human readable
+        uptime_seconds = metadata.get("uptime_in_seconds", 0)
+        uptime_days = uptime_seconds // 86400
+        uptime_hours = (uptime_seconds % 86400) // 3600
+        uptime_str = (
+            f"{uptime_days}d {uptime_hours}h"
+            if uptime_days > 0
+            else f"{uptime_hours}h"
+        )
+        
+        # Format numbers with commas
+        def format_number(num: int | float) -> str:
+            if isinstance(num, float):
+                return f"{num:,.1f}"
+            return f"{num:,}"
+        
         performance_stats = {
-            "Uptime": "7d 12h",
-            "Commands/sec": "1,247",
-            "Keys": "15,432",
-            "Keyspace Hits": "94.7%",
-            "Memory Peak": "67.2MB",
+            "Uptime": uptime_str,
+            "Commands/sec": format_number(
+                metadata.get("instantaneous_ops_per_sec", 0)
+            ),
+            "Total Keys": format_number(metadata.get("total_keys", 0)),
+            "Memory Peak": metadata.get("used_memory_peak_human", "unknown"),
+            "Connected Clients": format_number(
+                metadata.get("connected_clients", 0)
+            ),
+            "Evicted Keys": format_number(metadata.get("evicted_keys", 0)),
+            "Fragmentation": f"{metadata.get('mem_fragmentation_ratio', 1.0):.2f}",
         }
 
         perf_content = [
@@ -206,7 +286,22 @@ class RedisCard:
             ]
         )
 
-        return ft.Column(perf_content, spacing=6)
+        # Wrap in a scrollable container to handle overflow
+        return ft.Container(
+            content=ft.Column(
+                [
+                    ft.Container(
+                        content=ft.Column(
+                            perf_content,
+                            spacing=6,
+                            scroll=ft.ScrollMode.AUTO,
+                        ),
+                        height=240,  # Increased height to show more stats
+                    )
+                ]
+            ),
+            padding=ft.padding.only(right=4),  # Add padding for scrollbar space
+        )
 
     def build(self) -> ft.Container:
         """Build and return the complete Redis card with responsive layout."""

@@ -7,7 +7,7 @@
 
 build: ## Build all Docker images (safe, sequential)
 	@echo "🔨 Building Docker images..."
-	@docker compose build
+	@docker compose --profile dev build
 
 serve: ## Run all services (assumes images are built)
 	@echo "🚀 Starting services... (Press Ctrl+C to stop)"

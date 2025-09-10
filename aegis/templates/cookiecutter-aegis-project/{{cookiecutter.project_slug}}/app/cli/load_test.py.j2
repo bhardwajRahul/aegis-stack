@@ -8,6 +8,7 @@ with full parameter configuration and result analysis.
 import asyncio
 from enum import Enum
 import json
+import os
 import time
 from typing import Any
 
@@ -36,6 +37,12 @@ app = typer.Typer(
 )
 
 console = Console()
+
+# Force CLI to use local Redis URL (from REDIS_URL_LOCAL config)
+# This ensures CLI commands work when run locally outside Docker
+from app.core.config import settings
+if settings.REDIS_URL_LOCAL:
+    os.environ["REDIS_URL"] = settings.REDIS_URL_LOCAL
 
 
 class QueueChoice(str, Enum):

@@ -78,13 +78,37 @@ WORKER_MAX_TRIES=3                  # Used by WorkerSettings.max_tries
 
 ```bash
 # .env file for local development
-REDIS_URL=redis://localhost:6379
+REDIS_URL=redis://redis:6379        # Used by Docker containers
+REDIS_URL_LOCAL=redis://localhost:6379  # Used by CLI commands running locally
 REDIS_DB=0
 WORKER_KEEP_RESULT_SECONDS=3600     # WorkerSettings will use this
 WORKER_MAX_TRIES=3                  # WorkerSettings will use this  
 ENVIRONMENT=development             # WorkerSettings can check this
 APP_ENV=dev                         # Enables auto-reload in Docker
 ```
+
+### CLI Command Configuration
+
+When running CLI commands locally (outside Docker), the system automatically uses `REDIS_URL_LOCAL` if configured:
+
+```bash
+# Local CLI commands use this pattern:
+# 1. Docker services connect to: redis://redis:6379
+# 2. Local CLI commands connect to: redis://localhost:6379
+
+# In your .env file:
+REDIS_URL=redis://redis:6379        # For Docker containers
+REDIS_URL_LOCAL=redis://localhost:6379  # For local CLI commands
+
+# Example CLI usage (automatically uses REDIS_URL_LOCAL):
+my-app load-test io
+my-app health status
+```
+
+This dual-configuration approach allows:
+
+- **Docker containers** to connect to the `redis` service  
+- **Local CLI commands** to connect to `localhost` Redis without starting containers
 
 ### Production Settings
 

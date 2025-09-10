@@ -171,7 +171,9 @@ def health_status(
     ),
     json_output: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
 ) -> None:
-    """Show system health status (always exits 0 for inspection)."""
+    """Show system health status (always exits 0 for inspection).
+
+    Use --detailed for component metadata and response times."""
     setup_logging()
 
     try:
