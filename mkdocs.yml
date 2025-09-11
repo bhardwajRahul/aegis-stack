@@ -26,6 +26,7 @@ theme:
 # Navigation structure
 nav:
   - Home: index.md
+  - Installation: installation.md
   - About: about.md
   - Philosophy: philosophy.md
   - Components:
@@ -79,6 +80,8 @@ plugins:
 markdown_extensions:
   - admonition
   - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
