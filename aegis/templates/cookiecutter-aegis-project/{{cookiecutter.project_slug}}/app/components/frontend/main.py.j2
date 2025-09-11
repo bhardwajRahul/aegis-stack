@@ -9,11 +9,19 @@ import flet as ft
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 from .dashboard.cards import (
-    DatabaseCard,
     FastAPICard,
+    {%- if cookiecutter.include_database == "yes" %}
+    DatabaseCard,
+    {%- endif %}
+    {%- if cookiecutter.include_redis == "yes" %}
     RedisCard,
+    {%- endif %}
+    {%- if cookiecutter.include_scheduler == "yes" %}
     SchedulerCard,
+    {%- endif %}
+    {%- if cookiecutter.include_worker == "yes" %}
     WorkerCard,
+    {%- endif %}
 )
 from .dashboard.cards.card_utils import create_health_status_indicator
 from .theme import ThemeManager
@@ -183,14 +191,22 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             # Map component names to their stunning card classes
             if component_name == "backend":
                 return FastAPICard(component_data).build()
+            {%- if cookiecutter.include_worker == "yes" %}
             elif component_name == "worker":
                 return WorkerCard(component_data).build()
+            {%- endif %}
+            {%- if cookiecutter.include_redis == "yes" %}
             elif component_name == "cache":
                 return RedisCard(component_data).build()
+            {%- endif %}
+            {%- if cookiecutter.include_database == "yes" %}
             elif component_name == "database":
                 return DatabaseCard(component_data).build()
+            {%- endif %}
+            {%- if cookiecutter.include_scheduler == "yes" %}
             elif component_name == "scheduler":
                 return SchedulerCard(component_data).build()
+            {%- endif %}
             else:
                 # Fallback for unknown components - should not happen in practice
                 return ft.Container(

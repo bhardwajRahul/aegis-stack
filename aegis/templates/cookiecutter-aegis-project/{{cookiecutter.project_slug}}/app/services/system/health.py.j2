@@ -501,7 +501,11 @@ async def check_cache_health() -> ComponentStatus:
         import redis.asyncio as aioredis
 
         # Create Redis connection with timeout
-        redis_url = settings.redis_url_effective if hasattr(settings, 'redis_url_effective') else settings.REDIS_URL
+        redis_url = (
+            settings.redis_url_effective 
+            if hasattr(settings, 'redis_url_effective') 
+            else settings.REDIS_URL
+        )
         redis_connection = aioredis.from_url(  # type: ignore[no-untyped-call]
             redis_url,
             db=settings.REDIS_DB,
@@ -641,7 +645,11 @@ async def check_cache_health() -> ComponentStatus:
             response_time_ms=None,
             metadata={
                 "implementation": "redis",
-                "url": settings.redis_url_effective if hasattr(settings, 'redis_url_effective') else settings.REDIS_URL,
+                "url": (
+                    settings.redis_url_effective 
+                    if hasattr(settings, 'redis_url_effective') 
+                    else settings.REDIS_URL
+                ),
                 "db": settings.REDIS_DB,
                 "error": str(e),
                 # Provide fallback values for card display
@@ -1191,11 +1199,13 @@ async def check_worker_health() -> ComponentStatus:
                 "total_failed": total_failed,
                 "total_retried": total_retried,
                 "total_ongoing": total_ongoing,
-                "overall_failure_rate_percent": round(
-                    (total_failed / max(total_completed + total_failed, 1)) * 100, 1
-                )
-                if total_completed + total_failed > 0
-                else 0,
+                "overall_failure_rate_percent": (
+                    round(
+                        (total_failed / max(total_completed + total_failed, 1)) * 100, 1
+                    )
+                    if total_completed + total_failed > 0
+                    else 0
+                ),
                 "redis_url": settings.REDIS_URL,
                 "queue_configuration": {
                     queue_type: {

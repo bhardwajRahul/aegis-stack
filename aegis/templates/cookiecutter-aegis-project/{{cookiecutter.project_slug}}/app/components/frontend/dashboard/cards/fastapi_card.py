@@ -46,12 +46,12 @@ class FastAPICard:
     # Removed _get_status_colors - now using shared utility function
 
     def _create_tech_badge(self) -> ft.Container:
-        """Create the FastAPI technology badge section."""
+        """Create the Backend API technology badge section."""
         primary_color, _, _ = get_status_colors(self.component_data)
 
         return create_tech_badge(
-            title="FastAPI",
-            subtitle="Backend API",
+            title="Backend",
+            subtitle="FastAPI",
             icon="🚀",
             badge_text="API",
             badge_color=ft.Colors.GREEN,
@@ -135,37 +135,74 @@ class FastAPICard:
         )
 
     def _create_details_section(self) -> ft.Container:
-        """Create the additional details section."""
-        response_time = self.component_data.response_time_ms or 0.0
-
-        # Sample API endpoints (in real app, this would come from FastAPI introspection)
-        api_endpoints = [
-            "GET /health/",
-            "GET /docs",
-            "POST /api/v1/users",
-            "GET /api/v1/status",
-        ]
-
+        """Create the additional details section with real route data."""
+        metadata = self.component_data.metadata or {}
+        
+        # Get real route data from metadata
+        routes_data = metadata.get("routes", [])
+        total_routes = metadata.get("total_routes", 0)
+        total_endpoints = metadata.get("total_endpoints", 0)
+        method_counts = metadata.get("method_counts", {})
+        route_groups = metadata.get("route_groups", {})
+        has_docs = metadata.get("has_docs", False)
+        
         details_content = [
-            PrimaryText("Performance"),
+            PrimaryText("API Overview"),
             ft.Divider(height=1, color=ft.Colors.GREY_300),
-            create_stats_row("Response Time", f"{response_time:.1f}ms"),
             create_stats_row(
                 "Status",
                 self.component_data.status.value.title(),
                 get_status_colors(self.component_data)[0],
             ),
-            create_stats_row("Endpoints", f"{len(api_endpoints)} routes"),
         ]
+        
+        # Add route statistics
+        if total_routes > 0:
+            details_content.extend([
+                create_stats_row("Routes", str(total_routes)),
+                create_stats_row("Endpoints", str(total_endpoints)),
+            ])
+            
+            # Add method breakdown if available
+            if method_counts:
+                method_summary = ", ".join([
+                    f"{count} {method}" 
+                    for method, count in sorted(method_counts.items())
+                ])
+                details_content.append(create_stats_row("Methods", method_summary))
+        else:
+            details_content.append(create_stats_row("Routes", "No routes found"))
+        
+        # Add docs feature indicator if available
+        if has_docs:
+            details_content.append(create_stats_row("Features", "Docs"))
+        
+        # Add route groups summary if available
+        if route_groups and total_routes > 0:
+            details_content.extend([
+                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                PrimaryText("Route Groups"),
+            ])
+            
+            # Show top route groups (max 4)
+            for group, count in sorted(
+                route_groups.items(), key=lambda x: x[1], reverse=True
+            )[:4]:
+                group_display = group if group != "root" else "/"
+                details_content.append(
+                    create_stats_row(f"{group_display}", f"{count} routes")
+                )
+        
+        
+        # Handle fallback case (no route data available)
+        elif not routes_data and metadata.get("fallback"):
+            details_content.extend([
+                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                LabelText("Route introspection unavailable", color=ft.Colors.ORANGE),
+                LabelText("Using fallback display", size=11),
+            ])
 
-        # Add API endpoints list
-        for endpoint in api_endpoints[:3]:  # Show first 3
-            details_content.append(LabelText(f"• {endpoint}"))
-
-        if len(api_endpoints) > 3:
-            details_content.append(LabelText(f"• +{len(api_endpoints) - 3} more..."))
-
-        return ft.Column(details_content, spacing=6)
+        return ft.Column(details_content, spacing=6, scroll=ft.ScrollMode.AUTO)
 
     def build(self) -> ft.Container:
         """Build the complete FastAPI card with simple 3-section responsive layout."""

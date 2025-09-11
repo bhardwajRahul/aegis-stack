@@ -8,12 +8,12 @@ class ThemeManager:
 
     def __init__(self, page: ft.Page) -> None:
         self.page = page
-        self.is_dark_mode = False
+        self.is_dark_mode = True  # Default to dark
 
     async def initialize_themes(self) -> None:
-        """Initialize theme system with light mode as default."""
-        self.page.theme_mode = ft.ThemeMode.LIGHT
-        self.is_dark_mode = False
+        """Initialize theme system with dark mode as default."""
+        self.page.theme_mode = ft.ThemeMode.DARK
+        self.is_dark_mode = True
         self.page.update()
 
     async def toggle_theme(self) -> None:

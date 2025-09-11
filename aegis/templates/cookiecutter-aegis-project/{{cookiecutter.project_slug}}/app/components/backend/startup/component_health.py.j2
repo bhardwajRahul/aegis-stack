@@ -8,46 +8,166 @@ with the system health service using Python's import system.
 from app.core.log import logger
 from app.services.system.health import register_health_check
 from app.services.system.models import ComponentStatus, ComponentStatusType
+from app.components.backend.main import get_configured_app
+from app.services.backend.route_inspector import get_fastapi_route_metadata, RouteMetadata
+
+# Cache for route metadata - initialized once at startup
+_cached_route_metadata: RouteMetadata | None = None
+
+
+def _initialize_route_metadata_cache() -> None:
+    """
+    Initialize route metadata cache using the configured FastAPI app.
+    Called once during startup to avoid recreating the app on every health check.
+    """
+    global _cached_route_metadata
+    
+    if _cached_route_metadata is not None:
+        return  # Already initialized
+    
+    try:
+        app = get_configured_app()
+        if app is not None:
+            _cached_route_metadata = get_fastapi_route_metadata(app)
+            logger.info(
+                f"Route metadata cached: {_cached_route_metadata.total_routes} routes, "
+                f"{_cached_route_metadata.total_endpoints} endpoints"
+            )
+        else:
+            logger.warning(
+                "FastAPI app not yet configured - route metadata cache will be "
+                "initialized later"
+            )
+    except Exception as e:
+        logger.error(f"Failed to initialize route metadata cache: {e}")
 
 
 async def _backend_component_health() -> ComponentStatus:
     """
-    FastAPI backend health check.
+    FastAPI backend health check with route introspection.
 
     In test environment, reports as healthy since the app is loaded.
     In production, uses internal check to avoid circular dependency.
+    Includes comprehensive route metadata for dashboard display.
     """
     import os
+    global _cached_route_metadata
 
     # Check if we're in test environment
     if os.getenv("PYTEST_CURRENT_TEST") or "pytest" in os.getenv("_", ""):
-        return ComponentStatus(
-            name="backend",
-            status=ComponentStatusType.HEALTHY,
-            message="FastAPI backend available (test mode)",
-            response_time_ms=None,
-            metadata={
-                "type": "component_check",
-                "environment": "test",
-                "note": "Backend component loaded successfully",
-            },
-        )
+        # Even in test mode, try to get route information if possible
+        try:
+            
+            # Initialize cache if not already done (might happen in tests)
+            if _cached_route_metadata is None:
+                _initialize_route_metadata_cache()
+            
+            route_metadata = _cached_route_metadata
+            
+            # Handle case where route metadata is not available in test mode
+            if route_metadata is None:
+                return ComponentStatus(
+                    name="backend",
+                    status=ComponentStatusType.HEALTHY,
+                    message="FastAPI backend available (test mode)",
+                    response_time_ms=None,
+                    metadata={
+                        "type": "component_check",
+                        "environment": "test",
+                        "note": "Backend component loaded successfully",
+                        "route_introspection": "unavailable",
+                    },
+                )
+            
+            return ComponentStatus(
+                name="backend",
+                status=ComponentStatusType.HEALTHY,
+                message=(
+                    f"FastAPI backend available (test mode): "
+                    f"{route_metadata.total_routes} routes"
+                ),
+                response_time_ms=None,
+                metadata={
+                    "type": "component_check",
+                    "environment": "test",
+                    "note": "Backend component loaded successfully",
+                    **route_metadata.model_dump_for_metadata(),
+                },
+            )
+        except Exception as e:
+            logger.warning(f"Could not get route metadata in test mode: {e}")
+            return ComponentStatus(
+                name="backend",
+                status=ComponentStatusType.HEALTHY,
+                message="FastAPI backend available (test mode)",
+                response_time_ms=None,
+                metadata={
+                    "type": "component_check",
+                    "environment": "test",
+                    "note": "Backend component loaded successfully",
+                    "route_introspection_error": str(e),
+                },
+            )
 
-    # In production, assume backend is healthy if we can execute this code
-    # (since this code IS the backend). Avoid self-HTTP-check circular dependency.
+    # In production, use cached route information
     try:
-        # Simple internal health check - if we can import and run this, backend is up
-        from app.integrations.main import create_integrated_app
+        # Initialize cache if not already done (fallback safety)
+        if _cached_route_metadata is None:
+            logger.warning(
+                "Route metadata cache not initialized at startup, "
+                "initializing now..."
+            )
+            _initialize_route_metadata_cache()
+        
+        route_metadata = _cached_route_metadata
+        
+        # Handle case where route metadata is still not available
+        if route_metadata is None:
+            return ComponentStatus(
+                name="backend",
+                status=ComponentStatusType.HEALTHY,
+                message=(
+                    "FastAPI backend active (route introspection unavailable)"
+                ),
+                response_time_ms=None,
+                metadata={
+                    "type": "internal_component_check",
+                    "note": "Backend is running but route metadata unavailable",
+                    "check_method": "internal_execution",
+                },
+            )
+        
+        # Create descriptive message based on route data
+        total_routes = route_metadata.total_routes
+        total_endpoints = route_metadata.total_endpoints
+        method_counts = route_metadata.method_counts
+        
+        # Format method summary (e.g., "12 GET, 5 POST")
+        method_summary = ", ".join([
+            f"{count} {method}" 
+            for method, count in sorted(method_counts.items())
+        ])
+        
+        message_parts = [f"{total_routes} routes"]
+        if total_endpoints != total_routes:
+            message_parts.append(f"{total_endpoints} endpoints")
+        if method_summary:
+            message_parts.append(f"({method_summary})")
+        
+        message = f"FastAPI backend active: {', '.join(message_parts)}"
         
         return ComponentStatus(
             name="backend",
             status=ComponentStatusType.HEALTHY,
-            message="FastAPI backend active (internal check)",
+            message=message,
             response_time_ms=None,
             metadata={
                 "type": "internal_component_check",
-                "note": "Backend is running since this health check executed",
+                "note": (
+                    "Backend is running since this health check executed"
+                ),
                 "check_method": "internal_execution",
+                **route_metadata.model_dump_for_metadata(),
             },
         )
     except Exception as e:
@@ -189,6 +309,9 @@ async def startup_hook() -> None:
     optional components using Python's import system.
     """
     logger.info("Registering component health checks...")
+
+    # Initialize route metadata cache once at startup
+    _initialize_route_metadata_cache()
 
     # Always register core components
     register_health_check("backend", _backend_component_health)
