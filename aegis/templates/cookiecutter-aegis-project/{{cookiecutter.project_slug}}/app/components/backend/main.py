@@ -10,7 +10,7 @@ _configured_app: FastAPI | None = None
 def create_backend_app(app: FastAPI) -> FastAPI:
     """Configure FastAPI app with all backend concerns"""
     global _configured_app
-    
+
     # Store the app instance for later introspection
     _configured_app = app
 

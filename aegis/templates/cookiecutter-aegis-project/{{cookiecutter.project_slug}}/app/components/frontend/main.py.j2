@@ -6,10 +6,12 @@ from typing import Any
 
 import flet as ft
 
+from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 from .dashboard.cards import (
     FastAPICard,
+    FletCard,
     {%- if cookiecutter.include_database == "yes" %}
     DatabaseCard,
     {%- endif %}
@@ -87,24 +89,47 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
 
         async def update_logo() -> None:
             """Update logo based on current theme."""
-            # Update the base64 source for the current theme
-            logo_image.src_base64 = get_logo_base64(theme_manager.is_dark_mode)
-            logo_image.src = None  # Clear the src to use src_base64
+            try:
+                # Update the base64 source for the current theme
+                logo_image.src_base64 = get_logo_base64(theme_manager.is_dark_mode)
+                logo_image.src = None  # Clear the src to use src_base64
+            except Exception as e:
+                logger.error(
+                    f"Logo update failed: {e}",
+                    exc_info=True,
+                    extra={
+                        "error_type": type(e).__name__,
+                        "function": "update_logo",
+                        "is_dark_mode": getattr(
+                            theme_manager, 'is_dark_mode', 'unknown'
+                        )
+                    }
+                )
 
         async def toggle_theme(_: Any) -> None:
             """Toggle theme and update button icon and logo."""
-            await theme_manager.toggle_theme()
-            if theme_manager.is_dark_mode:
-                theme_button.icon = ft.Icons.LIGHT_MODE
-                theme_button.tooltip = "Switch to Light Mode"
-            else:
-                theme_button.icon = ft.Icons.DARK_MODE
-                theme_button.tooltip = "Switch to Dark Mode"
+            try:
+                await theme_manager.toggle_theme()
+                if theme_manager.is_dark_mode:
+                    theme_button.icon = ft.Icons.LIGHT_MODE
+                    theme_button.tooltip = "Switch to Light Mode"
+                else:
+                    theme_button.icon = ft.Icons.DARK_MODE
+                    theme_button.tooltip = "Switch to Dark Mode"
 
-            # Update logo immediately after theme change
-            await update_logo()
-            logo_image.update()
-            page.update()
+                # Update logo immediately after theme change
+                await update_logo()
+                logo_image.update()
+                page.update()
+            except Exception as e:
+                logger.error(
+                    f"Theme toggle failed: {e}",
+                    exc_info=True,
+                    extra={
+                        "error_type": type(e).__name__,
+                        "function": "toggle_theme"
+                    }
+                )
 
         theme_button.on_click = toggle_theme
 
@@ -185,35 +210,61 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             component_name: str, component_data: Any
         ) -> ft.Container:
             """Create stunning marketing-grade component cards."""
-            if not component_data:
-                return ft.Container()
+            try:
+                if not component_data:
+                    logger.warning(f"No component data provided for {component_name}")
+                    return ft.Container()
 
-            # Map component names to their stunning card classes
-            if component_name == "backend":
-                return FastAPICard(component_data).build()
-            {%- if cookiecutter.include_worker == "yes" %}
-            elif component_name == "worker":
-                return WorkerCard(component_data).build()
-            {%- endif %}
-            {%- if cookiecutter.include_redis == "yes" %}
-            elif component_name == "cache":
-                return RedisCard(component_data).build()
-            {%- endif %}
-            {%- if cookiecutter.include_database == "yes" %}
-            elif component_name == "database":
-                return DatabaseCard(component_data).build()
-            {%- endif %}
-            {%- if cookiecutter.include_scheduler == "yes" %}
-            elif component_name == "scheduler":
-                return SchedulerCard(component_data).build()
-            {%- endif %}
-            else:
-                # Fallback for unknown components - should not happen in practice
+                # Map component names to their stunning card classes
+                if component_name == "backend":
+                    return FastAPICard(component_data).build()
+                elif component_name == "frontend":
+                    return FletCard(component_data).build()
+                {%- if cookiecutter.include_worker == "yes" %}
+                elif component_name == "worker":
+                    return WorkerCard(component_data).build()
+                {%- endif %}
+                {%- if cookiecutter.include_redis == "yes" %}
+                elif component_name == "cache":
+                    return RedisCard(component_data).build()
+                {%- endif %}
+                {%- if cookiecutter.include_database == "yes" %}
+                elif component_name == "database":
+                    return DatabaseCard(component_data).build()
+                {%- endif %}
+                {%- if cookiecutter.include_scheduler == "yes" %}
+                elif component_name == "scheduler":
+                    return SchedulerCard(component_data).build()
+                {%- endif %}
+                else:
+                    # Fallback for unknown components - should not happen in practice
+                    logger.warning(f"Unknown component type: {component_name}")
+                    return ft.Container(
+                        content=ft.Text(f"Unknown component: {component_name}"),
+                        padding=20,
+                        bgcolor=ft.Colors.SURFACE,
+                        border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                        border_radius=16,
+                        width=800,
+                        height=240,
+                    )
+            except Exception as e:
+                logger.error(
+                    f"Failed to create component card for {component_name}: {e}",
+                    exc_info=True,
+                    extra={
+                        "error_type": type(e).__name__,
+                        "function": "create_component_card",
+                        "component_name": component_name,
+                        "component_data": component_data
+                    }
+                )
+                # Return fallback card on error
                 return ft.Container(
-                    content=ft.Text(f"Unknown component: {component_name}"),
+                    content=ft.Text(f"Error loading {component_name}"),
                     padding=20,
-                    bgcolor=ft.Colors.SURFACE,
-                    border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                    bgcolor=ft.Colors.ERROR_CONTAINER,
+                    border=ft.border.all(1, ft.Colors.ERROR),
                     border_radius=16,
                     width=800,
                     height=240,
@@ -242,21 +293,43 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 # Convert API data back to ComponentStatus objects for the cards
                 def convert_component(comp_data: dict[str, Any]) -> ComponentStatus:
                     """Recursively convert API component data to ComponentStatus."""
-                    sub_components = {}
-                    if "sub_components" in comp_data:
-                        for sub_name, sub_data in comp_data["sub_components"].items():
-                            sub_components[sub_name] = convert_component(sub_data)
+                    try:
+                        sub_components = {}
+                        if "sub_components" in comp_data:
+                            for sub_name, sub_data in comp_data[
+                                "sub_components"
+                            ].items():
+                                sub_components[sub_name] = convert_component(sub_data)
 
-                    return ComponentStatus(
-                        name=comp_data["name"],
-                        status=ComponentStatusType.HEALTHY
-                        if comp_data["healthy"]
-                        else ComponentStatusType.UNHEALTHY,
-                        message=comp_data["message"],
-                        response_time_ms=comp_data.get("response_time_ms"),
-                        metadata=comp_data.get("metadata", {}),
-                        sub_components=sub_components,
-                    )
+                        return ComponentStatus(
+                            name=comp_data.get("name", "Unknown"),
+                            status=ComponentStatusType.HEALTHY
+                            if comp_data.get("healthy", False)
+                            else ComponentStatusType.UNHEALTHY,
+                            message=comp_data.get("message", "No message"),
+                            response_time_ms=comp_data.get("response_time_ms"),
+                            metadata=comp_data.get("metadata", {}),
+                            sub_components=sub_components,
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to convert component data: {e}",
+                            exc_info=True,
+                            extra={
+                                "error_type": type(e).__name__,
+                                "function": "convert_component", 
+                                "comp_data": comp_data
+                            }
+                        )
+                        # Return a fallback ComponentStatus
+                        return ComponentStatus(
+                            name=comp_data.get("name", "Unknown"),
+                            status=ComponentStatusType.UNHEALTHY,
+                            message=f"Error converting component: {e}",
+                            response_time_ms=None,
+                            metadata={},
+                            sub_components={},
+                        )
 
                 components = {}
                 for name, comp_data in api_components.items():
@@ -292,12 +365,30 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
 
                 page.update()
 
-            except Exception:
+            except Exception as e:
+                logger.error(
+                    f"Dashboard refresh failed: {e}",
+                    exc_info=True,
+                    extra={
+                        "error_type": type(e).__name__,
+                        "function": "refresh_dashboard"
+                    }
+                )
                 # Show error indicator in header
-                error_indicator = create_health_status_indicator(0, 1)
-                header_row = page.controls[0].content
-                header_row.controls[1].content = error_indicator
-                page.update()
+                try:
+                    error_indicator = create_health_status_indicator(0, 1)
+                    header_row = page.controls[0].content
+                    header_row.controls[1].content = error_indicator
+                    page.update()
+                except Exception as update_error:
+                    logger.error(
+                        f"Failed to update error indicator: {update_error}",
+                        exc_info=True,
+                        extra={
+                            "error_type": type(update_error).__name__,
+                            "function": "refresh_dashboard_error_handler"
+                        }
+                    )
 
         async def auto_refresh() -> None:
             """Simple auto-refresh loop."""

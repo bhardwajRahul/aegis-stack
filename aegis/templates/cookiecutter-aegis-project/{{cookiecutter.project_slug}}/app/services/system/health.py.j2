@@ -96,7 +96,6 @@ async def get_system_status() -> SystemStatus:
     Returns:
         SystemStatus with all component health information organized as Aegis tree
     """
-    logger.info("Running system health checks")
     start_time = datetime.now(UTC)
 
     # Run custom component checks (these are top-level components)
@@ -934,9 +933,6 @@ async def check_worker_health() -> ComponentStatus:
                 if health_check_data:
                     health_string = health_check_data.decode()
                     # Parse format: "Mar-01 17:41:22 j_complete=0 j_failed=0 ..."
-                    logger.debug(
-                        f"Raw health check data for {queue_type}: {health_string}"
-                    )
 
                     # Extract timestamp (first part before job stats)
                     timestamp_match = re.match(r"^(\w+-\d+ \d+:\d+:\d+)", health_string)

@@ -11,15 +11,15 @@ build: ## Build all Docker images (safe, sequential)
 
 serve: ## Run all services (assumes images are built)
 	@echo "🚀 Starting services... (Press Ctrl+C to stop)"
-	@docker compose --profile dev up
+	@docker compose --profile dev up --remove-orphans
 
 serve-bg: ## Run all services in background
 	@echo "🚀 Starting services in background..."
-	@docker compose --profile dev up -d
+	@docker compose --profile dev up -d --remove-orphans
 
 stop: ## Gracefully stop all services
 	@echo "⏹️  Stopping services..."
-	@docker compose --profile dev down
+	@docker compose --profile dev down --remove-orphans
 
 clean: ## Nuclear cleanup - remove containers, networks, and images
 	@echo "🧹 Nuclear cleanup - removing everything..."

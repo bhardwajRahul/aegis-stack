@@ -96,6 +96,8 @@ services:
     restart: unless-stopped
     tty: true
     environment:
+      # Docker container marker for entrypoint script
+      - DOCKER_CONTAINER=1
       # Load test worker configuration (high concurrency)
       - WORKER_QUEUE_TYPE=load_test
       - WORKER_CONCURRENCY=${LOAD_TEST_WORKER_CONCURRENCY:-20}
@@ -130,6 +132,8 @@ services:
     restart: unless-stopped
     tty: true
     environment:
+      # Docker container marker for entrypoint script
+      - DOCKER_CONTAINER=1
       # System worker configuration (low concurrency, high reliability)
       - WORKER_QUEUE_TYPE=system
       - WORKER_CONCURRENCY=${SYSTEM_WORKER_CONCURRENCY:-2}
@@ -158,6 +162,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    hostname: redis
     ports:
       - "6379:6379"
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
