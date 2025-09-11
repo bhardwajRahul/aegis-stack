@@ -8,9 +8,11 @@ with the system health service using Python's import system.
 from app.core.log import logger
 from app.services.system.health import register_health_check
 from app.services.system.models import ComponentStatus, ComponentStatusType
+from app.components.backend.main import get_configured_app
+from app.services.backend.route_inspector import get_fastapi_route_metadata, RouteMetadata
 
 # Cache for route metadata - initialized once at startup
-_cached_route_metadata = None
+_cached_route_metadata: RouteMetadata | None = None
 
 
 def _initialize_route_metadata_cache() -> None:
@@ -24,9 +26,6 @@ def _initialize_route_metadata_cache() -> None:
         return  # Already initialized
     
     try:
-        from app.components.backend.main import get_configured_app
-        from app.services.backend.route_inspector import get_fastapi_route_metadata
-        
         app = get_configured_app()
         if app is not None:
             _cached_route_metadata = get_fastapi_route_metadata(app)

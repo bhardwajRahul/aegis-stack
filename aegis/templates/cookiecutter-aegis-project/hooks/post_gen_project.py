@@ -137,6 +137,10 @@ def main():
         remove_file("tests/api/test_scheduler_endpoints.py")
         # Remove scheduler card (should not display when scheduler not included)
         remove_file("app/components/frontend/dashboard/cards/scheduler_card.py")
+        # Remove scheduler test files
+        remove_file("tests/services/test_scheduled_task_manager.py")
+        remove_file("tests/services/test_component_integration.py")
+        remove_file("tests/services/test_health_logic.py")
 
     # Remove scheduler service if scheduler backend is memory
     # The service is only useful when we can persist to a database

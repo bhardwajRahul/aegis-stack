@@ -46,12 +46,12 @@ class FastAPICard:
     # Removed _get_status_colors - now using shared utility function
 
     def _create_tech_badge(self) -> ft.Container:
-        """Create the FastAPI technology badge section."""
+        """Create the Backend API technology badge section."""
         primary_color, _, _ = get_status_colors(self.component_data)
 
         return create_tech_badge(
-            title="FastAPI",
-            subtitle="Backend API",
+            title="Backend",
+            subtitle="FastAPI",
             icon="🚀",
             badge_text="API",
             badge_color=ft.Colors.GREEN,
@@ -136,7 +136,6 @@ class FastAPICard:
 
     def _create_details_section(self) -> ft.Container:
         """Create the additional details section with real route data."""
-        response_time = self.component_data.response_time_ms or 0.0
         metadata = self.component_data.metadata or {}
         
         # Get real route data from metadata
@@ -146,12 +145,10 @@ class FastAPICard:
         method_counts = metadata.get("method_counts", {})
         route_groups = metadata.get("route_groups", {})
         has_docs = metadata.get("has_docs", False)
-        has_health = metadata.get("has_health", False)
         
         details_content = [
             PrimaryText("API Overview"),
             ft.Divider(height=1, color=ft.Colors.GREY_300),
-            create_stats_row("Response Time", f"{response_time:.1f}ms"),
             create_stats_row(
                 "Status",
                 self.component_data.status.value.title(),
@@ -176,14 +173,9 @@ class FastAPICard:
         else:
             details_content.append(create_stats_row("Routes", "No routes found"))
         
-        # Add feature indicators
-        features = []
+        # Add docs feature indicator if available
         if has_docs:
-            features.append("Docs")
-        if has_health:
-            features.append("Health")
-        if features:
-            details_content.append(create_stats_row("Features", ", ".join(features)))
+            details_content.append(create_stats_row("Features", "Docs"))
         
         # Add route groups summary if available
         if route_groups and total_routes > 0:
@@ -201,40 +193,6 @@ class FastAPICard:
                     create_stats_row(f"{group_display}", f"{count} routes")
                 )
         
-        # Add sample routes if available
-        if routes_data and total_routes > 0:
-            details_content.extend([
-                ft.Divider(height=1, color=ft.Colors.GREY_300),
-                PrimaryText("Sample Routes"),
-            ])
-            
-            # Show first few routes  
-            for route in routes_data[:4]:  # Show max 4 routes
-                if isinstance(route, dict):
-                    # Handle dict format (fallback compatibility)
-                    methods = route.get("methods", [])
-                    path = route.get("path", "")
-                else:
-                    # Handle Pydantic model format (new standard)
-                    methods = (
-                        route.get("methods", []) if hasattr(route, 'get') 
-                        else getattr(route, 'methods', [])
-                    )
-                    path = (
-                        route.get("path", "") if hasattr(route, 'get') 
-                        else getattr(route, 'path', "")
-                    )
-                
-                # Format route display
-                method_str = "|".join(m for m in methods if m != "HEAD")
-                route_display = f"{method_str} {path}"
-                
-                details_content.append(LabelText(f"• {route_display}"))
-            
-            # Show "+X more" if there are additional routes
-            if total_routes > 4:
-                remaining = total_routes - 4
-                details_content.append(LabelText(f"• +{remaining} more..."))
         
         # Handle fallback case (no route data available)
         elif not routes_data and metadata.get("fallback"):
@@ -244,7 +202,7 @@ class FastAPICard:
                 LabelText("Using fallback display", size=11),
             ])
 
-        return ft.Column(details_content, spacing=6)
+        return ft.Column(details_content, spacing=6, scroll=ft.ScrollMode.AUTO)
 
     def build(self) -> ft.Container:
         """Build the complete FastAPI card with simple 3-section responsive layout."""

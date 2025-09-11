@@ -9,7 +9,7 @@ import fastapi
 from fastapi.routing import APIRoute
 
 from app.core.log import logger
-from .models import RouteInfo, RouteMetadata
+from app.services.backend.models import RouteInfo, RouteMetadata
 
 
 class FastAPIRouteInspector:
@@ -99,10 +99,14 @@ class FastAPIRouteInspector:
             # Special handling for common patterns
             if prefix in ["health", "docs", "redoc", "openapi.json"]:
                 groups[prefix] = groups.get(prefix, 0) + 1
+            elif prefix == "api" and len(path_parts) > 2:
+                # Skip API version prefix, group by actual resource
+                # /api/v1/users -> group as "users"
+                resource = path_parts[2]
+                groups[resource] = groups.get(resource, 0) + 1
             elif prefix.startswith("api"):
-                # Group API routes by version if present
-                api_prefix = "/".join(path_parts[:2]) if len(path_parts) > 1 else prefix
-                groups[api_prefix] = groups.get(api_prefix, 0) + 1
+                # Fallback for other API patterns
+                groups[prefix] = groups.get(prefix, 0) + 1
             else:
                 groups[prefix] = groups.get(prefix, 0) + 1
         
