@@ -1,7 +1,7 @@
 [project]
 name = "aegis-stack"
 version = "0.1.0"
-description = "A production-ready Python foundation for builders who refuse to wait"
+description = "A production-ready Python foundation for builders who refuse to wait. Try: uvx aegis-stack init my-project"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -21,6 +21,7 @@ keywords = [
     "database",
     "worker",
     "scheduler",
+    "uvx",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -46,8 +47,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/lbedner/aegis-stack"
-Documentation = "https://github.com/lbedner/aegis-stack#readme"
+Homepage = "https://lbedner.github.io/aegis-stack/"
+Documentation = "https://lbedner.github.io/aegis-stack/"
 Repository = "https://github.com/lbedner/aegis-stack"
 Issues = "https://github.com/lbedner/aegis-stack/issues"
 Changelog = "https://github.com/lbedner/aegis-stack/blob/main/CHANGELOG.md"
@@ -73,6 +74,7 @@ docs = [
 
 [project.scripts]
 aegis = "aegis.__main__:app"
+aegis-stack = "aegis.__main__:app"
 
 [build-system]
 requires = ["hatchling"]

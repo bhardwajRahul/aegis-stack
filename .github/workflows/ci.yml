@@ -67,4 +67,39 @@ jobs:
     - name: Run tests
       run: uv run pytest -v -m "not slow"
 
+  test-uvx:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: true
+    
+    - name: Test uvx aegis help
+      run: uvx --from . aegis --help
+    
+    - name: Test uvx aegis-stack help
+      run: uvx --from . aegis-stack --help
+    
+    - name: Test project creation with uvx aegis
+      run: |
+        uvx --from . aegis init test-uvx-aegis --no-interactive --yes --force
+        test -d test-uvx-aegis
+        test -f test-uvx-aegis/pyproject.toml
+    
+    - name: Test project creation with uvx aegis-stack
+      run: |
+        uvx --from . aegis-stack init test-uvx-aegis-stack --no-interactive --yes --force
+        test -d test-uvx-aegis-stack
+        test -f test-uvx-aegis-stack/pyproject.toml
+    
+    - name: Verify generated project structure
+      run: |
+        cd test-uvx-aegis
+        test -d app/components/backend
+        test -d app/components/frontend
+        test -f app/entrypoints/webserver.py
+
   

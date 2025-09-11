@@ -14,17 +14,35 @@ Aegis Stack is a CLI-driven framework for creating custom Python applications. S
 ## Quick Start
 
 ```bash
-# Install
-pip install aegis-stack
-
-# Create a simple API
-aegis init my-api
+# Run instantly without installation
+uvx aegis-stack init my-api
 
 # Create with background processing  
-aegis init task-processor --components scheduler,worker
+uvx aegis-stack init task-processor --components scheduler,worker
 
 # Start building
-cd my-project && uv sync && source .venv/bin/activate && make run-local
+cd my-api && uv sync && cp .env.example .env && make run-local
+```
+
+## Installation
+
+Choose the method that works best for your workflow:
+
+**Instant usage (recommended):**
+```bash
+uvx aegis-stack init my-project
+```
+
+**Install globally with uv:**
+```bash
+uv tool install aegis-stack
+aegis init my-project
+```
+
+**Traditional pip:**
+```bash
+pip install aegis-stack
+aegis init my-project
 ```
 
 ## Available Components

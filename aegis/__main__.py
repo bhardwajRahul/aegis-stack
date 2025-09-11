@@ -90,8 +90,13 @@ def expand_scheduler_dependencies(components: list[str]) -> list[str]:
 app = typer.Typer(
     name="aegis",
     help=(
-        "Aegis Stack CLI - Component generation and project management. "
+        "🛡️ Aegis Stack - Production-ready Python foundation\n\n"
+        "Quick start: uvx aegis-stack init my-project\n\n"
         "Available components: redis, worker, scheduler, scheduler[sqlite], database"
+    ),
+    epilog=(
+        "💡 Try it instantly: uvx aegis-stack init my-project\n"
+        "📚 More info: https://lbedner.github.io/aegis-stack/"
     ),
     add_completion=False,
 )
