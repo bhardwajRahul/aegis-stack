@@ -100,7 +100,7 @@ class FastAPIMiddlewareInspector:
         self, middleware: Any, order: int
     ) -> MiddlewareInfo | None:
         """Extract information from a single middleware instance (legacy method).
-        
+
         This method is kept for backward compatibility and is still used in tests.
         For production use, _extract_middleware_info_from_middleware_item is preferred.
         """

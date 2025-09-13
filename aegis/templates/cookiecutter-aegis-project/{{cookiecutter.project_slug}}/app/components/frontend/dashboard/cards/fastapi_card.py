@@ -6,7 +6,6 @@ and system performance data using shared utility functions.
 """
 
 import flet as ft
-
 from app.components.frontend.controls import LabelText, PrimaryText
 from app.services.system.models import ComponentStatus
 

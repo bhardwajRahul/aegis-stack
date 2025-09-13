@@ -5,6 +5,8 @@ These tests focus on the HTTP endpoints that CLI health commands call,
 ensuring API responses match expected CLI input format and handle errors correctly.
 """
 
+from collections.abc import AsyncIterator
+
 import pytest
 from httpx import AsyncClient, ASGITransport
 
@@ -15,7 +17,7 @@ class TestHealthEndpoints:
     """Test health API endpoints with various component states."""
 
     @pytest.fixture
-    async def async_client(self) -> AsyncClient:
+    async def async_client(self) -> AsyncIterator[AsyncClient]:
         """Async HTTP client for testing."""
         app = create_integrated_app()
 

@@ -6,7 +6,6 @@ UI settings, and frontend health status.
 """
 
 import flet as ft
-
 from app.components.frontend.controls import PrimaryText
 from app.services.system.models import ComponentStatus
 

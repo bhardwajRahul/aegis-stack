@@ -24,8 +24,8 @@ format: ## Format code with ruff
 	@uv run ruff format .
 
 # Run type checking
-typecheck: ## Run type checking with mypy
-	@uv run mypy .
+typecheck: ## Run type checking with ty
+	@uv run ty check
 
 # Run all checks (lint + typecheck + fast tests)
 check: lint typecheck test ## Run all checks (fast tests only)

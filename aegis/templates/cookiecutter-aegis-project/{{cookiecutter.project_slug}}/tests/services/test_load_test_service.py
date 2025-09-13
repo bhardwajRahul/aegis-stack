@@ -7,15 +7,14 @@ Tests business logic, data transformation, and analysis functions.
 import pickle
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from pydantic import ValidationError
 import pytest
-
 from app.components.worker.constants import LoadTestTypes
 from app.services.load_test import LoadTestConfiguration, LoadTestService
 from app.services.load_test_models import (
     LoadTestResult,
     PerformanceAnalysis,
 )
+from pydantic import ValidationError
 
 
 class TestLoadTestConfiguration:
@@ -45,7 +44,7 @@ class TestLoadTestConfiguration:
         """Test configuration serialization."""
         config = LoadTestConfiguration(
             num_tasks=100,
-            task_type="io_simulation",
+            task_type=LoadTestTypes.IO_SIMULATION,
             batch_size=20,
             delay_ms=50,
             target_queue="test_queue",
@@ -157,7 +156,7 @@ class TestLoadTestServiceAnalysis:
         )
 
         config = ConfigModel(
-            task_type="cpu_intensive",
+            task_type=LoadTestTypes.CPU_INTENSIVE,
             num_tasks=100,
             batch_size=10,
             target_queue="load_test",
@@ -257,7 +256,7 @@ class TestLoadTestServiceIntegration:
         # Create configuration
         config = LoadTestConfiguration(
             num_tasks=50,
-            task_type="cpu_intensive",
+            task_type=LoadTestTypes.CPU_INTENSIVE,
             batch_size=10,
             target_queue="load_test",
         )
@@ -267,7 +266,6 @@ class TestLoadTestServiceIntegration:
 
         # Verify results
         assert task_id == "test-job-123"
-        from app.components.worker.constants import LoadTestTypes
 
         mock_pool.enqueue_job.assert_called_once_with(
             "load_test_orchestrator",

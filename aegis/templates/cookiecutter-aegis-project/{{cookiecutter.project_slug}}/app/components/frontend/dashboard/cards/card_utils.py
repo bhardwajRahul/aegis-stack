@@ -9,7 +9,6 @@ from collections.abc import Callable
 from typing import Any
 
 import flet as ft
-
 from app.components.frontend.controls import LabelText, SecondaryText, TitleText
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
@@ -222,10 +221,7 @@ def create_health_status_indicator(
     Returns:
         Container with circular progress and component count
     """
-    if total_count == 0:
-        percentage = 0.0
-    else:
-        percentage = (healthy_count / total_count) * 100
+    percentage = 0.0 if total_count == 0 else healthy_count / total_count * 100
 
     # Color coding based on health percentage
     if percentage >= 100:

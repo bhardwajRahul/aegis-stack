@@ -217,9 +217,9 @@ async def check_database_health() -> ComponentHealth:
     """Check database connectivity."""
     try:
         # Perform database ping
-        start_time = datetime.utcnow()
+        start_time = datetime.now(UTC)
         # ... database check logic ...
-        end_time = datetime.utcnow()
+        end_time = datetime.now(UTC)
         
         return ComponentHealth(
             status="healthy",

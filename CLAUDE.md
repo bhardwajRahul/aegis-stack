@@ -32,7 +32,7 @@ This project uses `uv` for dependency management and a `Makefile` for CLI develo
 ### CLI Development Commands
 - `make test` - Run the CLI test suite with pytest
 - `make lint` - Run linting with ruff  
-- `make typecheck` - Run type checking with mypy
+- `make typecheck` - Run type checking with ty
 - `make check` - Run all checks (lint + typecheck + test) - **run this before committing**
 - `make install` or `uv sync --all-extras` - Install/sync dependencies
 - `make cli-test` - Test CLI commands locally

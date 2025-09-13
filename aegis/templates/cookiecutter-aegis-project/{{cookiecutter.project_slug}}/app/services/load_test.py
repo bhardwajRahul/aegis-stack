@@ -36,7 +36,7 @@ class LoadTestService:
     """Service for managing load test operations."""
 
     @staticmethod
-    def get_test_type_info(test_type: LoadTestTypes) -> dict[str, Any]:
+    def get_test_type_info(test_type: LoadTestTypes | str) -> dict[str, Any]:
         """Get detailed information about a specific test type."""
         test_info = {
             LoadTestTypes.CPU_INTENSIVE: {
@@ -362,6 +362,36 @@ class LoadTestService:
                     error=f"Validation failed: {e}",
                     analysis=None,
                 )
+
+        # Verify result is LoadTestResult and handle unexpected types
+        if not isinstance(result, LoadTestResult):
+            logger.error(f"Expected LoadTestResult but got {type(result)}")
+            return LoadTestResult(
+                status="failed",
+                test_id="unknown",
+                configuration=LoadTestConfiguration(
+                    task_type=LoadTestTypes.CPU_INTENSIVE,
+                    num_tasks=10,
+                    batch_size=1,
+                    delay_ms=0,
+                    target_queue="unknown",
+                ),
+                metrics=LoadTestMetrics(
+                    tasks_sent=0,
+                    tasks_completed=0,
+                    tasks_failed=0,
+                    total_duration_seconds=0.0,
+                    overall_throughput=0.0,
+                    failure_rate_percent=0.0,
+                    completion_percentage=0.0,
+                    average_throughput_per_second=0.0,
+                    monitor_duration_seconds=0.0,
+                ),
+                start_time=None,
+                end_time=None,
+                error=f"Unexpected result type: {type(result)}",
+                analysis=None,
+            )
 
         task_type = result.configuration.task_type
 

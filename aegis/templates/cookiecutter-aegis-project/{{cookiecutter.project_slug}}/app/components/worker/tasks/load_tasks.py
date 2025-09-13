@@ -7,8 +7,8 @@ infrastructure rather than computational complexity.
 """
 
 import asyncio
-from datetime import datetime
 import random
+from datetime import datetime
 from typing import Any, cast
 
 from app.core.log import logger
@@ -33,7 +33,7 @@ async def cpu_intensive_task(ctx: dict[str, Any], **kwargs: Any) -> dict[str, An
     a, b = 0, 1
     operations_count = 0
 
-    for i in range(n):
+    for _i in range(n):
         a, b = b, a + b
         operations_count += 1
 
@@ -84,7 +84,7 @@ async def cpu_intensive_task(ctx: dict[str, Any], **kwargs: Any) -> dict[str, An
     # CPU work 6: Simulate encoding/image processing (realistic CPU-heavy work)
     encoding_operations = 0
     # Simulate image/video encoding by doing intensive matrix operations
-    for frame in range(random.randint(10, 30)):  # Process "frames"
+    for _frame in range(random.randint(10, 30)):  # Process "frames"
         # Simulate encoding a frame with matrix multiplication
         matrix_size = random.randint(50, 100)
         matrix_a = [
@@ -477,7 +477,7 @@ async def failure_testing_task(ctx: dict[str, Any], **kwargs: Any) -> dict[str, 
         work_detail = f"sum_squares({n})={result}"
 
     else:  # simple_operation
-        data = [i for i in range(10)]
+        data = list(range(10))
         result = len(data) + sum(data)
         work_detail = f"list_ops({len(data)})={result}"
 

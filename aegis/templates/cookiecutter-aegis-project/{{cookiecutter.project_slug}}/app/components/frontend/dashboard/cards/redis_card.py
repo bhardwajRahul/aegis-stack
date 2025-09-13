@@ -7,7 +7,6 @@ per second, connection statistics, and comprehensive performance data.
 """
 
 import flet as ft
-
 from app.components.frontend.controls import (
     LabelText,
     MetricText,

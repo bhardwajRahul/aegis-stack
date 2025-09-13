@@ -169,11 +169,15 @@ class TestFastAPIMiddlewareInspector:
         """Test error handling in individual middleware info extraction."""
         inspector = FastAPIMiddlewareInspector(FastAPI())
         
-        # Mock middleware that raises an exception
-        bad_middleware = Mock()
-        bad_middleware.__class__.__name__ = "BadMiddleware"  # Valid name
-        # Force an exception by making __module__ raise an error
-        type(bad_middleware).__module__ = property(lambda self: 1/0)
+        # Mock middleware that raises an exception by overriding __module__ access
+        class BadMiddleware:
+            __name__ = "BadMiddleware"
+            
+            @property
+            def __module__(self) -> str:
+                raise ZeroDivisionError("Test exception")
+        
+        bad_middleware = BadMiddleware()
         
         result = inspector._extract_middleware_info(bad_middleware, 0)
         

@@ -7,9 +7,11 @@ ensuring TaskRequest model works correctly with task_kwargs field and
 validates the API contract.
 """
 
+from collections.abc import AsyncIterator
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from httpx import AsyncClient, ASGITransport
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.integrations.main import create_integrated_app
 
@@ -18,7 +20,7 @@ class TestWorkerEndpoints:
     """Test worker API endpoints for task enqueuing."""
 
     @pytest.fixture
-    async def async_client(self) -> AsyncClient:
+    async def async_client(self) -> AsyncIterator[AsyncClient]:
         """Async HTTP client for testing."""
         app = create_integrated_app()
 
