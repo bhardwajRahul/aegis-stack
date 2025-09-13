@@ -129,23 +129,83 @@ class FastAPICard:
                 )
             )
 
+        # Add middleware section
+        middleware_stack = self.component_data.metadata.get("middleware_stack", [])
+        security_count = self.component_data.metadata.get("security_count", 0)
+
+        if middleware_stack:
+            # Add divider between system metrics and middleware
+            if metrics_controls:
+                metrics_controls.append(ft.Divider(height=1, color=ft.Colors.GREY_400))
+
+            # Add middleware pipeline header
+            metrics_controls.append(PrimaryText("Middleware Pipeline"))
+
+            # Security middleware summary
+            if security_count > 0:
+                metrics_controls.append(
+                    create_stats_row(
+                        "Security", f"{security_count} layers", ft.Colors.GREEN
+                    )
+                )
+
+            # Middleware stack (in execution order, show first 5)
+            for idx, middleware in enumerate(middleware_stack[:5]):
+                mw_name = middleware.get("type", "Unknown")
+                order_indicator = f"{idx + 1}."
+
+                # Color coding for security middleware
+                is_security = middleware.get("is_security", False)
+                color = ft.Colors.GREEN if is_security else ft.Colors.GREY_600
+
+                metrics_controls.append(
+                    ft.Row(
+                        [
+                            LabelText(order_indicator, size=10, width=20),
+                            LabelText(
+                                mw_name,
+                                color=color,
+                                size=10,
+                                weight=ft.FontWeight.W_500
+                                if is_security
+                                else ft.FontWeight.NORMAL,
+                            ),
+                        ],
+                        spacing=5,
+                        tight=True,
+                    )
+                )
+
+            # Show "more" indicator if there are additional middleware
+            if len(middleware_stack) > 5:
+                metrics_controls.append(
+                    LabelText(
+                        f"+ {len(middleware_stack) - 5} more middleware",
+                        size=10,
+                        color=ft.Colors.GREY_500,
+                        italic=True,
+                    )
+                )
+
         return ft.Column(
             metrics_controls,
-            spacing=12,
+            spacing=8,
+            scroll=ft.ScrollMode.AUTO,
         )
 
     def _create_details_section(self) -> ft.Container:
         """Create the additional details section with real route data."""
         metadata = self.component_data.metadata or {}
-        
-        # Get real route data from metadata
+
+        # Get real route and middleware data from metadata
         routes_data = metadata.get("routes", [])
         total_routes = metadata.get("total_routes", 0)
         total_endpoints = metadata.get("total_endpoints", 0)
         method_counts = metadata.get("method_counts", {})
         route_groups = metadata.get("route_groups", {})
         has_docs = metadata.get("has_docs", False)
-        
+        total_middleware = metadata.get("total_middleware", 0)
+
         details_content = [
             PrimaryText("API Overview"),
             ft.Divider(height=1, color=ft.Colors.GREY_300),
@@ -155,35 +215,48 @@ class FastAPICard:
                 get_status_colors(self.component_data)[0],
             ),
         ]
-        
+
         # Add route statistics
         if total_routes > 0:
-            details_content.extend([
-                create_stats_row("Routes", str(total_routes)),
-                create_stats_row("Endpoints", str(total_endpoints)),
-            ])
-            
+            details_content.extend(
+                [
+                    create_stats_row("Routes", str(total_routes)),
+                    create_stats_row("Endpoints", str(total_endpoints)),
+                ]
+            )
+
+        # Add middleware count if available
+        if total_middleware > 0:
+            details_content.append(
+                create_stats_row("Middleware", f"{total_middleware} layers")
+            )
+
+        if total_routes > 0:
             # Add method breakdown if available
             if method_counts:
-                method_summary = ", ".join([
-                    f"{count} {method}" 
-                    for method, count in sorted(method_counts.items())
-                ])
+                method_summary = ", ".join(
+                    [
+                        f"{count} {method}"
+                        for method, count in sorted(method_counts.items())
+                    ]
+                )
                 details_content.append(create_stats_row("Methods", method_summary))
         else:
             details_content.append(create_stats_row("Routes", "No routes found"))
-        
+
         # Add docs feature indicator if available
         if has_docs:
             details_content.append(create_stats_row("Features", "Docs"))
-        
+
         # Add route groups summary if available
         if route_groups and total_routes > 0:
-            details_content.extend([
-                ft.Divider(height=1, color=ft.Colors.GREY_300),
-                PrimaryText("Route Groups"),
-            ])
-            
+            details_content.extend(
+                [
+                    ft.Divider(height=1, color=ft.Colors.GREY_300),
+                    PrimaryText("Route Groups"),
+                ]
+            )
+
             # Show top route groups (max 4)
             for group, count in sorted(
                 route_groups.items(), key=lambda x: x[1], reverse=True
@@ -192,15 +265,18 @@ class FastAPICard:
                 details_content.append(
                     create_stats_row(f"{group_display}", f"{count} routes")
                 )
-        
-        
+
         # Handle fallback case (no route data available)
         elif not routes_data and metadata.get("fallback"):
-            details_content.extend([
-                ft.Divider(height=1, color=ft.Colors.GREY_300),
-                LabelText("Route introspection unavailable", color=ft.Colors.ORANGE),
-                LabelText("Using fallback display", size=11),
-            ])
+            details_content.extend(
+                [
+                    ft.Divider(height=1, color=ft.Colors.GREY_300),
+                    LabelText(
+                        "Route introspection unavailable", color=ft.Colors.ORANGE
+                    ),
+                    LabelText("Using fallback display", size=11),
+                ]
+            )
 
         return ft.Column(details_content, spacing=6, scroll=ft.ScrollMode.AUTO)
 

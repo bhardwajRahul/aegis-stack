@@ -10,62 +10,78 @@ from app.services.system.health import register_health_check
 from app.services.system.models import ComponentStatus, ComponentStatusType
 from app.components.backend.main import get_configured_app
 from app.services.backend.route_inspector import get_fastapi_route_metadata, RouteMetadata
+from app.services.backend.middleware_inspector import get_fastapi_middleware_metadata, MiddlewareMetadata
 
 # Cache for route metadata - initialized once at startup
 _cached_route_metadata: RouteMetadata | None = None
+# Cache for middleware metadata - initialized once at startup  
+_cached_middleware_metadata: MiddlewareMetadata | None = None
 
 
 def _initialize_route_metadata_cache() -> None:
     """
-    Initialize route metadata cache using the configured FastAPI app.
+    Initialize route and middleware metadata caches using the configured FastAPI app.
     Called once during startup to avoid recreating the app on every health check.
     """
-    global _cached_route_metadata
+    global _cached_route_metadata, _cached_middleware_metadata
     
-    if _cached_route_metadata is not None:
+    if _cached_route_metadata is not None and _cached_middleware_metadata is not None:
         return  # Already initialized
     
     try:
         app = get_configured_app()
         if app is not None:
-            _cached_route_metadata = get_fastapi_route_metadata(app)
-            logger.info(
-                f"Route metadata cached: {_cached_route_metadata.total_routes} routes, "
-                f"{_cached_route_metadata.total_endpoints} endpoints"
-            )
+            # Cache route metadata
+            if _cached_route_metadata is None:
+                _cached_route_metadata = get_fastapi_route_metadata(app)
+                logger.info(
+                    f"Route metadata cached: "
+                    f"{_cached_route_metadata.total_routes} routes, "
+                    f"{_cached_route_metadata.total_endpoints} endpoints"
+                )
+            
+            # Cache middleware metadata
+            if _cached_middleware_metadata is None:
+                _cached_middleware_metadata = get_fastapi_middleware_metadata(app)
+                logger.info(
+                    f"Middleware metadata cached: "
+                    f"{_cached_middleware_metadata.total_middleware} middleware, "
+                    f"{_cached_middleware_metadata.security_count} security layers"
+                )
         else:
             logger.warning(
-                "FastAPI app not yet configured - route metadata cache will be "
-                "initialized later"
+                "FastAPI app not yet configured - route and middleware metadata "
+                "cache will be initialized later"
             )
     except Exception as e:
-        logger.error(f"Failed to initialize route metadata cache: {e}")
+        logger.error(f"Failed to initialize route and middleware metadata cache: {e}")
 
 
 async def _backend_component_health() -> ComponentStatus:
     """
-    FastAPI backend health check with route introspection.
+    FastAPI backend health check with route and middleware introspection.
 
     In test environment, reports as healthy since the app is loaded.
     In production, uses internal check to avoid circular dependency.
-    Includes comprehensive route metadata for dashboard display.
+    Includes comprehensive route and middleware metadata for dashboard display.
     """
     import os
-    global _cached_route_metadata
+    global _cached_route_metadata, _cached_middleware_metadata
 
     # Check if we're in test environment
     if os.getenv("PYTEST_CURRENT_TEST") or "pytest" in os.getenv("_", ""):
-        # Even in test mode, try to get route information if possible
+        # Even in test mode, try to get route and middleware information if possible
         try:
             
             # Initialize cache if not already done (might happen in tests)
-            if _cached_route_metadata is None:
+            if _cached_route_metadata is None or _cached_middleware_metadata is None:
                 _initialize_route_metadata_cache()
             
             route_metadata = _cached_route_metadata
+            middleware_metadata = _cached_middleware_metadata
             
-            # Handle case where route metadata is not available in test mode
-            if route_metadata is None:
+            # Handle case where metadata is not available in test mode
+            if route_metadata is None or middleware_metadata is None:
                 return ComponentStatus(
                     name="backend",
                     status=ComponentStatusType.HEALTHY,
@@ -76,7 +92,15 @@ async def _backend_component_health() -> ComponentStatus:
                         "environment": "test",
                         "note": "Backend component loaded successfully",
                         "route_introspection": "unavailable",
+                        "middleware_introspection": "unavailable",
                     },
+                )
+            
+            # Create message with both route and middleware info
+            message_parts = [f"{route_metadata.total_routes} routes"]
+            if middleware_metadata.security_count > 0:
+                message_parts.append(
+                    f"{middleware_metadata.security_count} security layers"
                 )
             
             return ComponentStatus(
@@ -84,7 +108,7 @@ async def _backend_component_health() -> ComponentStatus:
                 status=ComponentStatusType.HEALTHY,
                 message=(
                     f"FastAPI backend available (test mode): "
-                    f"{route_metadata.total_routes} routes"
+                    f"{', '.join(message_parts)}"
                 ),
                 response_time_ms=None,
                 metadata={
@@ -92,10 +116,13 @@ async def _backend_component_health() -> ComponentStatus:
                     "environment": "test",
                     "note": "Backend component loaded successfully",
                     **route_metadata.model_dump_for_metadata(),
+                    **middleware_metadata.model_dump_for_metadata(),
                 },
             )
         except Exception as e:
-            logger.warning(f"Could not get route metadata in test mode: {e}")
+            logger.warning(
+                f"Could not get route and middleware metadata in test mode: {e}"
+            )
             return ComponentStatus(
                 name="backend",
                 status=ComponentStatusType.HEALTHY,
@@ -106,41 +133,46 @@ async def _backend_component_health() -> ComponentStatus:
                     "environment": "test",
                     "note": "Backend component loaded successfully",
                     "route_introspection_error": str(e),
+                    "middleware_introspection_error": str(e),
                 },
             )
 
-    # In production, use cached route information
+    # In production, use cached route and middleware information
     try:
         # Initialize cache if not already done (fallback safety)
-        if _cached_route_metadata is None:
+        if _cached_route_metadata is None or _cached_middleware_metadata is None:
             logger.warning(
-                "Route metadata cache not initialized at startup, "
+                "Route and middleware metadata cache not initialized at startup, "
                 "initializing now..."
             )
             _initialize_route_metadata_cache()
         
         route_metadata = _cached_route_metadata
+        middleware_metadata = _cached_middleware_metadata
         
-        # Handle case where route metadata is still not available
-        if route_metadata is None:
+        # Handle case where metadata is still not available
+        if route_metadata is None or middleware_metadata is None:
             return ComponentStatus(
                 name="backend",
                 status=ComponentStatusType.HEALTHY,
                 message=(
-                    "FastAPI backend active (route introspection unavailable)"
+                    "FastAPI backend active (introspection unavailable)"
                 ),
                 response_time_ms=None,
                 metadata={
                     "type": "internal_component_check",
-                    "note": "Backend is running but route metadata unavailable",
+                    "note": (
+                        "Backend is running but route/middleware metadata unavailable"
+                    ),
                     "check_method": "internal_execution",
                 },
             )
         
-        # Create descriptive message based on route data
+        # Create descriptive message based on route and middleware data
         total_routes = route_metadata.total_routes
         total_endpoints = route_metadata.total_endpoints
         method_counts = route_metadata.method_counts
+        security_count = middleware_metadata.security_count
         
         # Format method summary (e.g., "12 GET, 5 POST")
         method_summary = ", ".join([
@@ -151,6 +183,8 @@ async def _backend_component_health() -> ComponentStatus:
         message_parts = [f"{total_routes} routes"]
         if total_endpoints != total_routes:
             message_parts.append(f"{total_endpoints} endpoints")
+        if security_count > 0:
+            message_parts.append(f"{security_count} security layers")
         if method_summary:
             message_parts.append(f"({method_summary})")
         
@@ -168,6 +202,7 @@ async def _backend_component_health() -> ComponentStatus:
                 ),
                 "check_method": "internal_execution",
                 **route_metadata.model_dump_for_metadata(),
+                **middleware_metadata.model_dump_for_metadata(),
             },
         )
     except Exception as e:

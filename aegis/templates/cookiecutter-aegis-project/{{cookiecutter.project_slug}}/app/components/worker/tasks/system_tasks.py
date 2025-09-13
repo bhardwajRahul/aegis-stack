@@ -55,14 +55,14 @@ async def load_test_orchestrator(
 
     # Initialize tasks_sent before try block to prevent UnboundLocalError
     tasks_sent = 0
-    
+
     try:
         # Import here to avoid circular imports
         from app.components.worker.pools import get_queue_pool
 
         # Get queue pool for enqueueing
         pool, queue_name = await get_queue_pool(target_queue)
-        
+
         try:
             # Spawn tasks in batches
             task_ids = []
@@ -146,7 +146,7 @@ async def load_test_orchestrator(
             )
 
             return result
-            
+
         finally:
             # Always close the pool, even if errors occur
             await pool.aclose()

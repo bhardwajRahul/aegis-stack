@@ -67,14 +67,14 @@ class RedisCard:
         """Create a circular gauge-style metric indicator."""
         # Format value appropriately based on size
         if value >= 1000:
-            formatted_value = f"{value/1000:.1f}k"
+            formatted_value = f"{value / 1000:.1f}k"
         elif value >= 1000000:
-            formatted_value = f"{value/1000000:.1f}M"
+            formatted_value = f"{value / 1000000:.1f}M"
         else:
             formatted_value = (
                 f"{value:.1f}" if isinstance(value, float) else str(int(value))
             )
-        
+
         return ft.Container(
             content=ft.Column(
                 [
@@ -143,19 +143,21 @@ class RedisCard:
         """Create the Redis metrics section with memory and connection stats."""
         # Extract real Redis metrics from component metadata
         metadata = self.component_data.metadata or {}
-        
+
         # Calculate hit rate with proper color coding
         hit_rate = metadata.get("hit_rate_percent", 0)
         hit_rate_color = (
-            ft.Colors.GREEN if hit_rate >= 90
-            else ft.Colors.ORANGE if hit_rate >= 70
+            ft.Colors.GREEN
+            if hit_rate >= 90
+            else ft.Colors.ORANGE
+            if hit_rate >= 70
             else ft.Colors.RED
         )
-        
+
         # Calculate memory usage percentage if maxmemory is set
         used_memory = metadata.get("used_memory", 0)
         max_memory = metadata.get("maxmemory", 0)
-        
+
         if max_memory > 0:
             memory_percent = (used_memory / max_memory) * 100
             memory_value = memory_percent
@@ -172,10 +174,10 @@ class RedisCard:
             memory_value = used_memory / (1024 * 1024) if used_memory > 0 else 0
             memory_unit = "MB"
             memory_color = ft.Colors.BLUE
-        
+
         # Get operations per second
         ops_per_sec = metadata.get("instantaneous_ops_per_sec", 0)
-        
+
         redis_metrics = {
             "hit_ratio": {
                 "value": hit_rate,
@@ -219,36 +221,30 @@ class RedisCard:
 
     def _create_performance_section(self) -> ft.Container:
         """Create the Redis performance and statistics section."""
-        
+
         # Extract real Redis performance stats from metadata
         metadata = self.component_data.metadata or {}
-        
+
         # Format uptime from seconds to human readable
         uptime_seconds = metadata.get("uptime_in_seconds", 0)
         uptime_days = uptime_seconds // 86400
         uptime_hours = (uptime_seconds % 86400) // 3600
         uptime_str = (
-            f"{uptime_days}d {uptime_hours}h"
-            if uptime_days > 0
-            else f"{uptime_hours}h"
+            f"{uptime_days}d {uptime_hours}h" if uptime_days > 0 else f"{uptime_hours}h"
         )
-        
+
         # Format numbers with commas
         def format_number(num: int | float) -> str:
             if isinstance(num, float):
                 return f"{num:,.1f}"
             return f"{num:,}"
-        
+
         performance_stats = {
             "Uptime": uptime_str,
-            "Commands/sec": format_number(
-                metadata.get("instantaneous_ops_per_sec", 0)
-            ),
+            "Commands/sec": format_number(metadata.get("instantaneous_ops_per_sec", 0)),
             "Total Keys": format_number(metadata.get("total_keys", 0)),
             "Memory Peak": metadata.get("used_memory_peak_human", "unknown"),
-            "Connected Clients": format_number(
-                metadata.get("connected_clients", 0)
-            ),
+            "Connected Clients": format_number(metadata.get("connected_clients", 0)),
             "Evicted Keys": format_number(metadata.get("evicted_keys", 0)),
             "Fragmentation": f"{metadata.get('mem_fragmentation_ratio', 1.0):.2f}",
         }

@@ -68,12 +68,12 @@ def setup_logging() -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
     root_logger = logging.getLogger()
-    
+
     # CRITICAL: Set log level BEFORE adding handler
     # This ensures all loggers (including import-time loggers) respect the level
     log_level = settings.LOG_LEVEL.upper()
     root_logger.setLevel(getattr(logging, log_level))
-    
+
     # Add handler after level is set
     root_logger.addHandler(handler)
 
@@ -82,7 +82,6 @@ def setup_logging() -> None:
     logging.getLogger("flet_runtime").setLevel(logging.INFO)
     logging.getLogger("flet_fastapi").setLevel(logging.INFO)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-
 
     log_format = "DEV" if settings.APP_ENV == "dev" else "JSON"
     logger.info(

@@ -26,7 +26,7 @@ class TableHeaderText(ft.Text):  # type: ignore[misc]
             "color": ft.Colors.GREY_600,
         }
         defaults.update(kwargs)
-        
+
         super().__init__(
             text,
             **defaults,
@@ -48,7 +48,7 @@ class TableCellText(ft.Text):  # type: ignore[misc]
             "color": ft.Colors.ON_SURFACE,
         }
         defaults.update(kwargs)
-        
+
         super().__init__(
             text,
             **defaults,
@@ -71,7 +71,7 @@ class TableNameText(ft.Text):  # type: ignore[misc]
             "color": ft.Colors.ON_SURFACE,
         }
         defaults.update(kwargs)
-        
+
         super().__init__(
             text,
             **defaults,

@@ -10,16 +10,33 @@ from pathlib import Path
 from typing import Any, Generator
 
 import pytest
-
-# Add project root to Python path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 {% if cookiecutter.include_database == "yes" %}
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine.base import Engine
 from sqlmodel import Session, SQLModel
+{% endif %}
+
+# Add project root to Python path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from app.integrations.main import create_integrated_app
 
 
+@pytest.fixture
+def app() -> FastAPI:
+    """Create a configured FastAPI app instance for testing."""
+    return create_integrated_app()
+
+
+@pytest.fixture
+def client(app: FastAPI) -> Generator[TestClient, None, None]:
+    """Create a test client for the FastAPI app."""
+    with TestClient(app) as test_client:
+        yield test_client
+
+{% if cookiecutter.include_database == "yes" %}
 @pytest.fixture(scope="session")
 def engine() -> Engine:
     """

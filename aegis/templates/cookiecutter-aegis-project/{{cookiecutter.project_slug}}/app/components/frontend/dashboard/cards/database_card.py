@@ -61,18 +61,16 @@ class DatabaseCard:
         else:  # UNHEALTHY
             return (ft.Colors.RED, ft.Colors.SURFACE, ft.Colors.RED)
 
-    def _create_table_row(
-        self, table_name: str, row_count: int
-    ) -> ft.Container:
+    def _create_table_row(self, table_name: str, row_count: int) -> ft.Container:
         """Create a single table row with metrics (consistent with worker card)."""
         # Estimate size (rough: assume avg 1KB per row for SQLite)
         size_kb = max(1, row_count)  # At least 1KB for existing tables
         if size_kb < 1024:
             size_str = f"{size_kb} KB" if size_kb > 0 else "-"
         elif size_kb < 1024 * 1024:
-            size_str = f"{size_kb/1024:.1f} MB"
+            size_str = f"{size_kb / 1024:.1f} MB"
         else:
-            size_str = f"{size_kb/(1024*1024):.1f} GB"
+            size_str = f"{size_kb / (1024 * 1024):.1f} GB"
 
         return ft.Container(
             content=ft.Row(
@@ -105,7 +103,7 @@ class DatabaseCard:
         """Create the Database/SQLite technology badge section."""
         primary_color, _, _ = self._get_status_colors()
         metadata = self.component_data.metadata or {}
-        
+
         # Determine badge text based on database state
         if self.component_data.status == ComponentStatusType.WARNING:
             badge_text = "NOT INIT"
@@ -158,7 +156,7 @@ class DatabaseCard:
         # Get real table data from metadata, with fallback for no tables
         metadata = self.component_data.metadata or {}
         tables_data = metadata.get("tables", [])
-        
+
         # If no tables or database not initialized, show appropriate message
         if not tables_data:
             if self.component_data.status == ComponentStatusType.WARNING:
@@ -270,8 +268,7 @@ class DatabaseCard:
         for table_data in tables_data:
             table_rows.append(
                 self._create_table_row(
-                    str(table_data["name"]), 
-                    int(table_data.get("rows", 0))
+                    str(table_data["name"]), int(table_data.get("rows", 0))
                 )
             )
 
@@ -305,10 +302,10 @@ class DatabaseCard:
     def _create_performance_section(self) -> ft.Container:
         """Create the database performance and statistics section."""
         metadata = self.component_data.metadata or {}
-        
+
         # Get real database stats from metadata
         db_stats = {}
-        
+
         # File size
         if "file_size_human" in metadata:
             db_stats["File Size"] = metadata["file_size_human"]
@@ -320,40 +317,40 @@ class DatabaseCard:
             elif size_bytes < 1024:
                 db_stats["File Size"] = f"{size_bytes} B"
             elif size_bytes < 1024**2:
-                db_stats["File Size"] = f"{size_bytes/1024:.1f} KB"
+                db_stats["File Size"] = f"{size_bytes / 1024:.1f} KB"
             elif size_bytes < 1024**3:
-                db_stats["File Size"] = f"{size_bytes/(1024**2):.1f} MB"
+                db_stats["File Size"] = f"{size_bytes / (1024**2):.1f} MB"
             else:
-                db_stats["File Size"] = f"{size_bytes/(1024**3):.1f} GB"
-        
+                db_stats["File Size"] = f"{size_bytes / (1024**3):.1f} GB"
+
         # Database version
         if "version" in metadata:
             db_stats["SQLite Version"] = metadata["version"]
-        
+
         # Connection pool size
         if "connection_pool_size" in metadata:
             db_stats["Pool Size"] = str(metadata["connection_pool_size"])
-        
+
         # Table count
         table_count = metadata.get("table_count", 0)
         if table_count > 0:
             db_stats["Tables"] = str(table_count)
-        
+
         # Journal mode
         pragma_settings = metadata.get("pragma_settings", {})
         if "journal_mode" in pragma_settings:
             db_stats["Journal Mode"] = pragma_settings["journal_mode"].upper()
-        
+
         # WAL enabled
         if metadata.get("wal_enabled"):
             db_stats["WAL"] = "Enabled"
-        
+
         # Foreign keys
         if "foreign_keys" in pragma_settings:
             db_stats["Foreign Keys"] = (
                 "On" if pragma_settings["foreign_keys"] else "Off"
             )
-        
+
         # If database not initialized, show different stats
         if self.component_data.status == ComponentStatusType.WARNING:
             db_stats = {

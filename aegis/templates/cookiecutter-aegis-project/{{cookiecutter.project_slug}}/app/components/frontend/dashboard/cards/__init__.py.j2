@@ -1,6 +1,7 @@
 """Dashboard component cards."""
 
 from .fastapi_card import FastAPICard
+from .flet_card import FletCard
 {%- if cookiecutter.include_database == "yes" %}
 from .database_card import DatabaseCard
 {%- endif %}
@@ -16,6 +17,7 @@ from .worker_card import WorkerCard
 
 __all__ = [
     "FastAPICard",
+    "FletCard",
     {%- if cookiecutter.include_database == "yes" %}
     "DatabaseCard",
     {%- endif %}

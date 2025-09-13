@@ -8,6 +8,8 @@ applications for health monitoring and dashboard display.
 import fastapi
 from fastapi.routing import APIRoute
 
+__all__ = ["RouteMetadata", "FastAPIRouteInspector"]
+
 from app.core.log import logger
 from app.services.backend.models import RouteInfo, RouteMetadata
 
