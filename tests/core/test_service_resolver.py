@@ -1,0 +1,358 @@
+"""
+Tests for service dependency resolution.
+
+Tests the ServiceResolver class and service-to-component dependency logic.
+"""
+
+from unittest import mock
+
+import pytest
+
+from aegis.core.service_resolver import ServiceResolver
+from aegis.core.services import SERVICES, ServiceSpec, ServiceType
+
+
+class TestServiceResolver:
+    """Test core service resolver functionality."""
+
+    def test_resolve_service_dependencies_auth(self):
+        """Test resolving auth service dependencies."""
+        services = ["auth"]
+
+        resolved_components, auto_added = ServiceResolver.resolve_service_dependencies(
+            services
+        )
+
+        # Auth requires backend and database (no automatic frontend inclusion)
+        assert "backend" in resolved_components
+        assert "database" in resolved_components
+
+        # Auto-added should include backend and database (required by auth)
+        assert "backend" in auto_added
+        assert "database" in auto_added
+
+    def test_resolve_service_dependencies_empty(self):
+        """Test resolving empty service list."""
+        services = []
+
+        resolved_components, auto_added = ServiceResolver.resolve_service_dependencies(
+            services
+        )
+
+        assert resolved_components == []
+        assert auto_added == []
+
+    def test_resolve_service_dependencies_unknown_service(self):
+        """Test resolving unknown service raises error."""
+        services = ["unknown_service"]
+
+        with pytest.raises(ValueError, match="Invalid services"):
+            ServiceResolver.resolve_service_dependencies(services)
+
+    def test_validate_services_success(self):
+        """Test successful service validation."""
+        services = ["auth"]
+
+        errors = ServiceResolver.validate_services(services)
+
+        assert errors == []
+
+    def test_validate_services_unknown(self):
+        """Test validation of unknown services."""
+        services = ["unknown_service"]
+
+        errors = ServiceResolver.validate_services(services)
+
+        assert len(errors) == 1
+        assert "Unknown service: unknown_service" in errors[0]
+
+    def test_validate_services_conflicts(self):
+        """Test validation of service conflicts."""
+
+        # Create a test service that conflicts with auth
+        test_service = ServiceSpec(
+            name="conflicting_auth",
+            type=ServiceType.AUTH,
+            description="Conflicting auth service",
+            conflicts=["auth"],
+        )
+
+        # Mock the SERVICES dict to include the conflicting service
+        test_services = SERVICES.copy()
+        test_services["conflicting_auth"] = test_service
+
+        with mock.patch.dict(
+            "aegis.core.service_resolver.SERVICES", test_services, clear=False
+        ):
+            errors = ServiceResolver.validate_services(["auth", "conflicting_auth"])
+
+            assert len(errors) >= 1
+            conflict_errors = [e for e in errors if "conflicts with" in e]
+            assert len(conflict_errors) > 0
+
+    def test_validate_services_required_services(self):
+        """Test validation of service-to-service dependencies."""
+        # Create a test service that requires auth
+        test_service = ServiceSpec(
+            name="profile_service",
+            type=ServiceType.AUTH,
+            description="User profile service",
+            required_services=["auth"],
+        )
+
+        # Mock the SERVICES dict to include the dependent service
+        test_services = SERVICES.copy()
+        test_services["profile_service"] = test_service
+
+        with mock.patch.dict(
+            "aegis.core.service_resolver.SERVICES", test_services, clear=False
+        ):
+            # Should fail when profile_service is selected without auth
+            errors = ServiceResolver.validate_services(["profile_service"])
+
+            assert len(errors) >= 1
+            dependency_errors = [e for e in errors if "requires service" in e]
+            assert len(dependency_errors) > 0
+
+            # Should pass when both are selected
+            errors = ServiceResolver.validate_services(["auth", "profile_service"])
+            assert errors == []
+
+    def test_get_missing_components_for_services(self):
+        """Test getting missing components for services."""
+        services = ["auth"]
+        available_components = ["backend"]  # Missing database
+
+        missing = ServiceResolver.get_missing_components_for_services(
+            services, available_components
+        )
+
+        assert "database" in missing
+        assert "backend" not in missing  # Already available
+
+    def test_get_missing_components_for_services_empty(self):
+        """Test getting missing components for empty service list."""
+        missing = ServiceResolver.get_missing_components_for_services([], ["backend"])
+
+        assert missing == []
+
+    def test_get_missing_components_for_services_invalid(self):
+        """Test getting missing components for invalid services."""
+        services = ["unknown_service"]
+        available_components = ["backend"]
+
+        missing = ServiceResolver.get_missing_components_for_services(
+            services, available_components
+        )
+
+        assert missing == []  # Returns empty for invalid services
+
+    def test_validate_service_component_compatibility_success(self):
+        """Test successful service-component compatibility validation."""
+        services = ["auth"]
+        components = ["backend", "frontend", "database"]
+
+        errors = ServiceResolver.validate_service_component_compatibility(
+            services, components
+        )
+
+        assert errors == []
+
+    def test_validate_service_component_compatibility_missing(self):
+        """Test service-component compatibility with missing components."""
+        services = ["auth"]
+        components = ["backend"]  # Missing database
+
+        errors = ServiceResolver.validate_service_component_compatibility(
+            services, components
+        )
+
+        assert len(errors) >= 1
+        missing_errors = [e for e in errors if "requires component" in e]
+        assert len(missing_errors) > 0
+
+    def test_get_service_component_summary(self):
+        """Test getting service component summary."""
+        services = ["auth"]
+
+        summary = ServiceResolver.get_service_component_summary(services)
+
+        assert "auth" in summary
+        assert "backend" in summary["auth"]
+        assert "database" in summary["auth"]
+
+    def test_get_service_component_summary_unknown(self):
+        """Test getting service component summary for unknown service."""
+        services = ["unknown_service"]
+
+        summary = ServiceResolver.get_service_component_summary(services)
+
+        assert "unknown_service" in summary
+        assert summary["unknown_service"] == []
+
+    def test_recommend_components_for_services(self):
+        """Test getting recommended components for services."""
+        # Create a test service with recommendations
+        test_service = ServiceSpec(
+            name="test_service",
+            type=ServiceType.AI,
+            description="Test service with recommendations",
+            required_components=["backend"],
+            recommended_components=["redis", "worker"],
+        )
+
+        test_services = SERVICES.copy()
+        test_services["test_service"] = test_service
+
+        with mock.patch.dict(
+            "aegis.core.service_resolver.SERVICES", test_services, clear=False
+        ):
+            recommendations = ServiceResolver.recommend_components_for_services(
+                ["test_service"]
+            )
+
+            assert "redis" in recommendations
+            assert "worker" in recommendations
+
+    def test_recommend_components_for_services_empty(self):
+        """Test getting recommendations for services without recommendations."""
+        services = ["auth"]  # Auth service has no recommendations
+
+        recommendations = ServiceResolver.recommend_components_for_services(services)
+
+        assert recommendations == []
+
+    def test_get_services_requiring_component(self):
+        """Test getting services that require a specific component."""
+        services = ServiceResolver.get_services_requiring_component("backend")
+
+        assert "auth" in services  # Auth requires backend
+
+    def test_get_services_requiring_component_none(self):
+        """Test getting services for component that no service requires."""
+        services = ServiceResolver.get_services_requiring_component(
+            "nonexistent_component"
+        )
+
+        assert services == []
+
+    def test_merge_service_and_component_selections(self):
+        """Test merging service and component selections."""
+        selected_services = ["auth"]
+        selected_components = ["redis"]  # User also wants redis
+
+        final_components, service_auto, component_auto = (
+            ServiceResolver.merge_service_and_component_selections(
+                selected_services, selected_components
+            )
+        )
+
+        # Should have all required components
+        assert "backend" in final_components
+        assert "database" in final_components
+        assert "redis" in final_components
+
+        # Service auto-added should include auth requirements
+        assert "backend" in service_auto
+        assert "database" in service_auto
+
+        # No component-to-component auto-adding for this case
+        # (redis doesn't require other components)
+
+    def test_merge_service_and_component_selections_overlapping(self):
+        """Test merging when service and component selections overlap."""
+        selected_services = ["auth"]  # Requires backend, database
+        selected_components = [
+            "backend",
+            "worker",
+        ]  # Backend overlaps, worker adds redis
+
+        final_components, service_auto, component_auto = (
+            ServiceResolver.merge_service_and_component_selections(
+                selected_services, selected_components
+            )
+        )
+
+        # Should have all components
+        assert "backend" in final_components
+        assert "database" in final_components
+        assert "worker" in final_components
+        assert "redis" in final_components
+
+        # Service auto-added (backend overlaps with explicit, but database is auto)
+        assert "database" in service_auto
+        # Backend might or might not be in service_auto depending on deduplication logic
+
+        # Component auto-added should include redis (required by worker)
+        assert "redis" in component_auto
+
+    def test_merge_empty_selections(self):
+        """Test merging empty selections."""
+        final_components, service_auto, component_auto = (
+            ServiceResolver.merge_service_and_component_selections([], [])
+        )
+
+        assert final_components == []
+        assert service_auto == []
+        assert component_auto == []
+
+
+class TestServiceResolverIntegration:
+    """Integration tests for service resolver with real component system."""
+
+    def test_auth_service_full_resolution(self):
+        """Test complete auth service resolution flow."""
+        # Start with just auth service
+        services = ["auth"]
+
+        # Resolve to components
+        resolved_components, auto_added = ServiceResolver.resolve_service_dependencies(
+            services
+        )
+
+        # Should have core components plus auth requirements
+        assert "backend" in resolved_components
+        assert "database" in resolved_components
+
+        # Validate compatibility
+        errors = ServiceResolver.validate_service_component_compatibility(
+            services, resolved_components
+        )
+        assert errors == []
+
+        # Get summary
+        summary = ServiceResolver.get_service_component_summary(services)
+        assert len(summary["auth"]) > 0
+
+    def test_complex_service_component_merge(self):
+        """Test complex scenario with multiple services and components."""
+        # User wants auth service + explicit worker component
+        services = ["auth"]
+        components = ["worker"]  # Worker requires redis
+
+        # Merge selections
+        final_components, service_auto, component_auto = (
+            ServiceResolver.merge_service_and_component_selections(services, components)
+        )
+
+        # Should have everything needed
+        expected_components = {"backend", "database", "worker", "redis"}
+        assert expected_components.issubset(set(final_components))
+
+        # Validate final result is compatible
+        errors = ServiceResolver.validate_service_component_compatibility(
+            services, final_components
+        )
+        assert errors == []
+
+    def test_service_resolver_edge_cases(self):
+        """Test edge cases and error conditions."""
+        # Invalid service
+        with pytest.raises(ValueError):
+            ServiceResolver.resolve_service_dependencies(["invalid_service"])
+
+        # Empty inputs
+        assert ServiceResolver.get_missing_components_for_services([], []) == []
+        assert ServiceResolver.validate_services([]) == []
+        assert ServiceResolver.get_service_component_summary([]) == {}
+        assert ServiceResolver.recommend_components_for_services([]) == []
