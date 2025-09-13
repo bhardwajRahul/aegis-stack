@@ -4,14 +4,13 @@ System worker queue configuration.
 Handles system maintenance and monitoring tasks using native arq patterns.
 """
 
-from arq.connections import RedisSettings
-
 # Import system tasks
 from app.components.worker.tasks.simple_system_tasks import (
     cleanup_temp_files,
     system_health_check,
 )
 from app.core.config import settings
+from arq.connections import RedisSettings
 
 
 class WorkerSettings:

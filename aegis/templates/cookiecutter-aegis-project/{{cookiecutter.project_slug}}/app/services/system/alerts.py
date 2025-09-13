@@ -5,7 +5,7 @@ Pure functions for sending alerts, managing notifications, and rate limiting.
 All functions use Pydantic models for type safety and validation.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from app.core.log import logger
@@ -26,7 +26,7 @@ def _should_send_alert(alert_key: str) -> bool:
     if alert_key not in _last_alerts:
         return True
 
-    time_since_last = datetime.utcnow() - _last_alerts[alert_key]
+    time_since_last = datetime.now(UTC) - _last_alerts[alert_key]
     return time_since_last.total_seconds() > _rate_limit_seconds
 
 
@@ -38,7 +38,7 @@ async def send_alert(alert: Alert) -> None:
         logger.debug(f"Rate limiting alert: {alert_key}")
         return
 
-    _last_alerts[alert_key] = datetime.utcnow()
+    _last_alerts[alert_key] = datetime.now(UTC)
 
     # Log-based alerting (always available)
     log_level = {
@@ -89,6 +89,6 @@ async def send_critical_alert(title: str, message: str) -> None:
         severity=alert_severity.CRITICAL,
         title=title,
         message=message,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC),
     )
     await send_alert(alert)

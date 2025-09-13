@@ -8,7 +8,6 @@ job statistics, and scheduling information using shared utility functions.
 from datetime import UTC
 
 import flet as ft
-
 from app.components.frontend.controls import PrimaryText
 from app.services.system.models import ComponentStatus
 

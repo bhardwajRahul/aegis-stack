@@ -45,7 +45,7 @@ jobs:
       run: uv sync --all-extras
     
     - name: Run type checking
-      run: uv run mypy .
+      run: uv run ty check
 
   test:
     runs-on: ubuntu-latest

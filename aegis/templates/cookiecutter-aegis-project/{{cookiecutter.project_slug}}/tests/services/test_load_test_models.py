@@ -4,9 +4,7 @@ Unit tests for load test Pydantic models.
 Tests validation, constraints, and data transformation for all load test models.
 """
 
-from pydantic import ValidationError
 import pytest
-
 from app.components.worker.constants import LoadTestTypes
 from app.services.load_test_models import (
     LoadTestConfiguration,
@@ -19,6 +17,7 @@ from app.services.load_test_models import (
 from app.services.load_test_models import (
     LoadTestErrorModel as LoadTestError,
 )
+from pydantic import ValidationError
 
 
 class TestLoadTestConfiguration:
@@ -27,7 +26,7 @@ class TestLoadTestConfiguration:
     def test_valid_configuration(self):
         """Test creating valid configuration."""
         config = LoadTestConfiguration(
-            task_type="cpu_intensive",
+            task_type=LoadTestTypes.CPU_INTENSIVE,
             num_tasks=100,
             batch_size=10,
             delay_ms=50,
@@ -44,7 +43,7 @@ class TestLoadTestConfiguration:
         """Test num_tasks constraints."""
         # Valid range
         config = LoadTestConfiguration(
-            task_type="cpu_intensive",
+            task_type=LoadTestTypes.CPU_INTENSIVE,
             num_tasks=50,
             batch_size=10,
             target_queue="load_test",
@@ -54,7 +53,7 @@ class TestLoadTestConfiguration:
         # Too low
         with pytest.raises(ValidationError, match="greater than or equal to 10"):
             LoadTestConfiguration(
-                task_type="cpu_intensive",
+                task_type=LoadTestTypes.CPU_INTENSIVE,
                 num_tasks=5,
                 batch_size=10,
                 target_queue="load_test",
@@ -63,7 +62,7 @@ class TestLoadTestConfiguration:
         # Too high
         with pytest.raises(ValidationError, match="less than or equal to 10000"):
             LoadTestConfiguration(
-                task_type="cpu_intensive",
+                task_type=LoadTestTypes.CPU_INTENSIVE,
                 num_tasks=20000,
                 batch_size=10,
                 target_queue="load_test",
@@ -73,7 +72,7 @@ class TestLoadTestConfiguration:
         """Test batch_size constraints."""
         # Valid range
         config = LoadTestConfiguration(
-            task_type="cpu_intensive",
+            task_type=LoadTestTypes.CPU_INTENSIVE,
             num_tasks=100,
             batch_size=25,
             target_queue="load_test",
@@ -83,7 +82,7 @@ class TestLoadTestConfiguration:
         # Too low
         with pytest.raises(ValidationError, match="greater than or equal to 1"):
             LoadTestConfiguration(
-                task_type="cpu_intensive",
+                task_type=LoadTestTypes.CPU_INTENSIVE,
                 num_tasks=100,
                 batch_size=0,
                 target_queue="load_test",
@@ -92,7 +91,7 @@ class TestLoadTestConfiguration:
         # Too high
         with pytest.raises(ValidationError, match="less than or equal to 100"):
             LoadTestConfiguration(
-                task_type="cpu_intensive",
+                task_type=LoadTestTypes.CPU_INTENSIVE,
                 num_tasks=100,
                 batch_size=150,
                 target_queue="load_test",
@@ -102,7 +101,7 @@ class TestLoadTestConfiguration:
         """Test delay_ms constraints."""
         # Valid range
         config = LoadTestConfiguration(
-            task_type="cpu_intensive",
+            task_type=LoadTestTypes.CPU_INTENSIVE,
             num_tasks=100,
             batch_size=10,
             delay_ms=1000,
@@ -113,7 +112,7 @@ class TestLoadTestConfiguration:
         # Too low (negative)
         with pytest.raises(ValidationError, match="greater than or equal to 0"):
             LoadTestConfiguration(
-                task_type="cpu_intensive",
+                task_type=LoadTestTypes.CPU_INTENSIVE,
                 num_tasks=100,
                 batch_size=10,
                 delay_ms=-100,
@@ -123,7 +122,7 @@ class TestLoadTestConfiguration:
         # Too high
         with pytest.raises(ValidationError, match="less than or equal to 5000"):
             LoadTestConfiguration(
-                task_type="cpu_intensive",
+                task_type=LoadTestTypes.CPU_INTENSIVE,
                 num_tasks=100,
                 batch_size=10,
                 delay_ms=10000,
@@ -317,7 +316,7 @@ class TestLoadTestResult:
     def test_valid_result(self):
         """Test creating valid load test result."""
         config = LoadTestConfiguration(
-            task_type="cpu_intensive",
+            task_type=LoadTestTypes.CPU_INTENSIVE,
             num_tasks=100,
             batch_size=10,
             target_queue="load_test",
@@ -343,7 +342,7 @@ class TestLoadTestResult:
     def test_invalid_status_values(self):
         """Test that invalid status values are rejected."""
         config = LoadTestConfiguration(
-            task_type="cpu_intensive",
+            task_type=LoadTestTypes.CPU_INTENSIVE,
             num_tasks=100,
             batch_size=10,
             target_queue="load_test",
@@ -364,7 +363,7 @@ class TestLoadTestResult:
     def test_status_consistency_validator(self):
         """Test status consistency validation."""
         config = LoadTestConfiguration(
-            task_type="cpu_intensive",
+            task_type=LoadTestTypes.CPU_INTENSIVE,
             num_tasks=100,
             batch_size=10,
             target_queue="load_test",
@@ -394,7 +393,7 @@ class TestOrchestratorRawResult:
         """Test creating valid orchestrator raw result."""
         raw_result = OrchestratorRawResult(
             test_id="test-123",
-            task_type="cpu_intensive",
+            task_type=LoadTestTypes.CPU_INTENSIVE.value,
             tasks_sent=100,
             tasks_completed=95,
             tasks_failed=5,

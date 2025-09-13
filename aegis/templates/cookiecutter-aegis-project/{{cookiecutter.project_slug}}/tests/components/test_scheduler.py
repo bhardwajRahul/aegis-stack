@@ -8,10 +8,9 @@ For integration tests of the actual scheduler, see the CLI tests that generate
 complete projects and validate they work correctly.
 """
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytest
-
 from app.services.system.health import check_system_status
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 
 @pytest.mark.asyncio

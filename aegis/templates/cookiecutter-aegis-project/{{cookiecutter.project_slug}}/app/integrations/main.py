@@ -1,8 +1,8 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
 import flet.fastapi as flet_fastapi
+from fastapi import FastAPI
 
 from app.components.backend.hooks import backend_hooks
 from app.components.backend.main import create_backend_app

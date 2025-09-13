@@ -6,7 +6,6 @@ reducing duplication across different card types.
 """
 
 import flet as ft
-
 from app.components.frontend.controls import (
     LabelText,
     MetricText,

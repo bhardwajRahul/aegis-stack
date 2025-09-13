@@ -70,7 +70,7 @@ class TestComponentIntegration:
             # Track the test value that gets set so we can return it on get
             stored_values = {}
 
-            async def mock_set(key: str, value: str, ex: int = None) -> bool:
+            async def mock_set(key: str, value: str, ex: int | None = None) -> bool:
                 stored_values[key] = value
                 return True
 

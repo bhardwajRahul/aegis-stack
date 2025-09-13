@@ -5,8 +5,8 @@ This module provides common functionality used across all CLI test files
 to avoid code duplication and ensure consistent behavior.
 """
 
-from pathlib import Path
 import subprocess
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -268,7 +268,7 @@ def run_quality_checks(project_path: Path, timeout: int = 120) -> list[CLITestRe
     # Type checking
     results.append(
         run_project_command(
-            ["uv", "run", "mypy", "."],
+            ["uv", "run", "ty", "check"],
             project_path,
             timeout=QUALITY_CHECK_TIMEOUTS["typecheck"],
             step_name="Type Checking",
@@ -531,12 +531,11 @@ def check_error_indicators(
         if indicator.lower() not in output_lower:
             missing_indicators.append(indicator)
 
-    if missing_indicators:
+    if len(missing_indicators) == len(expected_indicators):
         # More flexible matching - at least one indicator should be present
-        if len(missing_indicators) == len(expected_indicators):
-            pytest.fail(
-                f"Error message missing expected indicators for {description}\n"
-                f"Expected any of: {expected_indicators}\n"
-                f"Got output: {output}\n"
-                f"Missing all indicators: {missing_indicators}"
-            )
+        pytest.fail(
+            f"Error message missing expected indicators for {description}\n"
+            f"Expected any of: {expected_indicators}\n"
+            f"Got output: {output}\n"
+            f"Missing all indicators: {missing_indicators}"
+        )

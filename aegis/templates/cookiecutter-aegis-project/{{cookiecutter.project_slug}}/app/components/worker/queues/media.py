@@ -7,9 +7,8 @@ arq patterns.
 
 from typing import Any
 
-from arq.connections import RedisSettings
-
 from app.core.config import settings
+from arq.connections import RedisSettings
 
 # Import media tasks (when available)
 # from app.components.worker.tasks.media_tasks import (

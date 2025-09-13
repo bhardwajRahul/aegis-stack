@@ -6,11 +6,10 @@ to worker queues. Separated from worker management to allow clean architectural
 separation between client-side enqueueing and worker-side processing.
 """
 
-from arq import create_pool
-from arq.connections import ArqRedis, RedisSettings
-
 from app.core.config import get_default_queue, settings
 from app.core.log import logger
+from arq import create_pool
+from arq.connections import ArqRedis, RedisSettings
 
 # Global pool cache to avoid creating new Redis connections repeatedly
 _pool_cache: dict[str, ArqRedis] = {}

@@ -6,7 +6,6 @@ queue statistics, and job processing data using ee-toolset design standards.
 """
 
 import flet as ft
-
 from app.components.frontend.controls import (
     LabelText,
     PrimaryText,

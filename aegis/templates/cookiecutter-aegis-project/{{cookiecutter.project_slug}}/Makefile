@@ -135,9 +135,9 @@ format: ## Format code with ruff
 	@echo "💄 Formatting code..."
 	@uv run ruff format .
 
-typecheck: ## Run type checking with mypy
+typecheck: ## Run type checking with ty
 	@echo "🔍 Running type checking..."
-	@uv run mypy app/ --no-error-summary
+	@uv run ty check
 
 check: lint typecheck test ## Run all code quality checks
 	@echo "✅ All checks completed successfully!"

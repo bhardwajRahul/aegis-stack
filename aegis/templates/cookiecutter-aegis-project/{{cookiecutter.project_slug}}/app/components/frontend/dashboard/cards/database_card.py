@@ -6,7 +6,6 @@ connection statistics, query performance, and table information.
 """
 
 import flet as ft
-
 from app.components.frontend.controls import (
     LabelText,
     PrimaryText,

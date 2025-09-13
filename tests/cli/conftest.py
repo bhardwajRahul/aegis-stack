@@ -2,9 +2,9 @@
 Pytest configuration for CLI integration tests.
 """
 
+import tempfile
 from collections.abc import Generator
 from pathlib import Path
-import tempfile
 from typing import Any
 
 import pytest
@@ -156,16 +156,15 @@ def db_module(generated_db_project: CLITestResult) -> dict[str, Any]:
     # Import the generated db module
     # NOTE: These imports are from the dynamically generated project, not aegis-stack
     # MyPy can't see them during static analysis, hence the type: ignore comments
-    from sqlalchemy.exc import IntegrityError  # type: ignore[import-not-found]
-
-    # Also import SQLModel classes from the generated project
-    from sqlmodel import Field, SQLModel  # type: ignore[import-not-found]
-
     from app.core.db import (  # type: ignore[import-not-found]
         SessionLocal,
         db_session,
         engine,
     )
+    from sqlalchemy.exc import IntegrityError  # type: ignore[import-not-found]
+
+    # Also import SQLModel classes from the generated project
+    from sqlmodel import Field, SQLModel  # type: ignore[import-not-found]
 
     # Create model factory function
     def create_test_models() -> dict[str, Any]:

@@ -166,11 +166,10 @@ class TestDatabaseRuntimeBehavior:
             # Should succeed
 
         # Try to create a child with invalid parent_id - should fail
-        with pytest.raises(integrity_error):
-            with db_session() as session:
-                invalid_child = child_model(name="InvalidChild", parent_id=99999)
-                session.add(invalid_child)
-                session.flush()  # Force constraint check
+        with pytest.raises(integrity_error), db_session() as session:
+            invalid_child = child_model(name="InvalidChild", parent_id=99999)
+            session.add(invalid_child)
+            session.flush()  # Force constraint check
 
     @pytest.mark.slow
     def test_multiple_operations_in_transaction(

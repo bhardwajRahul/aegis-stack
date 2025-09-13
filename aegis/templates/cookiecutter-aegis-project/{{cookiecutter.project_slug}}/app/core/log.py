@@ -11,9 +11,8 @@ import logging
 import sys
 
 import structlog
-from structlog.types import Processor
-
 from app.core.config import settings
+from structlog.types import Processor
 
 # A global logger instance for easy access throughout the application
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()

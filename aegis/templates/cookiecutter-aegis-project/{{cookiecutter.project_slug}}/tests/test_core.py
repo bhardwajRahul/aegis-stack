@@ -7,10 +7,9 @@ These basic tests ensure the fundamental application components work correctly.
 
 from collections.abc import Generator
 
-from fastapi.testclient import TestClient
 import pytest
-
 from app.integrations.main import create_integrated_app
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture

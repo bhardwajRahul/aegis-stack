@@ -5,8 +5,6 @@ Handles load testing orchestration and synthetic workload tasks using native arq
 patterns.
 """
 
-from arq.connections import RedisSettings
-
 # Import load test tasks
 from app.components.worker.tasks.load_tasks import (
     cpu_intensive_task,
@@ -18,6 +16,7 @@ from app.components.worker.tasks.system_tasks import (
     load_test_orchestrator,
 )
 from app.core.config import settings
+from arq.connections import RedisSettings
 
 
 class WorkerSettings:

@@ -9,7 +9,6 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import flet as ft
-
 from app.components.frontend.controls import LabelText, SecondaryText, TitleText
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
