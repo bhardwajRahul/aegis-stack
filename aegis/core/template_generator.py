@@ -10,6 +10,7 @@ from typing import Any
 
 from .component_utils import extract_base_component_name, extract_engine_info
 from .components import COMPONENTS
+from .services import SERVICES
 
 
 class TemplateGenerator:
@@ -20,6 +21,7 @@ class TemplateGenerator:
         project_name: str,
         selected_components: list[str],
         scheduler_backend: str = "memory",
+        selected_services: list[str] | None = None,
     ):
         """
         Initialize template generator.
@@ -28,10 +30,12 @@ class TemplateGenerator:
             project_name: Name of the project being generated
             selected_components: List of component names to include
             scheduler_backend: Scheduler backend: "memory", "sqlite", "postgres"
+            selected_services: List of service names to include
         """
         self.project_name = project_name
         self.project_slug = project_name.lower().replace(" ", "-").replace("_", "-")
         self.scheduler_backend = scheduler_backend
+        self.selected_services = selected_services or []
 
         # Always include core components
         all_components = ["backend", "frontend"] + selected_components
@@ -98,6 +102,8 @@ class TemplateGenerator:
                 name in self.components for name in ["worker", "scheduler"]
             ),
             "needs_redis": "redis" in self.components,
+            # Service flags for template conditionals
+            "include_auth": "yes" if "auth" in self.selected_services else "no",
             # Dependency lists for templates
             "selected_components": selected_only,  # Original selection for context
             "docker_services": self._get_docker_services(),
@@ -127,11 +133,20 @@ class TemplateGenerator:
             Sorted list of Python package dependencies
         """
         deps = []
+        # Collect component dependencies
         for component_name in self.components:
             if component_name in self.component_specs:
                 spec = self.component_specs[component_name]
                 if spec.pyproject_deps:
                     deps.extend(spec.pyproject_deps)
+
+        # Collect service dependencies
+        for service_name in self.selected_services:
+            if service_name in SERVICES:
+                service_spec = SERVICES[service_name]
+                if service_spec.pyproject_deps:
+                    deps.extend(service_spec.pyproject_deps)
+
         return sorted(set(deps))  # Sort and deduplicate
 
     def get_template_files(self) -> list[str]:
@@ -142,12 +157,21 @@ class TemplateGenerator:
             List of template file paths
         """
         files = []
+        # Collect component template files
         for component_name in self.components:
             base_name = extract_base_component_name(component_name)
             if base_name in self.component_specs:
                 spec = self.component_specs[base_name]
                 if spec.template_files:
                     files.extend(spec.template_files)
+
+        # Collect service template files
+        for service_name in self.selected_services:
+            if service_name in SERVICES:
+                service_spec = SERVICES[service_name]
+                if service_spec.template_files:
+                    files.extend(service_spec.template_files)
+
         return list(dict.fromkeys(files))  # Preserve order, remove duplicates
 
     def get_entrypoints(self) -> list[str]:

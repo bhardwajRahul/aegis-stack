@@ -24,6 +24,11 @@ def validate_and_resolve_components(
     if not value:
         return None
 
+    # Skip validation during help generation, but not for tests
+    # Mock objects don't have a real resilient_parsing attribute set to True
+    if hasattr(ctx, "resilient_parsing") and ctx.resilient_parsing is True:
+        return None
+
     # Parse comma-separated string
     components_raw = [c.strip() for c in value.split(",")]
 
@@ -72,6 +77,11 @@ def validate_and_resolve_services(
 ) -> list[str] | None:
     """Validate and resolve service dependencies to components."""
     if not value:
+        return None
+
+    # Skip validation during help generation, but not for tests
+    # Mock objects don't have a real resilient_parsing attribute set to True
+    if hasattr(ctx, "resilient_parsing") and ctx.resilient_parsing is True:
         return None
 
     # Parse comma-separated string

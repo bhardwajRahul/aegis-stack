@@ -45,6 +45,7 @@ def process_j2_templates():
             "include_worker": "{{ cookiecutter.include_worker }}",
             "include_database": "{{ cookiecutter.include_database }}",
             "include_cache": "{{ cookiecutter.include_cache }}",
+            "include_auth": "{{ cookiecutter.include_auth }}",
         }
     }
 
@@ -172,6 +173,18 @@ def main():
     if "{{ cookiecutter.include_cache }}" != "yes":
         # remove_file("app/services/cache_service.py")
         pass  # Placeholder for cache component
+
+    # Remove services not selected
+    if "{{ cookiecutter.include_auth }}" != "yes":
+        # Remove auth service files
+        remove_dir("app/components/backend/api/auth")
+        remove_file("app/models/user.py")
+        remove_dir("app/services/auth")
+        remove_file("app/core/security.py")
+        # Remove auth-related tests if they exist
+        remove_file("tests/api/test_auth_endpoints.py")
+        remove_file("tests/services/test_auth_service.py")
+        remove_file("tests/models/test_user.py")
 
     # Clean up empty docs/components directory if no components selected
     if (

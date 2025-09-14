@@ -142,11 +142,11 @@ def init_command(
                 clean_selected_only
             )
             if auto_added:
-                typer.echo(f"\\n📦 Auto-added dependencies: {', '.join(auto_added)}")
+                typer.echo(f"\n📦 Auto-added dependencies: {', '.join(auto_added)}")
 
     # Create template generator with scheduler backend context
     template_gen = TemplateGenerator(
-        project_name, list(selected_components), scheduler_backend
+        project_name, list(selected_components), scheduler_backend, selected_services
     )
 
     # Show selected configuration
@@ -176,28 +176,28 @@ def init_command(
     # Show template files that will be generated
     template_files = template_gen.get_template_files()
     if template_files:
-        typer.echo("\\n📄 Component Files:")
+        typer.echo("\n📄 Component Files:")
         for file_path in template_files:
             typer.echo(f"   • {file_path}")
 
     # Show entrypoints that will be created
     entrypoints = template_gen.get_entrypoints()
     if entrypoints:
-        typer.echo("\\n🚀 Entrypoints:")
+        typer.echo("\n🚀 Entrypoints:")
         for entrypoint in entrypoints:
             typer.echo(f"   • {entrypoint}")
 
     # Show worker queues that will be created
     worker_queues = template_gen.get_worker_queues()
     if worker_queues:
-        typer.echo("\\n👷 Worker Queues:")
+        typer.echo("\n👷 Worker Queues:")
         for queue in worker_queues:
             typer.echo(f"   • {queue}")
 
     # Show dependency information using template generator
     deps = template_gen._get_pyproject_deps()
     if deps:
-        typer.echo("\\n📦 Dependencies to be installed:")
+        typer.echo("\n📦 Dependencies to be installed:")
         for dep in deps:
             typer.echo(f"   • {dep}")
 
