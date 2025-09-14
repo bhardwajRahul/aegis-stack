@@ -4,7 +4,7 @@ Tests for scheduler backend detection and expansion logic.
 Tests the new functions added to __main__.py for handling scheduler[backend] syntax.
 """
 
-from aegis.__main__ import detect_scheduler_backend, expand_scheduler_dependencies
+from aegis.cli.utils import detect_scheduler_backend, expand_scheduler_dependencies
 
 
 class TestSchedulerBackendDetection:
