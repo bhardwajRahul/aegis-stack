@@ -218,7 +218,7 @@ class TestServicesOptionIntegration:
                     "--services",
                     "auth",
                     "--components",
-                    "worker",
+                    "database,worker",  # Auth needs database (backend always included), plus explicit worker
                     "--no-interactive",
                     "--yes",
                     "--output-dir",
@@ -234,12 +234,12 @@ class TestServicesOptionIntegration:
             # Should show both services and components
             assert "🔧 Services: auth" in output
             assert "📦 Infrastructure:" in output
-            # Both auth (database) and worker (redis) dependencies should be present
-            assert (
-                ("database" in output and "redis" in output)
-                or "database, redis" in output
-                or "redis, database" in output
-            )
+            # Should have all components: backend, database (auth), worker and redis (worker dep)
+            assert "backend" in output
+            assert "database" in output
+            assert "worker" in output
+            # Worker adds redis as dependency
+            assert "redis" in output
 
     def test_init_services_help_text_accuracy(self):
         """Test that init command help shows correct services help text."""
@@ -478,3 +478,183 @@ class TestServicesErrorHandling:
             )
 
             assert result.returncode == 0  # Should handle whitespace gracefully
+
+
+class TestServiceComponentCompatibilityValidation:
+    """Test service-component compatibility validation in CLI."""
+
+    def test_services_with_compatible_explicit_components_success(self):
+        """Test that services work when user provides compatible explicit components."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = subprocess.run(
+                [
+                    "uv",
+                    "run",
+                    "python",
+                    "-m",
+                    "aegis",
+                    "init",
+                    "test-compatible",
+                    "--services",
+                    "auth",
+                    "--components",
+                    "database",  # Auth requires database (backend is always included)
+                    "--no-interactive",
+                    "--yes",
+                    "--output-dir",
+                    temp_dir,
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            assert result.returncode == 0
+            assert "🔧 Services: auth" in result.stdout
+            assert "backend" in result.stdout
+            assert "database" in result.stdout
+
+    def test_services_with_insufficient_explicit_components_failure(self):
+        """Test that services fail when user provides insufficient explicit components."""
+        result = subprocess.run(
+            [
+                "uv",
+                "run",
+                "python",
+                "-m",
+                "aegis",
+                "init",
+                "test-insufficient",
+                "--services",
+                "auth",
+                "--components",
+                "worker",  # Auth requires database, but user only provided worker
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                "/tmp",  # Won't be created due to validation failure
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 1
+        assert "Service-component compatibility errors:" in result.stderr
+        assert "Service 'auth' requires component 'database'" in result.stderr
+        assert "💡 Suggestion:" in result.stderr
+        # Should suggest adding missing components (worker auto-adds redis dependency)
+        assert "database" in result.stderr
+
+    def test_services_with_no_explicit_components_auto_add(self):
+        """Test that services auto-add components when user doesn't provide --components."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = subprocess.run(
+                [
+                    "uv",
+                    "run",
+                    "python",
+                    "-m",
+                    "aegis",
+                    "init",
+                    "test-auto-add",
+                    "--services",
+                    "auth",
+                    "--no-interactive",
+                    "--yes",
+                    "--output-dir",
+                    temp_dir,
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            assert result.returncode == 0
+            assert "🔧 Services: auth" in result.stdout
+            # Should auto-add both required components
+            assert "backend" in result.stdout
+            assert "database" in result.stdout
+
+    def test_services_with_partial_explicit_components_failure(self):
+        """Test that services fail when explicit components are partially sufficient."""
+        result = subprocess.run(
+            [
+                "uv",
+                "run",
+                "python",
+                "-m",
+                "aegis",
+                "init",
+                "test-partial",
+                "--services",
+                "auth",
+                "--components",
+                "redis",  # Auth requires database (missing database, backend is always included)
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                "/tmp",
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 1
+        assert "Service-component compatibility errors:" in result.stderr
+        assert "Service 'auth' requires component 'database'" in result.stderr
+
+    def test_multiple_services_with_insufficient_components_failure(self):
+        """Test validation with multiple services and insufficient components."""
+        # Note: This test assumes we might add more services in the future
+        # For now, we only have auth service, so this tests the error handling pattern
+        result = subprocess.run(
+            [
+                "uv",
+                "run",
+                "python",
+                "-m",
+                "aegis",
+                "init",
+                "test-multi-insufficient",
+                "--services",
+                "auth",  # Only auth available for now
+                "--components",
+                "worker,scheduler",  # Missing database for auth
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                "/tmp",
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 1
+        assert "Service-component compatibility errors:" in result.stderr
+        assert "Service 'auth' requires component 'database'" in result.stderr
+
+    def test_services_error_message_suggests_alternatives(self):
+        """Test that error message suggests both adding components and removing --components."""
+        result = subprocess.run(
+            [
+                "uv",
+                "run",
+                "python",
+                "-m",
+                "aegis",
+                "init",
+                "test-suggestions",
+                "--services",
+                "auth",
+                "--components",
+                "redis",  # Wrong component for auth
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                "/tmp",
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 1
+        assert "💡 Suggestion: Add missing components" in result.stderr
+        assert "remove --components to let services auto-add" in result.stderr

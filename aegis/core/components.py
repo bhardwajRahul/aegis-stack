@@ -16,6 +16,10 @@ class ComponentType(Enum):
     INFRASTRUCTURE = "infra"  # Redis, workers - foundation for services to use
 
 
+# Core components that are always included in every project
+CORE_COMPONENTS = ["backend", "frontend"]
+
+
 @dataclass
 class ComponentSpec:
     """Specification for a single component."""
