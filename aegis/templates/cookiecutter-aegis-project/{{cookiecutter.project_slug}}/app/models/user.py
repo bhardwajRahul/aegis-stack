@@ -2,13 +2,14 @@
 
 from datetime import UTC, datetime
 
+from pydantic import EmailStr
 from sqlmodel import Field, SQLModel
 
 
 class UserBase(SQLModel):
     """Base user model with shared fields."""
 
-    email: str = Field(unique=True, index=True)
+    email: EmailStr = Field(unique=True, index=True)
     full_name: str | None = None
     is_active: bool = Field(default=True)
 
@@ -25,7 +26,7 @@ class User(UserBase, table=True):
 class UserCreate(UserBase):
     """User creation model."""
 
-    password: str
+    password: str = Field(min_length=8)
 
 
 class UserLogin(SQLModel):

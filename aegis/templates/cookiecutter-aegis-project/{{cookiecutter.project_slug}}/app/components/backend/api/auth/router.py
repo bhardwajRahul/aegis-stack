@@ -1,6 +1,6 @@
 """Authentication API routes."""
 
-from app.core.db import get_db_session
+from app.components.backend.api.deps import get_db
 from app.core.security import create_access_token, verify_password
 from app.models.user import UserCreate, UserResponse
 from app.services.auth.auth_service import get_current_user_from_token
@@ -15,7 +15,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 
 @router.post("/register", response_model=UserResponse)
-async def register(user_data: UserCreate, db: Session = Depends(get_db_session)):
+async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     """Register a new user."""
     user_service = UserService(db)
 
@@ -34,7 +34,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db_session))
 @router.post("/token")
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_db),
 ):
     """Login and get access token."""
     user_service = UserService(db)
@@ -57,7 +57,7 @@ async def login(
 @router.get("/me", response_model=UserResponse)
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db_session),
+    db: Session = Depends(get_db),
 ):
     """Get current authenticated user."""
     user = await get_current_user_from_token(token, db)

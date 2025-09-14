@@ -72,8 +72,14 @@ class BackendHooks:
 
                 # Look for startup_hook function
                 if hasattr(module, "startup_hook"):
-                    logger.info(f"Registered startup hook from {module_name}")
-                    self.startup_hooks.append(module.startup_hook)
+                    # Prevent duplicate registration
+                    if module.startup_hook not in self.startup_hooks:
+                        logger.info(f"Registered startup hook from {module_name}")
+                        self.startup_hooks.append(module.startup_hook)
+                    else:
+                        logger.debug(
+                            f"Startup hook from {module_name} already registered"
+                        )
 
             except Exception as e:
                 logger.error(f"Failed to load startup hook {module_name}: {e}")
@@ -95,8 +101,14 @@ class BackendHooks:
 
                 # Look for shutdown_hook function
                 if hasattr(module, "shutdown_hook"):
-                    logger.info(f"Registered shutdown hook from {module_name}")
-                    self.shutdown_hooks.append(module.shutdown_hook)
+                    # Prevent duplicate registration
+                    if module.shutdown_hook not in self.shutdown_hooks:
+                        logger.info(f"Registered shutdown hook from {module_name}")
+                        self.shutdown_hooks.append(module.shutdown_hook)
+                    else:
+                        logger.debug(
+                            f"Shutdown hook from {module_name} already registered"
+                        )
 
             except Exception as e:
                 logger.error(f"Failed to load shutdown hook {module_name}: {e}")

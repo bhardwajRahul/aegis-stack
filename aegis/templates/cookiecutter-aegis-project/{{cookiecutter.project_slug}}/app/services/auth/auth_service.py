@@ -35,7 +35,7 @@ async def get_current_user_from_token(token: str, db: Session) -> User:
     # Check if user is active
     if not user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Inactive user"
         )
 
     return user
