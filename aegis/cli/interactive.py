@@ -7,7 +7,7 @@ used by CLI commands.
 
 import typer
 
-from ..core.components import COMPONENTS, ComponentSpec, ComponentType
+from ..core.components import COMPONENTS, CORE_COMPONENTS, ComponentSpec, ComponentType
 
 
 def get_interactive_infrastructure_components() -> list[ComponentSpec]:
@@ -32,7 +32,9 @@ def interactive_component_selection() -> tuple[list[str], str]:
 
     typer.echo("🎯 Component Selection")
     typer.echo("=" * 40)
-    typer.echo("✅ Core components (backend + frontend) included automatically\n")
+    typer.echo(
+        f"✅ Core components ({' + '.join(CORE_COMPONENTS)}) included automatically\n"
+    )
 
     selected = []
     database_engine = None  # Track database engine selection

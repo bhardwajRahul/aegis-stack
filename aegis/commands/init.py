@@ -19,7 +19,7 @@ from ..core.component_utils import (
     extract_base_component_name,
     restore_engine_info,
 )
-from ..core.components import COMPONENTS, ComponentType
+from ..core.components import COMPONENTS, CORE_COMPONENTS, ComponentType
 from ..core.dependency_resolver import DependencyResolver
 from ..core.service_resolver import ServiceResolver
 from ..core.template_generator import TemplateGenerator
@@ -104,6 +104,35 @@ def init_command(
 
     # Resolve services to components if services were provided
     if selected_services:
+        # If user provided explicit components, validate compatibility first
+        if components is not None:  # User provided explicit --components
+            # Include core components (always present) for validation
+            components_for_validation = list(set(selected_components + CORE_COMPONENTS))
+            errors = ServiceResolver.validate_service_component_compatibility(
+                selected_services, components_for_validation
+            )
+            if errors:
+                typer.echo("❌ Service-component compatibility errors:", err=True)
+                for error in errors:
+                    typer.echo(f"   • {error}", err=True)
+
+                # Show suggestion
+                missing_components = (
+                    ServiceResolver.get_missing_components_for_services(
+                        selected_services, components_for_validation
+                    )
+                )
+                if missing_components:
+                    typer.echo(
+                        f"💡 Suggestion: Add missing components: --components {','.join(selected_components + missing_components)}",
+                        err=True,
+                    )
+                typer.echo(
+                    "   Alternatively, remove --components to let services auto-add their dependencies.",
+                    err=True,
+                )
+                raise typer.Exit(1)
+
         service_components, _ = ServiceResolver.resolve_service_dependencies(
             selected_services
         )
@@ -136,7 +165,7 @@ def init_command(
 
             # Calculate auto-added components using clean names
             clean_selected_only = clean_component_names(
-                [c for c in selected_components if c not in ["backend", "frontend"]]
+                [c for c in selected_components if c not in CORE_COMPONENTS]
             )
             auto_added = DependencyResolver.get_missing_dependencies(
                 clean_selected_only
@@ -153,7 +182,7 @@ def init_command(
     typer.echo()
     typer.echo(f"📁 Project Name: {project_name}")
     typer.echo("🏗️  Project Structure:")
-    typer.echo("   ✅ Core: backend, frontend")
+    typer.echo(f"   ✅ Core: {', '.join(CORE_COMPONENTS)}")
 
     # Show infrastructure components
     infra_components = []

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .component_utils import extract_base_component_name, extract_engine_info
-from .components import COMPONENTS
+from .components import COMPONENTS, CORE_COMPONENTS
 from .services import SERVICES
 
 
@@ -38,7 +38,7 @@ class TemplateGenerator:
         self.selected_services = selected_services or []
 
         # Always include core components
-        all_components = ["backend", "frontend"] + selected_components
+        all_components = CORE_COMPONENTS + selected_components
         # Remove duplicates, preserve order
         self.components = list(dict.fromkeys(all_components))
 
@@ -74,7 +74,7 @@ class TemplateGenerator:
             Dictionary containing all template variables
         """
         # Store the originally selected components (without core)
-        selected_only = [c for c in self.components if c not in ["backend", "frontend"]]
+        selected_only = [c for c in self.components if c not in CORE_COMPONENTS]
 
         # Check for components using base names
         has_database = any(c.startswith("database") for c in self.components)
