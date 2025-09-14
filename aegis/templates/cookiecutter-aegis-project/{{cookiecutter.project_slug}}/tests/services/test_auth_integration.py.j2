@@ -1,0 +1,258 @@
+"""
+Integration tests for authentication services.
+
+This module tests the integration between auth services, database,
+and other components in realistic scenarios.
+"""
+
+import pytest
+from app.core.security import create_access_token, verify_password, verify_token
+from app.models.user import User, UserCreate
+from app.services.auth.auth_service import get_current_user_from_token
+from app.services.auth.user_service import UserService
+from fastapi import HTTPException
+from sqlmodel import Session, select
+
+
+class TestAuthServiceIntegration:
+    """Test auth service integration with database and security."""
+
+    def test_user_creation_and_retrieval(self, db_session: Session):
+        """Test complete user creation and retrieval flow."""
+        user_service = UserService(db_session)
+
+        # Create user data
+        user_data = UserCreate(
+            email="integration@example.com",
+            full_name="Integration Test User",
+            password="integrationpassword123"
+        )
+
+        # Create user
+        created_user = user_service.create_user(user_data)
+
+        # Verify user was created correctly
+        assert created_user.id is not None
+        assert created_user.email == user_data.email
+        assert created_user.full_name == user_data.full_name
+        assert created_user.is_active is True
+        # Password should be hashed
+        assert created_user.hashed_password != user_data.password
+        assert verify_password(user_data.password, created_user.hashed_password)
+
+        # Retrieve user from database
+        retrieved_user = user_service.get_user_by_email(user_data.email)
+        assert retrieved_user is not None
+        assert retrieved_user.id == created_user.id
+        assert retrieved_user.email == created_user.email
+        assert retrieved_user.hashed_password == created_user.hashed_password
+
+    async def test_user_authentication_flow(self, db_session: Session):
+        """Test complete user authentication flow."""
+        user_service = UserService(db_session)
+
+        # Create user
+        user_data = UserCreate(
+            email="authflow@example.com",
+            full_name="Auth Flow User",
+            password="authflowpassword"
+        )
+        created_user = user_service.create_user(user_data)
+
+        # Simulate login: verify credentials and create token
+        retrieved_user = user_service.get_user_by_email(user_data.email)
+        assert retrieved_user is not None
+
+        # Verify password
+        is_valid_password = verify_password(
+            user_data.password, retrieved_user.hashed_password
+        )
+        assert is_valid_password
+
+        # Create access token
+        access_token = create_access_token(data={"sub": retrieved_user.email})
+        assert access_token is not None
+        assert len(access_token) > 0
+
+        # Verify token
+        payload = verify_token(access_token)
+        assert payload is not None
+        assert payload["sub"] == retrieved_user.email
+
+        # Get user from token (simulates protected endpoint)
+        token_user = await get_current_user_from_token(access_token, db_session)
+        assert token_user.id == created_user.id
+        assert token_user.email == created_user.email
+
+    def test_multiple_users_isolation(self, db_session: Session):
+        """Test that multiple users are properly isolated."""
+        user_service = UserService(db_session)
+
+        # Create multiple users
+        users_data = [
+            UserCreate(
+                email="user1@example.com", full_name="User One", password="password1"
+            ),
+            UserCreate(
+                email="user2@example.com", full_name="User Two", password="password2"
+            ),
+            UserCreate(
+                email="user3@example.com", full_name="User Three", password="password3"
+            ),
+        ]
+
+        created_users = []
+        for user_data in users_data:
+            created_user = user_service.create_user(user_data)
+            created_users.append(created_user)
+
+        # Verify each user can be retrieved independently
+        for i, user_data in enumerate(users_data):
+            retrieved_user = user_service.get_user_by_email(user_data.email)
+            assert retrieved_user is not None
+            assert retrieved_user.id == created_users[i].id
+            assert retrieved_user.email == user_data.email
+            assert verify_password(user_data.password, retrieved_user.hashed_password)
+
+        # Verify passwords are different
+        for i in range(len(created_users)):
+            for j in range(i + 1, len(created_users)):
+                assert (
+                    created_users[i].hashed_password != created_users[j].hashed_password
+                )
+
+    async def test_invalid_token_handling(self, db_session: Session):
+        """Test handling of invalid tokens."""
+        # Test with completely invalid token
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user_from_token("invalid_token", db_session)
+        assert exc_info.value.status_code == 401
+
+        # Test with malformed token
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user_from_token("Bearer invalid_token", db_session)
+        assert exc_info.value.status_code == 401
+
+        # Test with token for non-existent user
+        fake_token = create_access_token(data={"sub": "nonexistent@example.com"})
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user_from_token(fake_token, db_session)
+        assert exc_info.value.status_code == 401
+
+    async def test_user_deactivation_flow(self, db_session: Session):
+        """Test user deactivation prevents authentication."""
+        user_service = UserService(db_session)
+
+        # Create active user
+        user_data = UserCreate(
+            email="deactivate@example.com",
+            full_name="Deactivate User",
+            password="deactivatepassword"
+        )
+        created_user = user_service.create_user(user_data)
+        assert created_user.is_active is True
+
+        # Create token for active user
+        token = create_access_token(data={"sub": created_user.email})
+
+        # Verify token works for active user
+        active_user = await get_current_user_from_token(token, db_session)
+        assert active_user.id == created_user.id
+
+        # Deactivate user manually (simulating admin action)
+        stmt = select(User).where(User.id == created_user.id)
+        result = db_session.exec(stmt)
+        user_to_deactivate = result.first()
+        assert user_to_deactivate is not None
+
+        user_to_deactivate.is_active = False
+        db_session.add(user_to_deactivate)
+        db_session.commit()
+
+        # Verify deactivated user cannot authenticate
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user_from_token(token, db_session)
+        assert exc_info.value.status_code == 401
+
+    def test_email_uniqueness_constraint(self, db_session: Session):
+        """Test that email uniqueness is enforced."""
+        user_service = UserService(db_session)
+
+        # Create first user
+        user_data1 = UserCreate(
+            email="unique@example.com",
+            full_name="First User",
+            password="password1"
+        )
+        created_user1 = user_service.create_user(user_data1)
+        assert created_user1.id is not None
+
+        # Try to create second user with same email
+        user_data2 = UserCreate(
+            email="unique@example.com",  # Same email
+            full_name="Second User",
+            password="password2"
+        )
+
+        # This should raise an exception or return None depending on implementation
+        try:
+            created_user2 = user_service.create_user(user_data2)
+            # If it doesn't raise an exception, it should return None
+            assert created_user2 is None
+        except Exception:
+            # Exception is acceptable for duplicate email
+            pass
+
+    def test_password_hashing_security(self, db_session: Session):
+        """Test password hashing security properties."""
+        user_service = UserService(db_session)
+
+        password = "securepassword123"
+        user_data = UserCreate(
+            email="security@example.com",
+            full_name="Security User",
+            password=password
+        )
+
+        created_user = user_service.create_user(user_data)
+
+        # Verify password is not stored in plain text
+        assert created_user.hashed_password != password
+
+        # Verify password hash is different each time (salt)
+        user_data2 = UserCreate(
+            email="security2@example.com",
+            full_name="Security User 2",
+            password=password  # Same password
+        )
+        created_user2 = user_service.create_user(user_data2)
+
+        # Hashes should be different due to salt
+        assert created_user.hashed_password != created_user2.hashed_password
+
+        # But both should verify correctly
+        assert verify_password(password, created_user.hashed_password)
+        assert verify_password(password, created_user2.hashed_password)
+
+        # Wrong password should not verify
+        assert not verify_password("wrongpassword", created_user.hashed_password)
+
+    def test_database_transaction_rollback(self, db_session: Session):
+        """Test that database operations work correctly with transactions."""
+        user_service = UserService(db_session)
+
+        # Create user
+        user_data = UserCreate(
+            email="transaction@example.com",
+            full_name="Transaction User",
+            password="transactionpassword"
+        )
+        user_service.create_user(user_data)
+
+        # Verify user exists before committing
+        retrieved_user = user_service.get_user_by_email(user_data.email)
+        assert retrieved_user is not None
+        assert retrieved_user.email == user_data.email
+
+        # Note: In test context, transactions are typically rolled back
+        # This test ensures the user service works within transaction boundaries

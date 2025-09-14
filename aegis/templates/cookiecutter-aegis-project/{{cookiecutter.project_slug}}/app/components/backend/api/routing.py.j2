@@ -7,6 +7,9 @@ from app.components.backend.api import worker
 {%- if cookiecutter.scheduler_backend != "memory" %}
 from app.components.backend.api import scheduler
 {%- endif %}
+{%- if cookiecutter.include_auth == "yes" %}
+from app.components.backend.api.auth.router import router as auth_router
+{%- endif %}
 
 
 def include_routers(app: FastAPI) -> None:
@@ -17,4 +20,7 @@ def include_routers(app: FastAPI) -> None:
     {%- endif %}
     {%- if cookiecutter.scheduler_backend != "memory" %}
     app.include_router(scheduler.router, prefix="/api/v1", tags=["scheduler"])
+    {%- endif %}
+    {%- if cookiecutter.include_auth == "yes" %}
+    app.include_router(auth_router, prefix="/api/v1")
     {%- endif %}
