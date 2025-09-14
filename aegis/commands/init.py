@@ -124,7 +124,7 @@ def init_command(
                 )
                 if missing_components:
                     typer.echo(
-                        f"💡 Suggestion: Add missing components: --components {','.join(selected_components + missing_components)}",
+                        f"💡 Suggestion: Add missing components: --components {','.join(list(dict.fromkeys(selected_components + missing_components)))}",
                         err=True,
                     )
                 typer.echo(
