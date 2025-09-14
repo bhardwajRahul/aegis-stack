@@ -12,6 +12,7 @@ import typer
 
 from .commands.components import components_command
 from .commands.init import init_command
+from .commands.services import services_command
 from .commands.version import version_command
 
 # Create the main Typer application
@@ -32,6 +33,7 @@ app = typer.Typer(
 # Register commands
 app.command(name="version")(version_command)
 app.command(name="components")(components_command)
+app.command(name="services")(services_command)
 app.command(name="init")(init_command)
 
 

@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     # Flet frontend settings
     FLET_ASSETS_DIR: str = "assets"  # Directory for Flet static assets (images, etc.)
 
+    # Authentication settings
+    SECRET_KEY: str = "change-this-secret-key-in-production-use-env-variable"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
 {% if cookiecutter.include_redis == "yes" %}
     # Redis settings for arq background tasks
     REDIS_URL: str = "redis://redis:6379"  # Docker service name by default

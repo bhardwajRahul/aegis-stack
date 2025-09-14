@@ -17,6 +17,9 @@
   "scheduler_backend": "memory",
   "scheduler_with_persistence": "no",
   
+  "_comment_services": "Service selection - these will be set by our CLI",
+  "include_auth": "no",
+  
   "_comment_internal": "Internal variables for template logic",
   "_has_additional_components": "{% if cookiecutter.include_scheduler == 'yes' or cookiecutter.include_redis == 'yes' or cookiecutter.include_worker == 'yes' or cookiecutter.include_database == 'yes' or cookiecutter.include_cache == 'yes' %}yes{% else %}no{% endif %}",
   
@@ -25,5 +28,8 @@
   "_redis_deps": "{% if cookiecutter.include_redis == 'yes' %}redis>=5.0.0{% endif %}",
   "_worker_deps": "{% if cookiecutter.include_worker == 'yes' %}arq>=0.25.0{% endif %}",
   "_database_deps": "{% if cookiecutter.include_database == 'yes' %}sqlmodel>=0.0.14,sqlalchemy>=2.0.0,aiosqlite>=0.19.0{% endif %}",
-  "_cache_deps": "{% if cookiecutter.include_cache == 'yes' %}redis[hiredis]>=5.0.0{% endif %}"
+  "_cache_deps": "{% if cookiecutter.include_cache == 'yes' %}redis[hiredis]>=5.0.0{% endif %}",
+  
+  "_comment_service_dependencies": "Service-specific dependencies",
+  "_auth_deps": "{% if cookiecutter.include_auth == 'yes' %}python-jose[cryptography]==3.3.0,passlib[bcrypt]==1.7.4,python-multipart==0.0.9{% endif %}"
 }
