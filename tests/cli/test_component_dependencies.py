@@ -411,7 +411,7 @@ def test_dependency_resolution_performance() -> None:
 
 def test_interactive_selection_registry_sync() -> None:
     """Test that interactive selection includes all infrastructure components."""
-    from aegis.__main__ import get_interactive_infrastructure_components
+    from aegis.cli.interactive import get_interactive_infrastructure_components
 
     # Get components from registry
     infra_components = get_interactive_infrastructure_components()
@@ -447,7 +447,7 @@ def test_interactive_selection_registry_sync() -> None:
 
 def test_interactive_selection_component_ordering() -> None:
     """Test that interactive selection returns components in consistent order."""
-    from aegis.__main__ import get_interactive_infrastructure_components
+    from aegis.cli.interactive import get_interactive_infrastructure_components
 
     # Get components multiple times
     components1 = get_interactive_infrastructure_components()

@@ -8,7 +8,7 @@ selection functionality added to the interactive component selection.
 from typing import Any
 from unittest.mock import patch
 
-from aegis.__main__ import interactive_component_selection
+from aegis.cli.interactive import interactive_component_selection
 
 
 class TestInteractiveSchedulerFlow:
