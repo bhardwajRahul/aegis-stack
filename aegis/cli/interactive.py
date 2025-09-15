@@ -8,6 +8,7 @@ used by CLI commands.
 import typer
 
 from ..core.components import COMPONENTS, CORE_COMPONENTS, ComponentSpec, ComponentType
+from ..core.services import SERVICES, ServiceType, get_services_by_type
 
 
 def get_interactive_infrastructure_components() -> list[ComponentSpec]:
@@ -22,12 +23,12 @@ def get_interactive_infrastructure_components() -> list[ComponentSpec]:
     return sorted(infra_components, key=lambda x: x.name)
 
 
-def interactive_component_selection() -> tuple[list[str], str]:
+def interactive_project_selection() -> tuple[list[str], str, list[str]]:
     """
-    Interactive component selection with dependency awareness.
+    Interactive project selection with component and service options.
 
     Returns:
-        Tuple of (selected_components, scheduler_backend)
+        Tuple of (selected_components, scheduler_backend, selected_services)
     """
 
     typer.echo("🎯 Component Selection")
@@ -152,4 +153,28 @@ def interactive_component_selection() -> tuple[list[str], str]:
         scheduler_index = selected.index("scheduler")
         selected[scheduler_index] = f"scheduler[{scheduler_backend}]"
 
-    return selected, scheduler_backend
+    # Service selection
+    selected_services = []
+
+    if SERVICES:  # Only show services if any are available
+        typer.echo("\n🔧 Service Selection")
+        typer.echo("=" * 40)
+        typer.echo(
+            "Services provide business logic functionality for your application.\n"
+        )
+
+        # Group services by type for better organization
+        auth_services = get_services_by_type(ServiceType.AUTH)
+
+        if auth_services:
+            typer.echo("🔐 Authentication Services:")
+            for service_name, service_spec in auth_services.items():
+                prompt = f"  Add {service_spec.description.lower()}?"
+                if typer.confirm(prompt):
+                    selected_services.append(service_name)
+
+        # Future service types can be added here as they become available
+        # payment_services = get_services_by_type(ServiceType.PAYMENT)
+        # ai_services = get_services_by_type(ServiceType.AI)
+
+    return selected, scheduler_backend, selected_services

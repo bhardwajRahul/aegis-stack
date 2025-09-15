@@ -9,7 +9,7 @@ not just when a database component exists independently.
 from typing import Any
 from unittest.mock import patch
 
-from aegis.cli.interactive import interactive_component_selection
+from aegis.cli.interactive import interactive_project_selection
 from aegis.core.template_generator import TemplateGenerator
 
 
@@ -19,84 +19,90 @@ class TestSchedulerPersistenceTracking:
     @patch("typer.confirm")
     def test_scheduler_backend_selected(self, mock_confirm: Any) -> None:
         """Test scheduler + persistence sets scheduler_backend="sqlite"."""
-        # Simulate: no redis, no worker, yes scheduler, yes persistence, yes sqlite
-        mock_confirm.side_effect = [False, False, True, True, True]
+        # Simulate: no redis, no worker, yes scheduler, yes persistence, yes sqlite, no auth
+        mock_confirm.side_effect = [False, False, True, True, True, False]
 
-        components, scheduler_backend = interactive_component_selection()
+        components, scheduler_backend, services = interactive_project_selection()
 
         assert "scheduler[sqlite]" in components
         assert "database[sqlite]" in components
         assert scheduler_backend == "sqlite"
+        assert services == []
 
     @patch("typer.confirm")
     def test_scheduler_without_persistence(self, mock_confirm: Any) -> None:
         """Test scheduler without persistence keeps scheduler_backend="memory"."""
-        # Simulate: no redis, no worker, yes scheduler, no persistence, no database
-        mock_confirm.side_effect = [False, False, True, False, False]
+        # Simulate: no redis, no worker, yes scheduler, no persistence, no database, no auth
+        mock_confirm.side_effect = [False, False, True, False, False, False]
 
-        components, scheduler_backend = interactive_component_selection()
+        components, scheduler_backend, services = interactive_project_selection()
 
         assert "scheduler" in components
         assert "database[sqlite]" not in components
         assert scheduler_backend == "memory"
+        assert services == []
 
     @patch("typer.confirm")
     def test_scheduler_persistence_declined_sqlite(self, mock_confirm: Any) -> None:
         """Test scheduler persistence declined at SQLite confirmation."""
-        # Simulate: scheduler, persistence, no sqlite, no database
-        mock_confirm.side_effect = [False, False, True, True, False, False]
+        # Simulate: scheduler, persistence, no sqlite, no database, no auth
+        mock_confirm.side_effect = [False, False, True, True, False, False, False]
 
-        components, scheduler_backend = interactive_component_selection()
+        components, scheduler_backend, services = interactive_project_selection()
 
         assert "scheduler" in components
         assert "database[sqlite]" not in components
         assert scheduler_backend == "memory"
+        assert services == []
 
     @patch("typer.confirm")
     def test_scheduler_not_selected(self, mock_confirm: Any) -> None:
         """Test no scheduler selection keeps scheduler_backend="memory"."""
-        # Simulate: no redis, no worker, no scheduler, yes database
-        mock_confirm.side_effect = [False, False, False, True]
+        # Simulate: no redis, no worker, no scheduler, yes database, no auth
+        mock_confirm.side_effect = [False, False, False, True, False]
 
-        components, scheduler_backend = interactive_component_selection()
+        components, scheduler_backend, services = interactive_project_selection()
 
         assert "scheduler" not in components
         assert "database" in components
         assert scheduler_backend == "memory"
+        assert services == []
 
     @patch("typer.confirm")
     def test_database_selected_independently_of_scheduler(
         self, mock_confirm: Any
     ) -> None:
         """Test database selected independently doesn't affect scheduler persistence."""
-        # Simulate: no redis, no worker, no scheduler, yes database
-        mock_confirm.side_effect = [False, False, False, True]
+        # Simulate: no redis, no worker, no scheduler, yes database, no auth
+        mock_confirm.side_effect = [False, False, False, True, False]
 
-        components, scheduler_backend = interactive_component_selection()
+        components, scheduler_backend, services = interactive_project_selection()
 
         assert "scheduler" not in components
         assert "database" in components
         assert scheduler_backend == "memory"
+        assert services == []
 
     @patch("typer.confirm")
     def test_both_scheduler_and_independent_database(self, mock_confirm: Any) -> None:
         """Test scheduler without persistence + independent database."""
-        # Simulate: no redis, no worker, yes scheduler, no persistence, yes database
-        mock_confirm.side_effect = [False, False, True, False, True]
+        # Simulate: no redis, no worker, yes scheduler, no persistence, yes database, no auth
+        mock_confirm.side_effect = [False, False, True, False, True, False]
 
-        components, scheduler_backend = interactive_component_selection()
+        components, scheduler_backend, services = interactive_project_selection()
 
         assert "scheduler" in components
         assert "database" in components
         assert scheduler_backend == "memory"
+        assert services == []
 
     @patch("typer.confirm")
     def test_full_stack_with_scheduler_persistence(self, mock_confirm: Any) -> None:
         """Test full stack selection with scheduler persistence."""
-        # Simulate: yes redis, yes worker, yes scheduler, yes persistence, yes sqlite
-        mock_confirm.side_effect = [True, True, True, True, True]
+        # Simulate: yes redis, yes worker, yes scheduler, yes persistence, yes sqlite, no auth
+        mock_confirm.side_effect = [True, True, True, True, True, False]
 
-        components, scheduler_backend = interactive_component_selection()
+        components, scheduler_backend, services = interactive_project_selection()
 
         assert "redis" in components
         assert "worker" in components
@@ -241,9 +247,9 @@ class TestSchedulerPersistenceLogic:
     def test_scheduler_persistence_flow_messaging(self, mock_confirm: Any) -> None:
         """Test that the right messages are shown during scheduler persistence flow."""
         # We can't easily test the echo output, but we can test the logic flow
-        mock_confirm.side_effect = [False, False, True, True, True]
+        mock_confirm.side_effect = [False, False, True, True, True, False]
 
-        components, scheduler_backend = interactive_component_selection()
+        components, scheduler_backend, services = interactive_project_selection()
 
         # Verify the logic worked correctly
         assert scheduler_backend == "sqlite"
@@ -253,9 +259,9 @@ class TestSchedulerPersistenceLogic:
     def test_scheduler_persistence_component_format(self) -> None:
         """Test that scheduler persistence results in correct component format."""
         with patch("typer.confirm") as mock_confirm:
-            mock_confirm.side_effect = [False, False, True, True, True]
+            mock_confirm.side_effect = [False, False, True, True, True, False]
 
-            components, scheduler_backend = interactive_component_selection()
+            components, scheduler_backend, services = interactive_project_selection()
 
             # Should have database with engine info when added by scheduler
             database_components = [c for c in components if c.startswith("database")]

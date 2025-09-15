@@ -5,12 +5,13 @@ This module tests the services command and --services option integration.
 """
 
 import re
-import subprocess
 import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
+
+from tests.cli.test_utils import run_aegis_command
 
 
 class TestServicesCommand:
@@ -18,11 +19,7 @@ class TestServicesCommand:
 
     def test_services_command_shows_available_services(self):
         """Test that services command displays available services."""
-        result = subprocess.run(
-            ["uv", "run", "python", "-m", "aegis", "services"],
-            capture_output=True,
-            text=True,
-        )
+        result = run_aegis_command("services")
 
         assert result.returncode == 0
         output = result.stdout
@@ -47,22 +44,14 @@ class TestServicesCommand:
 
     def test_services_command_help(self):
         """Test that services command help works."""
-        result = subprocess.run(
-            ["uv", "run", "python", "-m", "aegis", "services", "--help"],
-            capture_output=True,
-            text=True,
-        )
+        result = run_aegis_command("services", "--help")
 
         assert result.returncode == 0
         assert "List available services and their dependencies" in result.stdout
 
     def test_services_command_appears_in_main_help(self):
         """Test that services command appears in main CLI help."""
-        result = subprocess.run(
-            ["uv", "run", "python", "-m", "aegis", "--help"],
-            capture_output=True,
-            text=True,
-        )
+        result = run_aegis_command("--help")
 
         assert result.returncode == 0
         assert "services" in result.stdout
@@ -76,11 +65,7 @@ class TestServicesCommand:
             # Mock all service types to return empty dict
             mock_get_services.return_value = {}
 
-            result = subprocess.run(
-                ["uv", "run", "python", "-m", "aegis", "services"],
-                capture_output=True,
-                text=True,
-            )
+            result = run_aegis_command("services")
 
             assert result.returncode == 0
             # Should show no services message (though this won't actually show due to mock)
@@ -92,24 +77,15 @@ class TestServicesOptionIntegration:
     def test_init_with_valid_service(self):
         """Test init command with valid service."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            result = subprocess.run(
-                [
-                    "uv",
-                    "run",
-                    "python",
-                    "-m",
-                    "aegis",
-                    "init",
-                    "test-auth-service",
-                    "--services",
-                    "auth",
-                    "--no-interactive",
-                    "--yes",
-                    "--output-dir",
-                    temp_dir,
-                ],
-                capture_output=True,
-                text=True,
+            result = run_aegis_command(
+                "init",
+                "test-auth-service",
+                "--services",
+                "auth",
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                temp_dir,
             )
 
             assert result.returncode == 0
@@ -127,22 +103,13 @@ class TestServicesOptionIntegration:
 
     def test_init_with_invalid_service(self):
         """Test init command with invalid service shows error."""
-        result = subprocess.run(
-            [
-                "uv",
-                "run",
-                "python",
-                "-m",
-                "aegis",
-                "init",
-                "test-invalid",
-                "--services",
-                "invalid-service",
-                "--no-interactive",
-                "--yes",
-            ],
-            capture_output=True,
-            text=True,
+        result = run_aegis_command(
+            "init",
+            "test-invalid",
+            "--services",
+            "invalid-service",
+            "--no-interactive",
+            "--yes",
         )
 
         assert result.returncode != 0
@@ -152,24 +119,15 @@ class TestServicesOptionIntegration:
     def test_init_with_multiple_services(self):
         """Test init command with multiple services (when more are available)."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            result = subprocess.run(
-                [
-                    "uv",
-                    "run",
-                    "python",
-                    "-m",
-                    "aegis",
-                    "init",
-                    "test-multi-service",
-                    "--services",
-                    "auth",  # Only auth available for now
-                    "--no-interactive",
-                    "--yes",
-                    "--output-dir",
-                    temp_dir,
-                ],
-                capture_output=True,
-                text=True,
+            result = run_aegis_command(
+                "init",
+                "test-multi-service",
+                "--services",
+                "auth",  # Only auth available for now
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                temp_dir,
             )
 
             assert result.returncode == 0
@@ -178,24 +136,15 @@ class TestServicesOptionIntegration:
     def test_init_with_empty_service_name(self):
         """Test init command with empty service name."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            result = subprocess.run(
-                [
-                    "uv",
-                    "run",
-                    "python",
-                    "-m",
-                    "aegis",
-                    "init",
-                    "test-empty",
-                    "--services",
-                    "",
-                    "--output-dir",
-                    temp_dir,
-                    "--no-interactive",
-                    "--yes",
-                ],
-                capture_output=True,
-                text=True,
+            result = run_aegis_command(
+                "init",
+                "test-empty",
+                "--services",
+                "",
+                "--output-dir",
+                temp_dir,
+                "--no-interactive",
+                "--yes",
             )
 
             # Empty string is treated as "no services provided", so it should succeed
@@ -206,26 +155,17 @@ class TestServicesOptionIntegration:
     def test_init_with_services_and_components_together(self):
         """Test init command with both services and components specified."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            result = subprocess.run(
-                [
-                    "uv",
-                    "run",
-                    "python",
-                    "-m",
-                    "aegis",
-                    "init",
-                    "test-combined",
-                    "--services",
-                    "auth",
-                    "--components",
-                    "database,worker",  # Auth needs database (backend always included), plus explicit worker
-                    "--no-interactive",
-                    "--yes",
-                    "--output-dir",
-                    temp_dir,
-                ],
-                capture_output=True,
-                text=True,
+            result = run_aegis_command(
+                "init",
+                "test-combined",
+                "--services",
+                "auth",
+                "--components",
+                "database,worker",  # Auth needs database (backend always included), plus explicit worker
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                temp_dir,
             )
 
             assert result.returncode == 0
@@ -243,11 +183,7 @@ class TestServicesOptionIntegration:
 
     def test_init_services_help_text_accuracy(self):
         """Test that init command help shows correct services help text."""
-        result = subprocess.run(
-            ["uv", "run", "python", "-m", "aegis", "init", "--help"],
-            capture_output=True,
-            text=True,
-        )
+        result = run_aegis_command("init", "--help")
 
         assert result.returncode == 0
 
@@ -262,28 +198,55 @@ class TestServicesOptionIntegration:
     def test_init_services_disables_interactive_mode(self):
         """Test that specifying services disables interactive mode."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            result = subprocess.run(
-                [
-                    "uv",
-                    "run",
-                    "python",
-                    "-m",
-                    "aegis",
-                    "init",
-                    "test-non-interactive",
-                    "--services",
-                    "auth",
-                    "--yes",
-                    "--output-dir",
-                    temp_dir,
-                ],
-                capture_output=True,
-                text=True,
+            result = run_aegis_command(
+                "init",
+                "test-non-interactive",
+                "--services",
+                "auth",
+                "--yes",
+                "--output-dir",
+                temp_dir,
             )
 
             assert result.returncode == 0
             # Should not show interactive prompts
             assert "🎯 Component Selection" not in result.stdout
+
+
+class TestInteractiveServiceSelection:
+    """Test interactive service selection functionality."""
+
+    def test_interactive_project_selection_includes_services(self):
+        """Test that interactive project selection includes service prompts."""
+        from unittest.mock import patch
+
+        from aegis.cli.interactive import interactive_project_selection
+
+        with patch("typer.confirm") as mock_confirm:
+            # Simulate: no components selected, but yes auth service
+            mock_confirm.side_effect = [False, False, False, False, True]
+
+            components, scheduler_backend, services = interactive_project_selection()
+
+            assert components == []  # No components selected
+            assert scheduler_backend == "memory"  # Default
+            assert "auth" in services  # Auth service selected
+
+    def test_interactive_project_selection_no_services(self):
+        """Test that services can be declined in interactive mode."""
+        from unittest.mock import patch
+
+        from aegis.cli.interactive import interactive_project_selection
+
+        with patch("typer.confirm") as mock_confirm:
+            # Simulate: no components, no services
+            mock_confirm.side_effect = [False, False, False, False, False]
+
+            components, scheduler_backend, services = interactive_project_selection()
+
+            assert components == []
+            assert scheduler_backend == "memory"
+            assert services == []
 
 
 class TestServicesValidation:
@@ -345,25 +308,16 @@ class TestServicesIntegrationWithExistingFeatures:
             project_path = Path(temp_dir) / "test-force-service"
             project_path.mkdir()  # Create directory to test force
 
-            result = subprocess.run(
-                [
-                    "uv",
-                    "run",
-                    "python",
-                    "-m",
-                    "aegis",
-                    "init",
-                    "test-force-service",
-                    "--services",
-                    "auth",
-                    "--force",
-                    "--no-interactive",
-                    "--yes",
-                    "--output-dir",
-                    temp_dir,
-                ],
-                capture_output=True,
-                text=True,
+            result = run_aegis_command(
+                "init",
+                "test-force-service",
+                "--services",
+                "auth",
+                "--force",
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                temp_dir,
             )
 
             assert result.returncode == 0
@@ -375,24 +329,15 @@ class TestServicesIntegrationWithExistingFeatures:
             custom_dir = Path(temp_dir) / "custom"
             custom_dir.mkdir()
 
-            result = subprocess.run(
-                [
-                    "uv",
-                    "run",
-                    "python",
-                    "-m",
-                    "aegis",
-                    "init",
-                    "test-custom-dir",
-                    "--services",
-                    "auth",
-                    "--output-dir",
-                    str(custom_dir),
-                    "--no-interactive",
-                    "--yes",
-                ],
-                capture_output=True,
-                text=True,
+            result = run_aegis_command(
+                "init",
+                "test-custom-dir",
+                "--services",
+                "auth",
+                "--output-dir",
+                str(custom_dir),
+                "--no-interactive",
+                "--yes",
             )
 
             assert result.returncode == 0
@@ -400,25 +345,15 @@ class TestServicesIntegrationWithExistingFeatures:
 
     def test_services_dependency_display_consistency(self):
         """Test that services show dependencies consistently."""
-        result = subprocess.run(
-            [
-                "uv",
-                "run",
-                "python",
-                "-m",
-                "aegis",
-                "init",
-                "test-deps",
-                "--services",
-                "auth",
-                "--no-interactive",
-                "--yes",
-                "--output-dir",
-                "/tmp",  # Won't create due to early exit
-            ],
-            capture_output=True,
-            text=True,
-            input="n\n",  # Decline creation
+        result = run_aegis_command(
+            "init",
+            "test-deps",
+            "--services",
+            "auth",
+            "--no-interactive",
+            "--yes",
+            "--output-dir",
+            tempfile.gettempdir(),  # Won't create due to early exit
         )
 
         # Check that dependency messages are shown
@@ -433,22 +368,13 @@ class TestServicesErrorHandling:
 
     def test_malformed_service_list(self):
         """Test handling of malformed service lists."""
-        result = subprocess.run(
-            [
-                "uv",
-                "run",
-                "python",
-                "-m",
-                "aegis",
-                "init",
-                "test-malformed",
-                "--services",
-                "auth,,invalid",
-                "--no-interactive",
-                "--yes",
-            ],
-            capture_output=True,
-            text=True,
+        result = run_aegis_command(
+            "init",
+            "test-malformed",
+            "--services",
+            "auth,,invalid",
+            "--no-interactive",
+            "--yes",
         )
 
         assert result.returncode != 0
@@ -457,24 +383,15 @@ class TestServicesErrorHandling:
     def test_service_with_whitespace(self):
         """Test service names with whitespace."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            result = subprocess.run(
-                [
-                    "uv",
-                    "run",
-                    "python",
-                    "-m",
-                    "aegis",
-                    "init",
-                    "test-whitespace",
-                    "--services",
-                    " auth ",
-                    "--output-dir",
-                    temp_dir,
-                    "--no-interactive",
-                    "--yes",
-                ],
-                capture_output=True,
-                text=True,
+            result = run_aegis_command(
+                "init",
+                "test-whitespace",
+                "--services",
+                " auth ",
+                "--output-dir",
+                temp_dir,
+                "--no-interactive",
+                "--yes",
             )
 
             assert result.returncode == 0  # Should handle whitespace gracefully
@@ -486,26 +403,17 @@ class TestServiceComponentCompatibilityValidation:
     def test_services_with_compatible_explicit_components_success(self):
         """Test that services work when user provides compatible explicit components."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            result = subprocess.run(
-                [
-                    "uv",
-                    "run",
-                    "python",
-                    "-m",
-                    "aegis",
-                    "init",
-                    "test-compatible",
-                    "--services",
-                    "auth",
-                    "--components",
-                    "database",  # Auth requires database (backend is always included)
-                    "--no-interactive",
-                    "--yes",
-                    "--output-dir",
-                    temp_dir,
-                ],
-                capture_output=True,
-                text=True,
+            result = run_aegis_command(
+                "init",
+                "test-compatible",
+                "--services",
+                "auth",
+                "--components",
+                "database",  # Auth requires database (backend is always included)
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                temp_dir,
             )
 
             assert result.returncode == 0
@@ -515,26 +423,17 @@ class TestServiceComponentCompatibilityValidation:
 
     def test_services_with_insufficient_explicit_components_failure(self):
         """Test that services fail when user provides insufficient explicit components."""
-        result = subprocess.run(
-            [
-                "uv",
-                "run",
-                "python",
-                "-m",
-                "aegis",
-                "init",
-                "test-insufficient",
-                "--services",
-                "auth",
-                "--components",
-                "worker",  # Auth requires database, but user only provided worker
-                "--no-interactive",
-                "--yes",
-                "--output-dir",
-                "/tmp",  # Won't be created due to validation failure
-            ],
-            capture_output=True,
-            text=True,
+        result = run_aegis_command(
+            "init",
+            "test-insufficient",
+            "--services",
+            "auth",
+            "--components",
+            "worker",  # Auth requires database, but user only provided worker
+            "--no-interactive",
+            "--yes",
+            "--output-dir",
+            tempfile.gettempdir(),  # Won't be created due to validation failure
         )
 
         assert result.returncode == 1
@@ -547,24 +446,15 @@ class TestServiceComponentCompatibilityValidation:
     def test_services_with_no_explicit_components_auto_add(self):
         """Test that services auto-add components when user doesn't provide --components."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            result = subprocess.run(
-                [
-                    "uv",
-                    "run",
-                    "python",
-                    "-m",
-                    "aegis",
-                    "init",
-                    "test-auto-add",
-                    "--services",
-                    "auth",
-                    "--no-interactive",
-                    "--yes",
-                    "--output-dir",
-                    temp_dir,
-                ],
-                capture_output=True,
-                text=True,
+            result = run_aegis_command(
+                "init",
+                "test-auto-add",
+                "--services",
+                "auth",
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                temp_dir,
             )
 
             assert result.returncode == 0
@@ -575,26 +465,17 @@ class TestServiceComponentCompatibilityValidation:
 
     def test_services_with_partial_explicit_components_failure(self):
         """Test that services fail when explicit components are partially sufficient."""
-        result = subprocess.run(
-            [
-                "uv",
-                "run",
-                "python",
-                "-m",
-                "aegis",
-                "init",
-                "test-partial",
-                "--services",
-                "auth",
-                "--components",
-                "redis",  # Auth requires database (missing database, backend is always included)
-                "--no-interactive",
-                "--yes",
-                "--output-dir",
-                "/tmp",
-            ],
-            capture_output=True,
-            text=True,
+        result = run_aegis_command(
+            "init",
+            "test-partial",
+            "--services",
+            "auth",
+            "--components",
+            "redis",  # Auth requires database (missing database, backend is always included)
+            "--no-interactive",
+            "--yes",
+            "--output-dir",
+            tempfile.gettempdir(),
         )
 
         assert result.returncode == 1
@@ -605,26 +486,17 @@ class TestServiceComponentCompatibilityValidation:
         """Test validation with multiple services and insufficient components."""
         # Note: This test assumes we might add more services in the future
         # For now, we only have auth service, so this tests the error handling pattern
-        result = subprocess.run(
-            [
-                "uv",
-                "run",
-                "python",
-                "-m",
-                "aegis",
-                "init",
-                "test-multi-insufficient",
-                "--services",
-                "auth",  # Only auth available for now
-                "--components",
-                "worker,scheduler",  # Missing database for auth
-                "--no-interactive",
-                "--yes",
-                "--output-dir",
-                "/tmp",
-            ],
-            capture_output=True,
-            text=True,
+        result = run_aegis_command(
+            "init",
+            "test-multi-insufficient",
+            "--services",
+            "auth",  # Only auth available for now
+            "--components",
+            "worker,scheduler",  # Missing database for auth
+            "--no-interactive",
+            "--yes",
+            "--output-dir",
+            tempfile.gettempdir(),
         )
 
         assert result.returncode == 1
@@ -633,26 +505,17 @@ class TestServiceComponentCompatibilityValidation:
 
     def test_services_error_message_suggests_alternatives(self):
         """Test that error message suggests both adding components and removing --components."""
-        result = subprocess.run(
-            [
-                "uv",
-                "run",
-                "python",
-                "-m",
-                "aegis",
-                "init",
-                "test-suggestions",
-                "--services",
-                "auth",
-                "--components",
-                "redis",  # Wrong component for auth
-                "--no-interactive",
-                "--yes",
-                "--output-dir",
-                "/tmp",
-            ],
-            capture_output=True,
-            text=True,
+        result = run_aegis_command(
+            "init",
+            "test-suggestions",
+            "--services",
+            "auth",
+            "--components",
+            "redis",  # Wrong component for auth
+            "--no-interactive",
+            "--yes",
+            "--output-dir",
+            tempfile.gettempdir(),
         )
 
         assert result.returncode == 1
