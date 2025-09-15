@@ -184,6 +184,7 @@ def main():
         # Remove auth-related tests if they exist
         remove_file("tests/api/test_auth_endpoints.py")
         remove_file("tests/services/test_auth_service.py")
+        remove_file("tests/services/test_auth_integration.py")
         remove_file("tests/models/test_user.py")
 
     # Clean up empty docs/components directory if no components selected

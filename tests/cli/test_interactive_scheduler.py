@@ -8,7 +8,7 @@ selection functionality added to the interactive component selection.
 from typing import Any
 from unittest.mock import patch
 
-from aegis.cli.interactive import interactive_component_selection
+from aegis.cli.interactive import interactive_project_selection
 
 
 class TestInteractiveSchedulerFlow:
@@ -18,24 +18,26 @@ class TestInteractiveSchedulerFlow:
     def test_scheduler_with_sqlite_persistence(self, mock_confirm: Any) -> None:
         """Test scheduler selection with SQLite database persistence."""
         # Mock user responses: redis=no, worker=no, scheduler=yes,
-        # persistence=yes, continue with SQLite=yes
+        # persistence=yes, continue with SQLite=yes, no auth service
         mock_confirm.side_effect = [
             False,
             False,
             True,
             True,
             True,
-        ]  # redis, worker, scheduler, persistence, continue with SQLite
+            False,
+        ]  # redis, worker, scheduler, persistence, continue with SQLite, auth
 
-        components, scheduler_backend = interactive_component_selection()
+        components, scheduler_backend, services = interactive_project_selection()
 
         # Should return scheduler[sqlite] and database with SQLite engine info
         assert "scheduler[sqlite]" in components
         assert "database[sqlite]" in components
         assert scheduler_backend == "sqlite"
+        assert services == []  # No services selected
 
-        # Verify correct calls were made
-        assert mock_confirm.call_count == 5
+        # Verify correct calls were made (now includes auth service prompt)
+        assert mock_confirm.call_count == 6
 
     # TODO: Add PostgreSQL tests when PostgreSQL support is implemented
     # @patch('typer.confirm')
@@ -64,9 +66,10 @@ class TestInteractiveSchedulerFlow:
             True,
             False,
             False,
-        ]  # redis, worker, scheduler, no persistence, database=no
+            False,
+        ]  # redis, worker, scheduler, no persistence, database=no, no auth
 
-        components, scheduler_backend = interactive_component_selection()
+        components, scheduler_backend, _ = interactive_project_selection()
 
         # Should only return scheduler, no database
         assert "scheduler" in components
@@ -82,9 +85,10 @@ class TestInteractiveSchedulerFlow:
             False,
             False,
             False,
-        ]  # All components declined
+            False,
+        ]  # All components declined, no auth
 
-        components, scheduler_backend = interactive_component_selection()
+        components, scheduler_backend, _ = interactive_project_selection()
 
         # Should return empty list (no infrastructure components)
         assert "scheduler" not in components
@@ -104,9 +108,10 @@ class TestInteractiveSchedulerFlow:
             True,
             True,
             True,
-        ]  # redis, worker, scheduler, persistence, continue SQLite
+            False,
+        ]  # redis, worker, scheduler, persistence, continue SQLite, no auth
 
-        components, scheduler_backend = interactive_component_selection()
+        components, scheduler_backend, _ = interactive_project_selection()
 
         # Should have scheduler[sqlite] and database
         assert "scheduler[sqlite]" in components
@@ -114,8 +119,8 @@ class TestInteractiveSchedulerFlow:
         assert scheduler_backend == "sqlite"
 
         # Should not have been prompted for generic database
-        # (5 confirms: redis, worker, scheduler, persist, continue)
-        assert mock_confirm.call_count == 5
+        # (6 confirms: redis, worker, scheduler, persist, continue, auth)
+        assert mock_confirm.call_count == 6
 
     @patch("typer.confirm")
     def test_scheduler_declined_sqlite_no_database(self, mock_confirm: Any) -> None:
@@ -129,9 +134,10 @@ class TestInteractiveSchedulerFlow:
             True,
             False,
             False,
-        ]  # redis, worker, scheduler, persistence, decline SQLite, database=no
+            False,
+        ]  # redis, worker, scheduler, persistence, decline SQLite, database=no, no auth
 
-        components, scheduler_backend = interactive_component_selection()
+        components, scheduler_backend, _ = interactive_project_selection()
 
         # Should have scheduler but no database
         assert "scheduler" in components
@@ -149,9 +155,10 @@ class TestInteractiveSchedulerFlow:
             True,
             True,
             True,
-        ]  # redis=no, worker=yes, scheduler=yes, persistence=yes, continue=yes
+            False,
+        ]  # redis=no, worker=yes, scheduler=yes, persistence=yes, continue=yes, no auth
 
-        components, scheduler_backend = interactive_component_selection()
+        components, scheduler_backend, _ = interactive_project_selection()
 
         # Should have redis (from worker), worker, scheduler[sqlite], database[sqlite]
         assert "redis" in components
@@ -165,9 +172,9 @@ class TestInteractiveSchedulerFlow:
     def test_standalone_database_selection_still_works(self, mock_confirm: Any) -> None:
         """Test that standalone database selection (without scheduler) still works."""
         # Mock responses: redis=no, worker=no, scheduler=no, database=yes
-        mock_confirm.side_effect = [False, False, False, True]
+        mock_confirm.side_effect = [False, False, False, True, False]
 
-        components, scheduler_backend = interactive_component_selection()
+        components, scheduler_backend, _ = interactive_project_selection()
 
         # Should have just database (no engine suffix when not from scheduler)
         assert components == ["database"]
