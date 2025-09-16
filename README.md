@@ -3,7 +3,7 @@
   <img src="docs/images/aegis-manifesto.png" alt="Aegis Stack" width="400">
 </picture>
 
-**Build production-ready Python applications with your chosen components.**
+**Build production-ready Python applications with your chosen components and services.**
 
 [![CI](https://github.com/lbedner/aegis-stack/workflows/CI/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/ci.yml)
 [![Documentation](https://github.com/lbedner/aegis-stack/workflows/Deploy%20Documentation/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/docs.yml)
@@ -17,11 +17,14 @@ Aegis Stack is a CLI-driven framework for creating custom Python applications. S
 # Run instantly without installation
 uvx aegis-stack init my-api
 
-# Create with background processing  
+# Create with user authentication
+uvx aegis-stack init user-app --services auth
+
+# Create with background processing
 uvx aegis-stack init task-processor --components scheduler,worker
 
 # Start building
-cd my-api && uv sync && cp .env.example .env && make run-local
+cd my-api && uv sync && cp .env.example .env && make server
 ```
 
 ## Installation
@@ -45,8 +48,9 @@ pip install aegis-stack
 aegis init my-project
 ```
 
-## Available Components
+## Available Components & Services
 
+### Infrastructure Components
 | Component | Purpose | Status |
 |-----------|---------|--------|
 | **Core** (FastAPI + Flet) | Web API + Frontend | ✅ **Always Included** |
@@ -54,6 +58,12 @@ aegis init my-project
 | **Scheduler** | Background tasks, cron jobs | ✅ **Available** |
 | **Worker** | Async task queues (arq + Redis) | 🧪 **Experimental** |
 | **Cache** | Redis caching and sessions | 🚧 **Coming Soon** |
+
+### Business Services
+| Service | Purpose | Status |
+|---------|---------|--------|
+| **Auth** | User authentication & JWT | ✅ **Available** |
+| **AI** | OpenAI integration | 🚧 **Coming Soon** |
 
 ## See It In Action
 
@@ -72,7 +82,8 @@ Rich terminal output showing detailed component status, health metrics, and syst
 ## Learn More
 
 - **[📖 CLI Reference](docs/cli-reference.md)** - Complete command reference
-- **[🏗️ Components](docs/components/index.md)** - Deep dive into available components  
+- **[🏗️ Components](docs/components/index.md)** - Deep dive into available components
+- **[🔧 Services](docs/services/index.md)** - Business services (auth, AI)
 - **[🧠 Philosophy](docs/philosophy.md)** - Architecture and design principles
 
 ## For The Veterans

@@ -18,11 +18,14 @@ pip install aegis-stack
 # Create a simple API
 aegis init my-api
 
-# Create with background processing  
+# Create with user authentication
+aegis init user-app --services auth
+
+# Create with background processing
 aegis init task-processor --components scheduler,worker
 
 # Start building
-cd my-project && uv sync && source .venv/bin/activate && make run-local
+cd my-project && uv sync && source .venv/bin/activate && make server
 ```
 
 ## 🔨 Know What You're Doing?
@@ -32,13 +35,14 @@ cd my-project && uv sync && source .venv/bin/activate && make run-local
 **"I know more than you."** - Got it. Here's what you can build with:
 
 ```bash
-aegis init my-project --components worker,scheduler,database
+aegis init my-project --services auth --components worker,scheduler
 ```
 
 Your stack. Your rules. No hand-holding.
 
-## 🧩 Available Components
+## 🧩 Available Components & Services
 
+### Infrastructure Components
 | Component | Purpose | Status |
 |-----------|---------|--------|
 | **Core** (FastAPI + Flet) | Web API + Frontend | ✅ **Always Included** |
@@ -46,6 +50,12 @@ Your stack. Your rules. No hand-holding.
 | **Scheduler** | Background tasks, cron jobs | ✅ **Available** |
 | **Worker** | Async task queues (arq + Redis) | 🧪 **Experimental** |
 | **Cache** | Redis caching and sessions | 🚧 **Coming Soon** |
+
+### Business Services
+| Service | Purpose | Status |
+|---------|---------|--------|
+| **Auth** | User authentication & JWT | ✅ **Available** |
+| **AI** | OpenAI integration | 🚧 **Coming Soon** |
 
 ## What You Get
 
@@ -65,13 +75,14 @@ Real-time monitoring with component status, health percentages, and cross-platfo
 ## 📚 Learn More
 
 - **[📖 CLI Reference](cli-reference.md)** - Complete command reference
-- **[🏗️ Components](components/index.md)** - Deep dive into available components  
+- **[🏗️ Components](components/index.md)** - Infrastructure components (database, worker, scheduler)
+- **[🔧 Services](services/index.md)** - Business services (auth, payment, AI)
 - **[🧠 Philosophy](philosophy.md)** - Architecture and design principles
 
 ## Development Commands
 
 ```bash
-make run-local    # Start development server
+make server       # Start development server
 make test         # Run test suite  
 make check        # Run all quality checks
 make docs-serve   # Serve documentation
