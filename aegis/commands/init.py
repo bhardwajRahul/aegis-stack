@@ -153,10 +153,6 @@ def init_command(
             interactive_project_selection()
         )
 
-        # Merge interactively selected services with any already specified
-        if interactive_services:
-            selected_services = list(set(selected_services + interactive_services))
-
         # Resolve dependencies for interactively selected components
         if selected_components:
             # Clean component names for dependency resolution (remove engine info)
@@ -179,22 +175,8 @@ def init_command(
             if auto_added:
                 typer.echo(f"\n📦 Auto-added dependencies: {', '.join(auto_added)}")
 
-        # Resolve service dependencies for interactively selected services
-        if interactive_services:
-            service_components, _ = ServiceResolver.resolve_service_dependencies(
-                interactive_services
-            )
-            # Merge service-required components with existing components
-            all_components = list(set(selected_components + service_components))
-            if service_components:
-                new_components = [
-                    c for c in service_components if c not in selected_components
-                ]
-                if new_components:
-                    typer.echo(
-                        f"\n🔧 Auto-added components for services: {', '.join(new_components)}"
-                    )
-            selected_components = all_components
+        # Merge interactively selected services with any already selected services
+        selected_services = list(set(selected_services + interactive_services))
 
     # Create template generator with scheduler backend context
     template_gen = TemplateGenerator(
@@ -291,7 +273,7 @@ def init_command(
         typer.echo(f"   cd {project_path.resolve()}")
         typer.echo("   uv sync")
         typer.echo("   cp .env.example .env")
-        typer.echo("   make run-local")
+        typer.echo("   make server")
 
     except ImportError:
         typer.echo("❌ Error: cookiecutter not installed", err=True)

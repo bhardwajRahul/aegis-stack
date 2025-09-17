@@ -61,7 +61,7 @@ project/
 cd my-project
 uv sync                    # Install dependencies
 cp .env.example .env       # Configure environment
-make run-local             # Start development server (Docker)
+make server             # Start development server (Docker)
 make run-dev               # Start without Docker
 make test                  # Run test suite
 make check                 # Lint + typecheck + test

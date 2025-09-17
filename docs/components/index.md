@@ -1,6 +1,12 @@
 # Components Overview
 
-Components are the building blocks of your Aegis Stack application. Each component provides a specific capability like API serving, background tasks, or data persistence.
+Components are the **infrastructure building blocks** of your Aegis Stack application. Each component provides a specific capability like API serving, background tasks, or data persistence.
+
+!!! info "Components vs Services"
+    **Components** = Infrastructure capabilities (database, workers, scheduling)
+    **Services** = Business functionality (auth, payments, AI integrations)
+
+    See **[Services Overview](../services/index.md)** for business-level features.
 
 > 💡 **New to Aegis Stack?** See the [Philosophy Guide](../philosophy.md) for complete component design principles.
 
@@ -14,6 +20,9 @@ The interactive CLI guides you through component choices and explains integratio
 # Basic web application (FastAPI + Flet)
 aegis init my-project
 
+# Add user authentication (auto-includes database)
+aegis init user-app --services auth
+
 # Add background task scheduling
 aegis init scheduled-app --components scheduler
 
@@ -21,7 +30,10 @@ aegis init scheduled-app --components scheduler
 aegis init persistent-jobs --components scheduler,database
 
 # Full async task processing
-aegis init task-processor --components worker,redis
+aegis init task-processor --components worker
+
+# Business app with auth and background processing
+aegis init business-app --services auth --components worker,scheduler
 ```
 
 ## Component Architecture

@@ -76,6 +76,7 @@ with open("README.md") as readme:
     # Fix links to documentation pages (remove 'docs/' prefix)
     content = content.replace("](docs/cli-reference.md)", "](cli-reference.md)")
     content = content.replace("](docs/components/index.md)", "](components/index.md)")
+    content = content.replace("](docs/services/index.md)", "](services/index.md)")
     content = content.replace("](docs/philosophy.md)", "](philosophy.md)")
 
     # Use mkdocs_gen_files to create a virtual file instead of writing directly

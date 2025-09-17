@@ -145,7 +145,7 @@ class TestSchedulerEndpoints:
 
             if tasks:
                 # Test detail endpoint with first available job
-                job_id = tasks[0]["id"]
+                job_id = tasks[0]["job_id"]
                 url = f"/api/v1/scheduler/jobs/{job_id}"
                 detail_response = await async_client.get(url)
 
