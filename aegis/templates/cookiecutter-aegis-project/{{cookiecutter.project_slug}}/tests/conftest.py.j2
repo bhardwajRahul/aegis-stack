@@ -119,3 +119,5 @@ def db_session(engine: Engine) -> Generator[Session, None, None]:
     transaction.rollback()
     connection.close()
 {% endif %}
+
+

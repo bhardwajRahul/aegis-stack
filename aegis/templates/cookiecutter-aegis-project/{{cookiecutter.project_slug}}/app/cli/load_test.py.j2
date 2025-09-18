@@ -115,7 +115,9 @@ def run_load_test(
             )
         else:
             rprint("\n💡 [yellow]Use this command to check results later:[/yellow]")
-            rprint(f"   [bold]{{ cookiecutter.project_slug }} load-test results {task_id}[/bold]")
+            rprint(
+                f"   [bold]{{ cookiecutter.project_slug }} load-test results {task_id}[/bold]"
+            )
 
     except Exception as e:
         rprint(f"❌ [red]Failed to start load test:[/red] {e}")

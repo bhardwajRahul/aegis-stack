@@ -223,8 +223,8 @@ class TestInteractiveServiceSelection:
         from aegis.cli.interactive import interactive_project_selection
 
         with patch("typer.confirm") as mock_confirm:
-            # Simulate: no components selected, but yes auth service
-            mock_confirm.side_effect = [False, False, False, False, True]
+            # Simulate: no components selected, but yes auth service + yes to database confirmation
+            mock_confirm.side_effect = [False, False, False, False, True, True]
 
             components, scheduler_backend, services = interactive_project_selection()
 

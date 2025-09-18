@@ -85,9 +85,11 @@ class TestSystemService:
             status = await get_system_status()
             assert "aegis" in status.components
             aegis_component = status.components["aegis"]
-            assert "custom_test" in aegis_component.sub_components
-            assert aegis_component.sub_components["custom_test"].name == "custom_test"
-            assert aegis_component.sub_components["custom_test"].healthy is True
+            assert "components" in aegis_component.sub_components
+            components_group = aegis_component.sub_components["components"]
+            assert "custom_test" in components_group.sub_components
+            assert components_group.sub_components["custom_test"].name == "custom_test"
+            assert components_group.sub_components["custom_test"].healthy is True
         finally:
             # Clean up the custom health check registration
             from app.services.system.health import _health_checks

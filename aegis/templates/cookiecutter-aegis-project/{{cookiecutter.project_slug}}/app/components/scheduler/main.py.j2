@@ -113,7 +113,8 @@ def create_scheduler() -> AsyncIOScheduler:
         logger.info(msg)
 {% else %}
         logger.info(
-            f"✅ Job '{job_id}' exists, preserving current configuration: {existing_job.trigger}"
+            f"✅ Job '{job_id}' exists, preserving current configuration: "
+            f"{existing_job.trigger}"
         )
 {% endif %}
 {% endif %}
