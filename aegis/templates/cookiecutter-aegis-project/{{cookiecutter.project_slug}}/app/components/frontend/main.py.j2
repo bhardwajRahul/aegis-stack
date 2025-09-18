@@ -8,19 +8,13 @@ import flet as ft
 
 from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
-
-# Constants for health system grouping
-COMPONENTS_GROUP_KEY = "components"
-SERVICES_GROUP_KEY = "services"
-SERVICE_PREFIX = "service_"
-
 from .dashboard.cards import (
-    AICard,
-    AuthCard,
     FastAPICard,
     FletCard,
-    PaymentCard,
+    {%- if cookiecutter.include_auth == "yes" %}
+    AuthCard,
     ServicesCard,
+    {%- endif %}
     {%- if cookiecutter.include_database == "yes" %}
     DatabaseCard,
     {%- endif %}
@@ -36,6 +30,11 @@ from .dashboard.cards import (
 )
 from .dashboard.cards.card_utils import create_health_status_indicator
 from .theme import ThemeManager
+
+# Constants for health system grouping
+COMPONENTS_GROUP_KEY = "components"
+SERVICES_GROUP_KEY = "services"
+SERVICE_PREFIX = "service_"
 
 # Use simple filenames - Flet should auto-resolve from assets_dir
 DEFAULT_LOGO_PATH = "aegis-manifesto.png"
@@ -245,18 +244,16 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 elif component_name == "scheduler":
                     return SchedulerCard(component_data).build()
                 {%- endif %}
+                {%- if cookiecutter.include_auth == "yes" %}
                 elif component_name == "services":
                     return ServicesCard(component_data).build()
                 # Individual service cards
                 elif component_name == "service_auth":
                     return AuthCard(component_data).build()
-                elif component_name == "service_ai":
-                    return AICard(component_data).build()
-                elif component_name == "service_payment":
-                    return PaymentCard(component_data).build()
                 elif component_name.startswith("service_"):
                     # For other services, use generic ServicesCard for now
                     return ServicesCard(component_data).build()
+                {%- endif %}
                 else:
                     # Fallback for unknown components - should not happen in practice
                     logger.warning(f"Unknown component type: {component_name}")
@@ -365,9 +362,9 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                         for service_name, service_data in comp_data[
                             "sub_components"
                         ].items():
-                            components[f"{SERVICE_PREFIX}{service_name}"] = convert_component(
-                                service_data
-                            )
+                            components[
+                                f"{SERVICE_PREFIX}{service_name}"
+                            ] = convert_component(service_data)
                     else:
                         # For other groupings, add as-is
                         components[name] = convert_component(comp_data)

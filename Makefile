@@ -269,6 +269,22 @@ test-template-worker: ## Test template with worker component
 	@echo "✅ Worker template test completed successfully!"
 	@echo "   Test project available in ../test-worker-stack/"
 
+test-template-auth: ## Test template with auth service
+	@echo "🔐 Testing auth service template..."
+	@chmod -R +w ../test-auth-stack 2>/dev/null || true
+	@rm -rf ../test-auth-stack
+	@env -u VIRTUAL_ENV uv run aegis init test-auth-stack --services auth --output-dir .. --no-interactive --force --yes
+	@echo "📦 Installing dependencies and CLI..."
+	@cd ../test-auth-stack && chmod -R +w .venv 2>/dev/null || true && rm -rf .venv && env -u VIRTUAL_ENV uv sync --extra dev --extra docs
+	@cd ../test-auth-stack && env -u VIRTUAL_ENV uv pip install -e .
+	@echo "🔍 Running validation checks..."
+	@cd ../test-auth-stack && env -u VIRTUAL_ENV make check
+	@echo "🧪 Testing CLI script installation..."
+	@cd ../test-auth-stack && env -u VIRTUAL_ENV uv run test-auth-stack --help >/dev/null && echo "✅ CLI script 'test-auth-stack --help' works" || echo "⚠️  CLI script test failed"
+	@cd ../test-auth-stack && env -u VIRTUAL_ENV uv run test-auth-stack health status --help >/dev/null && echo "✅ Health commands available" || echo "⚠️  Health command test failed"
+	@echo "✅ Auth service template test completed successfully!"
+	@echo "   Test project available in ../test-auth-stack/"
+
 test-template-full: ## Test template with all components (worker + scheduler + database)
 	@echo "🌟 Testing full component template..."
 	@chmod -R +w ../test-full-stack 2>/dev/null || true
@@ -300,7 +316,7 @@ endif
 	@echo "✅ $(COMPONENT) component generated successfully in ../test-$(COMPONENT)-quick/"
 	@echo "   Run 'cd ../test-$(COMPONENT)-quick && make check' to validate"
 
-.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test redis-start redis-stop redis-cli redis-logs redis-stats redis-reset redis-queues redis-workers redis-failed redis-monitor redis-info test-template-quick test-template test-template-with-components test-template-database test-template-worker test-template-full test-component-quick test-stacks test-stacks-build test-stacks-runtime test-stacks-full clean-test-projects help
+.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test redis-start redis-stop redis-cli redis-logs redis-stats redis-reset redis-queues redis-workers redis-failed redis-monitor redis-info test-template-quick test-template test-template-with-components test-template-database test-template-worker test-template-auth test-template-full test-component-quick test-stacks test-stacks-build test-stacks-runtime test-stacks-full clean-test-projects help
 
 # Default target
 .DEFAULT_GOAL := help

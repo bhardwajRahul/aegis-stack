@@ -1,11 +1,11 @@
 """Dashboard component cards."""
 
-from .ai_card import AICard
-from .auth_card import AuthCard
 from .fastapi_card import FastAPICard
 from .flet_card import FletCard
-from .payment_card import PaymentCard
+{%- if cookiecutter.include_auth == "yes" %}
+from .auth_card import AuthCard
 from .services_card import ServicesCard
+{%- endif %}
 {%- if cookiecutter.include_database == "yes" %}
 from .database_card import DatabaseCard
 {%- endif %}
@@ -20,12 +20,12 @@ from .worker_card import WorkerCard
 {%- endif %}
 
 __all__ = [
-    "AICard",
-    "AuthCard",
     "FastAPICard",
     "FletCard",
-    "PaymentCard",
+    {%- if cookiecutter.include_auth == "yes" %}
+    "AuthCard",
     "ServicesCard",
+    {%- endif %}
     {%- if cookiecutter.include_database == "yes" %}
     "DatabaseCard",
     {%- endif %}
