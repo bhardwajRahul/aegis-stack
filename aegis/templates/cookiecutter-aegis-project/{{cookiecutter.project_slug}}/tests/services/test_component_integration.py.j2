@@ -299,9 +299,19 @@ class TestComponentIntegration:
             # Verify scheduler component is included in system status
             assert "aegis" in status.components
             aegis_component = status.components["aegis"]
-            assert "scheduler" in aegis_component.sub_components
 
-            scheduler_status = aegis_component.sub_components["scheduler"]
+            # Navigate to scheduler component
+            if "components" in aegis_component.sub_components:
+                components_group = aegis_component.sub_components["components"]
+                assert "scheduler" in components_group.sub_components, (
+                    f"Scheduler component missing from health structure. "
+                    f"Available: {list(components_group.sub_components.keys())}"
+                )
+                scheduler_status = components_group.sub_components["scheduler"]
+            else:
+                # Legacy direct structure
+                assert "scheduler" in aegis_component.sub_components
+                scheduler_status = aegis_component.sub_components["scheduler"]
             assert scheduler_status.healthy is True
             assert scheduler_status.status == ComponentStatusType.HEALTHY
             assert "APScheduler component activated" in scheduler_status.message

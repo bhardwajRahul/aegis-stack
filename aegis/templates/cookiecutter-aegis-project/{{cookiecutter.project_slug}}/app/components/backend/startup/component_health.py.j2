@@ -387,3 +387,25 @@ async def startup_hook() -> None:
     {%- endif %}
 
     logger.info("✅ Component health detection complete")
+
+    # ==========================================
+    # Service Health Checks Registration
+    # ==========================================
+
+    from app.services.system.health import register_service_health_check
+
+    logger.info("🔧 Registering service health checks...")
+
+    {%- if cookiecutter.include_auth == "yes" %}
+    # Register auth service health check
+    from app.services.auth.health import check_auth_service_health
+    register_service_health_check("auth", check_auth_service_health)
+    logger.info("Auth service health check registered")
+    {%- endif %}
+
+    # Future services will be registered here:
+    # if cookiecutter.include_payment == "yes":
+    #     from app.services.payment.health import check_payment_service_health
+    #     register_service_health_check("payment", check_payment_service_health)
+
+    logger.info("✅ Service health detection complete")

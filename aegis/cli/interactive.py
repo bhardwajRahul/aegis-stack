@@ -171,7 +171,27 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
             for service_name, service_spec in auth_services.items():
                 prompt = f"  Add {service_spec.description.lower()}?"
                 if typer.confirm(prompt):
-                    selected_services.append(service_name)
+                    # Auth service requires database - provide explicit confirmation
+                    typer.echo("\n🗃️  Database Required:")
+                    typer.echo("  Authentication requires a database for user storage")
+                    typer.echo("  (user accounts, sessions, JWT tokens)")
+
+                    # Check if database is already selected
+                    database_already_selected = any(
+                        "database" in comp for comp in selected
+                    )
+
+                    if database_already_selected:
+                        typer.echo("✅ Database component already selected")
+                        selected_services.append(service_name)
+                    else:
+                        auth_confirm_prompt = "  Continue and add database component?"
+                        if typer.confirm(auth_confirm_prompt, default=True):
+                            selected_services.append(service_name)
+                            # Note: Database will be auto-added by service resolution in init.py
+                            typer.echo("✅ Authentication + Database configured")
+                        else:
+                            typer.echo("⏹️  Authentication service cancelled")
 
         # Future service types can be added here as they become available
         # payment_services = get_services_by_type(ServiceType.PAYMENT)

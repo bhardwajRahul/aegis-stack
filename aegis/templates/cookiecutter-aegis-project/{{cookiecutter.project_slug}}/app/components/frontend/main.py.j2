@@ -9,9 +9,18 @@ import flet as ft
 from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
+# Constants for health system grouping
+COMPONENTS_GROUP_KEY = "components"
+SERVICES_GROUP_KEY = "services"
+SERVICE_PREFIX = "service_"
+
 from .dashboard.cards import (
+    AICard,
+    AuthCard,
     FastAPICard,
     FletCard,
+    PaymentCard,
+    ServicesCard,
     {%- if cookiecutter.include_database == "yes" %}
     DatabaseCard,
     {%- endif %}
@@ -236,6 +245,18 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 elif component_name == "scheduler":
                     return SchedulerCard(component_data).build()
                 {%- endif %}
+                elif component_name == "services":
+                    return ServicesCard(component_data).build()
+                # Individual service cards
+                elif component_name == "service_auth":
+                    return AuthCard(component_data).build()
+                elif component_name == "service_ai":
+                    return AICard(component_data).build()
+                elif component_name == "service_payment":
+                    return PaymentCard(component_data).build()
+                elif component_name.startswith("service_"):
+                    # For other services, use generic ServicesCard for now
+                    return ServicesCard(component_data).build()
                 else:
                     # Fallback for unknown components - should not happen in practice
                     logger.warning(f"Unknown component type: {component_name}")
@@ -333,7 +354,23 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
 
                 components = {}
                 for name, comp_data in api_components.items():
-                    components[name] = convert_component(comp_data)
+                    # Special handling for "components" grouping - expand it
+                    if name == COMPONENTS_GROUP_KEY and "sub_components" in comp_data:
+                        # Add all individual components from the grouping
+                        for sub_name, sub_data in comp_data["sub_components"].items():
+                            components[sub_name] = convert_component(sub_data)
+                    # Special handling for "services" grouping - expand services
+                    elif name == SERVICES_GROUP_KEY and "sub_components" in comp_data:
+                        # Add all individual services from the grouping
+                        for service_name, service_data in comp_data[
+                            "sub_components"
+                        ].items():
+                            components[f"{SERVICE_PREFIX}{service_name}"] = convert_component(
+                                service_data
+                            )
+                    else:
+                        # For other groupings, add as-is
+                        components[name] = convert_component(comp_data)
 
                 total_components = len(components)
                 healthy_components = len([c for c in components.values() if c.healthy])
@@ -359,8 +396,13 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                     ):
                         continue  # Skip unknown components
 
-                    # Add card with responsive column sizing (6 = 50% = 2 columns)
-                    card.col = {"xs": 12, "sm": 12, "md": 6, "lg": 6, "xl": 6}
+                    # Set responsive column sizing based on card type
+                    if component_name.startswith("service_"):
+                        # Service cards: 1/3 width (4 = 33% = 3 columns)
+                        card.col = {"xs": 12, "sm": 6, "md": 4, "lg": 4, "xl": 4}
+                    else:
+                        # Component cards: 1/2 width (6 = 50% = 2 columns)
+                        card.col = {"xs": 12, "sm": 12, "md": 6, "lg": 6, "xl": 6}
                     component_cards_container.content.controls.append(card)
 
                 page.update()

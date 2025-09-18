@@ -68,12 +68,21 @@ class SystemStatus(BaseModel):
     def _get_all_components_flat(self) -> list[tuple[str, ComponentStatus]]:
         """Get all components including sub-components as a flat list."""
         all_components = []
+
         for name, component in self.components.items():
-            all_components.append((name, component))
-            # Add sub-components with parent.child naming
-            for sub_name, sub_component in component.sub_components.items():
-                all_components.append((f"{name}.{sub_name}", sub_component))
+            all_components.extend(self._flatten_component(name, component))
+
         return all_components
+
+    def _flatten_component(
+        self, name: str, component: ComponentStatus
+    ) -> list[tuple[str, ComponentStatus]]:
+        """Recursively flatten a component and its sub-components into a list."""
+        result = [(name, component)]
+        # Recursively add sub-components with parent.child naming
+        for sub_name, sub_component in component.sub_components.items():
+            result.extend(self._flatten_component(f"{name}.{sub_name}", sub_component))
+        return result
 
     @property
     def healthy_components(self) -> list[str]:
@@ -112,6 +121,55 @@ class SystemStatus(BaseModel):
         """List of healthy top-level component names."""
         return [name for name, comp in self.components.items() if comp.healthy]
 
+    @property
+    def services_status(self) -> ComponentStatus | None:
+        """Get the services component status if it exists."""
+        if "aegis" in self.components:
+            aegis_component = self.components["aegis"]
+            if (
+                hasattr(aegis_component, "sub_components")
+                and aegis_component.sub_components
+            ):
+                return aegis_component.sub_components.get("services")
+        return None
+
+    @property
+    def has_services(self) -> bool:
+        """Check if any services are registered in the system."""
+        return self.services_status is not None
+
+    @property
+    def service_names(self) -> list[str]:
+        """Get list of registered service names."""
+        services_component = self.services_status
+        if services_component and hasattr(services_component, "sub_components"):
+            return list(services_component.sub_components.keys())
+        return []
+
+    @property
+    def healthy_services(self) -> list[str]:
+        """List of healthy service names."""
+        services_component = self.services_status
+        if services_component and hasattr(services_component, "sub_components"):
+            return [
+                name
+                for name, service in services_component.sub_components.items()
+                if service.healthy
+            ]
+        return []
+
+    @property
+    def unhealthy_services(self) -> list[str]:
+        """List of unhealthy service names."""
+        services_component = self.services_status
+        if services_component and hasattr(services_component, "sub_components"):
+            return [
+                name
+                for name, service in services_component.sub_components.items()
+                if not service.healthy
+            ]
+        return []
+
 
 class HealthResponse(BaseModel):
     """Basic health check API response."""
@@ -144,6 +202,19 @@ class DetailedHealthResponse(BaseModel):
     )
     health_percentage: float = Field(
         ..., description="Percentage of healthy components"
+    )
+    # Service-specific fields (optional)
+    has_services: bool = Field(
+        default=False, description="Whether any services are registered"
+    )
+    service_names: list[str] = Field(
+        default_factory=list, description="List of registered service names"
+    )
+    healthy_services: list[str] = Field(
+        default_factory=list, description="List of healthy service names"
+    )
+    unhealthy_services: list[str] = Field(
+        default_factory=list, description="List of unhealthy service names"
     )
 
 

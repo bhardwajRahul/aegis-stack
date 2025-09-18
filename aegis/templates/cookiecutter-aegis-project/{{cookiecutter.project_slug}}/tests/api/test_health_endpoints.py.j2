@@ -164,13 +164,26 @@ class TestHealthEndpoints:
             if "sub_components" in aegis_component:
                 sub_components = aegis_component["sub_components"]
 
-                # Worker component should be present
-                assert "worker" in sub_components, (
-                    f"Worker component missing from health response. "
-                    f"Available components: {list(sub_components.keys())}"
-                )
+                # Check if using grouped structure
+                if "components" in sub_components:
+                    components_group = sub_components["components"]
+                    if "sub_components" in components_group:
+                        worker_component = components_group["sub_components"].get(
+                            "worker"
+                        )
+                else:
+                    # Legacy direct structure
+                    worker_component = sub_components.get("worker")
 
-                worker_component = sub_components["worker"]
+                available_components = (
+                    list(sub_components.keys())
+                    if "components" not in sub_components
+                    else list(components_group.get("sub_components", {}).keys())
+                )
+                assert worker_component is not None, (
+                    f"Worker component missing from health response. "
+                    f"Available: {available_components}"
+                )
 
                 # Worker component should have required structure
                 assert "name" in worker_component
@@ -229,12 +242,20 @@ class TestHealthEndpoints:
             if "sub_components" in aegis_component:
                 sub_components = aegis_component["sub_components"]
 
-                # Worker should be present in basic health too
-                assert "worker" in sub_components, (
+                # Check if using grouped structure
+                if "components" in sub_components:
+                    components_group = sub_components["components"]
+                    if "sub_components" in components_group:
+                        worker_component = components_group["sub_components"].get(
+                            "worker"
+                        )
+                else:
+                    # Legacy direct structure
+                    worker_component = sub_components.get("worker")
+
+                assert worker_component is not None, (
                     "Worker component should appear in basic health response"
                 )
-
-                worker_component = sub_components["worker"]
                 assert worker_component["name"] == "worker"
                 assert isinstance(worker_component["healthy"], bool)
 

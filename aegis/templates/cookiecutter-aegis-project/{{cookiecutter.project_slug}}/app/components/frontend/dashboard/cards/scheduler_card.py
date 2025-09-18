@@ -247,7 +247,7 @@ class SchedulerCard:
                         alignment=ft.MainAxisAlignment.CENTER,
                     ),
                     padding=ft.padding.all(20),
-                    bgcolor=ft.Colors.with_opacity(ft.Colors.GREY, 0.05),
+                    bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.GREY),
                     border_radius=12,
                 )
             )

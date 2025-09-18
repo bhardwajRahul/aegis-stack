@@ -102,10 +102,13 @@ def init_command(
     selected_services = cast(list[str], services) if services else []
     scheduler_backend = "memory"  # Default to in-memory scheduler
 
-    # Resolve services to components if services were provided
-    if selected_services:
-        # If user provided explicit components, validate compatibility first
-        if components is not None:  # User provided explicit --components
+    # Resolve services to components if services were provided (non-interactive mode only)
+    if selected_services and not interactive:
+        # Check if --components was explicitly provided
+        components_explicitly_provided = components is not None
+
+        if components_explicitly_provided:
+            # In non-interactive mode with explicit --components, validate compatibility
             # Include core components (always present) for validation
             components_for_validation = list(set(selected_components + CORE_COMPONENTS))
             errors = ServiceResolver.validate_service_component_compatibility(
@@ -124,15 +127,30 @@ def init_command(
                 )
                 if missing_components:
                     typer.echo(
-                        f"💡 Suggestion: Add missing components: --components {','.join(list(dict.fromkeys(selected_components + missing_components)))}",
+                        f"💡 Suggestion: Add missing components --components {','.join(sorted(set(selected_components + missing_components)))}",
+                        err=True,
+                    )
+                    typer.echo(
+                        "   Or remove --components to let services auto-add dependencies.",
                         err=True,
                     )
                 typer.echo(
-                    "   Alternatively, remove --components to let services auto-add their dependencies.",
+                    "   Alternatively, use interactive mode to auto-add service dependencies.",
                     err=True,
                 )
                 raise typer.Exit(1)
+        else:
+            # No --components provided, auto-add required components for services
+            service_components, _ = ServiceResolver.resolve_service_dependencies(
+                selected_services
+            )
+            if service_components:
+                typer.echo(
+                    f"📦 Services require components: {', '.join(sorted(service_components))}"
+                )
+            selected_components = service_components
 
+        # Resolve service dependencies and merge with any explicitly selected components
         service_components, _ = ServiceResolver.resolve_service_dependencies(
             selected_services
         )
@@ -177,6 +195,43 @@ def init_command(
 
         # Merge interactively selected services with any already selected services
         selected_services = list(set(selected_services + interactive_services))
+
+        # Handle service dependencies for interactively selected services
+        if interactive_services:
+            # Track originally selected components before service resolution
+            originally_selected_components = selected_components.copy()
+
+            service_components, _ = ServiceResolver.resolve_service_dependencies(
+                interactive_services
+            )
+            # Merge service-required components with selected components
+            all_components = list(set(selected_components + service_components))
+            selected_components = all_components
+
+            # Show which components were auto-added by services
+            service_added_components = [
+                comp
+                for comp in service_components
+                if comp not in originally_selected_components
+                and comp not in CORE_COMPONENTS
+            ]
+            if service_added_components:
+                # Create a mapping of which services require which components
+                service_component_map = {}
+                for service_name in interactive_services:
+                    service_deps = ServiceResolver.resolve_service_dependencies(
+                        [service_name]
+                    )[0]
+                    for comp in service_deps:
+                        if comp in service_added_components:
+                            if comp not in service_component_map:
+                                service_component_map[comp] = []
+                            service_component_map[comp].append(service_name)
+
+                typer.echo("\n📦 Auto-added by services:")
+                for comp, requiring_services in service_component_map.items():
+                    services_str = ", ".join(requiring_services)
+                    typer.echo(f"   • {comp} (required by {services_str})")
 
     # Create template generator with scheduler backend context
     template_gen = TemplateGenerator(

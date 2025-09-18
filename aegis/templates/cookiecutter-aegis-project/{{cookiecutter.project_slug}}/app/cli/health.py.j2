@@ -338,15 +338,35 @@ def _display_health_status(
         f"Health Percentage: [bold]"
         f"{health_percentage:.{CLI.HEALTH_PERCENTAGE_DECIMALS}f}%[/bold]",
         f"Components: {healthy_count}/" + f"{total_count} healthy",
-        f"Timestamp: {timestamp}",
     ]
+
+    # Add service information if available (DetailedHealthResponse)
+    if hasattr(health_data, "has_services") and health_data.has_services:
+        healthy_services_count = len(health_data.healthy_services)
+        total_services_count = len(health_data.service_names)
+        if healthy_services_count == total_services_count:
+            service_status_color = "green"
+        elif healthy_services_count > 0:
+            service_status_color = "yellow"
+        else:
+            service_status_color = "red"
+
+        panel_content.append(
+            f"Services: [bold {service_status_color}]{healthy_services_count}/"
+            f"{total_services_count} healthy[/bold {service_status_color}]"
+        )
+
+    panel_content.append(f"Timestamp: {timestamp}")
 
     console.print(
         Panel("\n".join(panel_content), title=title, border_style=overall_color)
     )
 
-    # Component Tree Display
-    console.print("\n[bold magenta]Component Tree:[/bold magenta]")
+    # Component and Service Tree Display
+    tree_title = "Component Tree"
+    if hasattr(health_data, "has_services") and health_data.has_services:
+        tree_title = "Component & Service Tree"
+    console.print(f"\n[bold magenta]{tree_title}:[/bold magenta]")
 
     # Sort components: unhealthy first, then by name
     sorted_components = sorted(components.items(), key=lambda x: (x[1].healthy, x[0]))

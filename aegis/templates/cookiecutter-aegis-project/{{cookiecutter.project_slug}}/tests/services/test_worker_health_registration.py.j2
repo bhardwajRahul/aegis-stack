@@ -6,13 +6,16 @@ Tests that worker components are properly registered in the health system
 and appear in health check results.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
-from typing import Any
+from unittest.mock import patch
 
 import pytest
 
 from app.services.system import ComponentStatus, ComponentStatusType
-from app.services.system.health import get_system_status, register_health_check, _health_checks
+from app.services.system.health import (
+    _health_checks,
+    get_system_status,
+    register_health_check,
+)
 
 
 class TestWorkerHealthRegistration:
@@ -105,9 +108,12 @@ class TestWorkerHealthRegistration:
             register_health_check("worker", mock_worker_health)
 
             # Mock system metrics to avoid psutil dependency
-            with patch(
-                "app.services.system.health._get_cached_system_metrics"
-            ) as mock_metrics:
+            with (
+                patch("app.services.system.health._service_health_checks", {}),
+                patch(
+                    "app.services.system.health._get_cached_system_metrics"
+                ) as mock_metrics,
+            ):
                 mock_metrics.return_value = {
                     "memory": ComponentStatus(
                         name="memory",
@@ -133,10 +139,19 @@ class TestWorkerHealthRegistration:
                 assert system_status.overall_healthy
                 assert "aegis" in system_status.components
 
-                aegis_component = system_status.components["aegis"]
-                assert "worker" in aegis_component.sub_components
+                # Use model's flat component list to check for worker
+                assert "aegis.components.worker" in system_status.healthy_components
 
-                worker_component = aegis_component.sub_components["worker"]
+                # Also verify direct navigation
+                aegis_component = system_status.components["aegis"]
+                if "components" in aegis_component.sub_components:
+                    components_group = aegis_component.sub_components["components"]
+                    assert "worker" in components_group.sub_components
+                    worker_component = components_group.sub_components["worker"]
+                else:
+                    # Legacy direct structure
+                    assert "worker" in aegis_component.sub_components
+                    worker_component = aegis_component.sub_components["worker"]
                 assert worker_component.name == "worker"
                 assert worker_component.healthy
                 assert "workers active" in worker_component.message
@@ -171,9 +186,12 @@ class TestWorkerHealthRegistration:
             register_health_check("backend", mock_backend_health)
 
             # Mock system metrics
-            with patch(
-                "app.services.system.health._get_cached_system_metrics"
-            ) as mock_metrics:
+            with (
+                patch("app.services.system.health._service_health_checks", {}),
+                patch(
+                    "app.services.system.health._get_cached_system_metrics"
+                ) as mock_metrics,
+            ):
                 mock_metrics.return_value = {
                     "memory": ComponentStatus(
                         name="memory",
@@ -186,9 +204,24 @@ class TestWorkerHealthRegistration:
                 system_status = await get_system_status()
 
                 # Verify worker does NOT appear in results
+                assert "aegis.components.worker" not in system_status.healthy_components
+                assert (
+                    "aegis.components.worker" not in system_status.unhealthy_components
+                )
+
+                # Verify backend DOES appear
+                assert "aegis.components.backend" in system_status.healthy_components
+
+                # Also verify direct navigation
                 aegis_component = system_status.components["aegis"]
-                assert "worker" not in aegis_component.sub_components
-                assert "backend" in aegis_component.sub_components
+                if "components" in aegis_component.sub_components:
+                    components_group = aegis_component.sub_components["components"]
+                    assert "worker" not in components_group.sub_components
+                    assert "backend" in components_group.sub_components
+                else:
+                    # Legacy direct structure
+                    assert "worker" not in aegis_component.sub_components
+                    assert "backend" in aegis_component.sub_components
 
         finally:
             # Restore original state

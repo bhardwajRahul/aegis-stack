@@ -59,6 +59,11 @@ async def detailed_health() -> DetailedHealthResponse:
             healthy_components=system_status.healthy_components,
             unhealthy_components=system_status.unhealthy_components,
             health_percentage=system_status.health_percentage,
+            # Service-specific information
+            has_services=system_status.has_services,
+            service_names=system_status.service_names,
+            healthy_services=system_status.healthy_services,
+            unhealthy_services=system_status.unhealthy_services,
         )
 
     except HTTPException:
@@ -119,6 +124,31 @@ async def system_dashboard() -> dict[str, Any]:
                     "healthy_components": len(system_status.healthy_components),
                     "unhealthy_components": len(system_status.unhealthy_components),
                     "recent_alerts": recent_alerts,
+                    # Service summary information
+                    "has_services": system_status.has_services,
+                    "total_services": len(system_status.service_names),
+                    "healthy_services": len(system_status.healthy_services),
+                    "unhealthy_services": len(system_status.unhealthy_services),
+                },
+                # Services section for frontend consumption
+                "services": {
+                    "enabled": system_status.has_services,
+                    "services": {
+                        name: {
+                            "name": name,
+                            "healthy": service.healthy,
+                            "message": service.message,
+                            "response_time_ms": service.response_time_ms,
+                            "metadata": service.metadata,
+                        }
+                        for name, service in (
+                            system_status.services_status.sub_components.items()
+                            if system_status.services_status
+                            else {}
+                        ).items()
+                    }
+                    if system_status.has_services
+                    else {},
                 },
                 "system_info": system_status.system_info,
                 "timestamp": system_status.timestamp.isoformat(),
