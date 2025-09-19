@@ -1,26 +1,74 @@
 """
 Database initialization startup hook.
 
-Ensures database tables are created and directory structure exists
+Ensures database directory structure exists and verifies connectivity
 when the backend starts up (only when database component is included).
 """
 {% if cookiecutter.include_database == "yes" %}
 
+from pathlib import Path
 from app.core.db import init_database
 from app.core.log import logger
+
+{% if cookiecutter.include_auth == "yes" %}
+# Import models to register them with SQLModel metadata
+from app.models.user import User  # noqa: F401
+{% endif %}
 
 
 async def startup_database_init() -> None:
     """
-    Initialize database tables and directory structure on startup.
+    Initialize database directory structure and verify connectivity.
 
     This hook runs when the backend starts to ensure the database
-    is properly set up before any requests are processed.
+    directory exists and connection works. For auth service projects,
+    migrations should already be applied during project generation.
     """
     try:
+        # Ensure database directory exists
+        from app.core.db import DATABASE_PATH
+        db_path = Path(DATABASE_PATH)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        {% if cookiecutter.include_auth == "yes" %}
+        # Auth service - verify database and migration status
+        try:
+            from app.core.db import db_session
+            from sqlmodel import select, func, text
+            from sqlalchemy import inspect
+
+            with db_session(autocommit=False) as session:
+                # Check 1: Basic database connectivity
+                session.exec(text("SELECT 1"))
+
+                # Check 2: Auth tables exist (User table specifically)
+                session.exec(select(func.count()).select_from(User))
+
+                # Check 3: Alembic migration system is set up
+                inspector = inspect(session.connection())
+                table_names = inspector.get_table_names()
+
+                if "alembic_version" in table_names:
+                    logger.info("✅ Database connectivity and auth schema verified (migrations applied)")
+                else:
+                    logger.warning("⚠️  alembic_version table missing - migrations may not be fully applied")
+                    logger.warning("💡 Run 'alembic upgrade head' to ensure all migrations are applied")
+
+        except Exception as e:
+            logger.warning(f"⚠️  Database check failed: {e}")
+            logger.warning("💡 Run 'alembic upgrade head' to apply migrations")
+            # Don't fail startup - let the app run and show clear errors
+        {% else %}
+        # Database component only - ensure tables exist
         init_database()
         logger.info("🗃️  Database initialization completed")
+        {% endif %}
+
     except Exception as e:
         logger.error(f"❌ Database initialization failed: {e}")
         raise
+
+
+# Export the startup hook function
+startup_hook = startup_database_init
 {% endif %}

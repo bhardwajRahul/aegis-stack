@@ -171,6 +171,31 @@ docs-build: ## Build static documentation
 	@echo "📚 Building documentation..."
 	@uv run mkdocs build
 
+{% if cookiecutter.include_database == "yes" %}#=============================================================================
+# DATABASE MIGRATIONS
+#=============================================================================
+
+migrate: ## Apply database migrations
+	@echo "🗃️  Applying database migrations..."
+	@docker compose exec webserver alembic upgrade head
+
+migrate-check: ## Check migration status
+	@echo "🔍 Checking migration status..."
+	@docker compose exec webserver alembic current
+
+migrate-history: ## Show migration history
+	@echo "📜 Migration history:"
+	@docker compose exec webserver alembic history --verbose
+
+migrate-reset: ## Reset database (WARNING: destructive)
+	@echo "⚠️  This will destroy all data in the database!"
+	@read -p "Are you sure? Type 'yes' to continue: " confirm && [ "$$confirm" = "yes" ] || exit 1
+	@docker compose exec webserver alembic downgrade base
+	@docker compose exec webserver alembic upgrade head
+	@echo "✅ Database reset complete"
+
+{% endif %}
+
 #=============================================================================
 # WORKER DEBUGGING (arq)
 #=============================================================================
@@ -205,7 +230,7 @@ help: ## Show this help message
 	@echo
 	@echo "💡 TIP: Use 'make refresh' when everything is broken!"
 
-.PHONY: build serve stop clean rebuild refresh restart logs logs-web logs-worker logs-redis{% if cookiecutter.include_scheduler == "yes" %} logs-scheduler{% endif %} shell shell-worker ps redis-cli redis-stats redis-keys redis-reset health health-detailed health-json health-probe test test-verbose lint fix format typecheck check install deps-update clean-cache docs-serve docs-build worker-test status help
+.PHONY: build serve stop clean rebuild refresh restart logs logs-web logs-worker logs-redis{% if cookiecutter.include_scheduler == "yes" %} logs-scheduler{% endif %} shell shell-worker ps redis-cli redis-stats redis-keys redis-reset health health-detailed health-json health-probe test test-verbose lint fix format typecheck check install deps-update clean-cache docs-serve docs-build{% if cookiecutter.include_database == "yes" %} migrate migrate-check migrate-history migrate-reset{% endif %} worker-test status help
 
 # Default target - show help
 .DEFAULT_GOAL := help

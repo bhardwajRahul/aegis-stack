@@ -296,6 +296,14 @@ def init_command(
         typer.echo("❌ Project creation cancelled")
         raise typer.Exit(0)
 
+    # Handle force overwrite by completely removing existing directory
+    project_path = base_output_dir / project_name
+    if force and project_path.exists():
+        typer.echo(f"🗑️  Removing existing directory: {project_path}")
+        import shutil
+
+        shutil.rmtree(project_path)
+
     # Create project using cookiecutter
     typer.echo()
     typer.echo(f"🔧 Creating project: {project_name}")
@@ -317,18 +325,11 @@ def init_command(
             extra_context=extra_context,
             output_dir=str(base_output_dir),
             no_input=True,  # Don't prompt user, use our context
-            overwrite_if_exists=force,
+            overwrite_if_exists=False,  # No longer needed since we remove directory first
         )
 
-        typer.echo("✅ Project created successfully!")
-
-        # Show next steps
-        typer.echo()
-        typer.echo("📋 Next steps:")
-        typer.echo(f"   cd {project_path.resolve()}")
-        typer.echo("   uv sync")
-        typer.echo("   cp .env.example .env")
-        typer.echo("   make server")
+        # Note: Comprehensive setup output is now handled by the post-generation hook
+        # which provides better status reporting and automated setup
 
     except ImportError:
         typer.echo("❌ Error: cookiecutter not installed", err=True)

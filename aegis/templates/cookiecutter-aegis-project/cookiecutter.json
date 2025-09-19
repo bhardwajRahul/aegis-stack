@@ -22,6 +22,7 @@
   
   "_comment_internal": "Internal variables for template logic",
   "_has_additional_components": "{% if cookiecutter.include_scheduler == 'yes' or cookiecutter.include_redis == 'yes' or cookiecutter.include_worker == 'yes' or cookiecutter.include_database == 'yes' or cookiecutter.include_cache == 'yes' %}yes{% else %}no{% endif %}",
+  "_include_migrations": "{% if cookiecutter.include_auth == 'yes' %}yes{% else %}no{% endif %}",
   
   "_comment_dependencies": "Component-specific dependencies",
   "_scheduler_deps": "{% if cookiecutter.include_scheduler == 'yes' %}apscheduler>=3.10.0{% endif %}",

@@ -11,7 +11,7 @@ from sqlmodel import Session
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
 
 @router.post("/register", response_model=UserResponse)

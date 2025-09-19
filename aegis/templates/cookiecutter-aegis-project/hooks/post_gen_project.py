@@ -83,6 +83,117 @@ def process_j2_templates():
     return processed_files
 
 
+def setup_project_environment():
+    """
+    Complete project setup: dependencies, env file, migrations.
+
+    This function automates the entire setup process so users can
+    immediately start using their project after generation.
+    """
+    print("\n🚀 Setting up your project environment...")
+
+    # Step 1: Install dependencies with uv
+    try:
+        print("📦 Installing dependencies with uv...")
+        result = subprocess.run(
+            ["uv", "sync"],
+            cwd=PROJECT_DIRECTORY,
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5 minutes for dependency installation
+        )
+
+        if result.returncode == 0:
+            print("✅ Dependencies installed successfully")
+        else:
+            print("⚠️  Dependency installation failed")
+            if result.stderr:
+                print(f"   Error: {result.stderr.strip()}")
+            print("💡 Run 'uv sync' manually after project creation")
+            return False
+
+    except subprocess.TimeoutExpired:
+        print("⚠️  Dependency installation timeout - run 'uv sync' manually")
+        return False
+    except FileNotFoundError:
+        print("⚠️  uv not found in PATH")
+        print("💡 Install uv first: https://github.com/astral-sh/uv")
+        return False
+    except Exception as e:
+        print(f"⚠️  Dependency installation failed: {e}")
+        print("💡 Run 'uv sync' manually after project creation")
+        return False
+
+    # Step 2: Copy .env file
+    try:
+        print("📄 Setting up environment configuration...")
+        env_example = Path(PROJECT_DIRECTORY) / ".env.example"
+        env_file = Path(PROJECT_DIRECTORY) / ".env"
+
+        if env_example.exists() and not env_file.exists():
+            shutil.copy(env_example, env_file)
+            print("✅ Environment file created from .env.example")
+        elif env_file.exists():
+            print("✅ Environment file already exists")
+        else:
+            print("⚠️  No .env.example file found")
+
+    except Exception as e:
+        print(f"⚠️  Environment setup failed: {e}")
+        print("💡 Copy .env.example to .env manually")
+
+    # Step 3: Run migrations (if auth service included)
+    if "{{ cookiecutter.include_auth }}" == "yes":
+        try:
+            print("🗃️  Setting up database with auth schema...")
+
+            # Ensure data directory exists
+            data_dir = Path(PROJECT_DIRECTORY) / "data"
+            data_dir.mkdir(exist_ok=True)
+
+            # Verify alembic config exists before running migration
+            alembic_ini_path = Path(PROJECT_DIRECTORY) / "alembic" / "alembic.ini"
+            if not alembic_ini_path.exists():
+                print(f"⚠️  Alembic config file not found at {alembic_ini_path}")
+                print(
+                    "💡 Skipping database migration. Please ensure the config file exists and run 'alembic upgrade head' manually."
+                )
+                return
+
+            # Run alembic migrations using uv run (ensures correct environment)
+            result = subprocess.run(
+                [
+                    "uv",
+                    "run",
+                    "alembic",
+                    "-c",
+                    str(alembic_ini_path),
+                    "upgrade",
+                    "head",
+                ],
+                cwd=PROJECT_DIRECTORY,
+                capture_output=True,
+                text=True,
+                timeout=30,  # Reasonable timeout for initial migration
+            )
+
+            if result.returncode == 0:
+                print("✅ Database tables created successfully")
+            else:
+                print("⚠️  Database migration setup failed")
+                if result.stderr:
+                    print(f"   Error: {result.stderr.strip()}")
+                print("💡 Run 'alembic upgrade head' manually after project creation")
+
+        except subprocess.TimeoutExpired:
+            print("⚠️  Migration setup timeout - run 'alembic upgrade head' manually")
+        except Exception as e:
+            print(f"⚠️  Migration setup failed: {e}")
+            print("💡 Run 'alembic upgrade head' manually after project creation")
+
+    return True
+
+
 def run_auto_formatting():
     """
     Auto-format generated code by calling make fix.
@@ -196,13 +307,39 @@ def main():
     ):
         remove_dir("docs/components")
 
+    # Remove Alembic directory if auth service not included
+    if "{{ cookiecutter.include_auth }}" != "yes":
+        remove_dir("alembic")
+
     # Print only templates that survived cleanup
     for file_path in processed_files:
         if file_path.exists():
             print(f"Processed template: {file_path.name}")
 
+    # Complete project setup: dependencies, env file, migrations
+    setup_success = setup_project_environment()
+
     # Run auto-formatting after all processing is complete
     run_auto_formatting()
+
+    # Print final status and next steps
+    print("\n" + "=" * 60)
+    if setup_success:
+        print("✅ Project ready to run!")
+        print("\n📋 Next steps:")
+        print(f"   cd {Path(PROJECT_DIRECTORY).name}")
+        print("   make server")
+        print("\n💡 Your application is fully configured and ready to use!")
+    else:
+        print("⚠️  Project created with some setup issues")
+        print("\n📋 Manual setup required:")
+        print(f"   cd {Path(PROJECT_DIRECTORY).name}")
+        print("   uv sync")
+        print("   cp .env.example .env")
+        if "{{ cookiecutter.include_auth }}" == "yes":
+            print("   alembic upgrade head")
+        print("   make server")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
