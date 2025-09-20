@@ -1,0 +1,2 @@
+# This file exists to ensure auth.py is only included when auth service is selected
+# The actual implementation is in auth.py.j2 which gets processed during template generation

@@ -49,10 +49,19 @@ async def startup_database_init() -> None:
                 table_names = inspector.get_table_names()
 
                 if "alembic_version" in table_names:
-                    logger.info("✅ Database connectivity and auth schema verified (migrations applied)")
+                    logger.info(
+                        "✅ Database connectivity and auth schema verified "
+                        "(migrations applied)"
+                    )
                 else:
-                    logger.warning("⚠️  alembic_version table missing - migrations may not be fully applied")
-                    logger.warning("💡 Run 'alembic upgrade head' to ensure all migrations are applied")
+                    logger.warning(
+                        "⚠️  alembic_version table missing - migrations may not be "
+                        "fully applied"
+                    )
+                    logger.warning(
+                        "💡 Run 'alembic upgrade head' to ensure all migrations "
+                        "are applied"
+                    )
 
         except Exception as e:
             logger.warning(f"⚠️  Database check failed: {e}")
