@@ -177,21 +177,21 @@ docs-build: ## Build static documentation
 
 migrate: ## Apply database migrations
 	@echo "🗃️  Applying database migrations..."
-	@docker compose exec webserver alembic upgrade head
+	@docker compose exec webserver uv run alembic -c alembic/alembic.ini upgrade head
 
 migrate-check: ## Check migration status
 	@echo "🔍 Checking migration status..."
-	@docker compose exec webserver alembic current
+	@docker compose exec webserver uv run alembic -c alembic/alembic.ini current
 
 migrate-history: ## Show migration history
 	@echo "📜 Migration history:"
-	@docker compose exec webserver alembic history --verbose
+	@docker compose exec webserver uv run alembic -c alembic/alembic.ini history --verbose
 
 migrate-reset: ## Reset database (WARNING: destructive)
 	@echo "⚠️  This will destroy all data in the database!"
 	@read -p "Are you sure? Type 'yes' to continue: " confirm && [ "$$confirm" = "yes" ] || exit 1
-	@docker compose exec webserver alembic downgrade base
-	@docker compose exec webserver alembic upgrade head
+	@docker compose exec webserver uv run alembic -c alembic/alembic.ini downgrade base
+	@docker compose exec webserver uv run alembic -c alembic/alembic.ini upgrade head
 	@echo "✅ Database reset complete"
 
 {% endif %}

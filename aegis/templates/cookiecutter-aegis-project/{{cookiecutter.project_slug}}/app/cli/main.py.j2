@@ -39,6 +39,14 @@ except ImportError:
     # Scheduler components not available, skip tasks commands
     pass
 
+# Conditionally register auth command if auth service is available
+try:
+    auth_module = importlib.import_module("app.cli.auth")
+    app.add_typer(auth_module.app, name="auth")
+except ImportError:
+    # Auth service not available, skip auth commands
+    pass
+
 
 def main() -> None:
     """Entry point for the CLI application."""

@@ -65,3 +65,16 @@ class UserService:
     def deactivate_user(self, user_id: int) -> User | None:
         """Deactivate a user account."""
         return self.update_user(user_id, is_active=False)
+
+    def list_users(self) -> list[User]:
+        """List all users in the system."""
+        statement = select(User).order_by(User.created_at.desc())
+        result = self.db.exec(statement)
+        return list(result.all())
+
+    def find_existing_emails_with_prefix(self, prefix: str, domain: str) -> list[str]:
+        """Find existing emails that match the pattern prefix{number}@domain."""
+        pattern = f"{prefix}%@{domain}"
+        statement = select(User.email).where(User.email.like(pattern))
+        result = self.db.exec(statement)
+        return list(result.all())
