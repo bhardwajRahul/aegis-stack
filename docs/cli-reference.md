@@ -36,13 +36,13 @@ aegis init task-processor --components scheduler
 aegis init task-processor --components worker
 
 # User authentication system
-aegis init user-app --services auth
+aegis init user-app --services auth --components database
 
 # Full business application
-aegis init business-app --services auth,payment --components worker
+aegis init business-app --services auth,payment --components database,worker
 
 # Non-interactive with custom location
-aegis init my-app --services auth --no-interactive --output-dir /projects --yes
+aegis init my-app --services auth --components database --no-interactive --output-dir /projects --yes
 
 # Combined services and components (must include auth's required components)
 aegis init full-stack --services auth --components database,scheduler,worker
@@ -71,20 +71,20 @@ When you select services, required components are automatically included:
 ```mermaid
 graph LR
     Service["--services auth"] --> Core["backend + frontend<br/>Always included"]
-    Service --> Database["database component<br/>Auto-added by auth"]
+    Service --> Database["database component<br/>Must be explicitly added"]
     Service --> AuthFiles["Auth API routes + User models"]
 
     style Service fill:#e8f5e8
     style Core fill:#e8f4fd
-    style Database fill:#fff3e0
+    style Database fill:#ffebee
     style AuthFiles fill:#f1f8e9
 ```
 
 **Important CLI Behavior:**
 - `backend` and `frontend` components are always included in every project
-- **Interactive mode** (`aegis init project`): Services auto-add their required components
-- **Non-interactive mode** (`--components` specified): You must explicitly include all required components
-- Example: `--services auth` requires `--components database` (auth won't auto-add it)
+- **All modes**: Services require their dependencies to be explicitly specified
+- **Required components**: `--services auth` requires `--components database`
+- Example: Must use `--services auth --components database` (auth requires database)
 
 ## aegis services
 

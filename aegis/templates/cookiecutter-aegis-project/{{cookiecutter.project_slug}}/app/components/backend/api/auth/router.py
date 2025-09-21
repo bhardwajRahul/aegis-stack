@@ -4,7 +4,7 @@ from app.components.backend.api.deps import get_async_db
 from app.core.security import create_access_token, verify_password
 from app.models.user import UserCreate, UserResponse
 from app.services.auth.auth_service import get_current_user_from_token
-from app.services.auth.user_service import AsyncUserService
+from app.services.auth.user_service import UserService
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -17,7 +17,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 @router.post("/register", response_model=UserResponse)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_async_db)):
     """Register a new user."""
-    user_service = AsyncUserService(db)
+    user_service = UserService(db)
 
     # Check if user already exists
     existing_user = await user_service.get_user_by_email(user_data.email)
@@ -37,7 +37,7 @@ async def login(
     db: AsyncSession = Depends(get_async_db),
 ):
     """Login and get access token."""
-    user_service = AsyncUserService(db)
+    user_service = UserService(db)
 
     # Get user by email (username field in OAuth2 form)
     user = await user_service.get_user_by_email(form_data.username)

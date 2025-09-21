@@ -51,7 +51,12 @@ nav:
         - Load Testing: components/worker/extras/load-testing.md
   - Services:
     - Overview: services/index.md
-    - Authentication: services/auth.md
+    - Authentication:
+      - Getting Started: services/auth/index.md
+      - API Reference: services/auth/api.md
+      - Service Layer: services/auth/integration.md
+      - CLI Commands: services/auth/cli.md
+      - Examples: services/auth/examples.md
   - Reference:
     - CLI Reference: cli-reference.md
     - Integration Patterns: integration-patterns.md

@@ -8,7 +8,7 @@ login, token validation, and protected endpoint access.
 import pytest
 from app.core.security import create_access_token
 from app.models.user import UserCreate
-from app.services.auth.user_service import AsyncUserService, UserService
+from app.services.auth.user_service import UserService
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session
@@ -48,7 +48,7 @@ class TestAuthEndpoints:
     ):
         """Test registration with already existing email."""
         # Create a user first
-        user_service = AsyncUserService(async_db_session)
+        user_service = UserService(async_db_session)
         existing_user = UserCreate(
             email="existing@example.com",
             full_name="Existing User",
@@ -90,7 +90,7 @@ class TestAuthEndpoints:
     ):
         """Test login with valid credentials."""
         # Create a user first
-        user_service = AsyncUserService(async_db_session)
+        user_service = UserService(async_db_session)
         user_data = UserCreate(
             email="login@example.com",
             full_name="Login User",
@@ -131,7 +131,7 @@ class TestAuthEndpoints:
     ):
         """Test login with wrong password."""
         # Create a user first
-        user_service = AsyncUserService(async_db_session)
+        user_service = UserService(async_db_session)
         user_data = UserCreate(
             email="wrongpass@example.com",
             full_name="Wrong Pass User",
@@ -156,7 +156,7 @@ class TestAuthEndpoints:
     ):
         """Test getting current user with valid token."""
         # Create a user first
-        user_service = AsyncUserService(async_db_session)
+        user_service = UserService(async_db_session)
         user_data = UserCreate(
             email="currentuser@example.com",
             full_name="Current User",
@@ -204,7 +204,7 @@ class TestAuthEndpoints:
     ):
         """Test getting current user with expired token."""
         # Create a user first
-        user_service = AsyncUserService(async_db_session)
+        user_service = UserService(async_db_session)
         user_data = UserCreate(
             email="expiredtoken@example.com",
             full_name="Expired Token User",
@@ -298,7 +298,7 @@ class TestAuthIntegration:
         assert login_response.status_code == status.HTTP_200_OK
 
         # Verify user exists in database
-        user_service = AsyncUserService(async_db_session)
+        user_service = UserService(async_db_session)
         db_user = await user_service.get_user_by_email(user_data["email"])
 
         assert db_user is not None

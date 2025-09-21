@@ -292,6 +292,8 @@ def main():
         remove_file("app/models/user.py")
         remove_dir("app/services/auth")
         remove_file("app/core/security.py")
+        # Remove auth CLI
+        remove_file("app/cli/auth.py")
         # Remove auth-related tests if they exist
         remove_file("tests/api/test_auth_endpoints.py")
         remove_file("tests/services/test_auth_service.py")

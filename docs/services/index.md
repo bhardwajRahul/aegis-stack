@@ -45,9 +45,9 @@ Services are chosen during project creation and automatically include their requ
 # Basic API project (no services)
 aegis init my-api
 
-# Interactive mode - services auto-add their required components
-aegis init user-app --services auth
-# Interactive mode: database component auto-added (backend+frontend always included)
+# Interactive mode - must explicitly specify required components
+aegis init user-app --services auth --components database
+# Required: must include database component that auth service needs
 
 # Non-interactive mode - must explicitly specify all components
 aegis init user-app --services auth --components database --no-interactive
@@ -220,14 +220,14 @@ Shows all available services by category with their dependencies:
 
 ### Create Project with Services
 ```bash
-# With specific services
-aegis init my-app --services auth
+# With specific services - must include required components
+aegis init my-app --services auth --components database
 
 # Interactive service selection
 aegis init my-app --interactive
 
 # Multiple services (future)
-aegis init full-app --services auth,ai
+aegis init full-app --services auth,ai --components database,worker
 ```
 
 ---

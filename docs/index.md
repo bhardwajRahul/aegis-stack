@@ -19,7 +19,7 @@ pip install aegis-stack
 aegis init my-api
 
 # Create with user authentication
-aegis init user-app --services auth
+aegis init user-app --services auth --components database
 
 # Create with background processing
 aegis init task-processor --components scheduler,worker
@@ -35,7 +35,7 @@ cd my-project && uv sync && source .venv/bin/activate && make server
 **"I know more than you."** - Got it. Here's what you can build with:
 
 ```bash
-aegis init my-project --services auth --components worker,scheduler
+aegis init my-project --services auth --components database,worker,scheduler
 ```
 
 Your stack. Your rules. No hand-holding.
