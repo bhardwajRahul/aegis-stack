@@ -8,16 +8,20 @@ login, token validation, and protected endpoint access.
 import pytest
 from app.core.security import create_access_token
 from app.models.user import UserCreate
-from app.services.auth.user_service import UserService
+from app.services.auth.user_service import AsyncUserService, UserService
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 class TestAuthEndpoints:
     """Test auth API endpoints."""
 
-    def test_register_new_user(self, client_with_db: TestClient, db_session: Session):
+    @pytest.mark.asyncio
+    async def test_register_new_user(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
         """Test user registration with valid data."""
         user_data = {
             "email": "test@example.com",
@@ -25,7 +29,7 @@ class TestAuthEndpoints:
             "password": "testpassword123"
         }
 
-        response = client_with_db.post("/api/v1/auth/register", json=user_data)
+        response = async_client_with_db.post("/api/v1/auth/register", json=user_data)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -38,18 +42,19 @@ class TestAuthEndpoints:
         assert "password" not in data
         assert "hashed_password" not in data
 
-    def test_register_duplicate_email(
-        self, client_with_db: TestClient, db_session: Session
+    @pytest.mark.asyncio
+    async def test_register_duplicate_email(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
     ):
         """Test registration with already existing email."""
         # Create a user first
-        user_service = UserService(db_session)
+        user_service = AsyncUserService(async_db_session)
         existing_user = UserCreate(
             email="existing@example.com",
             full_name="Existing User",
             password="password123"
         )
-        user_service.create_user(existing_user)
+        await user_service.create_user(existing_user)
 
         # Try to register with same email
         duplicate_user_data = {
@@ -58,36 +63,40 @@ class TestAuthEndpoints:
             "password": "differentpassword"
         }
 
-        response = client_with_db.post(
+        response = async_client_with_db.post(
             "/api/v1/auth/register", json=duplicate_user_data
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "already registered" in response.json()["detail"].lower()
 
-    def test_register_invalid_data(self, client_with_db: TestClient):
+    @pytest.mark.asyncio
+    async def test_register_invalid_data(self, async_client_with_db: TestClient):
         """Test registration with invalid data."""
         invalid_user_data = {
             "email": "not-an-email",  # Invalid email format
             "password": "123"  # Too short
         }
 
-        response = client_with_db.post("/api/v1/auth/register", json=invalid_user_data)
+        response = async_client_with_db.post(
+            "/api/v1/auth/register", json=invalid_user_data
+        )
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
-    def test_login_valid_credentials(
-        self, client_with_db: TestClient, db_session: Session
+    @pytest.mark.asyncio
+    async def test_login_valid_credentials(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
     ):
         """Test login with valid credentials."""
         # Create a user first
-        user_service = UserService(db_session)
+        user_service = AsyncUserService(async_db_session)
         user_data = UserCreate(
             email="login@example.com",
             full_name="Login User",
             password="loginpassword123"
         )
-        user_service.create_user(user_data)
+        await user_service.create_user(user_data)
 
         # Login with valid credentials
         login_data = {
@@ -95,7 +104,7 @@ class TestAuthEndpoints:
             "password": "loginpassword123"
         }
 
-        response = client_with_db.post("/api/v1/auth/token", data=login_data)
+        response = async_client_with_db.post("/api/v1/auth/token", data=login_data)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -103,30 +112,32 @@ class TestAuthEndpoints:
         assert data["token_type"] == "bearer"
         assert len(data["access_token"]) > 0
 
-    def test_login_invalid_email(self, client_with_db: TestClient):
+    @pytest.mark.asyncio
+    async def test_login_invalid_email(self, async_client_with_db: TestClient):
         """Test login with non-existent email."""
         login_data = {
             "username": "nonexistent@example.com",
             "password": "somepassword"
         }
 
-        response = client_with_db.post("/api/v1/auth/token", data=login_data)
+        response = async_client_with_db.post("/api/v1/auth/token", data=login_data)
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         assert "incorrect" in response.json()["detail"].lower()
 
-    def test_login_invalid_password(
-        self, client_with_db: TestClient, db_session: Session
+    @pytest.mark.asyncio
+    async def test_login_invalid_password(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
     ):
         """Test login with wrong password."""
         # Create a user first
-        user_service = UserService(db_session)
+        user_service = AsyncUserService(async_db_session)
         user_data = UserCreate(
             email="wrongpass@example.com",
             full_name="Wrong Pass User",
             password="correctpassword"
         )
-        user_service.create_user(user_data)
+        await user_service.create_user(user_data)
 
         # Login with wrong password
         login_data = {
@@ -134,29 +145,30 @@ class TestAuthEndpoints:
             "password": "wrongpassword"
         }
 
-        response = client_with_db.post("/api/v1/auth/token", data=login_data)
+        response = async_client_with_db.post("/api/v1/auth/token", data=login_data)
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         assert "incorrect" in response.json()["detail"].lower()
 
-    def test_get_current_user_valid_token(
-        self, client_with_db: TestClient, db_session: Session
+    @pytest.mark.asyncio
+    async def test_get_current_user_valid_token(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
     ):
         """Test getting current user with valid token."""
         # Create a user first
-        user_service = UserService(db_session)
+        user_service = AsyncUserService(async_db_session)
         user_data = UserCreate(
             email="currentuser@example.com",
             full_name="Current User",
             password="password123"
         )
-        created_user = user_service.create_user(user_data)
+        created_user = await user_service.create_user(user_data)
 
         # Create a valid token
         token = create_access_token(data={"sub": created_user.email})
 
         # Get current user
-        response = client_with_db.get(
+        response = async_client_with_db.get(
             "/api/v1/auth/me",
             headers={"Authorization": f"Bearer {token}"}
         )
@@ -167,33 +179,38 @@ class TestAuthEndpoints:
         assert data["full_name"] == created_user.full_name
         assert data["id"] == created_user.id
 
-    def test_get_current_user_invalid_token(self, client_with_db: TestClient):
+    @pytest.mark.asyncio
+    async def test_get_current_user_invalid_token(
+        self, async_client_with_db: TestClient
+    ):
         """Test getting current user with invalid token."""
-        response = client_with_db.get(
+        response = async_client_with_db.get(
             "/api/v1/auth/me",
             headers={"Authorization": "Bearer invalid_token"}
         )
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_get_current_user_no_token(self, client_with_db: TestClient):
+    @pytest.mark.asyncio
+    async def test_get_current_user_no_token(self, async_client_with_db: TestClient):
         """Test getting current user without token."""
-        response = client_with_db.get("/api/v1/auth/me")
+        response = async_client_with_db.get("/api/v1/auth/me")
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_get_current_user_expired_token(
-        self, client_with_db: TestClient, db_session: Session
+    @pytest.mark.asyncio
+    async def test_get_current_user_expired_token(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
     ):
         """Test getting current user with expired token."""
         # Create a user first
-        user_service = UserService(db_session)
+        user_service = AsyncUserService(async_db_session)
         user_data = UserCreate(
             email="expiredtoken@example.com",
             full_name="Expired Token User",
             password="password123"
         )
-        created_user = user_service.create_user(user_data)
+        created_user = await user_service.create_user(user_data)
 
         # Create an expired token (negative expiry)
         from datetime import timedelta
@@ -203,7 +220,7 @@ class TestAuthEndpoints:
         )
 
         # Try to get current user with expired token
-        response = client_with_db.get(
+        response = async_client_with_db.get(
             "/api/v1/auth/me",
             headers={"Authorization": f"Bearer {expired_token}"}
         )
@@ -214,7 +231,10 @@ class TestAuthEndpoints:
 class TestAuthIntegration:
     """Integration tests for auth flow."""
 
-    def test_full_auth_flow(self, client_with_db: TestClient, db_session: Session):
+    @pytest.mark.asyncio
+    async def test_full_auth_flow(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
         """Test complete auth flow: register -> login -> protected endpoint."""
         # Step 1: Register new user
         user_data = {
@@ -223,7 +243,9 @@ class TestAuthIntegration:
             "password": "fullflowpassword123"
         }
 
-        register_response = client_with_db.post("/api/v1/auth/register", json=user_data)
+        register_response = async_client_with_db.post(
+            "/api/v1/auth/register", json=user_data
+        )
         assert register_response.status_code == status.HTTP_200_OK
 
         # Step 2: Login with credentials
@@ -232,13 +254,15 @@ class TestAuthIntegration:
             "password": user_data["password"]
         }
 
-        login_response = client_with_db.post("/api/v1/auth/token", data=login_data)
+        login_response = async_client_with_db.post(
+            "/api/v1/auth/token", data=login_data
+        )
         assert login_response.status_code == status.HTTP_200_OK
 
         token = login_response.json()["access_token"]
 
         # Step 3: Access protected endpoint
-        me_response = client_with_db.get(
+        me_response = async_client_with_db.get(
             "/api/v1/auth/me",
             headers={"Authorization": f"Bearer {token}"}
         )
@@ -248,8 +272,9 @@ class TestAuthIntegration:
         assert user_info["email"] == user_data["email"]
         assert user_info["full_name"] == user_data["full_name"]
 
-    def test_user_persistence_across_requests(
-        self, client_with_db: TestClient, db_session: Session
+    @pytest.mark.asyncio
+    async def test_user_persistence_across_requests(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
     ):
         """Test that users are properly persisted in database."""
         # Register user
@@ -259,7 +284,7 @@ class TestAuthIntegration:
             "password": "persistentpassword"
         }
 
-        client_with_db.post("/api/v1/auth/register", json=user_data)
+        async_client_with_db.post("/api/v1/auth/register", json=user_data)
 
         # Login in separate request
         login_data = {
@@ -267,12 +292,14 @@ class TestAuthIntegration:
             "password": user_data["password"]
         }
 
-        login_response = client_with_db.post("/api/v1/auth/token", data=login_data)
+        login_response = async_client_with_db.post(
+            "/api/v1/auth/token", data=login_data
+        )
         assert login_response.status_code == status.HTTP_200_OK
 
         # Verify user exists in database
-        user_service = UserService(db_session)
-        db_user = user_service.get_user_by_email(user_data["email"])
+        user_service = AsyncUserService(async_db_session)
+        db_user = await user_service.get_user_by_email(user_data["email"])
 
         assert db_user is not None
         assert db_user.email == user_data["email"]
