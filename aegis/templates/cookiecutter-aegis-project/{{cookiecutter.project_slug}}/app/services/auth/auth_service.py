@@ -5,7 +5,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.security import verify_token
 from app.models.user import User
-from app.services.auth.user_service import AsyncUserService
+from app.services.auth.user_service import UserService
 
 
 async def get_current_user_from_token(token: str, db: AsyncSession) -> User:
@@ -27,7 +27,7 @@ async def get_current_user_from_token(token: str, db: AsyncSession) -> User:
         raise credentials_exception
 
     # Get user from database
-    user_service = AsyncUserService(db)
+    user_service = UserService(db)
     user = await user_service.get_user_by_email(email)
     if user is None:
         raise credentials_exception

@@ -20,8 +20,8 @@ The interactive CLI guides you through component choices and explains integratio
 # Basic web application (FastAPI + Flet)
 aegis init my-project
 
-# Add user authentication (auto-includes database)
-aegis init user-app --services auth
+# Add user authentication (requires database)
+aegis init user-app --services auth --components database
 
 # Add background task scheduling
 aegis init scheduled-app --components scheduler
@@ -33,7 +33,7 @@ aegis init persistent-jobs --components scheduler,database
 aegis init task-processor --components worker
 
 # Business app with auth and background processing
-aegis init business-app --services auth --components worker,scheduler
+aegis init business-app --services auth --components database,worker,scheduler
 ```
 
 ## Component Architecture

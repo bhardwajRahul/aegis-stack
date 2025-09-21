@@ -4,6 +4,7 @@ Authentication CLI commands.
 Command-line interface for auth service management tasks.
 """
 
+import asyncio
 import secrets
 import string
 from typing import TYPE_CHECKING
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
 
 import typer
 
-from app.core.db import db_session
+from app.core.db import get_async_session
 from app.models.user import UserCreate
 from app.services.auth.user_service import UserService
 
@@ -26,12 +27,14 @@ def generate_password(length: int = 12) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
-def find_next_available_email(
+async def find_next_available_email(
     user_service: UserService, prefix: str = "test", domain: str = "example.com"
 ) -> str:
     """Find the next available email with auto-increment."""
     # Get existing emails with this prefix
-    existing_emails = user_service.find_existing_emails_with_prefix(prefix, domain)
+    existing_emails = await user_service.find_existing_emails_with_prefix(
+        prefix, domain
+    )
 
     if not existing_emails:
         # No existing emails, start with prefix@domain
@@ -82,7 +85,17 @@ def create_test_user(
     ),
 ) -> None:
     """Create a test user for development and testing."""
+    asyncio.run(_create_test_user(email, password, full_name, prefix, domain))
 
+
+async def _create_test_user(
+    email: str | None,
+    password: str | None,
+    full_name: str | None,
+    prefix: str,
+    domain: str,
+) -> None:
+    """Async implementation of create_test_user."""
     # Generate password if not provided
     if password is None:
         password = generate_password()
@@ -91,16 +104,16 @@ def create_test_user(
         generated_password = False
 
     try:
-        with db_session() as session:
+        async with get_async_session() as session:
             user_service = UserService(session)
 
             # Auto-generate email if not provided
             if email is None:
-                email = find_next_available_email(user_service, prefix, domain)
+                email = await find_next_available_email(user_service, prefix, domain)
                 typer.echo(f"📧 Auto-generated email: {email} (next in sequence)")
 
             # Check if user already exists
-            existing_user = user_service.get_user_by_email(email)
+            existing_user = await user_service.get_user_by_email(email)
             if existing_user:
                 typer.echo(f"❌ User with email '{email}' already exists", err=True)
                 raise typer.Exit(1)
@@ -113,7 +126,7 @@ def create_test_user(
             )
 
             # Create the user
-            user = user_service.create_user(user_data)
+            user = await user_service.create_user(user_data)
 
             # Display success message
             typer.echo("✅ Test user created successfully!")
@@ -145,7 +158,13 @@ def create_test_users(
     ),
 ) -> None:
     """Create multiple test users for development and testing."""
+    asyncio.run(_create_test_users(count, prefix, domain, password))
 
+
+async def _create_test_users(
+    count: int, prefix: str, domain: str, password: str | None
+) -> None:
+    """Async implementation of create_test_users."""
     # Generate password if not provided
     if password is None:
         password = generate_password()
@@ -158,7 +177,7 @@ def create_test_users(
         raise typer.Exit(1)
 
     try:
-        with db_session() as session:
+        async with get_async_session() as session:
             user_service = UserService(session)
             created_users = []
 
@@ -167,7 +186,7 @@ def create_test_users(
 
             for i in range(count):
                 # Find next available email
-                email = find_next_available_email(user_service, prefix, domain)
+                email = await find_next_available_email(user_service, prefix, domain)
 
                 # Create user data
                 user_data = UserCreate(
@@ -177,7 +196,7 @@ def create_test_users(
                 )
 
                 # Create the user
-                user = user_service.create_user(user_data)
+                user = await user_service.create_user(user_data)
                 created_users.append(user)
 
                 typer.echo(f"✅ Created: {user.email} (ID: {user.id})")
@@ -200,10 +219,15 @@ def create_test_users(
 @app.command()
 def list_users() -> None:
     """List all users in the system."""
+    asyncio.run(_list_users())
+
+
+async def _list_users() -> None:
+    """Async implementation of list_users."""
     try:
-        with db_session() as session:
+        async with get_async_session() as session:
             user_service = UserService(session)
-            users = user_service.list_users()
+            users = await user_service.list_users()
 
             if not users:
                 typer.echo("No users found.")

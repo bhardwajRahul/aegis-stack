@@ -9,7 +9,7 @@ import pytest
 from app.core.security import create_access_token, verify_password, verify_token
 from app.models.user import User, UserCreate
 from app.services.auth.auth_service import get_current_user_from_token
-from app.services.auth.user_service import AsyncUserService, UserService
+from app.services.auth.user_service import UserService
 from fastapi import HTTPException
 from sqlmodel import Session, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -18,9 +18,10 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 class TestAuthServiceIntegration:
     """Test auth service integration with database and security."""
 
-    def test_user_creation_and_retrieval(self, db_session: Session):
+    @pytest.mark.asyncio
+    async def test_user_creation_and_retrieval(self, async_db_session: AsyncSession):
         """Test complete user creation and retrieval flow."""
-        user_service = UserService(db_session)
+        user_service = UserService(async_db_session)
 
         # Create user data
         user_data = UserCreate(
@@ -30,7 +31,7 @@ class TestAuthServiceIntegration:
         )
 
         # Create user
-        created_user = user_service.create_user(user_data)
+        created_user = await user_service.create_user(user_data)
 
         # Verify user was created correctly
         assert created_user.id is not None
@@ -42,7 +43,7 @@ class TestAuthServiceIntegration:
         assert verify_password(user_data.password, created_user.hashed_password)
 
         # Retrieve user from database
-        retrieved_user = user_service.get_user_by_email(user_data.email)
+        retrieved_user = await user_service.get_user_by_email(user_data.email)
         assert retrieved_user is not None
         assert retrieved_user.id == created_user.id
         assert retrieved_user.email == created_user.email
@@ -51,7 +52,7 @@ class TestAuthServiceIntegration:
     @pytest.mark.asyncio
     async def test_user_authentication_flow(self, async_db_session: AsyncSession):
         """Test complete user authentication flow."""
-        user_service = AsyncUserService(async_db_session)
+        user_service = UserService(async_db_session)
 
         # Create user
         user_data = UserCreate(
@@ -86,9 +87,10 @@ class TestAuthServiceIntegration:
         assert token_user.id == created_user.id
         assert token_user.email == created_user.email
 
-    def test_multiple_users_isolation(self, db_session: Session):
+    @pytest.mark.asyncio
+    async def test_multiple_users_isolation(self, async_db_session: AsyncSession):
         """Test that multiple users are properly isolated."""
-        user_service = UserService(db_session)
+        user_service = UserService(async_db_session)
 
         # Create multiple users
         users_data = [
@@ -145,7 +147,7 @@ class TestAuthServiceIntegration:
     @pytest.mark.asyncio
     async def test_user_deactivation_flow(self, async_db_session: AsyncSession):
         """Test user deactivation prevents authentication."""
-        user_service = AsyncUserService(async_db_session)
+        user_service = UserService(async_db_session)
 
         # Create active user
         user_data = UserCreate(
@@ -362,7 +364,7 @@ class TestAuthMigrationIntegration:
     @pytest.mark.asyncio
     async def test_auth_service_works_end_to_end(self, async_db_session: AsyncSession):
         """Test complete auth flow works without database errors."""
-        user_service = AsyncUserService(async_db_session)
+        user_service = UserService(async_db_session)
 
         # Complete flow: create user -> login -> authenticate
         user_data = UserCreate(
