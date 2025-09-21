@@ -107,12 +107,12 @@ class TestAuthServiceIntegration:
 
         created_users = []
         for user_data in users_data:
-            created_user = user_service.create_user(user_data)
+            created_user = await user_service.create_user(user_data)
             created_users.append(created_user)
 
         # Verify each user can be retrieved independently
         for i, user_data in enumerate(users_data):
-            retrieved_user = user_service.get_user_by_email(user_data.email)
+            retrieved_user = await user_service.get_user_by_email(user_data.email)
             assert retrieved_user is not None
             assert retrieved_user.id == created_users[i].id
             assert retrieved_user.email == user_data.email
@@ -173,9 +173,10 @@ class TestAuthServiceIntegration:
             await get_current_user_from_token(token, async_db_session)
         assert exc_info.value.status_code == 401
 
-    def test_email_uniqueness_constraint(self, db_session: Session):
+    @pytest.mark.asyncio
+    async def test_email_uniqueness_constraint(self, async_db_session: AsyncSession):
         """Test that email uniqueness is enforced."""
-        user_service = UserService(db_session)
+        user_service = UserService(async_db_session)
 
         # Create first user
         user_data1 = UserCreate(
@@ -183,7 +184,7 @@ class TestAuthServiceIntegration:
             full_name="First User",
             password="password1"
         )
-        created_user1 = user_service.create_user(user_data1)
+        created_user1 = await user_service.create_user(user_data1)
         assert created_user1.id is not None
 
         # Try to create second user with same email
@@ -195,16 +196,17 @@ class TestAuthServiceIntegration:
 
         # This should raise an exception or return None depending on implementation
         try:
-            created_user2 = user_service.create_user(user_data2)
+            created_user2 = await user_service.create_user(user_data2)
             # If it doesn't raise an exception, it should return None
             assert created_user2 is None
         except Exception:
             # Exception is acceptable for duplicate email
             pass
 
-    def test_password_hashing_security(self, db_session: Session):
+    @pytest.mark.asyncio
+    async def test_password_hashing_security(self, async_db_session: AsyncSession):
         """Test password hashing security properties."""
-        user_service = UserService(db_session)
+        user_service = UserService(async_db_session)
 
         password = "securepassword123"
         user_data = UserCreate(
@@ -213,10 +215,13 @@ class TestAuthServiceIntegration:
             password=password
         )
 
-        created_user = user_service.create_user(user_data)
+        created_user = await user_service.create_user(user_data)
+
+        # Store hash before session expires
+        hash1 = created_user.hashed_password
 
         # Verify password is not stored in plain text
-        assert created_user.hashed_password != password
+        assert hash1 != password
 
         # Verify password hash is different each time (salt)
         user_data2 = UserCreate(
@@ -224,21 +229,25 @@ class TestAuthServiceIntegration:
             full_name="Security User 2",
             password=password  # Same password
         )
-        created_user2 = user_service.create_user(user_data2)
+        created_user2 = await user_service.create_user(user_data2)
+
+        # Store hash before session expires
+        hash2 = created_user2.hashed_password
 
         # Hashes should be different due to salt
-        assert created_user.hashed_password != created_user2.hashed_password
+        assert hash1 != hash2
 
         # But both should verify correctly
-        assert verify_password(password, created_user.hashed_password)
-        assert verify_password(password, created_user2.hashed_password)
+        assert verify_password(password, hash1)
+        assert verify_password(password, hash2)
 
         # Wrong password should not verify
-        assert not verify_password("wrongpassword", created_user.hashed_password)
+        assert not verify_password("wrongpassword", hash1)
 
-    def test_database_transaction_rollback(self, db_session: Session):
+    @pytest.mark.asyncio
+    async def test_database_transaction_rollback(self, async_db_session: AsyncSession):
         """Test that database operations work correctly with transactions."""
-        user_service = UserService(db_session)
+        user_service = UserService(async_db_session)
 
         # Create user
         user_data = UserCreate(
@@ -246,10 +255,10 @@ class TestAuthServiceIntegration:
             full_name="Transaction User",
             password="transactionpassword"
         )
-        user_service.create_user(user_data)
+        await user_service.create_user(user_data)
 
         # Verify user exists before committing
-        retrieved_user = user_service.get_user_by_email(user_data.email)
+        retrieved_user = await user_service.get_user_by_email(user_data.email)
         assert retrieved_user is not None
         assert retrieved_user.email == user_data.email
 
@@ -260,22 +269,28 @@ class TestAuthServiceIntegration:
 class TestAuthMigrationIntegration:
     """Test auth service migration and database initialization."""
 
-    def test_user_table_exists_after_migrations(self, db_session: Session):
+    @pytest.mark.asyncio
+    async def test_user_table_exists_after_migrations(
+        self, async_db_session: AsyncSession
+    ):
         """Test that user table exists and has correct structure after migrations."""
         # This test verifies migrations ran successfully
         # Try to query user table - should not raise "no such table" error
         stmt = select(User)
         try:
-            result = db_session.exec(stmt)
+            result = await async_db_session.exec(stmt)
             users = result.all()
             # If we get here, table exists (even if empty)
             assert isinstance(users, list)
         except Exception as e:
             pytest.fail(f"User table does not exist or has wrong structure: {e}")
 
-    def test_user_table_has_required_columns(self, db_session: Session):
+    @pytest.mark.asyncio
+    async def test_user_table_has_required_columns(
+        self, async_db_session: AsyncSession
+    ):
         """Test that user table has all required columns from migration."""
-        user_service = UserService(db_session)
+        user_service = UserService(async_db_session)
 
         # Create a user to test all columns are available
         user_data = UserCreate(
@@ -285,7 +300,7 @@ class TestAuthMigrationIntegration:
         )
 
         try:
-            created_user = user_service.create_user(user_data)
+            created_user = await user_service.create_user(user_data)
 
             # Verify all expected columns are accessible
             assert created_user.id is not None
@@ -300,9 +315,12 @@ class TestAuthMigrationIntegration:
         except Exception as e:
             pytest.fail(f"User table missing required columns: {e}")
 
-    def test_email_index_exists_and_enforces_uniqueness(self, db_session: Session):
+    @pytest.mark.asyncio
+    async def test_email_index_exists_and_enforces_uniqueness(
+        self, async_db_session: AsyncSession
+    ):
         """Test that email index from migration enforces uniqueness."""
-        user_service = UserService(db_session)
+        user_service = UserService(async_db_session)
 
         # Create first user
         user_data = UserCreate(
@@ -311,7 +329,7 @@ class TestAuthMigrationIntegration:
             password="indextest123"
         )
 
-        created_user = user_service.create_user(user_data)
+        created_user = await user_service.create_user(user_data)
         assert created_user is not None
 
         # Try to create user with same email
@@ -323,16 +341,19 @@ class TestAuthMigrationIntegration:
 
         # Should either return None or raise exception due to unique constraint
         try:
-            duplicate_user = user_service.create_user(duplicate_user_data)
+            duplicate_user = await user_service.create_user(duplicate_user_data)
             # If no exception, should return None
             assert duplicate_user is None
         except Exception:
             # Exception is expected for unique constraint violation
             pass
 
-    def test_auth_endpoints_work_without_table_errors(self, db_session: Session):
+    @pytest.mark.asyncio
+    async def test_auth_endpoints_work_without_table_errors(
+        self, async_db_session: AsyncSession
+    ):
         """Test that auth operations don't produce 'no such table' errors."""
-        user_service = UserService(db_session)
+        user_service = UserService(async_db_session)
 
         # Test user creation (tests INSERT)
         user_data = UserCreate(
@@ -343,11 +364,11 @@ class TestAuthMigrationIntegration:
 
         try:
             # Should not raise "no such table: user" error
-            created_user = user_service.create_user(user_data)
+            created_user = await user_service.create_user(user_data)
             assert created_user is not None
 
             # Test user retrieval (tests SELECT)
-            retrieved_user = user_service.get_user_by_email(user_data.email)
+            retrieved_user = await user_service.get_user_by_email(user_data.email)
             assert retrieved_user is not None
             assert retrieved_user.email == user_data.email
 
@@ -404,7 +425,10 @@ class TestAuthMigrationIntegration:
 class TestAuthDatabaseInitialization:
     """Test auth database initialization and setup."""
 
-    def test_database_session_works_with_auth_models(self, db_session: Session):
+    @pytest.mark.asyncio
+    async def test_database_session_works_with_auth_models(
+        self, async_db_session: AsyncSession
+    ):
         """Test that database session properly handles auth models."""
         # Verify we can create, read, update, delete with User model
         user_data = UserCreate(
@@ -413,43 +437,44 @@ class TestAuthDatabaseInitialization:
             password="crudtest123"
         )
 
-        user_service = UserService(db_session)
+        user_service = UserService(async_db_session)
 
         # CREATE
-        created_user = user_service.create_user(user_data)
+        created_user = await user_service.create_user(user_data)
         assert created_user is not None
         original_id = created_user.id
 
         # READ
-        read_user = user_service.get_user_by_email(user_data.email)
+        read_user = await user_service.get_user_by_email(user_data.email)
         assert read_user is not None
         assert read_user.id == original_id
 
         # UPDATE (via direct SQLModel operations)
         stmt = select(User).where(User.id == original_id)
-        result = db_session.exec(stmt)
+        result = await async_db_session.exec(stmt)
         user_to_update = result.first()
         assert user_to_update is not None
 
         user_to_update.full_name = "Updated Name"
-        db_session.add(user_to_update)
-        db_session.commit()
+        async_db_session.add(user_to_update)
+        await async_db_session.commit()
 
         # Verify update
-        updated_user = user_service.get_user_by_email(user_data.email)
+        updated_user = await user_service.get_user_by_email(user_data.email)
         assert updated_user.full_name == "Updated Name"
 
         # DELETE (via direct SQLModel operations)
-        db_session.delete(updated_user)
-        db_session.commit()
+        await async_db_session.delete(updated_user)
+        await async_db_session.commit()
 
         # Verify deletion
-        deleted_user = user_service.get_user_by_email(user_data.email)
+        deleted_user = await user_service.get_user_by_email(user_data.email)
         assert deleted_user is None
 
-    def test_database_connection_pool_works(self, db_session: Session):
+    @pytest.mark.asyncio
+    async def test_database_connection_pool_works(self, async_db_session: AsyncSession):
         """Test that database connection works reliably for auth operations."""
-        user_service = UserService(db_session)
+        user_service = UserService(async_db_session)
 
         # Perform multiple operations to test connection stability
         users_created = []
@@ -460,18 +485,21 @@ class TestAuthDatabaseInitialization:
                 password=f"pooltest{i}123"
             )
 
-            created_user = user_service.create_user(user_data)
+            created_user = await user_service.create_user(user_data)
             assert created_user is not None
             users_created.append(created_user)
 
         # Verify all users can be retrieved
         for i, user in enumerate(users_created):
             email = f"pool_test_{i}@example.com"
-            retrieved_user = user_service.get_user_by_email(email)
+            retrieved_user = await user_service.get_user_by_email(email)
             assert retrieved_user is not None
             assert retrieved_user.id == user.id
 
-    def test_migration_schema_matches_model_definitions(self, db_session: Session):
+    @pytest.mark.asyncio
+    async def test_migration_schema_matches_model_definitions(
+        self, async_db_session: AsyncSession
+    ):
         """Test that migration schema matches current User model."""
         # Create user to test all model fields work with database schema
         user_data = UserCreate(
@@ -480,8 +508,8 @@ class TestAuthDatabaseInitialization:
             password="schematest123"
         )
 
-        user_service = UserService(db_session)
-        created_user = user_service.create_user(user_data)
+        user_service = UserService(async_db_session)
+        created_user = await user_service.create_user(user_data)
 
         # Test that all User model fields are supported by current schema
         # This catches cases where model was updated but migrations weren't

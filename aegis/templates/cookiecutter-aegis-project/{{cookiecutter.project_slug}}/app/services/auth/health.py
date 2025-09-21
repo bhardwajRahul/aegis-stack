@@ -71,17 +71,64 @@ async def check_auth_service_health() -> ComponentStatus:
             status = ComponentStatusType.HEALTHY
             message = "Auth service configured and ready"
 
+        # Get user count for display (limited to avoid performance issues)
+        user_count = 0
+        user_count_display = "0"
+        if database_available:
+            try:
+                from sqlmodel import select
+
+                from app.core.db import db_session
+                from app.models.user import User
+
+                with db_session() as session:
+                    # Count up to 101 users to determine if we should show "100+"
+                    statement = select(User).limit(101)
+                    result = session.exec(statement)
+                    users = list(result.all())
+                    user_count = len(users)
+
+                    user_count_display = "100+" if user_count > 100 else str(user_count)
+            except Exception:
+                # If user counting fails, leave as 0
+                pass
+
+        # Format token expiry for display
+        token_expiry_display = "30 min"  # Default
+        if access_token_expire:
+            if access_token_expire >= 60:
+                hours = access_token_expire // 60
+                token_expiry_display = "1 hour" if hours == 1 else f"{hours} hours"
+            else:
+                token_expiry_display = f"{access_token_expire} min"
+
+        # Determine security level based on configuration
+        security_level = "standard"
+        if jwt_errors:
+            security_level = "basic"
+        elif (
+            hasattr(settings, "SECRET_KEY")
+            and settings.SECRET_KEY
+            and len(settings.SECRET_KEY) >= 64
+            and algorithm in ["RS256", "RS384", "RS512"]
+        ):
+            security_level = "high"
+
         # Collect metadata
         metadata = {
             "service_type": "auth",
             "jwt_algorithm": algorithm,
             "token_expiry_minutes": access_token_expire,
+            "token_expiry_display": token_expiry_display,
             "database_available": database_available,
             "secret_key_configured": hasattr(settings, "SECRET_KEY")
             and bool(settings.SECRET_KEY),
             "secret_key_length": len(getattr(settings, "SECRET_KEY", ""))
             if hasattr(settings, "SECRET_KEY")
             else 0,
+            "user_count": user_count,
+            "user_count_display": user_count_display,
+            "security_level": security_level,
         }
 
         # Add configuration issues to metadata if any
