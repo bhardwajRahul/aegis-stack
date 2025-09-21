@@ -521,3 +521,177 @@ class TestServiceComponentCompatibilityValidation:
         assert result.returncode == 1
         assert "💡 Suggestion: Add missing components" in result.stderr
         assert "remove --components to let services auto-add" in result.stderr
+
+
+class TestAuthServiceMigrationIntegration:
+    """Test auth service migration-specific CLI behavior."""
+
+    def test_auth_service_cli_output_mentions_migrations(self):
+        """Test that CLI output for auth service mentions migration infrastructure."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = run_aegis_command(
+                "init",
+                "test-auth-migration-mention",
+                "--services",
+                "auth",
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                temp_dir,
+            )
+
+            assert result.returncode == 0
+            output = result.stdout
+
+            # Should show that migrations are being included
+            assert "🔧 Services: auth" in output
+            assert "📦 Infrastructure: database" in output
+
+            # Check that migration infrastructure is being processed (appears in template processing)
+            # Look for migration-related processing in the output
+            assert "alembic.ini" in output or "001_initial_auth.py" in output
+
+    def test_auth_service_includes_database_automatically(self):
+        """Test that auth service automatically includes database and shows clear messaging."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = run_aegis_command(
+                "init",
+                "test-auth-auto-db",
+                "--services",
+                "auth",
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                temp_dir,
+            )
+
+            assert result.returncode == 0
+            output = result.stdout
+
+            # Should clearly show service requires database
+            assert "📦 Services require components: backend, database" in output
+
+            # Should show database in infrastructure
+            assert "📦 Infrastructure: database" in output
+
+            # Should show auth in services
+            assert "🔧 Services: auth" in output
+
+            # Check that actual project has migration infrastructure
+            project_path = Path(temp_dir) / "test-auth-auto-db"
+            assert (project_path / "alembic" / "alembic.ini").exists()
+
+    def test_database_only_excludes_migration_infrastructure(self):
+        """Test that database component alone does not include migration infrastructure."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = run_aegis_command(
+                "init",
+                "test-db-only-no-migration",
+                "--components",
+                "database",
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                temp_dir,
+            )
+
+            assert result.returncode == 0
+            output = result.stdout
+
+            # Should show database component
+            assert "📦 Infrastructure: database" in output
+
+            # Should NOT mention services (auth)
+            assert "🔧 Services:" not in output
+
+            # Check that project has database but no migrations
+            project_path = Path(temp_dir) / "test-db-only-no-migration"
+            assert (project_path / "app" / "core" / "db.py").exists()
+            assert not (project_path / "alembic").exists()
+
+    def test_services_command_shows_auth_requirements_clearly(self):
+        """Test that 'aegis services' command clearly shows auth requirements."""
+        result = run_aegis_command("services")
+
+        assert result.returncode == 0
+        output = result.stdout
+
+        # Should show auth service with clear requirements
+        assert "🔐 Authentication Services" in output
+        assert "auth" in output
+        assert "Requires components: backend, database" in output
+
+        # Should provide usage guidance
+        assert "💡 Use 'aegis init PROJECT_NAME --services auth'" in output
+
+    def test_auth_service_file_generation_completeness(self):
+        """Test that auth service generates all expected migration and auth files."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = run_aegis_command(
+                "init",
+                "test-auth-completeness",
+                "--services",
+                "auth",
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                temp_dir,
+            )
+
+            assert result.returncode == 0
+            output = result.stdout
+            project_path = Path(temp_dir) / "test-auth-completeness"
+
+            # Check CLI shows file generation
+            files_section = output.split("📄 Component Files:")[1].split("\n\n")[0]
+
+            # Should include auth-related files
+            assert "app/components/backend/api/auth/" in files_section
+            assert "app/models/user.py" in files_section
+            assert "app/core/security.py" in files_section
+
+            # Should include database files
+            assert "app/core/db.py" in files_section
+
+            # Verify actual files exist
+            assert (project_path / "app" / "models" / "user.py").exists()
+            assert (project_path / "app" / "core" / "security.py").exists()
+            assert (project_path / "app" / "core" / "db.py").exists()
+            assert (
+                project_path / "alembic" / "versions" / "001_initial_auth.py"
+            ).exists()
+
+    def test_auth_service_dependency_chain_validation(self):
+        """Test that auth service dependency chain is properly validated and resolved."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = run_aegis_command(
+                "init",
+                "test-auth-dependencies",
+                "--services",
+                "auth",
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                temp_dir,
+            )
+
+            assert result.returncode == 0
+            output = result.stdout
+
+            # Should show proper dependency resolution
+            assert "📦 Services require components: backend, database" in output
+
+            # Should show Python dependencies
+            deps_section = output.split("📦 Dependencies to be installed:")[1].split(
+                "\n\n"
+            )[0]
+
+            # Auth-specific dependencies
+            assert "python-jose[cryptography]" in deps_section
+            assert "passlib[bcrypt]" in deps_section
+            assert "python-multipart" in deps_section
+
+            # Database dependencies (auto-included)
+            assert "sqlmodel" in deps_section
+            assert "sqlalchemy" in deps_section
+            assert "aiosqlite" in deps_section

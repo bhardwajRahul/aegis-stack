@@ -42,9 +42,21 @@ This project uses `uv` for dependency management and a `Makefile` for CLI develo
 - `make test-template-quick` - Quick template test without validation
 - `make test-template` - Full template test with validation
 - `make test-template-with-components` - Test template with scheduler component
+- `make test-template-auth` - **Test auth service template with comprehensive validation**
+- `make test-template-worker` - Test worker component template
+- `make test-template-database` - Test database component template
+- `make test-template-full` - Test template with all components
 - `make clean-test-projects` - Remove generated test projects
 
 **Template testing is critical** - always run `make test-template` after modifying templates to ensure generated projects work correctly.
+
+**For auth service development**: Use `make test-template-auth` to generate auth service project and run full validation including:
+- ✅ Auth service includes Alembic migration infrastructure
+- ✅ Database component auto-inclusion
+- ✅ Migration files generate correctly
+- ✅ All 52 auth service tests pass
+- ✅ CLI script installation and functionality
+- ✅ Linting, type checking, and quality checks
 
 ## CRITICAL: Template Development Workflow
 
