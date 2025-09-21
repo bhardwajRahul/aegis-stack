@@ -2,7 +2,7 @@
 Authentication Service Card
 
 Modern card component specifically designed for authentication service monitoring.
-Shows auth-specific metrics like token validation, user sessions, and security status.
+Shows auth-specific metrics with a clean, functional layout.
 """
 
 import flet as ft
@@ -11,9 +11,7 @@ from app.services.system.models import ComponentStatus
 
 from .card_utils import (
     create_hover_handler,
-    create_responsive_3_section_layout,
     create_standard_card_container,
-    create_stats_row,
     create_tech_badge,
     get_status_colors,
 )
@@ -21,14 +19,13 @@ from .card_utils import (
 
 class AuthCard:
     """
-    A visually stunning component card specifically for authentication service.
+    A clean authentication service card with real metrics.
 
     Features:
-    - Authentication-specific metrics and status
-    - Token validation health
-    - User session monitoring
-    - Security indicators
-    - Modern Material Design 3 styling
+    - Real authentication metrics from health checks
+    - Clean 2-column layout
+    - Highlighted metric containers
+    - Responsive design
     """
 
     def __init__(self, component_data: ComponentStatus):
@@ -36,131 +33,39 @@ class AuthCard:
         self.component_data = component_data
         self.metadata = component_data.metadata or {}
 
-    def _create_auth_metrics(self) -> ft.Column:
-        """Create authentication-specific metrics display."""
-        metrics_items = []
-
-        # Token validation status
-        token_status = self.metadata.get("token_validation", "unknown")
-        token_color = ft.Colors.GREEN if token_status == "healthy" else ft.Colors.ORANGE
-
-        metrics_items.append(
-            ft.Container(
-                content=ft.Row(
-                    [
-                        ft.Container(
-                            width=8,
-                            height=8,
-                            bgcolor=token_color,
-                            border_radius=4,
-                        ),
-                        ft.Column(
-                            [
-                                PrimaryText("Token Validation"),
-                                LabelText(token_status.title(), size=12),
-                            ],
-                            spacing=2,
-                            expand=True,
-                        ),
-                    ],
-                ),
-                padding=ft.padding.symmetric(vertical=8, horizontal=12),
-                bgcolor=ft.Colors.with_opacity(0.03, token_color),
-                border_radius=8,
-                border=ft.border.all(1, ft.Colors.with_opacity(0.1, token_color)),
-            )
-        )
-
-        # Session management
-        sessions_active = self.metadata.get("active_sessions", 0)
-        sessions_color = ft.Colors.BLUE
-
-        metrics_items.append(
-            ft.Container(
-                content=ft.Row(
-                    [
-                        ft.Container(
-                            width=8,
-                            height=8,
-                            bgcolor=sessions_color,
-                            border_radius=4,
-                        ),
-                        ft.Column(
-                            [
-                                PrimaryText("Active Sessions"),
-                                LabelText(str(sessions_active), size=12),
-                            ],
-                            spacing=2,
-                            expand=True,
-                        ),
-                    ],
-                ),
-                padding=ft.padding.symmetric(vertical=8, horizontal=12),
-                bgcolor=ft.Colors.with_opacity(0.03, sessions_color),
-                border_radius=8,
-                border=ft.border.all(1, ft.Colors.with_opacity(0.1, sessions_color)),
-            )
-        )
-
-        # Security features
-        security_status = self.metadata.get("security_features", "enabled")
-        security_color = (
-            ft.Colors.GREEN if security_status == "enabled" else ft.Colors.RED
-        )
-
-        metrics_items.append(
-            ft.Container(
-                content=ft.Row(
-                    [
-                        ft.Container(
-                            width=8,
-                            height=8,
-                            bgcolor=security_color,
-                            border_radius=4,
-                        ),
-                        ft.Column(
-                            [
-                                PrimaryText("Security"),
-                                LabelText(security_status.title(), size=12),
-                            ],
-                            spacing=2,
-                            expand=True,
-                        ),
-                    ],
-                ),
-                padding=ft.padding.symmetric(vertical=8, horizontal=12),
-                bgcolor=ft.Colors.with_opacity(0.03, security_color),
-                border_radius=8,
-                border=ft.border.all(1, ft.Colors.with_opacity(0.1, security_color)),
-            )
-        )
-
-        return ft.Column(metrics_items, spacing=8)
-
-    def _create_auth_overview(self) -> ft.Container:
-        """Create the authentication service overview section."""
-        # Auth-specific statistics
-        total_users = self.metadata.get("total_users", 0)
-        failed_logins = self.metadata.get("failed_logins_24h", 0)
-        token_expiry = self.metadata.get("avg_token_lifetime", "24h")
-
-        stats_rows = [
-            create_stats_row("Total Users", str(total_users)),
-            create_stats_row("Failed Logins", str(failed_logins)),
-            create_stats_row("Token Lifetime", str(token_expiry)),
-        ]
-
+    def _create_metric_container(
+        self, label: str, value: str, color: str = ft.Colors.BLUE
+    ) -> ft.Container:
+        """Create a properly sized metric container."""
         return ft.Container(
             content=ft.Column(
                 [
-                    PrimaryText("Authentication"),
-                    ft.Container(height=8),  # Spacing
-                    ft.Column(stats_rows, spacing=4),
-                    ft.Container(height=12),  # Spacing
-                    self._create_auth_metrics(),
-                ]
+                    LabelText(label),
+                    ft.Container(height=8),  # More spacing
+                    PrimaryText(value),
+                ],
+                spacing=0,
+                horizontal_alignment=ft.CrossAxisAlignment.START,
             ),
+            padding=ft.padding.all(16),  # More padding
+            bgcolor=ft.Colors.with_opacity(0.08, color),
+            border_radius=8,
+            border=ft.border.all(1, ft.Colors.with_opacity(0.15, color)),
+            height=80,  # Taller containers
             expand=True,
+        )
+
+    def _create_left_section(self) -> ft.Container:
+        """Create the left section with just the tech badge."""
+        return ft.Container(
+            content=ft.Column(
+                [
+                    self._create_technology_badge(),
+                ],
+                spacing=0,
+            ),
+            width=200,
+            padding=ft.padding.all(16),
         )
 
     def _create_technology_badge(self) -> ft.Container:
@@ -176,79 +81,82 @@ class AuthCard:
             primary_color=primary_color,
         )
 
-    def _create_stats_section(self) -> ft.Container:
-        """Create the right stats section with auth-specific metrics."""
+    def _create_metrics_section(self) -> ft.Container:
+        """Create the metrics section with a clean grid layout."""
+        # Get real data from metadata
+        user_count_display = self.metadata.get("user_count_display", "0")
         response_time = self.component_data.response_time_ms
-
-        stats_items = []
-
-        # Response time
-        if response_time is not None:
-            stats_items.append(
-                ft.Container(
-                    content=ft.Column(
-                        [
-                            LabelText("Response Time", size=12),
-                            PrimaryText(f"{response_time:.1f}ms"),
-                        ],
-                        spacing=4,
-                    ),
-                    padding=ft.padding.all(12),
-                    bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.BLUE),
-                    border_radius=8,
-                )
-            )
-
-        # Security level indicator
+        database_available = self.metadata.get("database_available", False)
+        jwt_algorithm = self.metadata.get("jwt_algorithm", "HS256")
+        token_expiry_display = self.metadata.get("token_expiry_display", "30 min")
         security_level = self.metadata.get("security_level", "standard")
+
+        # Color code security level
         security_color = {
             "high": ft.Colors.GREEN,
             "standard": ft.Colors.BLUE,
             "basic": ft.Colors.ORANGE,
         }.get(security_level, ft.Colors.GREY)
 
-        stats_items.append(
-            ft.Container(
-                content=ft.Column(
-                    [
-                        LabelText("Security Level", size=12),
-                        ft.Text(
-                            security_level.title(),
-                            color=security_color,
-                            size=16,
-                            weight=ft.FontWeight.W_400,
-                        ),
-                    ],
-                    spacing=4,
-                ),
-                padding=ft.padding.all(12),
-                bgcolor=ft.Colors.with_opacity(0.05, security_color),
-                border_radius=8,
-            )
-        )
-
-        # OAuth providers status
-        oauth_providers = self.metadata.get("oauth_providers", [])
-        oauth_count = len(oauth_providers) if oauth_providers else 0
-
-        stats_items.append(
-            ft.Container(
-                content=ft.Column(
-                    [
-                        LabelText("OAuth Providers", size=12),
-                        PrimaryText(str(oauth_count)),
-                    ],
-                    spacing=4,
-                ),
-                padding=ft.padding.all(12),
-                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.PURPLE),
-                border_radius=8,
-            )
-        )
-
+        # Create metrics grid (3 rows x 2 columns)
         return ft.Container(
-            content=ft.Column(stats_items, spacing=8),
-            width=140,
+            content=ft.Column(
+                [
+                    # Row 1: User count and Response time
+                    ft.Row(
+                        [
+                            self._create_metric_container(
+                                "Total Users", user_count_display, ft.Colors.PURPLE
+                            ),
+                            self._create_metric_container(
+                                "Response Time",
+                                f"{response_time:.1f}ms" if response_time else "N/A",
+                                (
+                                    ft.Colors.GREEN
+                                    if response_time and response_time < 100
+                                    else ft.Colors.ORANGE
+                                ),
+                            ),
+                        ],
+                        expand=True,
+                    ),
+                    ft.Container(height=12),  # Vertical spacing
+                    # Row 2: JWT Algorithm and Token Expiry
+                    ft.Row(
+                        [
+                            self._create_metric_container(
+                                "JWT Algorithm", jwt_algorithm, ft.Colors.BLUE
+                            ),
+                            self._create_metric_container(
+                                "Token Expiry", token_expiry_display, ft.Colors.GREEN
+                            ),
+                        ],
+                        expand=True,
+                    ),
+                    ft.Container(height=12),  # Vertical spacing
+                    # Row 3: Security Level and Database
+                    ft.Row(
+                        [
+                            self._create_metric_container(
+                                "Security Level", security_level.title(), security_color
+                            ),
+                            self._create_metric_container(
+                                "Database",
+                                "Available" if database_available else "Unavailable",
+                                (
+                                    ft.Colors.GREEN
+                                    if database_available
+                                    else ft.Colors.RED
+                                ),
+                            ),
+                        ],
+                        expand=True,
+                    ),
+                ],
+                spacing=0,
+            ),
+            expand=True,
+            padding=ft.padding.all(16),
         )
 
     def build(self) -> ft.Container:
@@ -258,11 +166,20 @@ class AuthCard:
             self.component_data
         )
 
-        # Use shared responsive 3-section layout
-        content = create_responsive_3_section_layout(
-            left_content=self._create_technology_badge(),
-            middle_content=self._create_auth_overview(),
-            right_content=self._create_stats_section(),
+        # Create clean 2-column layout
+        content = ft.Row(
+            [
+                self._create_left_section(),
+                ft.Container(
+                    width=1,
+                    height=160,  # Adjust height to match content
+                    bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.GREY_400),
+                    margin=ft.margin.symmetric(horizontal=16),
+                ),
+                self._create_metrics_section(),
+            ],
+            expand=True,
+            vertical_alignment=ft.CrossAxisAlignment.START,
         )
 
         # Create the container
@@ -276,8 +193,6 @@ class AuthCard:
 
         # Create hover handler for the card
         hover_handler = create_hover_handler(card_container)
-
-        # Update the hover handler on the container
         card_container.on_hover = hover_handler
 
         return card_container
