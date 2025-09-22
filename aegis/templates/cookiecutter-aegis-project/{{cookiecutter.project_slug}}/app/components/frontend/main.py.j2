@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import flet as ft
+from flet import PageDisconnectedException
 
 from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
@@ -47,6 +48,12 @@ class SystemDashboard:
 
     Eliminates IndexError crashes by storing direct references to dashboard
     components instead of using brittle index-based access patterns.
+
+    Includes robust page disconnection handling to prevent crashes when
+    users navigate away from the dashboard during auto-refresh cycles.
+
+    Note: Uses defensive programming around Flet's private APIs for
+    connection checking. This may need updates with future Flet versions.
     """
 
     def __init__(self):
@@ -55,6 +62,7 @@ class SystemDashboard:
         self._cards_container: ft.Container | None = None
         self._theme_manager: ThemeManager | None = None
         self._logo_image: ft.Image | None = None
+        self._page: ft.Page | None = None
 
     def initialize_components(
         self,
@@ -62,15 +70,58 @@ class SystemDashboard:
         cards_container: ft.Container,
         theme_manager: ThemeManager,
         logo_image: ft.Image,
+        page: ft.Page,
     ) -> None:
         """Initialize dashboard with component references."""
         self._health_indicator_container = health_indicator_container
         self._cards_container = cards_container
         self._theme_manager = theme_manager
         self._logo_image = logo_image
+        self._page = page
+
+        # Log Flet version for debugging connection check compatibility
+        try:
+            logger.debug(f"Initializing dashboard with Flet version: {ft.__version__}")
+        except AttributeError:
+            logger.debug("Flet version not available for compatibility logging")
+
+    def _is_page_connected(self) -> bool:
+        """
+        Check if the page is still connected.
+
+        Note: This uses Flet's private attribute access as a last resort.
+        This is necessary because Flet doesn't provide a public API for
+        connection status checking. While brittle, this prevents crashes
+        when users navigate away from the dashboard.
+
+        Returns False on any error to fail safely.
+        """
+        try:
+            if self._page is None:
+                return False
+
+            # Attempt to access Flet's private connection attribute
+            # This may break with future Flet versions, but will fail safely
+            if not hasattr(self._page, '_Page__conn'):
+                logger.debug(
+                    "Flet page connection attribute not found - assuming disconnected"
+                )
+                return False
+
+            return self._page._Page__conn is not None
+
+        except (AttributeError, Exception) as e:
+            # If anything goes wrong with connection checking, assume disconnected
+            # This provides defensive behavior against Flet internal changes
+            logger.debug(f"Page connection check failed, assuming disconnected: {e}")
+            return False
 
     async def update_health_status(self, healthy_count: int, total_count: int) -> None:
         """Safely update health status indicator."""
+        if not self._is_page_connected():
+            logger.debug("Page disconnected, skipping health status update")
+            return
+
         if not self._health_indicator_container:
             logger.warning("Health indicator container not initialized")
             return
@@ -80,7 +131,12 @@ class SystemDashboard:
                 healthy_count, total_count
             )
             self._health_indicator_container.content = new_health_indicator
-            self._health_indicator_container.update()
+            # Check connection again before updating container
+            if self._is_page_connected():
+                self._health_indicator_container.update()
+        except PageDisconnectedException:
+            logger.debug("Page disconnected during health status update")
+            return
         except Exception as e:
             logger.error(
                 f"Failed to update health status: {e}",
@@ -97,6 +153,10 @@ class SystemDashboard:
         self, components: dict[str, ComponentStatus], card_creator_fn: Callable
     ) -> None:
         """Safely update component cards."""
+        if not self._is_page_connected():
+            logger.debug("Page disconnected, skipping component cards update")
+            return
+
         if not self._cards_container or not self._cards_container.content:
             logger.warning("Cards container not initialized")
             return
@@ -123,7 +183,12 @@ class SystemDashboard:
                     card.col = {"xs": 12, "sm": 12, "md": 6, "lg": 6, "xl": 6}
                 self._cards_container.content.controls.append(card)
 
-            self._cards_container.update()
+            # Check connection again before updating container
+            if self._is_page_connected():
+                self._cards_container.update()
+        except PageDisconnectedException:
+            logger.debug("Page disconnected during component cards update")
+            return
         except Exception as e:
             logger.error(
                 f"Failed to update component cards: {e}",
@@ -137,6 +202,10 @@ class SystemDashboard:
 
     async def show_error_status(self) -> None:
         """Safely show error status in health indicator."""
+        if not self._is_page_connected():
+            logger.debug("Page disconnected, skipping error status display")
+            return
+
         if not self._health_indicator_container:
             logger.warning(
                 "Health indicator container not initialized for error display"
@@ -146,7 +215,12 @@ class SystemDashboard:
         try:
             error_indicator = create_health_status_indicator(0, 1)
             self._health_indicator_container.content = error_indicator
-            self._health_indicator_container.update()
+            # Check connection again before updating container
+            if self._is_page_connected():
+                self._health_indicator_container.update()
+        except PageDisconnectedException:
+            logger.debug("Page disconnected during error status display")
+            return
         except Exception as e:
             logger.error(
                 f"Failed to show error status: {e}",
@@ -244,8 +318,15 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
 
                 # Update logo immediately after theme change
                 await update_logo()
-                logo_image.update()
-                page.update()
+                # Safe updates - check connection first
+                if dashboard._is_page_connected():
+                    try:
+                        logo_image.update()
+                        page.update()
+                    except PageDisconnectedException:
+                        logger.debug("Page disconnected during theme toggle")
+            except PageDisconnectedException:
+                logger.debug("Page disconnected during theme toggle")
             except Exception as e:
                 logger.error(
                     f"Theme toggle failed: {e}",
@@ -322,6 +403,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             cards_container=component_cards_container,
             theme_manager=theme_manager,
             logo_image=logo_image,
+            page=page,
         )
 
         # Add everything to page with modern layout
@@ -512,8 +594,21 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                     components, create_component_card
                 )
 
-                page.update()
+                # Safe page update - check connection first
+                if dashboard._is_page_connected():
+                    try:
+                        page.update()
+                    except PageDisconnectedException:
+                        logger.debug("Page disconnected during page.update()")
+                        raise
 
+            except PageDisconnectedException:
+                logger.debug("Page disconnected during dashboard refresh")
+                # Do NOT call show_error_status here: the page is already disconnected,
+                # so any attempt to update the UI (including showing an error) fails.
+                # Instead, propagate this exception so the auto_refresh loop can handle
+                # the disconnection gracefully and stop further updates.
+                raise
             except Exception as e:
                 logger.error(
                     f"Dashboard refresh failed: {e}",
@@ -527,10 +622,18 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 await dashboard.show_error_status()
 
         async def auto_refresh() -> None:
-            """Simple auto-refresh loop."""
-            while True:
-                await refresh_dashboard()
-                await asyncio.sleep(30)
+            """Simple auto-refresh loop that stops when page disconnects."""
+            while dashboard._is_page_connected():
+                try:
+                    await refresh_dashboard()
+                    await asyncio.sleep(30)
+                except PageDisconnectedException:
+                    logger.debug("Page disconnected, stopping auto-refresh loop")
+                    break
+                except Exception as e:
+                    logger.error(f"Error in auto-refresh loop: {e}", exc_info=True)
+                    # Continue the loop even if refresh fails
+                    await asyncio.sleep(30)
 
         # Initial load and start refresh
         await refresh_dashboard()
