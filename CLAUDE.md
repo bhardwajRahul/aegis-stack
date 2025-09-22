@@ -108,6 +108,74 @@ The main command for creating new Aegis Stack projects with customizable compone
 #### `aegis components`
 Shows project information and available components.
 
+## Creator Context & Philosophy
+
+### The Architect: Leonard Bedner
+
+**Leonard Bedner** (aka Challseus) is the creator and architect of Aegis Stack. A career software engineer since 2004, systems builder, and game developer who brings decades of experience building production systems and award-winning creative projects.
+
+#### Background: Rose of Eternity
+Before Aegis Stack, Leonard created the **Rose of Eternity** series - critically acclaimed RPG mods that pioneered innovative gameplay systems:
+- **Rose of Eternity - The Coming** (2005) - Ranked #15 all-time NWN modules
+- **Rose of Eternity - Cry The Beloved** (2006) - **2nd highest rated NWN module of all time**
+- **Rose of Eternity - Family & Country** (Dragon Age) - Continuing the saga 20 years later
+
+These games featured groundbreaking composable systems:
+- **Bonds of Battle**: Characters growing stronger fighting together
+- **Unison Abilities**: Combining party member strengths for emergent gameplay
+- **Last Resorts**: Desperation mechanics at low health
+- **Custom progression systems** that rewarded player experimentation
+
+#### The Connection: Game Design → Platform Architecture
+
+The same philosophy that made Rose of Eternity revolutionary now drives Aegis Stack:
+- **Composable systems that create emergent behavior** (like Breath of the Wild's chemistry engine)
+- **Small, focused components** that do one thing excellently
+- **Unexpected interactions** between components creating new possibilities
+- **Progressive enhancement** - systems that grow stronger together
+- **Player/Developer agency** - providing tools, not prescribing paths
+
+### What Aegis Stack Really Is
+
+**Aegis Stack is a modular, evolving, agent-ready boilerplate platform** - not just a CLI tool, but an ecosystem of composable primitives that grows with you.
+
+#### Core Philosophy:
+- **"Build foundations, not toys"** - Every component exists because it solved real production problems
+- **"Build once, scale forever"** - Upgradable, testable, observable foundations that never get in the way
+- **"Everything can affect everything"** - Components that compose in unexpected but delightful ways
+- **"It does damn well enough"** - Not trying to be everything, but what it does, it does RIGHT
+
+#### The Emergent Behavior Pattern:
+Just like Rose of Eternity's combat systems created unexpected synergies, Aegis components combine in powerful ways:
+- **AI Service alone**: Basic chatbot
+- **AI + Auth**: User-specific conversations, protected endpoints
+- **AI + Database**: Persistent history, analytics
+- **AI + Redis**: Fast conversation caching
+- **AI + Scheduler**: Scheduled summaries, model warm-ups
+- **AI + Worker**: Background AI processing, batch operations
+
+Each combination creates possibilities not explicitly designed - the hallmark of great platform architecture.
+
+### Development Approach
+
+Leonard's approach prioritizes:
+1. **Foundation-first thinking** - Not features, but capabilities others can build on
+2. **Battle-tested patterns** - Everything exists because it solved a real problem
+3. **Agent-ready architecture** - Predictable, testable, extendable
+4. **No abstraction for abstraction's sake** - Direct access to tools, not wrappers
+5. **Test-first development** - Comprehensive testing as a core requirement
+
+### Why This Matters
+
+When working with Aegis Stack code:
+- Remember you're working with **architectural DNA**, not just code
+- Every pattern repeats because it's been proven in production
+- Components are designed to discover unexpected interactions
+- The goal is empowering developers, not constraining them
+- This is a **meta-resume** - craft, discipline, and mind made visible in code
+
+**Aegis Stack is Leonard's engineering worldview made shareable** - two decades of building systems distilled into a platform that lets others skip the painful parts and get straight to creating.
+
 ## Coding Standards
 
 ### Git and Version Control
