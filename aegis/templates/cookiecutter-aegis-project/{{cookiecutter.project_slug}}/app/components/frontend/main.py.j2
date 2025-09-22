@@ -41,6 +41,123 @@ DEFAULT_LOGO_PATH = "aegis-manifesto.png"
 DEFAULT_DARK_LOGO_PATH = "aegis-manifesto-dark.png"
 
 
+class SystemDashboard:
+    """
+    Professional system dashboard with safe component references.
+
+    Eliminates IndexError crashes by storing direct references to dashboard
+    components instead of using brittle index-based access patterns.
+    """
+
+    def __init__(self):
+        # Direct component references - no more brittle indexing!
+        self._health_indicator_container: ft.Container | None = None
+        self._cards_container: ft.Container | None = None
+        self._theme_manager: ThemeManager | None = None
+        self._logo_image: ft.Image | None = None
+
+    def initialize_components(
+        self,
+        health_indicator_container: ft.Container,
+        cards_container: ft.Container,
+        theme_manager: ThemeManager,
+        logo_image: ft.Image,
+    ) -> None:
+        """Initialize dashboard with component references."""
+        self._health_indicator_container = health_indicator_container
+        self._cards_container = cards_container
+        self._theme_manager = theme_manager
+        self._logo_image = logo_image
+
+    async def update_health_status(self, healthy_count: int, total_count: int) -> None:
+        """Safely update health status indicator."""
+        if not self._health_indicator_container:
+            logger.warning("Health indicator container not initialized")
+            return
+
+        try:
+            new_health_indicator = create_health_status_indicator(
+                healthy_count, total_count
+            )
+            self._health_indicator_container.content = new_health_indicator
+            self._health_indicator_container.update()
+        except Exception as e:
+            logger.error(
+                f"Failed to update health status: {e}",
+                exc_info=True,
+                extra={
+                    "error_type": type(e).__name__,
+                    "function": "update_health_status",
+                    "healthy_count": healthy_count,
+                    "total_count": total_count,
+                }
+            )
+
+    async def update_component_cards(
+        self, components: dict[str, ComponentStatus], card_creator_fn: Callable
+    ) -> None:
+        """Safely update component cards."""
+        if not self._cards_container or not self._cards_container.content:
+            logger.warning("Cards container not initialized")
+            return
+
+        try:
+            # Clear existing cards
+            self._cards_container.content.controls.clear()
+
+            # Create cards for all available components with responsive sizing
+            for component_name, component_data in components.items():
+                card = card_creator_fn(component_name, component_data)
+                if (
+                    isinstance(card.content, ft.Text)
+                    and "Unknown component" in card.content.value
+                ):
+                    continue  # Skip unknown components
+
+                # Set responsive column sizing based on card type
+                if component_name.startswith("service_"):
+                    # Service cards: 1/3 width (4 = 33% = 3 columns)
+                    card.col = {"xs": 12, "sm": 6, "md": 4, "lg": 4, "xl": 4}
+                else:
+                    # Component cards: 1/2 width (6 = 50% = 2 columns)
+                    card.col = {"xs": 12, "sm": 12, "md": 6, "lg": 6, "xl": 6}
+                self._cards_container.content.controls.append(card)
+
+            self._cards_container.update()
+        except Exception as e:
+            logger.error(
+                f"Failed to update component cards: {e}",
+                exc_info=True,
+                extra={
+                    "error_type": type(e).__name__,
+                    "function": "update_component_cards",
+                    "component_count": len(components),
+                }
+            )
+
+    async def show_error_status(self) -> None:
+        """Safely show error status in health indicator."""
+        if not self._health_indicator_container:
+            logger.warning(
+                "Health indicator container not initialized for error display"
+            )
+            return
+
+        try:
+            error_indicator = create_health_status_indicator(0, 1)
+            self._health_indicator_container.content = error_indicator
+            self._health_indicator_container.update()
+        except Exception as e:
+            logger.error(
+                f"Failed to show error status: {e}",
+                exc_info=True,
+                extra={
+                    "error_type": type(e).__name__,
+                    "function": "show_error_status",
+                }
+            )
+
+
 # Load both light and dark logos as base64
 def get_logo_base64(dark_mode: bool = False) -> str:
     """Get the logo as base64 for light or dark mode."""
@@ -149,6 +266,13 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             0, 0
         )  # Start with loading state
 
+        # Create health indicator container with direct reference
+        # (no more brittle indexing)
+        health_indicator_container = ft.Container(
+            content=health_status_indicator,
+            margin=ft.margin.only(right=20),  # Space before theme button
+        )
+
         # Professional header with Aegis Stack logo positioned further left
         header = ft.Container(
             content=ft.Row(
@@ -171,10 +295,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                         ],
                         alignment=ft.MainAxisAlignment.START,
                     ),
-                    ft.Container(
-                        content=health_status_indicator,
-                        margin=ft.margin.only(right=20),  # Space before theme button
-                    ),
+                    health_indicator_container,  # Use the direct reference
                     ft.Container(content=theme_button, padding=10),
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -190,6 +311,17 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 run_spacing=20,  # Space between rows
             ),
             alignment=ft.alignment.center,
+        )
+
+        # Create SystemDashboard with safe component references
+        dashboard = SystemDashboard()
+
+        # Initialize dashboard with component references (using direct references)
+        dashboard.initialize_components(
+            health_indicator_container=health_indicator_container,
+            cards_container=component_cards_container,
+            theme_manager=theme_manager,
+            logo_image=logo_image,
         )
 
         # Add everything to page with modern layout
@@ -372,35 +504,13 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 total_components = len(components)
                 healthy_components = len([c for c in components.values() if c.healthy])
 
-                # Update health status indicator in the header
-                new_health_indicator = create_health_status_indicator(
+                # Update health status and component cards using safe dashboard methods
+                await dashboard.update_health_status(
                     healthy_components, total_components
                 )
-
-                # Update header health indicator
-                header_row = page.controls[0].content  # header container -> Row
-                header_row.controls[1].content = new_health_indicator
-
-                # Clear existing cards and create stunning new ones in responsive grid
-                component_cards_container.content.controls.clear()
-
-                # Create cards for all available components with responsive sizing
-                for component_name, component_data in components.items():
-                    card = create_component_card(component_name, component_data)
-                    if (
-                        isinstance(card.content, ft.Text)
-                        and "Unknown component" in card.content.value
-                    ):
-                        continue  # Skip unknown components
-
-                    # Set responsive column sizing based on card type
-                    if component_name.startswith("service_"):
-                        # Service cards: 1/3 width (4 = 33% = 3 columns)
-                        card.col = {"xs": 12, "sm": 6, "md": 4, "lg": 4, "xl": 4}
-                    else:
-                        # Component cards: 1/2 width (6 = 50% = 2 columns)
-                        card.col = {"xs": 12, "sm": 12, "md": 6, "lg": 6, "xl": 6}
-                    component_cards_container.content.controls.append(card)
+                await dashboard.update_component_cards(
+                    components, create_component_card
+                )
 
                 page.update()
 
@@ -413,21 +523,8 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                         "function": "refresh_dashboard"
                     }
                 )
-                # Show error indicator in header
-                try:
-                    error_indicator = create_health_status_indicator(0, 1)
-                    header_row = page.controls[0].content
-                    header_row.controls[1].content = error_indicator
-                    page.update()
-                except Exception as update_error:
-                    logger.error(
-                        f"Failed to update error indicator: {update_error}",
-                        exc_info=True,
-                        extra={
-                            "error_type": type(update_error).__name__,
-                            "function": "refresh_dashboard_error_handler"
-                        }
-                    )
+                # Show error indicator using safe dashboard method
+                await dashboard.show_error_status()
 
         async def auto_refresh() -> None:
             """Simple auto-refresh loop."""
