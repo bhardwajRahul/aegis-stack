@@ -403,6 +403,13 @@ async def startup_hook() -> None:
     logger.info("Auth service health check registered")
     {%- endif %}
 
+    {%- if cookiecutter.include_ai == "yes" %}
+    # Register AI service health check
+    from app.services.ai.health import check_ai_service_health
+    register_service_health_check("ai", check_ai_service_health)
+    logger.info("AI service health check registered")
+    {%- endif %}
+
     # Future services will be registered here:
     # if cookiecutter.include_payment == "yes":
     #     from app.services.payment.health import check_payment_service_health

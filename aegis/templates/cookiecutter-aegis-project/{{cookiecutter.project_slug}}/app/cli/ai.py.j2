@@ -1,0 +1,33 @@
+"""
+AI service CLI commands.
+
+Command-line interface for AI service management and chat functionality.
+"""
+
+import typer
+
+app = typer.Typer(help="AI service management and chat commands")
+
+
+@app.command()
+def version() -> None:
+    """Show AI service version and configuration."""
+    typer.echo("🤖 AI Service Foundation")
+    typer.echo("Engine: PydanticAI")
+    typer.echo("Status: Foundation ready (implementation pending)")
+    typer.echo("")
+    typer.echo("Available commands will be added in ticket #159:")
+    typer.echo("  • ai chat <message>     - Chat with AI")
+    typer.echo("  • ai config show        - Show configuration")
+    typer.echo("  • ai conversations      - List conversations")
+
+
+@app.command()
+def config() -> None:
+    """Show AI service configuration (stub)."""
+    typer.echo("🔧 AI Service Configuration")
+    typer.echo("Configuration management will be implemented in ticket #162")
+
+
+if __name__ == "__main__":
+    app()

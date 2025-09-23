@@ -18,7 +18,7 @@ class TestInteractiveSchedulerFlow:
     def test_scheduler_with_sqlite_persistence(self, mock_confirm: Any) -> None:
         """Test scheduler selection with SQLite database persistence."""
         # Mock user responses: redis=no, worker=no, scheduler=yes,
-        # persistence=yes, continue with SQLite=yes, no auth service
+        # persistence=yes, continue with SQLite=yes, no auth service, no AI service
         mock_confirm.side_effect = [
             False,
             False,
@@ -26,7 +26,8 @@ class TestInteractiveSchedulerFlow:
             True,
             True,
             False,
-        ]  # redis, worker, scheduler, persistence, continue with SQLite, auth
+            False,
+        ]  # redis, worker, scheduler, persistence, continue with SQLite, auth, AI
 
         components, scheduler_backend, services = interactive_project_selection()
 
@@ -36,8 +37,8 @@ class TestInteractiveSchedulerFlow:
         assert scheduler_backend == "sqlite"
         assert services == []  # No services selected
 
-        # Verify correct calls were made (now includes auth service prompt)
-        assert mock_confirm.call_count == 6
+        # Verify correct calls were made (now includes auth and AI service prompts)
+        assert mock_confirm.call_count == 7
 
     # TODO: Add PostgreSQL tests when PostgreSQL support is implemented
     # @patch('typer.confirm')
@@ -67,7 +68,8 @@ class TestInteractiveSchedulerFlow:
             False,
             False,
             False,
-        ]  # redis, worker, scheduler, no persistence, database=no, no auth
+            False,
+        ]  # redis, worker, scheduler, no persistence, database=no, no auth, no AI
 
         components, scheduler_backend, _ = interactive_project_selection()
 
@@ -86,7 +88,8 @@ class TestInteractiveSchedulerFlow:
             False,
             False,
             False,
-        ]  # All components declined, no auth
+            False,
+        ]  # All components declined, no auth, no AI
 
         components, scheduler_backend, _ = interactive_project_selection()
 
@@ -109,7 +112,8 @@ class TestInteractiveSchedulerFlow:
             True,
             True,
             False,
-        ]  # redis, worker, scheduler, persistence, continue SQLite, no auth
+            False,
+        ]  # redis, worker, scheduler, persistence, continue SQLite, no auth, no AI
 
         components, scheduler_backend, _ = interactive_project_selection()
 
@@ -119,8 +123,8 @@ class TestInteractiveSchedulerFlow:
         assert scheduler_backend == "sqlite"
 
         # Should not have been prompted for generic database
-        # (6 confirms: redis, worker, scheduler, persist, continue, auth)
-        assert mock_confirm.call_count == 6
+        # (7 confirms: redis, worker, scheduler, persist, continue, auth, AI)
+        assert mock_confirm.call_count == 7
 
     @patch("typer.confirm")
     def test_scheduler_declined_sqlite_no_database(self, mock_confirm: Any) -> None:
@@ -135,7 +139,8 @@ class TestInteractiveSchedulerFlow:
             False,
             False,
             False,
-        ]  # redis, worker, scheduler, persistence, decline SQLite, database=no, no auth
+            False,
+        ]  # redis, worker, scheduler, persistence, decline SQLite, database=no, no auth, no AI
 
         components, scheduler_backend, _ = interactive_project_selection()
 
@@ -156,7 +161,8 @@ class TestInteractiveSchedulerFlow:
             True,
             True,
             False,
-        ]  # redis=no, worker=yes, scheduler=yes, persistence=yes, continue=yes, no auth
+            False,
+        ]  # redis=no, worker=yes, scheduler=yes, persistence=yes, continue=yes, no auth, no AI
 
         components, scheduler_backend, _ = interactive_project_selection()
 
@@ -171,8 +177,8 @@ class TestInteractiveSchedulerFlow:
     @patch("typer.confirm")
     def test_standalone_database_selection_still_works(self, mock_confirm: Any) -> None:
         """Test that standalone database selection (without scheduler) still works."""
-        # Mock responses: redis=no, worker=no, scheduler=no, database=yes
-        mock_confirm.side_effect = [False, False, False, True, False]
+        # Mock responses: redis=no, worker=no, scheduler=no, database=yes, no auth, no AI
+        mock_confirm.side_effect = [False, False, False, True, False, False]
 
         components, scheduler_backend, _ = interactive_project_selection()
 

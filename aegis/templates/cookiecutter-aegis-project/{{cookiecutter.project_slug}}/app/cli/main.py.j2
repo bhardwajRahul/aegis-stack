@@ -47,6 +47,14 @@ except ImportError:
     # Auth service not available, skip auth commands
     pass
 
+# Conditionally register ai command if ai service is available
+try:
+    ai_module = importlib.import_module("app.cli.ai")
+    app.add_typer(ai_module.app, name="ai")
+except ImportError:
+    # AI service not available, skip ai commands
+    pass
+
 
 def main() -> None:
     """Entry point for the CLI application."""

@@ -62,10 +62,24 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/core/security.py",
         ],
     ),
+    "ai": ServiceSpec(
+        name="ai",
+        type=ServiceType.AI,
+        description="AI chatbot service with PydanticAI engine",
+        required_components=["backend"],
+        pyproject_deps=[
+            "pydantic-ai-slim[openai,anthropic,google,groq]==1.0.10",
+            "httpx>=0.27.0",  # For API providers
+        ],
+        template_files=[
+            "app/services/ai/",
+            "app/cli/ai.py",
+            "app/components/backend/api/ai/",
+        ],
+    ),
     # Future services will be added here:
     # "payment_stripe": ServiceSpec(...),
     # "notification_email": ServiceSpec(...),
-    # "ai_openai": ServiceSpec(...),
 }
 
 

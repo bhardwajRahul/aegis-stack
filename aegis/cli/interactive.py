@@ -193,8 +193,27 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
                         else:
                             typer.echo("⏹️  Authentication service cancelled")
 
+        # AI & Machine Learning Services
+        ai_services = get_services_by_type(ServiceType.AI)
+
+        if ai_services:
+            typer.echo("\n🤖 AI & Machine Learning Services:")
+            for service_name, service_spec in ai_services.items():
+                prompt = f"  Add {service_spec.description.lower()}?"
+                if typer.confirm(prompt):
+                    # AI service requires backend (always available) - no dependency issues
+                    typer.echo("\n🔧 AI Service Ready:")
+                    typer.echo(
+                        "  AI service will use PydanticAI engine with multiple provider support"
+                    )
+                    typer.echo(
+                        "  (OpenAI, Anthropic, Gemini, Groq - configure via environment)"
+                    )
+
+                    selected_services.append(service_name)
+                    typer.echo("✅ AI service configured")
+
         # Future service types can be added here as they become available
         # payment_services = get_services_by_type(ServiceType.PAYMENT)
-        # ai_services = get_services_by_type(ServiceType.AI)
 
     return selected, scheduler_backend, selected_services

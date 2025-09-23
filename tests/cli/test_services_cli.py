@@ -223,8 +223,8 @@ class TestInteractiveServiceSelection:
         from aegis.cli.interactive import interactive_project_selection
 
         with patch("typer.confirm") as mock_confirm:
-            # Simulate: no components selected, but yes auth service + yes to database confirmation
-            mock_confirm.side_effect = [False, False, False, False, True, True]
+            # Simulate: no components selected, but yes auth service + yes to database confirmation + no AI service
+            mock_confirm.side_effect = [False, False, False, False, True, True, False]
 
             components, scheduler_backend, services = interactive_project_selection()
 
@@ -239,8 +239,8 @@ class TestInteractiveServiceSelection:
         from aegis.cli.interactive import interactive_project_selection
 
         with patch("typer.confirm") as mock_confirm:
-            # Simulate: no components, no services
-            mock_confirm.side_effect = [False, False, False, False, False]
+            # Simulate: no components, no services (decline auth, decline AI)
+            mock_confirm.side_effect = [False, False, False, False, False, False]
 
             components, scheduler_backend, services = interactive_project_selection()
 
