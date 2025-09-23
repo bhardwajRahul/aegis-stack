@@ -5,28 +5,212 @@ Command-line interface for AI service management and chat functionality.
 """
 
 import typer
+from rich.console import Console
+from rich.table import Table
+
+from ..core.config import settings
+from ..services.ai.config import get_ai_config
+from ..services.ai.models import (
+    AIProvider,
+    get_free_providers,
+    get_provider_capabilities,
+)
 
 app = typer.Typer(help="AI service management and chat commands")
+console = Console()
+
+# Configuration command group
+config_app = typer.Typer(help="AI service configuration commands")
+app.add_typer(config_app, name="config")
+
+# Provider command group
+providers_app = typer.Typer(help="AI provider management commands")
+app.add_typer(providers_app, name="providers")
 
 
 @app.command()
 def version() -> None:
     """Show AI service version and configuration."""
-    typer.echo("🤖 AI Service Foundation")
+    ai_config = get_ai_config(settings)
+
+    typer.echo("🤖 AI Service Configuration System")
     typer.echo("Engine: PydanticAI")
-    typer.echo("Status: Foundation ready (implementation pending)")
+    typer.echo(f"Status: {'✅ Enabled' if ai_config.enabled else '❌ Disabled'}")
+    typer.echo(f"Provider: {ai_config.provider}")
+    typer.echo(f"Model: {ai_config.model}")
     typer.echo("")
-    typer.echo("Available commands will be added in ticket #159:")
-    typer.echo("  • ai chat <message>     - Chat with AI")
-    typer.echo("  • ai config show        - Show configuration")
-    typer.echo("  • ai conversations      - List conversations")
+    typer.echo("Available commands:")
+    typer.echo("  • ai config show         - Show detailed configuration")
+    typer.echo("  • ai config validate     - Validate current configuration")
+    typer.echo("  • ai providers list      - List available providers")
+    typer.echo("  • ai providers show      - Show provider capabilities")
 
 
-@app.command()
-def config() -> None:
-    """Show AI service configuration (stub)."""
+@config_app.command("show")
+def config_show() -> None:
+    """Show detailed AI service configuration."""
+    ai_config = get_ai_config(settings)
+
     typer.echo("🔧 AI Service Configuration")
-    typer.echo("Configuration management will be implemented in ticket #162")
+    typer.echo("=" * 40)
+    typer.echo(f"Enabled: {ai_config.enabled}")
+    typer.echo(f"Provider: {ai_config.provider}")
+    typer.echo(f"Model: {ai_config.model}")
+    typer.echo(f"Temperature: {ai_config.temperature}")
+    typer.echo(f"Max Tokens: {ai_config.max_tokens}")
+    typer.echo(f"Timeout: {ai_config.timeout_seconds}s")
+
+    # Provider-specific configuration
+    provider_config = ai_config.get_provider_config(settings)
+    typer.echo(f"\n🔐 Provider Configuration ({ai_config.provider}):")
+    typer.echo(f"API Key: {'✅ Set' if provider_config.api_key else '❌ Not set'}")
+    typer.echo(f"Rate Limit: {provider_config.rate_limit_rpm} RPM")
+
+    # Available providers
+    available = ai_config.get_available_providers(settings)
+    typer.echo(f"\n✅ Available Providers ({len(available)}):")
+    for provider in available:
+        typer.echo(f"  • {provider}")
+
+
+@config_app.command("validate")
+def config_validate() -> None:
+    """Validate AI service configuration."""
+    ai_config = get_ai_config(settings)
+
+    typer.echo("🔍 Validating AI Service Configuration...")
+
+    errors = ai_config.validate_configuration(settings)
+
+    if not errors:
+        typer.echo("✅ Configuration is valid!")
+        typer.echo(f"   Provider: {ai_config.provider}")
+        typer.echo(f"   Model: {ai_config.model}")
+
+        # Show provider capabilities
+        capabilities = get_provider_capabilities(ai_config.provider)
+        if capabilities.free_tier_available:
+            typer.echo("   💰 Uses free tier")
+        else:
+            typer.echo("   💳 Requires paid account")
+
+    else:
+        typer.echo("❌ Configuration has issues:")
+        for error in errors:
+            typer.echo(f"   • {error}")
+
+        # Suggest free providers if API key issues
+        if any("API key" in error for error in errors):
+            free_providers = get_free_providers()
+            if free_providers:
+                providers_list = ', '.join(free_providers)
+                typer.echo(f"\n💡 Try these free providers: {providers_list}")
+
+
+@config_app.command("set-provider")
+def config_set_provider(
+    provider: str = typer.Argument(
+        ..., help="Provider name (openai, anthropic, google, groq, mistral, cohere)"
+    )
+):
+    """Set the primary AI provider."""
+    try:
+        ai_provider = AIProvider(provider.lower())
+    except ValueError:
+        typer.echo(f"❌ Unknown provider: {provider}")
+        typer.echo(f"Available providers: {', '.join([p.value for p in AIProvider])}")
+        raise typer.Exit(1)
+
+    typer.echo(f"🔄 Setting provider to: {ai_provider}")
+    typer.echo("To persist this change, update your .env file:")
+    typer.echo(f"AI_PROVIDER={ai_provider}")
+
+    # Show provider info
+    capabilities = get_provider_capabilities(ai_provider)
+    if capabilities.free_tier_available:
+        typer.echo("✅ This provider offers a free tier")
+    else:
+        typer.echo("💳 This provider requires a paid account")
+        typer.echo(f"   Set {ai_provider.upper()}_API_KEY in your environment")
+
+
+@providers_app.command("list")
+def providers_list() -> None:
+    """List all available AI providers."""
+    ai_config = get_ai_config(settings)
+    available = ai_config.get_available_providers(settings)
+    free_providers = get_free_providers()
+
+    table = Table(title="🤖 AI Providers")
+    table.add_column("Provider", style="cyan")
+    table.add_column("Status", style="green")
+    table.add_column("Free Tier", style="yellow")
+    table.add_column("Features", style="blue")
+
+    for provider in AIProvider:
+        capabilities = get_provider_capabilities(provider)
+        is_available = provider in available
+        is_current = provider == ai_config.provider
+
+        status = "✅ Available" if is_available else "❌ Not configured"
+        if is_current:
+            status += " (current)"
+
+        free_tier = "Yes" if provider in free_providers else "No"
+
+        features = []
+        if capabilities.supports_streaming:
+            features.append("Stream")
+        if capabilities.supports_function_calling:
+            features.append("Functions")
+        if capabilities.supports_vision:
+            features.append("Vision")
+
+        table.add_row(
+            provider.value,
+            status,
+            free_tier,
+            ", ".join(features) if features else "Basic"
+        )
+
+    console.print(table)
+
+
+@providers_app.command("show")
+def providers_show(
+    provider: str | None = typer.Argument(None, help="Provider to show details for")
+):
+    """Show detailed provider capabilities."""
+    if provider:
+        try:
+            ai_provider = AIProvider(provider.lower())
+        except ValueError:
+            typer.echo(f"❌ Unknown provider: {provider}")
+            available_providers = ', '.join([p.value for p in AIProvider])
+            typer.echo(f"Available providers: {available_providers}")
+            raise typer.Exit(1)
+        providers_to_show = [ai_provider]
+    else:
+        providers_to_show = list(AIProvider)
+
+    for ai_provider in providers_to_show:
+        capabilities = get_provider_capabilities(ai_provider)
+
+        typer.echo(f"\n🔍 {ai_provider.value.title()} Provider")
+        typer.echo("=" * 30)
+        typer.echo(f"Max Tokens: {capabilities.max_tokens:,}")
+        typer.echo(f"Context Length: {capabilities.context_length:,}")
+        typer.echo(f"Free Tier: {'Yes' if capabilities.free_tier_available else 'No'}")
+        typer.echo(f"Streaming: {'Yes' if capabilities.supports_streaming else 'No'}")
+        function_calling = 'Yes' if capabilities.supports_function_calling else 'No'
+        typer.echo(f"Function Calling: {function_calling}")
+        typer.echo(f"Vision: {'Yes' if capabilities.supports_vision else 'No'}")
+
+        if capabilities.rate_limits:
+            typer.echo("Rate Limits:")
+            for limit_type, limit_value in capabilities.rate_limits.items():
+                limit_name = limit_type.replace('_', ' ').title()
+                typer.echo(f"  • {limit_name}: {limit_value:,}")
 
 
 if __name__ == "__main__":

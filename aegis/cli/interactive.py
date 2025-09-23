@@ -10,6 +10,9 @@ import typer
 from ..core.components import COMPONENTS, CORE_COMPONENTS, ComponentSpec, ComponentType
 from ..core.services import SERVICES, ServiceType, get_services_by_type
 
+# Global variable to store AI provider selections for template generation
+_ai_provider_selection: dict[str, list[str]] = {}
+
 
 def get_interactive_infrastructure_components() -> list[ComponentSpec]:
     """Get infrastructure components available for interactive selection."""
@@ -202,14 +205,57 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
                 prompt = f"  Add {service_spec.description.lower()}?"
                 if typer.confirm(prompt):
                     # AI service requires backend (always available) - no dependency issues
-                    typer.echo("\n🔧 AI Service Ready:")
+                    typer.echo("\n🤖 AI Provider Selection:")
                     typer.echo(
-                        "  AI service will use PydanticAI engine with multiple provider support"
+                        "  Choose AI providers to include (multiple selection supported)"
                     )
-                    typer.echo(
-                        "  (OpenAI, Anthropic, Gemini, Groq - configure via environment)"
-                    )
+                    typer.echo("  📋 Provider Options:")
 
+                    # Provider selection with recommendations
+                    providers = []
+                    provider_info = [
+                        ("openai", "OpenAI", "GPT models", "💰 Paid", False),
+                        ("anthropic", "Anthropic", "Claude models", "💰 Paid", False),
+                        ("google", "Google", "Gemini models", "🆓 Free tier", True),
+                        ("groq", "Groq", "Fast inference", "🆓 Free tier", True),
+                        ("mistral", "Mistral", "Open models", "💰 Mostly paid", False),
+                        (
+                            "cohere",
+                            "Cohere",
+                            "Enterprise focus",
+                            "💰 Limited free",
+                            False,
+                        ),
+                    ]
+
+                    # Ask about each provider
+                    for (
+                        provider_id,
+                        name,
+                        description,
+                        pricing,
+                        recommended,
+                    ) in provider_info:
+                        recommend_text = " (Recommended)" if recommended else ""
+                        if typer.confirm(
+                            f"    ☐ {name} - {description} ({pricing}){recommend_text}?",
+                            default=recommended,
+                        ):
+                            providers.append(provider_id)
+
+                    # Handle no providers selected
+                    if not providers:
+                        typer.echo(
+                            "  ⚠️  No providers selected, adding recommended defaults..."
+                        )
+                        providers = ["groq", "google"]  # Safe defaults with free tiers
+
+                    # Show selected providers
+                    typer.echo(f"\n  ✅ Selected providers: {', '.join(providers)}")
+                    typer.echo("  📦 Dependencies will be optimized for your selection")
+
+                    # Store provider selection in global context for template generation
+                    _ai_provider_selection[service_name] = providers
                     selected_services.append(service_name)
                     typer.echo("✅ AI service configured")
 
@@ -217,3 +263,22 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
         # payment_services = get_services_by_type(ServiceType.PAYMENT)
 
     return selected, scheduler_backend, selected_services
+
+
+def get_ai_provider_selection(service_name: str = "ai") -> list[str]:
+    """
+    Get AI provider selection from interactive session.
+
+    Args:
+        service_name: Name of the AI service (defaults to "ai")
+
+    Returns:
+        List of selected provider names, or default providers if none selected
+    """
+    return _ai_provider_selection.get(service_name, ["groq", "google"])
+
+
+def clear_ai_provider_selection() -> None:
+    """Clear stored AI provider selection (useful for testing)."""
+    global _ai_provider_selection
+    _ai_provider_selection.clear()

@@ -109,6 +109,32 @@ class Settings(BaseSettings):
     DATABASE_CONNECT_ARGS: dict[str, Any] = {"check_same_thread": False}
 {% endif %}
 
+{% if cookiecutter.include_ai == "yes" %}
+    # AI Service Configuration
+    # Primary service settings
+    AI_ENABLED: bool = True
+    AI_PROVIDER: str = "groq"  # Default to free provider
+    AI_MODEL: str = "llama-3.1-8b-instant"  # Default to free model
+    AI_TEMPERATURE: float = 0.7
+    AI_MAX_TOKENS: int = 1000
+    AI_TIMEOUT_SECONDS: float = 30.0
+
+    # Provider API Keys (optional - many providers offer free tiers)
+    OPENAI_API_KEY: str | None = None
+    ANTHROPIC_API_KEY: str | None = None
+    GOOGLE_API_KEY: str | None = None
+    GROQ_API_KEY: str | None = None
+    MISTRAL_API_KEY: str | None = None
+    COHERE_API_KEY: str | None = None
+
+    # Rate limiting per provider (requests per minute)
+    AI_RATE_LIMIT_RPM: int = 10
+
+    # Conversation settings
+    AI_MAX_CONVERSATION_LENGTH: int = 50  # Max messages per conversation
+    AI_CONVERSATION_TIMEOUT_HOURS: int = 24  # Auto-cleanup old conversations
+{% endif %}
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

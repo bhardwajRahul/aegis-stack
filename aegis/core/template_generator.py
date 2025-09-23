@@ -105,6 +105,8 @@ class TemplateGenerator:
             # Service flags for template conditionals
             "include_auth": "yes" if "auth" in self.selected_services else "no",
             "include_ai": "yes" if "ai" in self.selected_services else "no",
+            # AI provider selection for dynamic dependency generation
+            "ai_providers": self._get_ai_providers_string(),
             # Dependency lists for templates
             "selected_components": selected_only,  # Original selection for context
             "docker_services": self._get_docker_services(),
@@ -146,7 +148,13 @@ class TemplateGenerator:
             if service_name in SERVICES:
                 service_spec = SERVICES[service_name]
                 if service_spec.pyproject_deps:
-                    deps.extend(service_spec.pyproject_deps)
+                    # Process service dependencies with dynamic substitution
+                    for dep in service_spec.pyproject_deps:
+                        if service_name == "ai" and "{AI_PROVIDERS}" in dep:
+                            # Substitute AI providers dynamically
+                            providers = self._get_ai_providers_string()
+                            dep = dep.replace("{AI_PROVIDERS}", providers)
+                        deps.append(dep)
 
         return sorted(set(deps))  # Sort and deduplicate
 
@@ -174,6 +182,22 @@ class TemplateGenerator:
                     files.extend(service_spec.template_files)
 
         return list(dict.fromkeys(files))  # Preserve order, remove duplicates
+
+    def _get_ai_providers_string(self) -> str:
+        """
+        Get AI providers as comma-separated string for pydantic-ai-slim dependency.
+
+        Returns:
+            Comma-separated string of provider names (e.g., "openai,anthropic,google")
+        """
+        if "ai" not in self.selected_services:
+            return "groq,google"  # Default providers
+
+        # Import here to avoid circular imports
+        from ..cli.interactive import get_ai_provider_selection
+
+        providers = get_ai_provider_selection("ai")
+        return ",".join(providers)
 
     def get_entrypoints(self) -> list[str]:
         """

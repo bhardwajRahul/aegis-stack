@@ -2,24 +2,133 @@
 AI service configuration models.
 
 Configuration management for AI service providers, models, and settings.
-Full implementation will be added in ticket #162.
+Integrates with main application settings through app.core.config.
 """
 
-from pydantic import BaseModel
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from .models import (
+    AIProvider,
+    ProviderConfig,
+    get_free_providers,
+    get_provider_capabilities,
+)
 
 
 class AIServiceConfig(BaseModel):
     """
-    Base configuration for AI service.
+    AI service configuration that integrates with main app settings.
 
-    This is a foundation stub - full configuration implementation
-    will be added in ticket #162 (AI Service Configuration).
+    This class provides convenience methods and validation for AI service
+    configuration while the actual settings live in app.core.config.Settings.
     """
 
     enabled: bool = True
+    provider: AIProvider = AIProvider.GROQ  # Default to free provider
+    model: str = "llama-3.1-8b-instant"  # Default to free model
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    max_tokens: int = Field(default=1000, gt=0, le=8000)
+    timeout_seconds: float = Field(default=30.0, gt=0)
 
-    # Provider and model configuration will be added in #162
-    # provider: str = "groq"
-    # model: str = "llama-3.1-8b-instant"
-    # temperature: float = 0.7
-    # max_tokens: int = 1000
+    class Config:
+        use_enum_values = True
+
+    @classmethod
+    def from_settings(cls, settings: Any) -> "AIServiceConfig":
+        """Create configuration from main application settings."""
+        return cls(
+            enabled=getattr(settings, "AI_ENABLED", True),
+            provider=AIProvider(getattr(settings, "AI_PROVIDER", "groq")),
+            model=getattr(settings, "AI_MODEL", "llama-3.1-8b-instant"),
+            temperature=getattr(settings, "AI_TEMPERATURE", 0.7),
+            max_tokens=getattr(settings, "AI_MAX_TOKENS", 1000),
+            timeout_seconds=getattr(settings, "AI_TIMEOUT_SECONDS", 30.0),
+        )
+
+    def get_provider_config(self, settings: Any) -> ProviderConfig:
+        """Get provider-specific configuration."""
+        # Get API key based on provider
+        api_key_mapping = {
+            AIProvider.OPENAI: getattr(settings, "OPENAI_API_KEY", None),
+            AIProvider.ANTHROPIC: getattr(settings, "ANTHROPIC_API_KEY", None),
+            AIProvider.GOOGLE: getattr(settings, "GOOGLE_API_KEY", None),
+            AIProvider.GROQ: getattr(settings, "GROQ_API_KEY", None),
+            AIProvider.MISTRAL: getattr(settings, "MISTRAL_API_KEY", None),
+            AIProvider.COHERE: getattr(settings, "COHERE_API_KEY", None),
+        }
+
+        return ProviderConfig(
+            name=self.provider,
+            api_key=api_key_mapping.get(self.provider),
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+            timeout_seconds=self.timeout_seconds,
+            rate_limit_rpm=getattr(settings, "AI_RATE_LIMIT_RPM", 10),
+        )
+
+    def validate_configuration(self, settings: Any) -> list[str]:
+        """
+        Validate AI service configuration and return list of issues.
+
+        Returns:
+            List of validation error messages (empty if valid)
+        """
+        errors = []
+
+        if not self.enabled:
+            return errors  # Skip validation if disabled
+
+        # Check if provider is supported
+        capabilities = get_provider_capabilities(self.provider)
+        if not capabilities:
+            errors.append(f"Unsupported provider: {self.provider}")
+
+        # Check API key for non-free providers
+        provider_config = self.get_provider_config(settings)
+        free_providers = get_free_providers()
+
+        if self.provider not in free_providers and not provider_config.api_key:
+            errors.append(
+                f"Provider {self.provider} requires an API key. "
+                f"Set {self.provider.upper()}_API_KEY in environment."
+            )
+
+        # Validate token limits
+        if capabilities and self.max_tokens > capabilities.max_tokens:
+            errors.append(
+                f"max_tokens ({self.max_tokens}) exceeds provider limit "
+                f"({capabilities.max_tokens}) for {self.provider}"
+            )
+
+        return errors
+
+    def is_provider_available(self, settings: Any) -> bool:
+        """Check if the configured provider is available and properly configured."""
+        errors = self.validate_configuration(settings)
+        return len(errors) == 0
+
+    def get_available_providers(self, settings: Any) -> list[AIProvider]:
+        """Get list of providers that are properly configured."""
+        available = []
+
+        for provider in AIProvider:
+            # Temporarily check each provider
+            temp_config = AIServiceConfig(
+                enabled=True,
+                provider=provider,
+                model=self.model,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+
+            if len(temp_config.validate_configuration(settings)) == 0:
+                available.append(provider)
+
+        return available
+
+
+def get_ai_config(settings: Any) -> AIServiceConfig:
+    """Get AI service configuration from application settings."""
+    return AIServiceConfig.from_settings(settings)
