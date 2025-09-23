@@ -19,6 +19,7 @@
   
   "_comment_services": "Service selection - these will be set by our CLI",
   "include_auth": "no",
+  "include_ai": "no",
   
   "_comment_internal": "Internal variables for template logic",
   "_has_additional_components": "{% if cookiecutter.include_scheduler == 'yes' or cookiecutter.include_redis == 'yes' or cookiecutter.include_worker == 'yes' or cookiecutter.include_database == 'yes' or cookiecutter.include_cache == 'yes' %}yes{% else %}no{% endif %}",
@@ -32,5 +33,6 @@
   "_cache_deps": "{% if cookiecutter.include_cache == 'yes' %}redis[hiredis]>=5.0.0{% endif %}",
   
   "_comment_service_dependencies": "Service-specific dependencies",
-  "_auth_deps": "{% if cookiecutter.include_auth == 'yes' %}python-jose[cryptography]==3.3.0,passlib[bcrypt]==1.7.4,python-multipart==0.0.9{% endif %}"
+  "_auth_deps": "{% if cookiecutter.include_auth == 'yes' %}python-jose[cryptography]==3.3.0,passlib[bcrypt]==1.7.4,python-multipart==0.0.9{% endif %}",
+  "_ai_deps": "{% if cookiecutter.include_ai == 'yes' %}pydantic-ai-slim[openai,anthropic,google,groq]==1.0.10,httpx>=0.27.0{% endif %}"
 }

@@ -46,6 +46,7 @@ def process_j2_templates():
             "include_database": "{{ cookiecutter.include_database }}",
             "include_cache": "{{ cookiecutter.include_cache }}",
             "include_auth": "{{ cookiecutter.include_auth }}",
+            "include_ai": "{{ cookiecutter.include_ai }}",
         }
     }
 
@@ -299,6 +300,17 @@ def main():
         remove_file("tests/services/test_auth_service.py")
         remove_file("tests/services/test_auth_integration.py")
         remove_file("tests/models/test_user.py")
+
+    if "{{ cookiecutter.include_ai }}" != "yes":
+        # Remove AI service files
+        remove_dir("app/components/backend/api/ai")
+        remove_dir("app/services/ai")
+        # Remove AI CLI
+        remove_file("app/cli/ai.py")
+        # Remove AI-related tests if they exist
+        remove_file("tests/api/test_ai_endpoints.py")
+        remove_file("tests/services/test_ai_service.py")
+        remove_file("tests/services/test_ai_integration.py")
 
     # Clean up empty docs/components directory if no components selected
     if (

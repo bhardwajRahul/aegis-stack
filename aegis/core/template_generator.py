@@ -104,6 +104,7 @@ class TemplateGenerator:
             "needs_redis": "redis" in self.components,
             # Service flags for template conditionals
             "include_auth": "yes" if "auth" in self.selected_services else "no",
+            "include_ai": "yes" if "ai" in self.selected_services else "no",
             # Dependency lists for templates
             "selected_components": selected_only,  # Original selection for context
             "docker_services": self._get_docker_services(),
