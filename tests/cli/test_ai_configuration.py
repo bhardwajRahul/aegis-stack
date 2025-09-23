@@ -1,0 +1,320 @@
+"""
+Tests for AI service configuration system.
+
+This module tests the interactive provider selection, configuration loading,
+and CLI commands for AI service management.
+"""
+
+from typing import Any
+from unittest.mock import patch
+
+from aegis.cli.interactive import (
+    clear_ai_provider_selection,
+    get_ai_provider_selection,
+    interactive_project_selection,
+)
+
+
+class TestAIProviderSelection:
+    """Test cases for AI provider selection in interactive mode."""
+
+    def setup_method(self) -> None:
+        """Clear provider selection before each test."""
+        clear_ai_provider_selection()
+
+    @patch("typer.confirm")
+    def test_ai_service_with_default_providers(self, mock_confirm: Any) -> None:
+        """Test AI service selection with default providers."""
+        # Mock user responses: no components, yes AI service, no to all specific providers (triggers defaults)
+        mock_confirm.side_effect = [
+            False,
+            False,
+            False,
+            False,  # redis, worker, scheduler, database
+            False,  # auth service
+            True,  # AI service
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,  # All AI providers declined
+        ]
+
+        components, scheduler_backend, services = interactive_project_selection()
+
+        # Verify AI service was selected
+        assert "ai" in services
+        assert scheduler_backend == "memory"
+
+        # Verify default providers were selected
+        providers = get_ai_provider_selection("ai")
+        assert providers == ["groq", "google"]
+
+    @patch("typer.confirm")
+    def test_ai_service_with_custom_providers(self, mock_confirm: Any) -> None:
+        """Test AI service selection with custom provider selection."""
+        # Mock user responses: no components, yes AI service, select openai and anthropic
+        mock_confirm.side_effect = [
+            False,
+            False,
+            False,
+            False,  # redis, worker, scheduler, database
+            False,  # auth service
+            True,  # AI service
+            True,  # OpenAI
+            True,  # Anthropic
+            False,
+            False,
+            False,
+            False,  # Google, Groq, Mistral, Cohere
+        ]
+
+        components, scheduler_backend, services = interactive_project_selection()
+
+        # Verify AI service was selected
+        assert "ai" in services
+
+        # Verify custom providers were selected
+        providers = get_ai_provider_selection("ai")
+        assert "openai" in providers
+        assert "anthropic" in providers
+        assert len(providers) == 2
+
+    @patch("typer.confirm")
+    def test_ai_service_with_recommended_providers(self, mock_confirm: Any) -> None:
+        """Test AI service selection with recommended providers selected by default."""
+        # Mock user responses: no components, yes AI service, accept recommended defaults
+        mock_confirm.side_effect = [
+            False,
+            False,
+            False,
+            False,  # redis, worker, scheduler, database
+            False,  # auth service
+            True,  # AI service
+            False,
+            False,  # OpenAI, Anthropic
+            True,
+            True,  # Google (recommended), Groq (recommended)
+            False,
+            False,  # Mistral, Cohere
+        ]
+
+        components, scheduler_backend, services = interactive_project_selection()
+
+        # Verify AI service was selected
+        assert "ai" in services
+
+        # Verify recommended providers were selected
+        providers = get_ai_provider_selection("ai")
+        assert "google" in providers
+        assert "groq" in providers
+        assert len(providers) == 2
+
+    @patch("typer.confirm")
+    def test_no_ai_service_selection(self, mock_confirm: Any) -> None:
+        """Test when AI service is not selected."""
+        # Mock user responses: no components, no services
+        mock_confirm.side_effect = [
+            False,
+            False,
+            False,
+            False,  # redis, worker, scheduler, database
+            False,  # auth service
+            False,  # AI service
+        ]
+
+        components, scheduler_backend, services = interactive_project_selection()
+
+        # Verify AI service was not selected
+        assert "ai" not in services
+        assert services == []
+
+        # Verify no provider selection was stored
+        providers = get_ai_provider_selection("ai")
+        assert providers == ["groq", "google"]  # Default when not selected
+
+
+class TestAIConfigurationIntegration:
+    """Test AI configuration system integration."""
+
+    def test_provider_selection_storage(self) -> None:
+        """Test that provider selection is stored and retrieved correctly."""
+        clear_ai_provider_selection()
+
+        # Simulate provider selection
+        from aegis.cli.interactive import _ai_provider_selection
+
+        _ai_provider_selection["ai"] = ["openai", "google", "groq"]
+
+        # Verify retrieval
+        providers = get_ai_provider_selection("ai")
+        assert providers == ["openai", "google", "groq"]
+
+    def test_provider_selection_defaults(self) -> None:
+        """Test default provider selection when none specified."""
+        clear_ai_provider_selection()
+
+        # Should return defaults when no selection made
+        providers = get_ai_provider_selection("ai")
+        assert providers == ["groq", "google"]
+
+        # Should return defaults for unknown service
+        providers = get_ai_provider_selection("unknown_service")
+        assert providers == ["groq", "google"]
+
+    def test_clear_provider_selection(self) -> None:
+        """Test clearing provider selection."""
+        # Set some providers
+        from aegis.cli.interactive import _ai_provider_selection
+
+        _ai_provider_selection["ai"] = ["openai"]
+
+        # Verify they're set
+        providers = get_ai_provider_selection("ai")
+        assert providers == ["openai"]
+
+        # Clear and verify defaults return
+        clear_ai_provider_selection()
+        providers = get_ai_provider_selection("ai")
+        assert providers == ["groq", "google"]
+
+
+class TestTemplateGeneratorIntegration:
+    """Test integration with template generator for dynamic dependencies."""
+
+    def test_ai_providers_string_generation(self) -> None:
+        """Test that template generator creates correct provider string."""
+        from aegis.cli.interactive import _ai_provider_selection
+        from aegis.core.template_generator import TemplateGenerator
+
+        # Set up provider selection
+        clear_ai_provider_selection()
+        _ai_provider_selection["ai"] = ["openai", "anthropic", "google"]
+
+        # Create template generator with AI service
+        generator = TemplateGenerator(
+            "test-project", selected_components=["backend"], selected_services=["ai"]
+        )
+
+        # Test provider string generation
+        providers_string = generator._get_ai_providers_string()
+        assert providers_string == "openai,anthropic,google"
+
+    def test_ai_providers_string_no_service(self) -> None:
+        """Test provider string generation when AI service not selected."""
+        from aegis.core.template_generator import TemplateGenerator
+
+        clear_ai_provider_selection()
+
+        # Create template generator without AI service
+        generator = TemplateGenerator(
+            "test-project", selected_components=["backend"], selected_services=[]
+        )
+
+        # Should return defaults when service not selected
+        providers_string = generator._get_ai_providers_string()
+        assert providers_string == "groq,google"
+
+    def test_template_context_includes_providers(self) -> None:
+        """Test that template context includes AI provider selection."""
+        from aegis.cli.interactive import _ai_provider_selection
+        from aegis.core.template_generator import TemplateGenerator
+
+        # Set up provider selection
+        clear_ai_provider_selection()
+        _ai_provider_selection["ai"] = ["groq", "google", "mistral"]
+
+        # Create template generator with AI service
+        generator = TemplateGenerator(
+            "test-project", selected_components=["backend"], selected_services=["ai"]
+        )
+
+        # Get template context
+        context = generator.get_template_context()
+
+        # Verify AI provider context is included
+        assert context["include_ai"] == "yes"
+        assert context["ai_providers"] == "groq,google,mistral"
+
+
+# Integration test scenarios
+class TestAIConfigurationEndToEnd:
+    """End-to-end tests for AI configuration system."""
+
+    @patch("typer.confirm")
+    def test_full_ai_configuration_flow(self, mock_confirm: Any) -> None:
+        """Test complete flow from interactive selection to template generation."""
+        clear_ai_provider_selection()
+
+        # Mock interactive selection with AI service and specific providers
+        mock_confirm.side_effect = [
+            False,
+            False,
+            False,
+            False,  # No infrastructure components
+            False,  # No auth service
+            True,  # Yes AI service
+            True,
+            False,
+            True,
+            True,
+            False,
+            False,  # OpenAI, Google, Groq selected
+        ]
+
+        # Run interactive selection
+        components, scheduler_backend, services = interactive_project_selection()
+
+        # Verify service selection
+        assert "ai" in services
+
+        # Verify provider selection
+        providers = get_ai_provider_selection("ai")
+        assert "openai" in providers
+        assert "google" in providers
+        assert "groq" in providers
+        assert len(providers) == 3
+
+        # Test template generation
+        from aegis.core.template_generator import TemplateGenerator
+
+        generator = TemplateGenerator(
+            "test-ai-project",
+            selected_components=components,
+            selected_services=services,
+        )
+
+        context = generator.get_template_context()
+
+        # Verify template context
+        assert context["include_ai"] == "yes"
+        assert context["ai_providers"] == "openai,google,groq"
+        assert context["project_name"] == "test-ai-project"
+
+    def test_cookiecutter_json_structure(self) -> None:
+        """Test that cookiecutter.json has correct AI provider structure."""
+        import json
+        from pathlib import Path
+
+        # Load cookiecutter.json directly
+        cookiecutter_path = (
+            Path(__file__).parent.parent.parent
+            / "aegis"
+            / "templates"
+            / "cookiecutter-aegis-project"
+            / "cookiecutter.json"
+        )
+
+        with open(cookiecutter_path) as f:
+            config = json.load(f)
+
+        # Verify AI-related fields exist
+        assert "include_ai" in config
+        assert "ai_providers" in config
+        assert "_ai_deps" in config
+
+        # Verify AI dependencies template uses provider variable
+        ai_deps = config["_ai_deps"]
+        assert "{{ cookiecutter.ai_providers }}" in ai_deps
+        assert "pydantic-ai-slim" in ai_deps

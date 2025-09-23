@@ -49,7 +49,7 @@ dependencies = [
     "alembic==1.16.5",
 {%- endif %}
 {%- if cookiecutter.include_ai == "yes" %}
-    "pydantic-ai-slim[openai,anthropic,google,groq]==1.0.10",
+    "pydantic-ai-slim[{{cookiecutter.ai_providers}}]==1.0.10",
 {%- endif %}
 ]
 
