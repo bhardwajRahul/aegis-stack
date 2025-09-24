@@ -49,7 +49,7 @@ class TestAIProviderSelection:
 
         # Verify default providers were selected
         providers = get_ai_provider_selection("ai")
-        assert providers == ["groq", "google"]
+        assert providers == ["groq", "google"]  # Interactive defaults when all declined
 
     @patch("typer.confirm")
     def test_ai_service_with_custom_providers(self, mock_confirm: Any) -> None:
@@ -132,7 +132,7 @@ class TestAIProviderSelection:
 
         # Verify no provider selection was stored
         providers = get_ai_provider_selection("ai")
-        assert providers == ["groq", "google"]  # Default when not selected
+        assert providers == ["openai"]  # Default when not selected
 
 
 class TestAIConfigurationIntegration:
@@ -157,11 +157,11 @@ class TestAIConfigurationIntegration:
 
         # Should return defaults when no selection made
         providers = get_ai_provider_selection("ai")
-        assert providers == ["groq", "google"]
+        assert providers == ["openai"]
 
         # Should return defaults for unknown service
         providers = get_ai_provider_selection("unknown_service")
-        assert providers == ["groq", "google"]
+        assert providers == ["openai"]
 
     def test_clear_provider_selection(self) -> None:
         """Test clearing provider selection."""
@@ -177,7 +177,7 @@ class TestAIConfigurationIntegration:
         # Clear and verify defaults return
         clear_ai_provider_selection()
         providers = get_ai_provider_selection("ai")
-        assert providers == ["groq", "google"]
+        assert providers == ["openai"]
 
 
 class TestTemplateGeneratorIntegration:
@@ -214,7 +214,7 @@ class TestTemplateGeneratorIntegration:
 
         # Should return defaults when service not selected
         providers_string = generator._get_ai_providers_string()
-        assert providers_string == "groq,google"
+        assert providers_string == "openai"
 
     def test_template_context_includes_providers(self) -> None:
         """Test that template context includes AI provider selection."""

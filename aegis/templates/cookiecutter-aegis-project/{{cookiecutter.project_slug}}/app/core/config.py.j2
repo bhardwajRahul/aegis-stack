@@ -113,8 +113,8 @@ class Settings(BaseSettings):
     # AI Service Configuration
     # Primary service settings
     AI_ENABLED: bool = True
-    AI_PROVIDER: str = "groq"  # Default to free provider
-    AI_MODEL: str = "llama-3.1-8b-instant"  # Default to free model
+    AI_PROVIDER: str = "public"  # Default to public provider
+    AI_MODEL: str = "auto"  # Default model (public provider uses available models)
     AI_TEMPERATURE: float = 0.7
     AI_MAX_TOKENS: int = 1000
     AI_TIMEOUT_SECONDS: float = 30.0

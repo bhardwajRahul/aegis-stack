@@ -191,7 +191,7 @@ class TemplateGenerator:
             Comma-separated string of provider names (e.g., "openai,anthropic,google")
         """
         if "ai" not in self.selected_services:
-            return "groq,google"  # Default providers
+            return "openai"  # Default for PUBLIC provider
 
         # Import here to avoid circular imports
         from ..cli.interactive import get_ai_provider_selection

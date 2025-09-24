@@ -20,7 +20,7 @@
   "_comment_services": "Service selection - these will be set by our CLI",
   "include_auth": "no",
   "include_ai": "no",
-  "ai_providers": "groq,google",
+  "ai_providers": "openai",
   
   "_comment_internal": "Internal variables for template logic",
   "_has_additional_components": "{% if cookiecutter.include_scheduler == 'yes' or cookiecutter.include_redis == 'yes' or cookiecutter.include_worker == 'yes' or cookiecutter.include_database == 'yes' or cookiecutter.include_cache == 'yes' %}yes{% else %}no{% endif %}",
