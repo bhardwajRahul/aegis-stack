@@ -21,6 +21,7 @@ class AIProvider(str, Enum):
     GROQ = "groq"
     MISTRAL = "mistral"
     COHERE = "cohere"
+    PUBLIC = "public"  # Free public endpoints (no API key required)
 
 
 class MessageRole(str, Enum):
@@ -108,79 +109,65 @@ class AIServiceStatus(BaseModel):
 
 
 class ProviderCapabilities(BaseModel):
-    """Capabilities and limits for an AI provider."""
+    """Capabilities for an AI provider (binary features only)."""
 
     provider: AIProvider
     supports_streaming: bool = True
     supports_function_calling: bool = False
     supports_vision: bool = False
-    max_tokens: int = 4000
-    context_length: int = 4000
     free_tier_available: bool = False
-    rate_limits: dict[str, int] = Field(default_factory=dict)
 
 
-# Provider capability definitions
+# Provider capability definitions (binary features only)
 PROVIDER_CAPABILITIES = {
     AIProvider.OPENAI: ProviderCapabilities(
         provider=AIProvider.OPENAI,
         supports_streaming=True,
         supports_function_calling=True,
         supports_vision=True,
-        max_tokens=4000,
-        context_length=16000,
         free_tier_available=False,
-        rate_limits={"requests_per_minute": 3000, "tokens_per_minute": 250000},
     ),
     AIProvider.ANTHROPIC: ProviderCapabilities(
         provider=AIProvider.ANTHROPIC,
         supports_streaming=True,
         supports_function_calling=True,
         supports_vision=True,
-        max_tokens=4000,
-        context_length=200000,
         free_tier_available=False,
-        rate_limits={"requests_per_minute": 1000, "tokens_per_minute": 100000},
     ),
     AIProvider.GOOGLE: ProviderCapabilities(
         provider=AIProvider.GOOGLE,
         supports_streaming=True,
         supports_function_calling=True,
         supports_vision=True,
-        max_tokens=2048,
-        context_length=30000,
         free_tier_available=True,
-        rate_limits={"requests_per_minute": 1500, "tokens_per_minute": 32000},
     ),
     AIProvider.GROQ: ProviderCapabilities(
         provider=AIProvider.GROQ,
         supports_streaming=True,
         supports_function_calling=False,
         supports_vision=False,
-        max_tokens=8000,
-        context_length=8000,
         free_tier_available=True,  # Very generous free tier
-        rate_limits={"requests_per_minute": 30, "tokens_per_minute": 14400},
     ),
     AIProvider.MISTRAL: ProviderCapabilities(
         provider=AIProvider.MISTRAL,
         supports_streaming=True,
         supports_function_calling=True,
         supports_vision=False,
-        max_tokens=4000,
-        context_length=32000,
         free_tier_available=False,
-        rate_limits={"requests_per_minute": 1000, "tokens_per_minute": 100000},
     ),
     AIProvider.COHERE: ProviderCapabilities(
         provider=AIProvider.COHERE,
         supports_streaming=True,
         supports_function_calling=False,
         supports_vision=False,
-        max_tokens=4000,
-        context_length=4000,
         free_tier_available=True,
-        rate_limits={"requests_per_minute": 1000, "tokens_per_minute": 10000},
+    ),
+    AIProvider.PUBLIC: ProviderCapabilities(
+        provider=AIProvider.PUBLIC,
+        supports_streaming=False,
+        supports_function_calling=False,
+        supports_vision=False,
+        free_tier_available=True,  # No API key required
     ),
 }
 
@@ -201,4 +188,8 @@ def get_free_providers() -> list[AIProvider]:
 
 def get_recommended_free_providers() -> list[AIProvider]:
     """Get recommended free providers for getting started."""
-    return [AIProvider.GROQ, AIProvider.GOOGLE]  # Best free tiers
+    return [
+        AIProvider.PUBLIC,
+        AIProvider.GROQ,
+        AIProvider.GOOGLE,
+    ]  # PUBLIC requires no setup

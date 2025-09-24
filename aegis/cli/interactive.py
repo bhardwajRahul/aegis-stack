@@ -275,7 +275,7 @@ def get_ai_provider_selection(service_name: str = "ai") -> list[str]:
     Returns:
         List of selected provider names, or default providers if none selected
     """
-    return _ai_provider_selection.get(service_name, ["groq", "google"])
+    return _ai_provider_selection.get(service_name, ["openai"])
 
 
 def clear_ai_provider_selection() -> None:

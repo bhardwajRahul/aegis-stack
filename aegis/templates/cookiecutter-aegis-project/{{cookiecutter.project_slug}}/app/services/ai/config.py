@@ -12,7 +12,6 @@ from pydantic import BaseModel, Field
 from .models import (
     AIProvider,
     ProviderConfig,
-    get_free_providers,
     get_provider_capabilities,
 )
 
@@ -26,8 +25,10 @@ class AIServiceConfig(BaseModel):
     """
 
     enabled: bool = True
-    provider: AIProvider = AIProvider.GROQ  # Default to free provider
-    model: str = "llama-3.1-8b-instant"  # Default to free model
+    provider: AIProvider = (
+        AIProvider.PUBLIC
+    )  # Default to public endpoints (no API key required)
+    model: str = "gpt-3.5-turbo"  # Default to widely supported model
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1000, gt=0, le=8000)
     timeout_seconds: float = Field(default=30.0, gt=0)
@@ -40,8 +41,8 @@ class AIServiceConfig(BaseModel):
         """Create configuration from main application settings."""
         return cls(
             enabled=getattr(settings, "AI_ENABLED", True),
-            provider=AIProvider(getattr(settings, "AI_PROVIDER", "groq")),
-            model=getattr(settings, "AI_MODEL", "llama-3.1-8b-instant"),
+            provider=AIProvider(getattr(settings, "AI_PROVIDER", "public")),
+            model=getattr(settings, "AI_MODEL", "gpt-3.5-turbo"),
             temperature=getattr(settings, "AI_TEMPERATURE", 0.7),
             max_tokens=getattr(settings, "AI_MAX_TOKENS", 1000),
             timeout_seconds=getattr(settings, "AI_TIMEOUT_SECONDS", 30.0),
@@ -57,6 +58,7 @@ class AIServiceConfig(BaseModel):
             AIProvider.GROQ: getattr(settings, "GROQ_API_KEY", None),
             AIProvider.MISTRAL: getattr(settings, "MISTRAL_API_KEY", None),
             AIProvider.COHERE: getattr(settings, "COHERE_API_KEY", None),
+            AIProvider.PUBLIC: None,  # No API key required for public endpoints
         }
 
         return ProviderConfig(
@@ -85,22 +87,17 @@ class AIServiceConfig(BaseModel):
         if not capabilities:
             errors.append(f"Unsupported provider: {self.provider}")
 
-        # Check API key for non-free providers
+        # Check API key requirement (only PUBLIC provider requires no API key)
         provider_config = self.get_provider_config(settings)
-        free_providers = get_free_providers()
 
-        if self.provider not in free_providers and not provider_config.api_key:
+        if self.provider != AIProvider.PUBLIC and not provider_config.api_key:
             errors.append(
-                f"Provider {self.provider} requires an API key. "
-                f"Set {self.provider.upper()}_API_KEY in environment."
+                f"Missing API key for {self.provider} provider. "
+                f"Set {self.provider.upper()}_API_KEY environment variable."
             )
 
-        # Validate token limits
-        if capabilities and self.max_tokens > capabilities.max_tokens:
-            errors.append(
-                f"max_tokens ({self.max_tokens}) exceeds provider limit "
-                f"({capabilities.max_tokens}) for {self.provider}"
-            )
+        # Note: Token limits vary by model within each provider,
+        # so we don't validate them here
 
         return errors
 

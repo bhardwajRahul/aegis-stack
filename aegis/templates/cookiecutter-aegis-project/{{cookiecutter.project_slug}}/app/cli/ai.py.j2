@@ -12,6 +12,7 @@ from ..core.config import settings
 from ..services.ai.config import get_ai_config
 from ..services.ai.models import (
     AIProvider,
+    MessageRole,
     get_free_providers,
     get_provider_capabilities,
 )
@@ -40,10 +41,161 @@ def version() -> None:
     typer.echo(f"Model: {ai_config.model}")
     typer.echo("")
     typer.echo("Available commands:")
+    typer.echo("  • ai chat \"message\"       - Send a chat message")
+    typer.echo("  • ai chat list           - List conversations")
+    typer.echo("  • ai chat history <id>   - View conversation history")
     typer.echo("  • ai config show         - Show detailed configuration")
     typer.echo("  • ai config validate     - Validate current configuration")
     typer.echo("  • ai providers list      - List available providers")
-    typer.echo("  • ai providers show      - Show provider capabilities")
+
+
+# Chat command group
+chat_app = typer.Typer(help="AI chat commands")
+app.add_typer(chat_app, name="chat")
+
+
+@app.command()
+def chat(
+    message: str = typer.Argument(..., help="Message to send to AI"),
+    conversation_id: str | None = typer.Option(
+        None, "--conversation-id", "-c", help="Conversation ID"
+    ),
+) -> None:
+    """Send a chat message (shortcut for ai chat send)."""
+    import asyncio
+    from app.services.ai.service import AIService
+
+    ai_service = AIService(settings)
+
+    async def send_message() -> None:
+        try:
+            response = await ai_service.chat(
+                message=message,
+                conversation_id=conversation_id,
+                user_id="cli-user"
+            )
+
+            typer.echo(f"🤖 {response.content}")
+
+        except Exception as e:
+            typer.echo(f"❌ Error: {e}", err=True)
+            raise typer.Exit(1)
+
+    asyncio.run(send_message())
+
+
+@chat_app.command("send")
+def chat_send(
+    message: str = typer.Argument(..., help="Message to send to AI"),
+    conversation_id: str | None = typer.Option(
+        None, "--conversation-id", "-c", help="Conversation ID"
+    ),
+    user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
+) -> None:
+    """Send a chat message and get AI response."""
+    import asyncio
+    from app.services.ai.service import AIService
+
+    ai_service = AIService(settings)
+
+    async def send_message() -> None:
+        try:
+            response = await ai_service.chat(
+                message=message,
+                conversation_id=conversation_id,
+                user_id=user_id
+            )
+
+            # Show conversation info
+            conv_id = response.metadata.get("conversation_id", "unknown")
+            conversation = ai_service.get_conversation(conv_id)
+            if conversation:
+                typer.echo(f"💬 Conversation: {conversation.id}")
+                if conversation.title:
+                    typer.echo(f"📝 Title: {conversation.title}")
+
+            typer.echo("")
+            typer.echo(f"🤖 {response.content}")
+
+            # Show response metadata
+            if conversation:
+                typer.echo("")
+                typer.echo(f"ℹ️  Messages: {conversation.get_message_count()}")
+                if "last_response_time_ms" in conversation.metadata:
+                    response_time = conversation.metadata["last_response_time_ms"]
+                    typer.echo(f"⏱️  Response time: {response_time:.1f}ms")
+
+        except Exception as e:
+            typer.echo(f"❌ Error: {e}", err=True)
+            raise typer.Exit(1)
+
+    asyncio.run(send_message())
+
+
+@chat_app.command("list")
+def chat_list(
+    user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
+    limit: int = typer.Option(
+        10, "--limit", "-l", help="Number of conversations to show"
+    ),
+) -> None:
+    """List conversations for a user."""
+    from app.services.ai.service import AIService
+
+    ai_service = AIService(settings)
+    conversations = ai_service.list_conversations(user_id)[:limit]
+
+    if not conversations:
+        typer.echo(f"No conversations found for user: {user_id}")
+        return
+
+    typer.echo(f"💬 Conversations for {user_id}:")
+    typer.echo("")
+
+    for conv in conversations:
+        title = conv.title or "Untitled"
+        messages = conv.get_message_count()
+        updated = conv.updated_at.strftime("%Y-%m-%d %H:%M")
+
+        typer.echo(f"• {conv.id[:8]}... - {title}")
+        typer.echo(f"  📊 {messages} messages | 🕒 {updated}")
+        typer.echo("")
+
+
+@chat_app.command("history")
+def chat_history(
+    conversation_id: str = typer.Argument(..., help="Conversation ID"),
+    user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
+) -> None:
+    """View conversation history."""
+    from app.services.ai.service import AIService
+
+    ai_service = AIService(settings)
+    conversation = ai_service.get_conversation(conversation_id)
+
+    if not conversation:
+        typer.echo(f"❌ Conversation not found: {conversation_id}")
+        raise typer.Exit(1)
+
+    # Check if user owns conversation
+    if conversation.metadata.get("user_id") != user_id:
+        typer.echo("❌ Access denied: You don't own this conversation")
+        raise typer.Exit(1)
+
+    typer.echo(f"💬 Conversation: {conversation_id}")
+    if conversation.title:
+        typer.echo(f"📝 Title: {conversation.title}")
+    typer.echo(f"🤖 Provider: {conversation.provider}")
+    typer.echo(f"📊 Messages: {conversation.get_message_count()}")
+    typer.echo("")
+
+    for i, message in enumerate(conversation.messages):
+        timestamp = message.timestamp.strftime("%H:%M:%S")
+        role_icon = "👤" if message.role == MessageRole.USER else "🤖"
+
+        typer.echo(f"{role_icon} [{timestamp}] {message.content}")
+        if i < len(conversation.messages) - 1:
+            typer.echo("")
 
 
 @config_app.command("show")
@@ -141,18 +293,28 @@ def providers_list() -> None:
     available = ai_config.get_available_providers(settings)
     free_providers = get_free_providers()
 
-    table = Table(title="🤖 AI Providers")
-    table.add_column("Provider", style="cyan")
-    table.add_column("Status", style="green")
-    table.add_column("Free Tier", style="yellow")
-    table.add_column("Features", style="blue")
+    table = Table(title="🤖 AI Providers", width=75)
+    table.add_column("Provider", style="cyan", width=9)
+    table.add_column("Status", style="green", width=26, no_wrap=True)
+    table.add_column("Free", style="yellow", width=4)
+    table.add_column("Features", style="blue", width=18)
 
     for provider in AIProvider:
         capabilities = get_provider_capabilities(provider)
         is_available = provider in available
         is_current = provider == ai_config.provider
 
-        status = "✅ Available" if is_available else "❌ Not configured"
+        if is_available:
+            status = "✅ Available"
+        else:
+            # Make status more informative about what's missing
+            if provider == AIProvider.PUBLIC:
+                status = "❌ Error"  # Shouldn't happen for PUBLIC
+            else:
+                # Show abbreviated environment variable name
+                env_var = f"{provider.value.upper()}_API_KEY"
+                status = f"❌ Need {env_var}"
+
         if is_current:
             status += " (current)"
 
@@ -176,41 +338,6 @@ def providers_list() -> None:
     console.print(table)
 
 
-@providers_app.command("show")
-def providers_show(
-    provider: str | None = typer.Argument(None, help="Provider to show details for")
-):
-    """Show detailed provider capabilities."""
-    if provider:
-        try:
-            ai_provider = AIProvider(provider.lower())
-        except ValueError:
-            typer.echo(f"❌ Unknown provider: {provider}")
-            available_providers = ', '.join([p.value for p in AIProvider])
-            typer.echo(f"Available providers: {available_providers}")
-            raise typer.Exit(1)
-        providers_to_show = [ai_provider]
-    else:
-        providers_to_show = list(AIProvider)
-
-    for ai_provider in providers_to_show:
-        capabilities = get_provider_capabilities(ai_provider)
-
-        typer.echo(f"\n🔍 {ai_provider.value.title()} Provider")
-        typer.echo("=" * 30)
-        typer.echo(f"Max Tokens: {capabilities.max_tokens:,}")
-        typer.echo(f"Context Length: {capabilities.context_length:,}")
-        typer.echo(f"Free Tier: {'Yes' if capabilities.free_tier_available else 'No'}")
-        typer.echo(f"Streaming: {'Yes' if capabilities.supports_streaming else 'No'}")
-        function_calling = 'Yes' if capabilities.supports_function_calling else 'No'
-        typer.echo(f"Function Calling: {function_calling}")
-        typer.echo(f"Vision: {'Yes' if capabilities.supports_vision else 'No'}")
-
-        if capabilities.rate_limits:
-            typer.echo("Rate Limits:")
-            for limit_type, limit_value in capabilities.rate_limits.items():
-                limit_name = limit_type.replace('_', ' ').title()
-                typer.echo(f"  • {limit_name}: {limit_value:,}")
 
 
 if __name__ == "__main__":
