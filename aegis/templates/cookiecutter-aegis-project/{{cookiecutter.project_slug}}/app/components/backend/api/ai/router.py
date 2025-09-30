@@ -5,6 +5,8 @@ FastAPI router for AI chat endpoints implementing core chat functionality,
 conversation management, and service status.
 """
 
+import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 from app.core.config import settings
@@ -15,6 +17,7 @@ from app.services.ai.service import (
     ProviderError,
 )
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -97,6 +100,87 @@ async def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=400, detail=f"Conversation error: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
+
+
+@router.post("/chat/stream")
+async def chat_stream(request: ChatRequest) -> StreamingResponse:
+    """
+    Stream a chat message with real-time Server-Sent Events.
+
+    Args:
+        request: Chat request with message and optional conversation ID
+
+    Returns:
+        StreamingResponse: SSE stream with real-time AI response
+
+    Raises:
+        HTTPException: If streaming fails
+    """
+
+    async def generate_sse_stream() -> AsyncIterator[str]:
+        """Generate Server-Sent Events stream for chat response."""
+        try:
+            # Send initial connection event
+            connect_data = {"status": "connected", "message": "Streaming started"}
+            yield f"event: connect\ndata: {json.dumps(connect_data)}\n\n"
+
+            # Stream the AI response
+            async for chunk in ai_service.stream_chat(
+                message=request.message,
+                conversation_id=request.conversation_id,
+                user_id=request.user_id,
+                stream_delta=True,
+            ):
+                # Format chunk as SSE event
+                event_data = {
+                    "content": chunk.content,
+                    "is_final": chunk.is_final,
+                    "is_delta": chunk.is_delta,
+                    "message_id": chunk.message_id,
+                    "conversation_id": chunk.conversation_id,
+                    "timestamp": chunk.timestamp.isoformat(),
+                }
+
+                # Add metadata for final chunk
+                if chunk.is_final:
+                    event_data.update(chunk.metadata)
+
+                # Send chunk as SSE event
+                event_type = "final" if chunk.is_final else "chunk"
+                yield f"event: {event_type}\ndata: {json.dumps(event_data)}\n\n"
+
+                # Break after final chunk
+                if chunk.is_final:
+                    break
+
+            # Send stream complete event
+            complete_data = {"status": "completed", "message": "Stream finished"}
+            yield f"event: complete\ndata: {json.dumps(complete_data)}\n\n"
+
+        except AIServiceError as e:
+            error_data = {"error": "AI service error", "detail": str(e)}
+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+        except ProviderError as e:
+            error_data = {"error": "AI provider error", "detail": str(e)}
+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+        except ConversationError as e:
+            error_data = {"error": "Conversation error", "detail": str(e)}
+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+        except Exception as e:
+            error_data = {"error": "Unexpected error", "detail": str(e)}
+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+
+    # Create streaming response with proper SSE headers
+    return StreamingResponse(
+        generate_sse_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Content-Type",
+        },
+    )
 
 
 @router.get("/conversations", response_model=list[ConversationSummary])

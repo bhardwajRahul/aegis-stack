@@ -116,7 +116,7 @@ def get_agent(config: AIServiceConfig, settings: Any) -> Agent:
             ),
         )
 
-        logger.info(f"Created {config.provider} agent with model {config.model}")
+        # logger.info(f"Created {config.provider} agent with model {config.model}")
         return agent
 
     except Exception as e:
@@ -148,7 +148,9 @@ def _create_public_agent(config: AIServiceConfig) -> Agent:
             """Custom HTTP client that adds missing index field to LLM7.io responses."""
 
             async def send(self, request, **kwargs):
-                logger.info(f"🔧 FixedLLM7Client.send: {request.method} {request.url}")
+                # logger.info(
+                #     f"🔧 FixedLLM7Client.send: {request.method} {request.url}"
+                # )
                 response = await super().send(request, **kwargs)
 
                 # If this is a chat completions request, fix the response
@@ -156,33 +158,50 @@ def _create_public_agent(config: AIServiceConfig) -> Agent:
                     "/chat/completions" in str(request.url)
                     and request.method.upper() == "POST"
                 ):
-                    logger.debug(
-                        "Detected chat completions request, attempting to fix response"
-                    )
+                    # logger.debug(
+                    #     "Detected chat completions request, attempting to "
+                    #     "fix response"
+                    # )
                     try:
+                        # Check if this is a streaming response first
+                        content_type = response.headers.get("content-type", "")
+                        if (
+                            "text/plain" in content_type
+                            or "text/event-stream" in content_type
+                            or "application/x-ndjson" in content_type
+                        ):
+                            # logger.debug("Skipping fix for streaming response")
+                            return response
+
+                        # Only process non-streaming JSON responses
+                        if not response.headers.get("content-type", "").startswith(
+                            "application/json"
+                        ):
+                            # logger.debug("Skipping fix for non-JSON response")
+                            return response
+
                         # Get response text, letting httpx handle encoding/decompression
                         response_text = response.text
                         data = json.loads(response_text)
 
-                        logger.debug(f"Original response data: {data}")
+                        # logger.debug(f"Original response data: {data}")
 
                         # Add missing index field to choices
                         if "choices" in data and isinstance(data["choices"], list):
                             for i, choice in enumerate(data["choices"]):
                                 if "index" not in choice or choice["index"] is None:
                                     choice["index"] = i  # Always set index
-                                    logger.debug(f"Added index {i} to choice")
+                                    # logger.debug(f"Added index {i} to choice")
 
                         # Monkey patch the response to return fixed content
                         fixed_content = json.dumps(data)
                         response._content = fixed_content.encode()
                         response._text = fixed_content
 
-                        choices_count = len(data.get("choices", []))
-                        logger.debug(
-                            f"Fixed LLM7.io response: added index fields "
-                            f"to {choices_count} choices"
-                        )
+                        # logger.debug(
+                        #     f"Fixed LLM7.io response: added index fields "
+                        #     f"to {len(data.get('choices', []))} choices"
+                        # )
 
                     except Exception as e:
                         logger.warning(f"Failed to fix LLM7.io response: {e}")
@@ -192,7 +211,7 @@ def _create_public_agent(config: AIServiceConfig) -> Agent:
 
         # Create custom HTTP client
         custom_http_client = FixedLLM7Client()
-        logger.debug(f"Created custom HTTP client: {type(custom_http_client)}")
+        # logger.debug(f"Created custom HTTP client: {type(custom_http_client)}")
 
         # Create the AsyncOpenAI client directly to ensure
         # our custom HTTP client is used
@@ -201,11 +220,11 @@ def _create_public_agent(config: AIServiceConfig) -> Agent:
             base_url="https://api.llm7.io/v1",  # Public endpoint
             http_client=custom_http_client,
         )
-        logger.debug("Created OpenAI client with custom HTTP client")
+        # logger.debug("Created OpenAI client with custom HTTP client")
 
         # Create provider using the custom openai_client
         provider = OpenAIProvider(openai_client=openai_client)
-        logger.debug(f"Created provider with custom OpenAI client: {provider}")
+        # logger.debug(f"Created provider with custom OpenAI client: {provider}")
 
         # Create OpenAI model using the provider
         # Note: LLM7.io accepts various model names but routes to their available models
@@ -224,7 +243,7 @@ def _create_public_agent(config: AIServiceConfig) -> Agent:
             ),
         )
 
-        logger.info(f"Created PUBLIC agent with model {config.model} via LLM7.io")
+        # logger.info(f"Created PUBLIC agent with model {config.model} via LLM7.io")
         return agent
 
     except Exception as e:
@@ -258,9 +277,9 @@ def _get_env_var_name(provider: AIProvider) -> str:
     }
 
     # Debug logging
-    logger.debug(
-        f"Looking up env var for provider: {provider} (type: {type(provider)})"
-    )
+    # logger.debug(
+    #     f"Looking up env var for provider: {provider} (type: {type(provider)})"
+    # )
 
     result = env_var_map.get(provider)
     if result:
@@ -285,7 +304,7 @@ def _set_provider_env_var(provider: AIProvider, api_key: str) -> None:
     env_var = env_var_map.get(provider)
     if env_var and api_key:
         os.environ[env_var] = api_key
-        logger.debug(f"Set {env_var} environment variable")
+        # logger.debug(f"Set {env_var} environment variable")
 
 
 def validate_provider_support(provider: AIProvider) -> bool:

@@ -97,6 +97,41 @@ class Conversation(BaseModel):
         return self.messages[-1] if self.messages else None
 
 
+class StreamingMessage(BaseModel):
+    """A streaming message chunk with metadata."""
+
+    content: str = Field(..., description="Partial or complete message content")
+    is_final: bool = Field(False, description="Whether this is the final chunk")
+    is_delta: bool = Field(False, description="Whether content is delta or cumulative")
+    message_id: str | None = Field(None, description="Message ID once finalized")
+    conversation_id: str | None = Field(None, description="Associated conversation ID")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class StreamingConversation(BaseModel):
+    """Extended conversation model for streaming state management."""
+
+    conversation: Conversation
+    current_message_id: str | None = None
+    accumulated_content: str = ""
+    stream_start_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    def reset_stream(self) -> None:
+        """Reset streaming state for new message."""
+        self.current_message_id = None
+        self.accumulated_content = ""
+        self.stream_start_time = datetime.now(UTC)
+
+    def accumulate_content(self, content: str, is_delta: bool = False) -> str:
+        """Accumulate streaming content and return total content."""
+        if is_delta:
+            self.accumulated_content += content
+        else:
+            self.accumulated_content = content
+        return self.accumulated_content
+
+
 class AIServiceStatus(BaseModel):
     """Status information for the AI service."""
 
