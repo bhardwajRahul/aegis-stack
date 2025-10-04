@@ -6,6 +6,7 @@ conversation management, and provider integration.
 """
 
 import uuid
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,7 +16,13 @@ from app.core.log import logger
 
 from .config import get_ai_config
 from .conversation import ConversationManager
-from .models import Conversation, ConversationMessage, MessageRole
+from .models import (
+    Conversation,
+    ConversationMessage,
+    MessageRole,
+    StreamingConversation,
+    StreamingMessage,
+)
 from .providers import get_agent
 
 
@@ -51,10 +58,10 @@ class AIService:
         self.config = get_ai_config(settings)
         self.conversation_manager = ConversationManager()
 
-        logger.info(
-            f"AI service initialized - Provider: {self.config.provider}, "
-            f"Enabled: {self.config.enabled}"
-        )
+        # logger.info(
+        #     f"AI service initialized - Provider: {self.config.provider}, "
+        #     f"Enabled: {self.config.enabled}"
+        # )
 
     async def chat(
         self, message: str, conversation_id: str | None = None, user_id: str = "default"
@@ -92,11 +99,11 @@ class AIService:
                     model=self.config.model,
                     user_id=user_id,
                 )
-                logger.info(f"Created new conversation: {conversation.id}")
+                # logger.info(f"Created new conversation: {conversation.id}")
 
             # Add user message to conversation
             conversation.add_message(MessageRole.USER, message)
-            logger.debug(f"Added user message to conversation {conversation.id}")
+            # logger.debug(f"Added user message to conversation {conversation.id}")
 
             # Create agent for this request
             agent = get_agent(self.config, self.settings)
@@ -105,7 +112,7 @@ class AIService:
             conversation_context = self._build_conversation_context(conversation)
 
             # Get AI response
-            logger.debug(f"Sending message to AI provider: {self.config.provider}")
+            # logger.debug(f"Sending message to AI provider: {self.config.provider}")
             start_time = datetime.now(UTC)
 
             result = await agent.run(conversation_context)
@@ -133,10 +140,10 @@ class AIService:
             # Save conversation
             self.conversation_manager.save_conversation(conversation)
 
-            logger.info(
-                f"AI response generated for conversation {conversation.id} "
-                f"in {response_time_ms:.1f}ms"
-            )
+            # logger.info(
+            #     f"AI response generated for conversation {conversation.id} "
+            #     f"in {response_time_ms:.1f}ms"
+            # )
 
             return ai_message
 
@@ -146,6 +153,147 @@ class AIService:
             raise ProviderError(error_msg) from e
         except Exception as e:
             error_msg = f"Chat processing failed: {e}"
+            logger.error(error_msg)
+            raise AIServiceError(error_msg) from e
+
+    async def stream_chat(
+        self,
+        message: str,
+        conversation_id: str | None = None,
+        user_id: str = "default",
+        stream_delta: bool = False,
+    ) -> AsyncIterator[StreamingMessage]:
+        """
+        Stream a chat message with real-time response generation.
+
+        Args:
+            message: The user's message
+            conversation_id: Optional conversation ID (creates new if None)
+            user_id: User identifier for conversation ownership
+            stream_delta: Whether to stream delta changes or full content
+
+        Yields:
+            StreamingMessage: Real-time message chunks
+
+        Raises:
+            AIServiceError: If service is disabled or not configured
+            ProviderError: If AI provider fails
+            ConversationError: If conversation management fails
+        """
+        if not self.config.enabled:
+            raise AIServiceError("AI service is disabled")
+
+        try:
+            # Get or create conversation
+            if conversation_id:
+                conversation = self.conversation_manager.get_conversation(
+                    conversation_id
+                )
+                if not conversation:
+                    raise ConversationError(f"Conversation {conversation_id} not found")
+            else:
+                conversation = self.conversation_manager.create_conversation(
+                    provider=self.config.provider,
+                    model=self.config.model,
+                    user_id=user_id,
+                )
+                # logger.info(f"Created new conversation: {conversation.id}")
+
+            # Add user message to conversation
+            conversation.add_message(MessageRole.USER, message)
+            # logger.debug(f"Added user message to conversation {conversation.id}")
+
+            # Create streaming conversation wrapper
+            streaming_conv = StreamingConversation(conversation=conversation)
+            streaming_conv.reset_stream()
+
+            # Create agent for this request
+            agent = get_agent(self.config, self.settings)
+
+            # Build conversation context for AI
+            conversation_context = self._build_conversation_context(conversation)
+
+            # Start streaming
+            # logger.debug(f"Starting streaming to AI provider: {self.config.provider}")
+            start_time = datetime.now(UTC)
+
+            # Generate a message ID for the streaming response
+            message_id = str(uuid.uuid4())
+
+            # Use PydanticAI's run_stream method for streaming
+            async with agent.run_stream(conversation_context) as result:
+                # Stream text chunks
+                async for text_chunk in result.stream_text(delta=stream_delta):
+                    # Accumulate content
+                    total_content = streaming_conv.accumulate_content(
+                        text_chunk, is_delta=stream_delta
+                    )
+
+                    # Yield streaming message chunk
+                    yield StreamingMessage(
+                        content=text_chunk if stream_delta else total_content,
+                        is_final=False,
+                        is_delta=stream_delta,
+                        message_id=message_id,
+                        conversation_id=conversation.id,
+                        metadata={
+                            "provider": self.config.provider,
+                            "model": self.config.model,
+                            "stream_delta": stream_delta,
+                        },
+                    )
+
+            end_time = datetime.now(UTC)
+            response_time_ms = (end_time - start_time).total_seconds() * 1000
+
+            # Add final message to conversation using accumulated streaming content
+            final_content = streaming_conv.accumulated_content or "No content received"
+            ai_message = conversation.add_message(
+                MessageRole.ASSISTANT, final_content, message_id=message_id
+            )
+
+            # Store conversation metadata
+            ai_message.metadata["conversation_id"] = conversation.id
+
+            # Update conversation metadata
+            conversation.metadata.update(
+                {
+                    "last_response_time_ms": response_time_ms,
+                    "total_messages": conversation.get_message_count(),
+                    "last_activity": end_time.isoformat(),
+                    "streaming": True,
+                }
+            )
+
+            # Save conversation
+            self.conversation_manager.save_conversation(conversation)
+
+            # Yield final streaming message
+            yield StreamingMessage(
+                content=final_content,
+                is_final=True,
+                is_delta=False,
+                message_id=message_id,
+                conversation_id=conversation.id,
+                metadata={
+                    "provider": self.config.provider,
+                    "model": self.config.model,
+                    "response_time_ms": response_time_ms,
+                    "stream_complete": True,
+                },
+            )
+
+            # logger.info(
+            #     f"Streaming completed for conversation {conversation.id} "
+            #     f"in {response_time_ms:.1f}ms"
+            # )
+
+        except (ModelRetry, UnexpectedModelBehavior) as e:
+            error_msg = f"AI provider streaming error: {e}"
+            logger.error(error_msg)
+            raise ProviderError(error_msg) from e
+        except Exception as e:
+            error_msg = f"Streaming failed: {e}"
             logger.error(error_msg)
             raise AIServiceError(error_msg) from e
 

@@ -25,7 +25,7 @@ class ConversationManager:
     def __init__(self):
         """Initialize conversation manager with empty storage."""
         self.conversations: dict[str, Conversation] = {}
-        logger.info("Conversation manager initialized")
+        # logger.info("Conversation manager initialized")
 
     def create_conversation(
         self,
@@ -57,7 +57,7 @@ class ConversationManager:
         )
 
         self.conversations[conversation_id] = conversation
-        logger.debug(f"Created conversation {conversation_id} for user {user_id}")
+        # logger.debug(f"Created conversation {conversation_id} for user {user_id}")
 
         return conversation
 
@@ -82,7 +82,7 @@ class ConversationManager:
         """
         conversation.updated_at = datetime.now(UTC)
         self.conversations[conversation.id] = conversation
-        logger.debug(f"Saved conversation {conversation.id}")
+        # logger.debug(f"Saved conversation {conversation.id}")
 
     def list_conversations(self, user_id: str | None = None) -> list[Conversation]:
         """
@@ -119,7 +119,7 @@ class ConversationManager:
         """
         if conversation_id in self.conversations:
             del self.conversations[conversation_id]
-            logger.debug(f"Deleted conversation {conversation_id}")
+            # logger.debug(f"Deleted conversation {conversation_id}")
             return True
         return False
 

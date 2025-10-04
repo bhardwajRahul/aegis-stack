@@ -305,12 +305,17 @@ def main():
         # Remove AI service files
         remove_dir("app/components/backend/api/ai")
         remove_dir("app/services/ai")
-        # Remove AI CLI
+        # Remove AI CLI and rendering
         remove_file("app/cli/ai.py")
+        remove_file("app/cli/ai_rendering.py")
+        remove_file("app/cli/marko_terminal_renderer.py")
         # Remove AI-related tests if they exist
         remove_file("tests/api/test_ai_endpoints.py")
         remove_file("tests/services/test_ai_service.py")
         remove_file("tests/services/test_ai_integration.py")
+        remove_file("tests/services/test_conversation_persistence.py")
+        remove_file("tests/cli/test_ai_rendering.py")
+        remove_file("tests/cli/test_conversation_memory.py")
 
     # Clean up empty docs/components directory if no components selected
     if (

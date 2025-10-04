@@ -4,8 +4,13 @@ AI service CLI commands.
 Command-line interface for AI service management and chat functionality.
 """
 
+import logging
+from contextlib import contextmanager
+
 import typer
 from rich.console import Console
+from rich.panel import Panel
+from rich.prompt import Prompt
 from rich.table import Table
 
 from ..core.config import settings
@@ -19,6 +24,32 @@ from ..services.ai.models import (
 
 app = typer.Typer(help="AI service management and chat commands")
 console = Console()
+
+
+@contextmanager
+def suppress_logs(level: int = logging.ERROR):
+    """
+    Context manager to temporarily suppress logs during interactive chat.
+
+    Sets the root logger to ERROR level to hide INFO/DEBUG/WARNING logs while
+    preserving ERROR logs for critical issues.
+
+    Args:
+        level: Minimum log level to show (default: ERROR)
+    """
+    # Get the root logger and remember original level
+    root_logger = logging.getLogger()
+    original_level = root_logger.level
+
+    try:
+        # Temporarily raise log level to suppress info/debug logs
+        root_logger.setLevel(level)
+        yield
+    finally:
+        # Restore original log level
+        root_logger.setLevel(original_level)
+
+
 
 # Configuration command group
 config_app = typer.Typer(help="AI service configuration commands")
@@ -54,39 +85,54 @@ chat_app = typer.Typer(help="AI chat commands")
 app.add_typer(chat_app, name="chat")
 
 
-@app.command()
-def chat(
-    message: str = typer.Argument(..., help="Message to send to AI"),
+@chat_app.callback(invoke_without_command=True)
+def chat_main(
+    ctx: typer.Context,
+    message: str | None = typer.Option(
+        None, "--message", "-m", help="Send single message"
+    ),
+    stream: bool = typer.Option(
+        True, "--stream/--no-stream", help="Enable streaming output"
+    ),
     conversation_id: str | None = typer.Option(
         None, "--conversation-id", "-c", help="Conversation ID"
     ),
 ) -> None:
-    """Send a chat message (shortcut for ai chat send)."""
+    """Start interactive chat session or send single message."""
+    # If a subcommand was invoked, don't run the chat logic
+    if ctx.invoked_subcommand is not None:
+        return
+
     import asyncio
+
     from app.services.ai.service import AIService
 
-    ai_service = AIService(settings)
-
-    async def send_message() -> None:
+    async def run_chat() -> None:
         try:
-            response = await ai_service.chat(
-                message=message,
-                conversation_id=conversation_id,
-                user_id="cli-user"
-            )
-
-            typer.echo(f"🤖 {response.content}")
-
+            with suppress_logs():
+                ai_service = AIService(settings)
+                if message:
+                    # Single message mode
+                    await _single_message(ai_service, message, conversation_id, stream)
+                else:
+                    # Interactive session mode
+                    await _interactive_chat_session(ai_service, conversation_id)
+        except KeyboardInterrupt:
+            typer.echo("\n⚠️ Chat interrupted by user", err=True)
+            raise typer.Exit(1)
         except Exception as e:
             typer.echo(f"❌ Error: {e}", err=True)
             raise typer.Exit(1)
 
-    asyncio.run(send_message())
+    asyncio.run(run_chat())
 
 
 @chat_app.command("send")
 def chat_send(
     message: str = typer.Argument(..., help="Message to send to AI"),
+    stream: bool = typer.Option(
+        True, "--stream/--no-stream", help="Enable streaming output"
+    ),
     conversation_id: str | None = typer.Option(
         None, "--conversation-id", "-c", help="Conversation ID"
     ),
@@ -94,37 +140,67 @@ def chat_send(
 ) -> None:
     """Send a chat message and get AI response."""
     import asyncio
-    from app.services.ai.service import AIService
 
-    ai_service = AIService(settings)
+    from app.services.ai.service import AIService
 
     async def send_message() -> None:
         try:
-            response = await ai_service.chat(
-                message=message,
-                conversation_id=conversation_id,
-                user_id=user_id
-            )
+            with suppress_logs():
+                ai_service = AIService(settings)
 
-            # Show conversation info
-            conv_id = response.metadata.get("conversation_id", "unknown")
-            conversation = ai_service.get_conversation(conv_id)
-            if conversation:
-                typer.echo(f"💬 Conversation: {conversation.id}")
-                if conversation.title:
-                    typer.echo(f"📝 Title: {conversation.title}")
+                # Disable streaming for PUBLIC provider
+                # (fake streaming causes duplicates)
+                use_streaming = stream
+                if ai_service.config.provider == AIProvider.PUBLIC:
+                    use_streaming = False
 
-            typer.echo("")
-            typer.echo(f"🤖 {response.content}")
+                if use_streaming:
+                    await _stream_chat_response(
+                        ai_service, message, conversation_id, user_id, verbose=True
+                    )
+                else:
+                    response = await ai_service.chat(
+                        message=message,
+                        conversation_id=conversation_id,
+                        user_id=user_id
+                    )
 
-            # Show response metadata
-            if conversation:
-                typer.echo("")
-                typer.echo(f"ℹ️  Messages: {conversation.get_message_count()}")
-                if "last_response_time_ms" in conversation.metadata:
-                    response_time = conversation.metadata["last_response_time_ms"]
-                    typer.echo(f"⏱️  Response time: {response_time:.1f}ms")
+                    # Use new shared rendering functions
+                    from app.cli.ai_rendering import (
+                        render_ai_header,
+                        render_conversation_metadata,
+                        render_markdown_response,
+                    )
 
+                    # Show conversation info
+                    conv_id = response.metadata.get("conversation_id", "unknown")
+                    conversation = ai_service.get_conversation(conv_id)
+                    if conversation:
+                        typer.echo(f"💬 Conversation: {conversation.id}")
+                        if conversation.title:
+                            typer.echo(f"📝 Title: {conversation.title}")
+
+                    console.print()
+
+                    # Render response using new shared functions
+                    render_ai_header(console, inline=True)
+                    render_markdown_response(console, response.content)
+
+                    # Show response metadata using new shared function
+                    if conversation:
+                        response_time = conversation.metadata.get(
+                            "last_response_time_ms"
+                        )
+                        render_conversation_metadata(
+                            console,
+                            conversation.id,
+                            message_count=conversation.get_message_count(),
+                            response_time=response_time,
+                        )
+
+        except KeyboardInterrupt:
+            typer.echo("\n⚠️ Chat interrupted by user", err=True)
+            raise typer.Exit(1)
         except Exception as e:
             typer.echo(f"❌ Error: {e}", err=True)
             raise typer.Exit(1)
@@ -142,7 +218,8 @@ def chat_list(
     """List conversations for a user."""
     from app.services.ai.service import AIService
 
-    ai_service = AIService(settings)
+    with suppress_logs():
+        ai_service = AIService(settings)
     conversations = ai_service.list_conversations(user_id)[:limit]
 
     if not conversations:
@@ -170,7 +247,8 @@ def chat_history(
     """View conversation history."""
     from app.services.ai.service import AIService
 
-    ai_service = AIService(settings)
+    with suppress_logs():
+        ai_service = AIService(settings)
     conversation = ai_service.get_conversation(conversation_id)
 
     if not conversation:
@@ -338,6 +416,314 @@ def providers_list() -> None:
     console.print(table)
 
 
+async def _single_message(
+    ai_service,
+    message: str,
+    conversation_id: str | None,
+    stream: bool,
+) -> None:
+    """Send a single message and get response (for scripting/CI)."""
+
+    # Disable streaming for PUBLIC provider (fake streaming causes duplicates)
+    use_streaming = stream
+    if ai_service.config.provider == AIProvider.PUBLIC:
+        use_streaming = False
+
+    if use_streaming:
+        await _stream_chat_response(ai_service, message, conversation_id, "cli-user")
+    else:
+        # Show thinking spinner for non-streaming responses
+        from rich.live import Live
+        from rich.spinner import Spinner
+
+        spinner = Spinner("dots", text="🤖 Thinking...", style="bright_blue")
+        spinner_live = Live(
+            spinner, console=console, refresh_per_second=20, transient=True
+        )
+        spinner_live.start()
+
+        try:
+            response = await ai_service.chat(
+                message=message,
+                conversation_id=conversation_id,
+                user_id="cli-user",
+            )
+        finally:
+            spinner_live.stop()
+
+        # Use new shared rendering functions
+        from app.cli.ai_rendering import (
+            render_ai_header,
+            render_markdown_response,
+        )
+
+        render_ai_header(console, inline=True)
+        render_markdown_response(console, response.content)
+
+
+async def _interactive_chat_session(
+    ai_service,
+    conversation_id: str | None = None,
+) -> None:
+    """Start an interactive chat session with continuous conversation."""
+
+    # Show welcome banner
+    ai_config = get_ai_config(settings)
+    welcome_text = (
+        f"[bold cyan]🤖 AI Chat Session[/bold cyan]\n"
+        f"[dim]Provider: {ai_config.provider} | Model: {ai_config.model}[/dim]\n"
+        f"[dim]Type 'exit', 'quit', 'bye' or press Ctrl+C to end session[/dim]"
+    )
+
+    console.print(Panel(welcome_text, border_style="blue", expand=False))
+    console.print()
+
+    # Track conversation for context
+    current_conversation_id = conversation_id
+
+    while True:
+        try:
+            # Get user input with Rich prompt - handle keyboard interrupt here
+            try:
+                user_message = Prompt.ask(
+                    "[bold green]You[/bold green]", console=console
+                )
+            except (KeyboardInterrupt, EOFError):
+                # Single Ctrl+C should exit immediately
+                console.print("\n[yellow]👋 Chat session ended[/yellow]")
+                break
+
+            # Check for exit commands
+            if user_message.lower().strip() in ["exit", "quit", "bye", "q"]:
+                console.print("[yellow]👋 Goodbye![/yellow]")
+                break
+
+            if not user_message.strip():
+                console.print("[dim]Please enter a message or 'exit' to quit.[/dim]")
+                continue
+
+            # Stream the response using our existing beautiful renderer
+            # Disable streaming for PUBLIC provider (fake streaming causes duplicates)
+            use_streaming = True
+            if ai_service.config.provider == AIProvider.PUBLIC:
+                use_streaming = False
+
+            try:
+                if use_streaming:
+                    # Capture conversation_id from streaming response
+                    # for memory continuity
+                    returned_conversation_id = await _stream_chat_response(
+                        ai_service,
+                        user_message,
+                        current_conversation_id,
+                        "cli-user"
+                    )
+                    # Update conversation reference if streaming completed successfully
+                    if returned_conversation_id:
+                        current_conversation_id = returned_conversation_id
+                else:
+                    # Show thinking spinner for non-streaming responses
+                    from rich.live import Live
+                    from rich.spinner import Spinner
+
+                    spinner = Spinner(
+                        "dots", text="🤖 Thinking...", style="bright_blue"
+                    )
+                    spinner_live = Live(
+                        spinner,
+                        console=console,
+                        refresh_per_second=20,
+                        transient=True
+                    )
+                    spinner_live.start()
+
+                    try:
+                        response = await ai_service.chat(
+                            message=user_message,
+                            conversation_id=current_conversation_id,
+                            user_id="cli-user",
+                        )
+                    finally:
+                        spinner_live.stop()
+
+                    # Use new shared rendering functions
+                    from app.cli.ai_rendering import (
+                        render_ai_header,
+                        render_markdown_response,
+                    )
+
+                    render_ai_header(console, inline=True)
+                    render_markdown_response(console, response.content)
+
+                    # Update conversation reference
+                    current_conversation_id = response.metadata.get(
+                        "conversation_id", current_conversation_id
+                    )
+            except Exception as stream_error:
+                console.print(f"[red]❌ Streaming failed: {stream_error}[/red]")
+                console.print(
+                    "[dim]This might be a provider issue. "
+                    "Try a different provider or check your connection.[/dim]"
+                )
+                console.print("[dim]Available providers: openai, groq, public[/dim]")
+                console.print(
+                    "[dim]Set AI_PROVIDER=openai or AI_PROVIDER=groq "
+                    "to try alternatives.[/dim]"
+                )
+
+            # For subsequent messages, we want to continue the conversation
+            # The conversation_id will be maintained by the AI service
+            console.print()  # Add space after response
+
+        except Exception as e:
+            console.print(f"[red]❌ Error: {e}[/red]")
+            console.print(
+                "[dim]You can continue chatting or type 'exit' to quit.[/dim]"
+            )
+
+
+async def _stream_chat_response(
+    ai_service,
+    message: str,
+    conversation_id: str | None,
+    user_id: str,
+    verbose: bool = False,
+) -> str | None:
+    """
+    Stream chat response with real-time markdown rendering using Rich components.
+
+    Args:
+        ai_service: The AI service instance
+        message: User message
+        conversation_id: Optional conversation ID
+        user_id: User identifier
+        verbose: Whether to show detailed metadata
+
+    Returns:
+        str | None: The conversation ID for continuing the conversation,
+            None if interrupted
+    """
+    import signal
+
+    from rich.live import Live
+
+    from app.cli.ai_rendering import StreamingMarkdownRenderer
+
+    renderer = StreamingMarkdownRenderer(console)
+    conversation_info = None
+    response_time = None
+
+    # Set up signal handler for graceful interruption
+    interrupted = False
+
+    def signal_handler(signum, frame):
+        nonlocal interrupted
+        interrupted = True
+
+    old_handler = signal.signal(signal.SIGINT, signal_handler)
+
+    try:
+        # Track if we've shown the header yet
+        header_shown = False
+
+        # Stream without Live display to avoid accumulation duplication
+        # Temporarily removed suppress_logs to debug hanging issue
+        # Add timeout to prevent hanging
+        import asyncio
+
+        from rich.live import Live
+        from rich.spinner import Spinner
+
+        # Show thinking spinner initially
+        spinner = Spinner("dots", text="🤖 Thinking...", style="bright_blue")
+        spinner_live = Live(
+            spinner, console=console, refresh_per_second=20, transient=True
+        )
+        spinner_live.start()
+
+        try:
+            # Track processed content to prevent duplicates (fake streaming providers)
+            processed_content = set()
+
+            async with asyncio.timeout(30.0):  # 30 second timeout
+                async for chunk in ai_service.stream_chat(
+                    message=message,
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    stream_delta=True,
+                ):
+                    if interrupted:
+                        spinner_live.stop()
+                        console.print(
+                            "\n⚠️ Streaming interrupted by user", style="yellow"
+                        )
+                        break
+
+                    # Skip duplicate content (handles fake streaming providers)
+                    if chunk.content in processed_content:
+                        # Still store final chunk metadata
+                        # if this is the final duplicate
+                        if chunk.is_final:
+                            conversation_info = chunk.conversation_id
+                            response_time = chunk.metadata.get("response_time_ms")
+                        continue
+
+                    processed_content.add(chunk.content)
+
+                    # Process only the new delta content with Rich components
+                    if chunk.is_delta and chunk.content:
+                        # Show compact inline header only when first content arrives
+                        if not header_shown:
+                            spinner_live.stop()  # Stop spinner when content starts
+                            console.print("🤖: ", style="bright_blue", end="")
+                            header_shown = True
+
+                        # Process delta with new streaming renderer
+                        renderer.add_delta(chunk.content)
+
+                    # Store final chunk metadata
+                    if chunk.is_final:
+                        conversation_info = chunk.conversation_id
+                        response_time = chunk.metadata.get("response_time_ms")
+                        break
+        except TimeoutError:
+            spinner_live.stop()
+            console.print("\n❌ Request timed out after 30 seconds", style="red")
+            return None
+        finally:
+            # Ensure spinner is stopped in all cases
+            if spinner_live.is_started:
+                spinner_live.stop()
+
+        # Finalize any remaining content and add spacing
+        if not interrupted:
+            renderer.finalize()  # Process any remaining buffered content
+            console.print("\n")
+
+            if verbose and conversation_info:
+                # Get conversation details
+                conversation = ai_service.get_conversation(conversation_info)
+                if conversation:
+                    console.print(f"💬 Conversation: {conversation.id}", style="dim")
+                    console.print(
+                        f"ℹ️  Messages: {conversation.get_message_count()}", style="dim"
+                    )
+                    if response_time:
+                        console.print(
+                            f"⏱️  Response time: {response_time:.1f}ms", style="dim"
+                        )
+
+    except Exception as e:
+        if not interrupted:
+            console.print(f"❌ Streaming error: {e}", style="red")
+        raise
+
+    finally:
+        # Restore original signal handler
+        signal.signal(signal.SIGINT, old_handler)
+
+    # Return conversation_id for maintaining conversation context
+    return conversation_info if not interrupted else None
 
 
 if __name__ == "__main__":
