@@ -431,3 +431,59 @@ class TerminalRenderer(Renderer):
         """
         segments = ["-" * (width + 2) for width in col_widths]
         return "|" + "|".join(segments) + "|"
+
+    def render_strikethrough(self, element) -> str:
+        """
+        Render strikethrough text (~~text~~) with dim styling.
+
+        Args:
+            element: Strikethrough element from GFM extension
+
+        Returns:
+            Dimmed/faint text string
+        """
+        content = self._get_content(element)
+        return f"\033[2m{content}\033[0m"  # Dim/faint text
+
+    def render_url(self, element) -> str:
+        """
+        Render autolinked URLs.
+
+        Args:
+            element: URL element from GFM extension
+
+        Returns:
+            Cyan-colored URL string
+        """
+        url = element.dest if hasattr(element, "dest") else str(element.children)
+        return f"\033[36m{url}\033[0m"  # Cyan color
+
+    def __getattr__(self, name: str):
+        """
+        Fallback for any missing render methods.
+
+        Prevents crashes from unknown GFM elements by providing a generic
+        renderer that outputs plain text. This ensures compatibility with
+        future GFM extensions or elements we haven't explicitly handled.
+
+        Args:
+            name: Attribute name being accessed
+
+        Returns:
+            Fallback render function for render_* methods
+
+        Raises:
+            AttributeError: If attribute is not a render method
+        """
+        if name.startswith("render_"):
+
+            def fallback_render(element):
+                """Generic fallback - renders as plain text."""
+                if hasattr(element, "children"):
+                    return self.render_children(element)
+                return str(element)
+
+            return fallback_render
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )

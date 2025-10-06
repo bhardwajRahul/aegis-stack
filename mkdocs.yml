@@ -22,11 +22,13 @@ theme:
     - search.highlight
     - search.suggest
     - content.code.copy
+    - content.code.annotate
 
 # Navigation structure
 nav:
-  - Home: index.md
-  - Installation: installation.md
+  - Home:
+    - Overview: index.md
+    - Installation: installation.md
   - About: about.md
   - Philosophy: philosophy.md
   - Components:
@@ -57,6 +59,13 @@ nav:
       - Service Layer: services/auth/integration.md
       - CLI Commands: services/auth/cli.md
       - Examples: services/auth/examples.md
+    - AI Service:
+      - Getting Started: services/ai/index.md
+      - Provider Setup: services/ai/providers.md
+      - API Reference: services/ai/api.md
+      - Service Layer: services/ai/integration.md
+      - CLI Commands: services/ai/cli.md
+      - Examples: services/ai/examples.md
   - Reference:
     - CLI Reference: cli-reference.md
     - Integration Patterns: integration-patterns.md
@@ -95,6 +104,12 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg

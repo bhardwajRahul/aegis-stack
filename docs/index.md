@@ -55,7 +55,7 @@ Your stack. Your rules. No hand-holding.
 | Service | Purpose | Status |
 |---------|---------|--------|
 | **Auth** | User authentication & JWT | ✅ **Available** |
-| **AI** | OpenAI integration | 🚧 **Coming Soon** |
+| **AI** | Multi-provider AI chat | 🧪 **Experimental** |
 
 ## What You Get
 

@@ -12,7 +12,7 @@ Services are **business-level functionality** that your application provides to 
 graph TB
     subgraph "Services Layer (Business Logic)"
         Auth[🔐 Auth Service<br/>JWT + User Management<br/>Registration, Login, Profiles]
-        AI[🤖 AI Service<br/>OpenAI Integration<br/>🚧 Coming Soon]
+        AI[🤖 AI Service<br/>PydanticAI Integration<br/>Multi-Provider Chat]
     end
 
     subgraph "Components Layer (Infrastructure)"
@@ -25,11 +25,10 @@ graph TB
 
     Auth --> Backend
     Auth --> Database
-    AI -.-> Backend
-    AI -.-> Worker
+    AI --> Backend
 
     style Auth fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
-    style AI fill:#f0f0f0,stroke:#757575,stroke-width:2px,stroke-dasharray: 5 5
+    style AI fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style Backend fill:#e1f5fe,stroke:#1976d2,stroke-width:2px
     style Database fill:#fff3e0,stroke:#f57c00,stroke-width:2px
     style Worker fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
@@ -113,7 +112,7 @@ graph LR
 | Service | Status | Description | Required Components |
 |---------|--------|-------------|-------------------|
 | **auth** | ✅ Available | User authentication and authorization with JWT tokens | backend, database |
-| **ai** | 🚧 Coming Soon | OpenAI integration for AI features | backend, worker |
+| **ai** | 🧪 Experimental | Multi-provider AI chat with PydanticAI (OpenAI, Anthropic, Google, Groq, etc.) | backend |
 
 ## Service Categories
 
@@ -126,17 +125,15 @@ graph TB
     end
 
     subgraph "🤖 AI Services"
-        AIOpenAI[ai_openai<br/>🚧 Future: OpenAI]
-        AIClaude[ai_claude<br/>🚧 Future: Anthropic]
-        AILocal[ai_local<br/>🚧 Future: Local Models]
+        AIPydantic[ai<br/>PydanticAI Multi-Provider]
+        AILangChain[ai_langchain<br/>🚧 Future: LangChain]
     end
 
     style AuthJWT fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style AuthOAuth fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
     style AuthSAML fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
-    style AIOpenAI fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
-    style AIClaude fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
-    style AILocal fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
+    style AIPydantic fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
+    style AILangChain fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
 ```
 
 ## Service Development Patterns
@@ -234,6 +231,7 @@ aegis init full-app --services auth,ai --components database,worker
 
 **Next Steps:**
 
-- **[Authentication Service](auth.md)** - Complete JWT auth implementation
+- **[Authentication Service](auth/index.md)** - Complete JWT auth implementation
+- **[AI Service](ai/index.md)** - Multi-provider AI chat with PydanticAI
 - **[CLI Reference](../cli-reference.md)** - Service command reference
 - **[Components Overview](../components/index.md)** - Infrastructure layer

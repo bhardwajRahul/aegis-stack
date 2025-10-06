@@ -41,7 +41,6 @@ class ProviderConfig(BaseModel):
     max_tokens: int = 1000
     temperature: float = 0.7
     timeout_seconds: float = 30.0
-    rate_limit_rpm: int = 10  # Requests per minute
 
     class Config:
         use_enum_values = True
@@ -68,6 +67,9 @@ class Conversation(BaseModel):
     provider: AIProvider
     model: str
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    class Config:
+        use_enum_values = True
 
     def add_message(
         self, role: MessageRole, content: str, message_id: str | None = None
@@ -142,6 +144,9 @@ class AIServiceStatus(BaseModel):
     conversation_count: int = 0
     last_activity: datetime | None = None
 
+    class Config:
+        use_enum_values = True
+
 
 class ProviderCapabilities(BaseModel):
     """Capabilities for an AI provider (binary features only)."""
@@ -151,6 +156,9 @@ class ProviderCapabilities(BaseModel):
     supports_function_calling: bool = False
     supports_vision: bool = False
     free_tier_available: bool = False
+
+    class Config:
+        use_enum_values = True
 
 
 # Provider capability definitions (binary features only)
@@ -219,12 +227,3 @@ def get_free_providers() -> list[AIProvider]:
         for provider, caps in PROVIDER_CAPABILITIES.items()
         if caps.free_tier_available
     ]
-
-
-def get_recommended_free_providers() -> list[AIProvider]:
-    """Get recommended free providers for getting started."""
-    return [
-        AIProvider.PUBLIC,
-        AIProvider.GROQ,
-        AIProvider.GOOGLE,
-    ]  # PUBLIC requires no setup

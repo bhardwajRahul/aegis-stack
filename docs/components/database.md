@@ -1,5 +1,10 @@
 # Database Component
 
+!!! example "Musings: On ORMs and Alternatives"
+    I'm well aware of the... disdain... people have for ORMs. SQLModel is the default because it works great for 80% of use cases and integrates beautifully with FastAPI/Pydantic.
+
+    That said, I already have a sub-component feature in the works for folks who prefer raw SQL via driver cursors or SQLAlchemy Core. Choose your own adventure.
+
 SQLite database with [SQLModel](https://sqlmodel.tiangolo.com/) ORM for type-safe data operations.
 
 Use `aegis init my-project --components database` to include this component.

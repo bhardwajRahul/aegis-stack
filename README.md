@@ -63,7 +63,7 @@ aegis init my-project
 | Service | Purpose | Status |
 |---------|---------|--------|
 | **Auth** | User authentication & JWT | ✅ **Available** |
-| **AI** | OpenAI integration | 🚧 **Coming Soon** |
+| **AI** | Multi-provider AI chat | 🧪 **Experimental** |
 
 ## See It In Action
 

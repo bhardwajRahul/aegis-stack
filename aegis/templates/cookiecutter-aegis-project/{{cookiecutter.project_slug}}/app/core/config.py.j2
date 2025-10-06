@@ -127,9 +127,6 @@ class Settings(BaseSettings):
     MISTRAL_API_KEY: str | None = None
     COHERE_API_KEY: str | None = None
 
-    # Rate limiting per provider (requests per minute)
-    AI_RATE_LIMIT_RPM: int = 10
-
     # Conversation settings
     AI_MAX_CONVERSATION_LENGTH: int = 50  # Max messages per conversation
     AI_CONVERSATION_TIMEOUT_HOURS: int = 24  # Auto-cleanup old conversations

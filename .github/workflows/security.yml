@@ -51,4 +51,9 @@ jobs:
       run: uv sync --all-extras
     
     - name: Run security audit
-      run: uv run pip-audit
+      run: |
+        # Ignoring GHSA-4xh5-x5gv-qwph: pip 25.2 symlink traversal vulnerability
+        # Risk: Low - only affects installation of malicious packages from untrusted sources
+        # Mitigation: All packages installed from trusted PyPI with uv.lock verification
+        # Resolution: Will be fixed in pip 25.3 (not yet released)
+        uv run pip-audit --ignore-vuln GHSA-4xh5-x5gv-qwph

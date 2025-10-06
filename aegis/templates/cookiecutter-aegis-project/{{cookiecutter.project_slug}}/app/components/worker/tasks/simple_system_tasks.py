@@ -2,11 +2,12 @@
 
 import asyncio
 from datetime import UTC, datetime
+from typing import Any
 
 from app.core.log import logger
 
 
-async def system_health_check() -> dict[str, str]:
+async def system_health_check(ctx: dict[str, Any]) -> dict[str, str]:
     """Simple system health check task."""
     logger.info("🩺 Running system health check task")
 
@@ -18,7 +19,7 @@ async def system_health_check() -> dict[str, str]:
     }
 
 
-async def cleanup_temp_files() -> dict[str, str]:
+async def cleanup_temp_files(ctx: dict[str, Any]) -> dict[str, str]:
     """Simple temp file cleanup task placeholder."""
     logger.info("🧹 Running temp file cleanup task")
 

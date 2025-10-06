@@ -194,7 +194,7 @@ curl -X GET http://localhost:8000/auth/me \
 ### Using Python requests
 
 ```python
-import requests
+import httpx
 
 base_url = "http://localhost:8000"
 
@@ -204,7 +204,7 @@ register_data = {
     "full_name": "Test User",
     "password": "secure123"
 }
-response = requests.post(f"{base_url}/auth/register", json=register_data)
+response = httpx.post(f"{base_url}/auth/register", json=register_data)
 print("Register:", response.status_code, response.json())
 
 # Login
@@ -212,14 +212,14 @@ login_data = {
     "username": "test@example.com",
     "password": "secure123"
 }
-response = requests.post(f"{base_url}/auth/token", data=login_data)
+response = httpx.post(f"{base_url}/auth/token", data=login_data)
 token_data = response.json()
 token = token_data["access_token"]
 print("Login:", response.status_code, token_data)
 
 # Access protected endpoint
 headers = {"Authorization": f"Bearer {token}"}
-response = requests.get(f"{base_url}/auth/me", headers=headers)
+response = httpx.get(f"{base_url}/auth/me", headers=headers)
 print("Profile:", response.status_code, response.json())
 ```
 

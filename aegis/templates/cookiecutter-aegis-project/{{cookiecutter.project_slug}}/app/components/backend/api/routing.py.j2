@@ -10,6 +10,9 @@ from app.components.backend.api import scheduler
 {%- if cookiecutter.include_auth == "yes" %}
 from app.components.backend.api.auth.router import router as auth_router
 {%- endif %}
+{%- if cookiecutter.include_ai == "yes" %}
+from app.components.backend.api.ai.router import router as ai_router
+{%- endif %}
 
 
 def include_routers(app: FastAPI) -> None:
@@ -23,4 +26,7 @@ def include_routers(app: FastAPI) -> None:
     {%- endif %}
     {%- if cookiecutter.include_auth == "yes" %}
     app.include_router(auth_router, prefix="/api/v1")
+    {%- endif %}
+    {%- if cookiecutter.include_ai == "yes" %}
+    app.include_router(ai_router)
     {%- endif %}
