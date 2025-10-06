@@ -197,8 +197,8 @@ class TestConversationMemory:
         """Test that streaming timeout returns None."""
 
         async def mock_stream_chat_slow(*args, **kwargs):
-            # Simulate slow response that times out
-            await asyncio.sleep(35)  # Longer than 30s timeout
+            # Simulate slow response that times out (2s delay, 1s timeout)
+            await asyncio.sleep(2.0)  # Longer than timeout
             yield StreamingMessage(
                 content="Too late",
                 is_final=True,
@@ -210,7 +210,11 @@ class TestConversationMemory:
 
         mock_ai_service.stream_chat = mock_stream_chat_slow
 
-        with patch("app.cli.ai.console", mock_console):
+        # Mock the timeout duration to be much shorter for testing
+        with (
+            patch("app.cli.ai.console", mock_console),
+            patch("asyncio.timeout", return_value=asyncio.timeout(1.0)),
+        ):
             # Should timeout and return None
             conversation_id = await _stream_chat_response(
                 ai_service=mock_ai_service,

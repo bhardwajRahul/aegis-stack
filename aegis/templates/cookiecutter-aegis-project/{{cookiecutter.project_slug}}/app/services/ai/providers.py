@@ -17,6 +17,7 @@ from pydantic_ai import Agent
 # Other providers imported dynamically when needed
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.settings import ModelSettings
 
 # Removed TestModel - that's for unit tests, not user demos
 from app.core.log import logger
@@ -107,9 +108,14 @@ def get_agent(config: AIServiceConfig, settings: Any) -> Agent:
         # Create model instance (PydanticAI 1.0+ style)
         model = model_class(**model_kwargs)
 
-        # Create agent with system prompt
+        # Create agent with system prompt and model settings
         agent = Agent(
             model=model,
+            model_settings=ModelSettings(
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+                timeout=config.timeout_seconds,
+            ),
             system_prompt=(
                 "You are a helpful AI assistant. Provide clear, accurate, "
                 "and concise responses. Be friendly and professional."
@@ -233,9 +239,14 @@ def _create_public_agent(config: AIServiceConfig) -> Agent:
         )
         model = OpenAIChatModel(model_name=model_name, provider=provider)
 
-        # Create agent with friendly system prompt
+        # Create agent with friendly system prompt and model settings
         agent = Agent(
             model=model,
+            model_settings=ModelSettings(
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+                timeout=config.timeout_seconds,
+            ),
             system_prompt=(
                 "You are a helpful AI assistant powered by free public endpoints. "
                 "Provide clear, accurate, and concise responses. "

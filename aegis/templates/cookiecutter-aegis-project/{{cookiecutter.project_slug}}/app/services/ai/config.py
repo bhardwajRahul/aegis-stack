@@ -67,7 +67,6 @@ class AIServiceConfig(BaseModel):
             max_tokens=self.max_tokens,
             temperature=self.temperature,
             timeout_seconds=self.timeout_seconds,
-            rate_limit_rpm=getattr(settings, "AI_RATE_LIMIT_RPM", 10),
         )
 
     def validate_configuration(self, settings: Any) -> list[str]:

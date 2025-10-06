@@ -1,5 +1,13 @@
 # Worker Component
 
+!!! example "Musings: Why Worker is Experimental"
+    I haven't used arq in production long enough to say I'm an expert, and it wouldn't feel right to claim otherwise - hence the experimental label. That said, I included it because:
+
+    - The pedigree speaks volumes (Samuel Colvin built it)
+    - It was quite easy, dare I say elegant, to set up as its own component
+
+    At the end of the day, producer/queue/consumer/whatever you want to call it - I know that pattern. Implementing arq was as straightforward as it could be.
+
 Async background task processing using standard [arq](https://arq-docs.helpmanual.io/) patterns.
 
 !!! info "Adding Worker to Your Project"
@@ -84,7 +92,9 @@ The Worker component provides comprehensive queue monitoring through the dashboa
 ### 1. Create Your Task
 ```python
 # app/components/worker/tasks/my_tasks.py
-async def send_welcome_email(user_id: int) -> dict:
+from typing import Any
+
+async def send_welcome_email(ctx: dict[str, Any], user_id: int) -> dict:
     """Send welcome email to new user."""
     logger.info(f"Sending welcome email to user {user_id}")
     # Your email logic here

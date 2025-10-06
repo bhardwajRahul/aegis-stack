@@ -73,8 +73,6 @@ def version() -> None:
     typer.echo("")
     typer.echo("Available commands:")
     typer.echo("  • ai chat \"message\"       - Send a chat message")
-    typer.echo("  • ai chat list           - List conversations")
-    typer.echo("  • ai chat history <id>   - View conversation history")
     typer.echo("  • ai config show         - Show detailed configuration")
     typer.echo("  • ai config validate     - Validate current configuration")
     typer.echo("  • ai providers list      - List available providers")
@@ -263,7 +261,7 @@ def chat_history(
     typer.echo(f"💬 Conversation: {conversation_id}")
     if conversation.title:
         typer.echo(f"📝 Title: {conversation.title}")
-    typer.echo(f"🤖 Provider: {conversation.provider}")
+    typer.echo(f"🤖 Provider: {conversation.provider.value}")
     typer.echo(f"📊 Messages: {conversation.get_message_count()}")
     typer.echo("")
 
@@ -294,13 +292,12 @@ def config_show() -> None:
     provider_config = ai_config.get_provider_config(settings)
     typer.echo(f"\n🔐 Provider Configuration ({ai_config.provider}):")
     typer.echo(f"API Key: {'✅ Set' if provider_config.api_key else '❌ Not set'}")
-    typer.echo(f"Rate Limit: {provider_config.rate_limit_rpm} RPM")
 
     # Available providers
     available = ai_config.get_available_providers(settings)
     typer.echo(f"\n✅ Available Providers ({len(available)}):")
     for provider in available:
-        typer.echo(f"  • {provider}")
+        typer.echo(f"  • {provider.value}")
 
 
 @config_app.command("validate")
@@ -333,35 +330,8 @@ def config_validate() -> None:
         if any("API key" in error for error in errors):
             free_providers = get_free_providers()
             if free_providers:
-                providers_list = ', '.join(free_providers)
+                providers_list = ', '.join(p.value for p in free_providers)
                 typer.echo(f"\n💡 Try these free providers: {providers_list}")
-
-
-@config_app.command("set-provider")
-def config_set_provider(
-    provider: str = typer.Argument(
-        ..., help="Provider name (openai, anthropic, google, groq, mistral, cohere)"
-    )
-):
-    """Set the primary AI provider."""
-    try:
-        ai_provider = AIProvider(provider.lower())
-    except ValueError:
-        typer.echo(f"❌ Unknown provider: {provider}")
-        typer.echo(f"Available providers: {', '.join([p.value for p in AIProvider])}")
-        raise typer.Exit(1)
-
-    typer.echo(f"🔄 Setting provider to: {ai_provider}")
-    typer.echo("To persist this change, update your .env file:")
-    typer.echo(f"AI_PROVIDER={ai_provider}")
-
-    # Show provider info
-    capabilities = get_provider_capabilities(ai_provider)
-    if capabilities.free_tier_available:
-        typer.echo("✅ This provider offers a free tier")
-    else:
-        typer.echo("💳 This provider requires a paid account")
-        typer.echo(f"   Set {ai_provider.upper()}_API_KEY in your environment")
 
 
 @providers_app.command("list")

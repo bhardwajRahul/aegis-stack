@@ -164,24 +164,6 @@ class AuthCard:
         # Display auth statistics...
 ```
 
-## How the Architecture Supports Multiple Interfaces
-
-### 1. **Unified Async Service Layer**
-The single `UserService` class with async operations ensures consistent behavior across all interfaces - API, CLI, and dashboard.
-
-### 2. **Async Database Session Management**
-- **CLI**: Uses async sessions via `get_async_session()` with `asyncio.run()`
-- **API**: Uses async sessions via `get_async_db()` dependency
-- **Dashboard**: Monitors via health check data
-
-### 3. **Model Consistency**
-All interfaces use the same `User`, `UserCreate`, and `UserResponse` models, ensuring data consistency.
-
-### 4. **Authentication Integration**
-- **API**: Validates JWT tokens using `get_current_user_from_token()`
-- **CLI**: Direct async database access for user management
-- **Dashboard**: Displays auth metrics and status
-
 ## Configuration
 
 The auth service uses centralized configuration:

@@ -86,37 +86,15 @@ class AIService:
             raise AIServiceError("AI service is disabled")
 
         try:
-            # Get or create conversation
-            if conversation_id:
-                conversation = self.conversation_manager.get_conversation(
-                    conversation_id
-                )
-                if not conversation:
-                    raise ConversationError(f"Conversation {conversation_id} not found")
-            else:
-                conversation = self.conversation_manager.create_conversation(
-                    provider=self.config.provider,
-                    model=self.config.model,
-                    user_id=user_id,
-                )
-                # logger.info(f"Created new conversation: {conversation.id}")
+            # Setup conversation and add user message
+            conversation = self._setup_conversation(message, conversation_id, user_id)
 
-            # Add user message to conversation
-            conversation.add_message(MessageRole.USER, message)
-            # logger.debug(f"Added user message to conversation {conversation.id}")
-
-            # Create agent for this request
-            agent = get_agent(self.config, self.settings)
-
-            # Build conversation context for AI
-            conversation_context = self._build_conversation_context(conversation)
+            # Prepare agent and conversation context
+            agent, conversation_context = self._prepare_agent_and_context(conversation)
 
             # Get AI response
-            # logger.debug(f"Sending message to AI provider: {self.config.provider}")
             start_time = datetime.now(UTC)
-
             result = await agent.run(conversation_context)
-
             end_time = datetime.now(UTC)
             response_time_ms = (end_time - start_time).total_seconds() * 1000
 
@@ -128,22 +106,8 @@ class AIService:
             # Store conversation ID in message metadata for easy lookup
             ai_message.metadata["conversation_id"] = conversation.id
 
-            # Update conversation metadata
-            conversation.metadata.update(
-                {
-                    "last_response_time_ms": response_time_ms,
-                    "total_messages": conversation.get_message_count(),
-                    "last_activity": end_time.isoformat(),
-                }
-            )
-
-            # Save conversation
-            self.conversation_manager.save_conversation(conversation)
-
-            # logger.info(
-            #     f"AI response generated for conversation {conversation.id} "
-            #     f"in {response_time_ms:.1f}ms"
-            # )
+            # Finalize conversation (update metadata and save)
+            self._finalize_conversation(conversation, response_time_ms)
 
             return ai_message
 
@@ -184,37 +148,17 @@ class AIService:
             raise AIServiceError("AI service is disabled")
 
         try:
-            # Get or create conversation
-            if conversation_id:
-                conversation = self.conversation_manager.get_conversation(
-                    conversation_id
-                )
-                if not conversation:
-                    raise ConversationError(f"Conversation {conversation_id} not found")
-            else:
-                conversation = self.conversation_manager.create_conversation(
-                    provider=self.config.provider,
-                    model=self.config.model,
-                    user_id=user_id,
-                )
-                # logger.info(f"Created new conversation: {conversation.id}")
-
-            # Add user message to conversation
-            conversation.add_message(MessageRole.USER, message)
-            # logger.debug(f"Added user message to conversation {conversation.id}")
+            # Setup conversation and add user message
+            conversation = self._setup_conversation(message, conversation_id, user_id)
 
             # Create streaming conversation wrapper
             streaming_conv = StreamingConversation(conversation=conversation)
             streaming_conv.reset_stream()
 
-            # Create agent for this request
-            agent = get_agent(self.config, self.settings)
-
-            # Build conversation context for AI
-            conversation_context = self._build_conversation_context(conversation)
+            # Prepare agent and conversation context
+            agent, conversation_context = self._prepare_agent_and_context(conversation)
 
             # Start streaming
-            # logger.debug(f"Starting streaming to AI provider: {self.config.provider}")
             start_time = datetime.now(UTC)
 
             # Generate a message ID for the streaming response
@@ -255,18 +199,10 @@ class AIService:
             # Store conversation metadata
             ai_message.metadata["conversation_id"] = conversation.id
 
-            # Update conversation metadata
-            conversation.metadata.update(
-                {
-                    "last_response_time_ms": response_time_ms,
-                    "total_messages": conversation.get_message_count(),
-                    "last_activity": end_time.isoformat(),
-                    "streaming": True,
-                }
+            # Finalize conversation (update metadata and save)
+            self._finalize_conversation(
+                conversation, response_time_ms, is_streaming=True
             )
-
-            # Save conversation
-            self.conversation_manager.save_conversation(conversation)
 
             # Yield final streaming message
             yield StreamingMessage(
@@ -283,11 +219,6 @@ class AIService:
                 },
             )
 
-            # logger.info(
-            #     f"Streaming completed for conversation {conversation.id} "
-            #     f"in {response_time_ms:.1f}ms"
-            # )
-
         except (ModelRetry, UnexpectedModelBehavior) as e:
             error_msg = f"AI provider streaming error: {e}"
             logger.error(error_msg)
@@ -296,6 +227,90 @@ class AIService:
             error_msg = f"Streaming failed: {e}"
             logger.error(error_msg)
             raise AIServiceError(error_msg) from e
+
+    def _setup_conversation(
+        self,
+        message: str,
+        conversation_id: str | None,
+        user_id: str,
+    ) -> Conversation:
+        """
+        Get or create conversation and add user message.
+
+        Args:
+            message: The user's message
+            conversation_id: Optional conversation ID (creates new if None)
+            user_id: User identifier for conversation ownership
+
+        Returns:
+            Conversation: The conversation with user message added
+
+        Raises:
+            ConversationError: If conversation_id provided but not found
+        """
+        # Get or create conversation
+        if conversation_id:
+            conversation = self.conversation_manager.get_conversation(conversation_id)
+            if not conversation:
+                raise ConversationError(f"Conversation {conversation_id} not found")
+        else:
+            conversation = self.conversation_manager.create_conversation(
+                provider=self.config.provider,
+                model=self.config.model,
+                user_id=user_id,
+            )
+
+        # Add user message to conversation
+        conversation.add_message(MessageRole.USER, message)
+
+        return conversation
+
+    def _prepare_agent_and_context(self, conversation: Conversation) -> tuple[Any, str]:
+        """
+        Create agent for request and build conversation context.
+
+        Args:
+            conversation: The conversation to prepare context from
+
+        Returns:
+            tuple[Any, str]: (agent instance, conversation context string)
+        """
+        # Create agent for this request
+        agent = get_agent(self.config, self.settings)
+
+        # Build conversation context for AI
+        conversation_context = self._build_conversation_context(conversation)
+
+        return agent, conversation_context
+
+    def _finalize_conversation(
+        self,
+        conversation: Conversation,
+        response_time_ms: float,
+        is_streaming: bool = False,
+    ) -> None:
+        """
+        Update conversation metadata and save.
+
+        Args:
+            conversation: The conversation to finalize
+            response_time_ms: Response time in milliseconds
+            is_streaming: Whether this was a streaming response
+        """
+        # Update conversation metadata
+        metadata_update = {
+            "last_response_time_ms": response_time_ms,
+            "total_messages": conversation.get_message_count(),
+            "last_activity": datetime.now(UTC).isoformat(),
+        }
+
+        if is_streaming:
+            metadata_update["streaming"] = True
+
+        conversation.metadata.update(metadata_update)
+
+        # Save conversation
+        self.conversation_manager.save_conversation(conversation)
 
     def _build_conversation_context(self, conversation: Conversation) -> str:
         """
@@ -348,7 +363,7 @@ class AIService:
 
         return {
             "enabled": self.config.enabled,
-            "provider": self.config.provider.value,
+            "provider": self.config.provider,
             "model": self.config.model,
             "agent_initialized": True,  # Agents created per request, always available
             "total_conversations": total_conversations,
