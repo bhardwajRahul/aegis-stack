@@ -165,10 +165,12 @@ async def get_system_status() -> SystemStatus:
 
         # Propagate status from system metrics and original backend status
         system_metrics_statuses = [
-            metric.status
+            getattr(metric, 'status', ComponentStatusType.HEALTHY)
             for metric in system_metrics.values()
         ]
-        original_backend_status = backend_component.status
+        original_backend_status = getattr(
+            backend_component, 'status', ComponentStatusType.HEALTHY
+        )
         all_backend_statuses = system_metrics_statuses + [original_backend_status]
 
         backend_status = propagate_status(all_backend_statuses)
@@ -188,7 +190,7 @@ async def get_system_status() -> SystemStatus:
 
         # Propagate status from system metrics only
         system_metrics_statuses = [
-            metric.status
+            getattr(metric, 'status', ComponentStatusType.HEALTHY)
             for metric in system_metrics.values()
         ]
         backend_status = propagate_status(system_metrics_statuses)
@@ -219,11 +221,11 @@ async def get_system_status() -> SystemStatus:
 
     # Propagate status from all top-level components and services
     component_statuses = [
-        component.status
+        getattr(component, 'status', ComponentStatusType.HEALTHY)
         for component in component_results.values()
     ]
     service_statuses = [
-        service.status
+        getattr(service, 'status', ComponentStatusType.HEALTHY)
         for service in service_results.values()
     ]
     all_top_level_statuses = component_statuses + service_statuses

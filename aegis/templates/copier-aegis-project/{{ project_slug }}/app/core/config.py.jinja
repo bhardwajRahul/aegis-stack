@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
-{%- if include_redis %}
+{% if include_redis %}
     # Redis settings for arq background tasks
     REDIS_URL: str = "redis://redis:6379"  # Docker service name by default
     REDIS_URL_LOCAL: str | None = None  # Override for local CLI usage
@@ -84,7 +84,7 @@ class Settings(BaseSettings):
         )
 {% endif %}
 
-{%- if include_worker %}
+{% if include_worker %}
     # arq worker settings (shared across all workers)
     WORKER_KEEP_RESULT_SECONDS: int = 3600  # Keep job results for 1 hour
     WORKER_MAX_TRIES: int = 3
@@ -102,14 +102,14 @@ class Settings(BaseSettings):
     # in app/components/worker/queues/ - just import and use as arq intended!
 {% endif %}
 
-{%- if include_database %}
+{% if include_database %}
     # Database settings (SQLite)
     DATABASE_URL: str = "sqlite:///./data/app.db"
     DATABASE_ENGINE_ECHO: bool = False
     DATABASE_CONNECT_ARGS: dict[str, Any] = {"check_same_thread": False}
 {% endif %}
 
-{%- if include_ai %}
+{% if include_ai %}
     # AI Service Configuration
     # Primary service settings
     AI_ENABLED: bool = True
@@ -138,7 +138,7 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-{%- if include_worker %}
+{% if include_worker %}
 # Pure arq queue helper functions - use dynamic discovery
 def get_available_queues() -> list[str]:
     """Get all available queue names via dynamic discovery."""

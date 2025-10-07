@@ -284,7 +284,7 @@ async def _scheduler_component_health() -> ComponentStatus:
     Without persistence: Shows component as activated only
 {%- endif %}
     """
-    {%- if scheduler_backend != "memory" %}
+    {% if scheduler_backend != "memory" %}
     try:
         from app.services.scheduler.task_monitor import TaskHealthMonitor
         monitor = TaskHealthMonitor()
@@ -358,7 +358,7 @@ async def startup_hook() -> None:
     {%- if include_scheduler %}
     # Register scheduler component health check
     register_health_check("scheduler", _scheduler_component_health)
-    {%- if scheduler_backend != "memory" %}
+    {% if scheduler_backend != "memory" %}
     logger.info("Scheduler component health check registered (with task data)")
     {% else %}
     logger.info("Scheduler component enabled (shows as activated)")
@@ -384,7 +384,7 @@ async def startup_hook() -> None:
     from app.services.system.health import check_database_health
     register_health_check("database", check_database_health)
     logger.info("Database component health check registered")
-    {%- endif %}
+    {% endif %}
 
     logger.info("✅ Component health detection complete")
 
@@ -411,7 +411,7 @@ async def startup_hook() -> None:
     {%- endif %}
 
     # Future services will be registered here:
-    # if include_payment == "yes":
+    # if cookiecutter.include_payment == "yes":
     #     from app.services.payment.health import check_payment_service_health
     #     register_service_health_check("payment", check_payment_service_health)
 

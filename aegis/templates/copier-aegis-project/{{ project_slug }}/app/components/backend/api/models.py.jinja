@@ -1,11 +1,11 @@
 """
-API models for{%- if include_worker %} background tasks{%- endif %}{%- if include_worker == "yes" and scheduler_backend != "memory" %} and{%- endif %}{%- if scheduler_backend != "memory" %} scheduled tasks{%- endif %} and responses.
+API models for{%- if include_worker %} background tasks{%- endif %}{%- if include_worker and scheduler_backend != "memory" %} and{%- endif %}{%- if scheduler_backend != "memory" %} scheduled tasks{%- endif %} and responses.
 
 This module contains all Pydantic models used by the API layer for
 task management, status tracking, and response formatting.
 """
 
-{%- if include_worker == "yes" or scheduler_backend != "memory" %}
+{%- if include_worker or scheduler_backend != "memory" %}
 from datetime import datetime
 from typing import Any
 

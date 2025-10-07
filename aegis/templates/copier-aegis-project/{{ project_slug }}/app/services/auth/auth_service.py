@@ -1,11 +1,10 @@
 """Authentication service utilities."""
 
-from fastapi import HTTPException, status
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.core.security import verify_token
 from app.models.user import User
 from app.services.auth.user_service import UserService
+from fastapi import HTTPException, status
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 async def get_current_user_from_token(token: str, db: AsyncSession) -> User:

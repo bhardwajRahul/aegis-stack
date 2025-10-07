@@ -250,10 +250,8 @@ def main():
         remove_file("tests/api/test_scheduler_endpoints.py")
         # Remove scheduler card (should not display when scheduler not included)
         remove_file("app/components/frontend/dashboard/cards/scheduler_card.py")
-        # Remove scheduler test files
+        # Remove scheduler-specific test file
         remove_file("tests/services/test_scheduled_task_manager.py")
-        remove_file("tests/services/test_component_integration.py")
-        remove_file("tests/services/test_health_logic.py")
 
     # Remove scheduler service if scheduler backend is memory
     # The service is only useful when we can persist to a database
@@ -263,6 +261,8 @@ def main():
         # Remove scheduler API endpoints (empty when using memory backend)
         remove_file("app/components/backend/api/scheduler.py")
         remove_file("tests/api/test_scheduler_endpoints.py")
+        # Remove task manager test (only exists with persistence)
+        remove_file("tests/services/test_scheduled_task_manager.py")
 
     if "{{ cookiecutter.include_worker }}" != "yes":
         # Remove worker-specific files
@@ -278,6 +278,14 @@ def main():
         remove_file("tests/api/test_worker_endpoints.py")
         # Remove worker card (should not display when worker not included)
         remove_file("app/components/frontend/dashboard/cards/worker_card.py")
+
+    # Remove shared component integration tests only when BOTH scheduler AND worker disabled
+    if (
+        "{{ cookiecutter.include_scheduler }}" != "yes"
+        and "{{ cookiecutter.include_worker }}" != "yes"
+    ):
+        remove_file("tests/services/test_component_integration.py")
+        remove_file("tests/services/test_health_logic.py")
 
     if "{{ cookiecutter.include_database }}" != "yes":
         remove_file("app/core/db.py")
@@ -311,11 +319,11 @@ def main():
         remove_file("app/cli/marko_terminal_renderer.py")
         # Remove AI-related tests if they exist
         remove_file("tests/api/test_ai_endpoints.py")
-        remove_file("tests/services/test_ai_service.py")
-        remove_file("tests/services/test_ai_integration.py")
         remove_file("tests/services/test_conversation_persistence.py")
         remove_file("tests/cli/test_ai_rendering.py")
         remove_file("tests/cli/test_conversation_memory.py")
+        # Remove AI test directory (contains test_service.py, test_health.py, etc.)
+        remove_dir("tests/services/ai")
 
     # Clean up empty docs/components directory if no components selected
     if (
