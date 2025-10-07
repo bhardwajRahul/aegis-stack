@@ -1,0 +1,200 @@
+
+x-app: &app
+  image: ${AEGIS_STACK_TAG:-aegis-stack:latest}
+  build:
+    context: .
+    args:
+      - AEGIS_STACK_VERSION=${AEGIS_STACK_VERSION:-dev}
+      - PORT=${PORT:-8000}
+  env_file:
+    - ${AEGIS_STACK_ENV_FILE:-.env}
+  volumes:
+    - .:/code
+    # Exclude .venv to prevent host/container virtual environment conflicts
+    - /code/.venv
+  environment:
+    # Docker container marker for entrypoint script
+    - DOCKER_CONTAINER=1
+    - PORT=${PORT:-8000}
+  labels:
+    logging: "aegis-stack"
+
+services:
+  # DEVELOPMENT PROFILE
+
+  webserver:
+    <<: *app
+    command:
+      - webserver
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+{%- if include_redis %}
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      # Redis connection for health checks and task enqueueing
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+{%- endif %}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8000}/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    profiles:
+      - dev
+
+
+{%- if include_scheduler %}
+  # Scheduler service (runs scheduler tasks independently)
+  scheduler:
+    <<: *app
+    command:
+      - scheduler
+{%- if include_redis %}
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      # Redis connection for future scheduler integration
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+{%- endif %}
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    profiles:
+      - dev
+      - prod
+{%- endif %}
+
+{%- if include_worker %}
+  # Load Test Worker (high-performance load testing tasks)
+  worker-load-test:
+    <<: *app
+    command:
+      - worker
+      - load_test
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    tty: true
+    environment:
+      # Docker container marker for entrypoint script
+      - DOCKER_CONTAINER=1
+      # Load test worker configuration (high concurrency)
+      - WORKER_QUEUE_TYPE=load_test
+      - WORKER_CONCURRENCY=${LOAD_TEST_WORKER_CONCURRENCY:-20}
+      - WORKER_TIMEOUT_SECONDS=${LOAD_TEST_WORKER_TIMEOUT:-60}
+      - WORKER_MAX_TRIES=${LOAD_TEST_WORKER_MAX_TRIES:-1}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      # Docker file watching fix - force polling for volume mounts
+      - WATCHFILES_FORCE_POLLING=true
+      - WATCHFILES_POLL_DELAY_MS=800
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    profiles:
+      - dev
+      - prod
+
+
+  # System Worker (maintenance and administrative tasks)
+  worker-system:
+    <<: *app
+    command:
+      - worker
+      - system
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    tty: true
+    environment:
+      # Docker container marker for entrypoint script
+      - DOCKER_CONTAINER=1
+      # System worker configuration (low concurrency, high reliability)
+      - WORKER_QUEUE_TYPE=system
+      - WORKER_CONCURRENCY=${SYSTEM_WORKER_CONCURRENCY:-2}
+      - WORKER_TIMEOUT_SECONDS=${SYSTEM_WORKER_TIMEOUT:-1800}
+      - WORKER_MAX_TRIES=${SYSTEM_WORKER_MAX_TRIES:-5}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      # Docker file watching fix - force polling for volume mounts
+      - WATCHFILES_FORCE_POLLING=true
+      - WATCHFILES_POLL_DELAY_MS=800
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    profiles:
+      - dev
+      - prod
+{%- endif %}
+
+
+{%- if include_redis %}
+  # REDIS SERVICE
+
+  redis:
+    image: redis:7-alpine
+    hostname: redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.25'
+        reservations:
+          memory: 256M
+          cpus: '0.1'
+    profiles:
+      - dev
+{%- endif %}
+
+  # TEST PROFILE
+
+  test_runner:
+    <<: *app
+    command:
+      - test
+    env_file:
+      - ${AEGIS_STACK_ENV_FILE:-.env}
+    profiles:
+      - test
+
+volumes:
+  aegis-data:

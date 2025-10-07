@@ -1,0 +1,370 @@
+"""
+AI provider factory for creating PydanticAI agents.
+
+Simple factory that maps providers to PydanticAI model classes and creates
+Agent instances. Supports PydanticAI 1.0+ API with demo mode for immediate testing.
+"""
+
+import json
+import os
+from typing import Any
+
+import httpx
+from openai import AsyncOpenAI
+from pydantic_ai import Agent
+
+# Import only what's needed for PUBLIC provider by default
+# Other providers imported dynamically when needed
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.settings import ModelSettings
+
+# Removed TestModel - that's for unit tests, not user demos
+from app.core.log import logger
+
+from .config import AIServiceConfig
+from .models import AIProvider
+
+
+# Lazy loading of provider model classes to avoid import errors
+def _get_model_class(provider: AIProvider):
+    """Get model class for provider with lazy import to avoid dependency issues."""
+    if provider == AIProvider.OPENAI:
+        return OpenAIChatModel
+    elif provider == AIProvider.ANTHROPIC:
+        from pydantic_ai.models.anthropic import AnthropicModel
+
+        return AnthropicModel
+    elif provider == AIProvider.GOOGLE:
+        from pydantic_ai.models.google import GoogleModel
+
+        return GoogleModel
+    elif provider == AIProvider.GROQ:
+        from pydantic_ai.models.groq import GroqModel
+
+        return GroqModel
+    elif provider == AIProvider.MISTRAL:
+        return OpenAIChatModel  # Mistral uses OpenAI-compatible API
+    elif provider == AIProvider.COHERE:
+        return OpenAIChatModel  # Cohere can use OpenAI-compatible interface
+    elif provider == AIProvider.PUBLIC:
+        return OpenAIChatModel  # Public endpoints use OpenAI-compatible API
+    else:
+        raise ProviderError(f"Unsupported provider: {provider}")
+
+
+class ProviderError(Exception):
+    """Exception raised when provider setup fails."""
+
+    pass
+
+
+def get_agent(config: AIServiceConfig, settings: Any) -> Agent:
+    """
+    Create a PydanticAI Agent for the configured provider.
+
+    Falls back to demo mode if no API keys are configured for immediate testing.
+
+    Args:
+        config: AI service configuration
+        settings: Application settings for API keys
+
+    Returns:
+        Agent: Configured PydanticAI Agent
+
+    Raises:
+        ProviderError: If agent creation fails
+    """
+    try:
+        # Special handling for PUBLIC provider (no API key required)
+        if config.provider == AIProvider.PUBLIC:
+            return _create_public_agent(config)
+
+        # Check if we have API key for this provider
+        provider_config = config.get_provider_config(settings)
+
+        if not provider_config.api_key:
+            raise ProviderError(
+                f"No API key configured for {config.provider}. "
+                f"Set {_get_env_var_name(config.provider)} environment variable. "
+                f"For free usage without API keys, try 'public' provider or Groq: https://console.groq.com/keys"
+            )
+
+        # Set environment variable for PydanticAI 1.0+ (they expect env vars)
+        _set_provider_env_var(config.provider, provider_config.api_key)
+
+        # Get model class for provider (with lazy loading)
+        model_class = _get_model_class(config.provider)
+
+        # For PydanticAI 1.0+, NO api_key parameter - just model_name
+        model_kwargs = {"model_name": config.model}
+
+        # Add provider-specific configuration
+        if config.provider == AIProvider.MISTRAL:
+            model_kwargs["base_url"] = "https://api.mistral.ai/v1"
+        elif config.provider == AIProvider.COHERE:
+            model_kwargs["base_url"] = "https://api.cohere.ai/v1"
+
+        # Create model instance (PydanticAI 1.0+ style)
+        model = model_class(**model_kwargs)
+
+        # Create agent with system prompt and model settings
+        agent = Agent(
+            model=model,
+            model_settings=ModelSettings(
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+                timeout=config.timeout_seconds,
+            ),
+            system_prompt=(
+                "You are a helpful AI assistant. Provide clear, accurate, "
+                "and concise responses. Be friendly and professional."
+            ),
+        )
+
+        # logger.info(f"Created {config.provider} agent with model {config.model}")
+        return agent
+
+    except Exception as e:
+        error_msg = f"Failed to create agent for {config.provider}: {e}"
+        logger.error(error_msg)
+        raise ProviderError(error_msg) from e
+
+
+def _create_public_agent(config: AIServiceConfig) -> Agent:
+    """
+    Create agent for PUBLIC provider using free public endpoints.
+
+    Uses LLM7.io service which provides free access through an OpenAI-compatible API.
+    Note: The service accepts model names for compatibility but routes to their
+    available models (actual model used may differ from requested).
+
+    Args:
+        config: AI service configuration
+
+    Returns:
+        Agent: Configured PydanticAI Agent for public endpoint
+
+    Raises:
+        ProviderError: If agent creation fails
+    """
+    try:
+        # Create a custom HTTP client that fixes LLM7.io response format
+        class FixedLLM7Client(httpx.AsyncClient):
+            """Custom HTTP client that adds missing index field to LLM7.io responses."""
+
+            async def send(self, request, **kwargs):
+                # logger.info(
+                #     f"🔧 FixedLLM7Client.send: {request.method} {request.url}"
+                # )
+                response = await super().send(request, **kwargs)
+
+                # If this is a chat completions request, fix the response
+                if (
+                    "/chat/completions" in str(request.url)
+                    and request.method.upper() == "POST"
+                ):
+                    # logger.debug(
+                    #     "Detected chat completions request, attempting to "
+                    #     "fix response"
+                    # )
+                    try:
+                        # Check if this is a streaming response first
+                        content_type = response.headers.get("content-type", "")
+                        if (
+                            "text/plain" in content_type
+                            or "text/event-stream" in content_type
+                            or "application/x-ndjson" in content_type
+                        ):
+                            # logger.debug("Skipping fix for streaming response")
+                            return response
+
+                        # Only process non-streaming JSON responses
+                        if not response.headers.get("content-type", "").startswith(
+                            "application/json"
+                        ):
+                            # logger.debug("Skipping fix for non-JSON response")
+                            return response
+
+                        # Get response text, letting httpx handle encoding/decompression
+                        response_text = response.text
+                        data = json.loads(response_text)
+
+                        # logger.debug(f"Original response data: {data}")
+
+                        # Add missing index field to choices
+                        if "choices" in data and isinstance(data["choices"], list):
+                            for i, choice in enumerate(data["choices"]):
+                                if "index" not in choice or choice["index"] is None:
+                                    choice["index"] = i  # Always set index
+                                    # logger.debug(f"Added index {i} to choice")
+
+                        # Monkey patch the response to return fixed content
+                        fixed_content = json.dumps(data)
+                        response._content = fixed_content.encode()
+                        response._text = fixed_content
+
+                        # logger.debug(
+                        #     f"Fixed LLM7.io response: added index fields "
+                        #     f"to {len(data.get('choices', []))} choices"
+                        # )
+
+                    except Exception as e:
+                        logger.warning(f"Failed to fix LLM7.io response: {e}")
+                        # If fixing fails, return original response
+
+                return response
+
+        # Create custom HTTP client
+        custom_http_client = FixedLLM7Client()
+        # logger.debug(f"Created custom HTTP client: {type(custom_http_client)}")
+
+        # Create the AsyncOpenAI client directly to ensure
+        # our custom HTTP client is used
+        openai_client = AsyncOpenAI(
+            api_key="unused",  # LLM7.io doesn't need a real key
+            base_url="https://api.llm7.io/v1",  # Public endpoint
+            http_client=custom_http_client,
+        )
+        # logger.debug("Created OpenAI client with custom HTTP client")
+
+        # Create provider using the custom openai_client
+        provider = OpenAIProvider(openai_client=openai_client)
+        # logger.debug(f"Created provider with custom OpenAI client: {provider}")
+
+        # Create OpenAI model using the provider
+        # Note: LLM7.io accepts various model names but routes to their available models
+        model_name = (
+            config.model if config.model and config.model != "auto" else "gpt-4o-mini"
+        )
+        model = OpenAIChatModel(model_name=model_name, provider=provider)
+
+        # Create agent with friendly system prompt and model settings
+        agent = Agent(
+            model=model,
+            model_settings=ModelSettings(
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+                timeout=config.timeout_seconds,
+            ),
+            system_prompt=(
+                "You are a helpful AI assistant powered by free public endpoints. "
+                "Provide clear, accurate, and concise responses. "
+                "Be friendly and professional."
+            ),
+        )
+
+        # logger.info(f"Created PUBLIC agent with model {config.model} via LLM7.io")
+        return agent
+
+    except Exception as e:
+        # Fallback with helpful instructions if public endpoint fails
+        error_msg = (
+            f"Public endpoint failed ({e}). Here are reliable free alternatives:\n\n"
+            "🌟 RECOMMENDED - Groq (Fastest, Most Generous Free Tier):\n"
+            "   1. Visit: https://console.groq.com/keys\n"
+            "   2. Get API key: export GROQ_API_KEY=your_key_here\n"
+            "   3. Switch: {{ project_slug }} ai config "
+            "set-provider groq\n\n"
+            "🔥 Google AI Studio (Also Free):\n"
+            "   1. Visit: https://aistudio.google.com/app/apikey\n"
+            "   2. Get API key: export GOOGLE_API_KEY=your_key_here\n"
+            "   3. Switch: {{ project_slug }} ai config set-provider google"
+        )
+        logger.error(f"Failed to create PUBLIC agent: {e}")
+        raise ProviderError(error_msg) from e
+
+
+def _get_env_var_name(provider: AIProvider) -> str:
+    """Get the environment variable name for a provider."""
+    env_var_map = {
+        AIProvider.OPENAI: "OPENAI_API_KEY",
+        AIProvider.ANTHROPIC: "ANTHROPIC_API_KEY",
+        AIProvider.GOOGLE: "GOOGLE_API_KEY",
+        AIProvider.GROQ: "GROQ_API_KEY",
+        AIProvider.MISTRAL: "MISTRAL_API_KEY",
+        AIProvider.COHERE: "COHERE_API_KEY",
+        AIProvider.PUBLIC: "PUBLIC_API_KEY",  # Not actually needed
+    }
+
+    # Debug logging
+    # logger.debug(
+    #     f"Looking up env var for provider: {provider} (type: {type(provider)})"
+    # )
+
+    result = env_var_map.get(provider)
+    if result:
+        return result
+    else:
+        # Safe fallback without calling .value in case of type issues
+        return f"{str(provider).upper()}_API_KEY"
+
+
+def _set_provider_env_var(provider: AIProvider, api_key: str) -> None:
+    """Set environment variable for provider API key (PydanticAI 1.0+ expects this)."""
+    env_var_map = {
+        AIProvider.OPENAI: "OPENAI_API_KEY",
+        AIProvider.ANTHROPIC: "ANTHROPIC_API_KEY",
+        AIProvider.GOOGLE: "GOOGLE_API_KEY",
+        AIProvider.GROQ: "GROQ_API_KEY",
+        AIProvider.MISTRAL: "MISTRAL_API_KEY",
+        AIProvider.COHERE: "COHERE_API_KEY",
+        AIProvider.PUBLIC: "PUBLIC_API_KEY",  # Not actually needed
+    }
+
+    env_var = env_var_map.get(provider)
+    if env_var and api_key:
+        os.environ[env_var] = api_key
+        # logger.debug(f"Set {env_var} environment variable")
+
+
+def validate_provider_support(provider: AIProvider) -> bool:
+    """
+    Check if a provider is supported.
+
+    Args:
+        provider: The provider to check
+
+    Returns:
+        bool: True if provider is supported
+    """
+    try:
+        _get_model_class(provider)
+        return True
+    except ProviderError:
+        return False
+
+
+def get_supported_providers() -> list[AIProvider]:
+    """
+    Get list of supported providers.
+
+    Returns:
+        list[AIProvider]: List of supported providers
+    """
+    # Return all providers that are defined in the enum
+    return [
+        AIProvider.OPENAI,
+        AIProvider.ANTHROPIC,
+        AIProvider.GOOGLE,
+        AIProvider.GROQ,
+        AIProvider.MISTRAL,
+        AIProvider.COHERE,
+        AIProvider.PUBLIC,
+    ]
+
+
+def get_provider_model_class(provider: AIProvider):
+    """
+    Get the PydanticAI model class for a provider.
+
+    Args:
+        provider: The AI provider
+
+    Returns:
+        Model class for the provider
+
+    Raises:
+        ProviderError: If provider is not supported
+    """
+    return _get_model_class(provider)

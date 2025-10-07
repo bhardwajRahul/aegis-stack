@@ -1,0 +1,166 @@
+# Copier template configuration for Aegis Stack
+# This replaces cookiecutter.json with more powerful features:
+# - Questions with validation
+# - Conditional questions
+# - Better defaults
+# - Update support
+
+_min_copier_version: "9.0.0"
+
+# Answers file to track component selections for updates
+_answers_file: .copier-answers.yml
+
+# Template directory name (Copier will generate {{project_slug}} directory automatically)
+_templates_suffix: .jinja
+
+# Project metadata
+project_name:
+  type: str
+  help: "Name of your Aegis Stack project"
+  default: "My Aegis Stack Project"
+
+project_slug:
+  type: str
+  help: "Project slug (auto-generated from name)"
+  default: "{{ project_name.lower().replace(' ', '-').replace('_', '-') }}"
+
+project_description:
+  type: str
+  help: "Brief description of your project"
+  default: "A production-ready async Python application built with Aegis Stack"
+
+author_name:
+  type: str
+  help: "Your name"
+  default: "Your Name"
+
+author_email:
+  type: str
+  help: "Your email address"
+  default: "your.email@example.com"
+
+github_username:
+  type: str
+  help: "Your GitHub username"
+  default: "your-username"
+
+version:
+  type: str
+  help: "Initial version"
+  default: "0.1.0"
+
+python_version:
+  type: str
+  help: "Python version to use"
+  default: "3.11"
+  choices:
+    - "3.11"
+    - "3.12"
+    - "3.13"
+
+# Component selection
+include_scheduler:
+  type: bool
+  help: "Include APScheduler for scheduled tasks?"
+  default: false
+
+include_redis:
+  type: bool
+  help: "Include Redis for caching and pub/sub?"
+  default: false
+
+include_worker:
+  type: bool
+  help: "Include arq worker for background jobs?"
+  default: false
+
+include_database:
+  type: bool
+  help: "Include SQLModel database with SQLite?"
+  default: false
+
+include_cache:
+  type: bool
+  help: "Include Redis cache component?"
+  default: false
+
+scheduler_backend:
+  type: str
+  help: "Scheduler backend storage"
+  default: "memory"
+  choices:
+    - "memory"
+    - "sqlite"
+  when: "{{ include_scheduler }}"
+
+scheduler_with_persistence:
+  type: bool
+  help: "Enable scheduler persistence?"
+  default: "{{ scheduler_backend == 'sqlite' }}"
+  when: "{{ include_scheduler }}"
+
+# Service selection
+include_auth:
+  type: bool
+  help: "Include authentication service with JWT?"
+  default: false
+
+include_ai:
+  type: bool
+  help: "Include AI service with PydanticAI?"
+  default: false
+
+ai_providers:
+  type: str
+  help: "AI providers to support (comma-separated)"
+  default: "openai"
+  when: "{{ include_ai }}"
+
+# Internal computed values (using Jinja2)
+_has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache }}"
+_include_migrations: "{{ include_auth }}"
+
+# Component-specific dependencies (computed)
+_scheduler_deps: "{% if include_scheduler %}apscheduler>=3.10.0{% endif %}"
+_redis_deps: "{% if include_redis %}redis>=5.0.0{% endif %}"
+_worker_deps: "{% if include_worker %}arq>=0.25.0{% endif %}"
+_database_deps: "{% if include_database %}sqlmodel>=0.0.14,sqlalchemy>=2.0.0,aiosqlite>=0.19.0{% endif %}"
+_cache_deps: "{% if include_cache %}redis[hiredis]>=5.0.0{% endif %}"
+
+# Service-specific dependencies (computed)
+_auth_deps: "{% if include_auth %}python-jose[cryptography]==3.3.0,passlib[bcrypt]==1.7.4,python-multipart==0.0.9{% endif %}"
+_ai_deps: "{% if include_ai %}pydantic-ai-slim[{{ ai_providers }}]==1.0.10,httpx>=0.27.0{% endif %}"
+
+# Tasks to run after project generation
+_tasks:
+  # Step 1: Install dependencies with uv
+  - command: "uv sync"
+    when: "{{ _copier_conf.stage == 'task' }}"
+
+  # Step 2: Copy environment file if it doesn't exist
+  - command: "cp .env.example .env"
+    when: "{{ _copier_conf.stage == 'task' }}"
+
+  # Step 3: Create data directory for database (if auth service included)
+  - command: "mkdir -p data"
+    when: "{{ _copier_conf.stage == 'task' and include_auth }}"
+
+  # Step 4: Run database migrations if auth service is included
+  - command: "uv run alembic -c alembic/alembic.ini upgrade head"
+    when: "{{ _copier_conf.stage == 'task' and include_auth }}"
+
+  # Step 5: Auto-format generated code
+  - command: "make fix"
+    when: "{{ _copier_conf.stage == 'task' }}"
+
+# Files/directories to exclude from generation
+# NOTE: Copier doesn't support Jinja2 in _exclude like cookiecutter
+# We'll handle conditional file removal via Jinja2 in filenames instead
+_exclude:
+  - "copier.yml"
+  - ".copier-answers.yml"
+  - "__pycache__"
+  - "*.pyc"
+  - ".git"
+  - ".DS_Store"
+  - "clean-validation"

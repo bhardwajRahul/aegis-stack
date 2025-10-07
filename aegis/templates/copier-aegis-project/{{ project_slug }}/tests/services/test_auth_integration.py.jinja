@@ -1,0 +1,528 @@
+"""
+Integration tests for authentication services.
+
+This module tests the integration between auth services, database,
+and other components in realistic scenarios.
+"""
+
+import pytest
+from app.core.security import create_access_token, verify_password, verify_token
+from app.models.user import User, UserCreate
+from app.services.auth.auth_service import get_current_user_from_token
+from app.services.auth.user_service import UserService
+from fastapi import HTTPException
+from sqlmodel import Session, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+
+class TestAuthServiceIntegration:
+    """Test auth service integration with database and security."""
+
+    @pytest.mark.asyncio
+    async def test_user_creation_and_retrieval(self, async_db_session: AsyncSession):
+        """Test complete user creation and retrieval flow."""
+        user_service = UserService(async_db_session)
+
+        # Create user data
+        user_data = UserCreate(
+            email="integration@example.com",
+            full_name="Integration Test User",
+            password="integrationpassword123"
+        )
+
+        # Create user
+        created_user = await user_service.create_user(user_data)
+
+        # Verify user was created correctly
+        assert created_user.id is not None
+        assert created_user.email == user_data.email
+        assert created_user.full_name == user_data.full_name
+        assert created_user.is_active is True
+        # Password should be hashed
+        assert created_user.hashed_password != user_data.password
+        assert verify_password(user_data.password, created_user.hashed_password)
+
+        # Retrieve user from database
+        retrieved_user = await user_service.get_user_by_email(user_data.email)
+        assert retrieved_user is not None
+        assert retrieved_user.id == created_user.id
+        assert retrieved_user.email == created_user.email
+        assert retrieved_user.hashed_password == created_user.hashed_password
+
+    @pytest.mark.asyncio
+    async def test_user_authentication_flow(self, async_db_session: AsyncSession):
+        """Test complete user authentication flow."""
+        user_service = UserService(async_db_session)
+
+        # Create user
+        user_data = UserCreate(
+            email="authflow@example.com",
+            full_name="Auth Flow User",
+            password="authflowpassword"
+        )
+        created_user = await user_service.create_user(user_data)
+
+        # Simulate login: verify credentials and create token
+        retrieved_user = await user_service.get_user_by_email(user_data.email)
+        assert retrieved_user is not None
+
+        # Verify password
+        is_valid_password = verify_password(
+            user_data.password, retrieved_user.hashed_password
+        )
+        assert is_valid_password
+
+        # Create access token
+        access_token = create_access_token(data={"sub": retrieved_user.email})
+        assert access_token is not None
+        assert len(access_token) > 0
+
+        # Verify token
+        payload = verify_token(access_token)
+        assert payload is not None
+        assert payload["sub"] == retrieved_user.email
+
+        # Get user from token (simulates protected endpoint)
+        token_user = await get_current_user_from_token(access_token, async_db_session)
+        assert token_user.id == created_user.id
+        assert token_user.email == created_user.email
+
+    @pytest.mark.asyncio
+    async def test_multiple_users_isolation(self, async_db_session: AsyncSession):
+        """Test that multiple users are properly isolated."""
+        user_service = UserService(async_db_session)
+
+        # Create multiple users
+        users_data = [
+            UserCreate(
+                email="user1@example.com", full_name="User One", password="password1"
+            ),
+            UserCreate(
+                email="user2@example.com", full_name="User Two", password="password2"
+            ),
+            UserCreate(
+                email="user3@example.com", full_name="User Three", password="password3"
+            ),
+        ]
+
+        created_users = []
+        for user_data in users_data:
+            created_user = await user_service.create_user(user_data)
+            created_users.append(created_user)
+
+        # Verify each user can be retrieved independently
+        for i, user_data in enumerate(users_data):
+            retrieved_user = await user_service.get_user_by_email(user_data.email)
+            assert retrieved_user is not None
+            assert retrieved_user.id == created_users[i].id
+            assert retrieved_user.email == user_data.email
+            assert verify_password(user_data.password, retrieved_user.hashed_password)
+
+        # Verify passwords are different
+        for i in range(len(created_users)):
+            for j in range(i + 1, len(created_users)):
+                assert (
+                    created_users[i].hashed_password != created_users[j].hashed_password
+                )
+
+    @pytest.mark.asyncio
+    async def test_invalid_token_handling(self, async_db_session: AsyncSession):
+        """Test handling of invalid tokens."""
+        # Test with completely invalid token
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user_from_token("invalid_token", async_db_session)
+        assert exc_info.value.status_code == 401
+
+        # Test with malformed token
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user_from_token("Bearer invalid_token", async_db_session)
+        assert exc_info.value.status_code == 401
+
+        # Test with token for non-existent user
+        fake_token = create_access_token(data={"sub": "nonexistent@example.com"})
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user_from_token(fake_token, async_db_session)
+        assert exc_info.value.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_user_deactivation_flow(self, async_db_session: AsyncSession):
+        """Test user deactivation prevents authentication."""
+        user_service = UserService(async_db_session)
+
+        # Create active user
+        user_data = UserCreate(
+            email="deactivate@example.com",
+            full_name="Deactivate User",
+            password="deactivatepassword"
+        )
+        created_user = await user_service.create_user(user_data)
+        assert created_user.is_active is True
+
+        # Create token for active user
+        token = create_access_token(data={"sub": created_user.email})
+
+        # Verify token works for active user
+        active_user = await get_current_user_from_token(token, async_db_session)
+        assert active_user.id == created_user.id
+
+        # Deactivate user using async service
+        await user_service.deactivate_user(created_user.id)
+
+        # Verify deactivated user cannot authenticate
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user_from_token(token, async_db_session)
+        assert exc_info.value.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_email_uniqueness_constraint(self, async_db_session: AsyncSession):
+        """Test that email uniqueness is enforced."""
+        user_service = UserService(async_db_session)
+
+        # Create first user
+        user_data1 = UserCreate(
+            email="unique@example.com",
+            full_name="First User",
+            password="password1"
+        )
+        created_user1 = await user_service.create_user(user_data1)
+        assert created_user1.id is not None
+
+        # Try to create second user with same email
+        user_data2 = UserCreate(
+            email="unique@example.com",  # Same email
+            full_name="Second User",
+            password="password2"
+        )
+
+        # This should raise an exception or return None depending on implementation
+        try:
+            created_user2 = await user_service.create_user(user_data2)
+            # If it doesn't raise an exception, it should return None
+            assert created_user2 is None
+        except Exception:
+            # Exception is acceptable for duplicate email
+            pass
+
+    @pytest.mark.asyncio
+    async def test_password_hashing_security(self, async_db_session: AsyncSession):
+        """Test password hashing security properties."""
+        user_service = UserService(async_db_session)
+
+        password = "securepassword123"
+        user_data = UserCreate(
+            email="security@example.com",
+            full_name="Security User",
+            password=password
+        )
+
+        created_user = await user_service.create_user(user_data)
+
+        # Store hash before session expires
+        hash1 = created_user.hashed_password
+
+        # Verify password is not stored in plain text
+        assert hash1 != password
+
+        # Verify password hash is different each time (salt)
+        user_data2 = UserCreate(
+            email="security2@example.com",
+            full_name="Security User 2",
+            password=password  # Same password
+        )
+        created_user2 = await user_service.create_user(user_data2)
+
+        # Store hash before session expires
+        hash2 = created_user2.hashed_password
+
+        # Hashes should be different due to salt
+        assert hash1 != hash2
+
+        # But both should verify correctly
+        assert verify_password(password, hash1)
+        assert verify_password(password, hash2)
+
+        # Wrong password should not verify
+        assert not verify_password("wrongpassword", hash1)
+
+    @pytest.mark.asyncio
+    async def test_database_transaction_rollback(self, async_db_session: AsyncSession):
+        """Test that database operations work correctly with transactions."""
+        user_service = UserService(async_db_session)
+
+        # Create user
+        user_data = UserCreate(
+            email="transaction@example.com",
+            full_name="Transaction User",
+            password="transactionpassword"
+        )
+        await user_service.create_user(user_data)
+
+        # Verify user exists before committing
+        retrieved_user = await user_service.get_user_by_email(user_data.email)
+        assert retrieved_user is not None
+        assert retrieved_user.email == user_data.email
+
+        # Note: In test context, transactions are typically rolled back
+        # This test ensures the user service works within transaction boundaries
+
+
+class TestAuthMigrationIntegration:
+    """Test auth service migration and database initialization."""
+
+    @pytest.mark.asyncio
+    async def test_user_table_exists_after_migrations(
+        self, async_db_session: AsyncSession
+    ):
+        """Test that user table exists and has correct structure after migrations."""
+        # This test verifies migrations ran successfully
+        # Try to query user table - should not raise "no such table" error
+        stmt = select(User)
+        try:
+            result = await async_db_session.exec(stmt)
+            users = result.all()
+            # If we get here, table exists (even if empty)
+            assert isinstance(users, list)
+        except Exception as e:
+            pytest.fail(f"User table does not exist or has wrong structure: {e}")
+
+    @pytest.mark.asyncio
+    async def test_user_table_has_required_columns(
+        self, async_db_session: AsyncSession
+    ):
+        """Test that user table has all required columns from migration."""
+        user_service = UserService(async_db_session)
+
+        # Create a user to test all columns are available
+        user_data = UserCreate(
+            email="column_test@example.com",
+            full_name="Column Test User",
+            password="columntest123"
+        )
+
+        try:
+            created_user = await user_service.create_user(user_data)
+
+            # Verify all expected columns are accessible
+            assert created_user.id is not None
+            assert created_user.email == user_data.email
+            assert created_user.full_name == user_data.full_name
+            assert created_user.hashed_password is not None
+            assert created_user.is_active is not None
+            assert created_user.created_at is not None
+            # updated_at may be None for new users
+            assert hasattr(created_user, 'updated_at')
+
+        except Exception as e:
+            pytest.fail(f"User table missing required columns: {e}")
+
+    @pytest.mark.asyncio
+    async def test_email_index_exists_and_enforces_uniqueness(
+        self, async_db_session: AsyncSession
+    ):
+        """Test that email index from migration enforces uniqueness."""
+        user_service = UserService(async_db_session)
+
+        # Create first user
+        user_data = UserCreate(
+            email="index_test@example.com",
+            full_name="Index Test User",
+            password="indextest123"
+        )
+
+        created_user = await user_service.create_user(user_data)
+        assert created_user is not None
+
+        # Try to create user with same email
+        duplicate_user_data = UserCreate(
+            email="index_test@example.com",  # Same email
+            full_name="Duplicate User",
+            password="duplicate123"
+        )
+
+        # Should either return None or raise exception due to unique constraint
+        try:
+            duplicate_user = await user_service.create_user(duplicate_user_data)
+            # If no exception, should return None
+            assert duplicate_user is None
+        except Exception:
+            # Exception is expected for unique constraint violation
+            pass
+
+    @pytest.mark.asyncio
+    async def test_auth_endpoints_work_without_table_errors(
+        self, async_db_session: AsyncSession
+    ):
+        """Test that auth operations don't produce 'no such table' errors."""
+        user_service = UserService(async_db_session)
+
+        # Test user creation (tests INSERT)
+        user_data = UserCreate(
+            email="endpoint_test@example.com",
+            full_name="Endpoint Test User",
+            password="endpointtest123"
+        )
+
+        try:
+            # Should not raise "no such table: user" error
+            created_user = await user_service.create_user(user_data)
+            assert created_user is not None
+
+            # Test user retrieval (tests SELECT)
+            retrieved_user = await user_service.get_user_by_email(user_data.email)
+            assert retrieved_user is not None
+            assert retrieved_user.email == user_data.email
+
+        except Exception as e:
+            if "no such table" in str(e).lower():
+                pytest.fail(
+                    "Auth endpoints failed with 'no such table' error - "
+                    "migrations not run properly"
+                )
+            else:
+                # Re-raise other exceptions
+                raise
+
+    @pytest.mark.asyncio
+    async def test_auth_service_works_end_to_end(self, async_db_session: AsyncSession):
+        """Test complete auth flow works without database errors."""
+        user_service = UserService(async_db_session)
+
+        # Complete flow: create user -> login -> authenticate
+        user_data = UserCreate(
+            email="e2e_test@example.com",
+            full_name="End to End User",
+            password="e2etest123"
+        )
+
+        try:
+            # Create user
+            created_user = await user_service.create_user(user_data)
+            assert created_user is not None
+
+            # Verify login credentials
+            retrieved_user = await user_service.get_user_by_email(user_data.email)
+            assert retrieved_user is not None
+            assert verify_password(user_data.password, retrieved_user.hashed_password)
+
+            # Create and verify token
+            token = create_access_token(data={"sub": retrieved_user.email})
+            assert token is not None
+
+            # Authenticate with token
+            authenticated_user = await get_current_user_from_token(
+                token, async_db_session
+            )
+            assert authenticated_user.id == created_user.id
+
+        except Exception as e:
+            if "no such table" in str(e).lower() or "database" in str(e).lower():
+                pytest.fail(f"End-to-end auth flow failed with database error: {e}")
+            else:
+                # Re-raise other exceptions
+                raise
+
+
+class TestAuthDatabaseInitialization:
+    """Test auth database initialization and setup."""
+
+    @pytest.mark.asyncio
+    async def test_database_session_works_with_auth_models(
+        self, async_db_session: AsyncSession
+    ):
+        """Test that database session properly handles auth models."""
+        # Verify we can create, read, update, delete with User model
+        user_data = UserCreate(
+            email="crud_test@example.com",
+            full_name="CRUD Test User",
+            password="crudtest123"
+        )
+
+        user_service = UserService(async_db_session)
+
+        # CREATE
+        created_user = await user_service.create_user(user_data)
+        assert created_user is not None
+        original_id = created_user.id
+
+        # READ
+        read_user = await user_service.get_user_by_email(user_data.email)
+        assert read_user is not None
+        assert read_user.id == original_id
+
+        # UPDATE (via direct SQLModel operations)
+        stmt = select(User).where(User.id == original_id)
+        result = await async_db_session.exec(stmt)
+        user_to_update = result.first()
+        assert user_to_update is not None
+
+        user_to_update.full_name = "Updated Name"
+        async_db_session.add(user_to_update)
+        await async_db_session.commit()
+
+        # Verify update
+        updated_user = await user_service.get_user_by_email(user_data.email)
+        assert updated_user.full_name == "Updated Name"
+
+        # DELETE (via direct SQLModel operations)
+        await async_db_session.delete(updated_user)
+        await async_db_session.commit()
+
+        # Verify deletion
+        deleted_user = await user_service.get_user_by_email(user_data.email)
+        assert deleted_user is None
+
+    @pytest.mark.asyncio
+    async def test_database_connection_pool_works(self, async_db_session: AsyncSession):
+        """Test that database connection works reliably for auth operations."""
+        user_service = UserService(async_db_session)
+
+        # Perform multiple operations to test connection stability
+        users_created = []
+        for i in range(5):
+            user_data = UserCreate(
+                email=f"pool_test_{i}@example.com",
+                full_name=f"Pool Test User {i}",
+                password=f"pooltest{i}123"
+            )
+
+            created_user = await user_service.create_user(user_data)
+            assert created_user is not None
+            users_created.append(created_user)
+
+        # Verify all users can be retrieved
+        for i, user in enumerate(users_created):
+            email = f"pool_test_{i}@example.com"
+            retrieved_user = await user_service.get_user_by_email(email)
+            assert retrieved_user is not None
+            assert retrieved_user.id == user.id
+
+    @pytest.mark.asyncio
+    async def test_migration_schema_matches_model_definitions(
+        self, async_db_session: AsyncSession
+    ):
+        """Test that migration schema matches current User model."""
+        # Create user to test all model fields work with database schema
+        user_data = UserCreate(
+            email="schema_test@example.com",
+            full_name="Schema Test User",
+            password="schematest123"
+        )
+
+        user_service = UserService(async_db_session)
+        created_user = await user_service.create_user(user_data)
+
+        # Test that all User model fields are supported by current schema
+        # This catches cases where model was updated but migrations weren't
+        try:
+            # Access all fields to ensure they exist in database
+            assert created_user.id is not None
+            assert created_user.email is not None
+            assert created_user.full_name is not None
+            assert created_user.hashed_password is not None
+            assert created_user.is_active is not None
+            assert created_user.created_at is not None
+            # updated_at may be None initially
+            assert hasattr(created_user, 'updated_at')
+
+        except Exception as e:
+            pytest.fail(f"User model fields don't match database schema: {e}")

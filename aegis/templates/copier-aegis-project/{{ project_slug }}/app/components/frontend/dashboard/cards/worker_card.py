@@ -1,0 +1,684 @@
+"""
+Stunning Worker Component Card
+
+Modern, visually striking card component that displays rich Worker/arq metrics,
+queue statistics, and job processing data using ee-toolset design standards.
+"""
+
+import flet as ft
+from app.components.frontend.controls import (
+    LabelText,
+    PrimaryText,
+    SecondaryText,
+    TableCellText,
+    TableHeaderText,
+    TableNameText,
+    TitleText,
+)
+from app.services.system.models import ComponentStatus, ComponentStatusType
+
+
+class WorkerCard:
+    """
+    A visually stunning, wide component card for displaying Worker/arq metrics.
+
+    Features:
+    - Modern Material Design 3 styling
+    - Three-section layout (badge, queues, stats)
+    - Real-time queue metrics from health check data
+    - Comprehensive job statistics (queued, processing, completed, failed)
+    - Status-aware coloring and visual indicators (green/yellow/red)
+    - Worker failure rate monitoring with thresholds
+    - Responsive design for different screen sizes
+    """
+
+    def __init__(self, component_data: ComponentStatus) -> None:
+        """
+        Initialize the Worker card with component data.
+
+        Args:
+            component_data: ComponentStatus with worker health and queue metrics.
+                Expected metadata structure:
+                - active_workers: number of active worker processes
+                - total_queued: total jobs queued across all queues
+                - total_completed: total jobs completed
+                - total_failed: total jobs failed
+                - total_ongoing: total jobs currently processing
+                - overall_failure_rate_percent: overall failure percentage
+                Expected sub_components['queues'] with per-queue metadata:
+                - queued_jobs: jobs waiting in this queue
+                - jobs_ongoing: jobs currently processing
+                - jobs_completed: total completed for this queue
+                - jobs_failed: total failed for this queue
+                - failure_rate_percent: failure rate for this queue
+                - worker_alive: boolean indicating if worker is responsive
+        """
+        self.component_data = component_data
+        self._card_container: ft.Container | None = None
+
+    def _get_status_colors(self) -> tuple[str, str, str]:
+        """
+        Get status-aware colors for the card with UI-specific logic.
+
+        Returns:
+            Tuple of (primary_color, background_color, border_color)
+        """
+        status = self.component_data.status
+
+        # Override harsh "unhealthy" status for partial worker functionality
+        if status == ComponentStatusType.UNHEALTHY:
+            # Check if any workers are actually running
+            metadata = self.component_data.metadata or {}
+            active_workers = metadata.get("active_workers", 0)
+            total_queued = metadata.get("total_queued", 0)
+
+            if active_workers > 0:
+                # Some workers are running - this is WARNING, not UNHEALTHY
+                if total_queued > 0:
+                    # WARNING: queued jobs with some workers down
+                    return (ft.Colors.ORANGE, ft.Colors.SURFACE, ft.Colors.ORANGE)
+                else:
+                    # INFO: some workers offline but no backlog
+                    return (ft.Colors.BLUE, ft.Colors.SURFACE, ft.Colors.BLUE)
+            else:
+                # No workers running - truly unhealthy
+                return (ft.Colors.RED, ft.Colors.SURFACE, ft.Colors.RED)
+        elif status == ComponentStatusType.HEALTHY:
+            return (ft.Colors.GREEN, ft.Colors.SURFACE, ft.Colors.GREEN)
+        elif status == ComponentStatusType.INFO:
+            return (ft.Colors.BLUE, ft.Colors.SURFACE, ft.Colors.BLUE)
+        elif status == ComponentStatusType.WARNING:
+            return (ft.Colors.ORANGE, ft.Colors.SURFACE, ft.Colors.ORANGE)
+        else:
+            return (ft.Colors.RED, ft.Colors.SURFACE, ft.Colors.RED)
+
+    def _create_queue_indicator(
+        self, queue_name: str, queue_data: ComponentStatus
+    ) -> ft.Container:
+        """Create a comprehensive queue status indicator with detailed metrics."""
+        # Extract metrics from queue metadata
+        metadata = queue_data.metadata if queue_data else {}
+
+        queued_jobs = metadata.get("queued_jobs", 0)
+        jobs_ongoing = metadata.get("jobs_ongoing", 0)
+        jobs_completed = metadata.get("jobs_completed", 0)
+        jobs_failed = metadata.get("jobs_failed", 0)
+        failure_rate = metadata.get("failure_rate_percent", 0)
+        worker_alive = metadata.get("worker_alive", False)
+
+        # Determine color based on failure rate and worker status
+        if not worker_alive:
+            queue_color = ft.Colors.GREY
+            status_icon = "⚫"
+        elif failure_rate > 10:
+            queue_color = ft.Colors.RED
+            status_icon = "🔴"
+        elif failure_rate > 5:
+            queue_color = ft.Colors.ORANGE
+            status_icon = "🟡"
+        else:
+            queue_color = ft.Colors.GREEN
+            status_icon = "🟢"
+
+        return ft.Container(
+            content=ft.Column(
+                [
+                    # Queue name and status
+                    ft.Row(
+                        [
+                            ft.Text(status_icon, size=10),
+                            LabelText(queue_name.upper(), size=9),
+                        ],
+                        spacing=3,
+                    ),
+                    # Health bar
+                    ft.Container(
+                        height=3,
+                        bgcolor=queue_color,
+                        border_radius=1,
+                        margin=ft.margin.symmetric(vertical=2),
+                    ),
+                    # Metrics in compact format
+                    ft.Column(
+                        [
+                            LabelText(f"Q:{queued_jobs} A:{jobs_ongoing}", size=8),
+                            LabelText(f"✓{jobs_completed} ✗{jobs_failed}", size=8),
+                            LabelText(
+                                f"{failure_rate:.1f}%" if worker_alive else "OFFLINE",
+                                size=8,
+                                color=queue_color,
+                            ),
+                        ],
+                        spacing=1,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                    ),
+                ],
+                spacing=2,
+                alignment=ft.MainAxisAlignment.START,
+            ),
+            padding=ft.padding.all(6),
+            bgcolor=ft.Colors.SURFACE,
+            border=ft.border.all(1, queue_color),
+            border_radius=8,
+            width=110,  # Slightly wider for more metrics
+            height=80,  # Slightly taller for more content
+        )
+
+    def _create_technology_badge(self) -> ft.Container:
+        """Create the Worker/arq technology badge section."""
+        primary_color, _, _ = self._get_status_colors()
+
+        return ft.Container(
+            content=ft.Column(
+                [
+                    ft.Container(
+                        content=ft.Text("⚡", size=32),
+                        padding=ft.padding.all(8),
+                        bgcolor=primary_color,
+                        border_radius=12,
+                        margin=ft.margin.only(bottom=8),
+                    ),
+                    TitleText("Worker"),
+                    SecondaryText("arq + Redis"),
+                    ft.Container(
+                        content=LabelText(
+                            "QUEUES",
+                            color=ft.Colors.WHITE,
+                        ),
+                        padding=ft.padding.symmetric(horizontal=8, vertical=2),
+                        bgcolor=ft.Colors.PURPLE,
+                        border_radius=8,
+                        margin=ft.margin.only(top=4),
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=4,
+            ),
+            padding=ft.padding.all(16),
+            width=160,
+            alignment=ft.alignment.center,
+        )
+
+    def _create_queues_section(self) -> ft.Container:
+        """Create the queues section with individual queue indicators."""
+        queues_data = {}
+        if (
+            self.component_data.sub_components
+            and "queues" in self.component_data.sub_components
+        ):
+            queues_comp = self.component_data.sub_components["queues"]
+            if queues_comp.sub_components:
+                queues_data = queues_comp.sub_components
+
+        queue_controls = []
+
+        if queues_data:
+            # Show max 3 queues
+            for queue_name, queue_data in list(queues_data.items())[:3]:
+                queue_controls.append(
+                    self._create_queue_indicator(queue_name, queue_data)
+                )
+        else:
+            # Show placeholder when no queue data
+            queue_controls.append(
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Text("📭", size=24),
+                            LabelText("No Active Queues"),
+                        ],
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    padding=ft.padding.all(16),
+                    bgcolor=ft.Colors.GREY_200,
+                    border=ft.border.all(1, ft.Colors.GREY_300),
+                    border_radius=8,
+                    height=80,
+                )
+            )
+
+        return ft.Container(
+            content=ft.Column(
+                [
+                    PrimaryText("Queue Status"),
+                    ft.Divider(height=1, color=ft.Colors.GREY_300),
+                    ft.Container(
+                        content=ft.Row(
+                            queue_controls,
+                            spacing=12,
+                            wrap=True,
+                            alignment=ft.MainAxisAlignment.CENTER,
+                        ),
+                        width=400,  # Expanded width for queue metrics
+                        alignment=ft.alignment.center,
+                    ),
+                ],
+                spacing=12,
+                alignment=ft.MainAxisAlignment.START,
+            ),
+            alignment=ft.alignment.top_center,
+        )
+
+    def _create_stats_section(self) -> ft.Container:
+        """Create the worker statistics section using real health check data."""
+        # Extract real metrics from health check data
+        metadata = self.component_data.metadata or {}
+
+        active_workers = metadata.get("active_workers", 0)
+        total_completed = metadata.get("total_completed", 0)
+        total_failed = metadata.get("total_failed", 0)
+        total_ongoing = metadata.get("total_ongoing", 0)
+        total_queued = metadata.get("total_queued", 0)
+        failure_rate = metadata.get("overall_failure_rate_percent", 0)
+
+        # Format numbers for display
+        worker_stats = {
+            "Active Workers": str(active_workers),
+            "Jobs Processing": str(total_ongoing),
+            "Jobs Queued": f"{total_queued:,}",
+            "Completed": f"{total_completed:,}",
+            "Failed": f"{total_failed:,}",
+            "Failure Rate": f"{failure_rate:.1f}%",
+        }
+
+        stats_content = [
+            PrimaryText("Worker Stats"),
+            ft.Divider(height=1, color=ft.Colors.GREY_300),
+        ]
+
+        for stat_name, stat_value in worker_stats.items():
+            # Color code certain metrics
+            value_color = None
+            if stat_name == "Failure Rate":
+                if failure_rate > 10:
+                    value_color = ft.Colors.RED
+                elif failure_rate > 5:
+                    value_color = ft.Colors.ORANGE
+                else:
+                    value_color = ft.Colors.GREEN
+            elif stat_name == "Failed" and total_failed > 0:
+                value_color = ft.Colors.RED
+            elif stat_name == "Jobs Processing" and total_ongoing > 0:
+                value_color = ft.Colors.BLUE
+
+            value_label = LabelText(stat_value)
+            if value_color:
+                value_label.color = value_color
+
+            stats_content.append(
+                ft.Row(
+                    [
+                        SecondaryText(f"{stat_name}:"),
+                        value_label,
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                )
+            )
+
+        # Add status info
+        stats_content.extend(
+            [
+                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                ft.Row(
+                    [
+                        SecondaryText("Status:"),
+                        LabelText(
+                            self.component_data.status.value.title(),
+                            color=self._get_status_colors()[0],
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+            ]
+        )
+
+        return ft.Container(
+            content=ft.Column(
+                stats_content,
+                spacing=8,  # Increased spacing for better vertical distribution
+                alignment=ft.MainAxisAlignment.START,
+            ),
+            alignment=ft.alignment.top_left,  # Ensure proper alignment
+        )
+
+    def _create_queue_row(
+        self, queue_name: str, queue_data: ComponentStatus
+    ) -> ft.Container:
+        """Create a single row for a queue with all metrics."""
+        metadata = queue_data.metadata if queue_data else {}
+
+        queued = metadata.get("queued_jobs", 0)
+        active = metadata.get("jobs_ongoing", 0)
+        completed = metadata.get("jobs_completed", 0)
+        failed = metadata.get("jobs_failed", 0)
+        failure_rate = metadata.get("failure_rate_percent", 0)
+        worker_alive = metadata.get("worker_alive", False)
+
+        # Get status icon
+        if not worker_alive:
+            status_icon = "⚫"
+            status_color = ft.Colors.GREY
+        elif failure_rate > 10:
+            status_icon = "🔴"
+            status_color = ft.Colors.RED
+        elif failure_rate > 5:
+            status_icon = "🟠"
+            status_color = ft.Colors.ORANGE
+        else:
+            status_icon = "🟢"
+            status_color = ft.Colors.GREEN
+
+        # Calculate success rate
+        total_jobs = completed + failed
+        success_rate = (
+            f"{((completed / total_jobs) * 100):.1f}%" if total_jobs > 0 else "N/A"
+        )
+
+        return ft.Container(
+            content=ft.Row(
+                [
+                    # Queue name with status icon
+                    ft.Container(
+                        content=ft.Text(
+                            f"{status_icon} {queue_name}",
+                            weight=ft.FontWeight.W_500,
+                            color=ft.Colors.ON_SURFACE,
+                        ),
+                        width=120,
+                    ),
+                    # Queued
+                    ft.Container(
+                        content=ft.Text(f"{queued:,}", color=ft.Colors.ON_SURFACE),
+                        width=60,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Active
+                    ft.Container(
+                        content=ft.Text(f"{active:,}", color=ft.Colors.ON_SURFACE),
+                        width=50,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Completed
+                    ft.Container(
+                        content=ft.Text(f"{completed:,}", color=ft.Colors.ON_SURFACE),
+                        width=70,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Failed
+                    ft.Container(
+                        content=ft.Text(
+                            f"{failed:,}",
+                            color=ft.Colors.ERROR
+                            if failed > 0
+                            else ft.Colors.ON_SURFACE,
+                        ),
+                        width=50,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Success rate
+                    ft.Container(
+                        content=ft.Text(
+                            success_rate, color=status_color, weight=ft.FontWeight.W_500
+                        ),
+                        width=60,
+                        alignment=ft.alignment.center_right,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.START,
+            ),
+            padding=ft.padding.symmetric(horizontal=15, vertical=8),
+            bgcolor=(
+                ft.Colors.with_opacity(0.05, ft.Colors.GREY)
+                if not worker_alive
+                else None
+            ),
+            border_radius=8,
+        )
+
+    def _create_compact_queue_row(
+        self, queue_name: str, queue_data: ComponentStatus
+    ) -> ft.Container:
+        """Create a compact queue row for the 2-section layout."""
+        metadata = queue_data.metadata if queue_data else {}
+
+        queued = metadata.get("queued_jobs", 0)
+        active = metadata.get("jobs_ongoing", 0)
+        completed = metadata.get("jobs_completed", 0)
+        failed = metadata.get("jobs_failed", 0)
+        failure_rate = metadata.get("failure_rate_percent", 0)
+        worker_alive = metadata.get("worker_alive", False)
+
+        # Get status icon and smart status message (Option B)
+        if not worker_alive:
+            # Check if this is media queue with no tasks defined
+            if queue_data and "no functions" in queue_data.message.lower():
+                status_icon = "⚪"
+                status_message = "no tasks defined"
+                status_color = ft.Colors.GREY_600
+            else:
+                # Any other worker offline should be red (it's a problem)
+                status_icon = "🔴"
+                status_message = "worker offline"
+                status_color = ft.Colors.RED
+        elif failure_rate > 10:
+            status_icon = "🔴"
+            status_color = ft.Colors.RED
+            total_jobs = completed + failed
+            status_message = (
+                f"{((completed / total_jobs) * 100):.1f}%" if total_jobs > 0 else "N/A"
+            )
+        elif failure_rate > 5:
+            status_icon = "🟠"
+            status_color = ft.Colors.ORANGE
+            total_jobs = completed + failed
+            status_message = (
+                f"{((completed / total_jobs) * 100):.1f}%" if total_jobs > 0 else "N/A"
+            )
+        else:
+            status_icon = "🟢"
+            status_color = ft.Colors.GREEN
+            total_jobs = completed + failed
+            if total_jobs > 0:
+                status_message = f"{((completed / total_jobs) * 100):.1f}%"
+            else:
+                status_message = "ready"
+
+        # Calculate speed/performance metric
+        if not worker_alive:
+            speed_display = "-"
+            speed_color = ft.Colors.GREY_600
+        elif active > 0:
+            speed_display = "Active"
+            speed_color = ft.Colors.BLUE
+        else:
+            # For now, just show "-" since we don't have reliable timing data
+            # to calculate actual throughput. The completed count is cumulative
+            # since worker startup, not a time-windowed rate.
+            speed_display = "-"
+            speed_color = ft.Colors.GREY_600
+
+        return ft.Container(
+            content=ft.Row(
+                [
+                    # Queue name with status icon
+                    ft.Container(
+                        content=TableNameText(f"{status_icon} {queue_name}"),
+                        width=90,
+                    ),
+                    # Queued
+                    ft.Container(
+                        content=TableCellText(f"{queued}"),
+                        width=50,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Active
+                    ft.Container(
+                        content=TableCellText(f"{active}"),
+                        width=40,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Completed
+                    ft.Container(
+                        content=TableCellText(f"{completed}"),
+                        width=50,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Failed
+                    ft.Container(
+                        content=TableCellText(
+                            f"{failed}",
+                            color=(
+                                ft.Colors.ERROR if failed > 0 else ft.Colors.ON_SURFACE
+                            ),
+                        ),
+                        width=40,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Speed/Performance metric
+                    ft.Container(
+                        content=TableCellText(
+                            speed_display,
+                            color=speed_color,
+                        ),
+                        width=60,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    # Smart status (rate or message) - last column
+                    ft.Container(
+                        content=TableCellText(
+                            status_message,
+                            color=status_color,
+                        ),
+                        width=90,
+                        alignment=ft.alignment.center_right,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.START,
+            ),
+            padding=ft.padding.symmetric(horizontal=10, vertical=6),
+            bgcolor=(
+                ft.Colors.with_opacity(0.05, ft.Colors.GREY)
+                if not worker_alive
+                else None
+            ),
+            border_radius=4,
+        )
+
+    def build(self) -> ft.Container:
+        """Build and return the Worker card with 2-section layout."""
+        primary_color, background_color, border_color = self._get_status_colors()
+
+        # Get queue data
+        queues_data = {}
+        if (
+            self.component_data.sub_components
+            and "queues" in self.component_data.sub_components
+        ):
+            queues_data = (
+                self.component_data.sub_components["queues"].sub_components or {}
+            )
+
+        # Header for queue table
+        header_row = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Container(
+                        TableHeaderText("Queue"),
+                        width=90,
+                    ),
+                    ft.Container(
+                        TableHeaderText("Queued"),
+                        width=50,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    ft.Container(
+                        TableHeaderText("Active"),
+                        width=40,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    ft.Container(
+                        TableHeaderText("Done"),
+                        width=50,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    ft.Container(
+                        TableHeaderText("Failed"),
+                        width=40,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    ft.Container(
+                        TableHeaderText("Speed"),
+                        width=60,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    ft.Container(
+                        TableHeaderText("Status"),
+                        width=90,
+                        alignment=ft.alignment.center_right,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.START,
+            ),
+            padding=ft.padding.symmetric(horizontal=10, vertical=8),
+            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.GREY_300)),
+        )
+
+        # Queue rows (adjusted widths for smaller space)
+        queue_rows = []
+        for queue_name, queue_data in queues_data.items():
+            queue_rows.append(self._create_compact_queue_row(queue_name, queue_data))
+
+        # Queue Status header
+        queue_status_header = ft.Container(
+            content=ft.Text(
+                "Queue Status",
+                size=16,
+                weight=ft.FontWeight.W_600,
+                color=ft.Colors.ON_SURFACE,
+            ),
+            padding=ft.padding.only(top=10, bottom=10),
+        )
+
+        # Queue table content with header
+        table_content = ft.Column(
+            [
+                queue_status_header,
+                header_row,
+                *queue_rows,
+            ],
+            spacing=0,
+        )
+
+        # 2-section layout: Left badge + Right table
+        content = ft.Row(
+            [
+                # Left: Technology badge (same width as other cards)
+                ft.Container(
+                    content=self._create_technology_badge(),
+                    expand=2,  # Same as other cards
+                    width=100,  # Minimum width like other cards
+                ),
+                ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
+                # Right: Queue table
+                ft.Container(
+                    content=table_content,
+                    expand=8,  # Takes remaining space (2:8 ratio)
+                    padding=ft.padding.all(10),
+                    width=200,  # Minimum width
+                ),
+            ]
+        )
+
+        self._card_container = ft.Container(
+            content=content,
+            bgcolor=ft.Colors.SURFACE,
+            border=ft.border.all(1, border_color),
+            border_radius=16,
+            padding=0,
+            width=None,  # Let ResponsiveRow handle the width
+            height=280,
+        )
+
+        return self._card_container
