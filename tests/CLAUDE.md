@@ -38,10 +38,21 @@ make check         # Run lint + typecheck + unit tests
 make test-template                # Full template validation
 make test-template-quick         # Fast template generation only
 make test-template-with-components  # Test with scheduler component
-make test-template-worker        # Test worker component specifically  
+make test-template-worker        # Test worker component specifically
 make test-template-database      # Test database component specifically (v0.1.0)
 make test-template-full          # Test all components (worker + scheduler)
 make clean-test-projects         # Remove all generated test projects
+```
+
+### Parity Testing (Cookiecutter vs Copier Migration)
+**NEW - Ticket #124: Ensure Copier generates identical output to Cookiecutter**
+
+```bash
+make test-parity                 # Run all parity tests
+make test-parity-quick          # Quick test (base project only)
+make test-parity-components     # Test all component combinations
+make test-parity-services       # Test all service combinations
+make test-parity-full           # Comprehensive kitchen-sink test
 ```
 
 ### Template Testing Workflow
@@ -259,12 +270,183 @@ make test-template-database
 # - Clean project passes all quality checks
 ```
 
+## Parity Testing (Cookiecutter → Copier Migration)
+
+**Ticket #124** - Comprehensive testing ensuring Copier generates 100% identical output to Cookiecutter during the migration period.
+
+### What Parity Testing Does
+
+Parity tests generate projects with BOTH Cookiecutter and Copier, then compare them byte-for-byte:
+
+1. **Generates with Cookiecutter** - Uses existing template
+2. **Generates with Copier** - Uses new template
+3. **Compares directories** - File structure, contents, permissions
+4. **Reports differences** - Detailed diff output for debugging
+
+### Parity Test Matrix
+
+The parity test suite covers all critical combinations:
+
+```python
+# tests/test_template_parity.py
+
+test_parity_base_project()              # Base (backend + frontend only)
+test_parity_with_scheduler_memory()     # Scheduler (memory backend)
+test_parity_with_scheduler_sqlite()     # Scheduler (sqlite backend)
+test_parity_with_worker()               # Worker component
+test_parity_with_database()             # Database component
+test_parity_with_all_components()       # Worker + Scheduler + Database
+test_parity_with_auth_service()         # Auth service
+test_parity_with_ai_service()           # AI service
+test_parity_kitchen_sink()              # Everything enabled
+```
+
+### Running Parity Tests
+
+**CURRENT STATE**: Parity tests are currently **SKIPPED** in CI/CD because the Copier template migration is incomplete. The test infrastructure is ready, but the Copier template needs conditional `_exclude` patterns added before tests can pass.
+
+```bash
+# Tests are skipped by default (won't block CI/CD)
+uv run pytest tests/test_template_parity.py -v
+# Result: 9 skipped
+
+# To run parity tests (will fail until Copier template is fixed)
+uv run pytest tests/test_template_parity.py -v --run-skipped
+
+# Or use make targets (also skipped by default)
+make test-parity-quick          # Base project only
+make test-parity-components     # All component combinations
+make test-parity-services       # All service combinations
+make test-parity                # Full matrix (all tests)
+make test-parity-full           # Kitchen sink (everything)
+```
+
+**To enable tests** (after fixing Copier template):
+Remove the `@pytest.mark.skip` decorator from `TestTemplateParity` class in `tests/test_template_parity.py`
+
+### Reading Parity Test Failures
+
+When parity tests fail, you get detailed diff reports:
+
+```
+❌ PARITY TEST FAILURE
+================================================================================
+Cookiecutter: /tmp/cookiecutter-test-XXX
+Copier:       /tmp/copier-test-XXX
+
+📁 Files missing in Copier output:
+   - .env
+
+📁 Extra files in Copier output:
+   + .copier-answers.yml
+
+📝 Content mismatches:
+   README.md:
+      Cookiecutter: line 3: test-base project documentation...
+      Copier:       line 3: {{ project_name }} project documentation...
+
+🔒 Permission mismatches:
+   scripts/entrypoint.sh:
+      Cookiecutter: executable
+      Copier:       not executable
+
+================================================================================
+```
+
+### Common Parity Issues
+
+**Missing variable substitution:**
+```jinja
+{# WRONG - Copier doesn't know about cookiecutter #}
+{{ cookiecutter.project_name }}
+
+{# RIGHT - Copier uses direct variable names #}
+{{ project_name }}
+```
+
+**File permission mismatches:**
+- Cookiecutter's post-generation hook sets permissions
+- Copier needs permissions set in template or via tasks
+
+**Acceptable differences:**
+- `.copier-answers.yml` - Copier tracking file (ignored)
+- `uv.lock` revision differences - Lock file variations (expected)
+- `__pycache__` files - Generated artifacts (filtered out)
+
+### Parity Testing During Migration
+
+**Phase 1: Parallel Implementation (Current)**
+- Both templates exist side-by-side
+- Parity tests ensure identical output
+- Fix Copier template when tests fail
+
+**Phase 2: Parity Validation (Ticket #124)**
+- All tests passing (100% parity)
+- CI blocks merges if parity breaks
+- Ready for switchover
+
+**Phase 3: Copier Primary (Ticket #125+)**
+- Switch `aegis init` to use Copier
+- Keep Cookiecutter for comparison
+- Eventually remove after confidence period
+
+### Parity Test Development
+
+When adding new components/services:
+
+```python
+def test_parity_with_new_component(self) -> None:
+    """Test parity with new component."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir)
+
+        # Generate with both engines
+        ck_path = generate_with_cookiecutter(
+            project_name="test-new",
+            components=["new_component"],
+            output_dir=temp_path / "cookiecutter",
+        )
+        cp_path = generate_with_copier(
+            project_name="test-new",
+            components=["new_component"],
+            output_dir=temp_path / "copier",
+        )
+
+        # Compare outputs
+        result = compare_projects(ck_path, cp_path)
+
+        # Assert parity
+        assert result.is_identical, result.get_failure_report()
+```
+
+### Debugging Parity Failures
+
+```bash
+# 1. Run failing test with verbose output
+uv run pytest tests/test_template_parity.py::TestTemplateParity::test_parity_base_project -vv
+
+# 2. Check generated projects (they're in temp dirs, but you can modify test to keep them)
+# Modify test temporarily:
+temp_dir = "/tmp/parity-debug"  # Instead of TemporaryDirectory()
+
+# 3. Compare manually
+diff -r /tmp/parity-debug/cookiecutter/test-base /tmp/parity-debug/copier/test-base
+
+# 4. Fix the Copier template (NOT the generated project!)
+vim aegis/templates/copier-aegis-project/...
+
+# 5. Re-run parity test
+make test-parity-quick
+```
+
 ## Test Development Best Practices
 
 1. **Run fast tests frequently** (`make test`) during development
 2. **Run template tests before commits** (`make test-template`)
-3. **Test component combinations** when adding new components
-4. **Use `make test-template-quick`** for rapid iteration
-5. **Clean up test projects** (`make clean-test-projects`) regularly
-6. **Never edit generated projects** - always fix templates
-7. **Check both CLIs** - generation and generated project functionality
+3. **Run parity tests when touching templates** (`make test-parity-quick`)
+4. **Test component combinations** when adding new components
+5. **Use `make test-template-quick`** for rapid iteration
+6. **Clean up test projects** (`make clean-test-projects`) regularly
+7. **Never edit generated projects** - always fix templates
+8. **Check both CLIs** - generation and generated project functionality
+9. **Parity tests are critical** - Don't skip them during Copier migration
