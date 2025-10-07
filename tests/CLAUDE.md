@@ -305,6 +305,17 @@ test_parity_kitchen_sink()              # Everything enabled
 
 **CURRENT STATE**: Parity tests are currently **SKIPPED** in CI/CD because the Copier template migration is incomplete. The test infrastructure is ready, but the Copier template needs conditional `_exclude` patterns added before tests can pass.
 
+#### CI/CD Integration (Ticket #125)
+
+Parity tests run automatically on every PR via GitHub Actions:
+- Job: `template-parity` in `.github/workflows/ci.yml`
+- Status: Non-blocking (`continue-on-error: true`)
+- Result: Shows "9 skipped" (expected)
+
+The CI infrastructure is ready - once Copier template is fixed, just remove the `@pytest.mark.skip` decorator and tests become active validators.
+
+#### Local Testing
+
 ```bash
 # Tests are skipped by default (won't block CI/CD)
 uv run pytest tests/test_template_parity.py -v
