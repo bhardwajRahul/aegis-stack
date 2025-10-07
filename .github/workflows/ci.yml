@@ -102,4 +102,28 @@ jobs:
         test -d app/components/frontend
         test -f app/entrypoints/webserver.py
 
-  
+  template-parity:
+    runs-on: ubuntu-latest
+    continue-on-error: true  # Non-blocking until Copier template is fixed
+    steps:
+    - uses: actions/checkout@v5
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+
+    - name: Set up Python
+      run: uv python install 3.11
+
+    - name: Install dependencies
+      run: uv sync --all-extras
+
+    - name: Run template parity tests
+      run: uv run pytest tests/test_template_parity.py -v
+      # Note: Tests are currently skipped (@pytest.mark.skip) because Copier
+      # template needs conditional _exclude patterns added. This job validates
+      # the CI infrastructure is ready. Once Copier template is fixed, remove
+      # the skip decorator and this will become an active validation step.
+
