@@ -59,6 +59,12 @@ def init_command(
         help="Directory to create the project in (default: current directory)",
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    engine: str = typer.Option(
+        "cookiecutter",
+        "--engine",
+        hidden=True,  # Internal testing flag, not shown in --help
+        help="Template engine (cookiecutter or copier) - for internal testing",
+    ),
 ) -> None:
     """
     Initialize a new Aegis Stack project with battle-tested component combinations.
@@ -75,6 +81,15 @@ def init_command(
 
     # Validate project name first
     validate_project_name(project_name)
+
+    # Validate engine parameter
+    valid_engines = ["cookiecutter", "copier"]
+    if engine not in valid_engines:
+        typer.echo(
+            f"❌ Invalid engine '{engine}'. Must be one of: {', '.join(valid_engines)}",
+            err=True,
+        )
+        raise typer.Exit(1)
 
     typer.echo("🛡️  Aegis Stack Project Initialization")
     typer.echo("=" * 50)
@@ -304,35 +319,50 @@ def init_command(
 
         shutil.rmtree(project_path)
 
-    # Create project using cookiecutter
+    # Create project using selected template engine
     typer.echo()
     typer.echo(f"🔧 Creating project: {project_name}")
 
     try:
-        from cookiecutter.main import cookiecutter
+        if engine == "copier":
+            # Use Copier template engine
+            from ..core.copier_manager import generate_with_copier
 
-        # Get the template path
-        template_path = (
-            Path(__file__).parent.parent / "templates" / "cookiecutter-aegis-project"
-        )
+            generate_with_copier(template_gen, base_output_dir)
 
-        # Use template generator for context
-        extra_context = template_gen.get_template_context()
+            # Note: Copier template is currently incomplete (missing conditional
+            # _exclude patterns). Generated projects will include all components
+            # regardless of selection. This is expected for internal testing.
 
-        # Generate project with cookiecutter
-        cookiecutter(
-            str(template_path),
-            extra_context=extra_context,
-            output_dir=str(base_output_dir),
-            no_input=True,  # Don't prompt user, use our context
-            overwrite_if_exists=False,  # No longer needed since we remove directory first
-        )
+        else:
+            # Use Cookiecutter template engine (default)
+            from cookiecutter.main import cookiecutter
+
+            # Get the template path
+            template_path = (
+                Path(__file__).parent.parent
+                / "templates"
+                / "cookiecutter-aegis-project"
+            )
+
+            # Use template generator for context
+            extra_context = template_gen.get_template_context()
+
+            # Generate project with cookiecutter
+            cookiecutter(
+                str(template_path),
+                extra_context=extra_context,
+                output_dir=str(base_output_dir),
+                no_input=True,  # Don't prompt user, use our context
+                overwrite_if_exists=False,  # No longer needed since we remove directory first
+            )
 
         # Note: Comprehensive setup output is now handled by the post-generation hook
         # which provides better status reporting and automated setup
 
-    except ImportError:
-        typer.echo("❌ Error: cookiecutter not installed", err=True)
+    except ImportError as e:
+        typer.echo(f"❌ Error: {e}", err=True)
+        typer.echo("   Required template engine not installed", err=True)
         raise typer.Exit(1)
     except Exception as e:
         typer.echo(f"❌ Error creating project: {e}", err=True)
