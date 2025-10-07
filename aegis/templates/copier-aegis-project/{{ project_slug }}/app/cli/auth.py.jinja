@@ -1,0 +1,253 @@
+"""
+Authentication CLI commands.
+
+Command-line interface for auth service management tasks.
+"""
+
+import asyncio
+import secrets
+import string
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    pass
+
+import typer
+
+from app.core.db import get_async_session
+from app.models.user import UserCreate
+from app.services.auth.user_service import UserService
+
+app = typer.Typer(help="Authentication management commands")
+
+
+def generate_password(length: int = 12) -> str:
+    """Generate a secure random password."""
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+async def find_next_available_email(
+    user_service: UserService, prefix: str = "test", domain: str = "example.com"
+) -> str:
+    """Find the next available email with auto-increment."""
+    # Get existing emails with this prefix
+    existing_emails = await user_service.find_existing_emails_with_prefix(
+        prefix, domain
+    )
+
+    if not existing_emails:
+        # No existing emails, start with prefix@domain
+        return f"{prefix}@{domain}"
+
+    # Extract numbers from existing emails
+    used_numbers = set()
+    for email in existing_emails:
+        # Extract the part before @
+        local_part = email.split("@")[0]
+
+        # Check if it matches our pattern (prefix + optional number)
+        if local_part == prefix:
+            used_numbers.add(0)  # Base email without number
+        elif local_part.startswith(prefix):
+            suffix = local_part[len(prefix):]
+            if suffix.isdigit():
+                used_numbers.add(int(suffix))
+
+    # Find the next available number
+    counter = 0
+    while counter in used_numbers:
+        counter += 1
+
+    # Return the email with the next number
+    if counter == 0:
+        return f"{prefix}@{domain}"
+    else:
+        return f"{prefix}{counter}@{domain}"
+
+
+@app.command()
+def create_test_user(
+    email: str | None = typer.Option(
+        None,
+        help=(
+            "User email address (auto-increment: test@example.com, "
+            "test1@example.com, etc.)"
+        ),
+    ),
+    password: str | None = typer.Option(
+        None, help="User password (generated if not provided)"
+    ),
+    full_name: str | None = typer.Option(None, help="User full name"),
+    prefix: str = typer.Option("test", help="Email prefix for auto-generated emails"),
+    domain: str = typer.Option(
+        "example.com", help="Email domain for auto-generated emails"
+    ),
+) -> None:
+    """Create a test user for development and testing."""
+    asyncio.run(_create_test_user(email, password, full_name, prefix, domain))
+
+
+async def _create_test_user(
+    email: str | None,
+    password: str | None,
+    full_name: str | None,
+    prefix: str,
+    domain: str,
+) -> None:
+    """Async implementation of create_test_user."""
+    # Generate password if not provided
+    if password is None:
+        password = generate_password()
+        generated_password = True
+    else:
+        generated_password = False
+
+    try:
+        async with get_async_session() as session:
+            user_service = UserService(session)
+
+            # Auto-generate email if not provided
+            if email is None:
+                email = await find_next_available_email(user_service, prefix, domain)
+                typer.echo(f"📧 Auto-generated email: {email} (next in sequence)")
+
+            # Check if user already exists
+            existing_user = await user_service.get_user_by_email(email)
+            if existing_user:
+                typer.echo(f"❌ User with email '{email}' already exists", err=True)
+                raise typer.Exit(1)
+
+            # Create user data
+            user_data = UserCreate(
+                email=email,
+                password=password,
+                full_name=full_name,
+            )
+
+            # Create the user
+            user = await user_service.create_user(user_data)
+
+            # Display success message
+            typer.echo("✅ Test user created successfully!")
+            typer.echo("=" * 50)
+            typer.echo(f"📧 Email: {user.email}")
+            typer.echo(f"🔑 Password: {password}")
+            if user.full_name:
+                typer.echo(f"👤 Name: {user.full_name}")
+            typer.echo(f"🆔 User ID: {user.id}")
+            typer.echo("=" * 50)
+
+            if generated_password:
+                typer.echo("💡 Password was auto-generated. Save it for testing!")
+
+            typer.echo("🚀 Ready to test auth endpoints at http://localhost:8000/docs")
+
+    except Exception as e:
+        typer.echo(f"❌ Failed to create test user: {str(e)}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def create_test_users(
+    count: int = typer.Option(5, help="Number of test users to create"),
+    prefix: str = typer.Option("test", help="Email prefix for generated users"),
+    domain: str = typer.Option("example.com", help="Email domain for generated users"),
+    password: str | None = typer.Option(
+        None, help="Shared password (generated if not provided)"
+    ),
+) -> None:
+    """Create multiple test users for development and testing."""
+    asyncio.run(_create_test_users(count, prefix, domain, password))
+
+
+async def _create_test_users(
+    count: int, prefix: str, domain: str, password: str | None
+) -> None:
+    """Async implementation of create_test_users."""
+    # Generate password if not provided
+    if password is None:
+        password = generate_password()
+        generated_password = True
+    else:
+        generated_password = False
+
+    if count <= 0:
+        typer.echo("❌ Count must be greater than 0", err=True)
+        raise typer.Exit(1)
+
+    try:
+        async with get_async_session() as session:
+            user_service = UserService(session)
+            created_users = []
+
+            typer.echo(f"🚀 Creating {count} test users with prefix '{prefix}'...")
+            typer.echo("=" * 60)
+
+            for i in range(count):
+                # Find next available email
+                email = await find_next_available_email(user_service, prefix, domain)
+
+                # Create user data
+                user_data = UserCreate(
+                    email=email,
+                    password=password,
+                    full_name=f"Test User {email.split('@')[0].capitalize()}",
+                )
+
+                # Create the user
+                user = await user_service.create_user(user_data)
+                created_users.append(user)
+
+                typer.echo(f"✅ Created: {user.email} (ID: {user.id})")
+
+            # Display summary
+            typer.echo("=" * 60)
+            typer.echo(f"🎉 Successfully created {len(created_users)} test users!")
+            typer.echo(f"🔑 Shared password: {password}")
+
+            if generated_password:
+                typer.echo("💡 Password was auto-generated. Save it for testing!")
+
+            typer.echo("🚀 Ready to test auth endpoints at http://localhost:8000/docs")
+
+    except Exception as e:
+        typer.echo(f"❌ Failed to create test users: {str(e)}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def list_users() -> None:
+    """List all users in the system."""
+    asyncio.run(_list_users())
+
+
+async def _list_users() -> None:
+    """Async implementation of list_users."""
+    try:
+        async with get_async_session() as session:
+            user_service = UserService(session)
+            users = await user_service.list_users()
+
+            if not users:
+                typer.echo("No users found.")
+                return
+
+            typer.echo(f"Found {len(users)} user(s):")
+            typer.echo("=" * 60)
+
+            for user in users:
+                typer.echo(f"🆔 ID: {user.id}")
+                typer.echo(f"📧 Email: {user.email}")
+                if user.full_name:
+                    typer.echo(f"👤 Name: {user.full_name}")
+                typer.echo(f"📅 Created: {user.created_at}")
+                typer.echo("-" * 40)
+
+    except Exception as e:
+        typer.echo(f"❌ Failed to list users: {str(e)}", err=True)
+        raise typer.Exit(1)
+
+
+if __name__ == "__main__":
+    app()
