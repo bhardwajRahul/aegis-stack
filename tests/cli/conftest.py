@@ -42,10 +42,18 @@ def generated_stacks(
 
     This dramatically reduces test time by avoiding duplicate stack generation.
     Returns a dict mapping stack names to (combination, result) tuples.
+
+    Note: Always uses Cookiecutter engine for session-scoped generation.
+    Engine-parameterized tests will skip Copier tests via skip_copier_tests fixture.
     """
+    # Always use Cookiecutter for session-scoped fixture
+    engine = "cookiecutter"
+
     stacks = {}
 
-    print(f"\n🏗️  Generating {len(STACK_COMBINATIONS)} stacks for session...")
+    print(
+        f"\n🏗️  Generating {len(STACK_COMBINATIONS)} stacks for session (engine={engine})..."
+    )
 
     for combination in STACK_COMBINATIONS:
         print(f"   - Generating {combination.name} stack...")
@@ -55,6 +63,7 @@ def generated_stacks(
             combination.components,
             session_temp_dir,
             timeout=60,
+            engine=engine,
         )
 
         if not result.success:

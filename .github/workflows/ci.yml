@@ -127,3 +127,29 @@ jobs:
       # the CI infrastructure is ready. Once Copier template is fixed, remove
       # the skip decorator and this will become an active validation step.
 
+  test-template-engines:
+    runs-on: ubuntu-latest
+    continue-on-error: true  # Non-blocking until Copier template is fixed
+    steps:
+    - uses: actions/checkout@v5
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+
+    - name: Set up Python
+      run: uv python install 3.11
+
+    - name: Install dependencies
+      run: uv sync --all-extras
+
+    - name: Run tests with Cookiecutter engine (fast tests)
+      run: uv run pytest -v -m "not slow" --engine=cookiecutter
+
+    - name: Run tests with Copier engine (fast tests)
+      run: uv run pytest -v -m "not slow" --engine=copier
+      # Note: Copier tests will be skipped via skip_copier_tests fixture until
+      # template is fixed (ticket #128). This validates the test infrastructure.
+

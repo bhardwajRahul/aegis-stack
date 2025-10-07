@@ -34,18 +34,24 @@ def assert_no_template_files(project_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
 class TestCLIInit:
     """Test cases for the aegis init command."""
 
     @pytest.mark.slow
     def test_init_with_scheduler_component(
-        self, temp_output_dir: Any, skip_slow_tests: Any
+        self,
+        temp_output_dir: Any,
+        skip_slow_tests: Any,
+        skip_copier_tests: Any,
+        engine: str,
     ) -> None:
         """Test generating a project with scheduler component."""
         result = run_aegis_init(
             project_name="test-scheduler",
             components=["scheduler"],
             output_dir=temp_output_dir,
+            engine=engine,
         )
 
         # Assert command succeeded
@@ -70,11 +76,15 @@ class TestCLIInit:
 
     @pytest.mark.slow
     def test_init_without_components(
-        self, temp_output_dir: Any, skip_slow_tests: Any
+        self,
+        temp_output_dir: Any,
+        skip_slow_tests: Any,
+        skip_copier_tests: Any,
+        engine: str,
     ) -> None:
         """Test generating a project with no additional components."""
         result = run_aegis_init(
-            project_name="test-no-components", output_dir=temp_output_dir
+            project_name="test-no-components", output_dir=temp_output_dir, engine=engine
         )
 
         # Assert command succeeded
@@ -94,13 +104,18 @@ class TestCLIInit:
 
     @pytest.mark.slow
     def test_init_invalid_component(
-        self, temp_output_dir: Any, skip_slow_tests: Any
+        self,
+        temp_output_dir: Any,
+        skip_slow_tests: Any,
+        skip_copier_tests: Any,
+        engine: str,
     ) -> None:
         """Test that invalid component names are rejected."""
         result = run_aegis_init(
             project_name="test-invalid",
             components=["invalid_component"],
             output_dir=temp_output_dir,
+            engine=engine,
         )
 
         # Assert command failed
@@ -110,7 +125,11 @@ class TestCLIInit:
 
     @pytest.mark.slow
     def test_init_multiple_components(
-        self, temp_output_dir: Any, skip_slow_tests: Any
+        self,
+        temp_output_dir: Any,
+        skip_slow_tests: Any,
+        skip_copier_tests: Any,
+        engine: str,
     ) -> None:
         """Test generating project with multiple components (when available)."""
         # For now, test with just scheduler since others aren't implemented
@@ -118,6 +137,7 @@ class TestCLIInit:
             project_name="test-multi",
             components=["scheduler"],  # Add database, cache when implemented
             output_dir=temp_output_dir,
+            engine=engine,
         )
 
         assert result.success, f"CLI command failed: {result.stderr}"
@@ -127,7 +147,11 @@ class TestCLIInit:
 
     @pytest.mark.slow
     def test_template_variable_substitution(
-        self, temp_output_dir: Any, skip_slow_tests: Any
+        self,
+        temp_output_dir: Any,
+        skip_slow_tests: Any,
+        skip_copier_tests: Any,
+        engine: str,
     ) -> None:
         """Test that template variables are properly substituted."""
         project_name = "my-custom-project"
@@ -135,6 +159,7 @@ class TestCLIInit:
             project_name=project_name,
             components=["scheduler"],
             output_dir=temp_output_dir,
+            engine=engine,
         )
 
         assert result.success
@@ -154,13 +179,18 @@ class TestCLIInit:
 
     @pytest.mark.slow
     def test_project_quality_checks(
-        self, temp_output_dir: Any, skip_slow_tests: Any
+        self,
+        temp_output_dir: Any,
+        skip_slow_tests: Any,
+        skip_copier_tests: Any,
+        engine: str,
     ) -> None:
         """Test that generated project passes quality checks."""
         result = run_aegis_init(
             project_name="test-quality",
             components=["scheduler"],
             output_dir=temp_output_dir,
+            engine=engine,
         )
 
         assert result.success
@@ -193,13 +223,18 @@ class TestCLIInit:
 
     @pytest.mark.slow
     def test_init_with_worker_component(
-        self, temp_output_dir: Any, skip_slow_tests: Any
+        self,
+        temp_output_dir: Any,
+        skip_slow_tests: Any,
+        skip_copier_tests: Any,
+        engine: str,
     ) -> None:
         """Test generating a project with worker component."""
         result = run_aegis_init(
             project_name="test-worker",
             components=["worker"],
             output_dir=temp_output_dir,
+            engine=engine,
         )
 
         # Assert command succeeded
@@ -355,13 +390,18 @@ class TestCLIInit:
 
     @pytest.mark.slow
     def test_init_with_database_component(
-        self, temp_output_dir: Any, skip_slow_tests: Any
+        self,
+        temp_output_dir: Any,
+        skip_slow_tests: Any,
+        skip_copier_tests: Any,
+        engine: str,
     ) -> None:
         """Test generating a project with database component."""
         result = run_aegis_init(
             project_name="test-database",
             components=["database"],
             output_dir=temp_output_dir,
+            engine=engine,
         )
 
         # Assert command succeeded
@@ -423,13 +463,18 @@ class TestCLIInit:
 
     @pytest.mark.slow
     def test_init_with_scheduler_sqlite_backend(
-        self, temp_output_dir: Any, skip_slow_tests: Any
+        self,
+        temp_output_dir: Any,
+        skip_slow_tests: Any,
+        skip_copier_tests: Any,
+        engine: str,
     ) -> None:
         """Test generating project with scheduler[sqlite] syntax."""
         result = run_aegis_init(
             project_name="test-scheduler-sqlite",
             components=["scheduler[sqlite]"],
             output_dir=temp_output_dir,
+            engine=engine,
         )
 
         # Assert command succeeded
@@ -471,13 +516,18 @@ class TestCLIInit:
 
     @pytest.mark.slow
     def test_init_with_scheduler_memory_backend(
-        self, temp_output_dir: Any, skip_slow_tests: Any
+        self,
+        temp_output_dir: Any,
+        skip_slow_tests: Any,
+        skip_copier_tests: Any,
+        engine: str,
     ) -> None:
         """Test generating project with basic scheduler (memory backend)."""
         result = run_aegis_init(
             project_name="test-scheduler-memory",
             components=["scheduler"],
             output_dir=temp_output_dir,
+            engine=engine,
         )
 
         # Assert command succeeded
@@ -511,13 +561,18 @@ class TestCLIInit:
 
     @pytest.mark.slow
     def test_scheduler_backend_dependency_expansion(
-        self, temp_output_dir: Any, skip_slow_tests: Any
+        self,
+        temp_output_dir: Any,
+        skip_slow_tests: Any,
+        skip_copier_tests: Any,
+        engine: str,
     ) -> None:
         """Test that scheduler[sqlite] automatically adds database[sqlite]."""
         result = run_aegis_init(
             project_name="test-scheduler-expansion",
             components=["scheduler[sqlite]"],
             output_dir=temp_output_dir,
+            engine=engine,
         )
 
         assert result.success, f"CLI command failed: {result.stderr}"
