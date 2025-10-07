@@ -335,7 +335,31 @@ endif
 	@echo "✅ $(COMPONENT) component generated successfully in ../test-$(COMPONENT)-quick/"
 	@echo "   Run 'cd ../test-$(COMPONENT)-quick && make check' to validate"
 
-.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test redis-start redis-stop redis-cli redis-logs redis-stats redis-reset redis-queues redis-workers redis-failed redis-monitor redis-info test-template-quick test-template test-template-with-components test-template-database test-template-worker test-template-auth test-template-ai test-template-full test-component-quick test-stacks test-stacks-build test-stacks-runtime test-stacks-full clean-test-projects help
+# ============================================================================
+# PARITY TESTING - Cookiecutter vs Copier Template Comparison
+# ============================================================================
+
+test-parity: ## Run all Cookiecutter vs Copier parity tests
+	@echo "🔍 Running template parity tests (Cookiecutter vs Copier)..."
+	@uv run pytest tests/test_template_parity.py -v
+
+test-parity-quick: ## Quick parity test (base project only)
+	@echo "⚡ Quick parity test - base project only..."
+	@uv run pytest tests/test_template_parity.py::TestTemplateParity::test_parity_base_project -v
+
+test-parity-components: ## Test parity for all component combinations
+	@echo "🧩 Testing parity for all component combinations..."
+	@uv run pytest tests/test_template_parity.py -k "scheduler or worker or database" -v
+
+test-parity-services: ## Test parity for all service combinations
+	@echo "🔧 Testing parity for all service combinations..."
+	@uv run pytest tests/test_template_parity.py -k "auth or ai" -v
+
+test-parity-full: ## Comprehensive parity test (all combinations)
+	@echo "🚀 Comprehensive parity testing..."
+	@uv run pytest tests/test_template_parity.py::TestTemplateParity::test_parity_kitchen_sink -v
+
+.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test redis-start redis-stop redis-cli redis-logs redis-stats redis-reset redis-queues redis-workers redis-failed redis-monitor redis-info test-template-quick test-template test-template-with-components test-template-database test-template-worker test-template-auth test-template-ai test-template-full test-component-quick test-stacks test-stacks-build test-stacks-runtime test-stacks-full clean-test-projects test-parity test-parity-quick test-parity-components test-parity-services test-parity-full help
 
 # Default target
 .DEFAULT_GOAL := help
