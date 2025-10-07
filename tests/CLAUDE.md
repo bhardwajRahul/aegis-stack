@@ -55,6 +55,39 @@ make test-parity-services       # Test all service combinations
 make test-parity-full           # Comprehensive kitchen-sink test
 ```
 
+### Dual-Engine Testing (Ticket #127)
+**NEW - Run all tests with both Cookiecutter and Copier engines**
+
+All template tests are now parameterized to run with both engines:
+
+```bash
+# Run all tests with both engines (default behavior)
+make test-engines               # Run all fast tests with both engines
+make test-engines-quick         # Quick validation with both engines
+
+# Test specific engine only
+make test-engines-cookiecutter  # Test Cookiecutter engine only
+make test-engines-copier        # Test Copier engine only (skipped until #128)
+
+# Run pytest directly with engine selection
+pytest -v --engine=cookiecutter # All tests with Cookiecutter
+pytest -v --engine=copier       # All tests with Copier (skipped)
+pytest -v -m "not slow"         # Fast tests with both engines
+```
+
+**How it works:**
+- All integration tests are parametrized with `@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])`
+- Tests automatically run twice - once for each engine
+- `skip_copier_tests` fixture skips Copier tests until template is fixed (ticket #128)
+- CI runs dual-engine tests on every PR (non-blocking until Copier template complete)
+
+**Files affected:**
+- `tests/cli/test_cli_init.py` - All 11 test methods parameterized
+- `tests/cli/test_stack_generation.py` - All stack combination tests parameterized
+- `tests/cli/test_stack_validation.py` - All validation tests parameterized
+- `tests/conftest.py` - `skip_copier_tests` fixture and `--engine` CLI option
+- `tests/cli/test_utils.py` - `run_aegis_init()` accepts `engine` parameter
+
 ### Template Testing Workflow
 After modifying any template files:
 ```bash

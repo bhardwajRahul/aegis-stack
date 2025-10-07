@@ -359,7 +359,28 @@ test-parity-full: ## Comprehensive parity test (all combinations)
 	@echo "🚀 Comprehensive parity testing..."
 	@uv run pytest tests/test_template_parity.py::TestTemplateParity::test_parity_kitchen_sink -v
 
-.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test redis-start redis-stop redis-cli redis-logs redis-stats redis-reset redis-queues redis-workers redis-failed redis-monitor redis-info test-template-quick test-template test-template-with-components test-template-database test-template-worker test-template-auth test-template-ai test-template-full test-component-quick test-stacks test-stacks-build test-stacks-runtime test-stacks-full clean-test-projects test-parity test-parity-quick test-parity-components test-parity-services test-parity-full help
+# ============================================================================
+# DUAL-ENGINE TESTING - Cookiecutter and Copier Template Matrix
+# ============================================================================
+
+test-engines: ## Run all tests with both template engines
+	@echo "🔧 Running tests with both Cookiecutter and Copier engines..."
+	@uv run pytest -v -m "not slow"
+
+test-engines-quick: ## Quick test with both engines (fast tests only)
+	@echo "⚡ Quick dual-engine test (fast tests only)..."
+	@uv run pytest -v -m "not slow" --engine=cookiecutter
+	@uv run pytest -v -m "not slow" --engine=copier
+
+test-engines-cookiecutter: ## Run tests with Cookiecutter engine only
+	@echo "🍪 Testing with Cookiecutter engine..."
+	@uv run pytest -v --engine=cookiecutter
+
+test-engines-copier: ## Run tests with Copier engine only
+	@echo "📋 Testing with Copier engine..."
+	@uv run pytest -v --engine=copier
+
+.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test redis-start redis-stop redis-cli redis-logs redis-stats redis-reset redis-queues redis-workers redis-failed redis-monitor redis-info test-template-quick test-template test-template-with-components test-template-database test-template-worker test-template-auth test-template-ai test-template-full test-component-quick test-stacks test-stacks-build test-stacks-runtime test-stacks-full clean-test-projects test-parity test-parity-quick test-parity-components test-parity-services test-parity-full test-engines test-engines-quick test-engines-cookiecutter test-engines-copier help
 
 # Default target
 .DEFAULT_GOAL := help
