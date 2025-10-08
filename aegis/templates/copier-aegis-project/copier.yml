@@ -133,23 +133,20 @@ _ai_deps: "{% if include_ai %}pydantic-ai-slim[{{ ai_providers }}]==1.0.10,httpx
 
 # Tasks to run after project generation
 # Copier creates the project at {dst_path}/{project_slug}, so cd into it
+# NOTE: We unset VIRTUAL_ENV to avoid conflicts with parent project's venv
 _tasks:
   # Step 1: Install dependencies with uv (including dev tools like ruff)
-  - "cd {{ _copier_conf.dst_path }}/{{ project_slug }} && uv sync --all-extras"
+  - "cd {{ _copier_conf.dst_path }}/{{ project_slug }} && env -u VIRTUAL_ENV uv sync --all-extras"
 
   # Step 2: Copy environment file if it doesn't exist
   - "cd {{ _copier_conf.dst_path }}/{{ project_slug }} && cp .env.example .env"
 
-  # Step 3: Create data directory for database (if auth service included)
-  - command: "cd {{ _copier_conf.dst_path }}/{{ project_slug }} && mkdir -p data"
-    when: "{{ include_auth }}"
+  # Step 3: Setup auth database if needed (creates data dir + runs migrations)
+  # Uses conditional shell logic so task always runs (avoiding confusing "1 of 4, 2 of 4, 4 of 4" output)
+  - "cd {{ _copier_conf.dst_path }}/{{ project_slug }} && {% if include_auth %}mkdir -p data && env -u VIRTUAL_ENV uv run alembic -c alembic/alembic.ini upgrade head{% else %}echo '✓ Skipping auth database setup (auth service not enabled)'{% endif %}"
 
-  # Step 4: Run database migrations if auth service is included
-  - command: "cd {{ _copier_conf.dst_path }}/{{ project_slug }} && uv run alembic -c alembic/alembic.ini upgrade head"
-    when: "{{ include_auth }}"
-
-  # Step 5: Auto-format generated code (CRITICAL for parity with Cookiecutter)
-  - "cd {{ _copier_conf.dst_path }}/{{ project_slug }} && make fix"
+  # Step 4: Auto-format generated code (CRITICAL for parity with Cookiecutter)
+  - "cd {{ _copier_conf.dst_path }}/{{ project_slug }} && env -u VIRTUAL_ENV make fix"
 
 # Files/directories to exclude from generation based on component selection
 _exclude:

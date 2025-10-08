@@ -60,7 +60,7 @@ def init_command(
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     engine: str = typer.Option(
-        "cookiecutter",
+        "copier",
         "--engine",
         hidden=True,  # Internal testing flag, not shown in --help
         help="Template engine (cookiecutter or copier) - for internal testing",
@@ -330,12 +330,8 @@ def init_command(
 
             generate_with_copier(template_gen, base_output_dir)
 
-            # Note: Copier template is currently incomplete (missing conditional
-            # _exclude patterns). Generated projects will include all components
-            # regardless of selection. This is expected for internal testing.
-
         else:
-            # Use Cookiecutter template engine (default)
+            # Use Cookiecutter template engine (fallback option)
             from cookiecutter.main import cookiecutter
 
             # Get the template path
