@@ -96,12 +96,17 @@ def setup_project_environment():
     # Step 1: Install dependencies with uv
     try:
         print("📦 Installing dependencies with uv...")
+        # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
+        env = os.environ.copy()
+        env.pop("VIRTUAL_ENV", None)
+
         result = subprocess.run(
             ["uv", "sync"],
             cwd=PROJECT_DIRECTORY,
             capture_output=True,
             text=True,
             timeout=300,  # 5 minutes for dependency installation
+            env=env,
         )
 
         if result.returncode == 0:
@@ -162,6 +167,10 @@ def setup_project_environment():
                 return
 
             # Run alembic migrations using uv run (ensures correct environment)
+            # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
+            env = os.environ.copy()
+            env.pop("VIRTUAL_ENV", None)
+
             result = subprocess.run(
                 [
                     "uv",
@@ -176,6 +185,7 @@ def setup_project_environment():
                 capture_output=True,
                 text=True,
                 timeout=30,  # Reasonable timeout for initial migration
+                env=env,
             )
 
             if result.returncode == 0:
@@ -204,12 +214,17 @@ def run_auto_formatting():
         print("🎨 Auto-formatting generated code...")
 
         # Call make fix to auto-format the generated project
+        # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
+        env = os.environ.copy()
+        env.pop("VIRTUAL_ENV", None)
+
         result = subprocess.run(
             ["make", "fix"],
             cwd=PROJECT_DIRECTORY,
             capture_output=True,
             text=True,
             timeout=60,  # Don't hang forever
+            env=env,
         )
 
         if result.returncode == 0:

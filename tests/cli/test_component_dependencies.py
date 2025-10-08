@@ -253,6 +253,13 @@ def test_generated_project_dependencies(
         temp_output_dir,
     )
 
+    if not result.success:
+        print(f"\n{'=' * 80}")
+        print(f"STDERR: {result.stderr}")
+        print(f"STDOUT: {result.stdout}")
+        print(f"Return code: {result.returncode}")
+        print(f"{'=' * 80}\n")
+
     assert result.success, f"Failed to generate project for {test_case.description}"
 
     # Read pyproject.toml

@@ -301,7 +301,7 @@ def run_aegis_init(
     force: bool = True,
     yes: bool = True,
     timeout: int | None = None,
-    engine: str = "cookiecutter",
+    engine: str = "copier",
 ) -> CLITestResult:
     """
     Run the aegis init command and return results.

@@ -116,7 +116,8 @@ def run_load_test(
         else:
             rprint("\n💡 [yellow]Use this command to check results later:[/yellow]")
             rprint(
-                f"   [bold]{{ cookiecutter.project_slug }} load-test results {task_id}[/bold]"
+                f"   [bold]{{ cookiecutter.project_slug }} load-test results "
+                f"{task_id}[/bold]"
             )
 
     except Exception as e:
@@ -564,7 +565,9 @@ def _display_error_result(result: dict[str, Any], status: str) -> None:
     # Show basic troubleshooting info
     console.print("\n💡 [bold yellow]Troubleshooting Tips[/bold yellow]")
     console.print("   1. Check worker container logs: docker compose logs worker")
-    console.print("   2. Verify system health: {{ cookiecutter.project_slug }} health check")
+    console.print(
+        f"   2. Verify system health: {{ cookiecutter.project_slug }} health check"
+    )
     console.print(
         "   3. Try a smaller load test first: "
         f"{{ cookiecutter.project_slug }} load-test cpu --tasks 10"

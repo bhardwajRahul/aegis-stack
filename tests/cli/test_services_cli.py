@@ -547,9 +547,13 @@ class TestAuthServiceMigrationIntegration:
             assert "🔧 Services: auth" in output
             assert "📦 Infrastructure: database" in output
 
-            # Check that migration infrastructure is being processed (appears in template processing)
-            # Look for migration-related processing in the output
-            assert "alembic.ini" in output or "001_initial_auth.py" in output
+            # Verify migration infrastructure files were actually generated
+            project_path = Path(temp_dir) / "test-auth-migration-mention"
+            alembic_dir = project_path / "alembic"
+            assert alembic_dir.exists(), "Alembic directory not generated"
+            assert (alembic_dir / "alembic.ini").exists(), "alembic.ini not generated"
+            migration_files = list((alembic_dir / "versions").glob("*.py"))
+            assert len(migration_files) > 0, "No migration files generated"
 
     def test_auth_service_includes_database_automatically(self):
         """Test that auth service automatically includes database and shows clear messaging."""
