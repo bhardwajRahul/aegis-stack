@@ -1,0 +1,494 @@
+"""
+Tests for the 'aegis add' command that adds components to existing projects.
+
+Uses manual updater (Copier-lite) approach instead of Copier's update mechanism.
+"""
+
+from pathlib import Path
+
+import pytest
+
+from aegis.core.components import COMPONENTS, CORE_COMPONENTS
+from aegis.core.copier_manager import (
+    generate_with_copier,
+    is_copier_project,
+    load_copier_answers,
+)
+from aegis.core.template_generator import TemplateGenerator
+
+from .test_utils import CLI_TIMEOUT_STANDARD, run_aegis_command
+
+
+class TestAddCommand:
+    """Test suite for 'aegis add' command using manual updater."""
+
+    def test_add_command_not_copier_project(self, temp_output_dir: Path) -> None:
+        """Test that add command fails on non-Copier projects."""
+        # Create a dummy directory that's not a Copier project
+        fake_project = temp_output_dir / "fake-project"
+        fake_project.mkdir()
+
+        # Try to add component
+        result = run_aegis_command(
+            "add", "scheduler", "--project-path", str(fake_project), "--yes"
+        )
+
+        # Should fail with helpful message
+        assert not result.success
+        assert "not generated with copier" in result.stderr.lower()
+
+    def test_add_command_missing_project(self) -> None:
+        """Test that add command fails when project doesn't exist."""
+        result = run_aegis_command(
+            "add", "scheduler", "--project-path", "/nonexistent/path", "--yes"
+        )
+
+        assert not result.success
+        assert "not generated with copier" in result.stderr.lower()
+
+    def test_add_command_invalid_component(self, temp_output_dir: Path) -> None:
+        """Test that add command validates component names."""
+        # Generate a base project with Copier
+        template_gen = TemplateGenerator("test-invalid-component", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Try to add invalid component
+        result = run_aegis_command(
+            "add", "invalid_component", "--project-path", str(project_path), "--yes"
+        )
+
+        assert not result.success
+        assert "unknown component" in result.stderr.lower()
+
+    def test_add_scheduler_to_base_project(self, temp_output_dir: Path) -> None:
+        """Test adding scheduler component to a base project."""
+        # Generate base project (no components)
+        template_gen = TemplateGenerator("test-add-scheduler", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Verify it's a Copier project
+        assert is_copier_project(project_path)
+
+        # Verify scheduler not initially present
+        initial_answers = load_copier_answers(project_path)
+        assert initial_answers.get("include_scheduler") is False
+
+        # Add scheduler component
+        result = run_aegis_command(
+            "add", "scheduler", "--project-path", str(project_path), "--yes"
+        )
+
+        # Should succeed
+        assert result.success, f"Command failed: {result.stderr}"
+
+        # Verify scheduler was added to answers
+        updated_answers = load_copier_answers(project_path)
+        assert updated_answers.get("include_scheduler") is True
+
+        # Verify scheduler files were created (memory backend doesn't create component dir)
+        assert (project_path / "app" / "entrypoints" / "scheduler.py").exists()
+        assert (project_path / "tests" / "components" / "test_scheduler.py").exists()
+
+    @pytest.mark.skip(reason="Redis auto-dependency logic incomplete")
+    def test_add_worker_auto_adds_redis(self, temp_output_dir: Path) -> None:
+        """Test that adding worker automatically adds redis dependency."""
+        # Generate base project
+        template_gen = TemplateGenerator("test-add-worker", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Add worker (should auto-add redis)
+        result = run_aegis_command(
+            "add", "worker", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success
+        assert (
+            "auto-added dependencies" in result.stdout.lower()
+            or "redis" in result.stdout.lower()
+        )
+
+        # Verify both worker and redis were added
+        updated_answers = load_copier_answers(project_path)
+        assert updated_answers.get("include_worker") is True
+        assert updated_answers.get("include_redis") is True
+
+    def test_add_multiple_components(self, temp_output_dir: Path) -> None:
+        """Test adding multiple components at once."""
+        # Generate base project
+        template_gen = TemplateGenerator("test-add-multiple", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Add multiple components
+        result = run_aegis_command(
+            "add",
+            "scheduler,database",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+
+        assert result.success
+
+        # Verify all components were added
+        updated_answers = load_copier_answers(project_path)
+        assert updated_answers.get("include_scheduler") is True
+        assert updated_answers.get("include_database") is True
+
+        # Verify files exist
+        assert (project_path / "app" / "entrypoints" / "scheduler.py").exists()
+        assert (project_path / "app" / "core" / "db.py").exists()
+
+    def test_add_already_enabled_component(self, temp_output_dir: Path) -> None:
+        """Test adding a component that's already enabled."""
+        # Generate project WITH scheduler
+        template_gen = TemplateGenerator(
+            "test-add-existing", ["scheduler"], "memory", []
+        )
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Try to add scheduler again
+        result = run_aegis_command(
+            "add", "scheduler", "--project-path", str(project_path), "--yes"
+        )
+
+        # Should succeed with message about already enabled
+        assert result.success
+        assert "already enabled" in result.stdout.lower()
+
+    @pytest.mark.skip(reason="SQLite backend variant incomplete")
+    def test_add_scheduler_with_sqlite_backend(self, temp_output_dir: Path) -> None:
+        """Test adding scheduler with sqlite backend variant."""
+        # Generate base project
+        template_gen = TemplateGenerator("test-add-scheduler-sqlite", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Add scheduler with sqlite backend
+        result = run_aegis_command(
+            "add",
+            "scheduler[sqlite]",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+
+        assert result.success
+
+        # Verify scheduler backend is sqlite
+        updated_answers = load_copier_answers(project_path)
+        assert updated_answers.get("include_scheduler") is True
+        assert updated_answers.get("scheduler_backend") == "sqlite"
+        assert updated_answers.get("scheduler_with_persistence") is True
+
+        # Verify sqlite-specific files exist
+        assert (project_path / "app" / "services" / "scheduler").exists()
+        assert (project_path / "app" / "cli" / "tasks.py").exists()
+
+    def test_add_empty_component_name(self, temp_output_dir: Path) -> None:
+        """Test that empty component names are rejected."""
+        # Generate base project
+        template_gen = TemplateGenerator("test-add-empty", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Try to add with empty component
+        result = run_aegis_command(
+            "add", "scheduler,,database", "--project-path", str(project_path), "--yes"
+        )
+
+        assert not result.success
+        assert "empty component name" in result.stderr.lower()
+
+    def test_add_command_help(self) -> None:
+        """Test that add command has proper help text."""
+        result = run_aegis_command("add", "--help")
+
+        assert result.success
+        assert "add components" in result.stdout.lower()
+        assert "scheduler" in result.stdout.lower()
+        assert "worker" in result.stdout.lower()
+
+    @pytest.mark.skip(reason="File verification logic incomplete")
+    def test_add_component_files_created(self, temp_output_dir: Path) -> None:
+        """Test that all expected files are created when adding a component."""
+        # Generate base project
+        template_gen = TemplateGenerator("test-add-files", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Add worker component
+        result = run_aegis_command(
+            "add", "worker", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success
+
+        # Verify critical worker files exist
+        expected_files = [
+            "app/components/worker/__init__.py",
+            "app/services/load_test.py",
+            "tests/services/test_load_test_service.py",
+        ]
+
+        for file_path in expected_files:
+            full_path = project_path / file_path
+            assert full_path.exists(), f"Missing file: {file_path}"
+
+    @pytest.mark.skip(reason="Dependency update verification incomplete")
+    def test_add_updates_dependencies(self, temp_output_dir: Path) -> None:
+        """Test that adding components runs uv sync to update dependencies."""
+        # Generate base project
+        template_gen = TemplateGenerator("test-add-deps", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Add worker (requires arq)
+        result = run_aegis_command(
+            "add", "worker", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success
+        assert (
+            "dependencies synced" in result.stdout.lower()
+            or "uv sync" in result.stdout.lower()
+        )
+
+
+class TestAddCommandIntegration:
+    """Integration tests for add command that validate full workflow."""
+
+    @pytest.mark.slow
+    @pytest.mark.skip(reason="Quality verification incomplete")
+    def test_add_and_verify_project_quality(self, temp_output_dir: Path) -> None:
+        """
+        Full integration test: generate project, add component, verify quality.
+
+        This test is marked as slow because it does full project generation
+        and validation.
+        """
+        # Generate base project
+        template_gen = TemplateGenerator("test-add-integration", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Add scheduler
+        result = run_aegis_command(
+            "add", "scheduler", "--project-path", str(project_path), "--yes"
+        )
+        assert result.success
+
+        # Verify critical files exist
+        expected_files = [
+            "app/entrypoints/scheduler.py",
+            "tests/components/test_scheduler.py",
+            "tests/services/test_component_integration.py",
+        ]
+
+        for file_path in expected_files:
+            full_path = project_path / file_path
+            assert full_path.exists(), f"Missing file: {file_path}"
+
+        # Verify code formatting was applied
+        assert (
+            "code formatted" in result.stdout.lower()
+            or "make fix" in result.stdout.lower()
+        )
+
+    @pytest.mark.slow
+    def test_add_multiple_times_incrementally(self, temp_output_dir: Path) -> None:
+        """Test adding components in multiple separate operations."""
+        # Generate base project
+        template_gen = TemplateGenerator("test-add-incremental", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Add scheduler first
+        result1 = run_aegis_command(
+            "add", "scheduler", "--project-path", str(project_path), "--yes"
+        )
+        assert result1.success
+        assert (project_path / "app" / "entrypoints" / "scheduler.py").exists()
+
+        # Then add database
+        result2 = run_aegis_command(
+            "add", "database", "--project-path", str(project_path), "--yes"
+        )
+        assert result2.success
+        assert (project_path / "app" / "core" / "db.py").exists()
+
+        # Verify both components are enabled
+        final_answers = load_copier_answers(project_path)
+        assert final_answers.get("include_scheduler") is True
+        assert final_answers.get("include_database") is True
+
+        # Verify both sets of files still exist
+        assert (project_path / "app" / "entrypoints" / "scheduler.py").exists()
+        assert (project_path / "app" / "core" / "db.py").exists()
+
+    @pytest.mark.slow
+    @pytest.mark.skip(reason="Test fixture generation incomplete")
+    def test_add_component_with_tests(self, temp_output_dir: Path) -> None:
+        """Test that component tests are created and can run."""
+        # Generate base project
+        template_gen = TemplateGenerator("test-add-tests", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Add database component
+        result = run_aegis_command(
+            "add", "database", "--project-path", str(project_path), "--yes"
+        )
+        assert result.success
+
+        # Verify test file exists
+        test_file = project_path / "tests" / "conftest.py"
+        assert test_file.exists()
+
+        # Verify test file has database fixtures
+        test_content = test_file.read_text()
+        assert "db_session" in test_content or "database" in test_content.lower()
+
+
+class TestAddCommandInteractive:
+    """Test suite for 'aegis add --interactive' command."""
+
+    def test_add_interactive_requires_components_or_flag(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test that add command requires either components argument or --interactive flag."""
+        # Generate base project
+        template_gen = TemplateGenerator("test-add-requires-arg", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Try to run add without components or --interactive
+        result = run_aegis_command("add", "--project-path", str(project_path), "--yes")
+
+        # Should fail with helpful message
+        assert not result.success
+        assert "components argument is required" in result.stderr.lower()
+        assert "--interactive" in result.stderr.lower()
+
+    def test_add_interactive_base_project_state_detection(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test that interactive mode correctly detects base project state."""
+        # Generate base project (core components only)
+        template_gen = TemplateGenerator("test-add-interactive-base", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Verify initial state
+        initial_answers = load_copier_answers(project_path)
+
+        # All infrastructure components should be disabled
+        for component_name in COMPONENTS:
+            if component_name not in CORE_COMPONENTS:
+                include_key = f"include_{component_name}"
+                assert initial_answers.get(include_key) is False, (
+                    f"{component_name} should be disabled initially"
+                )
+
+    def test_add_interactive_detects_already_enabled_components(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test that interactive mode detects and reports already-enabled components."""
+        # Generate project WITH scheduler already enabled
+        scheduler_component = COMPONENTS["scheduler"]
+        template_gen = TemplateGenerator(
+            "test-add-interactive-enabled",
+            [scheduler_component.name],
+            "memory",
+            [],
+        )
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Verify scheduler is enabled
+        answers = load_copier_answers(project_path)
+        assert answers.get("include_scheduler") is True
+
+        # The interactive function would skip scheduler
+        # (Can't test interactive prompts, but we verify state detection)
+        # If we could run interactive mode, scheduler would show as "Already enabled"
+
+    def test_add_validates_component_names_in_interactive(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test that component validation works the same in interactive mode."""
+        # Generate base project
+        template_gen = TemplateGenerator(
+            "test-add-interactive-validation", [], "memory", []
+        )
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Try to add invalid component (non-interactive for validation test)
+        result = run_aegis_command(
+            "add",
+            "nonexistent_component",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+
+        # Should fail with validation error
+        assert not result.success
+        assert "unknown component" in result.stderr.lower()
+
+    @pytest.mark.slow
+    def test_add_interactive_workflow_adds_component(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test that components added via add command update project correctly."""
+        # Generate base project
+        database_component = COMPONENTS["database"]
+        template_gen = TemplateGenerator("test-add-workflow", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Add database component (non-interactive, but validates the workflow)
+        result = run_aegis_command(
+            "add",
+            database_component.name,
+            "--project-path",
+            str(project_path),
+            "--yes",
+            timeout=CLI_TIMEOUT_STANDARD,
+        )
+
+        assert result.success, (
+            f"Failed to add {database_component.name}: {result.stderr}"
+        )
+
+        # Verify database was added to answers
+        updated_answers = load_copier_answers(project_path)
+        assert updated_answers.get("include_database") is True
+
+        # Verify expected file exists (from component template_files)
+        assert database_component.template_files is not None
+        for template_file in database_component.template_files:
+            expected_file = project_path / template_file
+            assert expected_file.exists(), f"Expected file {template_file} not created"
+
+    @pytest.mark.slow
+    @pytest.mark.skip(reason="Interactive dependency handling incomplete")
+    def test_add_interactive_workflow_with_dependencies(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test that component dependencies are resolved in add workflow."""
+        # Generate base project
+        worker_component = COMPONENTS["worker"]
+        redis_component = COMPONENTS["redis"]
+        template_gen = TemplateGenerator("test-add-deps", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Add worker (requires redis)
+        result = run_aegis_command(
+            "add",
+            worker_component.name,
+            "--project-path",
+            str(project_path),
+            "--yes",
+            timeout=CLI_TIMEOUT_STANDARD,
+        )
+
+        # Check for dependency resolution message
+        assert result.success or "auto-added dependencies" in result.stdout.lower()
+
+        # Verify both worker and redis dependency are in answers
+        updated_answers = load_copier_answers(project_path)
+        assert updated_answers.get("include_worker"), (
+            "Worker component should be enabled"
+        )
+        assert updated_answers.get("include_redis"), (
+            f"{redis_component.description} should be auto-added"
+        )

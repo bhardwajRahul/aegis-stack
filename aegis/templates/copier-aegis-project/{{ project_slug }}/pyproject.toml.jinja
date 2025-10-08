@@ -88,7 +88,7 @@ packages = ["app"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py{{ python_version.replace('.', '') }}"
+target-version = "py{{ python_version | string | replace('.', '') }}"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]  # Added UP for pyupgrade (modern Python syntax)
