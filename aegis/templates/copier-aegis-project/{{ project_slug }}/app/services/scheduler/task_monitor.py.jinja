@@ -8,7 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.core.log import logger
 from .models import SchedulerHealthMetadata, UpcomingTask
 
-{%- if scheduler_backend != "memory" %}
+{% if scheduler_backend != "memory" %}
 from .scheduled_task_manager import ScheduledTaskManager
 {% endif %}
 
@@ -21,9 +21,9 @@ class TaskHealthMonitor:
     - Persistent mode: Uses ScheduledTaskManager for detailed task info
     - Non-persistent mode: Uses scheduler.get_jobs() directly
     """
-    
+
     def __init__(self) -> None:
-        {%- if scheduler_backend != "memory" %}
+        {% if scheduler_backend != "memory" %}
         self.task_manager = ScheduledTaskManager()
         {% endif %}
     
@@ -41,7 +41,7 @@ class TaskHealthMonitor:
         """
         try:
             # First, try to get enhanced data if persistence is available
-            {%- if scheduler_backend != "memory" %}
+            {% if scheduler_backend != "memory" %}
             if await self.task_manager.has_persistence():
                 return await self._get_persistent_metadata()
             {% endif %}
@@ -72,8 +72,8 @@ class TaskHealthMonitor:
                     upcoming_tasks=[],
                     scheduler_state="error"
                 )
-    
-    {%- if scheduler_backend != "memory" %}
+
+    {% if scheduler_backend != "memory" %}
     async def _get_persistent_metadata(self) -> SchedulerHealthMetadata:
         """Get detailed metadata using ScheduledTaskManager (persistent mode)."""
         try:

@@ -39,6 +39,13 @@ class TemplateGenerator:
 
         # Always include core components
         all_components = CORE_COMPONENTS + selected_components
+
+        # Add required components from selected services
+        for service_name in self.selected_services:
+            if service_name in SERVICES:
+                service_spec = SERVICES[service_name]
+                all_components.extend(service_spec.required_components)
+
         # Remove duplicates, preserve order
         self.components = list(dict.fromkeys(all_components))
 

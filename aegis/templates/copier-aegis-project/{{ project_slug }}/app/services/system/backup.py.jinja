@@ -4,7 +4,7 @@ Database backup service for {{ project_name }}.
 Provides database backup functionality for scheduled backup jobs.
 Included when scheduler and database components are both present.
 """
-{% if scheduler_backend != "memory" or (include_scheduler == "yes" and include_database == "yes") %}
+{% if scheduler_backend != "memory" or (include_scheduler and include_database) %}
 
 import asyncio
 import shutil

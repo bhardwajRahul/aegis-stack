@@ -4,13 +4,13 @@ Database initialization startup hook.
 Ensures database directory structure exists and verifies connectivity
 when the backend starts up (only when database component is included).
 """
-{%- if include_database %}
+{% if include_database %}
 
 from pathlib import Path
 from app.core.db import init_database
 from app.core.log import logger
 
-{%- if include_auth %}
+{% if include_auth %}
 # Import models to register them with SQLModel metadata
 from app.models.user import User  # noqa: F401
 {% endif %}
@@ -30,7 +30,7 @@ async def startup_database_init() -> None:
         db_path = Path(DATABASE_PATH)
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        {%- if include_auth %}
+        {% if include_auth %}
         # Auth service - verify database and migration status
         try:
             from app.core.db import db_session

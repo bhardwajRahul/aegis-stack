@@ -5,11 +5,10 @@ Provides consistent, beautiful output formatting across streaming
 and non-streaming modes using marko markdown parser with terminal rendering.
 """
 
+from app.cli.marko_terminal_renderer import TerminalRenderer
 from marko import Markdown
 from marko.ext.gfm import GFM
 from rich.console import Console
-
-from app.cli.marko_terminal_renderer import TerminalRenderer
 
 
 class StreamingMarkdownRenderer:

@@ -126,7 +126,10 @@ class SystemStatus(BaseModel):
         """Get the services component status if it exists."""
         if "aegis" in self.components:
             aegis_component = self.components["aegis"]
-            if aegis_component.sub_components:
+            if (
+                hasattr(aegis_component, "sub_components")
+                and aegis_component.sub_components
+            ):
                 return aegis_component.sub_components.get("services")
         return None
 
@@ -139,7 +142,7 @@ class SystemStatus(BaseModel):
     def service_names(self) -> list[str]:
         """Get list of registered service names."""
         services_component = self.services_status
-        if services_component and services_component.sub_components:
+        if services_component and hasattr(services_component, "sub_components"):
             return list(services_component.sub_components.keys())
         return []
 
@@ -147,7 +150,7 @@ class SystemStatus(BaseModel):
     def healthy_services(self) -> list[str]:
         """List of healthy service names."""
         services_component = self.services_status
-        if services_component and services_component.sub_components:
+        if services_component and hasattr(services_component, "sub_components"):
             return [
                 name
                 for name, service in services_component.sub_components.items()
@@ -159,7 +162,7 @@ class SystemStatus(BaseModel):
     def unhealthy_services(self) -> list[str]:
         """List of unhealthy service names."""
         services_component = self.services_status
-        if services_component and services_component.sub_components:
+        if services_component and hasattr(services_component, "sub_components"):
             return [
                 name
                 for name, service in services_component.sub_components.items()

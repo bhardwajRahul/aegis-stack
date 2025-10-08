@@ -10,9 +10,8 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
-
 from app.core.log import logger
+from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
 
 from .config import get_ai_config
 from .conversation import ConversationManager

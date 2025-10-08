@@ -9,18 +9,18 @@ import asyncio
 import os
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-{%- if scheduler_backend != "memory" %}
+{% if scheduler_backend != "memory" %}
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from app.core.db import engine, init_database, db_session
 from app.services.scheduler.models import APSchedulerJob
 from app.services.system.backup import backup_database_job
-{% elif include_scheduler == "yes" and include_database == "yes" %}
+{% elif include_scheduler and include_database %}
 from app.services.system.backup import backup_database_job
 {% endif %}
 
 from app.core.log import logger
 
-{%- if scheduler_backend != "memory" %}
+{% if scheduler_backend != "memory" %}
 
 def _job_exists_in_database(job_id: str) -> bool:
     """Check if a job already exists in the persistence database using SQLModel."""
@@ -45,7 +45,7 @@ def _job_exists_in_database(job_id: str) -> bool:
 
 def create_scheduler() -> AsyncIOScheduler:
     """Create and configure the scheduler with all jobs."""
-{%- if scheduler_backend != "memory" %}
+{% if scheduler_backend != "memory" %}
     # Ensure database is initialized before creating jobstore
     init_database()
 
@@ -75,12 +75,12 @@ def create_scheduler() -> AsyncIOScheduler:
     #   SCHEDULER_FORCE_UPDATE=true docker-compose up -d scheduler
     # ============================================================================
 
-{% if scheduler_backend != "memory" or (include_scheduler == "yes" and include_database == "yes") %}
+{% if scheduler_backend != "memory" or (include_scheduler and include_database) %}
     # Check environment flag for force updates (useful during deployments)
     force_update = os.getenv("SCHEDULER_FORCE_UPDATE", "false").lower() == "true"
     # Database backup job (runs daily at 2 AM when database is available)
     job_id = "database_backup"
-{%- if scheduler_backend != "memory" %}
+{% if scheduler_backend != "memory" %}
     # For persistent schedulers, check database directly since
     # scheduler hasn't loaded jobs yet
     job_exists = _job_exists_in_database(job_id)
@@ -108,7 +108,7 @@ def create_scheduler() -> AsyncIOScheduler:
             replace_existing=True  # Safe to use since we check first
         )
     else:
-{%- if scheduler_backend != "memory" %}
+{% if scheduler_backend != "memory" %}
         msg = f"✅ Job '{job_id}' exists in database, preserving current configuration"
         logger.info(msg)
 {% else %}

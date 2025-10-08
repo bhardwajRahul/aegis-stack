@@ -42,9 +42,8 @@ async def check_auth_service_health() -> ComponentStatus:
         # Check database dependency for user storage
         database_available = True
         try:
-            from sqlalchemy import text
-
             from app.core.db import db_session
+            from sqlalchemy import text
 
             with db_session() as session:
                 # Test database connectivity with a simple query
@@ -76,10 +75,9 @@ async def check_auth_service_health() -> ComponentStatus:
         user_count_display = "0"
         if database_available:
             try:
-                from sqlmodel import select
-
                 from app.core.db import db_session
                 from app.models.user import User
+                from sqlmodel import select
 
                 with db_session() as session:
                     # Count up to 101 users to determine if we should show "100+"

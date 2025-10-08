@@ -5,7 +5,6 @@ Runs FastAPI + Flet only (clean separation of concerns).
 """
 
 import uvicorn
-
 from app.core.config import settings
 from app.core.log import logger, setup_logging
 from app.integrations.main import create_integrated_app

@@ -7,10 +7,9 @@ results, and analysis data.
 
 from typing import Any
 
-from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
-
 from app.components.worker.constants import LoadTestTypes
 from app.core.config import get_load_test_queue
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 
 class LoadTestError(Exception):
