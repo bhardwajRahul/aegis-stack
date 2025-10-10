@@ -40,6 +40,7 @@ The Copier template now generates byte-for-byte identical output to Cookiecutter
 """
 
 import filecmp
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -48,6 +49,22 @@ from cookiecutter.main import cookiecutter
 from copier import run_copy
 
 from aegis.core.template_generator import TemplateGenerator
+
+# Configure git for CI environments (GitHub Actions, etc.)
+# This prevents git commit failures when git user.name/email not configured
+try:
+    subprocess.run(
+        ["git", "config", "--global", "user.name", "Aegis Stack CI"],
+        capture_output=True,
+        check=False,  # Don't fail if already configured
+    )
+    subprocess.run(
+        ["git", "config", "--global", "user.email", "ci@aegis-stack.dev"],
+        capture_output=True,
+        check=False,  # Don't fail if already configured
+    )
+except Exception:
+    pass  # Git configuration is best-effort, not critical for tests
 
 
 class ParityTestResult:
@@ -227,7 +244,8 @@ def generate_with_copier(
         "ai_providers": cookiecutter_context.get("ai_providers", "openai"),
     }
 
-    # Get copier template path
+    # Get copier template path - use the actual template directory, not repo root
+    # For tests, we don't need git tracking, so we can point directly at the template
     template_path = (
         Path(__file__).parent.parent / "aegis" / "templates" / "copier-aegis-project"
     )
@@ -238,12 +256,40 @@ def generate_with_copier(
         output_dir,
         data=copier_data,
         defaults=True,  # Use template defaults, overridden by our explicit data
-        unsafe=True,  # Allow tasks to run
-        vcs_ref="HEAD",
+        unsafe=False,  # No tasks in copier.yml - we run them manually below
+        vcs_ref=None,  # Don't use git for template versioning in tests
     )
 
     # Copier creates the project in output_dir/project_slug
-    return output_dir / cookiecutter_context["project_slug"]
+    project_path = output_dir / cookiecutter_context["project_slug"]
+
+    # Import cleanup function from shared module
+    from aegis.core.post_gen_tasks import (
+        cleanup_components,
+        format_code,
+        install_dependencies,
+        run_migrations,
+        setup_env_file,
+    )
+
+    # Clean up unwanted component files based on selection
+    # This must happen BEFORE post-generation tasks (which run linting on remaining files)
+    cleanup_components(project_path, copier_data)
+
+    # Run post-generation tasks (install deps, format code, etc.)
+    # NOTE: We run tasks individually and skip git initialization to avoid
+    # nested git repo issues in test environments
+    include_auth = copier_data.get("include_auth", False)
+
+    install_dependencies(project_path)
+    setup_env_file(project_path)
+    run_migrations(project_path, include_auth)
+    format_code(project_path)
+
+    # Skip git initialization in tests - not needed for parity comparison
+    # and causes issues with nested git repos in CI
+
+    return project_path
 
 
 def normalize_project(project_path: Path) -> None:

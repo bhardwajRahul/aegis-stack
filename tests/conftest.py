@@ -30,14 +30,11 @@ def skip_slow_tests(request: Any) -> None:
 @pytest.fixture
 def skip_copier_tests(request: Any, engine: str) -> None:
     """
-    Skip Copier engine tests until template is fixed (Ticket #128).
+    Copier engine tests are now enabled (Ticket #128 resolved).
 
-    Copier template is incomplete (missing conditional _exclude patterns),
-    so tests with Copier engine are skipped by default until the template
-    is fixed in ticket #128.
+    The conditional file exclusion is now handled by cleanup_components()
+    in post_gen_tasks.py, ensuring consistent behavior between Cookiecutter
+    and Copier template engines.
     """
-    if engine == "copier":
-        pytest.skip(
-            "Copier template migration incomplete - missing conditional _exclude "
-            "patterns (see ticket #128)"
-        )
+    # Tests no longer skipped - Copier template is working
+    pass

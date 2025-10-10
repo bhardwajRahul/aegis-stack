@@ -592,5 +592,54 @@ class TestCLIInit:
         assert "apscheduler>=3.10.4" in pyproject_content  # scheduler
         assert "sqlmodel>=0.0.14" in pyproject_content  # database
 
+    @pytest.mark.slow
+    def test_init_with_custom_output_directory(
+        self,
+        temp_output_dir: Any,
+        skip_slow_tests: Any,
+        skip_copier_tests: Any,
+        engine: str,
+    ) -> None:
+        """Test generating a project with custom output directory using -o flag."""
+        # Create a subdirectory to use as output location
+        custom_output = temp_output_dir / "custom-location"
+        custom_output.mkdir(parents=True, exist_ok=True)
+
+        # Generate project using -o flag (like user would do with -o ../)
+        result = run_aegis_init(
+            project_name="test-custom-output",
+            components=[],
+            output_dir=custom_output,
+            engine=engine,
+        )
+
+        # Assert command succeeded
+        assert result.success, (
+            f"CLI command failed with custom output dir: {result.stderr}"
+        )
+
+        # Assert project was created in the correct location
+        project_path = custom_output / "test-custom-output"
+        assert project_path.exists(), f"Project not created at {project_path}"
+
+        # Assert core structure exists
+        assert (project_path / "app").exists(), "app directory missing"
+        assert (project_path / "tests").exists(), "tests directory missing"
+        assert (project_path / "pyproject.toml").exists(), "pyproject.toml missing"
+        assert (project_path / ".copier-answers.yml").exists(), (
+            ".copier-answers.yml missing"
+        )
+
+        # Assert virtual environment was created (proves tasks ran successfully)
+        assert (project_path / ".venv").exists(), (
+            ".venv not created - tasks may have failed"
+        )
+
+        # Assert no template files remain
+        j2_files = list(project_path.rglob("*.j2"))
+        jinja_files = list(project_path.rglob("*.jinja"))
+        assert not j2_files, f"Template .j2 files remain: {j2_files}"
+        assert not jinja_files, f"Template .jinja files remain: {jinja_files}"
+
 
 # Note: CLI help tests moved to test_cli_basic.py to avoid duplication

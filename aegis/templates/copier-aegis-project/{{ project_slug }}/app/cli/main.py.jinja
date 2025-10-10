@@ -35,8 +35,8 @@ except ImportError:
 try:
     tasks_module = importlib.import_module("app.cli.tasks")
     app.add_typer(tasks_module.app, name="tasks")
-except ImportError:
-    # Scheduler components not available, skip tasks commands
+except (ImportError, AttributeError):
+    # Scheduler components not available or tasks module incomplete, skip tasks commands
     pass
 
 # Conditionally register auth command if auth service is available

@@ -5,6 +5,8 @@ This module contains interactive selection and prompting functions
 used by CLI commands.
 """
 
+from pathlib import Path
+
 import typer
 
 from ..core.components import COMPONENTS, CORE_COMPONENTS, ComponentSpec, ComponentType
@@ -282,3 +284,185 @@ def clear_ai_provider_selection() -> None:
     """Clear stored AI provider selection (useful for testing)."""
     global _ai_provider_selection
     _ai_provider_selection.clear()
+
+
+def interactive_component_add_selection(project_path: Path) -> tuple[list[str], str]:
+    """
+    Interactive component selection for adding to existing project.
+
+    Shows currently enabled components (grayed out) and available
+    components to add (selectable). Handles dependency resolution.
+
+    Args:
+        project_path: Path to the existing project
+
+    Returns:
+        Tuple of (selected_components, scheduler_backend)
+    """
+    from ..core.copier_manager import load_copier_answers
+
+    # Load current project state
+    try:
+        current_answers = load_copier_answers(project_path)
+    except Exception as e:
+        typer.echo(f"❌ Failed to load project configuration: {e}", err=True)
+        raise typer.Exit(1)
+
+    typer.echo("\n🎯 Component Selection")
+    typer.echo("=" * 40)
+
+    # Show currently enabled components
+    enabled_components = []
+    for component in ["redis", "worker", "scheduler", "database"]:
+        if current_answers.get(f"include_{component}"):
+            enabled_components.append(component)
+
+    if enabled_components:
+        typer.echo(f"✅ Currently enabled: {', '.join(enabled_components)}")
+    else:
+        typer.echo("✅ Currently enabled: backend, frontend (core only)")
+
+    typer.echo("\n🏗️  Available Components:\n")
+
+    selected = []
+    scheduler_backend = "memory"
+
+    # Get all infrastructure components in order
+    component_order = ["redis", "worker", "scheduler", "database"]
+
+    for component_name in component_order:
+        # Skip if already enabled
+        if component_name in enabled_components:
+            typer.echo(f"  ✅ {component_name} - Already enabled")
+            continue
+
+        # Skip if already selected in this session (e.g., database auto-added by scheduler)
+        if component_name in selected:
+            continue
+
+        # Find the component spec
+        component_spec = COMPONENTS.get(component_name)
+        if not component_spec:
+            continue
+
+        # Handle special logic for each component
+        if component_name == "worker":
+            if "redis" in enabled_components or "redis" in selected:
+                # Redis already available
+                prompt = f"  Add {component_spec.description.lower()}?"
+                if typer.confirm(prompt):
+                    selected.append("worker")
+            else:
+                # Need to add redis too
+                prompt = (
+                    f"  Add {component_spec.description.lower()}? (will auto-add Redis)"
+                )
+                if typer.confirm(prompt):
+                    selected.extend(["redis", "worker"])
+
+        elif component_name == "scheduler":
+            prompt = f"  Add {component_spec.description}?"
+            if typer.confirm(prompt):
+                selected.append("scheduler")
+
+                # Check if database is available or will be added
+                database_available = (
+                    "database" in enabled_components or "database" in selected
+                )
+
+                if database_available:
+                    # Database already available - offer persistence
+                    typer.echo("\n💾 Scheduler Persistence:")
+                    if typer.confirm("  Enable job persistence with SQLite?"):
+                        scheduler_backend = "sqlite"
+                        typer.echo("  ✅ Scheduler will use SQLite for job persistence")
+                    else:
+                        typer.echo(
+                            "  ℹ️  Scheduler will use memory backend (no persistence)"
+                        )
+                else:
+                    # Ask if they plan to add database
+                    typer.echo("\n💾 Scheduler Persistence:")
+                    typer.echo("  Job persistence requires SQLite database component")
+                    if typer.confirm("  Add database component for job persistence?"):
+                        selected.append("database")
+                        scheduler_backend = "sqlite"
+                        typer.echo(
+                            "  ✅ Database will be added - scheduler will use SQLite"
+                        )
+                    else:
+                        typer.echo(
+                            "  ℹ️  Scheduler will use memory backend (no persistence)"
+                        )
+
+        elif component_name == "redis":
+            # Only offer if not already added by worker
+            if "redis" not in selected:
+                prompt = f"  Add {component_spec.description}?"
+                if typer.confirm(prompt):
+                    selected.append("redis")
+
+        else:
+            # Standard prompt for other components
+            prompt = f"  Add {component_spec.description}?"
+            if typer.confirm(prompt):
+                selected.append(component_name)
+
+    return selected, scheduler_backend
+
+
+def interactive_component_remove_selection(project_path: Path) -> list[str]:
+    """
+    Interactive component selection for removing from project.
+
+    Shows currently enabled components (selectable) and core components
+    (grayed out, cannot remove). Displays deletion warnings.
+
+    Args:
+        project_path: Path to the existing project
+
+    Returns:
+        List of components to remove
+    """
+    from ..core.copier_manager import load_copier_answers
+
+    # Load current project state
+    try:
+        current_answers = load_copier_answers(project_path)
+    except Exception as e:
+        typer.echo(f"❌ Failed to load project configuration: {e}", err=True)
+        raise typer.Exit(1)
+
+    typer.echo("\n⚠️  Component Removal")
+    typer.echo("=" * 40)
+    typer.echo("⚠️  WARNING: This will DELETE component files from your project!")
+    typer.echo()
+
+    # Find enabled components
+    enabled_removable = []
+    for component in ["redis", "worker", "scheduler", "database"]:
+        if current_answers.get(f"include_{component}"):
+            enabled_removable.append(component)
+
+    if not enabled_removable:
+        typer.echo("ℹ️  No optional components to remove")
+        typer.echo("   (Core components backend + frontend cannot be removed)")
+        return []
+
+    typer.echo("Currently enabled components:\n")
+
+    # Show core components (not removable)
+    typer.echo("  ⚪ backend - Core component (cannot remove)")
+    typer.echo("  ⚪ frontend - Core component (cannot remove)")
+    typer.echo()
+
+    # Show removable components
+    selected = []
+    for component_name in enabled_removable:
+        component_spec = COMPONENTS.get(component_name)
+        if component_spec:
+            prompt = f"  Remove {component_spec.description.lower()}?"
+            if typer.confirm(prompt):
+                selected.append(component_name)
+
+    return selected

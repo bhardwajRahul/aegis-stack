@@ -10,8 +10,10 @@ Usage:
 
 import typer
 
+from .commands.add import add_command
 from .commands.components import components_command
 from .commands.init import init_command
+from .commands.remove import remove_command
 from .commands.services import services_command
 from .commands.version import version_command
 
@@ -35,6 +37,8 @@ app.command(name="version")(version_command)
 app.command(name="components")(components_command)
 app.command(name="services")(services_command)
 app.command(name="init")(init_command)
+app.command(name="add")(add_command)
+app.command(name="remove")(remove_command)
 
 
 # This is what runs when you do: aegis

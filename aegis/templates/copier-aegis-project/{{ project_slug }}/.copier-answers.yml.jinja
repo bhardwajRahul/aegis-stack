@@ -1,0 +1,21 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: {{ _copier_conf.vcs_ref_hash | default('unknown') }}
+_src_path: {{ _copier_conf.src_path }}
+project_name: {{ project_name }}
+project_slug: {{ project_slug }}
+project_description: {{ project_description }}
+author_name: {{ author_name }}
+author_email: {{ author_email }}
+github_username: {{ github_username }}
+version: {{ version }}
+python_version: {{ python_version }}
+include_scheduler: {{ include_scheduler }}
+scheduler_backend: {{ scheduler_backend }}
+scheduler_with_persistence: {{ scheduler_with_persistence }}
+include_worker: {{ include_worker }}
+include_redis: {{ include_redis }}
+include_database: {{ include_database }}
+include_cache: {{ include_cache }}
+include_auth: {{ include_auth }}
+include_ai: {{ include_ai }}
+ai_providers: {{ ai_providers }}
