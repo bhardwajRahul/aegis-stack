@@ -53,6 +53,31 @@ SHARED_TEMPLATE_FILES: dict[str, SharedFilePolicy] = {
         "warn": False,
     },  # Card exports
     # ==========================================
+    # Core Configuration Files
+    # ==========================================
+    # These files contain conditional logic for components (database settings,
+    # health checks, etc.) and must be regenerated when components change.
+    "app/core/config.py": {
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Contains database settings (DATABASE_URL, etc.)
+    "app/services/system/health.py": {
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Contains component-specific health checks (database, etc.)
+    "app/services/system/backup.py": {
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Contains database backup functionality
+    "tests/conftest.py": {
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Contains component-specific test fixtures (database, etc.)
+    # ==========================================
     # User-Customizable Files
     # ==========================================
     # These files may be customized by users, so we warn instead of

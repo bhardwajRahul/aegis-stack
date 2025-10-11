@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .component_utils import extract_base_component_name, extract_engine_info
-from .components import COMPONENTS, CORE_COMPONENTS
+from .components import COMPONENTS, CORE_COMPONENTS, SchedulerBackend
 from .services import SERVICES
 
 
@@ -20,7 +20,7 @@ class TemplateGenerator:
         self,
         project_name: str,
         selected_components: list[str],
-        scheduler_backend: str = "memory",
+        scheduler_backend: str = SchedulerBackend.MEMORY.value,
         selected_services: list[str] | None = None,
     ):
         """
@@ -29,7 +29,7 @@ class TemplateGenerator:
         Args:
             project_name: Name of the project being generated
             selected_components: List of component names to include
-            scheduler_backend: Scheduler backend: "memory", "sqlite", "postgres"
+            scheduler_backend: Scheduler backend: memory, sqlite, or postgres
             selected_services: List of service names to include
         """
         self.project_name = project_name
@@ -102,7 +102,9 @@ class TemplateGenerator:
             "scheduler_backend": self.scheduler_backend,
             # Legacy scheduler persistence flag for backwards compatibility
             "scheduler_with_persistence": (
-                "yes" if self.scheduler_backend != "memory" else "no"
+                "yes"
+                if self.scheduler_backend != SchedulerBackend.MEMORY.value
+                else "no"
             ),
             # Derived flags for template logic
             "has_background_infrastructure": any(

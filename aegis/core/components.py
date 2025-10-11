@@ -16,6 +16,14 @@ class ComponentType(Enum):
     INFRASTRUCTURE = "infra"  # Redis, workers - foundation for services to use
 
 
+class SchedulerBackend(str, Enum):
+    """Scheduler backend options for task persistence."""
+
+    MEMORY = "memory"  # In-memory (no persistence, default)
+    SQLITE = "sqlite"  # SQLite database (requires database component)
+    POSTGRES = "postgres"  # PostgreSQL (future support)
+
+
 # Core components that are always included in every project
 CORE_COMPONENTS = ["backend", "frontend"]
 

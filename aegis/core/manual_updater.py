@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from aegis.config.shared_files import SHARED_TEMPLATE_FILES
 
 from .component_files import get_component_files, get_template_path
+from .components import SchedulerBackend
 from .copier_manager import is_copier_project, load_copier_answers
 
 # Constants
@@ -182,41 +183,12 @@ class ManualUpdater:
                 print(f"   ✅ Created: {relative_path}")
                 files_modified.append(relative_path)
 
-            # Handle shared template files (docker-compose.yml, pyproject.toml, etc.)
-            # These files always exist and need to be regenerated with updated answers
-            print("\n📦 Updating shared template files...")
-            for shared_file, policy in SHARED_TEMPLATE_FILES.items():
-                template_file = f"{PROJECT_SLUG_PLACEHOLDER}/{shared_file}"
-                output_path = self.project_path / shared_file
-
-                # Skip if file doesn't exist (shouldn't happen for shared files)
-                if not output_path.exists():
-                    continue
-
-                # Render template with updated answers
-                content = self._render_template_file(template_file, updated_answers)
-
-                if content is None:
-                    continue  # Template not found
-
-                if policy.get("backup"):
-                    # Create backup before overwriting
-                    backup_path = output_path.with_suffix(
-                        output_path.suffix + ".backup"
-                    )
-                    shutil.copy(output_path, backup_path)
-                    print(f"   💾 Backed up: {shared_file}")
-                    shared_files_backed_up.append(shared_file)
-
-                if policy.get("overwrite"):
-                    # Regenerate with updated answers
-                    output_path.write_text(content)
-                    print(f"   ♻️  Updated: {shared_file}")
-                    shared_files_updated.append(shared_file)
-                elif policy.get("warn"):
-                    # Warn user manual merge needed
-                    print(f"   ⚠️  Manual merge required: {shared_file}")
-                    shared_files_need_manual_merge.append(shared_file)
+            # Regenerate shared template files with updated component configuration
+            (
+                shared_files_updated,
+                shared_files_backed_up,
+                shared_files_need_manual_merge,
+            ) = self._regenerate_shared_files(updated_answers)
 
             # Update .copier-answers.yml
             self._save_answers(updated_answers)
@@ -308,10 +280,18 @@ class ManualUpdater:
 
             # Also reset backend variant if removing scheduler
             if component == "scheduler":
-                updated_answers["scheduler_backend"] = "memory"
+                updated_answers["scheduler_backend"] = SchedulerBackend.MEMORY.value
                 updated_answers["scheduler_with_persistence"] = False
 
+            # Update .copier-answers.yml before regenerating shared files
             self._save_answers(updated_answers)
+
+            # Regenerate shared template files with component removed
+            (
+                shared_files_updated,
+                shared_files_backed_up,
+                shared_files_need_manual_merge,
+            ) = self._regenerate_shared_files(updated_answers)
 
             # Run post-generation tasks to clean up dependencies
             self._run_post_generation_tasks()
@@ -319,6 +299,9 @@ class ManualUpdater:
             return UpdateResult(
                 component=component,
                 files_deleted=files_deleted,
+                shared_files_updated=shared_files_updated,
+                shared_files_backed_up=shared_files_backed_up,
+                shared_files_need_manual_merge=shared_files_need_manual_merge,
                 success=True,
             )
 
@@ -329,6 +312,64 @@ class ManualUpdater:
                 success=False,
                 error_message=str(e),
             )
+
+    def _regenerate_shared_files(
+        self, updated_answers: dict[str, Any]
+    ) -> tuple[list[str], list[str], list[str]]:
+        """
+        Regenerate shared template files with updated answers.
+
+        Shared files (docker-compose.yml, pyproject.toml, etc.) contain
+        conditional logic for components and must be regenerated when
+        components are added or removed.
+
+        Args:
+            updated_answers: Updated Copier answers with component changes
+
+        Returns:
+            Tuple of (updated_files, backed_up_files, need_manual_merge_files)
+        """
+        shared_files_updated: list[str] = []
+        shared_files_backed_up: list[str] = []
+        shared_files_need_manual_merge: list[str] = []
+
+        print("\n📦 Updating shared template files...")
+        for shared_file, policy in SHARED_TEMPLATE_FILES.items():
+            template_file = f"{PROJECT_SLUG_PLACEHOLDER}/{shared_file}"
+            output_path = self.project_path / shared_file
+
+            # Skip if file doesn't exist (shouldn't happen for shared files)
+            if not output_path.exists():
+                continue
+
+            # Render template with updated answers
+            content = self._render_template_file(template_file, updated_answers)
+
+            if content is None:
+                continue  # Template not found
+
+            if policy.get("backup"):
+                # Create backup before overwriting
+                backup_path = output_path.with_suffix(output_path.suffix + ".backup")
+                shutil.copy(output_path, backup_path)
+                print(f"   💾 Backed up: {shared_file}")
+                shared_files_backed_up.append(shared_file)
+
+            if policy.get("overwrite"):
+                # Regenerate with updated answers
+                output_path.write_text(content)
+                print(f"   ♻️  Updated: {shared_file}")
+                shared_files_updated.append(shared_file)
+            elif policy.get("warn"):
+                # Warn user manual merge needed
+                print(f"   ⚠️  Manual merge required: {shared_file}")
+                shared_files_need_manual_merge.append(shared_file)
+
+        return (
+            shared_files_updated,
+            shared_files_backed_up,
+            shared_files_need_manual_merge,
+        )
 
     def _render_template_file(
         self, template_file: str, context: dict[str, Any]

@@ -9,7 +9,8 @@ from pathlib import Path
 import typer
 
 from ..cli.utils import detect_scheduler_backend
-from ..core.components import COMPONENTS, CORE_COMPONENTS
+from ..core.component_utils import extract_base_component_name, extract_engine_info
+from ..core.components import COMPONENTS, CORE_COMPONENTS, SchedulerBackend
 from ..core.copier_manager import (
     is_copier_project,
     load_copier_answers,
@@ -28,6 +29,12 @@ def add_command(
         "--interactive",
         "-i",
         help="Use interactive component selection",
+    ),
+    backend: str | None = typer.Option(
+        None,
+        "--backend",
+        "-b",
+        help="Scheduler backend: 'memory' (default) or 'sqlite' (enables persistence)",
     ),
     project_path: str = typer.Option(
         ".",
@@ -134,22 +141,48 @@ def add_command(
 
     selected_components = [c for c in components_raw if c]
 
+    # Parse bracket syntax for scheduler backend (e.g., "scheduler[sqlite]")
+    # Bracket syntax takes precedence over --backend flag
+    for comp in components_raw:
+        try:
+            base_name = extract_base_component_name(comp)
+            if base_name == "scheduler":
+                engine = extract_engine_info(comp)
+                if engine:
+                    if backend and backend != engine:
+                        typer.echo(
+                            f"⚠️  Bracket syntax 'scheduler[{engine}]' overrides --backend {backend}",
+                            err=False,
+                        )
+                    backend = engine
+        except ValueError as e:
+            typer.echo(f"❌ Invalid component format: {e}", err=True)
+            raise typer.Exit(1)
+
+    # Extract base component names for validation (removes bracket syntax)
+    base_components = []
+    for comp in selected_components:
+        try:
+            base_name = extract_base_component_name(comp)
+            base_components.append(base_name)
+        except ValueError as e:
+            typer.echo(f"❌ Invalid component format: {e}", err=True)
+            raise typer.Exit(1)
+
     # Validate components exist and resolve dependencies
     try:
         # Validate component names and resolve dependencies
-        errors = DependencyResolver.validate_components(selected_components)
+        errors = DependencyResolver.validate_components(base_components)
         if errors:
             for error in errors:
                 typer.echo(f"❌ {error}", err=True)
             raise typer.Exit(1)
 
         # Resolve dependencies
-        resolved_components = DependencyResolver.resolve_dependencies(
-            selected_components
-        )
+        resolved_components = DependencyResolver.resolve_dependencies(base_components)
 
         # Show dependency resolution
-        auto_added = DependencyResolver.get_missing_dependencies(selected_components)
+        auto_added = DependencyResolver.get_missing_dependencies(base_components)
         if auto_added:
             typer.echo(f"📦 Auto-added dependencies: {', '.join(auto_added)}")
 
@@ -187,9 +220,31 @@ def add_command(
         raise typer.Exit(0)
 
     # Detect scheduler backend if adding scheduler
-    scheduler_backend = "memory"
+    scheduler_backend = SchedulerBackend.MEMORY.value
     if "scheduler" in components_to_add:
-        scheduler_backend = detect_scheduler_backend(components_to_add)
+        # Use explicit backend flag/bracket syntax if provided, otherwise detect
+        scheduler_backend = backend or detect_scheduler_backend(components_to_add)
+
+        # Validate backend (only memory and sqlite supported)
+        valid_backends = [SchedulerBackend.MEMORY.value, SchedulerBackend.SQLITE.value]
+        if scheduler_backend not in valid_backends:
+            typer.echo(f"❌ Invalid scheduler backend: '{scheduler_backend}'", err=True)
+            typer.echo(f"   Valid options: {', '.join(valid_backends)}", err=True)
+            if scheduler_backend == SchedulerBackend.POSTGRES.value:
+                typer.echo(
+                    "   Note: PostgreSQL support coming in future release", err=True
+                )
+            raise typer.Exit(1)
+
+        # Auto-add database component for sqlite backend
+        if (
+            scheduler_backend == SchedulerBackend.SQLITE.value
+            and "database" not in components_to_add
+        ):
+            components_to_add.append("database")
+            typer.echo(
+                "📦 Auto-added database component for scheduler persistence", err=False
+            )
 
     # Show what will be added
     typer.echo("\n🔧 Components to add:")
@@ -198,7 +253,10 @@ def add_command(
             desc = COMPONENTS[component].description
             typer.echo(f"   • {component}: {desc}")
 
-    if "scheduler" in components_to_add and scheduler_backend != "memory":
+    if (
+        "scheduler" in components_to_add
+        and scheduler_backend != SchedulerBackend.MEMORY.value
+    ):
         typer.echo(f"\n📊 Scheduler backend: {scheduler_backend}")
 
     # Confirm before proceeding
@@ -217,7 +275,9 @@ def add_command(
     # Add scheduler backend configuration if adding scheduler
     if "scheduler" in components_to_add:
         update_data["scheduler_backend"] = scheduler_backend
-        update_data["scheduler_with_persistence"] = scheduler_backend == "sqlite"
+        update_data["scheduler_with_persistence"] = (
+            scheduler_backend == SchedulerBackend.SQLITE.value
+        )
 
     # Add components using ManualUpdater
     # This is the standard approach for adding components at the same template version

@@ -19,7 +19,12 @@ from ..core.component_utils import (
     extract_base_component_name,
     restore_engine_info,
 )
-from ..core.components import COMPONENTS, CORE_COMPONENTS, ComponentType
+from ..core.components import (
+    COMPONENTS,
+    CORE_COMPONENTS,
+    ComponentType,
+    SchedulerBackend,
+)
 from ..core.dependency_resolver import DependencyResolver
 from ..core.service_resolver import ServiceResolver
 from ..core.template_generator import TemplateGenerator
@@ -115,7 +120,7 @@ def init_command(
     # Note: components is list[str] after callback, despite str annotation
     selected_components = cast(list[str], components) if components else []
     selected_services = cast(list[str], services) if services else []
-    scheduler_backend = "memory"  # Default to in-memory scheduler
+    scheduler_backend = SchedulerBackend.MEMORY.value  # Default to in-memory scheduler
 
     # Resolve services to components if services were provided (non-interactive mode only)
     if selected_services and not interactive:
@@ -176,7 +181,7 @@ def init_command(
     # Auto-detect scheduler backend when components are specified
     if selected_components:
         scheduler_backend = detect_scheduler_backend(selected_components)
-        if scheduler_backend != "memory":
+        if scheduler_backend != SchedulerBackend.MEMORY.value:
             typer.echo(
                 f"📊 Auto-detected: Scheduler with {scheduler_backend} persistence"
             )
