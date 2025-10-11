@@ -8,7 +8,7 @@ from pathlib import Path
 
 import typer
 
-from ..core.components import COMPONENTS, CORE_COMPONENTS
+from ..core.components import COMPONENTS, CORE_COMPONENTS, SchedulerBackend
 from ..core.copier_manager import (
     is_copier_project,
     load_copier_answers,
@@ -154,6 +154,18 @@ def remove_command(
     if not components_to_remove:
         typer.echo("✅ No components to remove!")
         raise typer.Exit(0)
+
+    # Check for scheduler with sqlite backend - warn about persistence
+    if "scheduler" in components_to_remove:
+        scheduler_backend = existing_answers.get("scheduler_backend")
+        if scheduler_backend == SchedulerBackend.SQLITE.value:
+            typer.echo("\n⚠️  IMPORTANT: Scheduler Persistence Warning")
+            typer.echo("   Your scheduler uses SQLite for job persistence.")
+            typer.echo("   The database file at data/scheduler.db will remain.")
+            typer.echo()
+            typer.echo("   💡 To keep your job history: Leave the database component")
+            typer.echo("   💡 To remove all data: Also remove the database component")
+            typer.echo()
 
     # Show what will be removed
     typer.echo("\n⚠️  Components to remove:")

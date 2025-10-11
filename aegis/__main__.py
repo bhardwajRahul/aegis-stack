@@ -23,7 +23,8 @@ app = typer.Typer(
     help=(
         "🛡️ Aegis Stack - Production-ready Python foundation\n\n"
         "Quick start: uvx aegis-stack init my-project\n\n"
-        "Available components: redis, worker, scheduler, scheduler[sqlite], database"
+        "Available components: redis, worker, scheduler, scheduler[sqlite], database\n"
+        "Backend selection: Use --backend flag or bracket syntax (sqlite only)"
     ),
     epilog=(
         "💡 Try it instantly: uvx aegis-stack init my-project\n"

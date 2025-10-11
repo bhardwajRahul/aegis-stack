@@ -155,7 +155,6 @@ class TestAddCommand:
         assert result.success
         assert "already enabled" in result.stdout.lower()
 
-    @pytest.mark.skip(reason="SQLite backend variant incomplete")
     def test_add_scheduler_with_sqlite_backend(self, temp_output_dir: Path) -> None:
         """Test adding scheduler with sqlite backend variant."""
         # Generate base project
@@ -205,6 +204,145 @@ class TestAddCommand:
         assert "add components" in result.stdout.lower()
         assert "scheduler" in result.stdout.lower()
         assert "worker" in result.stdout.lower()
+        assert "-b" in result.stdout.lower()  # Short flag for --backend
+
+    def test_add_scheduler_with_backend_flag_sqlite(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test adding scheduler with --backend sqlite flag."""
+        # Generate base project
+        template_gen = TemplateGenerator("test-backend-sqlite", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Add scheduler with --backend sqlite
+        result = run_aegis_command(
+            "add",
+            "scheduler",
+            "--backend",
+            "sqlite",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+
+        assert result.success, f"Command failed: {result.stderr}"
+
+        # Verify scheduler backend is sqlite
+        updated_answers = load_copier_answers(project_path)
+        assert updated_answers.get("include_scheduler") is True
+        assert updated_answers.get("scheduler_backend") == "sqlite"
+        assert updated_answers.get("scheduler_with_persistence") is True
+
+        # Verify database component auto-added
+        assert updated_answers.get("include_database") is True
+
+        # Verify persistence files exist
+        assert (project_path / "app" / "services" / "scheduler").exists()
+
+    def test_add_scheduler_with_backend_flag_memory(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test adding scheduler with --backend memory flag."""
+        # Generate base project
+        template_gen = TemplateGenerator("test-backend-memory", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Add scheduler with --backend memory
+        result = run_aegis_command(
+            "add",
+            "scheduler",
+            "--backend",
+            "memory",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+
+        assert result.success, f"Command failed: {result.stderr}"
+
+        # Verify scheduler backend is memory
+        updated_answers = load_copier_answers(project_path)
+        assert updated_answers.get("include_scheduler") is True
+        assert updated_answers.get("scheduler_backend") == "memory"
+        assert updated_answers.get("scheduler_with_persistence") is False
+
+        # Verify database NOT auto-added
+        assert updated_answers.get("include_database") is False
+
+    def test_add_scheduler_invalid_backend_postgres(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test that postgres backend shows not-yet-supported error."""
+        # Generate base project
+        template_gen = TemplateGenerator("test-backend-postgres", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Try to add scheduler with postgres backend
+        result = run_aegis_command(
+            "add",
+            "scheduler",
+            "--backend",
+            "postgres",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+
+        # Should fail with helpful error
+        assert not result.success
+        assert "invalid scheduler backend" in result.stderr.lower()
+        assert "postgres" in result.stderr.lower()
+        assert "future release" in result.stderr.lower()
+
+    def test_add_scheduler_invalid_backend_error(self, temp_output_dir: Path) -> None:
+        """Test that invalid backend shows helpful error."""
+        # Generate base project
+        template_gen = TemplateGenerator("test-backend-invalid", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Try to add scheduler with invalid backend
+        result = run_aegis_command(
+            "add",
+            "scheduler",
+            "--backend",
+            "invalid",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+
+        # Should fail with helpful error
+        assert not result.success
+        assert "invalid scheduler backend" in result.stderr.lower()
+        assert "memory" in result.stderr.lower()
+        assert "sqlite" in result.stderr.lower()
+
+    def test_add_scheduler_bracket_overrides_flag(self, temp_output_dir: Path) -> None:
+        """Test that bracket syntax takes precedence over --backend flag."""
+        # Generate base project
+        template_gen = TemplateGenerator("test-bracket-override", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Add scheduler[sqlite] with --backend memory (bracket should win)
+        result = run_aegis_command(
+            "add",
+            "scheduler[sqlite]",
+            "--backend",
+            "memory",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+
+        assert result.success, f"Command failed: {result.stderr}"
+
+        # Should show warning about override
+        assert "overrides" in result.stdout.lower()
+
+        # Verify sqlite backend was used (bracket syntax wins)
+        updated_answers = load_copier_answers(project_path)
+        assert updated_answers.get("scheduler_backend") == "sqlite"
+        assert updated_answers.get("include_database") is True
 
     @pytest.mark.skip(reason="File verification logic incomplete")
     def test_add_component_files_created(self, temp_output_dir: Path) -> None:
