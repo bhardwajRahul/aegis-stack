@@ -33,10 +33,10 @@ Choose the method that works best for your workflow:
 
 === "uv tool"
 
-    Install Aegis Stack as a global CLI tool with uv:
+    Install Aegis Stack as a persistent CLI tool with uv:
 
     ```bash
-    # Install globally
+    # Install persistently
     uv tool install aegis-stack
 
     # Use the installed version
@@ -56,7 +56,7 @@ Choose the method that works best for your workflow:
 
 === "pip"
 
-    Install Aegis Stack globally with pip:
+    Install Aegis Stack with pip:
 
     ```bash
     # Install from PyPI

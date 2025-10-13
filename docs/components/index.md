@@ -10,31 +10,27 @@ Components are the **infrastructure building blocks** of your Aegis Stack applic
 
 > 💡 **New to Aegis Stack?** See the [Philosophy Guide](../philosophy.md) for complete component design principles.
 
-## Component Selection
+## Evolving Your Stack
 
-**⚠️ Important:** Components must be selected during project creation. There is currently no way to add components to existing projects.
+**Your choices aren't permanent.** Start with what you need today, add components as requirements evolve, remove what you don't use anymore.
 
-The interactive CLI guides you through component choices and explains integration benefits:
+### Start Lean, Grow As Needed
 
 ```bash
-# Basic web application (FastAPI + Flet)
-aegis init my-project
+# Monday: Ship MVP with just FastAPI + Flet
+aegis init my-api
 
-# Add user authentication (requires database)
-aegis init user-app --services auth --components database
+# Week 3: Product needs scheduled reports
+aegis add scheduler --project-path ./my-api
 
-# Add background task scheduling
-aegis init scheduled-app --components scheduler
+# Month 2: Scale demands async workers
+aegis add worker --project-path ./my-api
 
-# Add job persistence + automatic backup job
-aegis init persistent-jobs --components scheduler,database
-
-# Full async task processing
-aegis init task-processor --components worker
-
-# Business app with auth and background processing
-aegis init business-app --services auth --components database,worker,scheduler
+# Month 6: Scheduler not needed anymore
+aegis remove scheduler --project-path ./my-api
 ```
+
+Most frameworks lock you in at `init`. Aegis Stack doesn't. See the complete guide: **[Evolving Your Stack](../evolving-your-stack.md)**
 
 ## Component Architecture
 
