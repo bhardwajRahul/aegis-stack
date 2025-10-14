@@ -172,6 +172,123 @@ my-project/
 └── .env.example          # Environment template
 ```
 
+## aegis add
+
+Add components to an existing Aegis Stack project.
+
+**Usage:**
+```bash
+aegis add COMPONENTS [OPTIONS]
+```
+
+**Arguments:**
+
+- `COMPONENTS` - Comma-separated list of components to add (scheduler,worker,database)
+
+**Options:**
+
+- `--backend, -b TEXT` - Scheduler backend: 'memory' (default) or 'sqlite' (enables persistence)
+- `--interactive, -i` - Use interactive component selection
+- `--project-path, -p PATH` - Path to the Aegis Stack project (default: current directory)
+- `--yes, -y` - Skip confirmation prompt
+
+**Examples:**
+```bash
+# Add scheduler with default (memory) backend
+aegis add scheduler
+
+# Add scheduler with SQLite persistence
+aegis add scheduler --backend sqlite
+# or using bracket syntax
+aegis add "scheduler[sqlite]"
+
+# Add multiple components at once
+aegis add scheduler,database
+
+# Add worker (auto-includes redis dependency)
+aegis add worker
+
+# Add to specific project
+aegis add scheduler --project-path ../my-project
+
+# Interactive mode
+aegis add --interactive
+```
+
+**How It Works:**
+
+1. Validates project was generated with Copier (required)
+2. Checks component dependencies (e.g., scheduler[sqlite] requires database)
+3. Renders component templates with Jinja2
+4. Copies files to project (skips existing files)
+5. Updates `.copier-answers.yml` with new configuration
+6. Regenerates shared files (docker-compose.yml, pyproject.toml)
+7. Runs `uv sync` to install new dependencies
+8. Runs `make fix` to format code
+
+**Notes:**
+
+- Components are added incrementally without breaking existing code
+- Shared template files (docker-compose.yml, pyproject.toml) are automatically regenerated
+- Backup files are created for shared files before overwriting (`.backup` extension)
+- Changes are non-destructive (commit before running for easy rollback)
+
+---
+
+## aegis remove
+
+Remove components from an existing Aegis Stack project.
+
+**Usage:**
+```bash
+aegis remove COMPONENTS [OPTIONS]
+```
+
+**Arguments:**
+
+- `COMPONENTS` - Comma-separated list of components to remove (scheduler,worker,database)
+
+**Options:**
+
+- `--interactive, -i` - Use interactive component selection
+- `--project-path, -p PATH` - Path to the Aegis Stack project (default: current directory)
+- `--yes, -y` - Skip confirmation prompt
+
+**Examples:**
+```bash
+# Remove scheduler component
+aegis remove scheduler
+
+# Remove multiple components
+aegis remove scheduler,worker
+
+# Remove from specific project
+aegis remove scheduler --project-path ../my-project
+
+# Interactive mode
+aegis remove --interactive
+```
+
+**How It Works:**
+
+1. Validates project was generated with Copier (required)
+2. Checks component is currently enabled
+3. Deletes component files and directories
+4. Cleans up empty parent directories
+5. Updates `.copier-answers.yml` to disable component
+6. Regenerates shared files (docker-compose.yml, pyproject.toml)
+7. Runs `uv sync` to clean up unused dependencies
+8. Runs `make fix` to format code
+
+**Important Warnings:**
+
+- **THIS OPERATION DELETES FILES** - Make sure you have committed your changes to git
+- Core components (backend, frontend) cannot be removed
+- Removing scheduler with SQLite persistence leaves `data/scheduler.db` intact
+- Shared template files are regenerated (backups created automatically)
+
+---
+
 ## Development Workflow
 
 After creating a project:
@@ -184,4 +301,18 @@ cp .env.example .env       # Configure environment
 make server               # Start development server
 make test                  # Run test suite
 make check                 # Run all quality checks
+```
+
+### Evolving Your Project
+
+```bash
+# Add components as you need them
+aegis add scheduler
+aegis add worker
+
+# Remove components you don't need
+aegis remove scheduler
+
+# Always commit before making changes
+git add . && git commit -m "Add scheduler component"
 ```

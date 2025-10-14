@@ -44,7 +44,7 @@ http://localhost:8000/ai
 
     Get conversation with full message history
 
-    [:octicons-arrow-right-24: Details](#get-aiconversationsid)
+    [:octicons-arrow-right-24: Details](#get-aiconversationsconversation_id)
 
 -   :material-heart-pulse: **GET `/ai/health`**
 

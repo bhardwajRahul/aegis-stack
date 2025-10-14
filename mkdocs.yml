@@ -68,6 +68,7 @@ nav:
       - Examples: services/ai/examples.md
   - Reference:
     - CLI Reference: cli-reference.md
+    - Evolving Your Stack: evolving-your-stack.md
     - Integration Patterns: integration-patterns.md
     - Technology Stack: technology.md
 

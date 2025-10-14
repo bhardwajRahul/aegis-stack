@@ -4,6 +4,8 @@ A script to dynamically generate documentation files for MkDocs.
 This is run automatically by the mkdocs-gen-files plugin.
 """
 
+import re
+
 import mkdocs_gen_files
 
 print("--- Running gen_docs.py ---")
@@ -74,10 +76,8 @@ with open("README.md") as readme:
     )
 
     # Fix links to documentation pages (remove 'docs/' prefix)
-    content = content.replace("](docs/cli-reference.md)", "](cli-reference.md)")
-    content = content.replace("](docs/components/index.md)", "](components/index.md)")
-    content = content.replace("](docs/services/index.md)", "](services/index.md)")
-    content = content.replace("](docs/philosophy.md)", "](philosophy.md)")
+    # Use regex to catch all docs/*.md links instead of manually listing each one
+    content = re.sub(r"\]\(docs/([^)]+\.md)\)", r"](\1)", content)
 
     # Use mkdocs_gen_files to create a virtual file instead of writing directly
     # This prevents triggering file change detection loops

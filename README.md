@@ -29,24 +29,42 @@ cd my-api && uv sync && cp .env.example .env && make server
 
 ## Installation
 
-Choose the method that works best for your workflow:
+**No installation needed** - just run it:
 
-**Instant usage (recommended):**
 ```bash
 uvx aegis-stack init my-project
 ```
 
-**Install globally with uv:**
+That's it. [`uvx`](https://docs.astral.sh/uv/) downloads, installs, and runs Aegis Stack in one command.
+
+---
+
+**Alternative methods:** [Installation Guide](docs/installation.md) covers `uv tool install` and `pip install` for specific workflows.
+
+## 🌱 Your Stack Grows With You
+
+**Your choices aren't permanent.** Start with what you need today, add components when requirements change, remove what you outgrow.
+
 ```bash
-uv tool install aegis-stack
-aegis init my-project
+# Monday: Ship MVP
+aegis init my-api
+
+# Week 3: Add scheduled reports
+aegis add scheduler --project-path ./my-api
+
+# Month 2: Need async workers
+aegis add worker --project-path ./my-api
+
+# Month 6: Scheduler not needed
+aegis remove scheduler --project-path ./my-api
 ```
 
-**Traditional pip:**
-```bash
-pip install aegis-stack
-aegis init my-project
-```
+| Framework | Add Later? | Remove Later? | Git Conflicts? |
+|-----------|------------|---------------|----------------|
+| **Others** | ❌ Locked at init | ❌ Manual deletion | ⚠️ High risk |
+| **Aegis Stack** | ✅ One command | ✅ One command | ✅ Auto-handled |
+
+Most frameworks lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your Stack](docs/evolving-your-stack.md)** for the complete guide.
 
 ## Available Components & Services
 
