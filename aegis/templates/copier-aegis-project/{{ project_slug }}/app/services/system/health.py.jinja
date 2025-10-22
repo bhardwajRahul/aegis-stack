@@ -979,10 +979,10 @@ async def check_worker_health() -> ComponentStatus:
 
         import redis.asyncio as aioredis
 
-        # Create Redis connection
+        # Create Redis connection with auto-detection for local vs Docker
         # Step 1: Call untyped function with explicit ignore
         redis_connection = aioredis.from_url(  # type: ignore[no-untyped-call]
-            settings.REDIS_URL,
+            settings.redis_url_effective,
             db=settings.REDIS_DB
         )
         # Step 2: Cast the result to proper type

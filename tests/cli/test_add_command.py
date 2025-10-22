@@ -89,28 +89,35 @@ class TestAddCommand:
         assert (project_path / "app" / "entrypoints" / "scheduler.py").exists()
         assert (project_path / "tests" / "components" / "test_scheduler.py").exists()
 
-    @pytest.mark.skip(reason="Redis auto-dependency logic incomplete")
     def test_add_worker_auto_adds_redis(self, temp_output_dir: Path) -> None:
         """Test that adding worker automatically adds redis dependency."""
         # Generate base project
         template_gen = TemplateGenerator("test-add-worker", [], "memory", [])
         project_path = generate_with_copier(template_gen, temp_output_dir)
 
+        # Verify initial state (no worker or redis)
+        initial_answers = load_copier_answers(project_path)
+        assert initial_answers.get("include_worker") is False
+        assert initial_answers.get("include_redis") is False
+
         # Add worker (should auto-add redis)
         result = run_aegis_command(
             "add", "worker", "--project-path", str(project_path), "--yes"
         )
 
-        assert result.success
-        assert (
-            "auto-added dependencies" in result.stdout.lower()
-            or "redis" in result.stdout.lower()
-        )
+        assert result.success, f"Command failed: {result.stderr}"
+
+        # Should mention redis auto-addition
+        assert "redis" in result.stdout.lower() or "auto-added" in result.stdout.lower()
 
         # Verify both worker and redis were added
         updated_answers = load_copier_answers(project_path)
-        assert updated_answers.get("include_worker") is True
-        assert updated_answers.get("include_redis") is True
+        assert updated_answers.get("include_worker") is True, (
+            "Worker component not enabled"
+        )
+        assert updated_answers.get("include_redis") is True, (
+            "Redis dependency not auto-added"
+        )
 
     def test_add_multiple_components(self, temp_output_dir: Path) -> None:
         """Test adding multiple components at once."""
@@ -344,7 +351,6 @@ class TestAddCommand:
         assert updated_answers.get("scheduler_backend") == "sqlite"
         assert updated_answers.get("include_database") is True
 
-    @pytest.mark.skip(reason="File verification logic incomplete")
     def test_add_component_files_created(self, temp_output_dir: Path) -> None:
         """Test that all expected files are created when adding a component."""
         # Generate base project
@@ -356,13 +362,20 @@ class TestAddCommand:
             "add", "worker", "--project-path", str(project_path), "--yes"
         )
 
-        assert result.success
+        assert result.success, f"Command failed: {result.stderr}"
 
         # Verify critical worker files exist
         expected_files = [
             "app/components/worker/__init__.py",
+            "app/components/worker/pools.py",
+            "app/components/worker/registry.py",
+            "app/components/worker/queues/system.py",
+            "app/components/worker/queues/load_test.py",
+            "app/components/worker/tasks/system_tasks.py",
             "app/services/load_test.py",
-            "tests/services/test_load_test_service.py",
+            "app/services/load_test_models.py",
+            "tests/api/test_worker_endpoints.py",
+            "tests/services/test_worker_health_registration.py",
         ]
 
         for file_path in expected_files:

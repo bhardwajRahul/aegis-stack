@@ -143,45 +143,51 @@ class ManualUpdater:
             )
             component_files = get_component_files(component, backend_variant)
 
-            if not component_files:
-                raise ValueError(f"No files found for component '{component}'")
-
-            # Render and copy each file
+            # Some components (like Redis) have no template files - they only
+            # configure Docker services and dependencies via shared files
             rendered_files: dict[Path, str] = {}
 
-            for file_path in component_files:
-                # Convert relative path to template path
-                # copier_files: "app/components/scheduler"
-                # template_file: "{{ project_slug }}/app/components/scheduler.jinja"
-                template_file = f"{PROJECT_SLUG_PLACEHOLDER}/{file_path}"
+            if not component_files:
+                print(
+                    f"   ℹ️  Component '{component}' has no template files "
+                    f"(configured via shared files only)"
+                )
+                # Continue to regenerate shared files even if no component files
+            else:
+                # Render and copy each file for this component
+                for file_path in component_files:
+                    # Convert relative path to template path
+                    # copier_files: "app/components/scheduler"
+                    # template_file: "{{ project_slug }}/app/components/scheduler.jinja"
+                    template_file = f"{PROJECT_SLUG_PLACEHOLDER}/{file_path}"
 
-                # Try with .jinja extension first, then without
-                content = self._render_template_file(template_file, updated_answers)
+                    # Try with .jinja extension first, then without
+                    content = self._render_template_file(template_file, updated_answers)
 
-                if content is not None:
-                    # Output path in project
-                    output_path = self.project_path / file_path
-                    rendered_files[output_path] = content
+                    if content is not None:
+                        # Output path in project
+                        output_path = self.project_path / file_path
+                        rendered_files[output_path] = content
 
-            # Copy files to project
-            for output_path, content in rendered_files.items():
-                # Create parent directories
-                output_path.parent.mkdir(parents=True, exist_ok=True)
+                # Copy files to project
+                for output_path, content in rendered_files.items():
+                    # Create parent directories
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-                relative_path = str(output_path.relative_to(self.project_path))
+                    relative_path = str(output_path.relative_to(self.project_path))
 
-                # Check for conflicts
-                if output_path.exists():
-                    # For now, skip existing files
-                    # TODO: Implement conflict resolution
-                    print(f"   ⚠️  Skipping existing file: {relative_path}")
-                    files_skipped.append(relative_path)
-                    continue
+                    # Check for conflicts
+                    if output_path.exists():
+                        # For now, skip existing files
+                        # TODO: Implement conflict resolution
+                        print(f"   ⚠️  Skipping existing file: {relative_path}")
+                        files_skipped.append(relative_path)
+                        continue
 
-                # Write file
-                output_path.write_text(content)
-                print(f"   ✅ Created: {relative_path}")
-                files_modified.append(relative_path)
+                    # Write file
+                    output_path.write_text(content)
+                    print(f"   ✅ Created: {relative_path}")
+                    files_modified.append(relative_path)
 
             # Regenerate shared template files with updated component configuration
             (
@@ -313,6 +319,46 @@ class ManualUpdater:
                 error_message=str(e),
             )
 
+    def _extract_env_vars(self, content: str) -> dict[str, str]:
+        """
+        Extract environment variable names and values from .env.example content.
+
+        Args:
+            content: Content of .env.example file
+
+        Returns:
+            Dictionary mapping variable names to their values (or empty string if commented)
+        """
+        env_vars: dict[str, str] = {}
+
+        for line in content.split("\n"):
+            line = line.strip()
+
+            # Skip blank lines
+            if not line:
+                continue
+
+            # Handle commented variable definitions FIRST (e.g., "# REDIS_URL=...")
+            if line.startswith("# ") and "=" in line:
+                var_line = line[2:].strip()  # Remove "# " prefix
+                if "=" in var_line:
+                    var_name = var_line.split("=")[0].strip()
+                    var_value = var_line.split("=", 1)[1].strip()
+                    env_vars[var_name] = var_value
+                continue
+
+            # Skip other comment-only lines (section headers, descriptions, etc.)
+            if line.startswith("#"):
+                continue
+
+            # Handle active variable definitions (e.g., "REDIS_URL=...")
+            if "=" in line:
+                var_name = line.split("=")[0].strip()
+                var_value = line.split("=", 1)[1].strip()
+                env_vars[var_name] = var_value
+
+        return env_vars
+
     def _regenerate_shared_files(
         self, updated_answers: dict[str, Any]
     ) -> tuple[list[str], list[str], list[str]]:
@@ -342,6 +388,12 @@ class ManualUpdater:
             if not output_path.exists():
                 continue
 
+            # For .env.example, extract variables before and after to show diff
+            old_env_vars: dict[str, str] = {}
+            if shared_file == ".env.example":
+                old_content = output_path.read_text()
+                old_env_vars = self._extract_env_vars(old_content)
+
             # Render template with updated answers
             content = self._render_template_file(template_file, updated_answers)
 
@@ -360,6 +412,19 @@ class ManualUpdater:
                 output_path.write_text(content)
                 print(f"   ♻️  Updated: {shared_file}")
                 shared_files_updated.append(shared_file)
+
+                # Show environment variable changes for .env.example
+                if shared_file == ".env.example":
+                    new_env_vars = self._extract_env_vars(content)
+                    added_vars = {
+                        k: v for k, v in new_env_vars.items() if k not in old_env_vars
+                    }
+
+                    if added_vars:
+                        print("   📝 New environment variables:")
+                        for var_name, var_value in sorted(added_vars.items()):
+                            print(f"      • {var_name}={var_value}")
+
             elif policy.get("warn"):
                 # Warn user manual merge needed
                 print(f"   ⚠️  Manual merge required: {shared_file}")
