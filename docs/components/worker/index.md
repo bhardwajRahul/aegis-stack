@@ -11,7 +11,19 @@
 Async background task processing using standard [arq](https://arq-docs.helpmanual.io/) patterns.
 
 !!! info "Adding Worker to Your Project"
-    Use `aegis init my-project --components worker` to include this component.
+    **New Project**: Use `aegis init my-project --components worker` to include this component.
+
+    **Existing Project**: Add worker to an existing Aegis Stack project:
+    ```bash
+    aegis add worker
+    ```
+    Worker automatically includes Redis as a dependency. The command will:
+
+    - Create worker component files (`app/components/worker/`)
+    - Add worker queues (system, load-test)
+    - Add worker health checks and dashboard card
+    - Configure Docker services (Redis + workers)
+    - Update dependencies (`arq`, `redis`)
 
 ## What You Get
 

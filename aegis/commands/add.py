@@ -50,10 +50,13 @@ def add_command(
     This command uses Copier's update mechanism to add new components
     to a project that was generated with 'aegis init'.
 
-    Examples:\\n
-        - aegis add scheduler\\n
-        - aegis add worker,database\\n
-        - aegis add scheduler --project-path ../my-project\\n
+    Examples:
+
+        - aegis add scheduler
+
+        - aegis add worker,database
+
+        - aegis add scheduler --project-path ../my-project
 
     Note: This command only works with projects generated using Copier
     (the default since v0.2.0).

@@ -88,10 +88,10 @@ SHARED_TEMPLATE_FILES: dict[str, SharedFilePolicy] = {
         "warn": True,
     },  # Users may add custom build steps
     ".env.example": {
-        "overwrite": False,
-        "backup": False,
-        "warn": True,
-    },  # Users may add custom env vars
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Contains component configuration (regenerated when components change)
 }
 
 
