@@ -145,6 +145,74 @@ class TestAddCommand:
         assert (project_path / "app" / "entrypoints" / "scheduler.py").exists()
         assert (project_path / "app" / "core" / "db.py").exists()
 
+    def test_add_database_to_base_project(self, temp_output_dir: Path) -> None:
+        """Test adding database component to a base project."""
+        # Generate base project (no components)
+        template_gen = TemplateGenerator("test-add-database", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Verify database not initially present
+        initial_answers = load_copier_answers(project_path)
+        assert initial_answers.get("include_database") is False
+
+        # Add database component
+        result = run_aegis_command(
+            "add", "database", "--project-path", str(project_path), "--yes"
+        )
+
+        # Should succeed
+        assert result.success, f"Command failed: {result.stderr}"
+
+        # Verify database was added to answers
+        updated_answers = load_copier_answers(project_path)
+        assert updated_answers.get("include_database") is True
+        assert updated_answers.get("database_engine") == "sqlite"
+
+        # Verify database files were created
+        assert (project_path / "app" / "core" / "db.py").exists()
+
+    def test_add_database_already_enabled(self, temp_output_dir: Path) -> None:
+        """Test adding database when it's already enabled."""
+        # Generate project WITH database
+        template_gen = TemplateGenerator("test-db-existing", ["database"], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Try to add database again
+        result = run_aegis_command(
+            "add", "database", "--project-path", str(project_path), "--yes"
+        )
+
+        # Should succeed but show "already enabled" message
+        assert result.success
+        assert "already enabled" in result.stdout.lower()
+
+    def test_add_multiple_with_database(self, temp_output_dir: Path) -> None:
+        """Test adding database alongside other components."""
+        # Generate base project
+        template_gen = TemplateGenerator("test-add-multi-db", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Add database and scheduler together
+        result = run_aegis_command(
+            "add",
+            "database,scheduler",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+
+        assert result.success
+
+        # Verify both components were added
+        updated_answers = load_copier_answers(project_path)
+        assert updated_answers.get("include_database") is True
+        assert updated_answers.get("include_scheduler") is True
+        assert updated_answers.get("database_engine") == "sqlite"
+
+        # Verify files exist
+        assert (project_path / "app" / "core" / "db.py").exists()
+        assert (project_path / "app" / "entrypoints" / "scheduler.py").exists()
+
     def test_add_already_enabled_component(self, temp_output_dir: Path) -> None:
         """Test adding a component that's already enabled."""
         # Generate project WITH scheduler

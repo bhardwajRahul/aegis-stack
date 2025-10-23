@@ -282,6 +282,11 @@ def add_command(
             scheduler_backend == SchedulerBackend.SQLITE.value
         )
 
+    # Add database engine configuration if adding database
+    if "database" in components_to_add:
+        # SQLite is the only supported engine for now
+        update_data["database_engine"] = "sqlite"
+
     # Add components using ManualUpdater
     # This is the standard approach for adding components at the same template version
     # (Copier's run_update is designed for template VERSION upgrades, not component additions)
@@ -300,6 +305,8 @@ def add_command(
                 component_data["scheduler_with_persistence"] = update_data.get(
                     "scheduler_with_persistence", False
                 )
+            elif component == "database" and "database_engine" in update_data:
+                component_data["database_engine"] = update_data["database_engine"]
 
             # Add the component
             result = updater.add_component(component, component_data)

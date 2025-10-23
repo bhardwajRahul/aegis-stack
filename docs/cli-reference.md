@@ -208,12 +208,40 @@ aegis add scheduler,database
 # Add worker (auto-includes redis dependency)
 aegis add worker
 
+# Add database component
+aegis add database
+
+# Add database with other components
+aegis add database,scheduler
+
 # Add to specific project
 aegis add scheduler --project-path ../my-project
 
 # Interactive mode
 aegis add --interactive
 ```
+
+**Adding Database Component:**
+
+The database component provides SQLite database with SQLModel ORM:
+
+```bash
+# Add database to existing project
+aegis add database
+
+# Add with other components
+aegis add database,scheduler
+```
+
+**What Gets Added:**
+- `app/core/db.py` - Database connection and session management
+- SQLite database configuration (currently the only supported engine)
+- Health check integration
+- Shared files regenerated with database conditionals
+
+**Database Engine:**
+- Currently only SQLite is supported
+- PostgreSQL and MySQL support coming in future releases
 
 **How It Works:**
 
