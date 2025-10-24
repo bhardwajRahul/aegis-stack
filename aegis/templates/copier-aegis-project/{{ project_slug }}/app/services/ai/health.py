@@ -5,7 +5,6 @@ Health monitoring for AI service functionality including provider configuration,
 API connectivity, and service-specific metrics.
 """
 
-from app.core.config import settings
 from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
@@ -18,10 +17,9 @@ async def check_ai_service_health() -> ComponentStatus:
         ComponentStatus indicating AI service health
     """
     try:
-        from .service import AIService
-
-        # Initialize AI service for health check
-        ai_service = AIService(settings)
+        # Import the shared AI service instance from the API router
+        # This ensures health checks reflect actual API conversation state
+        from app.components.backend.api.ai.router import ai_service
 
         # Get service status
         service_status = ai_service.get_service_status()
@@ -48,8 +46,9 @@ async def check_ai_service_health() -> ComponentStatus:
             "provider": service_status["provider"],
             "model": service_status["model"],
             "agent_ready": service_status["agent_initialized"],
-            "conversations_active": service_status["total_conversations"],
+            "total_conversations": service_status["total_conversations"],
             "configuration_valid": service_status["configuration_valid"],
+            "validation_errors": validation_errors,
             "validation_errors_count": len(validation_errors),
         }
 
