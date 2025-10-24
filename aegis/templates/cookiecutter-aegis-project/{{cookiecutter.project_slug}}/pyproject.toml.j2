@@ -44,6 +44,7 @@ dependencies = [
 {%- if cookiecutter.include_auth == "yes" %}
     "python-jose[cryptography]==3.3.0",
     "passlib[bcrypt]==1.7.4",
+    "bcrypt<5.0.0",  # Pin to 4.x due to passlib compatibility
     "python-multipart==0.0.9",
     "email-validator==2.2.0",
     "alembic==1.16.5",

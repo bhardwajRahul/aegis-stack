@@ -7,7 +7,19 @@ from app.core.config import settings
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+)
+
+
+def _truncate_password(password: str) -> str:
+    """Truncate password to 72 bytes for bcrypt compatibility.
+
+    bcrypt has a 72-byte limit. We explicitly truncate here rather than
+    rely on library defaults for clarity and consistency.
+    """
+    return password[:72]
 
 
 def create_access_token(
@@ -42,9 +54,9 @@ def verify_token(token: str) -> dict[str, Any] | None:
 
 def get_password_hash(password: str) -> str:
     """Hash a password."""
-    return pwd_context.hash(password)
+    return pwd_context.hash(_truncate_password(password))
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    return pwd_context.verify(_truncate_password(plain_password), hashed_password)

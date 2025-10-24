@@ -263,6 +263,73 @@ aegis add database,scheduler
 
 ---
 
+## aegis add-service
+
+Add services to an existing Aegis Stack project.
+
+**Usage:**
+```bash
+aegis add-service SERVICES [OPTIONS]
+```
+
+**Arguments:**
+
+- `SERVICES` - Comma-separated list of services to add (auth,ai)
+
+**Options:**
+
+- `--interactive, -i` - Use interactive service selection
+- `--project-path, -p PATH` - Path to the Aegis Stack project (default: current directory)
+- `--yes, -y` - Skip confirmation prompt
+
+**Examples:**
+```bash
+# Add auth service (auto-adds database if not present)
+aegis add-service auth
+
+# Add AI service
+aegis add-service ai
+
+# Add multiple services
+aegis add-service auth,ai
+
+# Add with custom project path
+aegis add-service auth --project-path ../my-project
+
+# Interactive service selection
+aegis add-service --interactive
+
+# Non-interactive with auto-yes
+aegis add-service auth --yes
+```
+
+**Service Auto-Resolution:**
+
+Services automatically add their required components:
+- `auth` → Requires `database` component (auto-added if missing)
+- `ai` → Requires `backend` component (always present)
+
+**Post-Addition Setup:**
+
+After adding services, follow these steps:
+
+```bash
+# For auth service
+make migrate                       # Apply auth migrations
+my-project auth create-test-users  # Create test users
+
+# For AI service
+# Set AI_PROVIDER in .env (openai, anthropic, google, groq)
+# Set provider API key (OPENAI_API_KEY, etc.)
+my-project ai chat                 # Test CLI chat interface
+```
+
+**Important Notes:**
+- Only works with Copier-generated projects (default since v0.2.0)
+- Requires git repository (for change tracking)
+- Services require their dependencies - they will be auto-added
+- Review changes with `git diff` before committing
+
 ## aegis remove
 
 Remove components from an existing Aegis Stack project.

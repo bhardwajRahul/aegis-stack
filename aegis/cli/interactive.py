@@ -466,3 +466,146 @@ def interactive_component_remove_selection(project_path: Path) -> list[str]:
                 selected.append(component_name)
 
     return selected
+
+
+def interactive_service_selection(project_path: Path) -> list[str]:
+    """
+    Interactive service selection for adding to existing project.
+
+    Shows available services with their descriptions and required components.
+    Warns if required components are missing.
+
+    Args:
+        project_path: Path to the existing project
+
+    Returns:
+        List of services to add
+    """
+    from ..core.copier_manager import load_copier_answers
+
+    # Load current project state
+    try:
+        current_answers = load_copier_answers(project_path)
+    except Exception as e:
+        typer.echo(f"❌ Failed to load project configuration: {e}", err=True)
+        raise typer.Exit(1)
+
+    typer.echo("\n🔧 Service Selection")
+    typer.echo("=" * 40)
+    typer.echo("Services provide business logic functionality for your application.\n")
+
+    # Find already enabled services
+    enabled_services = []
+    for service_name in SERVICES:
+        if current_answers.get(f"include_{service_name}"):
+            enabled_services.append(service_name)
+
+    # Find enabled components
+    enabled_components = set(CORE_COMPONENTS)  # Always have core components
+    for component in ["redis", "worker", "scheduler", "database"]:
+        if current_answers.get(f"include_{component}"):
+            enabled_components.add(component)
+
+    if enabled_services:
+        typer.echo("Currently enabled services:")
+        for service_name in enabled_services:
+            service_spec = SERVICES[service_name]
+            typer.echo(f"  ✅ {service_name}: {service_spec.description}")
+        typer.echo()
+
+    # Show available services grouped by type
+    selected_services = []
+
+    # Authentication Services
+    auth_services = get_services_by_type(ServiceType.AUTH)
+    if auth_services:
+        typer.echo("🔐 Authentication Services:")
+        for service_name, service_spec in auth_services.items():
+            # Skip if already enabled
+            if service_name in enabled_services:
+                typer.echo(f"  ✅ {service_name} - Already enabled")
+                continue
+
+            # Check component requirements
+            missing_components = [
+                comp
+                for comp in service_spec.required_components
+                if comp not in enabled_components
+            ]
+
+            if missing_components:
+                requirement_text = f" (will auto-add: {', '.join(missing_components)})"
+            else:
+                requirement_text = ""
+
+            prompt = f"  Add {service_spec.description.lower()}{requirement_text}?"
+            if typer.confirm(prompt):
+                selected_services.append(service_name)
+
+                if missing_components:
+                    typer.echo(
+                        f"    📦 Required components will be added: {', '.join(missing_components)}"
+                    )
+
+    # AI & Machine Learning Services
+    ai_services = get_services_by_type(ServiceType.AI)
+    if ai_services:
+        typer.echo("\n🤖 AI & Machine Learning Services:")
+        for service_name, service_spec in ai_services.items():
+            # Skip if already enabled
+            if service_name in enabled_services:
+                typer.echo(f"  ✅ {service_name} - Already enabled")
+                continue
+
+            # Check component requirements
+            missing_components = [
+                comp
+                for comp in service_spec.required_components
+                if comp not in enabled_components
+            ]
+
+            if missing_components:
+                requirement_text = f" (will auto-add: {', '.join(missing_components)})"
+            else:
+                requirement_text = ""
+
+            prompt = f"  Add {service_spec.description.lower()}{requirement_text}?"
+            if typer.confirm(prompt):
+                selected_services.append(service_name)
+
+                if missing_components:
+                    typer.echo(
+                        f"    📦 Required components will be added: {', '.join(missing_components)}"
+                    )
+
+    # Payment Services (when they exist)
+    payment_services = get_services_by_type(ServiceType.PAYMENT)
+    if payment_services:
+        typer.echo("\n💰 Payment Services:")
+        for service_name, service_spec in payment_services.items():
+            if service_name in enabled_services:
+                typer.echo(f"  ✅ {service_name} - Already enabled")
+                continue
+
+            missing_components = [
+                comp
+                for comp in service_spec.required_components
+                if comp not in enabled_components
+            ]
+
+            requirement_text = (
+                f" (will auto-add: {', '.join(missing_components)})"
+                if missing_components
+                else ""
+            )
+
+            prompt = f"  Add {service_spec.description.lower()}{requirement_text}?"
+            if typer.confirm(prompt):
+                selected_services.append(service_name)
+
+                if missing_components:
+                    typer.echo(
+                        f"    📦 Required components will be added: {', '.join(missing_components)}"
+                    )
+
+    return selected_services

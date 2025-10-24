@@ -153,6 +153,155 @@ async def generate_report(ctx: dict, report_data: dict) -> dict:
 
 ---
 
+## Month 4: Adding User Authentication
+
+Product wants to add user accounts. You need authentication.
+
+**Before Aegis Stack:**
+
+- Research auth libraries
+- Set up database models
+- Create migration system
+- Build JWT token handling
+- Write auth endpoints
+- Add password hashing
+- Configure environment variables
+- Test everything manually
+
+**With Aegis Stack:**
+
+```bash
+aegis add-service auth --project-path ./mvp-api
+```
+
+**Added:**
+
+- `app/components/backend/api/auth/` - Auth API endpoints (login, register, etc.)
+- `app/models/user.py` - User model with password hashing
+- `app/services/auth/` - Authentication service layer
+- `app/core/security.py` - JWT token handling
+- `app/cli/auth.py` - User management CLI commands
+- `alembic/` - Database migration infrastructure
+- `tests/` - Comprehensive auth test suite (52 tests)
+- Database component (auto-added as required dependency)
+
+**Updated:**
+
+- `pyproject.toml` - Auth dependencies (python-jose, passlib, python-multipart)
+- `.env.example` - Auth configuration (JWT_SECRET, etc.)
+- `docker-compose.yml` - No changes (database already there from worker)
+
+### Post-Addition Setup
+
+```bash
+# Apply auth migrations
+make migrate
+
+# Create test users
+mvp-api auth create-test-users --count 5
+
+# Test authentication
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@example.com", "password": "admin123"}'
+```
+
+### Using Auth in Your API
+
+```python
+# app/components/backend/api/reports.py
+
+from fastapi import APIRouter, Depends
+from app.components.backend.api.deps import get_current_active_user
+from app.models.user import User
+
+router = APIRouter()
+
+@router.post("/reports/generate")
+async def generate_report_async(
+    report_data: dict,
+    current_user: User = Depends(get_current_active_user)  # Protected!
+):
+    """Queue report generation (requires authentication)."""
+    redis = await create_pool(RedisSettings())
+    job = await redis.enqueue_job(
+        "generate_report",
+        report_data,
+        user_id=current_user.id  # Track who requested it
+    )
+
+    return {"job_id": str(job.job_id), "status": "queued"}
+```
+
+---
+
+## Month 5: Adding AI Chat
+
+Product wants an AI chatbot for customer support.
+
+```bash
+aegis add-service ai --project-path ./mvp-api
+```
+
+**Added:**
+
+- `app/services/ai/` - PydanticAI integration with multiple providers
+- `app/components/backend/api/ai/` - AI API endpoints (chat, streaming)
+- `app/cli/ai.py` - Interactive CLI chat interface with markdown rendering
+- AI provider support (OpenAI, Anthropic, Google Gemini, Groq)
+- Conversation persistence and memory management
+
+**Updated:**
+
+- `pyproject.toml` - PydanticAI dependencies
+- `.env.example` - AI provider configuration
+
+### Post-Addition Setup
+
+```bash
+# Configure AI provider
+echo "AI_PROVIDER=openai" >> .env
+echo "OPENAI_API_KEY=your-key-here" >> .env
+
+# Test via CLI
+mvp-api ai chat
+# > How can I help you today?
+# Hello! Can you explain webhooks?
+
+# Test via API
+curl -X POST http://localhost:8000/api/ai/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Explain webhooks", "stream": false}'
+```
+
+### Combining Services: AI + Auth
+
+```python
+# app/components/backend/api/ai/router.py
+
+from fastapi import APIRouter, Depends
+from app.components.backend.api.deps import get_current_active_user
+from app.models.user import User
+from app.services.ai import get_ai_response
+
+router = APIRouter()
+
+@router.post("/ai/chat")
+async def chat(
+    message: str,
+    current_user: User = Depends(get_current_active_user)  # Require auth
+):
+    """User-specific AI chat with conversation history."""
+    response = await get_ai_response(
+        message=message,
+        user_id=current_user.id  # Personalized context
+    )
+
+    return {"response": response, "user": current_user.email}
+```
+
+---
+
 ## Month 6: Refactoring
 
 You've learned your system. Turns out scheduled jobs work better as worker tasks. Time to clean up.

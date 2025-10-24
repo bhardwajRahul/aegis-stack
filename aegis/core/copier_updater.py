@@ -135,9 +135,31 @@ def update_with_copier_native(
             vcs_ref="HEAD",  # Use latest template version
         )
 
+        # CRITICAL: Copy service-specific files for newly-added services
+        # Copier can only re-render existing files - it cannot copy new directories
+        # that were excluded during initial generation
+        answers = load_copier_answers(project_path)
+
+        # Check for services in components_to_add (they start with 'include_')
+        # Service names: auth, ai
+        service_names = {"auth", "ai"}
+        newly_added_services = [
+            svc for svc in service_names if f"include_{svc}" in update_data
+        ]
+
+        if newly_added_services:
+            from aegis.core.post_gen_tasks import copy_service_files
+
+            # Template content is at: template_root/aegis/templates/copier-aegis-project/
+            template_path = (
+                template_root / "aegis" / "templates" / "copier-aegis-project"
+            )
+
+            for service_name in newly_added_services:
+                copy_service_files(project_path, service_name, template_path)
+
         # Run post-generation tasks with explicit working directory control
         # This ensures consistent behavior with initial generation
-        answers = load_copier_answers(project_path)
         include_auth = answers.get("include_auth", False)
 
         # Run shared post-generation tasks
