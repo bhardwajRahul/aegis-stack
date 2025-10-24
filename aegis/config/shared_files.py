@@ -52,6 +52,11 @@ SHARED_TEMPLATE_FILES: dict[str, SharedFilePolicy] = {
         "backup": True,
         "warn": False,
     },  # Card exports
+    "app/components/backend/api/routing.py": {
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Contains conditional router includes for services (auth, AI, etc.)
     # ==========================================
     # Core Configuration Files
     # ==========================================

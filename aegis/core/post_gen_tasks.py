@@ -222,6 +222,75 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_dir(project_path, "docs/components")
 
 
+def copy_service_files(
+    project_path: Path, service_name: str, template_path: Path
+) -> None:
+    """
+    Copy service-specific files from template to project.
+
+    This is needed when services are added post-generation via Copier update.
+    Copier can only re-render existing files - it cannot copy new directories
+    that were excluded during initial generation.
+
+    Args:
+        project_path: Path to the project directory
+        service_name: Name of the service ('auth', 'ai', etc.)
+        template_path: Path to the Copier template directory
+
+    Note:
+        Uses get_component_file_mapping() to know which files belong to each service.
+    """
+    # Get the file mapping for this service
+    file_mapping = get_component_file_mapping()
+    if service_name not in file_mapping:
+        print(f"⚠️  Unknown service '{service_name}' - skipping file copy")
+        return
+
+    service_files = file_mapping[service_name]
+    print(f"📁 Copying {service_name} service files from template...")
+
+    # The template is at: aegis-stack/aegis/templates/copier-aegis-project/{{ project_slug }}/
+    # We need to find the template content directory
+    template_content = template_path / "{{ project_slug }}"
+    if not template_content.exists():
+        print(f"⚠️  Template content directory not found: {template_content}")
+        return
+
+    copied_count = 0
+    for rel_path in service_files:
+        src = template_content / rel_path
+        dst = project_path / rel_path
+
+        # Skip if source doesn't exist (might be conditional on other settings)
+        if not src.exists():
+            continue
+
+        # Create parent directory if needed
+        dst.parent.mkdir(parents=True, exist_ok=True)
+
+        # Copy file or directory
+        if src.is_dir():
+            if dst.exists():
+                # Skip if already exists (don't overwrite existing customizations)
+                continue
+            shutil.copytree(src, dst)
+            copied_count += 1
+        else:
+            # For files, check if .jinja extension (template file)
+            if src.suffix == ".jinja":
+                # This is a Jinja2 template - we need to render it
+                # For now, skip template files (they'll be handled by Copier update)
+                continue
+            # Copy regular file
+            shutil.copy2(src, dst)
+            copied_count += 1
+
+    if copied_count > 0:
+        print(f"✅ Copied {copied_count} {service_name} service files")
+    else:
+        print(f"⚠️  No {service_name} files copied (may already exist or be templates)")
+
+
 def install_dependencies(project_path: Path) -> bool:
     """
     Install project dependencies using uv.

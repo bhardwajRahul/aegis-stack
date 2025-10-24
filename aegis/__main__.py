@@ -11,6 +11,7 @@ Usage:
 import typer
 
 from .commands.add import add_command
+from .commands.add_service import add_service_command
 from .commands.components import components_command
 from .commands.init import init_command
 from .commands.remove import remove_command
@@ -39,6 +40,7 @@ app.command(name="components")(components_command)
 app.command(name="services")(services_command)
 app.command(name="init")(init_command)
 app.command(name="add")(add_command)
+app.command(name="add-service")(add_service_command)
 app.command(name="remove")(remove_command)
 
 
