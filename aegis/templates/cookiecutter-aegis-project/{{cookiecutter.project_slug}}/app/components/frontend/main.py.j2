@@ -12,6 +12,9 @@ from app.services.system.models import ComponentStatus, ComponentStatusType
 from .dashboard.cards import (
     FastAPICard,
     FletCard,
+    {%- if cookiecutter.include_ai == "yes" %}
+    AICard,
+    {%- endif %}
     {%- if cookiecutter.include_auth == "yes" %}
     AuthCard,
     ServicesCard,
@@ -458,15 +461,23 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 elif component_name == "scheduler":
                     return SchedulerCard(component_data).build()
                 {%- endif %}
+                {%- if cookiecutter.include_ai == "yes" or cookiecutter.include_auth == "yes" %}
                 {%- if cookiecutter.include_auth == "yes" %}
                 elif component_name == "services":
                     return ServicesCard(component_data).build()
+                {%- endif %}
                 # Individual service cards
+                {%- if cookiecutter.include_ai == "yes" %}
+                elif component_name == "service_ai":
+                    return AICard(component_data).build()
+                {%- endif %}
+                {%- if cookiecutter.include_auth == "yes" %}
                 elif component_name == "service_auth":
                     return AuthCard(component_data).build()
                 elif component_name.startswith("service_"):
                     # For other services, use generic ServicesCard for now
                     return ServicesCard(component_data).build()
+                {%- endif %}
                 {%- endif %}
                 else:
                     # Fallback for unknown components - should not happen in practice

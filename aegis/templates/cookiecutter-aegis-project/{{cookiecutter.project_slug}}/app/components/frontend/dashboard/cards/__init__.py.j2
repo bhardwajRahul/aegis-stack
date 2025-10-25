@@ -2,6 +2,9 @@
 
 from .fastapi_card import FastAPICard
 from .flet_card import FletCard
+{%- if cookiecutter.include_ai == "yes" %}
+from .ai_card import AICard
+{%- endif %}
 {%- if cookiecutter.include_auth == "yes" %}
 from .auth_card import AuthCard
 from .services_card import ServicesCard
@@ -22,6 +25,9 @@ from .worker_card import WorkerCard
 __all__ = [
     "FastAPICard",
     "FletCard",
+    {%- if cookiecutter.include_ai == "yes" %}
+    "AICard",
+    {%- endif %}
     {%- if cookiecutter.include_auth == "yes" %}
     "AuthCard",
     "ServicesCard",
