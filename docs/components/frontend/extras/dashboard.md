@@ -56,7 +56,11 @@ async def create_health_overview() -> ft.Container:
     )
 ```
 
-### Component Health Cards
+### Component and Service Cards
+
+The dashboard displays both **component health cards** (infrastructure like Backend, Database, Worker) and **service health cards** (business capabilities like Auth, AI).
+
+#### Component Health Cards
 
 Individual component status with detailed information:
 
@@ -226,8 +230,40 @@ def create_progress_indicator(name: str, value: float, max_value: float) -> ft.R
     - **Efficient data fetching**: Use WebSocket connections for real-time updates
     - **Component memoization**: Cache expensive UI components
 
+## Services Dashboard Integration
+
+When your project includes services (Auth, AI, etc.), they appear in the dashboard alongside components:
+
+!!! success "Services in Dashboard"
+    Services like **Auth** and **AI** automatically appear as dashboard cards showing service-specific metrics:
+
+    - **Auth Service**: User counts, JWT configuration, security level
+    - **AI Service**: Provider info, conversation counts, streaming status
+
+    See **[Services Dashboard Documentation](../../../services/dashboard.md)** for complete details on service cards and metrics.
+
+### Service Card Example
+
+```python
+# Services appear automatically in the dashboard
+async def create_services_section() -> ft.Column:
+    """Create services health cards section."""
+    services = await get_services_health()
+
+    service_cards = []
+    for service_name, health_info in services.items():
+        card = create_service_card(service_name, health_info)
+        service_cards.append(card)
+
+    return ft.Column([
+        ft.Text("Services", size=20, weight=ft.FontWeight.BOLD),
+        ft.Row(service_cards, wrap=True)
+    ])
+```
+
 ## Next Steps
 
+- **[Services Dashboard](../../../services/dashboard.md)** - Complete services dashboard documentation
 - **[Frontend Component](../../frontend.md)** - Return to frontend overview
 - **[Flet Documentation](https://flet.dev/docs/)** - Complete UI framework capabilities
 - **[Backend Integration](../../webserver.md)** - API health endpoints
