@@ -227,10 +227,20 @@ aegis init my-app --interactive
 aegis init full-app --services auth,ai --components database,worker
 ```
 
+## Dashboard Integration
+
+Services automatically appear in the health dashboard alongside components, providing real-time monitoring of your business capabilities.
+
+!!! success "Visual Monitoring"
+    When you include services in your project, they appear as dedicated dashboard cards showing service-specific metrics and health status.
+
+    **[See Services Dashboard Documentation →](dashboard.md)**
+
 ---
 
 **Next Steps:**
 
+- **[Services Dashboard](dashboard.md)** - Services dashboard integration and monitoring
 - **[Authentication Service](auth/index.md)** - Complete JWT auth implementation
 - **[AI Service](ai/index.md)** - Multi-provider AI chat with PydanticAI
 - **[CLI Reference](../cli-reference.md)** - Service command reference
