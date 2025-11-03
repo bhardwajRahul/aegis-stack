@@ -357,6 +357,53 @@ git add . && git commit -m "Remove scheduler component"
 
 ---
 
+## Template Updates: Stay Current
+
+Your project isn't frozen at `init`. Aegis Stack templates evolve, and your projects can evolve with them.
+
+### Version Tracking
+
+Every generated project tracks its template version:
+
+```yaml
+# .copier-answers.yml
+_commit: f359779a...  # Template snapshot you're on
+_src_path: /path/to/aegis-stack
+```
+
+### Staying Updated
+
+**Coming in v0.2.0:** Template update command
+
+```bash
+# Check for template updates
+aegis update --dry-run
+
+# Update to latest template
+aegis update
+
+# What gets updated:
+# - Bug fixes in generated code
+# - New best practices
+# - Improved patterns
+# - Enhanced tooling
+
+# What stays yours:
+# - Your business logic
+# - Custom modifications
+# - Database data
+# - Git history
+```
+
+### Update Philosophy
+
+- **Non-destructive**: Your custom code is preserved
+- **Incremental**: Small, frequent updates over big migrations
+- **Transparent**: See exactly what changes before applying
+- **Reversible**: Git keeps full history for rollback
+
+---
+
 ## Next Steps
 
 - **[CLI Reference](cli-reference.md)** - Complete `aegis add` and `aegis remove` documentation
