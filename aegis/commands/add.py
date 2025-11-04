@@ -17,6 +17,7 @@ from ..core.copier_manager import (
 )
 from ..core.dependency_resolver import DependencyResolver
 from ..core.manual_updater import ManualUpdater
+from ..core.version_compatibility import validate_version_compatibility
 
 
 def add_command(
@@ -43,6 +44,12 @@ def add_command(
         help="Path to the Aegis Stack project (default: current directory)",
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Force through version mismatch warnings",
+    ),
 ) -> None:
     """
     Add components to an existing Aegis Stack project.
@@ -84,6 +91,9 @@ def add_command(
         raise typer.Exit(1)
 
     typer.echo(f"📁 Project: {target_path}")
+
+    # Check version compatibility between CLI and project template
+    validate_version_compatibility(target_path, command_name="add", force=force)
 
     # Validate components argument or interactive mode
     if not interactive and not components:

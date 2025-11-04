@@ -547,3 +547,22 @@ def check_error_indicators(
             f"Got output: {output}\n"
             f"Missing all indicators: {missing_indicators}"
         )
+
+
+def strip_ansi_codes(text: str) -> str:
+    """
+    Strip ANSI escape codes from text for testing.
+
+    CLI output often contains ANSI color codes that make string comparison
+    difficult. This helper removes all ANSI escape sequences to get clean text.
+
+    Args:
+        text: Text potentially containing ANSI codes
+
+    Returns:
+        Clean text without ANSI codes
+    """
+    import re
+
+    ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
+    return ansi_pattern.sub("", text)

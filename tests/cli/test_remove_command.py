@@ -558,3 +558,55 @@ class TestRemoveCommandInteractive:
         # Should fail with validation error
         assert not result.success
         assert "unknown component" in result.stderr.lower()
+
+
+class TestRemoveCommandVersionCompatibility:
+    """Test version compatibility checks in remove command."""
+
+    def test_remove_with_force_flag_available(self) -> None:
+        """Test that remove command accepts --force flag."""
+        result = run_aegis_command("remove", "--help")
+
+        assert result.success
+        assert "--force" in result.stdout or "-f" in result.stdout
+
+    def test_remove_command_version_check_skipped_when_no_version(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test that remove command works when project version can't be determined."""
+        # Generate a project with scheduler
+        template_gen = TemplateGenerator(
+            "test-remove-no-version", ["scheduler"], "memory", []
+        )
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Remove a component - should work even if version can't be determined
+        result = run_aegis_command(
+            "remove", "scheduler", "--project-path", str(project_path), "--yes"
+        )
+
+        # Should succeed (version check is skipped when version unknown)
+        assert result.success, f"Command failed: {result.stderr}"
+
+    def test_remove_force_flag_bypasses_version_warning(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test that --force flag is available for bypassing warnings."""
+        # Generate a project with scheduler
+        template_gen = TemplateGenerator(
+            "test-remove-force", ["scheduler"], "memory", []
+        )
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Try remove with force flag (should be accepted even if not needed)
+        result = run_aegis_command(
+            "remove",
+            "scheduler",
+            "--project-path",
+            str(project_path),
+            "--yes",
+            "--force",
+        )
+
+        # Should succeed
+        assert result.success, f"Command failed: {result.stderr}"

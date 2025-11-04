@@ -5,9 +5,11 @@ This module provides an alternative to the manual updater by using Copier's
 native update mechanism with a copier.yml at the repository root.
 """
 
+import subprocess
 from pathlib import Path
 
 from copier import run_update
+from packaging.version import parse
 from pydantic import BaseModel, Field
 
 from aegis.core.copier_manager import load_copier_answers
@@ -175,3 +177,299 @@ def update_with_copier_native(
         return CopierUpdateResult(
             success=False, method="copier-native", error_message=str(e)
         )
+
+
+# Version Management Functions
+
+
+def get_current_template_commit(project_path: Path) -> str | None:
+    """
+    Get the git commit hash of the template used to generate the project.
+
+    Args:
+        project_path: Path to the project directory
+
+    Returns:
+        Commit hash string or None if not found
+    """
+    try:
+        answers = load_copier_answers(project_path)
+        commit_hash = answers.get("_commit")
+        if commit_hash and commit_hash != "None":
+            return commit_hash
+        return None
+    except Exception:
+        return None
+
+
+def get_available_versions(template_root: Path | None = None) -> list[str]:
+    """
+    Get list of available template versions from git tags.
+
+    Args:
+        template_root: Path to template repository (default: auto-detect)
+
+    Returns:
+        List of version strings sorted by PEP 440 (newest first)
+    """
+    if template_root is None:
+        template_root = get_template_root()
+
+    try:
+        result = subprocess.run(
+            ["git", "tag", "--list", "v*"],
+            cwd=template_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        # Parse tags (remove 'v' prefix and filter valid versions)
+        versions = []
+        for tag in result.stdout.strip().split("\n"):
+            if tag.startswith("v"):
+                version_str = tag[1:]  # Remove 'v' prefix
+                try:
+                    parse(version_str)  # Validate version
+                    versions.append(version_str)
+                except Exception:
+                    continue
+
+        # Sort by PEP 440 (newest first)
+        versions.sort(key=lambda v: parse(v), reverse=True)
+        return versions
+
+    except Exception:
+        return []
+
+
+def get_latest_version(template_root: Path | None = None) -> str | None:
+    """
+    Get the latest template version from git tags.
+
+    Args:
+        template_root: Path to template repository (default: auto-detect)
+
+    Returns:
+        Latest version string or None if no versions found
+    """
+    versions = get_available_versions(template_root)
+    return versions[0] if versions else None
+
+
+def resolve_ref_to_commit(ref: str, repo_path: Path) -> str | None:
+    """
+    Resolve a git reference (HEAD, branch, tag, commit) to full commit SHA.
+
+    Args:
+        ref: Git reference (HEAD, branch name, tag, or commit hash)
+        repo_path: Path to git repository
+
+    Returns:
+        Full commit SHA or None if resolution fails
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", ref],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError:
+        return None
+
+
+def resolve_version_to_ref(
+    version: str | None, template_root: Path | None = None
+) -> str:
+    """
+    Resolve a version string to a git reference.
+
+    Args:
+        version: Version string ("latest", "0.2.0", commit hash, or None)
+        template_root: Path to template repository (default: auto-detect)
+
+    Returns:
+        Git reference string (tag name, commit hash, or "HEAD")
+    """
+    if template_root is None:
+        template_root = get_template_root()
+
+    # None or "latest" -> use latest version tag
+    if not version or version == "latest":
+        latest = get_latest_version(template_root)
+        if latest:
+            return f"v{latest}"
+        return "HEAD"
+
+    # Check if it's a commit hash (40 hex characters)
+    if len(version) == 40 and all(c in "0123456789abcdef" for c in version.lower()):
+        return version
+
+    # Check if it looks like a version number (add 'v' prefix)
+    try:
+        parse(version)
+        # Valid version number - check if tag exists
+        tag_name = f"v{version}"
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", f"refs/tags/{tag_name}"],
+            cwd=template_root,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            return tag_name
+    except Exception:
+        pass
+
+    # Fall back to using the version string as-is (might be a branch name)
+    return version
+
+
+def validate_clean_git_tree(project_path: Path) -> tuple[bool, str]:
+    """
+    Check if the project's git working tree is clean.
+
+    Args:
+        project_path: Path to project directory
+
+    Returns:
+        Tuple of (is_clean: bool, message: str)
+    """
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        if result.stdout.strip():
+            return False, "Git tree has uncommitted changes"
+
+        return True, "Git tree is clean"
+
+    except subprocess.CalledProcessError as e:
+        return False, f"Failed to check git status: {e}"
+    except Exception as e:
+        return False, f"Error checking git status: {e}"
+
+
+def get_changelog(from_ref: str, to_ref: str, template_root: Path | None = None) -> str:
+    """
+    Get changelog between two git references.
+
+    Args:
+        from_ref: Starting git reference (commit, tag, or branch)
+        to_ref: Ending git reference
+        template_root: Path to template repository (default: auto-detect)
+
+    Returns:
+        Formatted changelog string
+    """
+    if template_root is None:
+        template_root = get_template_root()
+
+    try:
+        # Get commit log between refs
+        result = subprocess.run(
+            [
+                "git",
+                "log",
+                "--oneline",
+                "--no-merges",
+                "--pretty=format:%s",
+                f"{from_ref}..{to_ref}",
+            ],
+            cwd=template_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        if not result.stdout.strip():
+            return "No changes"
+
+        # Parse commits and categorize
+        commits = result.stdout.strip().split("\n")
+        features = []
+        fixes = []
+        breaking = []
+        other = []
+
+        for commit in commits:
+            commit_lower = commit.lower()
+            if "breaking:" in commit_lower or "breaking change" in commit_lower:
+                breaking.append(commit)
+            elif commit.startswith("feat:") or commit.startswith("feature:"):
+                features.append(commit)
+            elif commit.startswith("fix:"):
+                fixes.append(commit)
+            else:
+                other.append(commit)
+
+        # Format changelog
+        lines = []
+
+        if breaking:
+            lines.append("⚠️  Breaking Changes:")
+            for commit in breaking:
+                lines.append(f"  • {commit}")
+            lines.append("")
+
+        if features:
+            lines.append("✨ New Features:")
+            for commit in features:
+                lines.append(f"  • {commit}")
+            lines.append("")
+
+        if fixes:
+            lines.append("🐛 Bug Fixes:")
+            for commit in fixes:
+                lines.append(f"  • {commit}")
+            lines.append("")
+
+        if other:
+            lines.append("📝 Other Changes:")
+            for commit in other:
+                lines.append(f"  • {commit}")
+
+        return "\n".join(lines).strip()
+
+    except Exception as e:
+        return f"Error generating changelog: {e}"
+
+
+def get_commit_for_version(
+    version: str, template_root: Path | None = None
+) -> str | None:
+    """
+    Get the git commit hash for a version tag.
+
+    Args:
+        version: Version string (with or without 'v' prefix)
+        template_root: Path to template repository (default: auto-detect)
+
+    Returns:
+        Commit hash or None if tag not found
+    """
+    if template_root is None:
+        template_root = get_template_root()
+
+    # Ensure version has 'v' prefix
+    tag_name = version if version.startswith("v") else f"v{version}"
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-list", "-n", "1", tag_name],
+            cwd=template_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+    except Exception:
+        return None

@@ -9,6 +9,7 @@ source = { editable = "." }
 dependencies = [
     { name = "cookiecutter" },
     { name = "copier" },
+    { name = "packaging" },
     { name = "pillow" },
     { name = "rich" },
     { name = "typer" },
@@ -43,6 +44,7 @@ requires-dist = [
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5.0" },
     { name = "mkdocs-mermaid2-plugin", marker = "extra == 'docs'", specifier = ">=1.1.0" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.24.0" },
+    { name = "packaging", specifier = ">=24.0" },
     { name = "pillow", specifier = ">=11.3.0" },
     { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.6.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.7.0" },
