@@ -5,11 +5,9 @@ These tests focus on command parsing, help text, and basic functionality
 without doing full project generation.
 """
 
-import re
-
 import pytest
 
-from .test_utils import run_aegis_command, run_cli_help_command
+from .test_utils import run_aegis_command, run_cli_help_command, strip_ansi_codes
 
 
 class TestCLIBasics:
@@ -30,7 +28,7 @@ class TestCLIBasics:
         assert result.success, f"Init help command failed: {result.stderr}"
 
         # Remove ANSI color codes for reliable string matching
-        clean_output = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+        clean_output = strip_ansi_codes(result.stdout)
         assert "Initialize a new Aegis Stack project" in clean_output
         assert "--components" in clean_output
         assert (

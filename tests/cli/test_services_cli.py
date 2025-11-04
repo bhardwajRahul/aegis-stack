@@ -4,14 +4,13 @@ Tests for services CLI functionality.
 This module tests the services command and --services option integration.
 """
 
-import re
 import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
-from tests.cli.test_utils import run_aegis_command
+from tests.cli.test_utils import run_aegis_command, strip_ansi_codes
 
 
 class TestServicesCommand:
@@ -188,7 +187,7 @@ class TestServicesOptionIntegration:
         assert result.returncode == 0
 
         # Remove ANSI color codes for reliable string matching
-        clean_output = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+        clean_output = strip_ansi_codes(result.stdout)
 
         assert "--services" in clean_output
         # Check that services option is properly documented

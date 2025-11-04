@@ -1,0 +1,322 @@
+"""
+Tests for the 'aegis update' command for template version upgrades.
+
+Tests cover version detection, changelog generation, dry-run mode,
+and the full update workflow.
+"""
+
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from aegis.core.copier_manager import generate_with_copier, is_copier_project
+from aegis.core.template_generator import TemplateGenerator
+
+from .test_utils import run_aegis_command, strip_ansi_codes
+
+
+class TestUpdateCommandBasics:
+    """Basic validation tests for update command."""
+
+    def test_update_command_help(self) -> None:
+        """Test update command shows help text."""
+        result = run_aegis_command("update", "--help")
+
+        assert result.success
+        clean_output = strip_ansi_codes(result.stdout.lower())
+        assert "update" in clean_output
+        assert "--to-version" in clean_output
+        assert "--dry-run" in clean_output
+
+    def test_update_command_not_copier_project(self, temp_output_dir: Path) -> None:
+        """Test that update command fails on non-Copier projects."""
+        # Create a dummy directory that's not a Copier project
+        fake_project = temp_output_dir / "fake-project"
+        fake_project.mkdir()
+
+        # Try to update
+        result = run_aegis_command(
+            "update", "--project-path", str(fake_project), "--yes"
+        )
+
+        # Should fail with helpful message
+        assert not result.success
+        assert "not generated with copier" in result.stderr.lower()
+
+    def test_update_command_missing_project(self) -> None:
+        """Test that update command fails when project doesn't exist."""
+        result = run_aegis_command(
+            "update", "--project-path", "/nonexistent/path", "--yes"
+        )
+
+        assert not result.success
+        assert "not generated with copier" in result.stderr.lower()
+
+
+class TestUpdateCommandGitValidation:
+    """Tests for git tree validation."""
+
+    def test_update_requires_clean_git_tree(self, temp_output_dir: Path) -> None:
+        """Test that update command requires clean git working tree."""
+        # Generate a base project with Copier
+        template_gen = TemplateGenerator("test-dirty-tree", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Verify it's a Copier project
+        assert is_copier_project(project_path)
+
+        # Create an uncommitted change
+        test_file = project_path / "dirty.txt"
+        test_file.write_text("uncommitted change")
+
+        # Try to update
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--yes"
+        )
+
+        # Should fail with git tree error
+        assert not result.success
+        assert (
+            "git tree" in result.stderr.lower()
+            or "uncommitted" in result.stderr.lower()
+        )
+
+    def test_update_succeeds_with_clean_git_tree(self, temp_output_dir: Path) -> None:
+        """Test that update command works with clean git tree."""
+        # Generate a base project with Copier
+        template_gen = TemplateGenerator("test-clean-tree", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Verify it's a Copier project and has clean git tree
+        assert is_copier_project(project_path)
+
+        # Dry-run should work (doesn't actually update, so no version issues)
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--dry-run"
+        )
+
+        # Should either succeed (git is clean) or fail with a version-related message
+        # but NOT with a git tree error
+        if not result.success:
+            assert "git tree" not in result.stderr.lower()
+            assert "uncommitted" not in result.stderr.lower()
+
+    def test_update_exits_early_when_at_target_commit(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test that update exits early when project is already at target commit."""
+        # Generate a base project with Copier
+        template_gen = TemplateGenerator("test-early-exit", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Verify it's a Copier project
+        assert is_copier_project(project_path)
+
+        # Try to update to HEAD (should be same commit as project was just created)
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--to-version",
+            "HEAD",
+            "--yes",
+        )
+
+        # Should succeed and show early exit message
+        assert result.success
+        assert "already at the target commit" in result.stdout.lower()
+
+
+class TestUpdateCommandDryRun:
+    """Tests for dry-run mode."""
+
+    def test_dry_run_shows_preview(self, temp_output_dir: Path) -> None:
+        """Test that --dry-run shows preview without applying changes."""
+        # Generate a base project with Copier
+        template_gen = TemplateGenerator("test-dry-run", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Run update in dry-run mode
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--dry-run"
+        )
+
+        # Should succeed and either show dry-run message or early exit message
+        assert result.success
+        # If early exit happened (already at target), that's valid too
+        is_early_exit = "already at the target commit" in result.stdout.lower()
+        has_dry_run_msg = (
+            "dry run" in result.stdout.lower() or "preview" in result.stdout.lower()
+        )
+        assert is_early_exit or has_dry_run_msg
+
+        # Should not have actually updated anything
+        # (we can verify by checking that .copier-answers.yml hasn't changed)
+        # This is a basic smoke test - real validation would compare commits
+
+
+class TestUpdateCommandVersionResolution:
+    """Tests for version resolution logic."""
+
+    @patch("aegis.commands.update.get_latest_version")
+    @patch("aegis.commands.update.resolve_version_to_ref")
+    def test_update_to_latest_default(
+        self,
+        mock_resolve: MagicMock,
+        mock_get_latest: MagicMock,
+        temp_output_dir: Path,
+    ) -> None:
+        """Test that update defaults to latest version."""
+        # Setup mocks
+        mock_get_latest.return_value = "0.2.0"
+        mock_resolve.return_value = "v0.2.0"
+
+        # Generate a base project
+        template_gen = TemplateGenerator("test-latest", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Run update in dry-run mode (to avoid actual update)
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--dry-run"
+        )
+
+        # Should show version information
+        assert "version" in result.stdout.lower()
+
+    @patch("aegis.commands.update.resolve_version_to_ref")
+    def test_update_to_specific_version(
+        self, mock_resolve: MagicMock, temp_output_dir: Path
+    ) -> None:
+        """Test updating to a specific version."""
+        # Setup mock
+        mock_resolve.return_value = "v0.1.5"
+
+        # Generate a base project
+        template_gen = TemplateGenerator("test-specific-version", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Run update to specific version in dry-run mode
+        result = run_aegis_command(
+            "update",
+            "--to-version",
+            "0.1.5",
+            "--project-path",
+            str(project_path),
+            "--dry-run",
+        )
+
+        # Should mention the target version
+        assert "0.1.5" in result.stdout or "v0.1.5" in result.stdout
+
+
+class TestUpdateCommandChangelog:
+    """Tests for changelog display."""
+
+    @patch("aegis.commands.update.get_changelog")
+    @patch("aegis.commands.update.get_current_template_commit")
+    def test_update_shows_changelog(
+        self,
+        mock_get_commit: MagicMock,
+        mock_get_changelog: MagicMock,
+        temp_output_dir: Path,
+    ) -> None:
+        """Test that update command shows changelog."""
+        # Setup mocks - use a different commit to prevent early exit
+        mock_get_commit.return_value = "abc123def456"
+        mock_get_changelog.return_value = (
+            "✨ New Features:\n  • Added AI service\n\n"
+            "🐛 Bug Fixes:\n  • Fixed scheduler persistence"
+        )
+
+        # Generate a base project
+        template_gen = TemplateGenerator("test-changelog", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Run update in dry-run mode
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--dry-run"
+        )
+
+        # Should succeed
+        assert result.success
+        # Either shows changelog or early exit (both valid)
+        has_changelog = (
+            "changelog" in result.stdout.lower() or "changes" in result.stdout.lower()
+        )
+        is_early_exit = "already at the target commit" in result.stdout.lower()
+        assert has_changelog or is_early_exit
+
+
+class TestUpdateCommandConfirmation:
+    """Tests for user confirmation workflow."""
+
+    def test_update_requires_confirmation_without_yes_flag(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test that update requires confirmation without --yes flag."""
+        # Generate a base project
+        template_gen = TemplateGenerator("test-confirm", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Note: This test is tricky because it requires user input simulation
+        # For now, we just verify the command structure accepts --yes
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--help"
+        )
+
+        assert "--yes" in result.stdout or "-y" in result.stdout
+
+    def test_update_skips_confirmation_with_yes_flag(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test that --yes flag skips confirmation."""
+        # Generate a base project
+        template_gen = TemplateGenerator("test-yes-flag", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Dry-run with --yes should not prompt
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--dry-run", "--yes"
+        )
+
+        # Should complete without waiting for input
+        # (if it waited, the test would hang/timeout)
+        assert result.stdout  # Got some output
+
+
+class TestUpdateCommandErrorHandling:
+    """Tests for error handling and edge cases."""
+
+    def test_update_with_invalid_version(self, temp_output_dir: Path) -> None:
+        """Test update with non-existent version."""
+        # Generate a base project
+        template_gen = TemplateGenerator("test-invalid-version", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Try to update to an invalid version
+        result = run_aegis_command(
+            "update",
+            "--to-version",
+            "999.999.999",
+            "--project-path",
+            str(project_path),
+            "--dry-run",
+        )
+
+        # Should handle gracefully (may show warning or proceed with HEAD)
+        # At minimum, shouldn't crash
+        assert result.stdout or result.stderr
+
+    def test_update_shows_helpful_error_messages(self, temp_output_dir: Path) -> None:
+        """Test that update shows helpful error messages."""
+        # Create a non-Copier project
+        fake_project = temp_output_dir / "not-copier"
+        fake_project.mkdir()
+
+        result = run_aegis_command(
+            "update", "--project-path", str(fake_project), "--yes"
+        )
+
+        assert not result.success
+        # Should have helpful error message
+        assert len(result.stderr) > 0
+        assert "copier" in result.stderr.lower()

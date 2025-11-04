@@ -711,3 +711,51 @@ class TestAddCommandInteractive:
         assert updated_answers.get("include_redis"), (
             f"{redis_component.description} should be auto-added"
         )
+
+
+class TestAddCommandVersionCompatibility:
+    """Test version compatibility checks in add command."""
+
+    def test_add_with_force_flag_available(self) -> None:
+        """Test that add command accepts --force flag."""
+        result = run_aegis_command("add", "--help")
+
+        assert result.success
+        assert "--force" in result.stdout or "-f" in result.stdout
+
+    def test_add_command_version_check_skipped_when_no_version(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test that add command works when project version can't be determined."""
+        # Generate a base project with Copier
+        template_gen = TemplateGenerator("test-no-version", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Add a component - should work even if version can't be determined
+        result = run_aegis_command(
+            "add", "scheduler", "--project-path", str(project_path), "--yes"
+        )
+
+        # Should succeed (version check is skipped when version unknown)
+        assert result.success, f"Command failed: {result.stderr}"
+
+    def test_add_force_flag_bypasses_version_warning(
+        self, temp_output_dir: Path
+    ) -> None:
+        """Test that --force flag is available for bypassing warnings."""
+        # Generate a base project
+        template_gen = TemplateGenerator("test-force-flag", [], "memory", [])
+        project_path = generate_with_copier(template_gen, temp_output_dir)
+
+        # Try add with force flag (should be accepted even if not needed)
+        result = run_aegis_command(
+            "add",
+            "scheduler",
+            "--project-path",
+            str(project_path),
+            "--yes",
+            "--force",
+        )
+
+        # Should succeed
+        assert result.success, f"Command failed: {result.stderr}"

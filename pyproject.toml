@@ -45,6 +45,7 @@ dependencies = [
     "copier>=9.0.0",
     "rich>=13.0.0",
     "pillow>=11.3.0",
+    "packaging>=24.0",
 ]
 
 [project.urls]
