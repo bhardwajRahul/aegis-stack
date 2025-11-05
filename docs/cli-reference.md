@@ -384,6 +384,130 @@ aegis remove --interactive
 
 ---
 
+## aegis update
+
+Update an existing Copier-based project to the latest template version.
+
+**Usage:**
+```bash
+aegis update [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path PATH` - Path to project to update (default: current directory)
+- `--version TEXT` - Update to specific template version (default: latest)
+- `--force, -f` - Accept all template changes automatically (skip conflict resolution)
+- `--yes, -y` - Skip confirmation prompt
+- `--dry-run` - Preview changes without applying them
+
+**Examples:**
+```bash
+# Update current project to latest template
+aegis update
+
+# Update specific project
+aegis update --project-path ../my-project
+
+# Update to specific template version
+aegis update --version 0.2.0
+
+# Preview changes without applying
+aegis update --dry-run
+
+# Auto-accept all updates
+aegis update --force --yes
+```
+
+**How It Works:**
+
+1. Validates project was generated with Copier (required for updates)
+2. Checks current template version from `.copier-answers.yml`
+3. Fetches latest template version (or specified version)
+4. Compares current files with template updates
+5. Shows diff of changes to be applied
+6. Prompts for conflict resolution (which version to keep)
+7. Applies updates and creates backup files for conflicts
+8. Runs `uv sync` to update dependencies
+9. Runs `make fix` to format updated code
+
+**What Gets Updated:**
+
+- ✅ Template infrastructure files (configuration, base components)
+- ✅ Shared files (docker-compose.yml, pyproject.toml, Makefile)
+- ✅ Component implementations (if you haven't customized them)
+- ✅ Test infrastructure
+- ✅ Documentation templates
+
+**What's Preserved:**
+
+- ✅ Your custom business logic
+- ✅ Your environment variables (.env)
+- ✅ Your database migrations
+- ✅ Your custom models and services
+- ✅ Files you've modified (marked as conflicts for manual resolution)
+
+**Conflict Resolution:**
+
+When the template has changed a file you've also modified:
+
+```bash
+# Option 1: Keep your version
+[1] Keep my changes
+
+# Option 2: Use template version
+[2] Use template version
+
+# Option 3: View diff
+[3] Show diff
+
+# Option 4: Manual merge
+[4] I'll merge manually
+```
+
+Conflict files are backed up to:
+- Original: `app/components/backend/api/router.py.backup-TIMESTAMP`
+- Template: `app/components/backend/api/router.py.copier-TIMESTAMP`
+
+**Important Notes:**
+
+- **Cookiecutter projects cannot use this command** - Only Copier-based projects support updates
+- **Always commit before updating**: `git add . && git commit -m "Pre-update checkpoint"`
+- **Review changes carefully**: Don't blindly accept all updates
+- **Test after updating**: Run `make check` to verify everything works
+- **Backup files are created**: Check `.backup-*` and `.copier-*` files after conflicts
+- **Major version updates**: May require manual intervention and migration steps
+
+**Troubleshooting:**
+
+```bash
+# Error: "Not a Copier project"
+# Solution: This project was created with Cookiecutter
+# See docs/upgrading.md for migration options
+
+# Error: "Uncommitted changes"
+# Solution: Commit your changes first
+git add . && git commit -m "Save current work"
+
+# Many conflicts after update
+# Solution: Review .copier-answers.yml to see what changed
+# Use --dry-run first to preview changes
+
+# Update breaks tests
+# Solution: Roll back and review changes
+git reset --hard HEAD~1  # Undo update
+aegis update --dry-run    # Preview what changed
+```
+
+**See Also:**
+
+- [Upgrading Guide](upgrading.md) - Comprehensive upgrade documentation
+- [Versioning](versioning.md) - Understanding version compatibility
+- `aegis add` - Add new components to existing projects
+- `aegis remove` - Remove components from projects
+
+---
+
 ## Development Workflow
 
 After creating a project:
