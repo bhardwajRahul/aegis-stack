@@ -67,6 +67,8 @@ nav:
       - Service Layer: services/ai/integration.md
       - CLI Commands: services/ai/cli.md
       - Examples: services/ai/examples.md
+  - Development:
+    - Release Process: development/releases.md
   - Reference:
     - CLI Reference: cli-reference.md
     - Evolving Your Stack: evolving-your-stack.md

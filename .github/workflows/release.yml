@@ -1,0 +1,171 @@
+name: Release to PyPI
+
+on:
+  push:
+    tags:
+      - 'v*.*.*-rc*'  # Pre-release tags (v0.2.0-rc1, etc.) → TestPyPI
+      - 'v*.*.*'      # Production tags (v0.2.0, etc.) → PyPI
+
+jobs:
+  build:
+    name: Build Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run quality checks
+        run: make check
+
+      - name: Build package
+        run: uv build
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    if: contains(github.ref, '-rc')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # REQUIRED for Trusted Publishing
+      contents: write  # For creating GitHub pre-releases
+    environment:
+      name: release-test
+      url: https://test.pypi.org/project/aegis-stack/
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          print-hash: true
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ steps.version.outputs.VERSION }} (Release Candidate)"
+          body: |
+            ## 🧪 Test Release Published to TestPyPI
+
+            This is a pre-release version for testing. Install and test with:
+
+            ```bash
+            # Test the CLI
+            uvx --index-url https://test.pypi.org/simple/ aegis-stack --version
+
+            # Test project generation
+            uvx --index-url https://test.pypi.org/simple/ aegis-stack init test-project --no-interactive
+            cd test-project
+            make check
+            ```
+
+            **⚠️ This is a test release from TestPyPI - not for production use!**
+
+            If testing is successful, promote to production with:
+            ```bash
+            git tag v${{ steps.version.outputs.VERSION }}
+            git push --tags
+            ```
+          prerelease: true
+          files: dist/*
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build
+    if: "!contains(github.ref, '-rc')"
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # REQUIRED for Trusted Publishing
+      contents: write  # For creating GitHub releases
+    environment:
+      name: release
+      url: https://pypi.org/project/aegis-stack/
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          print-hash: true
+          attestations: true  # Generate Sigstore attestations
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          # Extract changelog section for this version (if CHANGELOG.md exists)
+          if [ -f CHANGELOG.md ]; then
+            # Try to extract the section for this version
+            VERSION="${{ steps.version.outputs.VERSION }}"
+            CHANGELOG=$(awk "/## \[${VERSION}\]|## ${VERSION}/,/## \[|## [0-9]/" CHANGELOG.md | sed '1d;$d' || echo "See CHANGELOG.md for details")
+            echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+            echo "$CHANGELOG" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "CHANGELOG=See commit history for details" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ steps.version.outputs.VERSION }}"
+          body: |
+            ## 🚀 Released to PyPI
+
+            Install with:
+            ```bash
+            pip install --upgrade aegis-stack
+            ```
+
+            Or use directly with `uvx`:
+            ```bash
+            uvx aegis-stack init my-project
+            ```
+
+            ## 📦 Package Information
+            - **PyPI**: https://pypi.org/project/aegis-stack/${{ steps.version.outputs.VERSION }}/
+            - **Documentation**: https://lbedner.github.io/aegis-stack/
+
+            ## 📝 Changes
+
+            ${{ steps.changelog.outputs.CHANGELOG }}
+          files: dist/*
+          prerelease: false
