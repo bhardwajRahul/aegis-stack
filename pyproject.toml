@@ -1,13 +1,11 @@
 [project]
 name = "aegis-stack"
-version = "0.2.0"
+version = "0.2.0rc1"
 description = "A production-ready Python foundation for builders who refuse to wait. Try: uvx aegis-stack init my-project"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
-authors = [
-    {name = "Leonard Bedner", email = "gamecoder99@gmail.com"}
-]
+license = { text = "MIT" }
+authors = [{ name = "Leonard Bedner", email = "gamecoder99@gmail.com" }]
 keywords = [
     "cli",
     "scaffold",
@@ -85,20 +83,8 @@ build-backend = "hatchling.build"
 packages = ["aegis"]
 
 [tool.hatch.build.targets.sdist]
-include = [
-    "/aegis",
-    "/tests",
-    "/README.md",
-    "/CHANGELOG.md",
-    "/pyproject.toml",
-]
-exclude = [
-    "/.github",
-    "/stacks",
-    "/test-*",
-    "*.pyc",
-    "__pycache__",
-]
+include = ["/aegis", "/tests", "/README.md", "/CHANGELOG.md", "/pyproject.toml"]
+exclude = ["/.github", "/stacks", "/test-*", "*.pyc", "__pycache__"]
 
 [tool.ruff]
 line-length = 88
@@ -117,14 +103,14 @@ select = [
     "SIM", # flake8-simplify
 ]
 ignore = [
-    "E501",  # line too long (handled by formatter)
-    "B008",  # do not perform function calls in argument defaults
-    "B011",  # do not call assert False
-    "B904",  # raise without from in exception handler
+    "E501", # line too long (handled by formatter)
+    "B008", # do not perform function calls in argument defaults
+    "B011", # do not call assert False
+    "B904", # raise without from in exception handler
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["B018", "B017"]  # Allow assert statements in tests
+"tests/**/*.py" = ["B018", "B017"] # Allow assert statements in tests
 
 [tool.ruff.format]
 quote-style = "double"
@@ -137,11 +123,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = [
-    "-v",
-    "--tb=short",
-    "--strict-markers",
-]
+addopts = ["-v", "--tb=short", "--strict-markers"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
@@ -151,9 +133,4 @@ asyncio_default_fixture_loop_scope = "function"
 
 [tool.ty.src]
 # Exclude template files and generated test projects from type checking
-exclude = [
-    "aegis/templates/**",
-    "test-project/**",
-    "my-app/**",
-    "test-*/**",
-]
+exclude = ["aegis/templates/**", "test-project/**", "my-app/**", "test-*/**"]
