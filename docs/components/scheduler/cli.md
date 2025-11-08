@@ -1,9 +1,11 @@
 # Scheduler CLI Interface
 
+**Part of the Generated Project CLI** - See [CLI Reference](../../cli-reference.md#component-clis) for complete overview.
+
 !!! warning "Persistence Required"
     The scheduler CLI is only available when using database persistence for job storage.
     Memory-based scheduling (default) does not support CLI operations.
-    
+
     Enable persistence with: `aegis init my-app --components scheduler,database`
 
 The scheduler provides a `tasks` CLI for managing scheduled jobs when persistence is enabled.
@@ -221,9 +223,9 @@ export DATABASE_URL=sqlite:///data/app.db
 docker exec my-app-container my-app tasks list
 ```
 
-## Next Steps
+## See Also
 
+- **[CLI Reference](../../cli-reference.md)** - Complete CLI overview and all commands
 - **[Scheduler Component](../scheduler.md)** - Main scheduler documentation
 - **[Examples](examples.md)** - Real-world scheduling patterns
 - **[Database Persistence](extras/persistence.md)** - Job persistence setup
-- **[Component Overview](../index.md)** - How components work together

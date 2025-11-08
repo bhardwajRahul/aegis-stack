@@ -1,5 +1,7 @@
 # AI CLI Commands
 
+**Part of the Generated Project CLI** - See [CLI Reference](../../cli-reference.md#service-clis) for complete overview.
+
 Command-line interface for the AI service.
 
 ## Command Overview
@@ -187,8 +189,10 @@ Available commands:
 
 ---
 
-**Next Steps:**
+## See Also
 
-- **[Examples](examples.md)** - Real-world usage examples
+- **[CLI Reference](../../cli-reference.md)** - Complete CLI overview and all commands
+- **[AI Service Documentation](index.md)** - Main AI service documentation
+- **[Providers Guide](providers.md)** - Provider setup and configuration
 - **[API Reference](api.md)** - REST API documentation
 - **[Service Layer](integration.md)** - Using AI service in code

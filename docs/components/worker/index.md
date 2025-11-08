@@ -1,6 +1,6 @@
 # Worker Component
 
-!!! example "Musings: Why Worker is Experimental"
+!!! example "Musings: Why Worker is Experimental (August 2025)"
     I haven't used arq in production long enough to say I'm an expert, and it wouldn't feel right to claim otherwise - hence the experimental label. That said, I included it because:
 
     - The pedigree speaks volumes (Samuel Colvin built it)
@@ -31,25 +31,6 @@ Async background task processing using standard [arq](https://arq-docs.helpmanua
 - **System queue** - For maintenance and background operations (15 concurrent jobs, 300s timeout)
 - **Auto-reload** - Built-in development mode with file watching
 - **Optional extras** - Load testing queue and future media processing
-
-??? note "arq CLI Reference"
-    Aegis Stack uses **pure arq** - no custom wrappers or abstractions:
-
-    ```bash
-    # Standard arq CLI - all features work!
-    arq app.components.worker.queues.system.WorkerSettings
-
-    # With auto-reload for development
-    arq app.components.worker.queues.system.WorkerSettings --watch app/
-
-    # Health check
-    arq app.components.worker.queues.system.WorkerSettings --check
-
-    # Process all jobs and exit (perfect for testing!)
-    arq app.components.worker.queues.system.WorkerSettings --burst
-    ```
-
-    Your existing arq knowledge transfers 100%. Google "arq [anything]" and it works!
 
 ## Quick Start
 
@@ -90,14 +71,82 @@ The Worker component provides comprehensive queue monitoring through the dashboa
 
 !!! info "Worker Dashboard Features"
     The Worker dashboard showcases queue monitoring:
-    
+
     - **Row-based queue display** - Compact table format showing multiple queues at once
     - **Intelligent status messages** - Context-aware status reporting:
         - "worker offline" - When Redis connection is lost
-        - "no tasks defined" - When queue exists but no functions are registered 
+        - "no tasks defined" - When queue exists but no functions are registered
         - "ready" - When worker is healthy and ready for tasks
     - **Real-time metrics** - Live updates of queue counts and job status
     - **Theme-aware design** - Optimized visibility in both light and dark modes
+
+## arq CLI Commands
+
+Aegis Stack uses **pure arq** - no custom wrappers or abstractions. Your existing arq knowledge transfers 100%!
+
+### Start Worker
+
+Start the worker to process background jobs:
+
+```bash
+arq my_project.components.worker.queues.system.WorkerSettings
+```
+
+**What it does:**
+- Connects to Redis
+- Registers all task functions
+- Begins processing jobs from queues
+- Runs until stopped with Ctrl+C
+
+**Example output:**
+```
+16:30:45: Starting worker for 1 functions: process_data_task, send_email_task
+16:30:45: redis_version=7.0.0 mem_usage=1.00M clients_connected=5
+16:30:45:  j_complete=0 j_failed=0 j_retried=0 j_ongoing=0 queued=0
+```
+
+### Auto-Reload Worker
+
+Start worker with auto-reload on code changes:
+
+```bash
+arq --watch my_project.components.worker.queues.system.WorkerSettings
+```
+
+**Best for:**
+- Local development
+- Testing task changes
+- Rapid iteration
+
+**Note:** Reloads on any `.py` file change in the project.
+
+### Check Queue Status
+
+View current queue status and job counts:
+
+```bash
+arq --check my_project.components.worker.queues.system.WorkerSettings
+```
+
+**Example output:**
+```
+j_complete=15 j_failed=0 j_retried=2 j_ongoing=1 queued=3
+```
+
+### Queue Management
+
+Each task is registered to a specific queue. Check your `WorkerSettings` class:
+
+```python
+# app/components/worker/queues/system.py
+class WorkerSettings:
+    functions = [
+        process_data_task,    # Default queue
+        send_email_task,      # Email queue
+    ]
+
+    queue_name = "default"  # Default queue name
+```
 
 ## Adding Your First Task
 
@@ -144,13 +193,49 @@ That's it! The worker will process it automatically.
 
 ## Development Workflow
 
+**Option 1: Standard Development (Recommended)**
+
 ```bash
-make serve           # Start everything
+# Start all services including worker
+make serve
+```
+
+Worker runs automatically as part of docker-compose stack.
+
+**Option 2: Development with Auto-Reload**
+
+```bash
+# Terminal 1: Start backend and Redis
+make serve
+
+# Terminal 2: Run worker with auto-reload (watches for code changes)
+arq --watch my_project.components.worker.queues.system.WorkerSettings
+```
+
+**Queue a task:**
+
+```python
+from app.components.worker.pools import get_queue_pool
+
+# Get queue pool
+pool, queue_name = await get_queue_pool("system")
+
+# Enqueue job
+job = await pool.enqueue_job("task_function_name", _queue_name=queue_name)
+
+# Close pool
+await pool.aclose()
+```
+
+**Monitor your workers:**
+
+```bash
 make logs-worker     # Watch workers live
 make health-detailed # See queue metrics
 ```
 
 ### Testing Your Tasks
+
 ```bash
 # Quick test via API
 curl -X POST http://localhost:8000/api/v1/tasks/enqueue \
@@ -160,6 +245,23 @@ curl -X POST http://localhost:8000/api/v1/tasks/enqueue \
 # Or use burst mode for one-off testing
 make worker-test
 ```
+
+## Configuration
+
+Worker behavior is configured in `app/core/config.py`:
+
+```python
+# Redis connection
+REDIS_HOST: str = "localhost"
+REDIS_PORT: int = 6379
+REDIS_DB: int = 0
+
+# Worker settings
+WORKER_MAX_JOBS: int = 10
+WORKER_MAX_TRIES: int = 5
+```
+
+See **[Configuration](configuration.md)** for complete details.
 
 ## API Reference
 

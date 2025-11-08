@@ -10,25 +10,15 @@ Components are the **infrastructure building blocks** of your Aegis Stack applic
 
 ## Evolving Your Stack
 
-**Your choices aren't permanent.** Start with what you need today, add components as requirements evolve, remove what you don't use anymore.
+**Your choices aren't permanent.** Components can be added or removed as your requirements change.
 
-### Start Lean, Grow As Needed
+Unlike most frameworks that lock you in at `init`, Aegis Stack lets you evolve:
 
-```bash
-# Monday: Ship MVP with just FastAPI + Flet
-aegis init my-api
+- **Add components**: `aegis add scheduler --project-path ./my-api`
+- **Remove components**: `aegis remove scheduler --project-path ./my-api`
+- **Update templates**: Stay current with upstream improvements
 
-# Week 3: Product needs scheduled reports
-aegis add scheduler --project-path ./my-api
-
-# Month 2: Scale demands async workers
-aegis add worker --project-path ./my-api
-
-# Month 6: Scheduler not needed anymore
-aegis remove scheduler --project-path ./my-api
-```
-
-Most frameworks lock you in at `init`. Aegis Stack doesn't. See the complete guide: **[Evolving Your Stack](../evolving-your-stack.md)**
+For complete workflows with real-world examples, see **[Evolving Your Stack →](../evolving-your-stack.md)**
 
 ## Component Architecture
 
@@ -106,6 +96,10 @@ graph TB
 
 !!! tip "Component Composition"
     Components can be combined to enable different capabilities. For detailed patterns on how components integrate with services and each other, see the **[Integration Patterns Reference](../integration-patterns.md)**.
+
+![Components forming your complete stack](../images/voltron.gif)
+
+**Individual components combine to form your complete application.** Database + Scheduler + Worker + Auth + AI = A unified, production-ready system.
 
 ---
 

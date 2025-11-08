@@ -1,14 +1,36 @@
-# Integration Patterns Reference
+# Integration Patterns
 
-Quick reference for how different parts of Aegis Stack integrate with each other.
+How different parts of Aegis Stack connect and communicate.
 
-## Service Layer Architecture
+!!! info "About This Guide"
+    This page explains the **architectural patterns** used throughout Aegis Stack. The business logic layer pattern described here applies to all services—whether built-in Aegis Services (auth, ai) that you add via `--services` or custom business services you write yourself.
 
-Aegis Stack uses a service layer to keep business logic separate from infrastructure components. Services are Python classes that orchestrate workflows and can be called from anywhere.
+    For information about **which Aegis Services are available**, see **[Services Overview](services/index.md)**.
 
-### Service Structure
+## Business Logic Layer
 
-Services are defined in `app/services/` and contain your business logic:
+Aegis Stack uses a **service layer** to keep business logic separate from infrastructure components. Services are Python classes that orchestrate workflows and can be called from anywhere.
+
+### What Goes Where
+
+**Services** (`app/services/`):
+
+- Database interactions, external API calls, file processing
+- Complex business logic and data transformations
+- Pure functions that can be unit tested
+- Single files (`report_service.py`) or folders (`system/health.py`) for complex domains
+
+**Components** (`app/components/`):
+
+- API endpoints, scheduled jobs, background tasks, UI handlers
+- Import services explicitly - no magic auto-discovery
+- Keep thin - handle requests, call services, return responses
+
+**Why explicit imports?** Makes dependencies clear, prevents surprises, easier testing.
+
+### Service Structure Example
+
+Services contain your business logic and can call other services:
 
 ```python
 # app/services/user_service.py
@@ -25,7 +47,7 @@ class UserService:
 
     async def create_user(self, user_data: UserCreate) -> User:
         """Create user and send welcome email."""
-        # Create user in database
+        # Step 1: Create user in database
         user = User(
             email=user_data.email,
             full_name=user_data.full_name,
@@ -35,17 +57,19 @@ class UserService:
         await self.db.commit()
         await self.db.refresh(user)
 
-        # Send welcome email
+        # Step 2: Send welcome email
         await self.email_service.send_welcome_email(user.id)
 
         return user
 ```
 
-This service can be used from any component.
+This service can be used from any component - API, CLI, Worker, or Scheduler.
 
-### Component Integration
+## Component → Service Patterns
 
-#### API → Service
+All components follow the same pattern: **import the service, call the method**. This keeps your business logic consistent whether triggered by HTTP request, CLI command, scheduled job, or background task.
+
+### API → Service
 
 Routes call service methods:
 
@@ -62,7 +86,7 @@ async def create_user_endpoint(data: UserCreate):
     return user
 ```
 
-#### CLI → Service
+### CLI → Service
 
 Commands call the same service methods:
 
@@ -81,9 +105,9 @@ async def create_user(email: str, name: str):
     print(f"Created user: {user.email}")
 ```
 
-#### Worker → Service
+### Worker → Service
 
-Background tasks call service methods:
+Background tasks call service methods through thin wrappers:
 
 ```python
 # app/components/worker/tasks/user_tasks.py
@@ -104,9 +128,9 @@ class WorkerSettings:
     functions = [create_user_task]
 ```
 
-#### Scheduler → Service
+### Scheduler → Service
 
-Scheduled jobs call service methods:
+Scheduled jobs call service methods directly:
 
 ```python
 # app/components/scheduler.py
@@ -122,62 +146,31 @@ async def cleanup_inactive_users():
 scheduler.add_job(cleanup_inactive_users, 'cron', hour=2)
 ```
 
-### Service Orchestration Pattern
+### Consistent Behavior
 
-Services orchestrate workflows by calling other services:
-
-```python
-# app/services/user_service.py
-class UserService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
-        self.email_service = EmailService()
-        self.analytics_service = AnalyticsService()
-
-    async def create_user(self, user_data: UserCreate) -> User:
-        """Create user with full workflow."""
-        # Step 1: Save user
-        user = await self._save_user(user_data)
-
-        # Step 2: Send welcome email
-        await self.email_service.send_welcome_email(user.id)
-
-        # Step 3: Track event
-        await self.analytics_service.track_event(
-            "user_created",
-            user_id=user.id
-        )
-
-        return user
-```
-
-The workflow stays consistent whether called from API, CLI, worker, or scheduler.
-
-### Worker Task Wrapper Pattern
-
-For background processing, create a thin wrapper around service methods:
+The workflow stays the same whether called from API, CLI, worker, or scheduler:
 
 ```python
-# app/components/worker/tasks/email_tasks.py
-from typing import Any
-from app.services.email_service import EmailService
+# One service class
+class AnalyticsService:
+    async def track_event(self, event: str, **data) -> None:
+        """Track analytics event."""
+        ...
 
-async def send_email_task(ctx: dict[str, Any], user_id: int, template: str) -> dict:
-    """Worker task wrapper for email service."""
-    email_service = EmailService()
-    result = await email_service.send_email(user_id, template)
-    return {"sent": True, "message_id": result.id}
-
-# Use from API:
-@router.post("/users/{user_id}/send-email")
-async def queue_email(user_id: int, template: str):
-    pool, _ = await get_queue_pool("system")
-    job = await pool.enqueue_job("send_email_task", user_id, template)
-    await pool.aclose()
-    return {"job_id": job.job_id}
+# Multiple entry points
+✅ API: Track endpoint calls
+✅ CLI: Track manual operations
+✅ Worker: Track background job completion
+✅ Scheduler: Track scheduled task execution
 ```
 
-### Scheduler + Worker Pattern
+One service class. Multiple entry points. Consistent behavior.
+
+## Cross-Component Patterns
+
+Sometimes components need to communicate with each other, not just call services.
+
+### Scheduler → Worker
 
 Scheduler can trigger worker tasks for heavy operations:
 
@@ -203,7 +196,7 @@ from app.services.cleanup_service import CleanupService
 from app.core.db import db_session
 
 async def cleanup_temp_files():
-    """Fast cleanup - run directly."""
+    """Fast cleanup - run directly in scheduler."""
     with db_session() as session:
         cleanup = CleanupService(session)
         await cleanup.remove_temp_files()
@@ -211,7 +204,101 @@ async def cleanup_temp_files():
 scheduler.add_job(cleanup_temp_files, 'interval', hours=1)
 ```
 
-### Testing Services
+**When to use Worker vs Direct:**
+- **Direct**: Lightweight tasks (< 1 second), no retry needed
+- **Worker**: Heavy tasks, need retry logic, want queue management
+
+### API → Worker
+
+Queue background tasks from API endpoints:
+
+```python
+# app/components/backend/api/reports.py
+from app.components.worker.pools import get_queue_pool
+
+@router.post("/reports/generate")
+async def queue_report(user_id: int):
+    """Queue report generation as background job."""
+    pool, _ = await get_queue_pool("system")
+    job = await pool.enqueue_job("generate_report", user_id)
+    await pool.aclose()
+    return {"job_id": job.job_id, "status": "queued"}
+```
+
+### Frontend ↔ Backend
+
+Flet frontend runs in the same process as FastAPI backend, so it can call services directly:
+
+```python
+# app/components/frontend/pages/dashboard.py
+from app.services.system import get_system_status
+
+async def update_dashboard():
+    """Update dashboard with system status."""
+    status = await get_system_status()
+    # Update Flet UI with status data
+```
+
+For generated projects, Frontend and Backend share the same container, making this direct access fast and simple.
+
+## Container Boundaries
+
+Each component runs in its own Docker container for independent scaling:
+
+- **Backend Container**: Runs FastAPI + Flet (Frontend)
+- **Scheduler Container**: Runs APScheduler for scheduled jobs
+- **Worker Container**: Runs arq for background task processing
+
+**What's Shared:**
+
+- Services (`app/services/`)
+- Core utilities (`app/core/`)
+- Configuration (`app/core/config`)
+- Database sessions
+
+**What's Isolated:**
+
+- Component-specific hooks and startup logic
+- Resource allocation (CPU, memory)
+- Scaling decisions (can scale workers independently)
+
+**Important**: Backend startup hooks don't affect scheduler, and vice versa. Each container manages its own lifecycle.
+
+## Data Validation Boundaries
+
+**Trust Zones**: Validate at entry points, trust internally.
+
+### Validate Hard at Entry Points
+
+API endpoints, CLI commands, and worker tasks validate incoming data:
+
+```python
+# Entry point - validate with Pydantic
+@router.get("/health", response_model=HealthResponse)
+async def health_check() -> HealthResponse:
+    # Internal code - trust the data
+    status = await get_system_status()
+    return HealthResponse(healthy=status.overall_healthy, ...)
+```
+
+### Trust Internally
+
+Once validated, internal code trusts the data:
+
+```python
+# CLI - validate API response
+health_data = HealthResponse.model_validate(response.json())
+
+# Then trust: direct attribute access
+print(f"System healthy: {health_data.healthy}")  # Not .get("healthy")
+```
+
+**Validation Layers:**
+1. **API Endpoints**: Pydantic `response_model` validates outgoing data
+2. **CLI Commands**: Pydantic models validate API responses
+3. **Internal Code**: Direct model attribute access (no `.get()` patterns)
+
+## Testing Services
 
 Services can be tested directly without running components:
 
@@ -230,147 +317,11 @@ async def test_create_user(db_session):
 
 No API server needed. No worker process needed. Just call the service.
 
-### Component Growth
-
-As you add components, services work everywhere:
-
-```python
-# app/services/analytics_service.py
-class AnalyticsService:
-    async def track_event(self, event: str, **data) -> None:
-        """Track analytics event."""
-        ...
-
-# Used across all components:
-✅ API: Track endpoint calls
-✅ CLI: Track manual operations
-✅ Worker: Track background job completion
-✅ Scheduler: Track scheduled task execution
-✅ Frontend: Track via API calls
-```
-
-One service class. Multiple entry points. Consistent behavior.
-
-## Backend Integration Patterns
-
-**🔄 Auto-Discovered**: Drop files, no registration required
-
-- **Middleware**: `app/components/backend/middleware/`
-- **Startup Hooks**: `app/components/backend/startup/`
-- **Shutdown Hooks**: `app/components/backend/shutdown/`
-
-**📝 Manual Registration**: Explicit imports for clarity
-
-- **API Routes**: Register in `app/components/backend/api/routing.py`
-- **Services**: Import explicitly where needed
-
-## Service Integration Patterns
-
-Put your business logic in `app/services/` and import it explicitly where needed.
-
-**Services** contain pure business logic functions. **Components** import and use them.
-
-```python
-# app/services/report_service.py
-async def generate_monthly_report(user_id: int) -> Report:
-    # Your business logic here
-    pass
-
-# app/components/backend/api/reports.py
-from app.services.report_service import generate_monthly_report
-
-@router.post("/reports")
-async def create_report(user_id: int):
-    return await generate_monthly_report(user_id)
-
-# app/components/scheduler/main.py
-from app.services.report_service import generate_monthly_report
-
-scheduler.add_job(generate_monthly_report, args=[123])
-```
-
-**What Goes Where:**
-
-**Services** (`app/services/`):
-
-- Database interactions, external API calls, file processing
-- Complex business logic and data transformations
-- Pure functions that can be unit tested
-- Single files (`report_service.py`) or folders (`system/health.py`) for complex domains
-
-**Components** (`app/components/`):
-
-- API endpoints, scheduled jobs, UI handlers
-- Import services explicitly - no magic auto-discovery
-- Keep thin - handle requests, call services, return responses
-
-**Why explicit?** Makes dependencies clear, prevents surprises, easier testing.
-
-## Component Communication
-
-**Backend ↔ Services**: Direct imports
-```python
-from app.services.system import get_system_status
-```
-
-**CLI ↔ Backend**: HTTP API calls
-```python
-from app.services.system.models import HealthResponse
-health_data = HealthResponse.model_validate(api_response.json())
-```
-
-**Frontend ↔ Backend**: Flet-FastAPI integration
-```python
-from app.services.system import get_system_status
-# Direct function calls within same process
-```
-
-## Data Validation Boundaries
-
-**Trust Zones**: Validate at entry points, trust internally
-
-1. **API Endpoints**: Pydantic `response_model` validates outgoing data
-2. **CLI Commands**: Pydantic models validate API responses
-3. **Internal Code**: Direct model attribute access (no `.get()` patterns)
-
-```python
-# Entry point - validate hard
-@router.get("/health", response_model=HealthResponse)
-async def health_check() -> HealthResponse:
-    # Internal code - trust the data
-    status = await get_system_status()
-    return HealthResponse(healthy=status.overall_healthy, ...)
-
-# CLI - validate API response
-health_data = HealthResponse.model_validate(response.json())
-# Then trust: health_data.healthy (not health_data.get("healthy"))
-```
-
-## Scheduler Integration
-
-**Job Registration**: Explicit in scheduler component
-
-```python
-# app/components/scheduler/main.py
-from app.services.reports import generate_daily_report
-
-scheduler.add_job(
-    generate_daily_report,
-    trigger="cron",
-    hour=9, minute=0
-)
-```
-
-**Service Functions**: Pure business logic
-```python
-# app/services/reports.py
-async def generate_daily_report() -> None:
-    # Pure business logic, no scheduler dependencies
-```
+This is why the service layer is powerful - it's testable in isolation.
 
 ## Configuration Access
 
-**Global Settings**: Available everywhere
+**Global Settings**: Available everywhere via explicit import.
 
 ```python
 from app.core.config import settings
@@ -382,23 +333,22 @@ api_timeout = settings.API_TIMEOUT
 
 **Constants vs Config**:
 
-- **Constants** (`app.core.constants`): Immutable values (API paths, timeouts)
-- **Config** (`app.core.config`): Environment-dependent values (URLs, secrets)
-
-## Container Boundaries
-
-Each component manages its own concerns:
-
-- **Backend Container**: Runs FastAPI + Flet, manages backend hooks
-- **Scheduler Container**: Runs APScheduler, manages scheduled jobs
-- **Shared**: Services, core utilities, configuration
-
-**No Cross-Container Hooks**: Backend hooks don't affect scheduler, and vice versa.
+- **Constants** (`app.core.constants`): Immutable values (API paths, default timeouts)
+- **Config** (`app.core.config`): Environment-dependent values (URLs, secrets, feature flags)
 
 ## Key Principles
 
-1. **Auto-discovery for infrastructure** (hooks) → convenience
-2. **Explicit imports for business logic** (services, routes) → clarity
-3. **Validate at boundaries** → security and reliability
-4. **Trust internally** → clean, readable code
-5. **Container isolation** → independent scaling
+1. **Services are the integration point** - business logic lives here, components call it
+2. **Explicit imports for clarity** - no magic auto-discovery for services or routes
+3. **Validate at boundaries** - security and reliability at entry points
+4. **Trust internally** - clean, readable code once validated
+5. **Container isolation** - independent scaling and lifecycle management
+6. **One pattern, many entry points** - same service logic works everywhere
+
+---
+
+## Next Steps
+
+- **[Services Overview](services/index.md)** - Explore built-in Aegis Services (auth, ai) you can add to your project
+- **[Components Overview](components/index.md)** - Infrastructure layer components
+- **[Evolving Your Stack](evolving-your-stack.md)** - How to grow your architecture over time

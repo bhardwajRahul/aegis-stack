@@ -36,6 +36,9 @@ graph TB
     style Cache fill:#f0f0f0,stroke:#757575,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
+!!! tip "Architectural Guidance"
+    This page covers **which services are available** and how to add them to your project. For detailed patterns on **how services integrate with components** and how to structure your code, see **[Integration Patterns](../integration-patterns.md)**.
+
 ## Service Selection
 
 Services are chosen during project creation and automatically include their required components:
@@ -240,6 +243,7 @@ Services automatically appear in the health dashboard alongside components, prov
 
 **Next Steps:**
 
+- **[Integration Patterns](../integration-patterns.md)** - How services integrate with components and architectural patterns
 - **[Services Dashboard](dashboard.md)** - Services dashboard integration and monitoring
 - **[Authentication Service](auth/index.md)** - Complete JWT auth implementation
 - **[AI Service](ai/index.md)** - Multi-provider AI chat with PydanticAI

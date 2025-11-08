@@ -136,12 +136,19 @@ my-app ai chat send "Same question" --no-stream
 
 API streaming uses Server-Sent Events:
 
-```javascript
-const eventSource = new EventSource('/ai/chat/stream?message=Hello');
-eventSource.addEventListener('chunk', (e) => {
-  const data = JSON.parse(e.data);
-  console.log(data.content); // Stream chunks
-});
+```python
+import httpx
+
+async with httpx.AsyncClient() as client:
+    async with client.stream(
+        "GET",
+        "http://localhost:8000/ai/chat/stream",
+        params={"message": "Hello"},
+    ) as response:
+        async for line in response.aiter_lines():
+            if line.startswith("data: "):
+                data = json.loads(line[6:])
+                print(data["content"])  # Stream chunks
 ```
 
 ### Health Monitoring
