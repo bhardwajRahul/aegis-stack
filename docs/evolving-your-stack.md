@@ -408,7 +408,6 @@ aegis update
 
 - **[CLI Reference](cli-reference.md)** - Complete `aegis add` and `aegis remove` documentation
 - **[Component Overview](components/index.md)** - Deep dive into available components
-- **[Philosophy](philosophy.md)** - Why Aegis Stack works this way
 
 ---
 

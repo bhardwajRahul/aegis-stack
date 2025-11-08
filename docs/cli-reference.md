@@ -306,6 +306,7 @@ aegis add-service auth --yes
 **Service Auto-Resolution:**
 
 Services automatically add their required components:
+
 - `auth` → Requires `database` component (auto-added if missing)
 - `ai` → Requires `backend` component (always present)
 
@@ -325,6 +326,7 @@ my-project ai chat                 # Test CLI chat interface
 ```
 
 **Important Notes:**
+
 - Only works with Copier-generated projects (default since v0.2.0)
 - Requires git repository (for change tracking)
 - Services require their dependencies - they will be auto-added
@@ -483,7 +485,7 @@ Conflict files are backed up to:
 ```bash
 # Error: "Not a Copier project"
 # Solution: This project was created with Cookiecutter
-# See docs/upgrading.md for migration options
+# aegis update only works with Copier-generated projects (v0.2.0+)
 
 # Error: "Uncommitted changes"
 # Solution: Commit your changes first
@@ -501,8 +503,6 @@ aegis update --dry-run    # Preview what changed
 
 **See Also:**
 
-- [Upgrading Guide](upgrading.md) - Comprehensive upgrade documentation
-- [Versioning](versioning.md) - Understanding version compatibility
 - `aegis add` - Add new components to existing projects
 - `aegis remove` - Remove components from projects
 
@@ -517,7 +517,7 @@ cd my-project
 uv sync                    # Install dependencies and create virtual environment
 source .venv/bin/activate  # Activate virtual environment (important!)
 cp .env.example .env       # Configure environment
-make serve               # Start development server
+make serve                 # Start development server
 make test                  # Run test suite
 make check                 # Run all quality checks
 ```
