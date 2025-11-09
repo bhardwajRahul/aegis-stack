@@ -291,15 +291,27 @@ def copy_service_files(
         print(f"⚠️  No {service_name} files copied (may already exist or be templates)")
 
 
-def install_dependencies(project_path: Path) -> bool:
+def install_dependencies(project_path: Path, python_version: str | None = None) -> bool:
     """
     Install project dependencies using uv.
 
     Args:
         project_path: Path to the project directory
+        python_version: Python version for project (currently unused in implementation
+                        but required for test mocking and future extensibility)
 
     Returns:
         True if installation succeeded, False otherwise
+
+    Note:
+        We don't pass --python to uv sync because:
+        1. The project's pyproject.toml requires-python field controls the version
+        2. Passing --python causes uv to download Python, making tests very slow
+        3. uv automatically respects requires-python in pyproject.toml
+
+        The python_version parameter is kept for:
+        - Test mocking (tests mock this function signature)
+        - Future extensibility if we need version-specific behavior
     """
     try:
         print("📦 Installing dependencies with uv...")
@@ -493,7 +505,9 @@ def format_code(project_path: Path) -> bool:
         return False
 
 
-def run_post_generation_tasks(project_path: Path, include_auth: bool = False) -> bool:
+def run_post_generation_tasks(
+    project_path: Path, include_auth: bool = False, python_version: str | None = None
+) -> bool:
     """
     Run all post-generation tasks for a project.
 
@@ -503,6 +517,7 @@ def run_post_generation_tasks(project_path: Path, include_auth: bool = False) ->
     Args:
         project_path: Path to the generated/updated project
         include_auth: Whether auth service is enabled (triggers migrations)
+        python_version: Python version to use (e.g., "3.13")
 
     Returns:
         True if all critical tasks succeeded, False otherwise
@@ -514,7 +529,7 @@ def run_post_generation_tasks(project_path: Path, include_auth: bool = False) ->
     print("\n🚀 Setting up your project environment...")
 
     # Task 1: Install dependencies (critical)
-    deps_success = install_dependencies(project_path)
+    deps_success = install_dependencies(project_path, python_version)
 
     # Task 2: Setup .env file (non-critical)
     setup_env_file(project_path)

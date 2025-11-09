@@ -3,7 +3,7 @@ name = "aegis-stack"
 version = "0.2.0"
 description = "A production-ready Python foundation for builders who refuse to wait. Try: uvx aegis-stack init my-project"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
 license = { text = "MIT" }
 authors = [{ name = "Leonard Bedner", email = "gamecoder99@gmail.com" }]
 keywords = [

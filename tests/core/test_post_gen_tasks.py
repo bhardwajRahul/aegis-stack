@@ -279,7 +279,7 @@ class TestRunPostGenerationTasks:
         """Test that tasks run in the correct order."""
         call_order = []
 
-        def track_deps(path: Path) -> bool:
+        def track_deps(path: Path, python_version: str | None = None) -> bool:
             call_order.append("deps")
             return True
 
