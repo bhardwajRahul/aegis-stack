@@ -182,7 +182,6 @@ def test_stack_cli_functionality(
     cli_test_result = run_project_command(
         ["uv", "run", combination.project_name, "--help"],
         project_path,
-        timeout=30,
         step_name="CLI Script Test",
         env_overrides={"VIRTUAL_ENV": ""},
     )
@@ -224,7 +223,6 @@ def test_stack_health_commands(
     health_result = run_project_command(
         ["uv", "run", combination.project_name, "health", "status", "--help"],
         project_path,
-        timeout=30,
         step_name="Health Command Test",
         env_overrides={"VIRTUAL_ENV": ""},
     )
@@ -256,7 +254,6 @@ def test_full_stack_validation_pipeline(get_generated_stack: Any) -> None:
     cli_test_result = run_project_command(
         ["uv", "run", combination.project_name, "--help"],
         project_path,
-        timeout=30,
         step_name="CLI Script Test",
         env_overrides={"VIRTUAL_ENV": ""},
     )
@@ -265,7 +262,6 @@ def test_full_stack_validation_pipeline(get_generated_stack: Any) -> None:
     health_result = run_project_command(
         ["uv", "run", combination.project_name, "health", "status", "--help"],
         project_path,
-        timeout=30,
         step_name="Health Command Test",
         env_overrides={"VIRTUAL_ENV": ""},
     )

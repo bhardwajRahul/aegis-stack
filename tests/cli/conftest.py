@@ -2,15 +2,24 @@
 Pytest configuration for CLI integration tests.
 """
 
+import hashlib
+import shutil
 import tempfile
-from collections.abc import Generator
+from collections.abc import Callable, Generator, Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from aegis.core.copier_manager import generate_with_copier
+from aegis.core.template_generator import TemplateGenerator
+
 from .test_stack_generation import STACK_COMBINATIONS, StackCombination
 from .test_utils import CLITestResult, run_aegis_init
+
+# Type alias for project_factory fixture
+ProjectFactory = Callable[..., Path]
 
 
 @pytest.fixture(scope="session")
@@ -31,6 +40,101 @@ def session_temp_dir() -> Generator[Path, None, None]:
     """Create a session-scoped temporary directory for shared stack generation."""
     with tempfile.TemporaryDirectory(prefix="aegis-test-session-") as temp_dir:
         yield Path(temp_dir)
+
+
+@dataclass(frozen=True)
+class ProjectTemplateSpec:
+    """Normalized spec used for caching generated projects."""
+
+    components: tuple[str, ...] = ()
+    scheduler_backend: str = "memory"
+    services: tuple[str, ...] = ()
+
+
+NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
+    "base": ProjectTemplateSpec(),
+    "base_with_database": ProjectTemplateSpec(components=("database",)),
+    "base_with_scheduler": ProjectTemplateSpec(components=("scheduler",)),
+    "base_with_scheduler_sqlite": ProjectTemplateSpec(
+        components=("database", "scheduler"), scheduler_backend="sqlite"
+    ),
+    "base_with_worker": ProjectTemplateSpec(components=("worker",)),
+    "base_with_redis": ProjectTemplateSpec(components=("redis",)),
+    "scheduler_and_database": ProjectTemplateSpec(components=("database", "scheduler")),
+    "base_with_auth_service": ProjectTemplateSpec(services=("auth",)),
+}
+
+
+@pytest.fixture(scope="session")
+def project_template_cache(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Callable[[ProjectTemplateSpec], Path]:
+    """
+    Generate reusable project skeletons once per test session.
+
+    Returns:
+        Callable that returns the cached project path for a given spec.
+    """
+    cache_root = tmp_path_factory.mktemp("aegis-project-cache")
+    cache: dict[ProjectTemplateSpec, Path] = {}
+
+    def build_project(spec: ProjectTemplateSpec) -> Path:
+        spec_hash = hashlib.sha1(repr(spec).encode("utf-8")).hexdigest()[:10]
+        project_name = f"cached-{spec_hash}"
+        template_gen = TemplateGenerator(
+            project_name=project_name,
+            selected_components=list(spec.components),
+            scheduler_backend=spec.scheduler_backend,
+            selected_services=list(spec.services),
+        )
+        return generate_with_copier(template_gen, cache_root)
+
+    def get_project(spec: ProjectTemplateSpec) -> Path:
+        if spec not in cache:
+            cache[spec] = build_project(spec)
+        return cache[spec]
+
+    return get_project
+
+
+@pytest.fixture
+def project_factory(
+    project_template_cache: Callable[[ProjectTemplateSpec], Path],
+    temp_output_dir: Path,
+) -> Callable[..., Path]:
+    """
+    Provide a helper that copies cached skeletons into the per-test temp directory.
+
+    Supports either named specs (e.g., "base") or explicit component lists.
+    """
+
+    def _factory(
+        name: str | None = None,
+        *,
+        components: Iterable[str] | None = None,
+        scheduler_backend: str = "memory",
+        services: Iterable[str] | None = None,
+    ) -> Path:
+        if name is not None:
+            if name not in NAMED_PROJECT_SPECS:
+                raise KeyError(
+                    f"Project template '{name}' is not cached. "
+                    f"Available templates: {list(NAMED_PROJECT_SPECS.keys())}"
+                )
+            spec = NAMED_PROJECT_SPECS[name]
+        else:
+            spec = ProjectTemplateSpec(
+                components=tuple(components or ()),
+                scheduler_backend=scheduler_backend,
+                services=tuple(services or ()),
+            )
+
+        source = project_template_cache(spec)
+        destination = temp_output_dir / source.name
+        shutil.copytree(source, destination)
+        return destination
+
+    return _factory
 
 
 @pytest.fixture(scope="session")
@@ -62,7 +166,6 @@ def generated_stacks(
             combination.project_name,
             combination.components,
             session_temp_dir,
-            timeout=60,
             engine=engine,
         )
 
@@ -113,7 +216,6 @@ def generated_db_project(session_temp_dir: Path) -> CLITestResult:
         "test-database-runtime",
         ["database"],
         session_temp_dir,
-        timeout=60,
     )
 
     if not result.success:
@@ -127,7 +229,6 @@ def generated_db_project(session_temp_dir: Path) -> CLITestResult:
     install_result = run_project_command(
         ["uv", "sync", "--extra", "dev"],
         result.project_path,
-        timeout=120,
         step_name="Install Dependencies",
         env_overrides={"VIRTUAL_ENV": ""},  # Ensure clean environment
     )
