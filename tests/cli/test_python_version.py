@@ -34,7 +34,10 @@ class TestPythonVersionValidation:
                 "--help",  # Don't actually create project
             )
             # Help should work with valid versions
-            assert result.success or "Initialize a new Aegis Stack project" in result.stdout
+            assert (
+                result.success
+                or "Initialize a new Aegis Stack project" in result.stdout
+            )
 
     def test_invalid_python_version(self) -> None:
         """Test that invalid Python versions are rejected."""
@@ -42,7 +45,10 @@ class TestPythonVersionValidation:
             "init", "test-project", "--python-version", "3.10", "--no-interactive"
         )
         assert not result.success
-        assert "Invalid Python version" in result.stderr or "Invalid Python version" in result.stdout
+        assert (
+            "Invalid Python version" in result.stderr
+            or "Invalid Python version" in result.stdout
+        )
 
     def test_invalid_python_version_format(self) -> None:
         """Test that malformed Python versions are rejected."""
@@ -50,7 +56,10 @@ class TestPythonVersionValidation:
             "init", "test-project", "--python-version", "invalid", "--no-interactive"
         )
         assert not result.success
-        assert "Invalid Python version" in result.stderr or "Invalid Python version" in result.stdout
+        assert (
+            "Invalid Python version" in result.stderr
+            or "Invalid Python version" in result.stdout
+        )
 
 
 @pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
@@ -88,6 +97,9 @@ class TestPythonVersionGeneration:
             project_path, "pyproject.toml", 'requires-python = ">=3.13"'
         )
 
+        # Check Dockerfile has correct Python version
+        assert_file_contains(project_path, "Dockerfile", "FROM python:3.13-slim")
+
     @pytest.mark.slow
     def test_python_version_3_11(
         self,
@@ -118,6 +130,9 @@ class TestPythonVersionGeneration:
         assert_file_contains(
             project_path, "pyproject.toml", 'requires-python = ">=3.11"'
         )
+
+        # Check Dockerfile has correct Python version
+        assert_file_contains(project_path, "Dockerfile", "FROM python:3.11-slim")
 
     @pytest.mark.slow
     def test_python_version_3_12(
@@ -150,6 +165,9 @@ class TestPythonVersionGeneration:
             project_path, "pyproject.toml", 'requires-python = ">=3.12"'
         )
 
+        # Check Dockerfile has correct Python version
+        assert_file_contains(project_path, "Dockerfile", "FROM python:3.12-slim")
+
     @pytest.mark.slow
     def test_python_version_3_13(
         self,
@@ -180,6 +198,9 @@ class TestPythonVersionGeneration:
         assert_file_contains(
             project_path, "pyproject.toml", 'requires-python = ">=3.13"'
         )
+
+        # Check Dockerfile has correct Python version
+        assert_file_contains(project_path, "Dockerfile", "FROM python:3.13-slim")
 
     @pytest.mark.slow
     def test_python_version_with_components(

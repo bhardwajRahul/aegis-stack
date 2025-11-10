@@ -79,6 +79,9 @@ ipython_config.py
 
 # pyenv
 .python-version
+# But include template .python-version files
+!aegis/templates/**/.python-version
+!aegis/templates/**/.python-version.jinja
 
 # celery beat schedule file
 celerybeat-schedule
