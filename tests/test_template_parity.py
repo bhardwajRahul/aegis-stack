@@ -230,7 +230,7 @@ def generate_with_copier(
         "author_email": "your.email@example.com",
         "github_username": "your-username",
         "version": "0.1.0",
-        "python_version": "3.11",
+        "python_version": cookiecutter_context.get("python_version", "3.13"),
         "include_scheduler": cookiecutter_context["include_scheduler"] == "yes",
         "scheduler_backend": cookiecutter_context["scheduler_backend"],
         "scheduler_with_persistence": cookiecutter_context["scheduler_with_persistence"]

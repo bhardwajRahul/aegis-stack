@@ -8,42 +8,88 @@ a single source of truth.
 from pathlib import Path
 
 
-def get_default_python_version() -> str:
+def _parse_python_version_bounds() -> tuple[str, str]:
     """
-    Get default Python version from aegis-stack's pyproject.toml.
+    Parse Python version bounds from aegis-stack's pyproject.toml.
 
-    Parses requires-python (e.g., ">=3.11,<3.14") and returns the minimum
-    supported version (e.g., "3.11") for broader compatibility.
+    Extracts requires-python (e.g., ">=3.11,<3.14") and returns:
+    - Lower bound (minimum supported): "3.11"
+    - Upper bound (maximum supported): "3.13" (derived from <3.14)
 
     Returns:
-        Minimum supported Python version as string (e.g., "3.11")
+        Tuple of (min_version, max_version) as strings
 
     Note:
-        Falls back to "3.11" if parsing fails to ensure graceful degradation.
+        Falls back to ("3.11", "3.13") if parsing fails.
     """
     try:
-        # aegis-stack's pyproject.toml (not the template)
         pyproject_path = Path(__file__).parent.parent.parent / "pyproject.toml"
-
         if pyproject_path.exists():
             content = pyproject_path.read_text()
-
             for line in content.splitlines():
                 if "requires-python" in line and ">=" in line:
                     # Parse: requires-python = ">=3.11,<3.14"
-                    # Extract lower bound: >=3.11 → 3.11
-                    lower_bound = line.split(">=")[1].split(",")[0].strip().strip('"')
-                    return lower_bound
+                    # Extract the version spec
+                    spec = line.split("=", 1)[1].strip().strip('"')
+
+                    # Lower bound: >=3.11 → 3.11
+                    lower = spec.split(">=")[1].split(",")[0].strip()
+
+                    # Upper bound: <3.14 → 3.13 (max supported version)
+                    if "<" in spec:
+                        upper_spec = spec.split("<")[1].strip()
+                        major, minor = upper_spec.split(".")
+                        # <3.14 means max supported is 3.13
+                        upper = f"{major}.{int(minor) - 1}"
+                    else:
+                        upper = lower  # Fallback if no upper bound
+
+                    return (lower, upper)
     except (FileNotFoundError, OSError, ValueError, IndexError):
-        # Graceful fallback if parsing fails
         pass
 
-    # Fallback default
-    return "3.11"
+    # Fallback defaults
+    return ("3.11", "3.13")
 
 
-# Single source of truth for default Python version
-DEFAULT_PYTHON_VERSION = get_default_python_version()
+def _generate_supported_versions(min_version: str, max_version: str) -> list[str]:
+    """
+    Generate list of supported Python versions from min to max.
 
-# Supported Python versions (validated in CLI)
-SUPPORTED_PYTHON_VERSIONS = ["3.11", "3.12", "3.13"]
+    Args:
+        min_version: Minimum version (e.g., "3.11")
+        max_version: Maximum version (e.g., "3.13")
+
+    Returns:
+        List of version strings (e.g., ["3.11", "3.12", "3.13"])
+
+    Note:
+        Only works for same major version. Falls back to hardcoded list
+        if major versions differ (e.g., 3.x → 4.x transition).
+    """
+    try:
+        min_parts = min_version.split(".")
+        max_parts = max_version.split(".")
+
+        # Only works if same major version
+        if min_parts[0] != max_parts[0]:
+            return ["3.11", "3.12", "3.13"]  # Fallback
+
+        major = min_parts[0]
+        min_minor = int(min_parts[1])
+        max_minor = int(max_parts[1])
+
+        return [f"{major}.{i}" for i in range(min_minor, max_minor + 1)]
+    except (ValueError, IndexError):
+        return ["3.11", "3.12", "3.13"]  # Fallback
+
+
+# Parse bounds from pyproject.toml (single source of truth)
+_min_version, _max_version = _parse_python_version_bounds()
+
+# Default Python version for generated projects (maximum supported)
+# Users can still specify --python-version 3.11 or 3.12 if desired
+DEFAULT_PYTHON_VERSION = _max_version
+
+# Supported Python versions (auto-generated from min to max)
+SUPPORTED_PYTHON_VERSIONS = _generate_supported_versions(_min_version, _max_version)
