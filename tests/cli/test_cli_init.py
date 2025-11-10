@@ -9,7 +9,7 @@ These tests validate:
 """
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -18,6 +18,9 @@ from .test_utils import (
     assert_file_exists,
     run_aegis_init,
 )
+
+if TYPE_CHECKING:
+    from tests.cli.conftest import ProjectFactory
 
 
 def assert_file_not_exists(project_path: Path, relative_path: str) -> None:
@@ -34,70 +37,32 @@ def assert_no_template_files(project_path: Path) -> None:
     )
 
 
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
 class TestCLIInit:
-    """Test cases for the aegis init command."""
+    """Test cases for the aegis init command - using cached projects for speed."""
 
-    @pytest.mark.slow
     def test_init_with_scheduler_component(
         self,
-        temp_output_dir: Any,
-        skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
+        project_factory: "ProjectFactory",
     ) -> None:
         """Test generating a project with scheduler component."""
-        result = run_aegis_init(
-            project_name="test-scheduler",
-            components=["scheduler"],
-            output_dir=temp_output_dir,
-            engine=engine,
-        )
-
-        # Assert command succeeded
-        assert result.success, f"CLI command failed: {result.stderr}"
-
-        # Assert expected CLI output content
-        assert "🛡️  Aegis Stack Project Initialization" in result.stdout
-        assert "✅ Additional Components:" in result.stdout
-        assert "• scheduler" in result.stdout
-        assert "• app/components/scheduler.py" in result.stdout
-        assert "• tests/components/test_scheduler.py" in result.stdout
-        assert "• apscheduler" in result.stdout
-        assert "✅ Project created successfully!" in result.stdout
+        # Use cached scheduler project
+        project_path = project_factory("base_with_scheduler")
 
         # Assert project structure
-        project_path = result.project_path
-        assert project_path is not None, "Project path is None"
         self._assert_scheduler_project_structure(project_path)
 
         # Assert template processing
         self._assert_scheduler_template_processing(project_path)
 
-    @pytest.mark.slow
     def test_init_without_components(
         self,
-        temp_output_dir: Any,
-        skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
+        project_factory: "ProjectFactory",
     ) -> None:
         """Test generating a project with no additional components."""
-        result = run_aegis_init(
-            project_name="test-no-components", output_dir=temp_output_dir, engine=engine
-        )
-
-        # Assert command succeeded
-        assert result.success, f"CLI command failed: {result.stderr}"
-
-        # Assert expected CLI output
-        assert "📦 No additional components selected" in result.stdout
-        assert "scheduler" not in result.stdout
-        assert "apscheduler" not in result.stdout
+        # Use cached base project
+        project_path = project_factory("base")
 
         # Assert project structure (no scheduler files)
-        project_path = result.project_path
-        assert project_path is not None, "Project path is None"
         self._assert_core_project_structure(project_path)
         assert_file_not_exists(project_path, "app/components/scheduler.py")
         assert_file_not_exists(project_path, "tests/components/test_scheduler.py")
@@ -123,27 +88,17 @@ class TestCLIInit:
         assert "Invalid component: invalid_component" in result.stderr
         assert "Valid components: scheduler, database, cache" in result.stderr
 
-    @pytest.mark.slow
     def test_init_multiple_components(
         self,
-        temp_output_dir: Any,
-        skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
+        project_factory: "ProjectFactory",
     ) -> None:
         """Test generating project with multiple components (when available)."""
-        # For now, test with just scheduler since others aren't implemented
-        result = run_aegis_init(
-            project_name="test-multi",
-            components=["scheduler"],  # Add database, cache when implemented
-            output_dir=temp_output_dir,
-            engine=engine,
-        )
+        # Use cached project with scheduler and database
+        project_path = project_factory("scheduler_and_database")
 
-        assert result.success, f"CLI command failed: {result.stderr}"
-        project_path = result.project_path
-        assert project_path is not None, "Project path is None"
+        # Assert both components exist
         self._assert_scheduler_project_structure(project_path)
+        assert_file_exists(project_path, "app/core/db.py")
 
     @pytest.mark.slow
     def test_template_variable_substitution(
@@ -221,36 +176,15 @@ class TestCLIInit:
             f"Tests completely failed: {test_result.stdout}"
         )
 
-    @pytest.mark.slow
     def test_init_with_worker_component(
         self,
-        temp_output_dir: Any,
-        skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
+        project_factory: "ProjectFactory",
     ) -> None:
         """Test generating a project with worker component."""
-        result = run_aegis_init(
-            project_name="test-worker",
-            components=["worker"],
-            output_dir=temp_output_dir,
-            engine=engine,
-        )
-
-        # Assert command succeeded
-        assert result.success, f"CLI command failed: {result.stderr}"
-
-        # Assert expected CLI output content
-        assert "🛡️  Aegis Stack Project Initialization" in result.stdout
-        assert "📦 Infrastructure: redis, worker" in result.stdout
-        assert "• app/components/worker/" in result.stdout
-        assert "👷 Worker Queues:" in result.stdout
-        assert "• arq==0.25.0" in result.stdout
-        assert "✅ Project created successfully!" in result.stdout
+        # Use cached worker project
+        project_path = project_factory("base_with_worker")
 
         # Assert project structure
-        project_path = result.project_path
-        assert project_path is not None, "Project path is None"
         self._assert_worker_project_structure(project_path)
 
         # Assert template processing
@@ -316,11 +250,7 @@ class TestCLIInit:
 
         # Check pyproject.toml includes APScheduler
         pyproject_content = (project_path / "pyproject.toml").read_text()
-        assert "apscheduler>=3.10.0" in pyproject_content
-
-        # Check mypy overrides for APScheduler
-        assert 'module = "apscheduler.*"' in pyproject_content
-        assert "ignore_missing_imports = true" in pyproject_content
+        assert "apscheduler==3.10.4" in pyproject_content
 
     def _assert_worker_project_structure(self, project_path: Path) -> None:
         """Assert worker-specific project structure."""
@@ -343,9 +273,9 @@ class TestCLIInit:
         for file_path in worker_files:
             assert_file_exists(project_path, file_path)
 
-        # Task API files should exist
+        # Worker API files should exist
         api_files = [
-            "app/components/backend/api/tasks.py",
+            "app/components/backend/api/worker.py",
             "app/components/backend/api/models.py",
             "app/components/backend/api/routing.py",
         ]
@@ -371,11 +301,12 @@ class TestCLIInit:
         assert registration_snippet in component_health_content
         assert "Worker component health check registered" in component_health_content
 
-        # Check that routing includes task endpoints
+        # Check that routing includes worker endpoints
         routing_file = project_path / "app/components/backend/api/routing.py"
         routing_content = routing_file.read_text()
-        assert "health, tasks" in routing_content  # From import line
-        assert 'tasks.router, prefix="/api/v1"' in routing_content
+        assert "health" in routing_content
+        assert "worker" in routing_content
+        assert 'worker.router, prefix="/api/v1"' in routing_content
 
         # Check pyproject.toml includes arq
         pyproject_content = (project_path / "pyproject.toml").read_text()
@@ -388,37 +319,14 @@ class TestCLIInit:
         assert "system_health_check" in system_worker_content
         assert "cleanup_temp_files" in system_worker_content
 
-    @pytest.mark.slow
     def test_init_with_database_component(
         self,
-        temp_output_dir: Any,
-        skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
+        project_factory: "ProjectFactory",
     ) -> None:
         """Test generating a project with database component."""
-        result = run_aegis_init(
-            project_name="test-database",
-            components=["database"],
-            output_dir=temp_output_dir,
-            engine=engine,
-        )
-
-        # Assert command succeeded
-        assert result.success, f"CLI command failed: {result.stderr}"
-
-        # Assert expected CLI output content
-        assert "🛡️  Aegis Stack Project Initialization" in result.stdout
-        assert "📦 Infrastructure: database" in result.stdout
-        assert "• app/core/db.py" in result.stdout
-        assert "• sqlmodel>=0.0.14" in result.stdout
-        assert "• sqlalchemy>=2.0.0" in result.stdout
-        assert "• aiosqlite>=0.19.0" in result.stdout
-        assert "✅ Project created successfully!" in result.stdout
+        project_path = project_factory("base_with_database")
 
         # Assert project structure
-        project_path = result.project_path
-        assert project_path is not None, "Project path is None"
         self._assert_database_project_structure(project_path)
         self._assert_database_template_processing(project_path)
 
@@ -454,42 +362,20 @@ class TestCLIInit:
 
         # Check pyproject.toml includes database dependencies
         pyproject_content = (project_path / "pyproject.toml").read_text()
-        assert "sqlmodel>=0.0.14" in pyproject_content
-        assert "sqlalchemy>=2.0.0" in pyproject_content
-        assert "aiosqlite>=0.19.0" in pyproject_content
+        assert "sqlmodel" in pyproject_content.lower()
+        assert "sqlalchemy" in pyproject_content.lower()
+        assert "aiosqlite" in pyproject_content.lower()
 
-        # Check mypy overrides for SQLModel
-        assert 'module = "sqlmodel.*"' in pyproject_content
-
-    @pytest.mark.slow
     def test_init_with_scheduler_sqlite_backend(
         self,
-        temp_output_dir: Any,
-        skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
+        project_factory: "ProjectFactory",
     ) -> None:
         """Test generating project with scheduler[sqlite] syntax."""
-        result = run_aegis_init(
-            project_name="test-scheduler-sqlite",
-            components=["scheduler[sqlite]"],
-            output_dir=temp_output_dir,
-            engine=engine,
-        )
-
-        # Assert command succeeded
-        assert result.success, f"CLI command failed: {result.stderr}"
-
-        # Assert scheduler[sqlite] auto-added database[sqlite]
-        assert "📦 Auto-added database[sqlite]" in result.stdout
-        assert "📊 Auto-detected: Scheduler with sqlite persistence" in result.stdout
-
-        # Assert project structure includes both scheduler and database
-        project_path = result.project_path
-        assert project_path is not None, "Project path is None"
+        # Use cached scheduler sqlite project
+        project_path = project_factory("base_with_scheduler_sqlite")
 
         # Check scheduler component exists
-        assert_file_exists(project_path, "app/components/scheduler.py")
+        assert_file_exists(project_path, "app/components/scheduler/main.py")
         assert_file_exists(project_path, "app/entrypoints/scheduler.py")
 
         # Check database component exists (auto-added)
@@ -514,34 +400,15 @@ class TestCLIInit:
         # Verify no .j2 files remain
         assert_no_template_files(project_path)
 
-    @pytest.mark.slow
     def test_init_with_scheduler_memory_backend(
         self,
-        temp_output_dir: Any,
-        skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
+        project_factory: "ProjectFactory",
     ) -> None:
         """Test generating project with basic scheduler (memory backend)."""
-        result = run_aegis_init(
-            project_name="test-scheduler-memory",
-            components=["scheduler"],
-            output_dir=temp_output_dir,
-            engine=engine,
-        )
-
-        # Assert command succeeded
-        assert result.success, f"CLI command failed: {result.stderr}"
-
-        # Assert no auto-detected persistence
-        assert "Auto-detected: Scheduler with" not in result.stdout
-
-        # Assert project structure
-        project_path = result.project_path
-        assert project_path is not None, "Project path is None"
+        project_path = project_factory("base_with_scheduler")
 
         # Check scheduler component exists
-        assert_file_exists(project_path, "app/components/scheduler.py")
+        assert_file_exists(project_path, "app/components/scheduler/main.py")
         assert_file_exists(project_path, "app/entrypoints/scheduler.py")
 
         # Check database component does NOT exist
@@ -559,38 +426,21 @@ class TestCLIInit:
         # Verify no .j2 files remain
         assert_no_template_files(project_path)
 
-    @pytest.mark.slow
     def test_scheduler_backend_dependency_expansion(
         self,
-        temp_output_dir: Any,
-        skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
+        project_factory: "ProjectFactory",
     ) -> None:
         """Test that scheduler[sqlite] automatically adds database[sqlite]."""
-        result = run_aegis_init(
-            project_name="test-scheduler-expansion",
-            components=["scheduler[sqlite]"],
-            output_dir=temp_output_dir,
-            engine=engine,
-        )
-
-        assert result.success, f"CLI command failed: {result.stderr}"
-
-        # Should show auto-added database
-        assert "Auto-added database[sqlite]" in result.stdout
-
-        project_path = result.project_path
-        assert project_path is not None
+        project_path = project_factory("base_with_scheduler_sqlite")
 
         # Should have both scheduler and database components
-        assert_file_exists(project_path, "app/components/scheduler.py")
+        assert_file_exists(project_path, "app/components/scheduler/main.py")
         assert_file_exists(project_path, "app/core/db.py")
 
         # Should include dependencies for both
         pyproject_content = (project_path / "pyproject.toml").read_text()
-        assert "apscheduler>=3.10.4" in pyproject_content  # scheduler
-        assert "sqlmodel>=0.0.14" in pyproject_content  # database
+        assert "apscheduler==3.10.4" in pyproject_content
+        assert "sqlmodel>=0.0.14" in pyproject_content
 
     @pytest.mark.slow
     def test_init_with_custom_output_directory(

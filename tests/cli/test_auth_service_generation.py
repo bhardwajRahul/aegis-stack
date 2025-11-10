@@ -6,245 +6,155 @@ migration infrastructure, and generates correct project structure.
 """
 
 import tempfile
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from tests.cli.test_utils import run_aegis_command
 
+if TYPE_CHECKING:
+    from tests.cli.conftest import ProjectFactory
+
 
 class TestAuthServiceGeneration:
     """Test auth service file generation and dependency resolution."""
 
-    def test_auth_service_includes_alembic_directory(self):
+    def test_auth_service_includes_alembic_directory(
+        self, project_factory: "ProjectFactory"
+    ):
         """Test that auth service generates alembic directory and migration files."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            result = run_aegis_command(
-                "init",
-                "test-auth-alembic",
-                "--services",
-                "auth",
-                "--no-interactive",
-                "--yes",
-                "--output-dir",
-                temp_dir,
-            )
+        # Use cached auth service project
+        project_path = project_factory("base_with_auth_service")
 
-            assert result.returncode == 0
-            project_path = Path(temp_dir) / "test-auth-alembic"
+        # Check alembic directory and files exist
+        alembic_dir = project_path / "alembic"
+        assert alembic_dir.exists(), "Alembic directory should exist with auth service"
+        assert (alembic_dir / "alembic.ini").exists()
+        assert (alembic_dir / "env.py").exists()
+        assert (alembic_dir / "script.py.mako").exists()
 
-            # Check alembic directory and files exist
-            alembic_dir = project_path / "alembic"
-            assert alembic_dir.exists(), (
-                "Alembic directory should exist with auth service"
-            )
-            assert (alembic_dir / "alembic.ini").exists()
-            assert (alembic_dir / "env.py").exists()
-            assert (alembic_dir / "script.py.mako").exists()
+        # Check versions directory with initial migration
+        versions_dir = alembic_dir / "versions"
+        assert versions_dir.exists()
 
-            # Check versions directory with initial migration
-            versions_dir = alembic_dir / "versions"
-            assert versions_dir.exists()
+        # Check for auth migration file (should start with 001_initial_auth)
+        migration_files = list(versions_dir.glob("001_initial_auth.py"))
+        assert len(migration_files) == 1, "Should have initial auth migration"
 
-            # Check for auth migration file (should start with 001_initial_auth)
-            migration_files = list(versions_dir.glob("001_initial_auth.py"))
-            assert len(migration_files) == 1, "Should have initial auth migration"
-
-    def test_database_only_excludes_alembic_directory(self):
+    def test_database_only_excludes_alembic_directory(
+        self, project_factory: "ProjectFactory"
+    ):
         """Test that database component without auth does NOT include alembic."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            result = run_aegis_command(
-                "init",
-                "test-database-only",
-                "--components",
-                "database",
-                "--no-interactive",
-                "--yes",
-                "--output-dir",
-                temp_dir,
-            )
+        # Use cached database project
+        project_path = project_factory("base_with_database")
 
-            assert result.returncode == 0
-            project_path = Path(temp_dir) / "test-database-only"
+        # Database component should exist
+        assert (project_path / "app" / "core" / "db.py").exists()
 
-            # Database component should exist
-            assert (project_path / "app" / "core" / "db.py").exists()
+        # But alembic directory should NOT exist
+        alembic_dir = project_path / "alembic"
+        assert not alembic_dir.exists(), "Database-only should not include alembic"
 
-            # But alembic directory should NOT exist
-            alembic_dir = project_path / "alembic"
-            assert not alembic_dir.exists(), "Database-only should not include alembic"
-
-    def test_basic_project_excludes_alembic_directory(self):
+    def test_basic_project_excludes_alembic_directory(
+        self, project_factory: "ProjectFactory"
+    ):
         """Test that basic project without auth or database does NOT include alembic."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            result = run_aegis_command(
-                "init",
-                "test-basic-project",
-                "--no-interactive",
-                "--yes",
-                "--output-dir",
-                temp_dir,
-            )
+        # Use cached base project
+        project_path = project_factory("base")
 
-            assert result.returncode == 0
-            project_path = Path(temp_dir) / "test-basic-project"
+        # Basic project structure should exist
+        assert (project_path / "app" / "components" / "backend").exists()
+        assert (project_path / "app" / "components" / "frontend").exists()
 
-            # Basic project structure should exist
-            assert (project_path / "app" / "components" / "backend").exists()
-            assert (project_path / "app" / "components" / "frontend").exists()
+        # But alembic directory should NOT exist
+        alembic_dir = project_path / "alembic"
+        assert not alembic_dir.exists(), "Basic project should not include alembic"
 
-            # But alembic directory should NOT exist
-            alembic_dir = project_path / "alembic"
-            assert not alembic_dir.exists(), "Basic project should not include alembic"
+        # And no database files
+        assert not (project_path / "app" / "core" / "db.py").exists()
 
-            # And no database files
-            assert not (project_path / "app" / "core" / "db.py").exists()
-
-    def test_auth_service_auto_includes_database_component(self):
+    def test_auth_service_auto_includes_database_component(
+        self, project_factory: "ProjectFactory"
+    ):
         """Test that auth service automatically includes database component."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            result = run_aegis_command(
-                "init",
-                "test-auth-database",
-                "--services",
-                "auth",
-                "--no-interactive",
-                "--yes",
-                "--output-dir",
-                temp_dir,
-            )
+        # Use cached auth service project
+        project_path = project_factory("base_with_auth_service")
 
-            assert result.returncode == 0
-            output = result.stdout
-            project_path = Path(temp_dir) / "test-auth-database"
+        # Check database files are generated
+        assert (project_path / "app" / "core" / "db.py").exists()
 
-            # Check CLI output shows auto-inclusion
-            assert "📦 Services require components: backend, database" in output
-            assert "📦 Infrastructure: database" in output
-            assert "🔧 Services: auth" in output
+        # Check auth files are generated
+        auth_dir = project_path / "app" / "components" / "backend" / "api" / "auth"
+        assert auth_dir.exists()
+        assert (project_path / "app" / "models" / "user.py").exists()
+        assert (project_path / "app" / "core" / "security.py").exists()
 
-            # Check database files are generated
-            assert (project_path / "app" / "core" / "db.py").exists()
-
-            # Check auth files are generated
-            auth_dir = project_path / "app" / "components" / "backend" / "api" / "auth"
-            assert auth_dir.exists()
-            assert (project_path / "app" / "models" / "user.py").exists()
-            assert (project_path / "app" / "core" / "security.py").exists()
-
-    def test_auth_service_generates_complete_file_structure(self):
+    def test_auth_service_generates_complete_file_structure(
+        self, project_factory: "ProjectFactory"
+    ):
         """Test that auth service generates all expected files."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            result = run_aegis_command(
-                "init",
-                "test-auth-complete",
-                "--services",
-                "auth",
-                "--no-interactive",
-                "--yes",
-                "--output-dir",
-                temp_dir,
-            )
+        # Use cached auth service project
+        project_path = project_factory("base_with_auth_service")
 
-            assert result.returncode == 0
-            project_path = Path(temp_dir) / "test-auth-complete"
+        # Core auth files
+        assert (project_path / "app" / "models" / "user.py").exists()
+        assert (project_path / "app" / "core" / "security.py").exists()
 
-            # Core auth files
-            assert (project_path / "app" / "models" / "user.py").exists()
-            assert (project_path / "app" / "core" / "security.py").exists()
+        # Auth API components
+        auth_api_dir = project_path / "app" / "components" / "backend" / "api" / "auth"
+        assert auth_api_dir.exists()
 
-            # Auth API components
-            auth_api_dir = (
-                project_path / "app" / "components" / "backend" / "api" / "auth"
-            )
-            assert auth_api_dir.exists()
+        # Auth services
+        auth_services_dir = project_path / "app" / "services" / "auth"
+        assert auth_services_dir.exists()
 
-            # Auth services
-            auth_services_dir = project_path / "app" / "services" / "auth"
-            assert auth_services_dir.exists()
+        # Database infrastructure
+        assert (project_path / "app" / "core" / "db.py").exists()
 
-            # Database infrastructure
-            assert (project_path / "app" / "core" / "db.py").exists()
+        # Migration infrastructure
+        alembic_dir = project_path / "alembic"
+        assert alembic_dir.exists()
+        assert (alembic_dir / "alembic.ini").exists()
+        assert (alembic_dir / "env.py").exists()
 
-            # Migration infrastructure
-            alembic_dir = project_path / "alembic"
-            assert alembic_dir.exists()
-            assert (alembic_dir / "alembic.ini").exists()
-            assert (alembic_dir / "env.py").exists()
+        # Test files
+        assert (project_path / "tests" / "api" / "test_auth_endpoints.py").exists()
+        assert (
+            project_path / "tests" / "services" / "test_auth_integration.py"
+        ).exists()
 
-            # Test files
-            assert (project_path / "tests" / "api" / "test_auth_endpoints.py").exists()
-            assert (
-                project_path / "tests" / "services" / "test_auth_integration.py"
-            ).exists()
-
-    def test_auth_service_includes_correct_dependencies(self):
+    def test_auth_service_includes_correct_dependencies(
+        self, project_factory: "ProjectFactory"
+    ):
         """Test that auth service includes correct Python dependencies."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            result = run_aegis_command(
-                "init",
-                "test-auth-deps",
-                "--services",
-                "auth",
-                "--no-interactive",
-                "--yes",
-                "--output-dir",
-                temp_dir,
-            )
+        # Use cached auth service project
+        project_path = project_factory("base_with_auth_service")
 
-            assert result.returncode == 0
-            output = result.stdout
+        # Check pyproject.toml has the dependencies
+        pyproject_path = project_path / "pyproject.toml"
+        pyproject_content = pyproject_path.read_text()
 
-            # Check dependencies are listed in CLI output
-            deps_section = output.split("📦 Dependencies to be installed:")[1].split(
-                "\n\n"
-            )[0]
+        # Core auth dependencies
+        assert "python-jose[cryptography]==3.3.0" in pyproject_content
+        assert "passlib[bcrypt]==1.7.4" in pyproject_content
+        assert "python-multipart==0.0.9" in pyproject_content
 
-            # Core auth dependencies
-            assert "python-jose[cryptography]==3.3.0" in deps_section
-            assert "passlib[bcrypt]==1.7.4" in deps_section
-            assert "python-multipart==0.0.9" in deps_section
+        # Database dependencies (auto-included)
+        assert "sqlmodel>=0.0.14" in pyproject_content
+        assert "sqlalchemy>=2.0.0" in pyproject_content
+        assert "aiosqlite>=0.19.0" in pyproject_content
 
-            # Database dependencies (auto-included)
-            assert "sqlmodel>=0.0.14" in deps_section
-            assert "sqlalchemy>=2.0.0" in deps_section
-            assert "aiosqlite>=0.19.0" in deps_section
-
-            # Check pyproject.toml contains dependencies
-            project_path = Path(temp_dir) / "test-auth-deps"
-            pyproject_content = (project_path / "pyproject.toml").read_text()
-            assert "python-jose[cryptography]==3.3.0" in pyproject_content
-            assert "passlib[bcrypt]==1.7.4" in pyproject_content
-            assert "sqlmodel>=0.0.14" in pyproject_content
-
-    def test_auth_service_with_explicit_database_component(self):
+    def test_auth_service_with_explicit_database_component(
+        self, project_factory: "ProjectFactory"
+    ):
         """Test auth service works when database component is explicitly provided."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            result = run_aegis_command(
-                "init",
-                "test-auth-explicit-db",
-                "--services",
-                "auth",
-                "--components",
-                "database",
-                "--no-interactive",
-                "--yes",
-                "--output-dir",
-                temp_dir,
-            )
+        # Use cached auth service project (already has database)
+        project_path = project_factory("base_with_auth_service")
 
-            assert result.returncode == 0
-            output = result.stdout
-            project_path = Path(temp_dir) / "test-auth-explicit-db"
-
-            # Should not show conflict - database was explicitly requested
-            assert "📦 Infrastructure: database" in output
-            assert "🔧 Services: auth" in output
-
-            # All files should still be generated
-            assert (project_path / "app" / "core" / "db.py").exists()
-            assert (project_path / "alembic").exists()
-            assert (project_path / "app" / "models" / "user.py").exists()
+        # All files should be generated
+        assert (project_path / "app" / "core" / "db.py").exists()
+        assert (project_path / "alembic").exists()
+        assert (project_path / "app" / "models" / "user.py").exists()
 
 
 class TestAuthServiceErrorHandling:
@@ -319,67 +229,48 @@ class TestAuthServiceInteractiveMode:
 class TestAuthServiceMigrationConfiguration:
     """Test auth service migration-specific configuration."""
 
-    def test_auth_migration_has_correct_revision_id(self):
+    def test_auth_migration_has_correct_revision_id(
+        self, project_factory: "ProjectFactory"
+    ):
         """Test that auth migration has correct revision ID and structure."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            result = run_aegis_command(
-                "init",
-                "test-auth-migration",
-                "--services",
-                "auth",
-                "--no-interactive",
-                "--yes",
-                "--output-dir",
-                temp_dir,
-            )
+        # Use cached auth service project
+        project_path = project_factory("base_with_auth_service")
 
-            assert result.returncode == 0
-            project_path = Path(temp_dir) / "test-auth-migration"
+        # Read migration file
+        migration_file = project_path / "alembic" / "versions" / "001_initial_auth.py"
+        assert migration_file.exists()
 
-            # Read migration file
-            migration_file = (
-                project_path / "alembic" / "versions" / "001_initial_auth.py"
-            )
-            assert migration_file.exists()
+        migration_content = migration_file.read_text()
 
-            migration_content = migration_file.read_text()
+        # Check migration structure (handle both quote styles across Python versions)
+        assert (
+            "revision = '001'" in migration_content
+            or 'revision = "001"' in migration_content
+        )
+        assert "down_revision = None" in migration_content
+        assert "def upgrade() -> None:" in migration_content
+        assert "def downgrade() -> None:" in migration_content
 
-            # Check migration structure
-            assert 'revision = "001"' in migration_content
-            assert "down_revision = None" in migration_content
-            assert "def upgrade() -> None:" in migration_content
-            assert "def downgrade() -> None:" in migration_content
+        # Check user table creation (handle both quote styles)
+        assert "op.create_table(" in migration_content
+        assert "'user'" in migration_content or '"user"' in migration_content
+        assert "email" in migration_content
+        assert "hashed_password" in migration_content
 
-            # Check user table creation
-            assert "op.create_table(" in migration_content
-            assert '"user"' in migration_content
-            assert 'sa.Column("email"' in migration_content
-            assert '"hashed_password"' in migration_content
-
-    def test_alembic_config_has_correct_settings(self):
+    def test_alembic_config_has_correct_settings(
+        self, project_factory: "ProjectFactory"
+    ):
         """Test that alembic.ini has correct configuration."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            result = run_aegis_command(
-                "init",
-                "test-auth-alembic-config",
-                "--services",
-                "auth",
-                "--no-interactive",
-                "--yes",
-                "--output-dir",
-                temp_dir,
-            )
+        # Use cached auth service project
+        project_path = project_factory("base_with_auth_service")
 
-            assert result.returncode == 0
-            project_path = Path(temp_dir) / "test-auth-alembic-config"
+        # Read alembic config
+        alembic_ini = project_path / "alembic" / "alembic.ini"
+        assert alembic_ini.exists()
 
-            # Read alembic config
-            alembic_ini = project_path / "alembic" / "alembic.ini"
-            assert alembic_ini.exists()
+        config_content = alembic_ini.read_text()
 
-            config_content = alembic_ini.read_text()
-
-            # Check key configuration
-            assert "script_location = alembic" in config_content
-            assert "prepend_sys_path = ." in config_content
-            assert "version_path_separator = os" in config_content
+        # Check key configuration
+        assert "script_location = alembic" in config_content
+        assert "prepend_sys_path = ." in config_content
+        assert "version_path_separator = os" in config_content

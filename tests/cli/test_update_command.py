@@ -6,12 +6,15 @@ and the full update workflow.
 """
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
-from aegis.core.copier_manager import generate_with_copier, is_copier_project
-from aegis.core.template_generator import TemplateGenerator
+from aegis.core.copier_manager import is_copier_project
 
 from .test_utils import run_aegis_command, strip_ansi_codes
+
+if TYPE_CHECKING:
+    from tests.cli.conftest import ProjectFactory
 
 
 class TestUpdateCommandBasics:
@@ -55,11 +58,12 @@ class TestUpdateCommandBasics:
 class TestUpdateCommandGitValidation:
     """Tests for git tree validation."""
 
-    def test_update_requires_clean_git_tree(self, temp_output_dir: Path) -> None:
+    def test_update_requires_clean_git_tree(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
         """Test that update command requires clean git working tree."""
-        # Generate a base project with Copier
-        template_gen = TemplateGenerator("test-dirty-tree", [], "memory", [])
-        project_path = generate_with_copier(template_gen, temp_output_dir)
+        # Use cached base project
+        project_path = project_factory("base")
 
         # Verify it's a Copier project
         assert is_copier_project(project_path)
@@ -80,11 +84,12 @@ class TestUpdateCommandGitValidation:
             or "uncommitted" in result.stderr.lower()
         )
 
-    def test_update_succeeds_with_clean_git_tree(self, temp_output_dir: Path) -> None:
+    def test_update_succeeds_with_clean_git_tree(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
         """Test that update command works with clean git tree."""
-        # Generate a base project with Copier
-        template_gen = TemplateGenerator("test-clean-tree", [], "memory", [])
-        project_path = generate_with_copier(template_gen, temp_output_dir)
+        # Use cached base project
+        project_path = project_factory("base")
 
         # Verify it's a Copier project and has clean git tree
         assert is_copier_project(project_path)
@@ -101,12 +106,11 @@ class TestUpdateCommandGitValidation:
             assert "uncommitted" not in result.stderr.lower()
 
     def test_update_exits_early_when_at_target_commit(
-        self, temp_output_dir: Path
+        self, project_factory: "ProjectFactory"
     ) -> None:
         """Test that update exits early when project is already at target commit."""
-        # Generate a base project with Copier
-        template_gen = TemplateGenerator("test-early-exit", [], "memory", [])
-        project_path = generate_with_copier(template_gen, temp_output_dir)
+        # Use cached base project
+        project_path = project_factory("base")
 
         # Verify it's a Copier project
         assert is_copier_project(project_path)
@@ -129,11 +133,10 @@ class TestUpdateCommandGitValidation:
 class TestUpdateCommandDryRun:
     """Tests for dry-run mode."""
 
-    def test_dry_run_shows_preview(self, temp_output_dir: Path) -> None:
+    def test_dry_run_shows_preview(self, project_factory: "ProjectFactory") -> None:
         """Test that --dry-run shows preview without applying changes."""
-        # Generate a base project with Copier
-        template_gen = TemplateGenerator("test-dry-run", [], "memory", [])
-        project_path = generate_with_copier(template_gen, temp_output_dir)
+        # Use cached base project
+        project_path = project_factory("base")
 
         # Run update in dry-run mode
         result = run_aegis_command(
@@ -163,16 +166,15 @@ class TestUpdateCommandVersionResolution:
         self,
         mock_resolve: MagicMock,
         mock_get_latest: MagicMock,
-        temp_output_dir: Path,
+        project_factory: "ProjectFactory",
     ) -> None:
         """Test that update defaults to latest version."""
         # Setup mocks
         mock_get_latest.return_value = "0.2.0"
         mock_resolve.return_value = "v0.2.0"
 
-        # Generate a base project
-        template_gen = TemplateGenerator("test-latest", [], "memory", [])
-        project_path = generate_with_copier(template_gen, temp_output_dir)
+        # Use cached base project
+        project_path = project_factory("base")
 
         # Run update in dry-run mode (to avoid actual update)
         result = run_aegis_command(
@@ -184,15 +186,14 @@ class TestUpdateCommandVersionResolution:
 
     @patch("aegis.commands.update.resolve_version_to_ref")
     def test_update_to_specific_version(
-        self, mock_resolve: MagicMock, temp_output_dir: Path
+        self, mock_resolve: MagicMock, project_factory: "ProjectFactory"
     ) -> None:
         """Test updating to a specific version."""
         # Setup mock
         mock_resolve.return_value = "v0.1.5"
 
-        # Generate a base project
-        template_gen = TemplateGenerator("test-specific-version", [], "memory", [])
-        project_path = generate_with_copier(template_gen, temp_output_dir)
+        # Use cached base project
+        project_path = project_factory("base")
 
         # Run update to specific version in dry-run mode
         result = run_aegis_command(
@@ -217,7 +218,7 @@ class TestUpdateCommandChangelog:
         self,
         mock_get_commit: MagicMock,
         mock_get_changelog: MagicMock,
-        temp_output_dir: Path,
+        project_factory: "ProjectFactory",
     ) -> None:
         """Test that update command shows changelog."""
         # Setup mocks - use a different commit to prevent early exit
@@ -227,9 +228,8 @@ class TestUpdateCommandChangelog:
             "🐛 Bug Fixes:\n  • Fixed scheduler persistence"
         )
 
-        # Generate a base project
-        template_gen = TemplateGenerator("test-changelog", [], "memory", [])
-        project_path = generate_with_copier(template_gen, temp_output_dir)
+        # Use cached base project
+        project_path = project_factory("base")
 
         # Run update in dry-run mode
         result = run_aegis_command(
@@ -250,12 +250,11 @@ class TestUpdateCommandConfirmation:
     """Tests for user confirmation workflow."""
 
     def test_update_requires_confirmation_without_yes_flag(
-        self, temp_output_dir: Path
+        self, project_factory: "ProjectFactory"
     ) -> None:
         """Test that update requires confirmation without --yes flag."""
-        # Generate a base project
-        template_gen = TemplateGenerator("test-confirm", [], "memory", [])
-        project_path = generate_with_copier(template_gen, temp_output_dir)
+        # Use cached base project
+        project_path = project_factory("base")
 
         # Note: This test is tricky because it requires user input simulation
         # For now, we just verify the command structure accepts --yes
@@ -266,12 +265,11 @@ class TestUpdateCommandConfirmation:
         assert "--yes" in result.stdout or "-y" in result.stdout
 
     def test_update_skips_confirmation_with_yes_flag(
-        self, temp_output_dir: Path
+        self, project_factory: "ProjectFactory"
     ) -> None:
         """Test that --yes flag skips confirmation."""
-        # Generate a base project
-        template_gen = TemplateGenerator("test-yes-flag", [], "memory", [])
-        project_path = generate_with_copier(template_gen, temp_output_dir)
+        # Use cached base project
+        project_path = project_factory("base")
 
         # Dry-run with --yes should not prompt
         result = run_aegis_command(
@@ -286,11 +284,12 @@ class TestUpdateCommandConfirmation:
 class TestUpdateCommandErrorHandling:
     """Tests for error handling and edge cases."""
 
-    def test_update_with_invalid_version(self, temp_output_dir: Path) -> None:
+    def test_update_with_invalid_version(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
         """Test update with non-existent version."""
-        # Generate a base project
-        template_gen = TemplateGenerator("test-invalid-version", [], "memory", [])
-        project_path = generate_with_copier(template_gen, temp_output_dir)
+        # Use cached base project
+        project_path = project_factory("base")
 
         # Try to update to an invalid version
         result = run_aegis_command(
