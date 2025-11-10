@@ -304,14 +304,13 @@ def install_dependencies(project_path: Path, python_version: str | None = None) 
         True if installation succeeded, False otherwise
 
     Note:
-        We don't pass --python to uv sync because:
-        1. The project's pyproject.toml requires-python field controls the version
-        2. Passing --python causes uv to download Python, making tests very slow
-        3. uv automatically respects requires-python in pyproject.toml
+        We pass --python to uv sync when python_version is specified to ensure
+        uv uses the correct Python version and respects the requires-python
+        constraint in pyproject.toml. This prevents uv from selecting incompatible
+        Python versions (e.g., 3.14 when requires-python = ">=3.11,<3.14").
 
-        The python_version parameter is kept for:
-        - Test mocking (tests mock this function signature)
-        - Future extensibility if we need version-specific behavior
+        When python_version is None, uv sync runs without version constraint,
+        allowing uv to auto-detect a compatible Python version.
     """
     try:
         print("📦 Installing dependencies with uv...")
@@ -320,8 +319,13 @@ def install_dependencies(project_path: Path, python_version: str | None = None) 
         env = os.environ.copy()
         env.pop("VIRTUAL_ENV", None)
 
+        # Build command with optional --python flag to enforce version constraint
+        cmd = ["uv", "sync"]
+        if python_version:
+            cmd.extend(["--python", python_version])
+
         result = subprocess.run(
-            ["uv", "sync"],
+            cmd,
             cwd=project_path,
             capture_output=True,
             text=True,

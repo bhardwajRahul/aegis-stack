@@ -12,6 +12,7 @@ from typing import Any
 import yaml
 from copier import run_copy, run_update
 
+from ..config.defaults import DEFAULT_PYTHON_VERSION
 from .post_gen_tasks import cleanup_components, run_post_generation_tasks
 from .template_generator import TemplateGenerator
 
@@ -52,7 +53,9 @@ def generate_with_copier(template_gen: TemplateGenerator, output_dir: Path) -> P
         ),
         "github_username": cookiecutter_context.get("github_username", "your-username"),
         "version": cookiecutter_context.get("version", "0.1.0"),
-        "python_version": cookiecutter_context.get("python_version", "3.11"),
+        "python_version": cookiecutter_context.get(
+            "python_version", DEFAULT_PYTHON_VERSION
+        ),
         # Convert yes/no strings to booleans
         "include_scheduler": cookiecutter_context["include_scheduler"] == "yes",
         "scheduler_backend": cookiecutter_context["scheduler_backend"],
@@ -95,7 +98,10 @@ def generate_with_copier(template_gen: TemplateGenerator, output_dir: Path) -> P
     # Run post-generation tasks with explicit working directory control
     # This ensures consistent behavior with Cookiecutter
     include_auth = copier_data.get("include_auth", False)
-    run_post_generation_tasks(project_path, include_auth=include_auth)
+    python_version = copier_data.get("python_version")
+    run_post_generation_tasks(
+        project_path, include_auth=include_auth, python_version=python_version
+    )
 
     # Initialize git repository for Copier updates
     # Copier requires a git-tracked project to perform updates
