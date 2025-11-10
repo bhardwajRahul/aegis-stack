@@ -14,6 +14,7 @@ from ..cli.callbacks import (
 from ..cli.interactive import interactive_project_selection
 from ..cli.utils import detect_scheduler_backend
 from ..cli.validators import validate_project_name
+from ..config.defaults import DEFAULT_PYTHON_VERSION, SUPPORTED_PYTHON_VERSIONS
 from ..core.component_utils import (
     clean_component_names,
     extract_base_component_name,
@@ -47,6 +48,11 @@ def init_command(
         "-s",
         callback=validate_and_resolve_services,
         help="Comma-separated list of services (auth). Use 'aegis services' for full list.",
+    ),
+    python_version: str = typer.Option(
+        DEFAULT_PYTHON_VERSION,
+        "--python-version",
+        help="Python version for generated project (3.11, 3.12, or 3.13)",
     ),
     interactive: bool = typer.Option(
         True,
@@ -86,6 +92,14 @@ def init_command(
 
     # Validate project name first
     validate_project_name(project_name)
+
+    # Validate Python version
+    if python_version not in SUPPORTED_PYTHON_VERSIONS:
+        typer.echo(
+            f"❌ Invalid Python version '{python_version}'. Must be one of: {', '.join(SUPPORTED_PYTHON_VERSIONS)}",
+            err=True,
+        )
+        raise typer.Exit(1)
 
     # Validate engine parameter
     valid_engines = ["cookiecutter", "copier"]
@@ -255,7 +269,11 @@ def init_command(
 
     # Create template generator with scheduler backend context
     template_gen = TemplateGenerator(
-        project_name, list(selected_components), scheduler_backend, selected_services
+        project_name,
+        list(selected_components),
+        scheduler_backend,
+        selected_services,
+        python_version,
     )
 
     # Show selected configuration

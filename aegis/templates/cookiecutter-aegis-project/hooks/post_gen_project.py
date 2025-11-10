@@ -207,7 +207,10 @@ def main():
     # Complete project setup: dependencies, env file, migrations, formatting
     # Use shared post-generation tasks module (also used by Copier)
     include_auth = "{{ cookiecutter.include_auth }}" == "yes"
-    run_post_generation_tasks(Path(PROJECT_DIRECTORY), include_auth=include_auth)
+    python_version = "{{ cookiecutter.python_version }}"
+    run_post_generation_tasks(
+        Path(PROJECT_DIRECTORY), include_auth=include_auth, python_version=python_version
+    )
 
 
 if __name__ == "__main__":

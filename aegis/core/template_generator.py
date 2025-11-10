@@ -8,6 +8,7 @@ the template rendering process based on selected components.
 from pathlib import Path
 from typing import Any
 
+from ..config.defaults import DEFAULT_PYTHON_VERSION
 from .component_utils import extract_base_component_name, extract_engine_info
 from .components import COMPONENTS, CORE_COMPONENTS, SchedulerBackend
 from .services import SERVICES
@@ -22,6 +23,7 @@ class TemplateGenerator:
         selected_components: list[str],
         scheduler_backend: str = SchedulerBackend.MEMORY.value,
         selected_services: list[str] | None = None,
+        python_version: str = DEFAULT_PYTHON_VERSION,
     ):
         """
         Initialize template generator.
@@ -31,11 +33,13 @@ class TemplateGenerator:
             selected_components: List of component names to include
             scheduler_backend: Scheduler backend: memory, sqlite, or postgres
             selected_services: List of service names to include
+            python_version: Python version for generated project (default from pyproject.toml)
         """
         self.project_name = project_name
         self.project_slug = project_name.lower().replace(" ", "-").replace("_", "-")
         self.scheduler_backend = scheduler_backend
         self.selected_services = selected_services or []
+        self.python_version = python_version
 
         # Always include core components
         all_components = CORE_COMPONENTS + selected_components
@@ -89,6 +93,7 @@ class TemplateGenerator:
         return {
             "project_name": self.project_name,
             "project_slug": self.project_slug,
+            "python_version": self.python_version,
             # Component flags for template conditionals - cookiecutter needs yes/no
             "include_redis": "yes" if "redis" in self.components else "no",
             "include_worker": "yes" if "worker" in self.components else "no",

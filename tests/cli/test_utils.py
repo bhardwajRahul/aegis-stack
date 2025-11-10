@@ -303,6 +303,7 @@ def run_aegis_init(
     force: bool = True,
     yes: bool = True,
     engine: str = "copier",
+    python_version: str | None = None,
 ) -> CLITestResult:
     """
     Run the aegis init command and return results.
@@ -315,6 +316,7 @@ def run_aegis_init(
         force: Whether to force overwrite
         yes: Whether to skip confirmation
         engine: Template engine to use (cookiecutter or copier)
+        python_version: Python version for generated project (e.g., "3.13")
 
     Returns:
         CLITestResult with command results and project path
@@ -325,6 +327,8 @@ def run_aegis_init(
         args.extend(["--components", ",".join(components)])
     if output_dir:
         args.extend(["--output-dir", str(output_dir)])
+    if python_version:
+        args.extend(["--python-version", python_version])
     if not interactive:
         args.append("--no-interactive")
     if force:

@@ -58,7 +58,7 @@ version:
 python_version:
   type: str
   help: "Python version to use"
-  default: "3.11"
+  default: "3.13"
   choices:
     - "3.11"
     - "3.12"
