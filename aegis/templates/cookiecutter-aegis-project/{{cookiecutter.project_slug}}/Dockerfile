@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:{{ cookiecutter.python_version }}-slim
 
 # Install system dependencies and clean up
 RUN apt-get update -y && \
