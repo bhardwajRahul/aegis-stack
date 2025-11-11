@@ -18,6 +18,7 @@ from .commands.remove import remove_command
 from .commands.services import services_command
 from .commands.update import update_command
 from .commands.version import version_command
+from .core.verbosity import set_verbose
 
 # Create the main Typer application
 app = typer.Typer(
@@ -34,6 +35,20 @@ app = typer.Typer(
     ),
     add_completion=False,
 )
+
+
+@app.callback()
+def main(
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Enable verbose output (show detailed file operations)",
+    ),
+) -> None:
+    """Aegis Stack CLI - Global options and configuration."""
+    set_verbose(verbose)
+
 
 # Register commands
 app.command(name="version")(version_command)

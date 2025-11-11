@@ -9,7 +9,7 @@ The **Authentication Service** provides complete user management and JWT-based a
     aegis init my-app --services auth --components database
     cd my-app
     uv sync && source .venv/bin/activate
-    make server
+    make serve
     ```
 
     Authentication endpoints available at `/auth/*` with automatic database setup.
@@ -148,7 +148,7 @@ cd my-auth-app
 uv sync && source .venv/bin/activate
 
 # Run the application
-make server
+make serve
 ```
 
 ### 2. Test Authentication

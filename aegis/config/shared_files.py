@@ -57,6 +57,11 @@ SHARED_TEMPLATE_FILES: dict[str, SharedFilePolicy] = {
         "backup": True,
         "warn": False,
     },  # Contains conditional router includes for services (auth, AI, etc.)
+    "app/components/backend/api/models.py": {
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Contains worker and scheduler API models
     # ==========================================
     # Core Configuration Files
     # ==========================================

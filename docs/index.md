@@ -22,7 +22,7 @@ uvx aegis-stack init user-app --services auth
 uvx aegis-stack init task-processor --components scheduler,worker
 
 # Start building
-cd my-api && uv sync && cp .env.example .env && make server
+cd my-api && uv sync && cp .env.example .env && make serve
 ```
 
 ## Installation

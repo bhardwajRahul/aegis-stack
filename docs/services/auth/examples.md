@@ -15,7 +15,7 @@ cd my-auth-app
 uv sync && source .venv/bin/activate
 
 # Start the application (spins up all infrastructure)
-make server
+make serve
 
 # In a new terminal, create test users
 my-auth-app auth create-test-user --email "admin@test.com" --password "admin123"

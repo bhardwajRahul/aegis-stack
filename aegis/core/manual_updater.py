@@ -19,6 +19,7 @@ from aegis.config.shared_files import SHARED_TEMPLATE_FILES
 from .component_files import get_component_files, get_template_path
 from .components import SchedulerBackend
 from .copier_manager import is_copier_project, load_copier_answers
+from .verbosity import verbose_print
 
 # Constants
 COPIER_ANSWERS_FILE = ".copier-answers.yml"
@@ -148,7 +149,7 @@ class ManualUpdater:
             rendered_files: dict[Path, str] = {}
 
             if not component_files:
-                print(
+                verbose_print(
                     f"   ℹ️  Component '{component}' has no template files "
                     f"(configured via shared files only)"
                 )
@@ -180,13 +181,13 @@ class ManualUpdater:
                     if output_path.exists():
                         # For now, skip existing files
                         # TODO: Implement conflict resolution
-                        print(f"   ⚠️  Skipping existing file: {relative_path}")
+                        verbose_print(f"   ⚠️  Skipping existing file: {relative_path}")
                         files_skipped.append(relative_path)
                         continue
 
                     # Write file
                     output_path.write_text(content)
-                    print(f"   ✅ Created: {relative_path}")
+                    verbose_print(f"   ✅ Created: {relative_path}")
                     files_modified.append(relative_path)
 
             # Regenerate shared template files with updated component configuration
@@ -261,10 +262,10 @@ class ManualUpdater:
 
                     if full_path.is_dir():
                         shutil.rmtree(full_path)
-                        print(f"   🗑️  Removed directory: {relative_path}")
+                        verbose_print(f"   🗑️  Removed directory: {relative_path}")
                     else:
                         full_path.unlink()
-                        print(f"   🗑️  Removed file: {relative_path}")
+                        verbose_print(f"   🗑️  Removed file: {relative_path}")
 
                     files_deleted.append(relative_path)
                     deleted_paths.append(full_path)
@@ -276,7 +277,9 @@ class ManualUpdater:
                     if parent.exists() and not any(parent.iterdir()):
                         parent.rmdir()
                         relative_parent = str(parent.relative_to(self.project_path))
-                        print(f"   🗑️  Removed empty directory: {relative_parent}")
+                        verbose_print(
+                            f"   🗑️  Removed empty directory: {relative_parent}"
+                        )
                 except OSError:
                     # Directory not empty or other error, skip
                     pass
@@ -404,13 +407,13 @@ class ManualUpdater:
                 # Create backup before overwriting
                 backup_path = output_path.with_suffix(output_path.suffix + ".backup")
                 shutil.copy(output_path, backup_path)
-                print(f"   💾 Backed up: {shared_file}")
+                verbose_print(f"   💾 Backed up: {shared_file}")
                 shared_files_backed_up.append(shared_file)
 
             if policy.get("overwrite"):
                 # Regenerate with updated answers
                 output_path.write_text(content)
-                print(f"   ♻️  Updated: {shared_file}")
+                verbose_print(f"   ♻️  Updated: {shared_file}")
                 shared_files_updated.append(shared_file)
 
                 # Show environment variable changes for .env.example
@@ -421,14 +424,16 @@ class ManualUpdater:
                     }
 
                     if added_vars:
-                        print("   📝 New environment variables:")
+                        verbose_print("   📝 New environment variables:")
                         for var_name, var_value in sorted(added_vars.items()):
-                            print(f"      • {var_name}={var_value}")
+                            verbose_print(f"      • {var_name}={var_value}")
 
             elif policy.get("warn"):
-                # Warn user manual merge needed
-                print(f"   ⚠️  Manual merge required: {shared_file}")
-                shared_files_need_manual_merge.append(shared_file)
+                # Only warn if file actually has changes that need manual merge
+                existing_content = output_path.read_text()
+                if content != existing_content:
+                    print(f"   ⚠️  Manual merge required: {shared_file}")
+                    shared_files_need_manual_merge.append(shared_file)
 
         return (
             shared_files_updated,

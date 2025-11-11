@@ -65,8 +65,12 @@ def add_command(
 
         - aegis add scheduler --project-path ../my-project
 
+        - aegis --verbose add worker (show detailed file operations)
+
     Note: This command only works with projects generated using Copier
     (the default since v0.2.0).
+
+    Global options: Use --verbose/-v before the command for detailed output.
     """
 
     typer.echo("🛡️  Aegis Stack - Add Components")

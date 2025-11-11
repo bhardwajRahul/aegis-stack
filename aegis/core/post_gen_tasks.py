@@ -550,7 +550,7 @@ def run_post_generation_tasks(
         print("✅ Project ready to run!")
         print("\n📋 Next steps:")
         print(f"   cd {project_path.name}")
-        print("   make server")
+        print("   make serve")
         print("\n💡 Your application is fully configured and ready to use!")
     else:
         print("⚠️  Project created with some setup issues")
@@ -560,7 +560,7 @@ def run_post_generation_tasks(
         print("   cp .env.example .env")
         if include_auth:
             print("   alembic upgrade head")
-        print("   make server")
+        print("   make serve")
     print("=" * 60)
 
     return deps_success
