@@ -19,7 +19,7 @@ With Aegis Stack, you can confidently choose **B** - because adding components l
 ```bash
 # Friday 4 PM: Bootstrap it
 uvx aegis-stack init mvp-api
-cd mvp-api && uv sync && make server
+cd mvp-api && uv sync && make serve
 
 # Monday 9 AM: It's live 🎉
 ```

@@ -193,7 +193,7 @@ Then restart your application:
 make stop
 
 # Start with new provider
-make server
+make serve
 ```
 
 **Testing the switch:**

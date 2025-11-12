@@ -53,8 +53,11 @@ def remove_command(
         - aegis remove scheduler\\\\n
         - aegis remove worker,database\\\\n
         - aegis remove scheduler --project-path ../my-project\\\\n
+        - aegis --verbose remove worker (show detailed file operations)\\\\n
 
     Note: Core components (backend, frontend) cannot be removed.
+
+    Global options: Use --verbose/-v before the command for detailed output.
     """
 
     typer.echo("🛡️  Aegis Stack - Remove Components")
@@ -164,6 +167,22 @@ def remove_command(
     if not components_to_remove:
         typer.echo("✅ No components to remove!")
         raise typer.Exit(0)
+
+    # Auto-remove redis if worker is being removed (redis has no standalone functionality)
+    # Don't remove redis if cache component is using it
+    if (
+        "worker" in components_to_remove
+        and "redis" not in components_to_remove
+        and existing_answers.get("include_redis")
+        and not existing_answers.get(
+            "include_cache"
+        )  # Future: cache component may use redis
+    ):
+        components_to_remove.append("redis")
+        typer.echo(
+            "ℹ️  Auto-removing redis (no standalone functionality, only used by worker)",
+            err=False,
+        )
 
     # Check for scheduler with sqlite backend - warn about persistence
     if "scheduler" in components_to_remove:

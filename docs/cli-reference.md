@@ -517,7 +517,7 @@ cd my-project
 uv sync                    # Install dependencies and create virtual environment
 source .venv/bin/activate  # Activate virtual environment (important!)
 cp .env.example .env       # Configure environment
-make server               # Start development server
+make serve               # Start development server
 make test                  # Run test suite
 make check                 # Run all quality checks
 ```
