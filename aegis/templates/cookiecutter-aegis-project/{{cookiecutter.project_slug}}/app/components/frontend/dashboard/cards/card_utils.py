@@ -331,3 +331,182 @@ def create_progress_indicator(
         padding=ft.padding.symmetric(horizontal=12, vertical=8),
         expand=True,
     )
+
+
+def create_modal_for_component(
+    component_name: str, component_data: ComponentStatus
+) -> ft.AlertDialog | None:
+    """
+    Factory function to create appropriate modal dialog for a component.
+
+    Args:
+        component_name: Name of the component (e.g., "scheduler", "worker")
+        component_data: ComponentStatus containing component health and metrics
+
+    Returns:
+        AlertDialog instance for the component, or None if component not supported
+    """
+    from ..modals import SchedulerDetailDialog
+
+    modal_map: dict[str, type[ft.AlertDialog]] = {
+        "scheduler": SchedulerDetailDialog,
+        # More modals will be added as they are implemented
+    }
+
+    modal_class = modal_map.get(component_name)
+    if modal_class:
+        return modal_class(component_data)
+
+    return None
+
+
+def create_card_click_handler(
+    component_name: str, component_data: ComponentStatus
+) -> Callable[[ft.ControlEvent], None]:
+    """
+    Create a click handler for a card that opens its detail modal.
+
+    Args:
+        component_name: Name of the component
+        component_data: ComponentStatus containing component information
+
+    Returns:
+        Click event handler function
+    """
+
+    def handle_click(e: ft.ControlEvent) -> None:
+        """Handle card click by opening detail modal."""
+        modal = create_modal_for_component(component_name, component_data)
+        if modal and e.page:
+            e.page.open(modal)
+
+    return handle_click
+
+
+def create_clickable_hover_handler(
+    card_container: ft.Container,
+) -> Callable[[ft.ControlEvent], None]:
+    """
+    Create a hover event handler for clickable cards.
+
+    Args:
+        card_container: The card container to apply hover effects to
+
+    Returns:
+        Hover event handler function
+    """
+
+    def handle_hover(e: ft.ControlEvent) -> None:
+        """Handle hover by adding subtle scale and border effects."""
+        if e.data == "true":  # Mouse enter
+            card_container.scale = 1.02
+            card_container.elevation = 4
+        else:  # Mouse leave
+            card_container.scale = 1.0
+            card_container.elevation = 0
+        card_container.update()
+
+    return handle_hover
+
+
+def format_next_run_time(iso_time_str: str) -> str:
+    """
+    Format ISO datetime string to human readable relative time.
+
+    Generic utility that can be used by any component card/modal to display
+    upcoming execution times in a user-friendly format.
+
+    Args:
+        iso_time_str: ISO 8601 formatted datetime string (with or without timezone)
+
+    Returns:
+        Human-readable relative time string ("in 2h", "in 3d", "Past due", etc.)
+        Returns "Unknown" if parsing fails or input is empty
+    """
+    from datetime import UTC, datetime
+
+    from app.core.log import logger
+
+    if not iso_time_str:
+        return "Unknown"
+
+    try:
+        # Handle both timezone-aware and naive datetimes
+        if iso_time_str.endswith("Z"):
+            next_run = datetime.fromisoformat(iso_time_str.replace("Z", "+00:00"))
+        elif "+" in iso_time_str or iso_time_str.endswith("00:00"):
+            next_run = datetime.fromisoformat(iso_time_str)
+        else:
+            # Assume UTC if no timezone info
+            next_run = datetime.fromisoformat(iso_time_str).replace(tzinfo=UTC)
+
+        now = datetime.now(UTC)
+
+        # Make sure both datetimes are timezone-aware
+        if next_run.tzinfo is None:
+            next_run = next_run.replace(tzinfo=UTC)
+
+        delta = next_run - now
+        total_seconds = delta.total_seconds()
+
+        if total_seconds < 0:
+            return "Past due"
+        elif total_seconds < 60:
+            return f"in {int(total_seconds)}s"
+        elif total_seconds < 3600:
+            minutes = int(total_seconds / 60)
+            return f"in {minutes}m"
+        elif total_seconds < 86400:
+            hours = total_seconds / 3600
+            if hours < 2:
+                return f"in {hours:.1f}h"
+            else:
+                return f"in {int(hours)}h"
+        else:
+            days = int(total_seconds / 86400)
+            return f"in {days}d"
+    except Exception as e:
+        logger.debug(f"Failed to format next run time '{iso_time_str}': {e}")
+        return "Unknown"
+
+
+def format_schedule_human_readable(schedule: str) -> str:
+    """
+    Convert schedule format to human readable description.
+
+    Generic utility that can be used by any component card/modal to display
+    scheduling patterns in a user-friendly format.
+
+    Args:
+        schedule: Schedule string (typically from APScheduler or similar)
+
+    Returns:
+        Human-readable schedule description ("Daily at 2:00 AM UTC", etc.)
+        Returns original schedule string if no pattern matches
+        Returns "Unknown schedule" for empty/invalid input
+    """
+    import re
+
+    from app.core.log import logger
+
+    if not schedule or "Unknown" in schedule:
+        return "Unknown schedule"
+
+    # Handle common cron patterns
+    if "hour=2, minute=0, second=0" in schedule:
+        return "Daily at 2:00 AM UTC"
+    elif "hour=" in schedule and "minute=" in schedule:
+        # Extract hour and minute from the schedule string
+        try:
+            hour_match = re.search(r"hour=([0-9]+)", schedule)
+            minute_match = re.search(r"minute=([0-9]+)", schedule)
+            if hour_match and minute_match:
+                hour = int(hour_match.group(1))
+                minute = int(minute_match.group(1))
+                time_str = f"{hour:02d}:{minute:02d}"
+                return f"Daily at {time_str} UTC"
+        except Exception as e:
+            logger.debug(f"Failed to parse schedule pattern '{schedule}': {e}")
+
+    # Fallback to original schedule
+    return schedule
