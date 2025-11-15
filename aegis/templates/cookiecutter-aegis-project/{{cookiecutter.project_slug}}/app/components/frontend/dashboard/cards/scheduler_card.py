@@ -5,18 +5,19 @@ Modern, visually striking card component that displays scheduled jobs,
 job statistics, and scheduling information using shared utility functions.
 """
 
-from datetime import UTC
-
 import flet as ft
 from app.components.frontend.controls import PrimaryText
 from app.services.system.models import ComponentStatus
 
 from .card_utils import (
-    create_hover_handler,
+    create_card_click_handler,
+    create_clickable_hover_handler,
     create_responsive_3_section_layout,
     create_standard_card_container,
     create_stats_row,
     create_tech_badge,
+    format_next_run_time,
+    format_schedule_human_readable,
     get_status_colors,
 )
 
@@ -43,77 +44,6 @@ class SchedulerCard:
         """
         self.component_data = component_data
         self._card_container: ft.Container | None = None
-
-    def _format_next_run_time(self, iso_time_str: str) -> str:
-        """Format ISO datetime string to human readable relative time."""
-        if not iso_time_str:
-            return "Unknown"
-
-        try:
-            from datetime import datetime
-
-            # Handle both timezone-aware and naive datetimes
-            if iso_time_str.endswith("Z"):
-                next_run = datetime.fromisoformat(iso_time_str.replace("Z", "+00:00"))
-            elif "+" in iso_time_str or iso_time_str.endswith("00:00"):
-                next_run = datetime.fromisoformat(iso_time_str)
-            else:
-                # Assume UTC if no timezone info
-                next_run = datetime.fromisoformat(iso_time_str).replace(tzinfo=UTC)
-
-            now = datetime.now(UTC)
-
-            # Make sure both datetimes are timezone-aware
-            if next_run.tzinfo is None:
-                next_run = next_run.replace(tzinfo=UTC)
-
-            delta = next_run - now
-            total_seconds = delta.total_seconds()
-
-            if total_seconds < 0:
-                return "Past due"
-            elif total_seconds < 60:
-                return f"in {int(total_seconds)}s"
-            elif total_seconds < 3600:
-                minutes = int(total_seconds / 60)
-                return f"in {minutes}m"
-            elif total_seconds < 86400:
-                hours = total_seconds / 3600
-                if hours < 2:
-                    return f"in {hours:.1f}h"
-                else:
-                    return f"in {int(hours)}h"
-            else:
-                days = int(total_seconds / 86400)
-                return f"in {days}d"
-        except Exception:
-            return "Unknown"
-
-    def _format_schedule_human_readable(self, schedule: str) -> str:
-        """Convert schedule format to human readable."""
-        if not schedule or "Unknown" in schedule:
-            return "Unknown schedule"
-
-        # Handle common cron patterns
-        if "hour=2, minute=0, second=0" in schedule:
-            return "Daily at 2:00 AM UTC"
-        elif "hour=" in schedule and "minute=" in schedule:
-            # Extract hour and minute from the schedule string
-            try:
-                import re
-
-                hour_match = re.search(r"hour=([0-9]+)", schedule)
-                minute_match = re.search(r"minute=([0-9]+)", schedule)
-                if hour_match and minute_match:
-                    hour = int(hour_match.group(1))
-                    minute = int(minute_match.group(1))
-                    time_str = f"{hour:02d}:{minute:02d}"
-                    return f"Daily at {time_str} UTC"
-            except Exception:
-                pass
-
-        # Fallback to original schedule
-        return schedule
 
     def _handle_job_hover_simple(self, e: ft.ControlEvent) -> None:
         """Simple hover handler that works with event source."""
@@ -155,7 +85,7 @@ class SchedulerCard:
         job_list_items = []
         for task in upcoming_tasks:
             # Format next run time
-            next_run_display = self._format_next_run_time(task.get("next_run", ""))
+            next_run_display = format_next_run_time(task.get("next_run", ""))
             schedule = task.get("schedule", "Unknown schedule")
 
             job_list_items.append(
@@ -213,7 +143,7 @@ class SchedulerCard:
                                     ),
                                     ft.Text("|", size=12, color=ft.Colors.GREY),
                                     ft.Text(
-                                        self._format_schedule_human_readable(schedule),
+                                        format_schedule_human_readable(schedule),
                                         size=12,
                                         color=ft.Colors.GREY,
                                     ),
@@ -282,7 +212,7 @@ class SchedulerCard:
         upcoming_tasks = metadata.get("upcoming_tasks", [])
         next_job = "None"
         if upcoming_tasks:
-            next_job = self._format_next_run_time(upcoming_tasks[0].get("next_run", ""))
+            next_job = format_next_run_time(upcoming_tasks[0].get("next_run", ""))
 
         scheduler_stats = {
             "Total Tasks": total_tasks,
@@ -341,12 +271,20 @@ class SchedulerCard:
             primary_color=primary_color,
             border_color=border_color,
             width=None,  # Let ResponsiveRow handle the width
-            hover_handler=create_hover_handler(
-                None
-            ),  # Will set after container creation
+            hover_handler=None,  # Will be set after container creation
         )
 
-        # Set the hover handler with the actual container
-        # Hover effects disabled
+        # Add clickable hover effects
+        self._card_container.on_hover = create_clickable_hover_handler(
+            self._card_container
+        )
+
+        # Add click handler to open detail modal
+        self._card_container.on_click = create_card_click_handler(
+            "scheduler", self.component_data
+        )
+
+        # Add cursor pointer to indicate clickability
+        self._card_container.cursor = ft.MouseCursor.CLICK
 
         return self._card_container

@@ -3,13 +3,19 @@
   <img src="docs/images/aegis-manifesto.png" alt="Aegis Stack" width="400">
 </picture>
 
-**Build production-ready Python applications with your chosen components and services.**
-
 [![CI](https://github.com/lbedner/aegis-stack/workflows/CI/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/ci.yml)
 [![Documentation](https://github.com/lbedner/aegis-stack/workflows/Deploy%20Documentation/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/docs.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-Aegis Stack is a CLI-driven framework for creating custom Python applications. Select exactly the components you need - no bloat, no unused dependencies.
+You need to ship reliable software, but management only gave you 2 weeks.
+
+No time for health checks, proper testing, or clean architecture. Just enough time for duct tape and hope.
+
+**What if you could go from idea to working prototype in the time it takes to grab coffee?**
+
+![Aegis Stack Quick Start Demo](docs/images/aegis-demo.gif)
+
+Aegis Stack is a modular Python framework that grows with your projects — start with an API, add Auth, Scheduler, Workers, or AI services when you need them.
 
 ## Quick Start
 
@@ -27,19 +33,7 @@ uvx aegis-stack init task-processor --components scheduler,worker
 cd my-api && uv sync && cp .env.example .env && make serve
 ```
 
-## Installation
-
-**No installation needed** - just run it:
-
-```bash
-uvx aegis-stack init my-project
-```
-
-That's it. [`uvx`](https://docs.astral.sh/uv/) downloads, installs, and runs Aegis Stack in one command.
-
----
-
-**Alternative methods:** [Installation Guide](docs/installation.md) covers `uv tool install` and `pip install` for specific workflows.
+**Installation alternatives:** See the [Installation Guide](docs/installation.md) for `uv tool install`, `pip install`, and development setup.
 
 ## 🌱 Your Stack Grows With You
 
@@ -64,7 +58,23 @@ aegis remove scheduler --project-path ./my-api
 | **Others** | ❌ Locked at init | ❌ Manual deletion | ⚠️ High risk |
 | **Aegis Stack** | ✅ One command | ✅ One command | ✅ Auto-handled |
 
+![Component Evolution Demo](docs/images/aegis-evolution-demo.gif)
+
 Most frameworks lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your Stack](docs/evolving-your-stack.md)** for the complete guide.
+
+## See It In Action
+
+### System Health Dashboard
+
+![System Health Dashboard](docs/images/dashboard-dark.png)
+
+Real-time monitoring with component status, health percentages, and cross-platform deployment (web, desktop, mobile).
+
+### CLI Health Monitoring
+
+![CLI Health Check](docs/images/cli_health_check.png)
+
+Rich terminal output showing detailed component status, health metrics, and system diagnostics.
 
 ## Available Components & Services
 
@@ -83,26 +93,20 @@ Most frameworks lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your
 | **Auth** | User authentication & JWT | ✅ **Available** |
 | **AI** | Multi-provider AI chat | 🧪 **Experimental** |
 
-## See It In Action
+## AI Service in Action
 
-### System Health Dashboard
+![AI Service Demo](docs/images/aegis-ai-demo.gif)
 
-![System Health Dashboard](docs/images/dashboard-dark.png)
+Services work immediately - create a project with AI, and start chatting without any server setup.
 
-Real-time monitoring with component status, health percentages, and cross-platform deployment (web, desktop, mobile).
-
-### CLI Health Monitoring
-
-![CLI Health Check](docs/images/cli_health_check.png)
-
-Rich terminal output showing detailed component status, health metrics, and system diagnostics.
+**See detailed documentation:** [Components →](docs/components/index.md) | [Services →](docs/services/index.md)
 
 ## Learn More
 
-- **[📖 CLI Reference](docs/cli-reference.md)** - Complete command reference
-- **[🏗️ Components](docs/components/index.md)** - Deep dive into available components
-- **[🔧 Services](docs/services/index.md)** - Business services (auth, AI)
-- **[🧠 Philosophy](docs/philosophy.md)** - Architecture and design principles
+- **[CLI Reference](docs/cli-reference.md)** - Complete command reference
+- **[About](docs/about.md)** - The philosophy and vision behind Aegis Stack
+- **[Evolving Your Stack](docs/evolving-your-stack.md)** - Add/remove components as needs change
+- **[Technology Stack](docs/technology.md)** - Battle-tested technology choices
 
 ## For The Veterans
 

@@ -82,21 +82,11 @@ DATABASE_URL=sqlite:///data/app.db      # Database location
 DATABASE_ENGINE_ECHO=false              # SQL logging
 ```
 
-### Connection Settings
-```python
-# app/core/config.py (auto-generated)
-DATABASE_CONNECT_ARGS = {
-    "check_same_thread": False,  # Allow multi-threading
-    "foreign_keys": 1,            # Enable foreign key constraints
-}
-```
-
 ## Development Workflow
 
 ### Docker (Recommended)
 ```bash
-make serve           # Start everything
-make health-detailed # See database status
+make serve  # Start everything
 ```
 
 ### Direct Access
@@ -141,9 +131,6 @@ def db_session():
 ```bash
 # Quick health check
 make health-detailed
-
-# Direct database inspection
-sqlite3 data/app.db ".tables"
 ```
 
 The health system tracks:

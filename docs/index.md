@@ -98,10 +98,12 @@ Rich terminal output showing detailed component status, health metrics, and syst
 
 ## Learn More
 
-- **[📖 CLI Reference](cli-reference.md)** - Complete command reference
-- **[🏗️ Components](components/index.md)** - Deep dive into available components
-- **[🔧 Services](services/index.md)** - Business services (auth, AI)
-- **[🧠 Philosophy](philosophy.md)** - Architecture and design principles
+- **[CLI Reference](cli-reference.md)** - Complete command reference
+- **[Components](components/index.md)** - Deep dive into available components
+- **[Services](services/index.md)** - Business services (auth, AI)
+- **[About](about.md)** - The philosophy and vision behind Aegis Stack
+- **[Evolving Your Stack](evolving-your-stack.md)** - Add/remove components as needs change
+- **[Technology Stack](technology.md)** - Battle-tested technology choices
 
 ## For The Veterans
 

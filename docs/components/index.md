@@ -8,8 +8,6 @@ Components are the **infrastructure building blocks** of your Aegis Stack applic
 
     See **[Services Overview](../services/index.md)** for business-level features.
 
-> 💡 **New to Aegis Stack?** See the [Philosophy Guide](../philosophy.md) for complete component design principles.
-
 ## Evolving Your Stack
 
 **Your choices aren't permanent.** Start with what you need today, add components as requirements evolve, remove what you don't use anymore.

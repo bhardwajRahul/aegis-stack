@@ -84,4 +84,3 @@ The backend runs on port 8000 and is configured through the integration layer wi
 - **[FastAPI Documentation](https://fastapi.tiangolo.com/)** - Complete API framework capabilities
 - **[FastAPI Tutorial](https://fastapi.tiangolo.com/tutorial/)** - Building APIs with FastAPI
 - **[Component Overview](./index.md)** - Understanding Aegis Stack's component architecture
-- **[Philosophy Guide](../philosophy.md)** - Component architecture principles

@@ -23,11 +23,11 @@ Choose the method that works best for your workflow:
 
     **Benefits:**
 
-    - ✨ No installation required
-    - 📦 Always uses latest version
-    - ⚡ Zero setup, works immediately
-    - 🔒 Isolated execution environment
-    - 🚀 Perfect for trying Aegis Stack or one-off usage
+    - No installation required
+    - Always uses latest version
+    - Zero setup, works immediately
+    - Isolated execution environment
+    - Perfect for trying Aegis Stack or one-off usage
 
     **Best for:** Quick start, experimentation, CI/CD, one-off usage
 
@@ -47,10 +47,10 @@ Choose the method that works best for your workflow:
 
     **Benefits:**
 
-    - 🏃 Fastest subsequent runs (pre-installed)
-    - 🎯 Simple `aegis` command
-    - 🔄 Easy to upgrade with `uv tool upgrade aegis-stack`
-    - 💾 Persistent installation
+    - Fastest subsequent runs (pre-installed)
+    - Simple `aegis` command
+    - Easy to upgrade with `uv tool upgrade aegis-stack`
+    - Persistent installation
 
     **Best for:** Daily development work, regular CLI usage
 
@@ -70,9 +70,9 @@ Choose the method that works best for your workflow:
 
     **Benefits:**
 
-    - 🔄 Works in any Python environment
-    - 📚 Familiar to all Python developers
-    - 🛠️ Compatible with existing workflows
+    - Works in any Python environment
+    - Familiar to all Python developers
+    - Compatible with existing workflows
 
     **Best for:** Traditional workflows, existing pip-based setups
 
@@ -100,67 +100,9 @@ Choose the method that works best for your workflow:
 
     **Benefits:**
 
-    - 🧪 Latest unreleased features
-    - 🔧 Full development environment
-    - ✏️ Ability to modify and test changes
-    - 🧰 Access to development tools
+    - Latest unreleased features
+    - Full development environment
+    - Ability to modify and test changes
+    - Access to development tools
 
     **Best for:** Contributing, customizing, latest features
-
-## Command Examples
-
-All commands work the same regardless of installation method:
-
-=== "uvx"
-
-    ```bash
-    # Initialize new projects
-    uvx aegis-stack init my-web-app
-    uvx aegis-stack init my-api --components worker
-    uvx aegis-stack init full-stack --components scheduler,database
-
-    # Project information
-    uvx aegis-stack components
-    uvx aegis-stack --help
-    ```
-
-=== "uv tool"
-
-    ```bash
-    # Initialize new projects  
-    aegis init my-web-app
-    aegis init my-api --components worker
-    aegis init full-stack --components scheduler,database
-
-    # Project information
-    aegis components
-    aegis --help
-    ```
-
-=== "pip"
-
-    ```bash
-    # Initialize new projects
-    aegis init my-web-app
-    aegis init my-api --components worker  
-    aegis init full-stack --components scheduler,database
-
-    # Project information
-    aegis components
-    aegis --help
-    ```
-
-=== "Development"
-
-    ```bash
-    # Initialize new projects
-    .venv/bin/aegis init my-web-app
-    .venv/bin/aegis init my-api --components worker
-    .venv/bin/aegis init full-stack --components scheduler,database
-
-    # Development commands
-    .venv/bin/aegis --help
-    make test
-    make lint
-    ```
-
