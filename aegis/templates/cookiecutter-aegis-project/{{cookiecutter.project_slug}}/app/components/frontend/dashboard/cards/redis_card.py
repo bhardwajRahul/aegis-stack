@@ -14,6 +14,7 @@ from app.components.frontend.controls import (
     SecondaryText,
     TitleText,
 )
+from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 from .card_utils import create_responsive_3_section_layout
@@ -122,7 +123,7 @@ class RedisCard:
                     ft.Container(
                         content=LabelText(
                             "CACHE",
-                            color=ft.Colors.WHITE,
+                            color=Theme.Colors.BADGE_TEXT,
                         ),
                         padding=ft.padding.symmetric(horizontal=8, vertical=2),
                         bgcolor=ft.Colors.RED,

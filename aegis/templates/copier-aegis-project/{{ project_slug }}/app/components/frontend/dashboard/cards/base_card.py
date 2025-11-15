@@ -10,6 +10,7 @@ from typing import Any
 
 import flet as ft
 from app.components.frontend.controls import LabelText, SecondaryText, TitleText
+from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 
@@ -92,7 +93,7 @@ class BaseCard(ABC):
                     ft.Container(
                         content=LabelText(
                             badge_text,
-                            color=ft.Colors.WHITE,
+                            color=Theme.Colors.BADGE_TEXT,
                         ),
                         padding=ft.padding.symmetric(horizontal=8, vertical=2),
                         bgcolor=badge_color,
