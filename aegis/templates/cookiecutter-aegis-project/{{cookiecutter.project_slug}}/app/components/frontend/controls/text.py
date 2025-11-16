@@ -2,38 +2,39 @@
 Custom text controls with proper theme-aware styling.
 
 These components automatically use semantic Flet colors that adapt to light/dark themes,
-following the same patterns as ee-toolset for consistent visual design.
+following the Aegis Stack design system for consistent visual design.
 """
 
 from typing import Any
 
 import flet as ft
 
+from ..theme import AegisTheme as Theme
+
 
 class PrimaryText(ft.Text):  # type: ignore[misc]
     """
-    Primary text component using theme-aware ON_SURFACE color.
+    Primary text component using theme-aware text colors.
 
     Automatically adapts to light/dark themes with proper contrast.
     Use for main content text, labels, and primary information.
     """
 
     def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
-        super().__init__(
-            value=value,
-            opacity=opacity,
-            no_wrap=False,
-            color=ft.Colors.ON_SURFACE,  # Theme-aware primary text color
-            font_family="Roboto",
-            size=16,
-            weight=ft.FontWeight.W_400,
-            **kwargs,
-        )
+        defaults = {
+            "no_wrap": False,
+            "color": Theme.Colors.TEXT_PRIMARY,
+            "font_family": "Roboto",
+            "size": Theme.Typography.BODY_LARGE,
+            "weight": Theme.Typography.WEIGHT_REGULAR,
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)
 
 
 class SecondaryText(ft.Text):  # type: ignore[misc]
     """
-    Secondary text component using theme-aware ON_SURFACE_VARIANT color.
+    Secondary text component using theme-aware secondary text colors.
 
     Automatically adapts to light/dark themes with reduced contrast.
     Use for supporting text, captions, and less prominent information.
@@ -42,16 +43,15 @@ class SecondaryText(ft.Text):  # type: ignore[misc]
     def __init__(
         self, value: str, opacity: float = 1.0, no_wrap: bool = False, **kwargs: Any
     ) -> None:
-        super().__init__(
-            value=value,
-            opacity=opacity,
-            no_wrap=no_wrap,
-            color=ft.Colors.GREY_600,  # Theme-aware secondary text color
-            font_family="Roboto",
-            size=14,
-            weight=ft.FontWeight.W_400,
-            **kwargs,
-        )
+        defaults = {
+            "no_wrap": no_wrap,
+            "color": Theme.Colors.TEXT_SECONDARY,
+            "font_family": "Roboto",
+            "size": Theme.Typography.BODY,
+            "weight": Theme.Typography.WEIGHT_REGULAR,
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)
 
 
 class TitleText(ft.Text):  # type: ignore[misc]
@@ -64,10 +64,10 @@ class TitleText(ft.Text):  # type: ignore[misc]
     def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
         # Set defaults, but allow kwargs to override
         defaults = {
-            "color": ft.Colors.ON_SURFACE,  # Theme-aware primary text color
+            "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
-            "size": 24,
-            "weight": ft.FontWeight.W_700,
+            "size": Theme.Typography.H2,
+            "weight": Theme.Typography.WEIGHT_BOLD,
         }
         # Update defaults with any provided kwargs
         defaults.update(kwargs)
@@ -87,15 +87,14 @@ class ConfirmationText(ft.Text):  # type: ignore[misc]
     """
 
     def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
-        super().__init__(
-            value=value,
-            opacity=opacity,
-            color=ft.Colors.ERROR,  # Theme-aware error color
-            font_family="Roboto",
-            size=14,
-            weight=ft.FontWeight.W_400,
-            **kwargs,
-        )
+        defaults = {
+            "color": Theme.Colors.ERROR,
+            "font_family": "Roboto",
+            "size": Theme.Typography.BODY,
+            "weight": Theme.Typography.WEIGHT_REGULAR,
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)
 
 
 class MetricText(ft.Text):  # type: ignore[misc]
@@ -106,15 +105,14 @@ class MetricText(ft.Text):  # type: ignore[misc]
     """
 
     def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
-        super().__init__(
-            value=value,
-            opacity=opacity,
-            color=ft.Colors.ON_SURFACE,  # Theme-aware primary text color
-            font_family="Roboto",
-            size=16,
-            weight=ft.FontWeight.W_700,  # Bold for emphasis
-            **kwargs,
-        )
+        defaults = {
+            "color": Theme.Colors.TEXT_PRIMARY,
+            "font_family": "Roboto",
+            "size": Theme.Typography.BODY_LARGE,
+            "weight": Theme.Typography.WEIGHT_BOLD,
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)
 
 
 class LabelText(ft.Text):  # type: ignore[misc]
@@ -127,10 +125,10 @@ class LabelText(ft.Text):  # type: ignore[misc]
     def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
         # Set defaults, but allow kwargs to override
         defaults = {
-            "color": ft.Colors.GREY_600,  # Theme-aware secondary color
+            "color": Theme.Colors.TEXT_SECONDARY,
             "font_family": "Roboto",
-            "size": 12,
-            "weight": ft.FontWeight.W_600,  # Medium weight for labels
+            "size": Theme.Typography.BODY_SMALL,
+            "weight": Theme.Typography.WEIGHT_SEMIBOLD,
         }
         # Update defaults with any provided kwargs
         defaults.update(kwargs)
@@ -140,3 +138,170 @@ class LabelText(ft.Text):  # type: ignore[misc]
             opacity=opacity,
             **defaults,
         )
+
+
+# ============================================================================
+# NEW THEME-BASED CONTROLS
+# ============================================================================
+
+
+class DisplayText(ft.Text):  # type: ignore[misc]
+    """
+    Hero display text - largest emphasis.
+
+    Used for major headings, hero sections, and key visual elements.
+    """
+
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
+        defaults = {
+            "size": Theme.Typography.DISPLAY,
+            "weight": Theme.Typography.WEIGHT_BOLD,
+            "color": Theme.Colors.TEXT_PRIMARY,
+            "font_family": "Roboto",
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)
+
+
+class H1Text(ft.Text):  # type: ignore[misc]
+    """
+    H1 heading text for page titles.
+
+    Primary heading level for major page sections.
+    """
+
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
+        defaults = {
+            "size": Theme.Typography.H1,
+            "weight": Theme.Typography.WEIGHT_BOLD,
+            "color": Theme.Colors.TEXT_PRIMARY,
+            "font_family": "Roboto",
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)
+
+
+class H2Text(ft.Text):  # type: ignore[misc]
+    """
+    H2 heading text for major section headers.
+
+    Secondary heading level for important content sections.
+    """
+
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
+        defaults = {
+            "size": Theme.Typography.H2,
+            "weight": Theme.Typography.WEIGHT_BOLD,
+            "color": Theme.Colors.TEXT_PRIMARY,
+            "font_family": "Roboto",
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)
+
+
+class H3Text(ft.Text):  # type: ignore[misc]
+    """
+    H3 heading text for subsection headers.
+
+    Tertiary heading level for subsections and groupings.
+    """
+
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
+        defaults = {
+            "size": Theme.Typography.H3,
+            "weight": Theme.Typography.WEIGHT_SEMIBOLD,
+            "color": Theme.Colors.TEXT_PRIMARY,
+            "font_family": "Roboto",
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)
+
+
+class BodyText(ft.Text):  # type: ignore[misc]
+    """
+    Standard body text for general content.
+
+    Default text size for most content areas.
+    """
+
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
+        defaults = {
+            "size": Theme.Typography.BODY,
+            "weight": Theme.Typography.WEIGHT_REGULAR,
+            "color": Theme.Colors.TEXT_PRIMARY,
+            "font_family": "Roboto",
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)
+
+
+class AccentText(ft.Text):  # type: ignore[misc]
+    """
+    Accent-colored text for emphasis and highlights.
+
+    Uses vibrant accent color for calls-to-action and important highlights.
+    """
+
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
+        defaults = {
+            "size": Theme.Typography.BODY,
+            "weight": Theme.Typography.WEIGHT_MEDIUM,
+            "color": Theme.Colors.ACCENT,
+            "font_family": "Roboto",
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)
+
+
+class SuccessText(ft.Text):  # type: ignore[misc]
+    """
+    Success-colored text for positive feedback.
+
+    Uses success color for confirmations and positive states.
+    """
+
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
+        defaults = {
+            "size": Theme.Typography.BODY,
+            "weight": Theme.Typography.WEIGHT_MEDIUM,
+            "color": Theme.Colors.SUCCESS,
+            "font_family": "Roboto",
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)
+
+
+class WarningText(ft.Text):  # type: ignore[misc]
+    """
+    Warning-colored text for caution messages.
+
+    Uses warning color for important notices and cautions.
+    """
+
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
+        defaults = {
+            "size": Theme.Typography.BODY,
+            "weight": Theme.Typography.WEIGHT_MEDIUM,
+            "color": Theme.Colors.WARNING,
+            "font_family": "Roboto",
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)
+
+
+class ErrorText(ft.Text):  # type: ignore[misc]
+    """
+    Error-colored text for error messages and critical feedback.
+
+    Uses error color for failures and critical issues.
+    """
+
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
+        defaults = {
+            "size": Theme.Typography.BODY,
+            "weight": Theme.Typography.WEIGHT_MEDIUM,
+            "color": Theme.Colors.ERROR,
+            "font_family": "Roboto",
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)

@@ -6,6 +6,14 @@ Each section is a self-contained Flet control that can be reused and tested inde
 """
 
 import flet as ft
+from app.components.frontend.controls import (
+    BodyText,
+    DisplayText,
+    H2Text,
+    PrimaryText,
+    SecondaryText,
+)
+from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
 from ..cards.card_utils import format_next_run_time, format_schedule_human_readable
@@ -29,24 +37,18 @@ class MetricCard(ft.Container):
         self.content = ft.Column(
             [
                 ft.Icon(icon, size=32, color=color),
-                ft.Text(
-                    value,
-                    size=28,
-                    weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.ON_SURFACE,
-                ),
-                ft.Text(
+                DisplayText(value),
+                SecondaryText(
                     label,
-                    size=12,
-                    color=ft.Colors.GREY_600,
+                    size=Theme.Typography.BODY_SMALL,
                 ),
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=8,
+            spacing=Theme.Spacing.SM,
         )
-        self.padding = 20
-        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.GREY)
-        self.border_radius = 12
+        self.padding = Theme.Spacing.MD
+        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.OUTLINE_VARIANT)
+        self.border_radius = Theme.Components.CARD_RADIUS
         self.expand = True
 
 
@@ -68,40 +70,35 @@ class OverviewSection(ft.Container):
 
         self.content = ft.Column(
             [
-                ft.Text(
-                    "Overview",
-                    size=18,
-                    weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.ON_SURFACE,
-                ),
-                ft.Container(height=10),
+                H2Text("Overview"),
+                ft.Container(height=Theme.Spacing.SM),
                 ft.Row(
                     [
                         MetricCard(
                             "Total Tasks",
                             str(total_tasks),
                             ft.Icons.SCHEDULE,
-                            ft.Colors.BLUE,
+                            Theme.Colors.INFO,
                         ),
                         MetricCard(
                             "Active Tasks",
                             str(active_tasks),
                             ft.Icons.PLAY_CIRCLE_OUTLINE,
-                            ft.Colors.GREEN,
+                            Theme.Colors.SUCCESS,
                         ),
                         MetricCard(
                             "Paused Tasks",
                             str(paused_tasks),
                             ft.Icons.PAUSE_CIRCLE_OUTLINE,
-                            ft.Colors.ORANGE,
+                            Theme.Colors.WARNING,
                         ),
                     ],
-                    spacing=20,
+                    spacing=Theme.Spacing.MD,
                 ),
             ],
             spacing=0,
         )
-        self.padding = 20
+        self.padding = Theme.Spacing.MD
 
 
 class JobItem(ft.Container):
@@ -125,46 +122,43 @@ class JobItem(ft.Container):
 
         self.content = ft.Row(
             [
-                ft.Icon(ft.Icons.SCHEDULE, size=24, color=ft.Colors.TEAL),
+                ft.Icon(ft.Icons.SCHEDULE, size=24, color=Theme.Colors.PRIMARY),
                 ft.Column(
                     [
-                        ft.Text(
+                        PrimaryText(
                             job_name,
-                            size=16,
-                            weight=ft.FontWeight.W_600,
-                            color=ft.Colors.ON_SURFACE,
+                            size=Theme.Typography.BODY_LARGE,
+                            weight=Theme.Typography.WEIGHT_SEMIBOLD,
                         ),
                         ft.Row(
                             [
                                 ft.Icon(
                                     ft.Icons.ACCESS_TIME,
                                     size=14,
-                                    color=ft.Colors.GREY,
+                                    color=Theme.Colors.TEXT_TERTIARY,
                                 ),
-                                ft.Text(
+                                SecondaryText(
                                     f"Next run: {next_run_display}",
-                                    size=12,
-                                    color=ft.Colors.GREY_600,
+                                    size=Theme.Typography.BODY_SMALL,
                                 ),
-                                ft.Text("|", size=12, color=ft.Colors.GREY),
-                                ft.Text(
+                                SecondaryText("|", size=Theme.Typography.BODY_SMALL),
+                                SecondaryText(
                                     schedule_display,
-                                    size=12,
-                                    color=ft.Colors.GREY_600,
+                                    size=Theme.Typography.BODY_SMALL,
                                 ),
                             ],
-                            spacing=8,
+                            spacing=Theme.Spacing.SM,
                         ),
                     ],
-                    spacing=4,
+                    spacing=Theme.Spacing.XS,
                     expand=True,
                 ),
             ],
-            spacing=16,
+            spacing=Theme.Spacing.MD,
         )
-        self.padding = 16
-        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.GREY)
-        self.border_radius = 12
+        self.padding = Theme.Spacing.MD
+        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.OUTLINE_VARIANT)
+        self.border_radius = Theme.Components.CARD_RADIUS
 
 
 class EmptyJobsPlaceholder(ft.Container):
@@ -179,20 +173,19 @@ class EmptyJobsPlaceholder(ft.Container):
                 ft.Icon(
                     ft.Icons.SCHEDULE_OUTLINED,
                     size=48,
-                    color=ft.Colors.GREY,
+                    color=Theme.Colors.TEXT_TERTIARY,
                 ),
-                ft.Text(
+                SecondaryText(
                     "No scheduled jobs",
-                    size=16,
-                    color=ft.Colors.GREY,
+                    size=Theme.Typography.BODY_LARGE,
                 ),
             ],
             alignment=ft.MainAxisAlignment.CENTER,
-            spacing=20,
+            spacing=Theme.Spacing.MD,
         )
-        self.padding = 40
-        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.GREY)
-        self.border_radius = 12
+        self.padding = Theme.Spacing.XL
+        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.OUTLINE_VARIANT)
+        self.border_radius = Theme.Components.CARD_RADIUS
 
 
 class JobsSection(ft.Container):
@@ -213,22 +206,17 @@ class JobsSection(ft.Container):
             jobs_content = EmptyJobsPlaceholder()
         else:
             job_items = [JobItem(task) for task in upcoming_tasks]
-            jobs_content = ft.Column(job_items, spacing=12)
+            jobs_content = ft.Column(job_items, spacing=Theme.Spacing.SM)
 
         self.content = ft.Column(
             [
-                ft.Text(
-                    "Scheduled Jobs",
-                    size=18,
-                    weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.ON_SURFACE,
-                ),
-                ft.Container(height=10),
+                H2Text("Scheduled Jobs"),
+                ft.Container(height=Theme.Spacing.SM),
                 jobs_content,
             ],
             spacing=0,
         )
-        self.padding = 20
+        self.padding = Theme.Spacing.MD
 
 
 class StatisticsSection(ft.Container):
@@ -256,37 +244,26 @@ class StatisticsSection(ft.Container):
             stats_rows.append(
                 ft.Row(
                     [
-                        ft.Text(
+                        SecondaryText(
                             f"{label}:",
-                            size=14,
-                            weight=ft.FontWeight.W_600,
-                            color=ft.Colors.GREY_700,
+                            weight=Theme.Typography.WEIGHT_SEMIBOLD,
                             width=150,
                         ),
-                        ft.Text(
-                            value,
-                            size=14,
-                            color=ft.Colors.ON_SURFACE,
-                        ),
+                        BodyText(value),
                     ],
-                    spacing=20,
+                    spacing=Theme.Spacing.MD,
                 )
             )
 
         self.content = ft.Column(
             [
-                ft.Text(
-                    "Component Information",
-                    size=18,
-                    weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.ON_SURFACE,
-                ),
-                ft.Container(height=10),
-                ft.Column(stats_rows, spacing=12),
+                H2Text("Component Information"),
+                ft.Container(height=Theme.Spacing.SM),
+                ft.Column(stats_rows, spacing=Theme.Spacing.SM),
             ],
             spacing=0,
         )
-        self.padding = 20
+        self.padding = Theme.Spacing.MD
 
 
 class SchedulerDetailDialog(ft.AlertDialog):
@@ -316,9 +293,9 @@ class SchedulerDetailDialog(ft.AlertDialog):
             content=ft.Column(
                 [
                     OverviewSection(metadata),
-                    ft.Divider(height=20, color=ft.Colors.GREY_300),
+                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
                     JobsSection(metadata),
-                    ft.Divider(height=20, color=ft.Colors.GREY_300),
+                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
                     StatisticsSection(component_data),
                 ],
                 spacing=0,
@@ -336,32 +313,29 @@ class SchedulerDetailDialog(ft.AlertDialog):
         """Create the modal title with status indicator."""
         status = self.component_data.status
         if status.value == "healthy":
-            status_color = ft.Colors.GREEN
+            status_color = Theme.Colors.SUCCESS
         elif status.value == "info":
-            status_color = ft.Colors.BLUE
+            status_color = Theme.Colors.INFO
         elif status.value == "warning":
-            status_color = ft.Colors.ORANGE
+            status_color = Theme.Colors.WARNING
         else:  # unhealthy
-            status_color = ft.Colors.RED
+            status_color = Theme.Colors.ERROR
 
         return ft.Row(
             [
-                ft.Text(
-                    "⏰ Scheduler Details",
-                    size=24,
-                    weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.ON_SURFACE,
-                ),
+                H2Text("⏰ Scheduler Details"),
                 ft.Container(
                     content=ft.Text(
                         status.value.upper(),
-                        size=12,
-                        weight=ft.FontWeight.W_600,
-                        color=ft.Colors.WHITE,
+                        size=Theme.Typography.BODY_SMALL,
+                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
+                        color=Theme.Colors.BADGE_TEXT,
                     ),
-                    padding=ft.padding.symmetric(horizontal=12, vertical=6),
+                    padding=ft.padding.symmetric(
+                        horizontal=Theme.Spacing.SM, vertical=Theme.Spacing.XS
+                    ),
                     bgcolor=status_color,
-                    border_radius=8,
+                    border_radius=Theme.Components.BADGE_RADIUS,
                 ),
             ],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,

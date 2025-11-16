@@ -15,6 +15,7 @@ from app.components.frontend.controls import (
     TableNameText,
     TitleText,
 )
+from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 
@@ -183,7 +184,7 @@ class WorkerCard:
                     ft.Container(
                         content=LabelText(
                             "QUEUES",
-                            color=ft.Colors.WHITE,
+                            color=Theme.Colors.BADGE_TEXT,
                         ),
                         padding=ft.padding.symmetric(horizontal=8, vertical=2),
                         bgcolor=ft.Colors.PURPLE,
