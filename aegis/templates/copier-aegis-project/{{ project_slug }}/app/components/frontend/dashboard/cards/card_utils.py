@@ -347,10 +347,11 @@ def create_modal_for_component(
     Returns:
         AlertDialog instance for the component, or None if component not supported
     """
-    from ..modals import SchedulerDetailDialog
+    from ..modals import SchedulerDetailDialog, WorkerDetailDialog
 
     modal_map: dict[str, type[ft.AlertDialog]] = {
         "scheduler": SchedulerDetailDialog,
+        "worker": WorkerDetailDialog,
         # More modals will be added as they are implemented
     }
 

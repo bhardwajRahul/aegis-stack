@@ -75,14 +75,14 @@ class AegisTheme:
         INFO = ft.Colors.BLUE_400
 
         # Surface Levels (Semantic - auto-adapt to light/dark mode)
-        SURFACE_0 = ft.Colors.SURFACE  # Deepest background
-        SURFACE_1 = (
-            ft.Colors.SURFACE_CONTAINER_LOW
-        )  # Standard card/container backgrounds
-        SURFACE_2 = (
-            ft.Colors.SURFACE_CONTAINER_HIGH
-        )  # Elevated elements (modals, dropdowns)
-        SURFACE_3 = ft.Colors.SURFACE_CONTAINER_HIGHEST  # Hover/active states
+        SURFACE_0 = ft.Colors.SURFACE  # Base background
+        SURFACE_1 = ft.Colors.with_opacity(
+            0.05, ft.Colors.ON_SURFACE
+        )  # Slight elevation
+        SURFACE_2 = ft.Colors.with_opacity(
+            0.08, ft.Colors.ON_SURFACE
+        )  # Medium elevation
+        SURFACE_3 = ft.Colors.SURFACE_CONTAINER_HIGHEST  # Highest elevation
 
         # Text Colors (Semantic - auto-adapt to light/dark mode)
         TEXT_PRIMARY = ft.Colors.ON_SURFACE  # Main content text
