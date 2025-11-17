@@ -9,6 +9,8 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 import os
+from pathlib import Path
+import re
 import sqlite3
 import sys
 from typing import Any, cast
@@ -950,6 +952,234 @@ async def check_database_health() -> ComponentStatus:
                     logger.debug(
                         "Failed to collect SQLite PRAGMA settings", exc_info=True
                     )
+
+            # Collect comprehensive PRAGMA settings for database modal
+            if db_url.startswith("sqlite:///"):
+                try:
+                    comprehensive_pragma = {}
+
+                    # Performance settings
+                    result = session.execute(text("PRAGMA synchronous")).fetchone()
+                    if result:
+                        comprehensive_pragma["synchronous"] = result[0]
+
+                    result = session.execute(text("PRAGMA temp_store")).fetchone()
+                    if result:
+                        comprehensive_pragma["temp_store"] = result[0]
+
+                    result = session.execute(text("PRAGMA mmap_size")).fetchone()
+                    if result:
+                        comprehensive_pragma["mmap_size"] = result[0]
+
+                    result = session.execute(text("PRAGMA page_size")).fetchone()
+                    if result:
+                        comprehensive_pragma["page_size"] = result[0]
+
+                    result = session.execute(text("PRAGMA auto_vacuum")).fetchone()
+                    if result:
+                        comprehensive_pragma["auto_vacuum"] = result[0]
+
+                    result = session.execute(text("PRAGMA busy_timeout")).fetchone()
+                    if result:
+                        comprehensive_pragma["busy_timeout"] = result[0]
+
+                    # Database statistics
+                    result = session.execute(text("PRAGMA page_count")).fetchone()
+                    if result:
+                        comprehensive_pragma["page_count"] = result[0]
+
+                    result = session.execute(text("PRAGMA freelist_count")).fetchone()
+                    if result:
+                        freelist = result[0]
+                        comprehensive_pragma["freelist_count"] = freelist
+                        page_count = comprehensive_pragma.get("page_count", 0)
+                        if page_count > 0:
+                            efficiency = (1 - freelist / page_count) * 100
+                            comprehensive_pragma["db_efficiency"] = round(efficiency, 2)
+
+                    enhanced_metadata["comprehensive_pragma"] = comprehensive_pragma
+
+                except Exception as e:
+                    logger.debug("Failed to collect comprehensive PRAGMA settings", exc_info=True)
+
+            # Collect table schema details (columns, indexes, foreign keys)
+            if db_url.startswith("sqlite:///") and table_info:
+                try:
+                    table_schemas = []
+                    total_indexes = 0
+                    total_foreign_keys = 0
+
+                    for table in table_info:
+                        table_name = table["name"]
+                        schema_info = {"name": table_name, "rows": table["rows"]}
+
+                        # Get column information
+                        columns = []
+                        from sqlalchemy import quoted_name
+                        quoted_table = quoted_name(table_name, quote=True)
+                        result = session.execute(
+                            text(f"PRAGMA table_info({quoted_table})")
+                        ).fetchall()
+                        for row in result:
+                            columns.append({
+                                "cid": row[0],
+                                "name": row[1],
+                                "type": row[2],
+                                "notnull": bool(row[3]),
+                                "default_value": row[4],
+                                "pk": bool(row[5]),
+                            })
+                        schema_info["columns"] = columns
+
+                        # Get index information
+                        indexes = []
+                        result = session.execute(
+                            text(f"PRAGMA index_list({quoted_table})")
+                        ).fetchall()
+                        for row in result:
+                            index_info = {
+                                "seq": row[0],
+                                "name": row[1],
+                                "unique": bool(row[2]),
+                                "origin": row[3],
+                                "partial": bool(row[4]),
+                            }
+
+                            # Get index columns
+                            index_columns = []
+                            quoted_index = quoted_name(row[1], quote=True)
+                            index_result = session.execute(
+                                text(f"PRAGMA index_info({quoted_index})")
+                            ).fetchall()
+                            for idx_row in index_result:
+                                index_columns.append({
+                                    "seqno": idx_row[0],
+                                    "cid": idx_row[1],
+                                    "name": idx_row[2],
+                                })
+                            index_info["columns"] = index_columns
+                            indexes.append(index_info)
+                            total_indexes += 1
+
+                        schema_info["indexes"] = indexes
+
+                        # Get foreign key information
+                        foreign_keys = []
+                        result = session.execute(
+                            text(f"PRAGMA foreign_key_list({quoted_table})")
+                        ).fetchall()
+                        for row in result:
+                            foreign_keys.append({
+                                "id": row[0],
+                                "seq": row[1],
+                                "table": row[2],
+                                "from_column": row[3],
+                                "to_column": row[4],
+                                "on_update": row[5],
+                                "on_delete": row[6],
+                                "match": row[7],
+                            })
+                            total_foreign_keys += 1
+
+                        schema_info["foreign_keys"] = foreign_keys
+                        table_schemas.append(schema_info)
+
+                    enhanced_metadata["table_schemas"] = table_schemas
+                    enhanced_metadata["total_indexes"] = total_indexes
+                    enhanced_metadata["total_foreign_keys"] = total_foreign_keys
+
+                    # Calculate total rows and find largest table
+                    if table_info:
+                        total_rows = sum(t["rows"] for t in table_info)
+                        largest_table = max(table_info, key=lambda t: t["rows"])
+                        enhanced_metadata["total_rows"] = total_rows
+                        enhanced_metadata["largest_table"] = largest_table
+
+                except Exception as e:
+                    logger.debug("Failed to collect table schema details", exc_info=True)
+
+            # Collect migration history from Alembic
+            if db_url.startswith("sqlite:///"):
+                try:
+                    migrations = []
+
+                    # Check if alembic_version table exists
+                    result = session.execute(
+                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'")
+                    ).fetchone()
+
+                    if result:
+                        # Get current version
+                        version_result = session.execute(
+                            text("SELECT version_num FROM alembic_version")
+                        ).fetchone()
+                        current_version = version_result[0] if version_result else None
+                        enhanced_metadata["current_migration"] = current_version
+
+                        # Find alembic versions directory (standard Alembic structure)
+                        alembic_versions_path = Path("alembic/versions")
+                        if alembic_versions_path.exists():
+                            # Parse migration files
+                            for migration_file in sorted(alembic_versions_path.glob("*.py")):
+                                if migration_file.name == "__init__.py":
+                                    continue
+
+                                try:
+                                    with open(migration_file, "r") as f:
+                                        content = f.read()
+
+                                    # Extract revision ID (from filename or content)
+                                    revision_id = migration_file.stem.split("_")[0]
+
+                                    # Extract metadata from file content
+                                    description = "No description"
+                                    down_revision = None
+                                    create_date = None
+
+                                    # Parse docstring for description
+                                    doc_match = re.search(r'"""(.+?)"""', content, re.DOTALL)
+                                    if doc_match:
+                                        description = doc_match.group(1).strip()
+
+                                    # Parse revision metadata
+                                    revision_match = re.search(r'revision\s*=\s*[\'"](.+?)[\'"]', content)
+                                    if revision_match:
+                                        revision_id = revision_match.group(1)
+
+                                    down_revision_match = re.search(r'down_revision\s*=\s*[\'"](.+?)[\'"]', content)
+                                    if down_revision_match:
+                                        down_revision = down_revision_match.group(1)
+
+                                    create_date_match = re.search(r'create_date\s*=\s*.+?datetime\((.+?)\)', content)
+                                    if create_date_match:
+                                        create_date = create_date_match.group(0)
+
+                                    # Get file modification time as fallback
+                                    file_mtime = os.path.getmtime(migration_file)
+
+                                    migrations.append({
+                                        "revision": revision_id,
+                                        "down_revision": down_revision,
+                                        "description": description,
+                                        "file_mtime": file_mtime,
+                                        "create_date": create_date,
+                                        "is_current": revision_id == current_version,
+                                    })
+
+                                except Exception as e:
+                                    logger.debug(f"Failed to parse migration file {migration_file}: {e}")
+
+                        enhanced_metadata["migrations"] = migrations
+                        enhanced_metadata["migration_count"] = len(migrations)
+                    else:
+                        enhanced_metadata["current_migration"] = None
+                        enhanced_metadata["migrations"] = []
+                        enhanced_metadata["migration_count"] = 0
+
+                except Exception as e:
+                    logger.debug("Failed to collect migration history", exc_info=True)
+                    enhanced_metadata["migrations"] = []
+                    enhanced_metadata["migration_count"] = 0
 
             # No need to commit since we're just testing connectivity
 
