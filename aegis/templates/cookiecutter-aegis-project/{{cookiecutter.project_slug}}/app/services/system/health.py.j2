@@ -638,7 +638,41 @@ async def check_cache_health() -> ComponentStatus:
         memory_info = await redis_info_client.info('memory')
         clients_info = await redis_info_client.info('clients')
         keyspace_info = await redis_info_client.info('keyspace')
-        
+
+        # Get recent slow query log entries from Redis SLOWLOG
+        slowlog_entries: list[dict[str, Any]] = []
+        try:
+            slowlog = await redis_info_client.slowlog_get(10)
+            slowlog_entries = [
+                {
+                    "id": entry["id"],
+                    "timestamp": entry["start_time"],
+                    "duration_ms": round(entry["duration"] / 1000, 2),  # Convert microseconds to ms
+                    "command": " ".join(str(arg.decode('utf-8', errors='replace') if isinstance(arg, bytes) else arg) for arg in entry["command"]),
+                }
+                for entry in slowlog
+            ]
+        except (redis.exceptions.RedisError, AttributeError, KeyError) as e:
+            logger.warning(f"Failed to get SLOWLOG: {e}")
+
+        # Get active client connections
+        active_clients: list[dict[str, str]] = []
+        try:
+            client_list = await redis_info_client.client_list()
+            active_clients = [
+                {
+                    "id": str(client.get("id", "")),
+                    "addr": str(client.get("addr", "")),
+                    "age": str(client.get("age", "0")),
+                    "idle": str(client.get("idle", "0")),
+                    "db": str(client.get("db", "0")),
+                    "cmd": str(client.get("cmd", "")),
+                }
+                for client in client_list
+            ]
+        except (redis.exceptions.RedisError, AttributeError, KeyError) as e:
+            logger.warning(f"Failed to get CLIENT LIST: {e}")
+
         await redis_info_client.aclose()
         
         # Calculate derived metrics
@@ -716,6 +750,10 @@ async def check_cache_health() -> ComponentStatus:
                     "total_connections_received", 0
                 ),
                 "rejected_connections": stats_info.get("rejected_connections", 0),
+
+                # Slow queries and client connections
+                "slowlog_entries": slowlog_entries,
+                "active_clients": active_clients,
             },
         )
 
