@@ -17,7 +17,11 @@ from app.components.frontend.controls import (
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
-from .card_utils import create_responsive_3_section_layout
+from .card_utils import (
+    create_card_click_handler,
+    create_clickable_hover_handler,
+    create_responsive_3_section_layout,
+)
 
 
 class RedisCard:
@@ -319,5 +323,14 @@ class RedisCard:
             width=None,  # Let ResponsiveRow handle the width
             height=280,
         )
+
+        # Add click handler to open Redis detail modal
+        self._card_container.on_hover = create_clickable_hover_handler(
+            self._card_container
+        )
+        self._card_container.on_click = create_card_click_handler(
+            "redis", self.component_data
+        )
+        self._card_container.cursor = ft.MouseCursor.CLICK
 
         return self._card_container
