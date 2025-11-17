@@ -1112,7 +1112,7 @@ class DatabaseDetailDialog(ft.AlertDialog):
 
         # Initialize dialog
         super().__init__(
-            modal=True,
+            modal=False,
             title=title,
             content=content,
             actions=[

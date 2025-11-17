@@ -348,6 +348,7 @@ def create_modal_for_component(
         AlertDialog instance for the component, or None if component not supported
     """
     from ..modals import (
+        BackendDetailDialog,
         DatabaseDetailDialog,
         RedisDetailDialog,
         SchedulerDetailDialog,
@@ -355,6 +356,7 @@ def create_modal_for_component(
     )
 
     modal_map: dict[str, type[ft.AlertDialog]] = {
+        "backend": BackendDetailDialog,
         "database": DatabaseDetailDialog,
         "redis": RedisDetailDialog,
         "scheduler": SchedulerDetailDialog,
