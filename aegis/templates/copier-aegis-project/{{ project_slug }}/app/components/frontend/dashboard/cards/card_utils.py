@@ -360,6 +360,7 @@ def create_modal_for_component(
     """
     from ..modals import (
         AIDetailDialog,
+        AuthDetailDialog,
         BackendDetailDialog,
         DatabaseDetailDialog,
         RedisDetailDialog,
@@ -369,6 +370,7 @@ def create_modal_for_component(
 
     modal_map: dict[str, type[ft.AlertDialog]] = {
         "ai": AIDetailDialog,
+        "auth": AuthDetailDialog,
         "backend": BackendDetailDialog,
         "database": DatabaseDetailDialog,
         "redis": RedisDetailDialog,

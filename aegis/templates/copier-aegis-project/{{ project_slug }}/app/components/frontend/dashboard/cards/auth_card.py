@@ -10,7 +10,8 @@ from app.components.frontend.controls import LabelText, PrimaryText
 from app.services.system.models import ComponentStatus
 
 from .card_utils import (
-    create_hover_handler,
+    create_card_click_handler,
+    create_clickable_hover_handler,
     create_standard_card_container,
     create_tech_badge,
     get_status_colors,
@@ -191,8 +192,12 @@ class AuthCard:
             hover_handler=None,
         )
 
-        # Create hover handler for the card
-        hover_handler = create_hover_handler(card_container)
+        # Create clickable hover handler for the card (with scale animation)
+        hover_handler = create_clickable_hover_handler(card_container)
         card_container.on_hover = hover_handler
+
+        # Add click handler to open modal (standard pattern)
+        card_container.on_click = create_card_click_handler("auth", self.component_data)
+        card_container.cursor = ft.MouseCursor.CLICK
 
         return card_container
