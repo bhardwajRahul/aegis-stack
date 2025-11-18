@@ -10,7 +10,9 @@ from app.components.frontend.controls import LabelText, PrimaryText
 from app.services.system.models import ComponentStatus
 
 from .card_utils import (
-    create_hover_handler,
+    PROVIDER_COLORS,
+    create_card_click_handler,
+    create_clickable_hover_handler,
     create_standard_card_container,
     create_tech_badge,
     get_status_colors,
@@ -30,17 +32,6 @@ class AICard:
     - Responsive design
     """
 
-    # Provider color mapping for visual consistency
-    PROVIDER_COLORS = {
-        "groq": ft.Colors.PURPLE,
-        "openai": ft.Colors.GREEN,
-        "anthropic": ft.Colors.ORANGE,
-        "google": ft.Colors.BLUE,
-        "mistral": ft.Colors.INDIGO,
-        "cohere": ft.Colors.TEAL,
-        "gemini": ft.Colors.BLUE,
-    }
-
     def __init__(self, component_data: ComponentStatus):
         """Initialize with AI service data from health check."""
         self.component_data = component_data
@@ -48,7 +39,7 @@ class AICard:
 
     def _get_provider_color(self, provider: str) -> str:
         """Get color for provider badge."""
-        return self.PROVIDER_COLORS.get(provider.lower(), ft.Colors.GREY)
+        return PROVIDER_COLORS.get(provider.lower(), ft.Colors.GREY)
 
     def _truncate_model_name(self, model: str) -> str:
         """Intelligently truncate model name for display."""
@@ -280,8 +271,12 @@ class AICard:
             hover_handler=None,
         )
 
-        # Create hover handler for the card
-        hover_handler = create_hover_handler(card_container)
+        # Create clickable hover handler for the card (with scale animation)
+        hover_handler = create_clickable_hover_handler(card_container)
         card_container.on_hover = hover_handler
+
+        # Add click handler to open modal (standard pattern)
+        card_container.on_click = create_card_click_handler("ai", self.component_data)
+        card_container.cursor = ft.MouseCursor.CLICK
 
         return card_container

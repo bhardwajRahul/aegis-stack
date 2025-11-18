@@ -13,6 +13,17 @@ from app.components.frontend.controls import LabelText, SecondaryText, TitleText
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
+# Provider color mapping for AI service (shared across AI card and modal)
+PROVIDER_COLORS = {
+    "groq": ft.Colors.PURPLE,
+    "openai": ft.Colors.GREEN,
+    "anthropic": ft.Colors.ORANGE,
+    "google": ft.Colors.BLUE,
+    "mistral": ft.Colors.INDIGO,
+    "cohere": ft.Colors.TEAL,
+    "gemini": ft.Colors.BLUE,
+}
+
 
 def get_status_colors(component_data: ComponentStatus) -> tuple[str, str, str]:
     """
@@ -348,6 +359,7 @@ def create_modal_for_component(
         AlertDialog instance for the component, or None if component not supported
     """
     from ..modals import (
+        AIDetailDialog,
         BackendDetailDialog,
         DatabaseDetailDialog,
         RedisDetailDialog,
@@ -356,6 +368,7 @@ def create_modal_for_component(
     )
 
     modal_map: dict[str, type[ft.AlertDialog]] = {
+        "ai": AIDetailDialog,
         "backend": BackendDetailDialog,
         "database": DatabaseDetailDialog,
         "redis": RedisDetailDialog,

@@ -38,6 +38,9 @@ async def check_ai_service_health() -> ComponentStatus:
             status = ComponentStatusType.HEALTHY
             message = f"AI service ready - {service_status['provider']} provider"
 
+        # Get conversation statistics
+        conversation_stats = ai_service.conversation_manager.get_stats()
+
         # Collect comprehensive metadata
         metadata = {
             "service_type": "ai",
@@ -47,6 +50,11 @@ async def check_ai_service_health() -> ComponentStatus:
             "model": service_status["model"],
             "agent_ready": service_status["agent_initialized"],
             "total_conversations": service_status["total_conversations"],
+            "total_messages": conversation_stats["total_messages"],
+            "unique_users": conversation_stats["unique_users"],
+            "avg_messages_per_conversation": conversation_stats[
+                "average_messages_per_conversation"
+            ],
             "configuration_valid": service_status["configuration_valid"],
             "validation_errors": validation_errors,
             "validation_errors_count": len(validation_errors),
