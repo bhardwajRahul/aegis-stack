@@ -2,93 +2,80 @@
 
 Complete reference for the Aegis Stack command-line interface.
 
-## aegis init
+## Global Options
 
-Create a new Aegis Stack project with your chosen components.
+These options work with all commands and must be specified **before** the command name.
 
 **Usage:**
 ```bash
-aegis init PROJECT_NAME [OPTIONS]
+aegis [GLOBAL OPTIONS] COMMAND [COMMAND OPTIONS]
 ```
 
-**Arguments:**
+**Available Options:**
 
-- `PROJECT_NAME` - Name of the new project to create (required)
-
-**Options:**
-
-- `--components, -c TEXT` - Comma-separated list of components (scheduler,worker,database,cache)
-- `--services, -s TEXT` - Comma-separated list of services (auth,payment,ai,analytics)
-- `--interactive / --no-interactive, -i / -ni` - Use interactive component selection (default: interactive)
-- `--force, -f` - Overwrite existing directory if it exists
-- `--output-dir, -o PATH` - Directory to create the project in (default: current directory)
-- `--yes, -y` - Skip confirmation prompt
+- `--verbose, -v` - Enable verbose output (show detailed file operations)
+- `--help` - Show help message
 
 **Examples:**
 ```bash
-# Simple API project
-aegis init my-api
+# Correct: Global flag before command
+aegis --verbose init my-project
+aegis --verbose add scheduler
+aegis -v remove worker
 
-# Background processing system with scheduler
-aegis init task-processor --components scheduler
-
-# Background processing system with worker
-aegis init task-processor --components worker
-
-# User authentication system
-aegis init user-app --services auth --components database
-
-# Full business application
-aegis init business-app --services auth,payment --components database,worker
-
-# Non-interactive with custom location
-aegis init my-app --services auth --components database --no-interactive --output-dir /projects --yes
-
-# Combined services and components (must include auth's required components)
-aegis init full-stack --services auth --components database,scheduler,worker
+# Incorrect: Global flag after command (will fail)
+aegis init my-project --verbose  ❌
 ```
 
-**Available Components:**
+**What --verbose Shows:**
+- Detailed file operation logs
+- Template rendering details
+- Component resolution steps
+- Dependency installation progress
 
-| Component | Status | Description |
-|-----------|--------|-------------|
-| `scheduler` | ✅ Available | APScheduler-based async task scheduling |
-| `worker` | ✅ Available | Pure arq worker with multiple queues for background processing |
-| `database` | ✅ Available | SQLite database with SQLModel ORM |
-| `cache` | 🚧 Coming Soon | Redis-based async caching |
+---
 
-**Available Services:**
+## Quick Start Commands
 
-| Service | Status | Description | Auto-Added Components |
-|---------|--------|-------------|---------------------|
-| `auth` | ✅ Available | User authentication and authorization with JWT tokens | database *(backend+frontend always included)* |
-| `ai` | 🚧 Coming Soon | OpenAI integration for AI features | worker *(backend+frontend always included)* |
+### aegis version
 
-**Service Auto-Resolution:**
+Show the Aegis Stack CLI version.
 
-When you select services, required components are automatically included:
-
-```mermaid
-graph LR
-    Service["--services auth"] --> Core["backend + frontend<br/>Always included"]
-    Service --> Database["database component<br/>Must be explicitly added"]
-    Service --> AuthFiles["Auth API routes + User models"]
-
-    style Service fill:#e8f5e8
-    style Core fill:#e8f4fd
-    style Database fill:#ffebee
-    style AuthFiles fill:#f1f8e9
+**Usage:**
+```bash
+aegis version
 ```
 
-**Important CLI Behavior:**
-- `backend` and `frontend` components are always included in every project
-- **All modes**: Services require their dependencies to be explicitly specified
-- **Required components**: `--services auth` requires `--components database`
-- Example: Must use `--services auth --components database` (auth requires database)
+**Example Output:**
+```
+Aegis Stack CLI v0.2.1
+```
 
-## aegis services
+### aegis components
 
-List available services and their dependencies.
+List available components with their status and dependencies.
+
+**Usage:**
+```bash
+aegis components
+```
+
+**Example Output:**
+```
+🧩 AVAILABLE COMPONENTS
+========================================
+
+Infrastructure Components
+----------------------------------------
+  scheduler     - APScheduler-based async task scheduling
+  worker        - Pure arq worker with multiple queues (requires: redis)
+  database      - SQLite database with SQLModel ORM
+  redis         - Redis cache and message broker
+```
+
+### aegis services
+
+List available services with their required components.
 
 **Usage:**
 ```bash
@@ -105,74 +92,111 @@ aegis services
   auth         - User authentication and authorization with JWT tokens
                Requires components: backend, database
 
-💰 Payment Services
-----------------------------------------
-  No services available yet.
-
 🤖 AI & Machine Learning Services
 ----------------------------------------
-  No services available yet.
+  ai           - AI chatbot with PydanticAI engine
+               Requires components: backend
+               Supports: OpenAI, Anthropic, Google, Groq, Mistral, Cohere
 ```
 
-## aegis version
+---
 
-Show the Aegis Stack CLI version.
+## Project Management Commands
+
+### aegis init
+
+Create a new Aegis Stack project with your chosen components and services.
 
 **Usage:**
 ```bash
-aegis version
+aegis init PROJECT_NAME [OPTIONS]
 ```
 
-**Example Output:**
-```
-Aegis Stack CLI v1.0.0
-```
+**Arguments:**
 
-## Global Options
+- `PROJECT_NAME` - Name of the new project to create (required)
 
-**Help:**
+**Options:**
+
+- `--components, -c TEXT` - Comma-separated list of components
+- `--services, -s TEXT` - Comma-separated list of services
+- `--interactive / --no-interactive, -i / -ni` - Use interactive selection (default: interactive)
+- `--force, -f` - Overwrite existing directory if it exists
+- `--output-dir, -o PATH` - Directory to create the project in (default: current directory)
+- `--yes, -y` - Skip confirmation prompt
+
+**Examples:**
 ```bash
-aegis --help          # Show general help
-aegis COMMAND --help  # Show help for specific command
+# Simple API project
+aegis init my-api
+
+# Background processing with scheduler
+aegis init task-processor --components scheduler
+
+# User authentication system
+aegis init user-app --services auth --components database
+
+# AI chatbot application
+aegis init chatbot --services ai
+
+# Full stack with auth and AI
+aegis init full-app --services auth,ai --components database,scheduler
+
+# Non-interactive with custom location
+aegis init my-app --services auth --components database --no-interactive --output-dir /projects --yes
 ```
 
-## Exit Codes
+**Available Components:**
 
-- `0` - Success
-- `1` - Error (invalid arguments, project creation failed, etc.)
+| Component | Status | Description |
+|-----------|--------|-------------|
+| `scheduler` | ✅ Available | APScheduler-based async task scheduling |
+| `scheduler[sqlite]` | ✅ Available | Scheduler with SQLite persistence (auto-adds database) |
+| `worker` | ✅ Available | arq worker with Redis for background processing (auto-adds redis) |
+| `database` | ✅ Available | SQLite database with SQLModel ORM |
+| `redis` | ✅ Available | Redis cache and message broker |
+| `cache` | 🚧 Coming Soon | Redis-based async caching layer |
 
-## Environment
+**Available Services:**
 
-The CLI respects these environment variables:
+| Service | Status | Description | Required Components |
+|---------|--------|-------------|---------------------|
+| `auth` | ✅ Available | User authentication with JWT tokens | backend, database |
+| `ai` | ✅ Available | AI chatbot with 7 provider options | backend |
 
-- Standard Python environment variables
-- UV environment variables (for dependency management)
+**Service Auto-Resolution:**
 
-## Project Structure
+When you select services, required components are automatically added:
 
-Projects created with `aegis init` follow this structure:
+- `--services auth` → Auto-adds `database` component
+- `--services ai` → No additional components (backend always included)
+- Backend and frontend components are **always included** in every project
 
+**Component Dependencies:**
+
+Some components require others and will be auto-added:
+
+- `worker` → Auto-adds `redis`
+- `scheduler[sqlite]` → Auto-adds `database`
+
+**Examples with Auto-Resolution:**
+```bash
+# Auth service auto-adds database
+aegis init user-app --services auth
+# Result: backend + frontend + database + auth service
+
+# Worker auto-adds redis
+aegis init task-app --components worker
+# Result: backend + frontend + redis + worker
+
+# Scheduler with SQLite auto-adds database
+aegis init cron-app --components "scheduler[sqlite]"
+# Result: backend + frontend + database + scheduler
 ```
-my-project/
-├── app/
-│   ├── components/
-│   │   ├── backend/        # FastAPI backend
-│   │   ├── frontend/       # Flet frontend  
-│   │   ├── scheduler.py    # APScheduler (if included)
-│   │   └── worker/         # arq worker queues (if included)
-│   ├── core/              # Framework utilities
-│   ├── services/          # Business logic
-│   └── integrations/      # App composition
-├── tests/                 # Test suite
-├── docs/                  # Documentation
-├── pyproject.toml         # Project configuration
-├── Dockerfile             # Container definition
-├── docker-compose.yml     # Multi-service orchestration
-├── Makefile              # Development commands
-└── .env.example          # Environment template
-```
 
-## aegis add
+---
+
+### aegis add
 
 Add components to an existing Aegis Stack project.
 
@@ -183,7 +207,7 @@ aegis add COMPONENTS [OPTIONS]
 
 **Arguments:**
 
-- `COMPONENTS` - Comma-separated list of components to add (scheduler,worker,database)
+- `COMPONENTS` - Comma-separated list of components to add
 
 **Options:**
 
@@ -194,7 +218,7 @@ aegis add COMPONENTS [OPTIONS]
 
 **Examples:**
 ```bash
-# Add scheduler with default (memory) backend
+# Add scheduler with memory backend
 aegis add scheduler
 
 # Add scheduler with SQLite persistence
@@ -202,16 +226,10 @@ aegis add scheduler --backend sqlite
 # or using bracket syntax
 aegis add "scheduler[sqlite]"
 
-# Add multiple components at once
-aegis add scheduler,database
-
-# Add worker (auto-includes redis dependency)
+# Add worker (auto-includes redis)
 aegis add worker
 
-# Add database component
-aegis add database
-
-# Add database with other components
+# Add multiple components
 aegis add database,scheduler
 
 # Add to specific project
@@ -221,32 +239,10 @@ aegis add scheduler --project-path ../my-project
 aegis add --interactive
 ```
 
-**Adding Database Component:**
-
-The database component provides SQLite database with SQLModel ORM:
-
-```bash
-# Add database to existing project
-aegis add database
-
-# Add with other components
-aegis add database,scheduler
-```
-
-**What Gets Added:**
-- `app/core/db.py` - Database connection and session management
-- SQLite database configuration (currently the only supported engine)
-- Health check integration
-- Shared files regenerated with database conditionals
-
-**Database Engine:**
-- Currently only SQLite is supported
-- PostgreSQL and MySQL support coming in future releases
-
 **How It Works:**
 
-1. Validates project was generated with Copier (required)
-2. Checks component dependencies (e.g., scheduler[sqlite] requires database)
+1. Validates project was generated with Copier
+2. Checks component dependencies (auto-adds required components)
 3. Renders component templates with Jinja2
 4. Copies files to project (skips existing files)
 5. Updates `.copier-answers.yml` with new configuration
@@ -256,14 +252,14 @@ aegis add database,scheduler
 
 **Notes:**
 
-- Components are added incrementally without breaking existing code
-- Shared template files (docker-compose.yml, pyproject.toml) are automatically regenerated
-- Backup files are created for shared files before overwriting (`.backup` extension)
+- Components added incrementally without breaking existing code
+- Shared files automatically regenerated with backups
 - Changes are non-destructive (commit before running for easy rollback)
+- Use `--verbose` flag to see detailed operation logs
 
 ---
 
-## aegis add-service
+### aegis add-service
 
 Add services to an existing Aegis Stack project.
 
@@ -274,7 +270,7 @@ aegis add-service SERVICES [OPTIONS]
 
 **Arguments:**
 
-- `SERVICES` - Comma-separated list of services to add (auth,ai)
+- `SERVICES` - Comma-separated list of services to add
 
 **Options:**
 
@@ -293,19 +289,16 @@ aegis add-service ai
 # Add multiple services
 aegis add-service auth,ai
 
-# Add with custom project path
-aegis add-service auth --project-path ../my-project
-
 # Interactive service selection
 aegis add-service --interactive
 
 # Non-interactive with auto-yes
-aegis add-service auth --yes
+aegis add-service auth --yes --project-path ../my-project
 ```
 
 **Service Auto-Resolution:**
 
-Services automatically add their required components:
+Services automatically add their required components if missing:
 
 - `auth` → Requires `database` component (auto-added if missing)
 - `ai` → Requires `backend` component (always present)
@@ -314,15 +307,28 @@ Services automatically add their required components:
 
 After adding services, follow these steps:
 
+**For Auth Service:**
 ```bash
-# For auth service
-make migrate                       # Apply auth migrations
-my-project auth create-test-users  # Create test users
+make migrate                       # Apply auth database migrations
+my-project auth create-test-users  # Create test users for development
+my-project auth list-users         # Verify users created
+```
 
-# For AI service
-# Set AI_PROVIDER in .env (openai, anthropic, google, groq)
-# Set provider API key (OPENAI_API_KEY, etc.)
-my-project ai chat                 # Test CLI chat interface
+**For AI Service:**
+
+Configure provider in `.env`:
+```env
+AI_PROVIDER=public  # Options: public, openai, anthropic, google, groq, mistral, cohere
+
+# For paid providers, add API key:
+# OPENAI_API_KEY=sk-...
+# ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Test the AI service:
+```bash
+my-project ai chat                 # Start interactive chat
+my-project ai providers list       # See all available providers
 ```
 
 **Important Notes:**
@@ -332,7 +338,11 @@ my-project ai chat                 # Test CLI chat interface
 - Services require their dependencies - they will be auto-added
 - Review changes with `git diff` before committing
 
-## aegis remove
+See **Generated Project CLI** section below for full command reference.
+
+---
+
+### aegis remove
 
 Remove components from an existing Aegis Stack project.
 
@@ -343,7 +353,7 @@ aegis remove COMPONENTS [OPTIONS]
 
 **Arguments:**
 
-- `COMPONENTS` - Comma-separated list of components to remove (scheduler,worker,database)
+- `COMPONENTS` - Comma-separated list of components to remove
 
 **Options:**
 
@@ -359,16 +369,13 @@ aegis remove scheduler
 # Remove multiple components
 aegis remove scheduler,worker
 
-# Remove from specific project
-aegis remove scheduler --project-path ../my-project
-
 # Interactive mode
 aegis remove --interactive
 ```
 
 **How It Works:**
 
-1. Validates project was generated with Copier (required)
+1. Validates project was generated with Copier
 2. Checks component is currently enabled
 3. Deletes component files and directories
 4. Cleans up empty parent directories
@@ -379,14 +386,15 @@ aegis remove --interactive
 
 **Important Warnings:**
 
-- **THIS OPERATION DELETES FILES** - Make sure you have committed your changes to git
+- **THIS OPERATION DELETES FILES** - Commit your changes to git first
 - Core components (backend, frontend) cannot be removed
 - Removing scheduler with SQLite persistence leaves `data/scheduler.db` intact
 - Shared template files are regenerated (backups created automatically)
+- Redis is auto-removed when worker is removed (no standalone functionality)
 
 ---
 
-## aegis update
+### aegis update
 
 Update an existing Copier-based project to the latest template version.
 
@@ -398,8 +406,8 @@ aegis update [OPTIONS]
 **Options:**
 
 - `--project-path PATH` - Path to project to update (default: current directory)
-- `--version TEXT` - Update to specific template version (default: latest)
-- `--force, -f` - Accept all template changes automatically (skip conflict resolution)
+- `--to-version TEXT` - Update to specific template version (default: latest)
+- `--force, -f` - Accept all template changes automatically
 - `--yes, -y` - Skip confirmation prompt
 - `--dry-run` - Preview changes without applying them
 
@@ -412,7 +420,7 @@ aegis update
 aegis update --project-path ../my-project
 
 # Update to specific template version
-aegis update --version 0.2.0
+aegis update --to-version 0.2.0
 
 # Preview changes without applying
 aegis update --dry-run
@@ -423,21 +431,21 @@ aegis update --force --yes
 
 **How It Works:**
 
-1. Validates project was generated with Copier (required for updates)
+1. Validates project was generated with Copier
 2. Checks current template version from `.copier-answers.yml`
 3. Fetches latest template version (or specified version)
 4. Compares current files with template updates
 5. Shows diff of changes to be applied
-6. Prompts for conflict resolution (which version to keep)
-7. Applies updates and creates backup files for conflicts
+6. Prompts for conflict resolution
+7. Applies updates and creates backup files
 8. Runs `uv sync` to update dependencies
 9. Runs `make fix` to format updated code
 
 **What Gets Updated:**
 
-- ✅ Template infrastructure files (configuration, base components)
+- ✅ Template infrastructure files
 - ✅ Shared files (docker-compose.yml, pyproject.toml, Makefile)
-- ✅ Component implementations (if you haven't customized them)
+- ✅ Component implementations (if unmodified)
 - ✅ Test infrastructure
 - ✅ Documentation templates
 
@@ -447,64 +455,116 @@ aegis update --force --yes
 - ✅ Your environment variables (.env)
 - ✅ Your database migrations
 - ✅ Your custom models and services
-- ✅ Files you've modified (marked as conflicts for manual resolution)
-
-**Conflict Resolution:**
-
-When the template has changed a file you've also modified:
-
-```bash
-# Option 1: Keep your version
-[1] Keep my changes
-
-# Option 2: Use template version
-[2] Use template version
-
-# Option 3: View diff
-[3] Show diff
-
-# Option 4: Manual merge
-[4] I'll merge manually
-```
-
-Conflict files are backed up to:
-- Original: `app/components/backend/api/router.py.backup-TIMESTAMP`
-- Template: `app/components/backend/api/router.py.copier-TIMESTAMP`
+- ✅ Files you've modified (marked as conflicts)
 
 **Important Notes:**
 
-- **Cookiecutter projects cannot use this command** - Only Copier-based projects support updates
+- **Cookiecutter projects cannot use this command** - Copier only
 - **Always commit before updating**: `git add . && git commit -m "Pre-update checkpoint"`
-- **Review changes carefully**: Don't blindly accept all updates
 - **Test after updating**: Run `make check` to verify everything works
-- **Backup files are created**: Check `.backup-*` and `.copier-*` files after conflicts
-- **Major version updates**: May require manual intervention and migration steps
+- Use `--dry-run` first to preview changes
 
-**Troubleshooting:**
+---
 
+## Generated Project CLI
+
+When you add services to a project, they install their own CLI commands as entry point scripts. These commands are available after running `uv sync` in your generated project.
+
+**Script Installation:**
+
+All generated projects get a CLI script matching the project name:
 ```bash
-# Error: "Not a Copier project"
-# Solution: This project was created with Cookiecutter
-# aegis update only works with Copier-generated projects (v0.2.0+)
+# If project is named "my-app"
+my-app --help
 
-# Error: "Uncommitted changes"
-# Solution: Commit your changes first
-git add . && git commit -m "Save current work"
-
-# Many conflicts after update
-# Solution: Review .copier-answers.yml to see what changed
-# Use --dry-run first to preview changes
-
-# Update breaks tests
-# Solution: Roll back and review changes
-git reset --hard HEAD~1  # Undo update
-aegis update --dry-run    # Preview what changed
+# If project is named "chatbot"
+chatbot --help
 ```
 
-**See Also:**
+### Component CLIs
 
-- `aegis add` - Add new components to existing projects
-- `aegis remove` - Remove components from projects
+Components that add CLI capabilities to your generated projects:
+
+**Scheduler** - `my-app tasks`
+
+Manage scheduled tasks with persistent job tracking:
+
+```bash
+my-app tasks list       # List all scheduled jobs
+my-app tasks stats      # View scheduler statistics
+my-app tasks history    # View execution history
+```
+
+**→ [Complete Scheduler CLI Reference](components/scheduler/cli.md)**
+
+**Worker** - Native `arq` CLI
+
+Background task processing with Redis-backed queues:
+
+```bash
+arq my_project.components.worker.WorkerSettings  # Start worker
+arq --watch my_project.components.worker.WorkerSettings  # Auto-reload
+```
+
+**→ [Complete Worker CLI Reference](components/worker/cli.md)**
+
+### Service CLIs
+
+Services that add CLI capabilities to your generated projects:
+
+**Auth Service** - `my-app auth`
+
+User management and testing utilities:
+
+```bash
+my-app auth create-test-user   # Create single test user
+my-app auth create-test-users  # Create multiple test users
+my-app auth list-users         # List all users
+```
+
+**→ [Complete Auth CLI Reference](services/auth/cli.md)**
+
+**AI Service** - `my-app ai`
+
+Multi-provider AI chat interface with conversation management:
+
+```bash
+my-app ai chat                 # Interactive chat session
+my-app ai chat send "Hello"    # Send single message
+my-app ai config show          # View AI configuration
+my-app ai providers list       # List all 7 AI providers
+```
+
+**→ [Complete AI CLI Reference](services/ai/cli.md)**
+
+---
+
+## Project Structure
+
+Projects created with `aegis init` follow this structure:
+
+```
+my-project/
+├── app/
+│   ├── components/
+│   │   ├── backend/        # FastAPI backend
+│   │   ├── frontend/       # Flet frontend
+│   │   ├── scheduler.py    # APScheduler (if included)
+│   │   ├── worker/         # arq worker queues (if included)
+│   │   └── database.py     # Database setup (if included)
+│   ├── core/              # Framework utilities
+│   ├── services/          # Business logic
+│   ├── cli/               # CLI commands (if services added)
+│   └── integrations/      # App composition
+├── tests/                 # Test suite
+├── docs/                  # Documentation
+├── data/                  # SQLite databases (if database included)
+├── pyproject.toml         # Project configuration
+├── Dockerfile             # Container definition
+├── docker-compose.yml     # Multi-service orchestration
+├── Makefile              # Development commands
+└── .env.example          # Environment template
+```
 
 ---
 
@@ -516,10 +576,10 @@ After creating a project:
 cd my-project
 uv sync                    # Install dependencies and create virtual environment
 source .venv/bin/activate  # Activate virtual environment (important!)
-cp .env.example .env       # Configure environment
+cp .env.example .env       # Configure environment (edit API keys, etc.)
 make serve                 # Start development server
 make test                  # Run test suite
-make check                 # Run all quality checks
+make check                 # Run all quality checks (lint + typecheck + test)
 ```
 
 ### Evolving Your Project
@@ -529,9 +589,34 @@ make check                 # Run all quality checks
 aegis add scheduler
 aegis add worker
 
+# Add services for new features
+aegis add-service auth
+aegis add-service ai
+
 # Remove components you don't need
 aegis remove scheduler
+
+# Update to latest template version
+aegis update
 
 # Always commit before making changes
 git add . && git commit -m "Add scheduler component"
 ```
+
+### Best Practices
+
+1. **Commit before evolving**: Always commit your work before adding/removing components
+2. **Use verbose mode**: Add `--verbose` flag to see detailed operations
+3. **Test after changes**: Run `make check` after adding/removing components
+4. **Review diffs**: Use `git diff` to see what changed after operations
+5. **Update regularly**: Keep your project in sync with latest template via `aegis update`
+
+---
+
+## Environment
+
+The CLI respects these environment variables:
+
+- Standard Python environment variables
+- UV environment variables (for dependency management)
+- Project-specific variables (when running generated CLI commands)

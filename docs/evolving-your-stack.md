@@ -8,7 +8,11 @@ Most frameworks lock you into decisions made during `init`. Aegis Stack gives yo
 
 ## The Friday Afternoon Dilemma
 
-It's Friday afternoon. Product wants the MVP Monday. Do you:
+It's Friday afternoon. Product wants the MVP Monday.
+
+![Management has spoken](images/mr_burns.jpg)
+
+Do you:
 
 **A) Over-engineer for "future scale"** *(workers, queues, caching, message buses...)*
 

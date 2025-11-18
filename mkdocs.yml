@@ -32,6 +32,7 @@ nav:
   - Origin Story:
     - About: about.md
     - Technology Stack: technology.md
+    - How I Build: process.md
   - Components:
     - Overview: components/index.md
     - Backend: components/webserver.md

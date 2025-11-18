@@ -1,5 +1,7 @@
 # CLI Commands
 
+**Part of the Generated Project CLI** - See [CLI Reference](../../cli-reference.md#service-clis) for complete overview.
+
 Manage users from the command line with development-focused CLI commands.
 
 ## Overview
@@ -97,8 +99,9 @@ curl -X GET http://localhost:8000/auth/me \
 
 ---
 
-**Next Steps:**
+## See Also
 
+- **[CLI Reference](../../cli-reference.md)** - Complete CLI overview and all commands
+- **[Auth Service Documentation](index.md)** - Main auth service documentation
 - **[API Reference](api.md)** - Test the endpoints with your created users
 - **[Integration Guide](integration.md)** - Build frontend login forms
-- **[Examples](examples.md)** - See complete application examples

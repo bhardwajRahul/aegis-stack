@@ -96,7 +96,7 @@ conversation = ai_service.get_conversation(conv_id)
 conversations = ai_service.list_conversations(user_id="user-123")
 ```
 
-!!! example "Musings: Persistent Storage Coming"
+!!! example "Musings: Persistent Storage Coming (October 2025)"
     Right now conversations are in-memory and reset on restart. That's intentional for v0.1.0 - keeps things simple while I focus on getting the core experience right.
 
     Database-backed storage is definitely planned. The architecture's pretty straightforward: "If database component detected, store conversations there." The design is solid, I just need to think through some things.
