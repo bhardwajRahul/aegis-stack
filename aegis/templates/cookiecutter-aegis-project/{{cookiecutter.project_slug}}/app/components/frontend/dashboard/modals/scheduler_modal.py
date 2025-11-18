@@ -281,15 +281,12 @@ class SchedulerDetailDialog(ft.AlertDialog):
         Args:
             component_data: ComponentStatus containing scheduler health and metrics
         """
-        super().__init__()
-
         self.component_data = component_data
         metadata = component_data.metadata or {}
 
-        # Configure dialog properties
-        self.modal = True
-        self.title = self._create_title()
-        self.content = ft.Container(
+        # Build modal content
+        title = self._create_title()
+        content = ft.Container(
             content=ft.Column(
                 [
                     OverviewSection(metadata),
@@ -304,10 +301,17 @@ class SchedulerDetailDialog(ft.AlertDialog):
             width=900,
             height=700,
         )
-        self.actions = [
-            ft.TextButton("Close", on_click=self._close),
-        ]
-        self.actions_alignment = ft.MainAxisAlignment.END
+
+        # Initialize dialog
+        super().__init__(
+            modal=False,
+            title=title,
+            content=content,
+            actions=[
+                ft.TextButton("Close", on_click=self._close),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
 
     def _create_title(self) -> ft.Control:
         """Create the modal title with status indicator."""

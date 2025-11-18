@@ -401,8 +401,6 @@ class WorkerDetailDialog(ft.AlertDialog):
         Args:
             component_data: Worker ComponentStatus from health check
         """
-        super().__init__()
-
         self.component_data = component_data
         status = component_data.status
 
@@ -415,10 +413,9 @@ class WorkerDetailDialog(ft.AlertDialog):
         }
         status_color = status_color_map.get(status, Theme.Colors.TEXT_DISABLED)
 
-        # Modal configuration
-        self.modal = True
-        self.title = self._create_title(status, status_color)
-        self.content = ft.Container(
+        # Build modal content
+        title = self._create_title(status, status_color)
+        content = ft.Container(
             content=ft.Column(
                 [
                     OverviewSection(component_data),
@@ -433,10 +430,17 @@ class WorkerDetailDialog(ft.AlertDialog):
             width=900,
             height=700,
         )
-        self.actions = [
-            ft.TextButton("Close", on_click=self._close),
-        ]
-        self.actions_alignment = ft.MainAxisAlignment.END
+
+        # Initialize dialog
+        super().__init__(
+            modal=False,
+            title=title,
+            content=content,
+            actions=[
+                ft.TextButton("Close", on_click=self._close),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
 
     def _create_title(self, status: ComponentStatusType, status_color: str) -> ft.Row:
         """

@@ -10,6 +10,8 @@ from app.components.frontend.controls import LabelText, PrimaryText
 from app.services.system.models import ComponentStatus
 
 from .card_utils import (
+    create_card_click_handler,
+    create_clickable_hover_handler,
     create_hover_handler,
     create_progress_indicator,
     create_standard_card_container,
@@ -323,6 +325,13 @@ class FastAPICard:
             ),  # Will set after container creation
         )
 
-        # Hover effects disabled
+        # Add click handler to open Backend detail modal
+        self._card_container.on_hover = create_clickable_hover_handler(
+            self._card_container
+        )
+        self._card_container.on_click = create_card_click_handler(
+            "backend", self.component_data
+        )
+        self._card_container.cursor = ft.MouseCursor.CLICK
 
         return self._card_container
