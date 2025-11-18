@@ -27,6 +27,7 @@ class PrimaryText(ft.Text):  # type: ignore[misc]
             "font_family": "Roboto",
             "size": Theme.Typography.BODY_LARGE,
             "weight": Theme.Typography.WEIGHT_REGULAR,
+            "selectable": True,
         }
         defaults.update(kwargs)
         super().__init__(value=value, opacity=opacity, **defaults)
@@ -49,6 +50,7 @@ class SecondaryText(ft.Text):  # type: ignore[misc]
             "font_family": "Roboto",
             "size": Theme.Typography.BODY,
             "weight": Theme.Typography.WEIGHT_REGULAR,
+            "selectable": True,
         }
         defaults.update(kwargs)
         super().__init__(value=value, opacity=opacity, **defaults)
@@ -68,6 +70,7 @@ class TitleText(ft.Text):  # type: ignore[misc]
             "font_family": "Roboto",
             "size": Theme.Typography.H2,
             "weight": Theme.Typography.WEIGHT_BOLD,
+            "selectable": True,
         }
         # Update defaults with any provided kwargs
         defaults.update(kwargs)
@@ -92,6 +95,7 @@ class ConfirmationText(ft.Text):  # type: ignore[misc]
             "font_family": "Roboto",
             "size": Theme.Typography.BODY,
             "weight": Theme.Typography.WEIGHT_REGULAR,
+            "selectable": True,
         }
         defaults.update(kwargs)
         super().__init__(value=value, opacity=opacity, **defaults)
@@ -110,6 +114,7 @@ class MetricText(ft.Text):  # type: ignore[misc]
             "font_family": "Roboto",
             "size": Theme.Typography.BODY_LARGE,
             "weight": Theme.Typography.WEIGHT_BOLD,
+            "selectable": True,
         }
         defaults.update(kwargs)
         super().__init__(value=value, opacity=opacity, **defaults)
@@ -129,6 +134,7 @@ class LabelText(ft.Text):  # type: ignore[misc]
             "font_family": "Roboto",
             "size": Theme.Typography.BODY_SMALL,
             "weight": Theme.Typography.WEIGHT_SEMIBOLD,
+            "selectable": True,
         }
         # Update defaults with any provided kwargs
         defaults.update(kwargs)
@@ -158,6 +164,7 @@ class DisplayText(ft.Text):  # type: ignore[misc]
             "weight": Theme.Typography.WEIGHT_BOLD,
             "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
+            "selectable": True,
         }
         defaults.update(kwargs)
         super().__init__(value=value, opacity=opacity, **defaults)
@@ -176,6 +183,7 @@ class H1Text(ft.Text):  # type: ignore[misc]
             "weight": Theme.Typography.WEIGHT_BOLD,
             "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
+            "selectable": True,
         }
         defaults.update(kwargs)
         super().__init__(value=value, opacity=opacity, **defaults)
@@ -194,6 +202,7 @@ class H2Text(ft.Text):  # type: ignore[misc]
             "weight": Theme.Typography.WEIGHT_BOLD,
             "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
+            "selectable": True,
         }
         defaults.update(kwargs)
         super().__init__(value=value, opacity=opacity, **defaults)
@@ -212,6 +221,7 @@ class H3Text(ft.Text):  # type: ignore[misc]
             "weight": Theme.Typography.WEIGHT_SEMIBOLD,
             "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
+            "selectable": True,
         }
         defaults.update(kwargs)
         super().__init__(value=value, opacity=opacity, **defaults)
@@ -230,6 +240,7 @@ class BodyText(ft.Text):  # type: ignore[misc]
             "weight": Theme.Typography.WEIGHT_REGULAR,
             "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
+            "selectable": True,
         }
         defaults.update(kwargs)
         super().__init__(value=value, opacity=opacity, **defaults)
@@ -248,6 +259,7 @@ class AccentText(ft.Text):  # type: ignore[misc]
             "weight": Theme.Typography.WEIGHT_MEDIUM,
             "color": Theme.Colors.ACCENT,
             "font_family": "Roboto",
+            "selectable": True,
         }
         defaults.update(kwargs)
         super().__init__(value=value, opacity=opacity, **defaults)
@@ -266,6 +278,7 @@ class SuccessText(ft.Text):  # type: ignore[misc]
             "weight": Theme.Typography.WEIGHT_MEDIUM,
             "color": Theme.Colors.SUCCESS,
             "font_family": "Roboto",
+            "selectable": True,
         }
         defaults.update(kwargs)
         super().__init__(value=value, opacity=opacity, **defaults)
@@ -284,6 +297,7 @@ class WarningText(ft.Text):  # type: ignore[misc]
             "weight": Theme.Typography.WEIGHT_MEDIUM,
             "color": Theme.Colors.WARNING,
             "font_family": "Roboto",
+            "selectable": True,
         }
         defaults.update(kwargs)
         super().__init__(value=value, opacity=opacity, **defaults)
@@ -302,6 +316,7 @@ class ErrorText(ft.Text):  # type: ignore[misc]
             "weight": Theme.Typography.WEIGHT_MEDIUM,
             "color": Theme.Colors.ERROR,
             "font_family": "Roboto",
+            "selectable": True,
         }
         defaults.update(kwargs)
         super().__init__(value=value, opacity=opacity, **defaults)
