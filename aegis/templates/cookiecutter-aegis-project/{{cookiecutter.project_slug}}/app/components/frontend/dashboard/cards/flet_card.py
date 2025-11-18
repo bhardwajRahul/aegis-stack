@@ -10,7 +10,8 @@ from app.components.frontend.controls import PrimaryText
 from app.services.system.models import ComponentStatus
 
 from .card_utils import (
-    create_hover_handler,
+    create_card_click_handler,
+    create_clickable_hover_handler,
     create_responsive_3_section_layout,
     create_standard_card_container,
     create_stats_row,
@@ -261,7 +262,17 @@ class FletCard:
             primary_color=primary_color,
             border_color=border_color,
             width=None,  # Let ResponsiveRow handle the width
-            hover_handler=create_hover_handler(None),
+            hover_handler=None,
         )
+
+        # Create clickable hover handler for the card (with scale animation)
+        hover_handler = create_clickable_hover_handler(self._card_container)
+        self._card_container.on_hover = hover_handler
+
+        # Add click handler to open modal (standard pattern)
+        self._card_container.on_click = create_card_click_handler(
+            "frontend", self.component_data
+        )
+        self._card_container.cursor = ft.MouseCursor.CLICK
 
         return self._card_container
