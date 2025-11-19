@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from aegis.core.copier_manager import is_copier_project
 
 from .test_utils import run_aegis_command, strip_ansi_codes
@@ -319,3 +321,227 @@ class TestUpdateCommandErrorHandling:
         # Should have helpful error message
         assert len(result.stderr) > 0
         assert "copier" in result.stderr.lower()
+
+
+class TestUpdateCommandTemplatePath:
+    """Tests for --template-path flag functionality."""
+
+    def test_update_command_has_template_path_option(self) -> None:
+        """Test that update command has --template-path option in help."""
+        result = run_aegis_command("update", "--help")
+
+        assert result.success
+        clean_output = strip_ansi_codes(result.stdout)
+        assert "--template-path" in clean_output
+
+    def test_update_with_nonexistent_template_path(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Test that update fails with non-existent template path."""
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--template-path",
+            "/nonexistent/path",
+            "--dry-run",
+        )
+
+        assert not result.success
+        assert "does not exist" in result.stderr.lower()
+
+    def test_update_with_invalid_template_structure(
+        self, project_factory: "ProjectFactory", temp_output_dir: Path
+    ) -> None:
+        """Test that update fails when template path is missing copier.yml."""
+        project_path = project_factory("base")
+
+        # Create an empty directory (no copier.yml)
+        invalid_template = temp_output_dir / "invalid-template"
+        invalid_template.mkdir()
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--template-path",
+            str(invalid_template),
+            "--dry-run",
+        )
+
+        assert not result.success
+        assert "missing copier.yml" in result.stderr.lower()
+
+    def test_update_with_non_git_template_path(
+        self, project_factory: "ProjectFactory", temp_output_dir: Path
+    ) -> None:
+        """Test that update fails when template path is not a git repository."""
+        project_path = project_factory("base")
+
+        # Create directory with copier.yml but no .git
+        non_git_template = temp_output_dir / "non-git-template"
+        non_git_template.mkdir()
+        (non_git_template / "copier.yml").write_text("# mock copier config")
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--template-path",
+            str(non_git_template),
+            "--dry-run",
+        )
+
+        assert not result.success
+        assert "git repository" in result.stderr.lower()
+
+    def test_update_with_valid_template_path(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Test that update works with valid custom template path."""
+        project_path = project_factory("base")
+
+        # Use the actual aegis-stack repo as template path
+        # This is the same as the default, but tests the path validation
+        from aegis.core.copier_updater import get_template_root
+
+        template_root = get_template_root()
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--template-path",
+            str(template_root),
+            "--dry-run",
+        )
+
+        # Should succeed or show early exit (already at target)
+        assert result.success
+        # Should show that custom template is being used
+        assert (
+            "custom template" in result.stdout.lower()
+            or "already at" in result.stdout.lower()
+        )
+
+    def test_update_template_path_expands_tilde(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Test that template path expands ~ to home directory."""
+        project_path = project_factory("base")
+
+        # Use a path that should expand (even if it doesn't exist)
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--template-path",
+            "~/nonexistent-aegis-stack",
+            "--dry-run",
+        )
+
+        # Should fail with "does not exist" (not a raw path error)
+        # This proves ~ was expanded
+        assert not result.success
+        assert "does not exist" in result.stderr.lower()
+        # Should NOT contain the literal ~ in the error message
+        assert "~/nonexistent" not in result.stderr
+
+
+class TestUpdateCommandEnvVar:
+    """Tests for AEGIS_TEMPLATE_PATH environment variable support."""
+
+    def test_update_uses_env_var_when_no_flag(
+        self, project_factory: "ProjectFactory", monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that update uses AEGIS_TEMPLATE_PATH when flag not provided."""
+        project_path = project_factory("base")
+
+        # Use the actual aegis-stack repo as template path
+        from aegis.core.copier_updater import get_template_root
+
+        template_root = get_template_root()
+
+        # Set env var
+        monkeypatch.setenv("AEGIS_TEMPLATE_PATH", str(template_root))
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--dry-run",
+        )
+
+        # Should succeed and show env var source
+        assert result.success
+        assert (
+            "aegis_template_path" in result.stdout.lower()
+            or "already at" in result.stdout.lower()
+        )
+
+    def test_update_flag_overrides_env_var(
+        self, project_factory: "ProjectFactory", monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that --template-path flag overrides AEGIS_TEMPLATE_PATH env var."""
+        project_path = project_factory("base")
+
+        # Set env var to a non-existent path
+        monkeypatch.setenv("AEGIS_TEMPLATE_PATH", "/env/var/path")
+
+        # Use flag with different (also non-existent) path
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--template-path",
+            "/flag/path",
+            "--dry-run",
+        )
+
+        # Should fail with flag path error (not env var path)
+        assert not result.success
+        assert "/flag/path" in result.stderr
+        assert "/env/var/path" not in result.stderr
+
+    def test_update_env_var_invalid_path(
+        self, project_factory: "ProjectFactory", monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that invalid AEGIS_TEMPLATE_PATH env var shows error."""
+        project_path = project_factory("base")
+
+        # Set env var to non-existent path
+        monkeypatch.setenv("AEGIS_TEMPLATE_PATH", "/nonexistent/env/path")
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--dry-run",
+        )
+
+        # Should fail with validation error
+        assert not result.success
+        assert "does not exist" in result.stderr.lower()
+
+    def test_update_env_var_empty_string_ignored(
+        self, project_factory: "ProjectFactory", monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that empty AEGIS_TEMPLATE_PATH env var is ignored."""
+        project_path = project_factory("base")
+
+        # Set env var to empty string
+        monkeypatch.setenv("AEGIS_TEMPLATE_PATH", "")
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--dry-run",
+        )
+
+        # Should succeed using default template (empty string is falsy)
+        assert result.success
+        # Should NOT show "custom template" message
+        assert "custom template" not in result.stdout.lower()
