@@ -319,3 +319,130 @@ class TestUpdateCommandErrorHandling:
         # Should have helpful error message
         assert len(result.stderr) > 0
         assert "copier" in result.stderr.lower()
+
+
+class TestUpdateCommandTemplatePath:
+    """Tests for --template-path flag functionality."""
+
+    def test_update_command_has_template_path_option(self) -> None:
+        """Test that update command has --template-path option in help."""
+        result = run_aegis_command("update", "--help")
+
+        assert result.success
+        clean_output = strip_ansi_codes(result.stdout)
+        assert "--template-path" in clean_output
+
+    def test_update_with_nonexistent_template_path(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Test that update fails with non-existent template path."""
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--template-path",
+            "/nonexistent/path",
+            "--dry-run",
+        )
+
+        assert not result.success
+        assert "does not exist" in result.stderr.lower()
+
+    def test_update_with_invalid_template_structure(
+        self, project_factory: "ProjectFactory", temp_output_dir: Path
+    ) -> None:
+        """Test that update fails when template path is missing copier.yml."""
+        project_path = project_factory("base")
+
+        # Create an empty directory (no copier.yml)
+        invalid_template = temp_output_dir / "invalid-template"
+        invalid_template.mkdir()
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--template-path",
+            str(invalid_template),
+            "--dry-run",
+        )
+
+        assert not result.success
+        assert "missing copier.yml" in result.stderr.lower()
+
+    def test_update_with_non_git_template_path(
+        self, project_factory: "ProjectFactory", temp_output_dir: Path
+    ) -> None:
+        """Test that update fails when template path is not a git repository."""
+        project_path = project_factory("base")
+
+        # Create directory with copier.yml but no .git
+        non_git_template = temp_output_dir / "non-git-template"
+        non_git_template.mkdir()
+        (non_git_template / "copier.yml").write_text("# mock copier config")
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--template-path",
+            str(non_git_template),
+            "--dry-run",
+        )
+
+        assert not result.success
+        assert "git repository" in result.stderr.lower()
+
+    def test_update_with_valid_template_path(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Test that update works with valid custom template path."""
+        project_path = project_factory("base")
+
+        # Use the actual aegis-stack repo as template path
+        # This is the same as the default, but tests the path validation
+        from aegis.core.copier_updater import get_template_root
+
+        template_root = get_template_root()
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--template-path",
+            str(template_root),
+            "--dry-run",
+        )
+
+        # Should succeed or show early exit (already at target)
+        assert result.success
+        # Should show that custom template is being used
+        assert (
+            "custom template" in result.stdout.lower()
+            or "already at" in result.stdout.lower()
+        )
+
+    def test_update_template_path_expands_tilde(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Test that template path expands ~ to home directory."""
+        project_path = project_factory("base")
+
+        # Use a path that should expand (even if it doesn't exist)
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--template-path",
+            "~/nonexistent-aegis-stack",
+            "--dry-run",
+        )
+
+        # Should fail with "does not exist" (not a raw path error)
+        # This proves ~ was expanded
+        assert not result.success
+        assert "does not exist" in result.stderr.lower()
+        # Should NOT contain the literal ~ in the error message
+        assert "~/nonexistent" not in result.stderr

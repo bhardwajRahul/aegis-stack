@@ -39,6 +39,12 @@ def update_command(
         "-p",
         help="Path to the Aegis Stack project (default: current directory)",
     ),
+    template_path: str | None = typer.Option(
+        None,
+        "--template-path",
+        "-t",
+        help="Use custom template path instead of installed version",
+    ),
     yes: bool = typer.Option(
         False,
         "--yes",
@@ -61,6 +67,8 @@ def update_command(
         - aegis update --dry-run
 
         - aegis update --project-path ../my-project
+
+        - aegis update --template-path ~/workspace/aegis-stack
 
     Note: This command requires a clean git working tree.
     """
@@ -114,8 +122,15 @@ def update_command(
     current_version = get_project_template_version(target_path)
     cli_version = get_cli_version()
 
-    # Get template root
-    template_root = get_template_root()
+    # Get template root (with optional custom path)
+    try:
+        template_root = get_template_root(template_path)
+    except ValueError as e:
+        typer.echo(f"❌ {e}", err=True)
+        raise typer.Exit(1)
+
+    if template_path:
+        typer.echo(f"📦 Using custom template: {template_root}")
 
     # Resolve target version
     if to_version:
