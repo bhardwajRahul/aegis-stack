@@ -29,14 +29,41 @@ class CopierUpdateResult(BaseModel):
     )
 
 
-def get_template_root() -> Path:
+def get_template_root(override_path: str | None = None) -> Path:
     """
     Get path to aegis-stack repository root (where copier.yml lives).
 
+    Args:
+        override_path: Optional custom template path to use instead of default
+
     Returns:
         Path to aegis-stack root directory
+
+    Raises:
+        ValueError: If override_path is invalid or missing required structure
     """
-    # This file is at: aegis-stack/aegis/core/copier_updater.py
+    if override_path:
+        template_path = Path(override_path).expanduser().resolve()
+
+        # Validate path exists
+        if not template_path.exists():
+            raise ValueError(f"Template path does not exist: {template_path}")
+
+        # Validate it's a directory
+        if not template_path.is_dir():
+            raise ValueError(f"Template path is not a directory: {template_path}")
+
+        # Validate it has copier.yml
+        if not (template_path / "copier.yml").exists():
+            raise ValueError(f"Invalid template: missing copier.yml at {template_path}")
+
+        # Validate it's a git repository
+        if not (template_path / ".git").exists():
+            raise ValueError(f"Template path must be a git repository: {template_path}")
+
+        return template_path
+
+    # Default: This file is at: aegis-stack/aegis/core/copier_updater.py
     # We want: aegis-stack/ (2 levels up)
     return Path(__file__).parents[2]
 
