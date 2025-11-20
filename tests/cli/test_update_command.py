@@ -142,7 +142,12 @@ class TestUpdateCommandDryRun:
 
         # Run update in dry-run mode
         result = run_aegis_command(
-            "update", "--project-path", str(project_path), "--dry-run"
+            "update",
+            "--project-path",
+            str(project_path),
+            "--to-version",
+            "HEAD",
+            "--dry-run",
         )
 
         # Should succeed and either show dry-run message or early exit message
@@ -415,6 +420,8 @@ class TestUpdateCommandTemplatePath:
             str(project_path),
             "--template-path",
             str(template_root),
+            "--to-version",
+            "HEAD",
             "--dry-run",
         )
 
@@ -461,7 +468,12 @@ class TestUpdateCommandRollback:
 
         # Run update in dry-run mode (won't actually update but shows workflow)
         result = run_aegis_command(
-            "update", "--project-path", str(project_path), "--dry-run"
+            "update",
+            "--project-path",
+            str(project_path),
+            "--to-version",
+            "HEAD",
+            "--dry-run",
         )
 
         # Dry run doesn't create backup, but command structure is valid
@@ -611,6 +623,8 @@ class TestUpdateCommandEnvVar:
             "update",
             "--project-path",
             str(project_path),
+            "--to-version",
+            "HEAD",
             "--dry-run",
         )
 
@@ -678,6 +692,8 @@ class TestUpdateCommandEnvVar:
             "update",
             "--project-path",
             str(project_path),
+            "--to-version",
+            "HEAD",
             "--dry-run",
         )
 
@@ -772,6 +788,8 @@ class TestUpdateCommandVersionInfo:
             "update",
             "--project-path",
             str(project_path),
+            "--to-version",
+            "HEAD",
             "--dry-run",
         )
 

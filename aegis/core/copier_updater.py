@@ -358,6 +358,37 @@ def resolve_version_to_ref(
     return version
 
 
+def is_version_downgrade(
+    current_commit: str, target_commit: str, template_root: Path
+) -> bool:
+    """
+    Check if target commit is older than current commit (downgrade).
+
+    Args:
+        current_commit: Current template commit hash
+        target_commit: Target template commit hash
+        template_root: Path to template repository
+
+    Returns:
+        True if target is older than current (downgrade), False otherwise
+    """
+    try:
+        # Use git merge-base to check if target is ancestor of current
+        # If target IS an ancestor of current, it means target is older (downgrade)
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", target_commit, current_commit],
+            cwd=template_root,
+            capture_output=True,
+            check=False,
+        )
+        # Exit code 0 means target IS ancestor (downgrade)
+        # Exit code 1 means target is NOT ancestor (upgrade or unrelated)
+        return result.returncode == 0
+    except Exception:
+        # If we can't determine, assume it's not a downgrade (safe default)
+        return False
+
+
 def validate_clean_git_tree(project_path: Path) -> tuple[bool, str]:
     """
     Check if the project's git working tree is clean.

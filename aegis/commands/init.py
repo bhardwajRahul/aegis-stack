@@ -76,6 +76,11 @@ def init_command(
         hidden=True,  # Internal testing flag, not shown in --help
         help="Template engine (cookiecutter or copier) - for internal testing",
     ),
+    to_version: str | None = typer.Option(
+        None,
+        "--to-version",
+        help="Generate from specific template version (tag, commit, or branch)",
+    ),
 ) -> None:
     """
     Initialize a new Aegis Stack project with battle-tested component combinations.
@@ -118,6 +123,9 @@ def init_command(
     project_path = base_output_dir / project_name
 
     typer.echo(f"📁 Project will be created in: {project_path.resolve()}")
+
+    if to_version:
+        typer.echo(f"📦 Template Version: {to_version}")
 
     # Check if directory already exists
     if project_path.exists():
@@ -351,7 +359,7 @@ def init_command(
             # Use Copier template engine
             from ..core.copier_manager import generate_with_copier
 
-            generate_with_copier(template_gen, base_output_dir)
+            generate_with_copier(template_gen, base_output_dir, vcs_ref=to_version)
 
         else:
             # Use Cookiecutter template engine (fallback option)
