@@ -12,11 +12,14 @@ import typer
 
 from ..core.copier_manager import is_copier_project, load_copier_answers
 from ..core.copier_updater import (
+    cleanup_backup_tag,
+    create_backup_point,
     get_changelog,
     get_current_template_commit,
     get_latest_version,
     get_template_root,
     resolve_version_to_ref,
+    rollback_to_backup,
     validate_clean_git_tree,
 )
 from ..core.post_gen_tasks import run_post_generation_tasks
@@ -211,6 +214,15 @@ def update_command(
             typer.echo("❌ Update cancelled")
             raise typer.Exit(0)
 
+    # Create backup point before update
+    typer.echo("")
+    typer.echo("📸 Creating backup point...")
+    backup_tag = create_backup_point(target_path)
+    if backup_tag:
+        typer.echo(f"   Backup created: {backup_tag}")
+    else:
+        typer.secho("⚠️  Could not create backup point", fg="yellow")
+
     # Perform update using Copier
     typer.echo("")
     typer.echo("🔄 Updating project...")
@@ -271,9 +283,28 @@ def update_command(
             if len(rej_files) > 5:
                 typer.echo(f"   ... and {len(rej_files) - 5} more")
 
+        # Cleanup backup tag on success
+        if backup_tag:
+            cleanup_backup_tag(target_path, backup_tag)
+
     except Exception as e:
         typer.echo("")
         typer.secho(f"❌ Update failed: {e}", fg="red", err=True)
+
+        # Offer rollback if backup exists
+        if backup_tag:
+            typer.echo("")
+            if yes or typer.confirm("🔄 Rollback to previous state?"):
+                success, message = rollback_to_backup(target_path, backup_tag)
+                if success:
+                    typer.secho(f"✅ {message}", fg="green")
+                    cleanup_backup_tag(target_path, backup_tag)
+                else:
+                    typer.secho(f"❌ {message}", fg="red", err=True)
+                    typer.echo(f"   Manual rollback: git reset --hard {backup_tag}")
+            else:
+                typer.echo(f"💡 Manual rollback: git reset --hard {backup_tag}")
+
         typer.echo("")
         typer.echo("💡 Troubleshooting:")
         typer.echo("   - Ensure you have a clean git tree")

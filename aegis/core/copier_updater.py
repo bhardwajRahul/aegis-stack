@@ -470,6 +470,89 @@ def get_changelog(from_ref: str, to_ref: str, template_root: Path | None = None)
         return f"Error generating changelog: {e}"
 
 
+def create_backup_point(project_path: Path) -> str | None:
+    """
+    Create a backup point before update by tagging current HEAD.
+
+    Args:
+        project_path: Path to project directory
+
+    Returns:
+        Backup tag name or None if creation failed
+    """
+    import time
+
+    backup_tag = f"aegis-backup-{int(time.time())}"
+
+    try:
+        # Create lightweight tag at current HEAD
+        subprocess.run(
+            ["git", "tag", backup_tag],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return backup_tag
+    except subprocess.CalledProcessError:
+        return None
+
+
+def rollback_to_backup(project_path: Path, backup_tag: str) -> tuple[bool, str]:
+    """
+    Rollback project to backup point.
+
+    Args:
+        project_path: Path to project directory
+        backup_tag: Tag name to rollback to
+
+    Returns:
+        Tuple of (success: bool, message: str)
+    """
+    try:
+        # Hard reset to backup tag
+        subprocess.run(
+            ["git", "reset", "--hard", backup_tag],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        # Clean untracked files that may have been added
+        subprocess.run(
+            ["git", "clean", "-fd"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            check=False,  # Don't fail if clean has issues
+        )
+
+        return True, f"Successfully rolled back to {backup_tag}"
+    except subprocess.CalledProcessError as e:
+        return False, f"Rollback failed: {e}"
+
+
+def cleanup_backup_tag(project_path: Path, backup_tag: str) -> None:
+    """
+    Remove backup tag after successful update.
+
+    Args:
+        project_path: Path to project directory
+        backup_tag: Tag name to remove
+    """
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        subprocess.run(
+            ["git", "tag", "-d", backup_tag],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            check=False,  # Don't fail if tag doesn't exist
+        )
+
+
 def get_commit_for_version(
     version: str, template_root: Path | None = None
 ) -> str | None:
