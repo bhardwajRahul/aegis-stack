@@ -12,8 +12,10 @@ import typer
 
 from ..core.copier_manager import is_copier_project, load_copier_answers
 from ..core.copier_updater import (
+    analyze_conflict_files,
     cleanup_backup_tag,
     create_backup_point,
+    format_conflict_report,
     get_changelog,
     get_current_template_commit,
     get_latest_version,
@@ -269,19 +271,12 @@ def update_command(
         typer.echo("   3. Run tests: make check")
         typer.echo("   4. Commit changes: git add . && git commit")
 
-        # Check for conflict files
-        rej_files = list(target_path.rglob("*.rej"))
-        if rej_files:
+        # Check for conflict files and display enhanced report
+        conflicts = analyze_conflict_files(target_path)
+        if conflicts:
             typer.echo("")
-            typer.secho(
-                f"⚠️  Found {len(rej_files)} conflict file(s) - manual resolution required",
-                fg="yellow",
-            )
-            typer.echo("   Conflicts:")
-            for rej_file in rej_files[:5]:  # Show first 5
-                typer.echo(f"   - {rej_file.relative_to(target_path)}")
-            if len(rej_files) > 5:
-                typer.echo(f"   ... and {len(rej_files) - 5} more")
+            report = format_conflict_report(conflicts)
+            typer.secho(report, fg="yellow")
 
         # Cleanup backup tag on success
         if backup_tag:

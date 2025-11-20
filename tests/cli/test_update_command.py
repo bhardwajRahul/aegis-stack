@@ -685,3 +685,122 @@ class TestUpdateCommandEnvVar:
         assert result.success
         # Should NOT show "custom template" message
         assert "custom template" not in result.stdout.lower()
+
+
+class TestUpdateCommandConflictHandling:
+    """Tests for enhanced conflict handling."""
+
+    def test_conflict_analysis_functions_work(self, tmp_path: Path) -> None:
+        """Test that conflict analysis functions properly detect and format conflicts."""
+        from aegis.core.copier_updater import (
+            analyze_conflict_files,
+            format_conflict_report,
+        )
+
+        # Create .rej files
+        (tmp_path / "test.txt.rej").write_text("content\nline2")
+        (tmp_path / "app").mkdir(exist_ok=True)
+        (tmp_path / "app" / "main.py.rej").write_text("rejected")
+
+        conflicts = analyze_conflict_files(tmp_path)
+        assert len(conflicts) == 2
+
+        report = format_conflict_report(conflicts)
+        assert "conflict" in report.lower()
+        assert "resolution" in report.lower()
+        assert "git diff" in report.lower()
+
+
+class TestUpdateCommandMigrationDetection:
+    """Tests for detecting projects that need migration."""
+
+    def test_update_detects_non_copier_project(self, temp_output_dir: Path) -> None:
+        """Test that update detects v0.1.0 style projects without copier answers."""
+        # Create a project directory without .copier-answers.yml
+        project_path = temp_output_dir / "old-project"
+        project_path.mkdir()
+        (project_path / "pyproject.toml").write_text(
+            "[project]\nname = 'old-project'\n"
+        )
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+        )
+
+        # Should fail with helpful error
+        assert not result.success
+        assert (
+            "copier" in result.stderr.lower()
+            or "not generated" in result.stderr.lower()
+        )
+
+    def test_update_shows_migration_guidance(self, temp_output_dir: Path) -> None:
+        """Test that update provides guidance for non-copier projects."""
+        # Create a non-copier project
+        project_path = temp_output_dir / "legacy-project"
+        project_path.mkdir()
+        (project_path / "pyproject.toml").write_text("[project]\nname = 'legacy'\n")
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+        )
+
+        assert not result.success
+        # Should mention regeneration or v0.2.0
+        stderr_lower = result.stderr.lower()
+        assert (
+            "regenerat" in stderr_lower
+            or "v0.2" in stderr_lower
+            or "copier" in stderr_lower
+        )
+
+
+class TestUpdateCommandVersionInfo:
+    """Tests for version information display."""
+
+    def test_update_shows_current_and_target_versions(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Test that update displays version information clearly."""
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--dry-run",
+        )
+
+        assert result.success
+        output = result.stdout.lower()
+        # Should show version information
+        assert "version" in output or "template" in output
+
+    @patch("aegis.commands.update.get_latest_version")
+    @patch("aegis.commands.update.get_current_template_commit")
+    def test_update_shows_cli_version(
+        self,
+        mock_get_commit: MagicMock,
+        mock_latest: MagicMock,
+        project_factory: "ProjectFactory",
+    ) -> None:
+        """Test that update shows CLI version information."""
+        mock_get_commit.return_value = "abc123"
+        mock_latest.return_value = "0.2.0"
+
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--dry-run",
+        )
+
+        assert result.success
+        # Should display CLI version
+        assert "cli" in result.stdout.lower()
