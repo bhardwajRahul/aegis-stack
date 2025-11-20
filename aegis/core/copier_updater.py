@@ -5,6 +5,7 @@ This module provides an alternative to the manual updater by using Copier's
 native update mechanism with a copier.yml at the repository root.
 """
 
+import logging
 import subprocess
 from pathlib import Path
 
@@ -14,6 +15,8 @@ from pydantic import BaseModel, Field
 
 from aegis.core.copier_manager import load_copier_answers
 from aegis.core.post_gen_tasks import run_post_generation_tasks
+
+logger = logging.getLogger(__name__)
 
 
 class CopierUpdateResult(BaseModel):
@@ -583,3 +586,78 @@ def get_commit_for_version(
         return result.stdout.strip()
     except Exception:
         return None
+
+
+def analyze_conflict_files(project_path: Path) -> list[dict[str, str]]:
+    """
+    Analyze .rej files created by Copier during conflict resolution.
+
+    Args:
+        project_path: Path to project directory
+
+    Returns:
+        List of conflict info dicts with keys: path, original, size, summary
+    """
+    conflicts = []
+
+    # Find all .rej files
+    rej_files = list(project_path.rglob("*.rej"))
+
+    for rej_file in rej_files:
+        # Get the original file path
+        original_path = rej_file.with_suffix("")
+        relative_path = rej_file.relative_to(project_path)
+        relative_original = original_path.relative_to(project_path)
+
+        # Read the .rej file content to get a summary
+        try:
+            rej_content = rej_file.read_text()
+            line_count = len(rej_content.strip().split("\n"))
+            summary = f"{line_count} lines in conflict file"
+        except Exception as e:
+            logger.debug(f"Failed to read .rej file {rej_file}: {e}")
+            summary = "Unable to read conflict details"
+
+        conflicts.append(
+            {
+                "path": str(relative_path),
+                "original": str(relative_original),
+                "size": f"{rej_file.stat().st_size} bytes",
+                "summary": summary,
+            }
+        )
+
+    return conflicts
+
+
+def format_conflict_report(conflicts: list[dict[str, str]]) -> str:
+    """
+    Format a detailed conflict report for display.
+
+    Args:
+        conflicts: List of conflict info dicts from analyze_conflict_files
+
+    Returns:
+        Formatted string report
+    """
+    if not conflicts:
+        return ""
+
+    lines = []
+    lines.append("⚠️  Conflicts detected - manual resolution required")
+    lines.append("")
+
+    for conflict in conflicts:
+        lines.append(f"  📄 {conflict['original']}")
+        lines.append(f"     Rejected changes: {conflict['path']}")
+        lines.append(f"     Details: {conflict['summary']}")
+        lines.append("")
+
+    lines.append("📋 Resolution steps:")
+    lines.append("   1. Open the .rej file to see rejected changes")
+    lines.append("   2. Manually apply changes to the original file")
+    lines.append("   3. Delete the .rej file when resolved")
+    lines.append("")
+    lines.append("💡 Tip: Use 'git diff' to see all changes made by the update")
+
+    return "\n".join(lines)
