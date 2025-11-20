@@ -9,6 +9,9 @@ from .ai_card import AICard
 from .auth_card import AuthCard
 from .services_card import ServicesCard
 {%- endif %}
+{%- if include_comms %}
+from .comms_card import CommsCard
+{%- endif %}
 {%- if include_database %}
 from .database_card import DatabaseCard
 {%- endif %}
@@ -31,6 +34,9 @@ __all__ = [
     {%- if include_auth %}
     "AuthCard",
     "ServicesCard",
+    {%- endif %}
+    {%- if include_comms %}
+    "CommsCard",
     {%- endif %}
     {%- if include_database %}
     "DatabaseCard",

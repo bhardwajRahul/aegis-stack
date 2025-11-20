@@ -67,6 +67,7 @@ def generate_with_copier(template_gen: TemplateGenerator, output_dir: Path) -> P
         "include_cache": False,  # Default to no
         "include_auth": cookiecutter_context.get("include_auth", "no") == "yes",
         "include_ai": cookiecutter_context.get("include_ai", "no") == "yes",
+        "include_comms": cookiecutter_context.get("include_comms", "no") == "yes",
         "ai_providers": cookiecutter_context.get("ai_providers", "openai"),
     }
 

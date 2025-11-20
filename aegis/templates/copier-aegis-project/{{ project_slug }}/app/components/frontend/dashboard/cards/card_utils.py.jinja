@@ -359,25 +359,55 @@ def create_modal_for_component(
         AlertDialog instance for the component, or None if component not supported
     """
     from ..modals import (
+        {%- if include_ai %}
         AIDetailDialog,
+        {%- endif %}
+        {%- if include_auth %}
         AuthDetailDialog,
+        {%- endif %}
         BackendDetailDialog,
+        {%- if include_comms %}
+        CommsDetailDialog,
+        {%- endif %}
+        {%- if include_database %}
         DatabaseDetailDialog,
+        {%- endif %}
         FrontendDetailDialog,
+        {%- if include_redis %}
         RedisDetailDialog,
+        {%- endif %}
+        {%- if include_scheduler %}
         SchedulerDetailDialog,
+        {%- endif %}
+        {%- if include_worker %}
         WorkerDetailDialog,
+        {%- endif %}
     )
 
     modal_map: dict[str, type[ft.AlertDialog]] = {
+        {%- if include_ai %}
         "ai": AIDetailDialog,
+        {%- endif %}
+        {%- if include_auth %}
         "auth": AuthDetailDialog,
+        {%- endif %}
         "backend": BackendDetailDialog,
+        {%- if include_comms %}
+        "comms": CommsDetailDialog,
+        {%- endif %}
+        {%- if include_database %}
         "database": DatabaseDetailDialog,
+        {%- endif %}
         "frontend": FrontendDetailDialog,
+        {%- if include_redis %}
         "redis": RedisDetailDialog,
+        {%- endif %}
+        {%- if include_scheduler %}
         "scheduler": SchedulerDetailDialog,
+        {%- endif %}
+        {%- if include_worker %}
         "worker": WorkerDetailDialog,
+        {%- endif %}
     }
 
     modal_class = modal_map.get(component_name)

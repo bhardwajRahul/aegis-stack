@@ -77,9 +77,22 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/components/backend/api/ai/",
         ],
     ),
-    # Future services will be added here:
-    # "payment_stripe": ServiceSpec(...),
-    # "notification_email": ServiceSpec(...),
+    "comms": ServiceSpec(
+        name="comms",
+        type=ServiceType.NOTIFICATION,
+        description="Communications service with email (Resend), SMS and voice (Twilio)",
+        required_components=["backend"],
+        pyproject_deps=[
+            "resend>=2.4.0",  # Email provider
+            "twilio>=9.3.7",  # SMS/Voice provider
+            # Note: email-validator is shared with auth service, handled in pyproject.toml.jinja
+        ],
+        template_files=[
+            "app/services/comms/",
+            "app/cli/comms.py",
+            "app/components/backend/api/comms/",
+        ],
+    ),
 }
 
 

@@ -162,7 +162,8 @@ aegis init my-app --services auth --components database --no-interactive --outpu
 | Service | Status | Description | Required Components |
 |---------|--------|-------------|---------------------|
 | `auth` | ✅ Available | User authentication with JWT tokens | backend, database |
-| `ai` | ✅ Available | AI chatbot with 7 provider options | backend |
+| `ai` | 🧪 Experimental | AI chatbot with 7 provider options | backend |
+| `comms` | 🧪 Experimental | Email (Resend), SMS & voice (Twilio) | backend |
 
 **Service Auto-Resolution:**
 
@@ -170,6 +171,7 @@ When you select services, required components are automatically added:
 
 - `--services auth` → Auto-adds `database` component
 - `--services ai` → No additional components (backend always included)
+- `--services comms` → No additional components (backend always included)
 - Backend and frontend components are **always included** in every project
 
 **Component Dependencies:**

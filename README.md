@@ -90,14 +90,9 @@ Rich terminal output showing detailed component status, health metrics, and syst
 ### Business Services
 | Service | Purpose | Status |
 |---------|---------|--------|
-| **Auth** | User authentication & JWT | ✅ **Available** |
-| **AI** | Multi-provider AI chat | 🧪 **Experimental** |
-
-## AI Service in Action
-
-![AI Service Demo](docs/images/aegis-ai-demo.gif)
-
-Services work immediately - create a project with AI, and start chatting without any server setup.
+| **[Auth](docs/services/auth/index.md)** | User authentication & JWT | ✅ **Available** |
+| **[AI](docs/services/ai/index.md)** | Multi-provider AI chat | 🧪 **Experimental** |
+| **[Comms](docs/services/comms/index.md)** | Email, SMS, voice calls | 🧪 **Experimental** |
 
 **See detailed documentation:** [Components →](docs/components/index.md) | [Services →](docs/services/index.md)
 

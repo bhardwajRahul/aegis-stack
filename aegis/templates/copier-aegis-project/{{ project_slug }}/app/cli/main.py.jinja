@@ -5,8 +5,10 @@ Command-line interface for {{ project_slug }} management tasks.
 """
 
 import importlib
+import sys
 from typing import TYPE_CHECKING
 
+import click
 import typer
 
 from app.cli import health
@@ -55,10 +57,32 @@ except ImportError:
     # AI service not available, skip ai commands
     pass
 
+# Conditionally register comms command if comms service is available
+try:
+    comms_module = importlib.import_module("app.cli.comms")
+    app.add_typer(comms_module.app, name="comms")
+except ImportError:
+    # Comms service not available, skip comms commands
+    pass
+
 
 def main() -> None:
     """Entry point for the CLI application."""
-    app()
+    try:
+        app(standalone_mode=False)
+    except click.exceptions.UsageError as e:
+        # Show help automatically on usage errors instead of just "try --help"
+        if e.ctx is not None:
+            click.echo(e.ctx.get_help())
+            click.echo()
+        click.echo(f"Error: {e.format_message()}", err=True)
+        sys.exit(2)
+    except click.exceptions.Abort:
+        # User cancelled (e.g., Ctrl+C)
+        sys.exit(1)
+    except SystemExit as e:
+        # Re-raise system exits (normal exit codes)
+        raise
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ graph TB
     subgraph "Services Layer (Business Logic)"
         Auth[🔐 Auth Service<br/>JWT + User Management<br/>Registration, Login, Profiles]
         AI[🤖 AI Service<br/>PydanticAI Integration<br/>Multi-Provider Chat]
+        Comms[📧 Comms Service<br/>Email, SMS, Voice<br/>Resend + Twilio]
     end
 
     subgraph "Components Layer (Infrastructure)"
@@ -26,9 +27,11 @@ graph TB
     Auth --> Backend
     Auth --> Database
     AI --> Backend
+    Comms --> Backend
 
     style Auth fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style AI fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
+    style Comms fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style Backend fill:#e1f5fe,stroke:#1976d2,stroke-width:2px
     style Database fill:#fff3e0,stroke:#f57c00,stroke-width:2px
     style Worker fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
@@ -116,6 +119,7 @@ graph LR
 |---------|--------|-------------|-------------------|
 | **auth** | ✅ Available | User authentication and authorization with JWT tokens | backend, database |
 | **ai** | 🧪 Experimental | Multi-provider AI chat with PydanticAI (OpenAI, Anthropic, Google, Groq, etc.) | backend |
+| **comms** | 🧪 Experimental | Email (Resend), SMS, and voice calls (Twilio) | backend |
 
 ## Service Categories
 
@@ -132,11 +136,18 @@ graph TB
         AILangChain[ai_langchain<br/>🚧 Future: LangChain]
     end
 
+    subgraph "📧 Notification Services"
+        CommsService[comms<br/>Email, SMS, Voice]
+        Push[push<br/>🚧 Future: Push Notifications]
+    end
+
     style AuthJWT fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style AuthOAuth fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
     style AuthSAML fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
     style AIPydantic fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style AILangChain fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
+    style CommsService fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
+    style Push fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
 ```
 
 ## Service Development Patterns
@@ -247,5 +258,6 @@ Services automatically appear in the health dashboard alongside components, prov
 - **[Services Dashboard](dashboard.md)** - Services dashboard integration and monitoring
 - **[Authentication Service](auth/index.md)** - Complete JWT auth implementation
 - **[AI Service](ai/index.md)** - Multi-provider AI chat with PydanticAI
+- **[Communications Service](comms/index.md)** - Email, SMS, and voice via Resend/Twilio
 - **[CLI Reference](../cli-reference.md)** - Service command reference
 - **[Components Overview](../components/index.md)** - Infrastructure layer

@@ -20,6 +20,7 @@
   "_comment_services": "Service selection - these will be set by our CLI",
   "include_auth": "no",
   "include_ai": "no",
+  "include_comms": "no",
   "ai_providers": "openai",
   
   "_comment_internal": "Internal variables for template logic",
@@ -35,5 +36,6 @@
   
   "_comment_service_dependencies": "Service-specific dependencies",
   "_auth_deps": "{% if cookiecutter.include_auth == 'yes' %}python-jose[cryptography]==3.3.0,passlib[bcrypt]==1.7.4,python-multipart==0.0.9{% endif %}",
-  "_ai_deps": "{% if cookiecutter.include_ai == 'yes' %}pydantic-ai-slim[{{ cookiecutter.ai_providers }}]==1.0.10,httpx>=0.27.0{% endif %}"
+  "_ai_deps": "{% if cookiecutter.include_ai == 'yes' %}pydantic-ai-slim[{{ cookiecutter.ai_providers }}]==1.0.10,httpx>=0.27.0{% endif %}",
+  "_comms_deps": "{% if cookiecutter.include_comms == 'yes' %}resend>=2.4.0,twilio>=9.3.7{% endif %}"
 }

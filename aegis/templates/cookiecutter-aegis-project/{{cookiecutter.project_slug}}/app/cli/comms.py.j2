@@ -1,0 +1,243 @@
+"""
+Communications service CLI commands.
+
+Command-line interface for email, SMS, and voice call functionality.
+"""
+
+import asyncio
+
+import typer
+from rich.console import Console
+from rich.table import Table
+
+# Default TwiML URL for testing voice calls
+TWILIO_DEMO_TWIML_URL = "http://demo.twilio.com/docs/voice.xml"
+
+app = typer.Typer(help="Communications service commands (email, SMS, voice)")
+console = Console()
+
+# Email command group
+email_app = typer.Typer(help="Email commands using Resend")
+app.add_typer(email_app, name="email")
+
+# SMS command group
+sms_app = typer.Typer(help="SMS commands using Twilio")
+app.add_typer(sms_app, name="sms")
+
+# Call command group
+call_app = typer.Typer(help="Voice call commands using Twilio")
+app.add_typer(call_app, name="call")
+
+
+@app.command()
+def status() -> None:
+    """Show communications service configuration status."""
+    from app.services.comms.call import get_call_status, validate_call_config
+    from app.services.comms.email import get_email_status, validate_email_config
+    from app.services.comms.sms import get_sms_status, validate_sms_config
+
+    typer.echo("📧 Communications Service Status")
+    typer.echo("=" * 50)
+
+    # Email status
+    email_status = get_email_status()
+    email_errors = validate_email_config()
+
+    typer.echo("\n📨 Email (Resend)")
+    typer.echo(f"  Status: {'✅ Configured' if email_status['configured'] else '❌ Not configured'}")
+    typer.echo(f"  API Key: {'✅ Set' if email_status['api_key_set'] else '❌ Not set'}")
+    typer.echo(f"  From Email: {email_status['from_email'] or '❌ Not set'}")
+
+    if email_errors:
+        for error in email_errors:
+            typer.echo(f"  ⚠️  {error}")
+
+    # SMS status
+    sms_status = get_sms_status()
+    sms_errors = validate_sms_config()
+
+    typer.echo("\n📱 SMS (Twilio)")
+    typer.echo(f"  Status: {'✅ Configured' if sms_status['configured'] else '❌ Not configured'}")
+    typer.echo(f"  Account SID: {'✅ Set' if sms_status['account_sid_set'] else '❌ Not set'}")
+    typer.echo(f"  Auth Token: {'✅ Set' if sms_status['auth_token_set'] else '❌ Not set'}")
+    typer.echo(f"  Messaging Service: {'✅ Set' if sms_status.get('messaging_service_sid_set') else '❌ Not set'}")
+    typer.echo(f"  Phone Number: {sms_status['phone_number'] or '❌ Not set'}")
+
+    if sms_errors:
+        for error in sms_errors:
+            typer.echo(f"  ⚠️  {error}")
+
+    # Voice status
+    call_status = get_call_status()
+    call_errors = validate_call_config()
+
+    typer.echo("\n📞 Voice (Twilio)")
+    typer.echo(f"  Status: {'✅ Configured' if call_status['configured'] else '❌ Not configured'}")
+    typer.echo(f"  Account SID: {'✅ Set' if call_status['account_sid_set'] else '❌ Not set'}")
+    typer.echo(f"  Auth Token: {'✅ Set' if call_status['auth_token_set'] else '❌ Not set'}")
+    typer.echo(f"  Phone Number: {call_status['phone_number'] or '❌ Not set'}")
+
+    if call_errors:
+        for error in call_errors:
+            typer.echo(f"  ⚠️  {error}")
+
+    # Summary
+    typer.echo("\n" + "=" * 50)
+    services_configured = sum([
+        email_status['configured'],
+        sms_status['configured'],
+        call_status['configured'],
+    ])
+    typer.echo(f"📊 {services_configured}/3 services configured")
+
+    if services_configured < 3:
+        typer.echo("\n💡 Quick start:")
+        if not email_status['configured']:
+            typer.echo("   Email: Sign up at https://resend.com (free tier available)")
+        if not sms_status['configured'] or not call_status['configured']:
+            typer.echo("   SMS/Voice: Sign up at https://twilio.com/try-twilio (free trial)")
+
+
+@email_app.command("send")
+def email_send(
+    to: str = typer.Argument(..., help="Recipient email address"),
+    subject: str = typer.Option(..., "--subject", "-s", help="Email subject"),
+    text: str | None = typer.Option(None, "--text", "-t", help="Plain text body"),
+    html: str | None = typer.Option(None, "--html", help="HTML body"),
+) -> None:
+    """Send an email via Resend."""
+    asyncio.run(_email_send(to, subject, text, html))
+
+
+async def _email_send(
+    to: str,
+    subject: str,
+    text: str | None,
+    html: str | None,
+) -> None:
+    """Async implementation of email send."""
+    from app.services.comms.email import EmailConfigurationError, EmailError, send_email_simple
+
+    if not text and not html:
+        typer.echo("❌ Either --text or --html is required", err=True)
+        raise typer.Exit(1)
+
+    try:
+        result = await send_email_simple(
+            to=to,
+            subject=subject,
+            text=text,
+            html=html,
+        )
+
+        typer.echo("✅ Email sent successfully!")
+        typer.echo(f"📧 Message ID: {result.id}")
+        typer.echo(f"📮 To: {', '.join(result.to)}")
+        typer.echo(f"📝 Subject: {subject}")
+
+    except EmailConfigurationError as e:
+        typer.echo(f"❌ Configuration error: {e}", err=True)
+        raise typer.Exit(1)
+    except EmailError as e:
+        typer.echo(f"❌ Failed to send email: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@sms_app.command("send")
+def sms_send(
+    to: str = typer.Argument(..., help="Recipient phone number (E.164 format)"),
+    body: str = typer.Argument(..., help="SMS message body"),
+) -> None:
+    """Send an SMS via Twilio."""
+    asyncio.run(_sms_send(to, body))
+
+
+async def _sms_send(to: str, body: str) -> None:
+    """Async implementation of SMS send."""
+    from app.services.comms.sms import SMSConfigurationError, SMSError, send_sms_simple
+
+    try:
+        result = await send_sms_simple(to=to, body=body)
+
+        typer.echo("✅ SMS sent successfully!")
+        typer.echo(f"📱 Message SID: {result.sid}")
+        typer.echo(f"📮 To: {result.to}")
+        typer.echo(f"📊 Segments: {result.segments}")
+
+    except SMSConfigurationError as e:
+        typer.echo(f"❌ Configuration error: {e}", err=True)
+        raise typer.Exit(1)
+    except SMSError as e:
+        typer.echo(f"❌ Failed to send SMS: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@call_app.command("make")
+def call_make(
+    to: str = typer.Argument(..., help="Recipient phone number (E.164 format)"),
+    twiml_url: str = typer.Argument(TWILIO_DEMO_TWIML_URL, help="URL returning TwiML instructions"),
+    timeout: int = typer.Option(30, "--timeout", "-t", help="Seconds to wait for answer"),
+) -> None:
+    """Make a voice call via Twilio."""
+    asyncio.run(_call_make(to, twiml_url, timeout))
+
+
+async def _call_make(to: str, twiml_url: str, timeout: int) -> None:
+    """Async implementation of make call."""
+    from app.services.comms.call import CallConfigurationError, CallError, make_call
+    from app.services.comms.models import MakeCallRequest
+
+    try:
+        request = MakeCallRequest(to=to, twiml_url=twiml_url, timeout=timeout)
+        result = await make_call(request)
+
+        typer.echo("✅ Call initiated successfully!")
+        typer.echo(f"📞 Call SID: {result.sid}")
+        typer.echo(f"📮 To: {result.to}")
+        typer.echo(f"📊 Status: {result.status}")
+
+    except CallConfigurationError as e:
+        typer.echo(f"❌ Configuration error: {e}", err=True)
+        raise typer.Exit(1)
+    except CallError as e:
+        typer.echo(f"❌ Failed to make call: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command("providers")
+def providers() -> None:
+    """Show available communications providers."""
+    table = Table(title="📧 Communications Providers", width=70)
+    table.add_column("Channel", style="cyan", width=10)
+    table.add_column("Provider", style="green", width=10)
+    table.add_column("Free Tier", style="yellow", width=12)
+    table.add_column("Notes", style="blue", width=30)
+
+    table.add_row(
+        "Email",
+        "Resend",
+        "100/day",
+        "Modern email API, great DX",
+    )
+    table.add_row(
+        "SMS",
+        "Twilio",
+        "$15 trial",
+        "Pay per message after trial",
+    )
+    table.add_row(
+        "Voice",
+        "Twilio",
+        "$15 trial",
+        "Pay per minute after trial",
+    )
+
+    console.print(table)
+
+    typer.echo("\n📚 Sign up links:")
+    typer.echo("   Resend: https://resend.com")
+    typer.echo("   Twilio: https://twilio.com/try-twilio")
+
+
+if __name__ == "__main__":
+    app()
