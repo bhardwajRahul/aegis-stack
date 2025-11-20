@@ -17,13 +17,16 @@ from .post_gen_tasks import cleanup_components, run_post_generation_tasks
 from .template_generator import TemplateGenerator
 
 
-def generate_with_copier(template_gen: TemplateGenerator, output_dir: Path) -> Path:
+def generate_with_copier(
+    template_gen: TemplateGenerator, output_dir: Path, vcs_ref: str | None = None
+) -> Path:
     """
     Generate project using Copier template engine.
 
     Args:
         template_gen: Template generator with project configuration
         output_dir: Directory to create the project in
+        vcs_ref: Git reference (tag, branch, or commit) to generate from
 
     Returns:
         Path to the generated project
@@ -71,22 +74,35 @@ def generate_with_copier(template_gen: TemplateGenerator, output_dir: Path) -> P
         "ai_providers": cookiecutter_context.get("ai_providers", "openai"),
     }
 
-    # Get copier template path - point directly at template directory
-    # This prevents copying aegis-stack repo files into generated projects
-    # The repo root path is set later in .copier-answers.yml for git-aware updates
-    template_path = Path(__file__).parent.parent / "templates" / "copier-aegis-project"
+    # Resolve vcs_ref to actual commit if version specified
+    resolved_ref = None
+    if vcs_ref:
+        from .copier_updater import get_template_root, resolve_version_to_ref
+
+        template_root = get_template_root()
+        resolved_ref = resolve_version_to_ref(vcs_ref, template_root)
+
+    # Determine which template path to use
+    # When using vcs_ref, we MUST use the repo root (so git can checkout the ref)
+    # Otherwise, use template subdirectory to avoid copying repo files
+    if resolved_ref:
+        # Use repo root when specifying a version (vcs_ref requires git repo)
+        template_source = str(template_root)
+    else:
+        # Use template subdirectory to avoid copying aegis-stack repo files
+        template_source = str(
+            Path(__file__).parent.parent / "templates" / "copier-aegis-project"
+        )
 
     # Generate project - Copier creates the project_slug directory automatically
     # NOTE: _tasks removed from copier.yml - we run them ourselves below
     run_copy(
-        str(
-            template_path
-        ),  # Use template directory (not repo root) to avoid copying extra files
+        template_source,
         output_dir,
         data=copier_data,
         defaults=True,  # Use template defaults, overridden by our explicit data
         unsafe=False,  # No tasks in copier.yml anymore - we run them ourselves
-        vcs_ref=None,  # Don't use git for template versioning - prevents git submodule errors in CI
+        vcs_ref=resolved_ref,  # Use specified version if provided
     )
 
     # Copier creates the project in output_dir/project_slug
@@ -150,15 +166,27 @@ def generate_with_copier(template_gen: TemplateGenerator, output_dir: Path) -> P
     # 2. Update template path (_src_path) - point to repo root, not subdirectory
     #    (repo root has .git so Copier can detect version changes)
     try:
-        # Get current commit hash from aegis-stack repo
+        # Get commit hash from aegis-stack repo
         template_root = Path(__file__).parent.parent.parent
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=template_root,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+
+        # If vcs_ref was used, resolve it to a commit hash
+        # Otherwise use current HEAD
+        if resolved_ref:
+            result = subprocess.run(
+                ["git", "rev-parse", resolved_ref],
+                cwd=template_root,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        else:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=template_root,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
         commit_hash = result.stdout.strip()
 
         # Update .copier-answers.yml with commit hash AND repo root path

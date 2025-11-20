@@ -6,6 +6,7 @@ Copier's git-aware update mechanism.
 """
 
 import os
+import subprocess
 from pathlib import Path
 
 import typer
@@ -20,6 +21,7 @@ from ..core.copier_updater import (
     get_current_template_commit,
     get_latest_version,
     get_template_root,
+    is_version_downgrade,
     resolve_version_to_ref,
     rollback_to_backup,
     validate_clean_git_tree,
@@ -56,6 +58,11 @@ def update_command(
         "--yes",
         "-y",
         help="Skip confirmation prompt",
+    ),
+    allow_downgrade: bool = typer.Option(
+        False,
+        "--allow-downgrade",
+        help="Allow updating to older template versions (use with caution)",
     ),
 ) -> None:
     """
@@ -188,6 +195,28 @@ def update_command(
             typer.echo(f"   Target:  {target_commit[:8]}...")
             return
 
+        # Check for downgrade attempt
+        if target_commit and is_version_downgrade(
+            current_commit, target_commit, template_root
+        ):
+            if not allow_downgrade:
+                typer.echo("")
+                typer.secho("❌ Downgrade detected", fg="red", err=True)
+                typer.echo(f"   Current: {current_commit[:8]}...", err=True)
+                typer.echo(f"   Target:  {target_commit[:8]}...", err=True)
+                typer.echo(
+                    "   Use --allow-downgrade to proceed (not recommended)", err=True
+                )
+                raise typer.Exit(1)
+
+            # Downgrade allowed - show warning
+            typer.echo("")
+            typer.secho(
+                "⚠️  WARNING: Downgrading to older template version", fg="yellow"
+            )
+            typer.echo(f"   Current: {current_commit[:8]}...")
+            typer.echo(f"   Target:  {target_commit[:8]}...")
+
     # Get and display changelog
     if current_commit:
         typer.echo("")
@@ -231,12 +260,56 @@ def update_command(
 
     try:
         # Import here to avoid circular dependency
+        import yaml
         from copier import run_update
 
+        # Prepare .copier-answers.yml for the update
+        # If custom template path was provided, update _src_path
+        # so Copier reads the template from the correct location.
+        # This is necessary because Copier's git detection only works reliably
+        # when reading _src_path from the answers file, not when passed as src_path.
+        if effective_template_path:
+            answers_file = target_path / ".copier-answers.yml"
+            if answers_file.exists():
+                with open(answers_file) as f:
+                    answers = yaml.safe_load(f) or {}
+
+                # Update _src_path to point to custom template
+                answers["_src_path"] = str(template_root)
+
+                with open(answers_file, "w") as f:
+                    yaml.safe_dump(
+                        answers, f, default_flow_style=False, sort_keys=False
+                    )
+
+                # Commit the updated answers (Copier requires clean repo)
+                try:
+                    subprocess.run(
+                        ["git", "add", ".copier-answers.yml"],
+                        cwd=target_path,
+                        check=True,
+                        capture_output=True,
+                    )
+                    subprocess.run(
+                        [
+                            "git",
+                            "commit",
+                            "-m",
+                            "Update template path for aegis update",
+                        ],
+                        cwd=target_path,
+                        check=True,
+                        capture_output=True,
+                    )
+                except subprocess.CalledProcessError:
+                    # If commit fails (e.g., no changes), that's OK
+                    pass
+
         # Run Copier update with git-aware merge
+        # NOTE: We do NOT pass src_path - Copier reads it from .copier-answers.yml
+        # This is critical for Copier's git tracking detection to work correctly
         run_update(
             dst_path=str(target_path),
-            src_path=str(template_root),
             defaults=True,  # Use existing answers as defaults
             overwrite=True,  # Allow overwriting files
             conflict="rej",  # Create .rej files for conflicts
@@ -284,7 +357,16 @@ def update_command(
 
     except Exception as e:
         typer.echo("")
-        typer.secho(f"❌ Update failed: {e}", fg="red", err=True)
+
+        # Check if this is a Copier downgrade error
+        error_msg = str(e)
+        if "downgrad" in error_msg.lower() and not allow_downgrade:
+            typer.secho(f"❌ Update failed: {e}", fg="red", err=True)
+            typer.echo("")
+            typer.echo("💡 This appears to be a downgrade.")
+            typer.echo("   Use --allow-downgrade to proceed (not recommended)")
+        else:
+            typer.secho(f"❌ Update failed: {e}", fg="red", err=True)
 
         # Offer rollback if backup exists
         if backup_tag:
