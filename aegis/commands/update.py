@@ -124,6 +124,7 @@ def update_command(
     cli_version = get_cli_version()
 
     # Get template root (with optional custom path)
+
     # Precedence: --template-path flag > AEGIS_TEMPLATE_PATH env var > default
     effective_template_path = template_path or os.getenv("AEGIS_TEMPLATE_PATH")
 
