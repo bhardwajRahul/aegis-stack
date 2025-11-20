@@ -5,6 +5,7 @@ Updates an existing Aegis Stack project to a newer template version using
 Copier's git-aware update mechanism.
 """
 
+import os
 from pathlib import Path
 
 import typer
@@ -123,14 +124,19 @@ def update_command(
     cli_version = get_cli_version()
 
     # Get template root (with optional custom path)
+
+    # Precedence: --template-path flag > AEGIS_TEMPLATE_PATH env var > default
+    effective_template_path = template_path or os.getenv("AEGIS_TEMPLATE_PATH")
+
     try:
-        template_root = get_template_root(template_path)
+        template_root = get_template_root(effective_template_path)
     except ValueError as e:
         typer.echo(f"❌ {e}", err=True)
         raise typer.Exit(1)
 
-    if template_path:
-        typer.echo(f"📦 Using custom template: {template_root}")
+    if effective_template_path:
+        source = "flag" if template_path else "AEGIS_TEMPLATE_PATH"
+        typer.echo(f"📦 Using custom template ({source}): {template_root}")
 
     # Resolve target version
     if to_version:

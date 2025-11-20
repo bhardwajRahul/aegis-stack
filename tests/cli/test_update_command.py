@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from aegis.core.copier_manager import is_copier_project
 
 from .test_utils import run_aegis_command, strip_ansi_codes
@@ -446,3 +448,100 @@ class TestUpdateCommandTemplatePath:
         assert "does not exist" in result.stderr.lower()
         # Should NOT contain the literal ~ in the error message
         assert "~/nonexistent" not in result.stderr
+
+
+class TestUpdateCommandEnvVar:
+    """Tests for AEGIS_TEMPLATE_PATH environment variable support."""
+
+    def test_update_uses_env_var_when_no_flag(
+        self, project_factory: "ProjectFactory", monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that update uses AEGIS_TEMPLATE_PATH when flag not provided."""
+        project_path = project_factory("base")
+
+        # Use the actual aegis-stack repo as template path
+        from aegis.core.copier_updater import get_template_root
+
+        template_root = get_template_root()
+
+        # Set env var
+        monkeypatch.setenv("AEGIS_TEMPLATE_PATH", str(template_root))
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--dry-run",
+        )
+
+        # Should succeed and show env var source
+        assert result.success
+        assert (
+            "aegis_template_path" in result.stdout.lower()
+            or "already at" in result.stdout.lower()
+        )
+
+    def test_update_flag_overrides_env_var(
+        self, project_factory: "ProjectFactory", monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that --template-path flag overrides AEGIS_TEMPLATE_PATH env var."""
+        project_path = project_factory("base")
+
+        # Set env var to a non-existent path
+        monkeypatch.setenv("AEGIS_TEMPLATE_PATH", "/env/var/path")
+
+        # Use flag with different (also non-existent) path
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--template-path",
+            "/flag/path",
+            "--dry-run",
+        )
+
+        # Should fail with flag path error (not env var path)
+        assert not result.success
+        assert "/flag/path" in result.stderr
+        assert "/env/var/path" not in result.stderr
+
+    def test_update_env_var_invalid_path(
+        self, project_factory: "ProjectFactory", monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that invalid AEGIS_TEMPLATE_PATH env var shows error."""
+        project_path = project_factory("base")
+
+        # Set env var to non-existent path
+        monkeypatch.setenv("AEGIS_TEMPLATE_PATH", "/nonexistent/env/path")
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--dry-run",
+        )
+
+        # Should fail with validation error
+        assert not result.success
+        assert "does not exist" in result.stderr.lower()
+
+    def test_update_env_var_empty_string_ignored(
+        self, project_factory: "ProjectFactory", monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that empty AEGIS_TEMPLATE_PATH env var is ignored."""
+        project_path = project_factory("base")
+
+        # Set env var to empty string
+        monkeypatch.setenv("AEGIS_TEMPLATE_PATH", "")
+
+        result = run_aegis_command(
+            "update",
+            "--project-path",
+            str(project_path),
+            "--dry-run",
+        )
+
+        # Should succeed using default template (empty string is falsy)
+        assert result.success
+        # Should NOT show "custom template" message
+        assert "custom template" not in result.stdout.lower()
