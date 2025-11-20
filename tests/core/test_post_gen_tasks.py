@@ -12,12 +12,62 @@ from unittest.mock import Mock, patch
 import pytest
 
 from aegis.core.post_gen_tasks import (
+    _truncate_stderr,
     format_code,
     install_dependencies,
     run_migrations,
     run_post_generation_tasks,
     setup_env_file,
 )
+
+
+class TestTruncateStderr:
+    """Test stderr truncation helper function."""
+
+    def test_short_output_unchanged(self) -> None:
+        """Test that short output is returned unchanged."""
+        stderr = "line 1\nline 2\nline 3"
+        result = _truncate_stderr(stderr)
+        assert result == "line 1\nline 2\nline 3"
+
+    def test_truncates_long_output(self) -> None:
+        """Test that long output is truncated."""
+        lines = [f"line {i}" for i in range(30)]
+        stderr = "\n".join(lines)
+
+        result = _truncate_stderr(stderr, max_lines=10)
+
+        # Should have head + omitted message + tail
+        result_lines = result.split("\n")
+        assert len(result_lines) == 11  # 5 head + 1 omitted + 5 tail
+        assert "omitted" in result_lines[5].lower()
+        assert "20" in result_lines[5]  # 30 - 10 = 20 omitted
+
+    def test_preserves_first_and_last_lines(self) -> None:
+        """Test that first and last lines are preserved."""
+        lines = [f"line {i}" for i in range(30)]
+        stderr = "\n".join(lines)
+
+        result = _truncate_stderr(stderr, max_lines=10)
+
+        result_lines = result.split("\n")
+        assert result_lines[0] == "line 0"
+        assert result_lines[-1] == "line 29"
+
+    def test_handles_empty_input(self) -> None:
+        """Test handling of empty input."""
+        result = _truncate_stderr("")
+        assert result == ""
+
+    def test_handles_single_line(self) -> None:
+        """Test handling of single line input."""
+        result = _truncate_stderr("single line")
+        assert result == "single line"
+
+    def test_strips_whitespace(self) -> None:
+        """Test that leading/trailing whitespace is stripped."""
+        result = _truncate_stderr("  line 1\nline 2  \n")
+        assert result == "line 1\nline 2"
 
 
 class TestInstallDependencies:

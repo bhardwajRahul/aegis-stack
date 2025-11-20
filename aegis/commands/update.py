@@ -236,11 +236,20 @@ def update_command(
 
         # Run post-generation tasks
         typer.echo("🔨 Running post-generation tasks...")
-        run_post_generation_tasks(target_path, include_auth=include_auth)
+        tasks_success = run_post_generation_tasks(
+            target_path, include_auth=include_auth
+        )
 
-        # Success!
+        # Show update result
         typer.echo("")
-        typer.secho("✅ Update completed successfully!", fg="green")
+        if tasks_success:
+            typer.secho("✅ Update completed successfully!", fg="green")
+        else:
+            typer.secho(
+                "⚠️  Update completed with some post-generation task failures",
+                fg="yellow",
+            )
+            typer.echo("   Some setup tasks failed. See details above.")
         typer.echo("")
         typer.echo("📝 Next Steps:")
         typer.echo("   1. Review changes: git diff")

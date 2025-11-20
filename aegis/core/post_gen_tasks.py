@@ -15,6 +15,33 @@ from typing import Any
 POST_GEN_TIMEOUT_INSTALL = 300  # 5 minutes for dependency installation
 POST_GEN_TIMEOUT_FORMAT = 60  # 1 minute for code formatting
 POST_GEN_TIMEOUT_MIGRATION = 30  # 30 seconds for database migration
+POST_GEN_STDERR_MAX_LINES = 15  # Maximum stderr lines to display
+
+
+def _truncate_stderr(stderr: str, max_lines: int = POST_GEN_STDERR_MAX_LINES) -> str:
+    """
+    Truncate stderr output to a reasonable number of lines.
+
+    Args:
+        stderr: The stderr output to truncate
+        max_lines: Maximum number of lines to show
+
+    Returns:
+        Truncated stderr with indication if lines were omitted
+    """
+    lines = stderr.strip().split("\n")
+    if len(lines) <= max_lines:
+        return stderr.strip()
+
+    # Show first and last portions
+    head_lines = max_lines // 2
+    tail_lines = max_lines - head_lines
+    omitted = len(lines) - max_lines
+
+    result = lines[:head_lines]
+    result.append(f"   ... ({omitted} lines omitted) ...")
+    result.extend(lines[-tail_lines:])
+    return "\n".join(result)
 
 
 def get_component_file_mapping() -> dict[str, list[str]]:
@@ -339,7 +366,9 @@ def install_dependencies(project_path: Path, python_version: str | None = None) 
         else:
             print("⚠️  Dependency installation failed")
             if result.stderr:
-                print(f"   Error: {result.stderr.strip()}")
+                truncated = _truncate_stderr(result.stderr)
+                for line in truncated.split("\n"):
+                    print(f"   {line}")
             print("💡 Run 'uv sync' manually after project creation")
             return False
 
@@ -447,7 +476,9 @@ def run_migrations(project_path: Path, include_auth: bool = False) -> bool:
         else:
             print("⚠️  Database migration setup failed")
             if result.stderr:
-                print(f"   Error: {result.stderr.strip()}")
+                truncated = _truncate_stderr(result.stderr)
+                for line in truncated.split("\n"):
+                    print(f"   {line}")
             print("💡 Run 'alembic upgrade head' manually after project creation")
             return False
 
