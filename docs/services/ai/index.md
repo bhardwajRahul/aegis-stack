@@ -2,6 +2,8 @@
 
 The **AI Service** provides multi-provider AI chat capabilities with conversation management, streaming responses, and both CLI and API interfaces powered by [PydanticAI](https://ai.pydantic.dev/).
 
+![AI Service Demo](../../images/aegis-ai-demo.gif)
+
 !!! info "Start Chatting in 30 Seconds"
     Generate a project with AI service and start chatting immediately:
 

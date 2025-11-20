@@ -78,8 +78,9 @@ Most frameworks lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your
 ### Business Services
 | Service | Purpose | Status |
 |---------|---------|--------|
-| **Auth** | User authentication & JWT | ✅ **Available** |
-| **AI** | Multi-provider AI chat | 🧪 **Experimental** |
+| **[Auth](services/auth/index.md)** | User authentication & JWT | ✅ **Available** |
+| **[AI](services/ai/index.md)** | Multi-provider AI chat | 🧪 **Experimental** |
+| **[Comms](services/comms/index.md)** | Email, SMS, voice calls | 🧪 **Experimental** |
 
 ## See It In Action
 

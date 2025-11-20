@@ -119,6 +119,7 @@ class TemplateGenerator:
             # Service flags for template conditionals
             "include_auth": "yes" if "auth" in self.selected_services else "no",
             "include_ai": "yes" if "ai" in self.selected_services else "no",
+            "include_comms": "yes" if "comms" in self.selected_services else "no",
             # AI provider selection for dynamic dependency generation
             "ai_providers": self._get_ai_providers_string(),
             # Dependency lists for templates

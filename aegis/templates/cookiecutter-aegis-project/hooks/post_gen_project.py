@@ -54,6 +54,7 @@ def process_j2_templates():
             "include_cache": "{{ cookiecutter.include_cache }}",
             "include_auth": "{{ cookiecutter.include_auth }}",
             "include_ai": "{{ cookiecutter.include_ai }}",
+            "include_comms": "{{ cookiecutter.include_comms }}",
         }
     }
 
@@ -109,8 +110,9 @@ def main():
         # Remove scheduler API endpoints (empty when scheduler not included)
         remove_file("app/components/backend/api/scheduler.py")
         remove_file("tests/api/test_scheduler_endpoints.py")
-        # Remove scheduler card (should not display when scheduler not included)
+        # Remove scheduler dashboard card and modal
         remove_file("app/components/frontend/dashboard/cards/scheduler_card.py")
+        remove_file("app/components/frontend/dashboard/modals/scheduler_modal.py")
         # Remove scheduler-specific test file
         remove_file("tests/services/test_scheduled_task_manager.py")
 
@@ -137,8 +139,9 @@ def main():
         # Remove worker API endpoints (empty when worker not included)
         remove_file("app/components/backend/api/worker.py")
         remove_file("tests/api/test_worker_endpoints.py")
-        # Remove worker card (should not display when worker not included)
+        # Remove worker dashboard card and modal
         remove_file("app/components/frontend/dashboard/cards/worker_card.py")
+        remove_file("app/components/frontend/dashboard/modals/worker_modal.py")
 
     # Remove shared component integration tests only when BOTH scheduler AND worker disabled
     if (
@@ -150,6 +153,14 @@ def main():
 
     if "{{ cookiecutter.include_database }}" != "yes":
         remove_file("app/core/db.py")
+        # Remove database dashboard card and modal
+        remove_file("app/components/frontend/dashboard/cards/database_card.py")
+        remove_file("app/components/frontend/dashboard/modals/database_modal.py")
+
+    # Remove redis component dashboard files if not selected
+    if "{{ cookiecutter.include_redis }}" != "yes":
+        remove_file("app/components/frontend/dashboard/cards/redis_card.py")
+        remove_file("app/components/frontend/dashboard/modals/redis_modal.py")
 
     if "{{ cookiecutter.include_cache }}" != "yes":
         # remove_file("app/services/cache_service.py")
@@ -164,6 +175,10 @@ def main():
         remove_file("app/core/security.py")
         # Remove auth CLI
         remove_file("app/cli/auth.py")
+        # Remove auth dashboard card and modal
+        remove_file("app/components/frontend/dashboard/cards/auth_card.py")
+        remove_file("app/components/frontend/dashboard/cards/services_card.py")
+        remove_file("app/components/frontend/dashboard/modals/auth_modal.py")
         # Remove auth-related tests if they exist
         remove_file("tests/api/test_auth_endpoints.py")
         remove_file("tests/services/test_auth_service.py")
@@ -178,6 +193,9 @@ def main():
         remove_file("app/cli/ai.py")
         remove_file("app/cli/ai_rendering.py")
         remove_file("app/cli/marko_terminal_renderer.py")
+        # Remove AI dashboard card and modal
+        remove_file("app/components/frontend/dashboard/cards/ai_card.py")
+        remove_file("app/components/frontend/dashboard/modals/ai_modal.py")
         # Remove AI-related tests if they exist
         remove_file("tests/api/test_ai_endpoints.py")
         remove_file("tests/services/test_conversation_persistence.py")
@@ -185,6 +203,21 @@ def main():
         remove_file("tests/cli/test_conversation_memory.py")
         # Remove AI test directory (contains test_service.py, test_health.py, etc.)
         remove_dir("tests/services/ai")
+
+    if "{{ cookiecutter.include_comms }}" != "yes":
+        # Remove comms service files
+        remove_dir("app/components/backend/api/comms")
+        remove_dir("app/services/comms")
+        # Remove comms CLI
+        remove_file("app/cli/comms.py")
+        # Remove comms dashboard card and modal
+        remove_file("app/components/frontend/dashboard/cards/comms_card.py")
+        remove_file("app/components/frontend/dashboard/modals/comms_modal.py")
+        # Remove comms-related tests if they exist
+        remove_file("tests/api/test_comms_endpoints.py")
+        remove_dir("tests/services/comms")
+        # Remove comms documentation
+        remove_dir("docs/services/comms")
 
     # Clean up empty docs/components directory if no components selected
     if (
@@ -209,7 +242,9 @@ def main():
     include_auth = "{{ cookiecutter.include_auth }}" == "yes"
     python_version = "{{ cookiecutter.python_version }}"
     run_post_generation_tasks(
-        Path(PROJECT_DIRECTORY), include_auth=include_auth, python_version=python_version
+        Path(PROJECT_DIRECTORY),
+        include_auth=include_auth,
+        python_version=python_version,
     )
 
 

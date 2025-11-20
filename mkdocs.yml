@@ -69,6 +69,11 @@ nav:
       - Service Layer: services/ai/integration.md
       - CLI Commands: services/ai/cli.md
       - Examples: services/ai/examples.md
+    - Communications:
+      - Getting Started: services/comms/index.md
+      - Provider Setup: services/comms/setup.md
+      - API Reference: services/comms/api.md
+      - CLI Commands: services/comms/cli.md
   - Reference:
     - CLI Reference: cli-reference.md
     - Evolving Your Stack: evolving-your-stack.md

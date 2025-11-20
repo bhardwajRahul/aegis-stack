@@ -5,22 +5,52 @@ Reusable modal dialogs for displaying detailed component information.
 Each modal inherits from ft.AlertDialog and uses component composition.
 """
 
+{%- if include_ai %}
 from .ai_modal import AIDetailDialog
+{%- endif %}
+{%- if include_auth %}
 from .auth_modal import AuthDetailDialog
+{%- endif %}
 from .backend_modal import BackendDetailDialog
+{%- if include_comms %}
+from .comms_modal import CommsDetailDialog
+{%- endif %}
+{%- if include_database %}
 from .database_modal import DatabaseDetailDialog
+{%- endif %}
 from .frontend_modal import FrontendDetailDialog
+{%- if include_redis %}
 from .redis_modal import RedisDetailDialog
+{%- endif %}
+{%- if include_scheduler %}
 from .scheduler_modal import SchedulerDetailDialog
+{%- endif %}
+{%- if include_worker %}
 from .worker_modal import WorkerDetailDialog
+{%- endif %}
 
 __all__ = [
+    {%- if include_ai %}
     "AIDetailDialog",
+    {%- endif %}
+    {%- if include_auth %}
     "AuthDetailDialog",
+    {%- endif %}
     "BackendDetailDialog",
+    {%- if include_comms %}
+    "CommsDetailDialog",
+    {%- endif %}
+    {%- if include_database %}
     "DatabaseDetailDialog",
+    {%- endif %}
     "FrontendDetailDialog",
+    {%- if include_redis %}
     "RedisDetailDialog",
+    {%- endif %}
+    {%- if include_scheduler %}
     "SchedulerDetailDialog",
+    {%- endif %}
+    {%- if include_worker %}
     "WorkerDetailDialog",
+    {%- endif %}
 ]

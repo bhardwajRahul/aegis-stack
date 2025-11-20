@@ -19,6 +19,9 @@ from .dashboard.cards import (
     AuthCard,
     ServicesCard,
     {%- endif %}
+    {%- if cookiecutter.include_comms == "yes" %}
+    CommsCard,
+    {%- endif %}
     {%- if cookiecutter.include_database == "yes" %}
     DatabaseCard,
     {%- endif %}
@@ -461,7 +464,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 elif component_name == "scheduler":
                     return SchedulerCard(component_data).build()
                 {%- endif %}
-                {%- if cookiecutter.include_ai == "yes" or cookiecutter.include_auth == "yes" %}
+                {%- if cookiecutter.include_ai == "yes" or cookiecutter.include_auth == "yes" or cookiecutter.include_comms == "yes" %}
                 {%- if cookiecutter.include_auth == "yes" %}
                 elif component_name == "services":
                     return ServicesCard(component_data).build()
@@ -474,6 +477,12 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 {%- if cookiecutter.include_auth == "yes" %}
                 elif component_name == "service_auth":
                     return AuthCard(component_data).build()
+                {%- endif %}
+                {%- if cookiecutter.include_comms == "yes" %}
+                elif component_name == "service_comms":
+                    return CommsCard(component_data).build()
+                {%- endif %}
+                {%- if cookiecutter.include_auth == "yes" %}
                 elif component_name.startswith("service_"):
                     # For other services, use generic ServicesCard for now
                     return ServicesCard(component_data).build()

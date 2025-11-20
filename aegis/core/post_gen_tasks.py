@@ -173,6 +173,9 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(
             project_path, "app/components/frontend/dashboard/cards/scheduler_card.py"
         )
+        remove_file(
+            project_path, "app/components/frontend/dashboard/modals/scheduler_modal.py"
+        )
         remove_file(project_path, "tests/services/test_scheduled_task_manager.py")
 
     # Remove scheduler service if using memory backend
@@ -199,6 +202,9 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(
             project_path, "app/components/frontend/dashboard/cards/worker_card.py"
         )
+        remove_file(
+            project_path, "app/components/frontend/dashboard/modals/worker_modal.py"
+        )
 
     # Remove shared component integration tests only when BOTH scheduler AND worker disabled
     if not is_enabled("include_scheduler") and not is_enabled("include_worker"):
@@ -208,6 +214,21 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     # Remove database component if not selected
     if not is_enabled("include_database"):
         remove_file(project_path, "app/core/db.py")
+        remove_file(
+            project_path, "app/components/frontend/dashboard/cards/database_card.py"
+        )
+        remove_file(
+            project_path, "app/components/frontend/dashboard/modals/database_modal.py"
+        )
+
+    # Remove redis component dashboard files if not selected
+    if not is_enabled("include_redis"):
+        remove_file(
+            project_path, "app/components/frontend/dashboard/cards/redis_card.py"
+        )
+        remove_file(
+            project_path, "app/components/frontend/dashboard/modals/redis_modal.py"
+        )
 
     # Remove cache component if not selected
     if not is_enabled("include_cache"):
@@ -238,6 +259,37 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/cli/test_ai_rendering.py")
         remove_file(project_path, "tests/cli/test_conversation_memory.py")
         remove_dir(project_path, "tests/services/ai")
+        remove_file(project_path, "app/components/frontend/dashboard/cards/ai_card.py")
+        remove_file(
+            project_path, "app/components/frontend/dashboard/modals/ai_modal.py"
+        )
+
+    # Remove comms service if not selected
+    if not is_enabled("include_comms"):
+        remove_dir(project_path, "app/components/backend/api/comms")
+        remove_dir(project_path, "app/services/comms")
+        remove_file(project_path, "app/cli/comms.py")
+        remove_file(project_path, "tests/api/test_comms_endpoints.py")
+        remove_dir(project_path, "tests/services/comms")
+        remove_dir(project_path, "docs/services/comms")
+        remove_file(
+            project_path, "app/components/frontend/dashboard/cards/comms_card.py"
+        )
+        remove_file(
+            project_path, "app/components/frontend/dashboard/modals/comms_modal.py"
+        )
+
+    # Remove auth service dashboard files if not selected
+    if not is_enabled("include_auth"):
+        remove_file(
+            project_path, "app/components/frontend/dashboard/cards/auth_card.py"
+        )
+        remove_file(
+            project_path, "app/components/frontend/dashboard/cards/services_card.py"
+        )
+        remove_file(
+            project_path, "app/components/frontend/dashboard/modals/auth_modal.py"
+        )
 
     # Clean up empty docs/components directory if no components selected
     if (
