@@ -7,14 +7,12 @@ and conversation metrics in a clean 2-column layout.
 
 import flet as ft
 from app.components.frontend.controls import LabelText, PrimaryText
+from app.components.frontend.controls.tech_badge import TechBadge
 from app.services.system.models import ComponentStatus
 
+from .card_container import CardContainer
 from .card_utils import (
     PROVIDER_COLORS,
-    create_card_click_handler,
-    create_clickable_hover_handler,
-    create_standard_card_container,
-    create_tech_badge,
     get_status_colors,
 )
 
@@ -107,18 +105,21 @@ class AICard:
 
     def _create_technology_badge(self) -> ft.Container:
         """Create technology badge for AI service."""
-        _, primary_color, _ = get_status_colors(self.component_data)
+        primary_color, _, _ = get_status_colors(self.component_data)
 
-        # Get provider for subtitle
-        provider = self.metadata.get("provider", "Unknown")
-        provider_display = provider.title()
+        # Infer engine from metadata (e.g., "pydantic-ai")
+        engine = self.metadata.get("engine", "pydantic-ai")
+        # Convert "pydantic-ai" to "Pydantic AI" for display
+        if engine == "pydantic-ai":
+            engine_display = "Pydantic AI"
+        else:
+            engine_display = engine.replace("-", " ").title() if engine else "AI Engine"
 
-        return create_tech_badge(
-            title="AI Service",
-            subtitle=f"{provider_display} + PydanticAI",
-            icon="🤖",
-            badge_text="CHAT",
-            badge_color=primary_color,
+        return TechBadge(
+            title=engine_display,
+            subtitle="AI Agent",
+            badge_text="AI",
+            badge_color=ft.Colors.CYAN,
             primary_color=primary_color,
         )
 
@@ -262,21 +263,9 @@ class AICard:
             vertical_alignment=ft.CrossAxisAlignment.START,
         )
 
-        # Create the container
-        card_container = create_standard_card_container(
+        return CardContainer(
             content=content,
-            primary_color=primary_color,
             border_color=border_color,
-            width=None,
-            hover_handler=None,
+            component_data=self.component_data,
+            component_name="ai",
         )
-
-        # Create clickable hover handler for the card (with scale animation)
-        hover_handler = create_clickable_hover_handler(card_container)
-        card_container.on_hover = hover_handler
-
-        # Add click handler to open modal (standard pattern)
-        card_container.on_click = create_card_click_handler("ai", self.component_data)
-        card_container.cursor = ft.MouseCursor.CLICK
-
-        return card_container

@@ -13,14 +13,12 @@ from app.components.frontend.controls import (
     TableCellText,
     TableHeaderText,
     TableNameText,
-    TitleText,
 )
-from app.components.frontend.theme import AegisTheme as Theme
+from app.components.frontend.controls.tech_badge import TechBadge
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
+from .card_container import CardContainer
 from .card_utils import (
-    create_card_click_handler,
-    create_clickable_hover_handler,
     create_responsive_3_section_layout,
 )
 
@@ -112,47 +110,22 @@ class DatabaseCard:
         if self.component_data.status == ComponentStatusType.WARNING:
             badge_text = "NOT INIT"
             badge_color = ft.Colors.ORANGE
-            icon = "⚠️"
         else:
             table_count = metadata.get("table_count", 0)
             if table_count == 0:
                 badge_text = "EMPTY"
                 badge_color = ft.Colors.BLUE
-                icon = "🗃️"
             else:
                 badge_text = "STORAGE"
                 badge_color = ft.Colors.INDIGO
-                icon = "🗃️"
 
-        return ft.Container(
-            content=ft.Column(
-                [
-                    ft.Container(
-                        content=ft.Text(icon, size=32),
-                        padding=ft.padding.all(8),
-                        bgcolor=primary_color,
-                        border_radius=12,
-                        margin=ft.margin.only(bottom=8),
-                    ),
-                    TitleText("Database"),
-                    SecondaryText("SQLite + SQLModel"),
-                    ft.Container(
-                        content=LabelText(
-                            badge_text,
-                            color=Theme.Colors.BADGE_TEXT,
-                        ),
-                        padding=ft.padding.symmetric(horizontal=8, vertical=2),
-                        bgcolor=badge_color,
-                        border_radius=8,
-                        margin=ft.margin.only(top=4),
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=2,
-            ),
-            padding=ft.padding.all(16),
-            width=160,  # Wider badge section
+        return TechBadge(
+            title="SQLite",
+            subtitle="Relational Database",
+            badge_text=badge_text,
+            badge_color=badge_color,
+            primary_color=primary_color,
+            width=160,
         )
 
     def _create_tables_section(self) -> ft.Container:
@@ -412,23 +385,9 @@ class DatabaseCard:
             right_content=self._create_performance_section(),
         )
 
-        self._card_container = ft.Container(
+        return CardContainer(
             content=content,
-            bgcolor=ft.Colors.SURFACE,
-            border=ft.border.all(1, border_color),
-            border_radius=16,
-            padding=0,
-            width=None,  # Let ResponsiveRow handle the width
-            height=280,
+            border_color=border_color,
+            component_data=self.component_data,
+            component_name="database",
         )
-
-        # Add click handler to open Database detail modal
-        self._card_container.on_hover = create_clickable_hover_handler(
-            self._card_container
-        )
-        self._card_container.on_click = create_card_click_handler(
-            "database", self.component_data
-        )
-        self._card_container.cursor = ft.MouseCursor.CLICK
-
-        return self._card_container

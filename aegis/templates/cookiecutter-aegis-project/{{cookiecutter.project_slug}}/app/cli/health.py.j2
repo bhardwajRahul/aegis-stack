@@ -33,6 +33,67 @@ def _get_status_icon_and_color(status: ComponentStatusType) -> tuple[str, str]:
     return get_status_icon(status), get_status_color_name(status)
 
 
+def _count_status_types(components: dict[str, Any]) -> dict[str, int]:
+    """
+    Count components by status type.
+
+    Returns dict with counts for: healthy, warning, info, unhealthy
+    """
+    counts = {
+        "healthy": 0,
+        "warning": 0,
+        "info": 0,
+        "unhealthy": 0,
+    }
+
+    for component in components.values():
+        if hasattr(component, "status"):
+            status = component.status
+            if status == ComponentStatusType.HEALTHY:
+                counts["healthy"] += 1
+            elif status == ComponentStatusType.WARNING:
+                counts["warning"] += 1
+            elif status == ComponentStatusType.INFO:
+                counts["info"] += 1
+            elif status == ComponentStatusType.UNHEALTHY:
+                counts["unhealthy"] += 1
+
+    return counts
+
+
+def _format_status_breakdown(counts: dict[str, int]) -> str:
+    """
+    Format status counts into a readable string.
+
+    Shows: "X healthy, Y warnings, Z info" (omits unhealthy and zero counts)
+    Returns color based on status mix.
+    """
+    parts = []
+
+    if counts["healthy"] > 0:
+        parts.append(f"{counts['healthy']} healthy")
+    if counts["warning"] > 0:
+        parts.append(f"{counts['warning']} warning{'s' if counts['warning'] > 1 else ''}")
+    if counts["info"] > 0:
+        parts.append(f"{counts['info']} info")
+    if counts["unhealthy"] > 0:
+        parts.append(f"{counts['unhealthy']} unhealthy")
+
+    return ", ".join(parts) if parts else "0 components"
+
+
+def _get_status_color(counts: dict[str, int]) -> str:
+    """Get color based on status breakdown."""
+    if counts["unhealthy"] > 0:
+        return "red"
+    elif counts["warning"] > 0:
+        return "yellow"
+    elif counts["info"] > 0:
+        return "blue"
+    else:
+        return "green"
+
+
 def _is_scheduler_metadata(metadata: dict[str, Any]) -> bool:
     """Check if metadata contains scheduler-specific task information."""
     return "total_tasks" in metadata and "upcoming_tasks" in metadata
@@ -331,29 +392,58 @@ def _display_health_status(
     else:
         title += " Unhealthy"
 
+    # Get component status breakdown
+    components_group_dict = {}
+    if components and "aegis" in components:
+        aegis_component = components["aegis"]
+        if (
+            hasattr(aegis_component, "sub_components")
+            and aegis_component.sub_components
+        ):
+            components_group = aegis_component.sub_components.get("components")
+            if (
+                components_group
+                and hasattr(components_group, "sub_components")
+                and components_group.sub_components
+            ):
+                components_group_dict = components_group.sub_components
+
+    component_counts = _count_status_types(components_group_dict)
+    component_breakdown = _format_status_breakdown(component_counts)
+    component_status_color = _get_status_color(component_counts)
+
     panel_content = [
         f"Overall Status: [bold {overall_color}]"
         + ("Healthy" if overall_healthy else "Unhealthy")
         + f"[/bold {overall_color}]",
         f"Health Percentage: [bold]"
         f"{health_percentage:.{CLI.HEALTH_PERCENTAGE_DECIMALS}f}%[/bold]",
-        f"Components: {healthy_count}/" + f"{total_count} healthy",
+        f"Components: [bold {component_status_color}]{component_breakdown}[/bold {component_status_color}]",
     ]
 
-    # Add service information if available (DetailedHealthResponse)
-    if hasattr(health_data, "has_services") and health_data.has_services:
-        healthy_services_count = len(health_data.healthy_services)
-        total_services_count = len(health_data.service_names)
-        if healthy_services_count == total_services_count:
-            service_status_color = "green"
-        elif healthy_services_count > 0:
-            service_status_color = "yellow"
-        else:
-            service_status_color = "red"
+    # Add service information
+    services_group_dict = {}
+    if components and "aegis" in components:
+        aegis_component = components["aegis"]
+        if (
+            hasattr(aegis_component, "sub_components")
+            and aegis_component.sub_components
+        ):
+            services_group = aegis_component.sub_components.get("services")
+            if (
+                services_group
+                and hasattr(services_group, "sub_components")
+                and services_group.sub_components
+            ):
+                services_group_dict = services_group.sub_components
+
+    if services_group_dict:
+        service_counts = _count_status_types(services_group_dict)
+        service_breakdown = _format_status_breakdown(service_counts)
+        service_status_color = _get_status_color(service_counts)
 
         panel_content.append(
-            f"Services: [bold {service_status_color}]{healthy_services_count}/"
-            f"{total_services_count} healthy[/bold {service_status_color}]"
+            f"Services: [bold {service_status_color}]{service_breakdown}[/bold {service_status_color}]"
         )
 
     panel_content.append(f"Timestamp: {timestamp}")

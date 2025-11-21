@@ -64,11 +64,11 @@ Most frameworks lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your
 
 ## See It In Action
 
-### System Health Dashboard
+### Overseer
 
-![System Health Dashboard](docs/images/dashboard-dark.png)
+![Overseer](docs/images/overseer-dashboard-1-dark.png)
 
-Real-time monitoring with component status, health percentages, and cross-platform deployment (web, desktop, mobile).
+Real-time monitoring dashboard showing how every component and service is performing with detailed health metrics and status information.
 
 ### CLI Health Monitoring
 

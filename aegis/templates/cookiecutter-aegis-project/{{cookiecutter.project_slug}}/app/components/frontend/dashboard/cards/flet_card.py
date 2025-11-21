@@ -7,15 +7,13 @@ UI settings, and frontend health status.
 
 import flet as ft
 from app.components.frontend.controls import PrimaryText
+from app.components.frontend.controls.tech_badge import TechBadge
 from app.services.system.models import ComponentStatus
 
+from .card_container import CardContainer
 from .card_utils import (
-    create_card_click_handler,
-    create_clickable_hover_handler,
     create_responsive_3_section_layout,
-    create_standard_card_container,
     create_stats_row,
-    create_tech_badge,
     get_status_colors,
 )
 
@@ -46,11 +44,10 @@ class FletCard:
         """Create the Flet technology badge section."""
         primary_color, _, _ = get_status_colors(self.component_data)
 
-        return create_tech_badge(
-            title="Frontend",
-            subtitle="Flet",
-            icon="🎨",
-            badge_text="UI",
+        return TechBadge(
+            title="Flet",
+            subtitle="Python UI",
+            badge_text="Frontend",
             badge_color=ft.Colors.PURPLE,
             primary_color=primary_color,
             width=160,
@@ -257,22 +254,9 @@ class FletCard:
             right_content=self._create_stats_section(),
         )
 
-        self._card_container = create_standard_card_container(
+        return CardContainer(
             content=content,
-            primary_color=primary_color,
             border_color=border_color,
-            width=None,  # Let ResponsiveRow handle the width
-            hover_handler=None,
+            component_data=self.component_data,
+            component_name="frontend",
         )
-
-        # Create clickable hover handler for the card (with scale animation)
-        hover_handler = create_clickable_hover_handler(self._card_container)
-        self._card_container.on_hover = hover_handler
-
-        # Add click handler to open modal (standard pattern)
-        self._card_container.on_click = create_card_click_handler(
-            "frontend", self.component_data
-        )
-        self._card_container.cursor = ft.MouseCursor.CLICK
-
-        return self._card_container

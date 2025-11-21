@@ -7,15 +7,13 @@ job statistics, and scheduling information using shared utility functions.
 
 import flet as ft
 from app.components.frontend.controls import PrimaryText
+from app.components.frontend.controls.tech_badge import TechBadge
 from app.services.system.models import ComponentStatus
 
+from .card_container import CardContainer
 from .card_utils import (
-    create_card_click_handler,
-    create_clickable_hover_handler,
     create_responsive_3_section_layout,
-    create_standard_card_container,
     create_stats_row,
-    create_tech_badge,
     format_next_run_time,
     format_schedule_human_readable,
     get_status_colors,
@@ -62,11 +60,10 @@ class SchedulerCard:
         """Create the Scheduler technology badge section."""
         primary_color, _, _ = get_status_colors(self.component_data)
 
-        return create_tech_badge(
-            title="Scheduler",
-            subtitle="APScheduler",
-            icon="⏰",
-            badge_text="JOBS",
+        return TechBadge(
+            title="APScheduler",
+            subtitle="Task Scheduling",
+            badge_text="Jobs",
             badge_color=ft.Colors.TEAL,
             primary_color=primary_color,
             width=160,
@@ -266,25 +263,9 @@ class SchedulerCard:
             right_content=self._create_stats_section(),
         )
 
-        self._card_container = create_standard_card_container(
+        return CardContainer(
             content=content,
-            primary_color=primary_color,
             border_color=border_color,
-            width=None,  # Let ResponsiveRow handle the width
-            hover_handler=None,  # Will be set after container creation
+            component_data=self.component_data,
+            component_name="scheduler",
         )
-
-        # Add clickable hover effects
-        self._card_container.on_hover = create_clickable_hover_handler(
-            self._card_container
-        )
-
-        # Add click handler to open detail modal
-        self._card_container.on_click = create_card_click_handler(
-            "scheduler", self.component_data
-        )
-
-        # Add cursor pointer to indicate clickability
-        self._card_container.cursor = ft.MouseCursor.CLICK
-
-        return self._card_container

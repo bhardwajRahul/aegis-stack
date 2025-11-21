@@ -58,31 +58,40 @@ Understanding how components deploy and scale is crucial for architectural decis
 
 ```mermaid
 graph TB
-    subgraph "Development"
-        A1[All Components<br/>Single Container + Volumes]
+    subgraph "Multi-Container Architecture"
+        A1[Webserver<br/>Backend + Frontend]
+        A2[Scheduler<br/>Background Jobs]
+        A3[Worker Pool<br/>Task Processing]
+        A4[Infrastructure<br/>Redis + Database]
     end
-    
-    subgraph "Production Scaling"
-        B1[Web Service<br/>Backend + Frontend]
-        B2[Scheduler Service<br/>Background Jobs]
-        B3[Worker Pool<br/>Task Processing]
-        B4[Infrastructure<br/>Redis + Database]
+
+    subgraph "Independent Scaling"
+        B1[Webserver × N]
+        B2[Scheduler × N]
+        B3[Worker × N]
+        B4[Infrastructure × N]
     end
-    
+
     A1 --> B1
-    A1 --> B2
-    A1 --> B3
-    A1 --> B4
-    
-    style A1 fill:#e1f5fe
+    A2 --> B2
+    A3 --> B3
+    A4 --> B4
+
+    style A1 fill:#e8f5e8
+    style A2 fill:#fff3e0
+    style A3 fill:#f3e5f5
+    style A4 fill:#e1f5fe
     style B1 fill:#e8f5e8
     style B2 fill:#fff3e0
     style B3 fill:#f3e5f5
+    style B4 fill:#e1f5fe
 ```
 
-**Development:** All components run in a single container with shared volumes for simplicity.
+**Multi-Container Architecture:** Each component runs in its own Docker container (via docker-compose) for isolation and maintainability.
 
-**Production:** Components can be deployed as independent services, each scaling based on demand.
+**Backend + Frontend Container:** FastAPI serves the Flet UI as an integrated web app - this is an architectural choice, not a limitation.
+
+**Independent Scaling:** Each service can be scaled separately based on demand using Docker Compose replicas or orchestration tools.
 
 ## Available Components
 

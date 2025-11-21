@@ -20,6 +20,8 @@ IMAGE_PATH_MAPPINGS = {
     "![Ron Swanson](docs/images/ron-swanson.gif)": "![Ron Swanson](images/ron-swanson.gif)",
     # Static images
     "![CLI Health Check](docs/images/cli_health_check.png)": "![CLI Health Check](images/cli_health_check.png)",
+    # Overseer Dashboard
+    "![Overseer](docs/images/overseer-dashboard-1-dark.png)": "![Overseer](images/overseer-dashboard-1-dark.png)",
     # Dashboard - single dark image -> dual light/dark
     "![System Health Dashboard](docs/images/dashboard-dark.png)": (
         "![System Health Dashboard](images/dashboard-light.png#only-light)\n"

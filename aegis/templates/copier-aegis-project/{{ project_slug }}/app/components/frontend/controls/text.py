@@ -320,3 +320,92 @@ class ErrorText(ft.Text):  # type: ignore[misc]
         }
         defaults.update(kwargs)
         super().__init__(value=value, opacity=opacity, **defaults)
+
+
+# ============================================================================
+# SPECIALIZED COMPONENT TEXT
+# ============================================================================
+
+
+class ModalText(ft.Text):  # type: ignore[misc]
+    """
+    Modal title text with bold emphasis.
+
+    Used for dialog and modal headers.
+    """
+
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
+        defaults = {
+            "size": Theme.Typography.BODY_LARGE,
+            "weight": Theme.Typography.WEIGHT_BOLD,
+            "color": Theme.Colors.TEXT_PRIMARY,
+            "font_family": "Roboto",
+            "selectable": True,
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)
+
+
+class ModalSubtitleText(ft.Text):  # type: ignore[misc]
+    """
+    Modal subtitle text for supporting information.
+
+    Used for dialog descriptions and secondary modal content.
+    """
+
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
+        defaults = {
+            "size": Theme.Typography.BODY,
+            "weight": Theme.Typography.WEIGHT_REGULAR,
+            "color": Theme.Colors.TEXT_SECONDARY,
+            "font_family": "Roboto",
+            "selectable": True,
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)
+
+
+class SidebarLabelText(ft.Text):  # type: ignore[misc]
+    """
+    Sidebar label text with ellipsis overflow.
+
+    Used for navigation items and sidebar content labels.
+    """
+
+    def __init__(
+        self,
+        value: str,
+        opacity: float = 1.0,
+        width: int = 200,
+        **kwargs: Any,
+    ) -> None:
+        defaults = {
+            "size": Theme.Typography.BODY,
+            "weight": Theme.Typography.WEIGHT_REGULAR,
+            "color": Theme.Colors.TEXT_SECONDARY,
+            "font_family": "Roboto",
+            "overflow": ft.TextOverflow.ELLIPSIS,
+            "width": width,
+            "selectable": True,
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)
+
+
+class SidebarLabelHeadingText(ft.Text):  # type: ignore[misc]
+    """
+    Sidebar heading text for section headers.
+
+    Used for sidebar section titles and category headers.
+    """
+
+    def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
+        defaults = {
+            "size": Theme.Typography.BODY,
+            "weight": Theme.Typography.WEIGHT_BOLD,
+            "color": Theme.Colors.TEXT_PRIMARY,
+            "font_family": "Roboto",
+            "selectable": True,
+        }
+        defaults.update(kwargs)
+        super().__init__(value=value, opacity=opacity, **defaults)

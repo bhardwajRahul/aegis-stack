@@ -8,14 +8,13 @@ individual service statuses.
 
 import flet as ft
 from app.components.frontend.controls import LabelText, PrimaryText
+from app.components.frontend.controls.tech_badge import TechBadge
 from app.services.system.models import ComponentStatus
 
+from .card_container import CardContainer
 from .card_utils import (
-    create_hover_handler,
     create_responsive_3_section_layout,
-    create_standard_card_container,
     create_stats_row,
-    create_tech_badge,
     get_status_colors,
 )
 
@@ -132,14 +131,13 @@ class ServicesCard:
 
     def _create_technology_badge(self) -> ft.Container:
         """Create technology badge for services."""
-        _, primary_color, _ = get_status_colors(self.component_data)
+        primary_color, _, _ = get_status_colors(self.component_data)
 
-        return create_tech_badge(
-            title="Services",
-            subtitle="Business Logic",
-            icon="🔧",
-            badge_text="SVC",
-            badge_color=primary_color,
+        return TechBadge(
+            title="Business Logic",
+            subtitle="Application Services",
+            badge_text="Services",
+            badge_color=ft.Colors.INDIGO,
             primary_color=primary_color,
         )
 
@@ -215,19 +213,9 @@ class ServicesCard:
             right_content=self._create_stats_section(),
         )
 
-        # Create the container
-        card_container = create_standard_card_container(
+        return CardContainer(
             content=content,
-            primary_color=primary_color,
             border_color=border_color,
-            width=None,
-            hover_handler=None,
+            component_data=self.component_data,
+            component_name="services",
         )
-
-        # Create hover handler for the card
-        hover_handler = create_hover_handler(card_container)
-
-        # Update the hover handler on the container
-        card_container.on_hover = hover_handler
-
-        return card_container

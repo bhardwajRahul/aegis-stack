@@ -7,16 +7,13 @@ and system performance data using shared utility functions.
 
 import flet as ft
 from app.components.frontend.controls import LabelText, PrimaryText
+from app.components.frontend.controls.tech_badge import TechBadge
 from app.services.system.models import ComponentStatus
 
+from .card_container import CardContainer
 from .card_utils import (
-    create_card_click_handler,
-    create_clickable_hover_handler,
-    create_hover_handler,
     create_progress_indicator,
-    create_standard_card_container,
     create_stats_row,
-    create_tech_badge,
     get_status_colors,
 )
 
@@ -50,11 +47,10 @@ class FastAPICard:
         """Create the Backend API technology badge section."""
         primary_color, _, _ = get_status_colors(self.component_data)
 
-        return create_tech_badge(
-            title="Backend",
-            subtitle="FastAPI",
-            icon="🚀",
-            badge_text="API",
+        return TechBadge(
+            title="FastAPI",
+            subtitle="Web Framework",
+            badge_text="Backend",
             badge_color=ft.Colors.GREEN,
             primary_color=primary_color,
             width=None,  # Let flex handle the width
@@ -290,11 +286,10 @@ class FastAPICard:
         # Responsive 3-section layout with flex ratios prioritizing middle
         content = ft.Row(
             [
-                # Left: Tech badge (flexible, can shrink to minimum)
+                # Left: Tech badge (fixed width)
                 ft.Container(
                     content=self._create_tech_badge(),
-                    expand=2,  # ~20% of space, can shrink
-                    width=100,  # Minimum width to keep badge readable
+                    width=200,  # Fixed width - honors TechBadge width
                 ),
                 ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
                 # Middle: Metrics (PRIORITY - gets most space and protection)
@@ -315,23 +310,9 @@ class FastAPICard:
             ]
         )
 
-        self._card_container = create_standard_card_container(
+        return CardContainer(
             content=content,
-            primary_color=primary_color,
             border_color=border_color,
-            width=None,  # Let ResponsiveRow handle the width
-            hover_handler=create_hover_handler(
-                None
-            ),  # Will set after container creation
+            component_data=self.component_data,
+            component_name="backend",
         )
-
-        # Add click handler to open Backend detail modal
-        self._card_container.on_hover = create_clickable_hover_handler(
-            self._card_container
-        )
-        self._card_container.on_click = create_card_click_handler(
-            "backend", self.component_data
-        )
-        self._card_container.cursor = ft.MouseCursor.CLICK
-
-        return self._card_container

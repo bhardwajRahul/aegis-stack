@@ -45,12 +45,12 @@ class ComponentStatus(BaseModel):
     @property
     def healthy(self) -> bool:
         """
-        Component is healthy if status is not UNHEALTHY.
+        Component is healthy only if status is HEALTHY.
 
-        WARNING and INFO statuses are considered healthy (functional but with concerns),
-        only UNHEALTHY is considered not healthy (non-functional).
+        WARNING, INFO, and UNHEALTHY statuses are not considered healthy.
+        This ensures health counts accurately reflect only fully healthy components.
         """
-        return self.status != ComponentStatusType.UNHEALTHY
+        return self.status == ComponentStatusType.HEALTHY
 
 
 class SystemStatus(BaseModel):
