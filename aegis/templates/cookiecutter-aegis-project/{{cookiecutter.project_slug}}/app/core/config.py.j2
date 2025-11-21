@@ -145,6 +145,11 @@ class Settings(BaseSettings):
     TWILIO_MESSAGING_SERVICE_SID: str | None = None  # Required for toll-free SMS
 {% endif %}
 
+{% if cookiecutter.include_scheduler == "yes" %}
+    # Scheduler settings
+    SCHEDULER_FORCE_UPDATE: bool = False  # Force update jobs from code on restart
+{% endif %}
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

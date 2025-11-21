@@ -130,9 +130,9 @@ scheduler.modify_job("daily_reports", hour=7)  # Change to 7 AM
 
 ## Configuration
 
-The scheduler uses APScheduler's default settings. The only environment variable is:
+The scheduler uses APScheduler's default settings. Configuration is managed via `app/core/config.py`:
 
-- `SCHEDULER_FORCE_UPDATE`: Set to "true" to force update jobs from code during restart (persistence mode only)
+- `SCHEDULER_FORCE_UPDATE` (bool, default: `False`): Force update jobs from code during restart (persistence mode only). Set via environment variable `SCHEDULER_FORCE_UPDATE=true`
 
 Individual jobs can configure their own behavior when defined:
 
