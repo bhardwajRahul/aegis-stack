@@ -275,7 +275,8 @@ def update_command(
                     answers = yaml.safe_load(f) or {}
 
                 # Update _src_path to point to custom template
-                answers["_src_path"] = str(template_root)
+                # Use git+file:// URL format so Copier recognizes it as git-tracked
+                answers["_src_path"] = f"git+file://{template_root}"
 
                 with open(answers_file, "w") as f:
                     yaml.safe_dump(

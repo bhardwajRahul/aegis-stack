@@ -8,7 +8,6 @@ No inheritance or ABC complexity - just common functionality extracted.
 from collections.abc import Callable
 
 import flet as ft
-
 from app.components.frontend.controls import LabelText, SecondaryText
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
@@ -208,7 +207,9 @@ def create_progress_indicator(
                         value=value / 100.0,
                         height=8,
                         color=color,
-                        bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.ON_SURFACE_VARIANT),
+                        bgcolor=ft.Colors.with_opacity(
+                            0.3, ft.Colors.ON_SURFACE_VARIANT
+                        ),
                         border_radius=4,
                     ),
                     margin=ft.margin.only(top=4, bottom=4),
@@ -251,55 +252,27 @@ def create_modal_for_component(
         AlertDialog instance for the component, or None if component not supported
     """
     from ..modals import (
-        {%- if cookiecutter.include_ai == "yes" %}
         AIDetailDialog,
-        {%- endif %}
-        {%- if cookiecutter.include_auth == "yes" %}
         AuthDetailDialog,
-        {%- endif %}
         BackendDetailDialog,
-        {%- if cookiecutter.include_comms == "yes" %}
         CommsDetailDialog,
-        {%- endif %}
-        {%- if cookiecutter.include_database == "yes" %}
         DatabaseDetailDialog,
-        {%- endif %}
         FrontendDetailDialog,
-        {%- if cookiecutter.include_redis == "yes" %}
         RedisDetailDialog,
-        {%- endif %}
-        {%- if cookiecutter.include_scheduler == "yes" %}
         SchedulerDetailDialog,
-        {%- endif %}
-        {%- if cookiecutter.include_worker == "yes" %}
         WorkerDetailDialog,
-        {%- endif %}
     )
 
     modal_map: dict[str, type[ft.AlertDialog]] = {
-        {%- if cookiecutter.include_ai == "yes" %}
         "ai": AIDetailDialog,
-        {%- endif %}
-        {%- if cookiecutter.include_auth == "yes" %}
         "auth": AuthDetailDialog,
-        {%- endif %}
         "backend": BackendDetailDialog,
-        {%- if cookiecutter.include_comms == "yes" %}
         "comms": CommsDetailDialog,
-        {%- endif %}
-        {%- if cookiecutter.include_database == "yes" %}
         "database": DatabaseDetailDialog,
-        {%- endif %}
         "frontend": FrontendDetailDialog,
-        {%- if cookiecutter.include_redis == "yes" %}
         "redis": RedisDetailDialog,
-        {%- endif %}
-        {%- if cookiecutter.include_scheduler == "yes" %}
         "scheduler": SchedulerDetailDialog,
-        {%- endif %}
-        {%- if cookiecutter.include_worker == "yes" %}
         "worker": WorkerDetailDialog,
-        {%- endif %}
     }
 
     modal_class = modal_map.get(component_name)

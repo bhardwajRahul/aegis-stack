@@ -368,19 +368,19 @@ class WorkerCard:
                     ),
                     # Queued
                     ft.Container(
-                        content=ft.Text(f"{queued:,}", color=ft.Colors.ON_SURFACE),
+                        content=ft.Text(f"{queued:,}"),
                         width=60,
                         alignment=ft.alignment.center_right,
                     ),
                     # Active
                     ft.Container(
-                        content=ft.Text(f"{active:,}", color=ft.Colors.ON_SURFACE),
+                        content=ft.Text(f"{active:,}"),
                         width=50,
                         alignment=ft.alignment.center_right,
                     ),
                     # Completed
                     ft.Container(
-                        content=ft.Text(f"{completed:,}", color=ft.Colors.ON_SURFACE),
+                        content=ft.Text(f"{completed:,}"),
                         width=70,
                         alignment=ft.alignment.center_right,
                     ),

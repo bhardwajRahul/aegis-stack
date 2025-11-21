@@ -70,7 +70,7 @@ def create_responsive_3_section_layout(
                 content=left_content,
                 width=200,  # Fixed width - honors TechBadge width
             ),
-            ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
+            ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
             # Middle: Metrics (PRIORITY - gets most space and protection)
             ft.Container(
                 content=middle_content,
@@ -78,7 +78,7 @@ def create_responsive_3_section_layout(
                 padding=ft.padding.all(16),
                 width=300,  # Minimum width to keep metrics functional
             ),
-            ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
+            ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
             # Right: Details (flexible, shrinks most aggressively)
             ft.Container(
                 content=right_content,
@@ -204,14 +204,14 @@ def create_progress_indicator(
                     label,
                     size=12,
                     weight=ft.FontWeight.W_600,
-                    color=ft.Colors.GREY_600,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
                 ft.Container(
                     content=ft.ProgressBar(
                         value=value / 100.0,
                         height=8,
                         color=color,
-                        bgcolor=ft.Colors.GREY_300,
+                        bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.ON_SURFACE_VARIANT),
                         border_radius=4,
                     ),
                     margin=ft.margin.only(top=4, bottom=4),
@@ -227,7 +227,7 @@ def create_progress_indicator(
                         ft.Text(
                             details,
                             size=14,
-                            color=ft.Colors.GREY_600,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
                         ),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,

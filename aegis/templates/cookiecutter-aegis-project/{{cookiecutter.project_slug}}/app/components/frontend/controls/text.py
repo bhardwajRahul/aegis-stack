@@ -23,7 +23,6 @@ class PrimaryText(ft.Text):  # type: ignore[misc]
     def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
         defaults = {
             "no_wrap": False,
-            "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
             "size": Theme.Typography.BODY_LARGE,
             "weight": Theme.Typography.WEIGHT_REGULAR,
@@ -46,7 +45,6 @@ class SecondaryText(ft.Text):  # type: ignore[misc]
     ) -> None:
         defaults = {
             "no_wrap": no_wrap,
-            "color": Theme.Colors.TEXT_SECONDARY,
             "font_family": "Roboto",
             "size": Theme.Typography.BODY,
             "weight": Theme.Typography.WEIGHT_REGULAR,
@@ -66,7 +64,6 @@ class TitleText(ft.Text):  # type: ignore[misc]
     def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
         # Set defaults, but allow kwargs to override
         defaults = {
-            "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
             "size": Theme.Typography.H2,
             "weight": Theme.Typography.WEIGHT_BOLD,
@@ -110,7 +107,6 @@ class MetricText(ft.Text):  # type: ignore[misc]
 
     def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
         defaults = {
-            "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
             "size": Theme.Typography.BODY_LARGE,
             "weight": Theme.Typography.WEIGHT_BOLD,
@@ -130,7 +126,6 @@ class LabelText(ft.Text):  # type: ignore[misc]
     def __init__(self, value: str, opacity: float = 1.0, **kwargs: Any) -> None:
         # Set defaults, but allow kwargs to override
         defaults = {
-            "color": Theme.Colors.TEXT_SECONDARY,
             "font_family": "Roboto",
             "size": Theme.Typography.BODY_SMALL,
             "weight": Theme.Typography.WEIGHT_SEMIBOLD,
@@ -162,7 +157,6 @@ class DisplayText(ft.Text):  # type: ignore[misc]
         defaults = {
             "size": Theme.Typography.DISPLAY,
             "weight": Theme.Typography.WEIGHT_BOLD,
-            "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
             "selectable": True,
         }
@@ -181,7 +175,6 @@ class H1Text(ft.Text):  # type: ignore[misc]
         defaults = {
             "size": Theme.Typography.H1,
             "weight": Theme.Typography.WEIGHT_BOLD,
-            "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
             "selectable": True,
         }
@@ -200,7 +193,6 @@ class H2Text(ft.Text):  # type: ignore[misc]
         defaults = {
             "size": Theme.Typography.H2,
             "weight": Theme.Typography.WEIGHT_BOLD,
-            "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
             "selectable": True,
         }
@@ -219,7 +211,6 @@ class H3Text(ft.Text):  # type: ignore[misc]
         defaults = {
             "size": Theme.Typography.H3,
             "weight": Theme.Typography.WEIGHT_SEMIBOLD,
-            "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
             "selectable": True,
         }
@@ -238,7 +229,6 @@ class BodyText(ft.Text):  # type: ignore[misc]
         defaults = {
             "size": Theme.Typography.BODY,
             "weight": Theme.Typography.WEIGHT_REGULAR,
-            "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
             "selectable": True,
         }
@@ -338,7 +328,6 @@ class ModalText(ft.Text):  # type: ignore[misc]
         defaults = {
             "size": Theme.Typography.BODY_LARGE,
             "weight": Theme.Typography.WEIGHT_BOLD,
-            "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
             "selectable": True,
         }
@@ -357,7 +346,6 @@ class ModalSubtitleText(ft.Text):  # type: ignore[misc]
         defaults = {
             "size": Theme.Typography.BODY,
             "weight": Theme.Typography.WEIGHT_REGULAR,
-            "color": Theme.Colors.TEXT_SECONDARY,
             "font_family": "Roboto",
             "selectable": True,
         }
@@ -382,7 +370,6 @@ class SidebarLabelText(ft.Text):  # type: ignore[misc]
         defaults = {
             "size": Theme.Typography.BODY,
             "weight": Theme.Typography.WEIGHT_REGULAR,
-            "color": Theme.Colors.TEXT_SECONDARY,
             "font_family": "Roboto",
             "overflow": ft.TextOverflow.ELLIPSIS,
             "width": width,
@@ -403,7 +390,6 @@ class SidebarLabelHeadingText(ft.Text):  # type: ignore[misc]
         defaults = {
             "size": Theme.Typography.BODY,
             "weight": Theme.Typography.WEIGHT_BOLD,
-            "color": Theme.Colors.TEXT_PRIMARY,
             "font_family": "Roboto",
             "selectable": True,
         }
