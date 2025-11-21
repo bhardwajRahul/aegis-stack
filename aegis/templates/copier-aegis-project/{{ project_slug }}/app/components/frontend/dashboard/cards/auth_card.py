@@ -7,13 +7,11 @@ Shows auth-specific metrics with a clean, functional layout.
 
 import flet as ft
 from app.components.frontend.controls import LabelText, PrimaryText
+from app.components.frontend.controls.tech_badge import TechBadge
 from app.services.system.models import ComponentStatus
 
+from .card_container import CardContainer
 from .card_utils import (
-    create_card_click_handler,
-    create_clickable_hover_handler,
-    create_standard_card_container,
-    create_tech_badge,
     get_status_colors,
 )
 
@@ -71,14 +69,13 @@ class AuthCard:
 
     def _create_technology_badge(self) -> ft.Container:
         """Create technology badge for authentication service."""
-        _, primary_color, _ = get_status_colors(self.component_data)
+        primary_color, _, _ = get_status_colors(self.component_data)
 
-        return create_tech_badge(
-            title="Auth",
-            subtitle="JWT + OAuth",
-            icon="🔐",
-            badge_text="AUTH",
-            badge_color=primary_color,
+        return TechBadge(
+            title="JWT",
+            subtitle="Authentication",
+            badge_text="Auth",
+            badge_color=ft.Colors.AMBER,
             primary_color=primary_color,
         )
 
@@ -183,21 +180,9 @@ class AuthCard:
             vertical_alignment=ft.CrossAxisAlignment.START,
         )
 
-        # Create the container
-        card_container = create_standard_card_container(
+        return CardContainer(
             content=content,
-            primary_color=primary_color,
             border_color=border_color,
-            width=None,
-            hover_handler=None,
+            component_data=self.component_data,
+            component_name="auth",
         )
-
-        # Create clickable hover handler for the card (with scale animation)
-        hover_handler = create_clickable_hover_handler(card_container)
-        card_container.on_hover = hover_handler
-
-        # Add click handler to open modal (standard pattern)
-        card_container.on_click = create_card_click_handler("auth", self.component_data)
-        card_container.cursor = ft.MouseCursor.CLICK
-
-        return card_container

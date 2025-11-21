@@ -5,6 +5,8 @@ from .table import (
     TableHeaderText,
     TableNameText,
 )
+from .tag import Tag
+from .tech_badge import TechBadge
 from .text import (
     AccentText,
     BodyText,
@@ -45,4 +47,7 @@ __all__ = [
     "TableHeaderText",
     "TableCellText",
     "TableNameText",
+    # Badge/Tag controls
+    "Tag",
+    "TechBadge",
 ]

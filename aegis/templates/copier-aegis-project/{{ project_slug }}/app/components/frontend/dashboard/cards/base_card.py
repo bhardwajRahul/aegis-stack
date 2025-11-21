@@ -9,8 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import flet as ft
-from app.components.frontend.controls import LabelText, SecondaryText, TitleText
-from app.components.frontend.theme import AegisTheme as Theme
+from app.components.frontend.controls.tech_badge import TechBadge
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 
@@ -70,7 +69,7 @@ class BaseCard(ABC):
             subtitle: Technology subtitle (e.g., "Backend API", "arq + Redis")
             badge_text: Badge label text (e.g., "ACTIVE", "QUEUES")
             icon: Emoji icon for the technology
-            badge_color: Background color for the badge
+            badge_color: Border color for the badge
             width: Width of the badge container
 
         Returns:
@@ -78,36 +77,13 @@ class BaseCard(ABC):
         """
         primary_color, _, _ = self._get_status_colors()
 
-        return ft.Container(
-            content=ft.Column(
-                [
-                    ft.Container(
-                        content=ft.Text(icon, size=32),
-                        padding=ft.padding.all(8),
-                        bgcolor=primary_color,
-                        border_radius=12,
-                        margin=ft.margin.only(bottom=8),
-                    ),
-                    TitleText(title),
-                    SecondaryText(subtitle),
-                    ft.Container(
-                        content=LabelText(
-                            badge_text,
-                            color=Theme.Colors.BADGE_TEXT,
-                        ),
-                        padding=ft.padding.symmetric(horizontal=8, vertical=2),
-                        bgcolor=badge_color,
-                        border_radius=8,
-                        margin=ft.margin.only(top=4),
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=4,
-            ),
-            padding=ft.padding.all(16),
+        return TechBadge(
+            title=title,
+            subtitle=subtitle,
+            badge_text=badge_text,
+            badge_color=badge_color,
+            primary_color=primary_color,
             width=width,
-            alignment=ft.alignment.center,
         )
 
     def _create_section_container(

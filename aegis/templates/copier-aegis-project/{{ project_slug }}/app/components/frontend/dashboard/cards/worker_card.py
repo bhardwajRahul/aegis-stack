@@ -13,12 +13,11 @@ from app.components.frontend.controls import (
     TableCellText,
     TableHeaderText,
     TableNameText,
-    TitleText,
 )
-from app.components.frontend.theme import AegisTheme as Theme
+from app.components.frontend.controls.tech_badge import TechBadge
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
-from .card_utils import create_card_click_handler, create_clickable_hover_handler
+from .card_container import CardContainer
 
 
 class WorkerCard:
@@ -171,36 +170,12 @@ class WorkerCard:
         """Create the Worker/arq technology badge section."""
         primary_color, _, _ = self._get_status_colors()
 
-        return ft.Container(
-            content=ft.Column(
-                [
-                    ft.Container(
-                        content=ft.Text("⚡", size=32),
-                        padding=ft.padding.all(8),
-                        bgcolor=primary_color,
-                        border_radius=12,
-                        margin=ft.margin.only(bottom=8),
-                    ),
-                    TitleText("Worker"),
-                    SecondaryText("arq + Redis"),
-                    ft.Container(
-                        content=LabelText(
-                            "QUEUES",
-                            color=Theme.Colors.BADGE_TEXT,
-                        ),
-                        padding=ft.padding.symmetric(horizontal=8, vertical=2),
-                        bgcolor=ft.Colors.PURPLE,
-                        border_radius=8,
-                        margin=ft.margin.only(top=4),
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=4,
-            ),
-            padding=ft.padding.all(16),
-            width=160,
-            alignment=ft.alignment.center,
+        return TechBadge(
+            title="arq",
+            subtitle="Async Job Queue",
+            badge_text="Worker",
+            badge_color=ft.Colors.PURPLE,
+            primary_color=primary_color,
         )
 
     def _create_queues_section(self) -> ft.Container:
@@ -657,11 +632,10 @@ class WorkerCard:
         # 2-section layout: Left badge + Right table
         content = ft.Row(
             [
-                # Left: Technology badge (same width as other cards)
+                # Left: Technology badge (fixed width)
                 ft.Container(
                     content=self._create_technology_badge(),
-                    expand=2,  # Same as other cards
-                    width=100,  # Minimum width like other cards
+                    width=200,  # Fixed width - honors TechBadge width
                 ),
                 ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
                 # Right: Queue table
@@ -674,23 +648,9 @@ class WorkerCard:
             ]
         )
 
-        self._card_container = ft.Container(
+        return CardContainer(
             content=content,
-            bgcolor=ft.Colors.SURFACE,
-            border=ft.border.all(1, border_color),
-            border_radius=16,
-            padding=0,
-            width=None,  # Let ResponsiveRow handle the width
-            height=280,
+            border_color=border_color,
+            component_data=self.component_data,
+            component_name="worker",
         )
-
-        # Add click handler to open worker detail modal
-        self._card_container.on_hover = create_clickable_hover_handler(
-            self._card_container
-        )
-        self._card_container.on_click = create_card_click_handler(
-            "worker", self.component_data
-        )
-        self._card_container.cursor = ft.MouseCursor.CLICK
-
-        return self._card_container

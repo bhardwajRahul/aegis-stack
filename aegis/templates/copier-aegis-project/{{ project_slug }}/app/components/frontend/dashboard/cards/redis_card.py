@@ -12,14 +12,12 @@ from app.components.frontend.controls import (
     MetricText,
     PrimaryText,
     SecondaryText,
-    TitleText,
 )
-from app.components.frontend.theme import AegisTheme as Theme
+from app.components.frontend.controls.tech_badge import TechBadge
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
+from .card_container import CardContainer
 from .card_utils import (
-    create_card_click_handler,
-    create_clickable_hover_handler,
     create_responsive_3_section_layout,
 )
 
@@ -112,35 +110,13 @@ class RedisCard:
         """Create the Redis technology badge section."""
         primary_color, _, _ = self._get_status_colors()
 
-        return ft.Container(
-            content=ft.Column(
-                [
-                    ft.Container(
-                        content=ft.Text("🗄️", size=32),
-                        padding=ft.padding.all(8),
-                        bgcolor=primary_color,
-                        border_radius=12,
-                        margin=ft.margin.only(bottom=8),
-                    ),
-                    TitleText("Redis"),
-                    SecondaryText("Cache + Pub/Sub"),
-                    ft.Container(
-                        content=LabelText(
-                            "CACHE",
-                            color=Theme.Colors.BADGE_TEXT,
-                        ),
-                        padding=ft.padding.symmetric(horizontal=8, vertical=2),
-                        bgcolor=ft.Colors.RED,
-                        border_radius=8,
-                        margin=ft.margin.only(top=4),
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=4,
-            ),
-            padding=ft.padding.all(16),
-            width=160,  # Expanded badge width to 160px
+        return TechBadge(
+            title="Redis",
+            subtitle="Cache + Pub/Sub",
+            badge_text="Cache",
+            badge_color=ft.Colors.RED,
+            primary_color=primary_color,
+            width=160,
         )
 
     def _create_metrics_section(self) -> ft.Container:
@@ -314,23 +290,9 @@ class RedisCard:
             right_content=self._create_performance_section(),
         )
 
-        self._card_container = ft.Container(
+        return CardContainer(
             content=content,
-            bgcolor=ft.Colors.SURFACE,
-            border=ft.border.all(1, border_color),
-            border_radius=16,
-            padding=0,
-            width=None,  # Let ResponsiveRow handle the width
-            height=280,
+            border_color=border_color,
+            component_data=self.component_data,
+            component_name="redis",
         )
-
-        # Add click handler to open Redis detail modal
-        self._card_container.on_hover = create_clickable_hover_handler(
-            self._card_container
-        )
-        self._card_container.on_click = create_card_click_handler(
-            "redis", self.component_data
-        )
-        self._card_container.cursor = ft.MouseCursor.CLICK
-
-        return self._card_container
