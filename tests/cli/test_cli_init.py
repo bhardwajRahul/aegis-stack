@@ -54,6 +54,20 @@ class TestCLIInit:
         # Assert template processing
         self._assert_scheduler_template_processing(project_path)
 
+    def test_init_with_scheduler_sqlite(
+        self,
+        project_factory: "ProjectFactory",
+    ) -> None:
+        """Test generating project with scheduler using sqlite persistence."""
+        # Use cached scheduler project with sqlite backend
+        project_path = project_factory("base_with_scheduler_sqlite")
+
+        # Assert project structure
+        self._assert_scheduler_project_structure(project_path)
+
+        # Assert sqlite-specific scheduler config
+        self._assert_scheduler_sqlite_config(project_path)
+
     def test_init_without_components(
         self,
         project_factory: "ProjectFactory",
@@ -251,6 +265,20 @@ class TestCLIInit:
         # Check pyproject.toml includes APScheduler
         pyproject_content = (project_path / "pyproject.toml").read_text()
         assert "apscheduler==3.10.4" in pyproject_content
+
+    def _assert_scheduler_sqlite_config(self, project_path: Path) -> None:
+        """Assert scheduler sqlite persistence config is correct."""
+        scheduler_file = project_path / "app/components/scheduler/main.py"
+        scheduler_content = scheduler_file.read_text()
+
+        # Check SCHEDULER_FORCE_UPDATE uses config system (not os.getenv)
+        assert "from app.core.config import settings" in scheduler_content
+        assert "settings.SCHEDULER_FORCE_UPDATE" in scheduler_content
+        assert "os.getenv" not in scheduler_content
+
+        # Check config.py has the setting
+        config_content = (project_path / "app/core/config.py").read_text()
+        assert "SCHEDULER_FORCE_UPDATE: bool = False" in config_content
 
     def _assert_worker_project_structure(self, project_path: Path) -> None:
         """Assert worker-specific project structure."""

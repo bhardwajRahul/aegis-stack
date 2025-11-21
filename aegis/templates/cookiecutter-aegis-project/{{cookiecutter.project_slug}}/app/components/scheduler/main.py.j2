@@ -6,7 +6,6 @@ Add your own jobs by importing service functions and calling scheduler.add_job()
 """
 
 import asyncio
-import os
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 {% if cookiecutter.scheduler_backend != "memory" %}
@@ -18,6 +17,7 @@ from app.services.system.backup import backup_database_job
 from app.services.system.backup import backup_database_job
 {% endif %}
 
+from app.core.config import settings
 from app.core.log import logger
 
 {% if cookiecutter.scheduler_backend != "memory" %}
@@ -76,8 +76,8 @@ def create_scheduler() -> AsyncIOScheduler:
     # ============================================================================
 
 {% if cookiecutter.scheduler_backend != "memory" or (cookiecutter.include_scheduler == "yes" and cookiecutter.include_database == "yes") %}
-    # Check environment flag for force updates (useful during deployments)
-    force_update = os.getenv("SCHEDULER_FORCE_UPDATE", "false").lower() == "true"
+    # Check config flag for force updates (useful during deployments)
+    force_update = settings.SCHEDULER_FORCE_UPDATE
     # Database backup job (runs daily at 2 AM when database is available)
     job_id = "database_backup"
 {% if cookiecutter.scheduler_backend != "memory" %}
