@@ -6,13 +6,10 @@ No inheritance or ABC complexity - just common functionality extracted.
 """
 
 from collections.abc import Callable
-from typing import Any
 
 import flet as ft
 
-from app.components.frontend.controls import LabelText, SecondaryText, TitleText
-from app.components.frontend.controls.tech_badge import TechBadge
-from app.components.frontend.theme import AegisTheme as Theme
+from app.components.frontend.controls import LabelText, SecondaryText
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 # Provider color mapping for AI service (shared across AI card and modal)
@@ -241,17 +238,18 @@ def create_progress_indicator(
 
 
 def create_modal_for_component(
-    component_name: str, component_data: ComponentStatus
-) -> ft.AlertDialog | None:
+    component_name: str, component_data: ComponentStatus, page: ft.Page
+) -> ft.Container | None:
     """
-    Factory function to create appropriate modal dialog for a component.
+    Factory function to create appropriate popup dialog for a component.
 
     Args:
         component_name: Name of the component (e.g., "scheduler", "worker")
         component_data: ComponentStatus containing component health and metrics
+        page: The Flet page instance
 
     Returns:
-        AlertDialog instance for the component, or None if component not supported
+        Popup Container instance for the component, or None if component not supported
     """
     from ..modals import (
         {%- if include_ai %}
@@ -279,7 +277,7 @@ def create_modal_for_component(
         {%- endif %}
     )
 
-    modal_map: dict[str, type[ft.AlertDialog]] = {
+    modal_map: dict[str, type[ft.Container]] = {
         {%- if include_ai %}
         "ai": AIDetailDialog,
         {%- endif %}
@@ -307,7 +305,7 @@ def create_modal_for_component(
 
     modal_class = modal_map.get(component_name)
     if modal_class:
-        return modal_class(component_data)
+        return modal_class(component_data, page)
 
     return None
 
@@ -316,7 +314,7 @@ def create_card_click_handler(
     component_name: str, component_data: ComponentStatus
 ) -> Callable[[ft.ControlEvent], None]:
     """
-    Create a click handler for a card that opens its detail modal.
+    Create a click handler for a card that opens its detail popup.
 
     Args:
         component_name: Name of the component
@@ -327,10 +325,16 @@ def create_card_click_handler(
     """
 
     def handle_click(e: ft.ControlEvent) -> None:
-        """Handle card click by opening detail modal."""
-        modal = create_modal_for_component(component_name, component_data)
-        if modal and e.page:
-            e.page.open(modal)
+        """Handle card click by opening detail popup."""
+        if not e.page:
+            return
+
+        popup = create_modal_for_component(component_name, component_data, e.page)
+        if popup:
+            # Add to page overlay and show
+            e.page.overlay.append(popup)
+            popup.show()
+            e.page.update()
 
     return handle_click
 

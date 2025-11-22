@@ -8,47 +8,16 @@ conversation statistics, and usage metrics.
 import flet as ft
 from app.components.frontend.controls import (
     BodyText,
-    DisplayText,
-    H2Text,
+    H3Text,
     SecondaryText,
+    Tag,
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
 from ..cards.card_utils import PROVIDER_COLORS
-
-
-class MetricCard(ft.Container):
-    """Reusable metric display card with icon, value, and label."""
-
-    def __init__(self, label: str, value: str, icon: str, color: str) -> None:
-        """
-        Initialize metric card.
-
-        Args:
-            label: Metric label text
-            value: Metric value to display
-            icon: Flet icon constant
-            color: Icon and accent color
-        """
-        super().__init__()
-
-        self.content = ft.Column(
-            [
-                ft.Icon(icon, size=32, color=color),
-                DisplayText(value),
-                SecondaryText(
-                    label,
-                    size=Theme.Typography.BODY_SMALL,
-                ),
-            ],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=Theme.Spacing.SM,
-        )
-        self.padding = Theme.Spacing.MD
-        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.OUTLINE_VARIANT)
-        self.border_radius = Theme.Components.CARD_RADIUS
-        self.expand = True
+from .base_detail_popup import BaseDetailPopup
+from .modal_sections import MetricCard
 
 
 class OverviewSection(ft.Container):
@@ -67,35 +36,25 @@ class OverviewSection(ft.Container):
         total_messages = metadata.get("total_messages", 0)
         unique_users = metadata.get("unique_users", 0)
 
-        self.content = ft.Column(
+        self.content = ft.Row(
             [
-                H2Text("Overview"),
-                ft.Container(height=Theme.Spacing.SM),
-                ft.Row(
-                    [
-                        MetricCard(
-                            "Total Conversations",
-                            str(total_conversations),
-                            ft.Icons.CHAT,
-                            Theme.Colors.PRIMARY,
-                        ),
-                        MetricCard(
-                            "Total Messages",
-                            str(total_messages),
-                            ft.Icons.MESSAGE,
-                            Theme.Colors.INFO,
-                        ),
-                        MetricCard(
-                            "Unique Users",
-                            str(unique_users),
-                            ft.Icons.PEOPLE,
-                            Theme.Colors.SUCCESS,
-                        ),
-                    ],
-                    spacing=Theme.Spacing.MD,
+                MetricCard(
+                    "Total Conversations",
+                    str(total_conversations),
+                    Theme.Colors.PRIMARY,
+                ),
+                MetricCard(
+                    "Total Messages",
+                    str(total_messages),
+                    Theme.Colors.INFO,
+                ),
+                MetricCard(
+                    "Unique Users",
+                    str(unique_users),
+                    Theme.Colors.SUCCESS,
                 ),
             ],
-            spacing=0,
+            spacing=Theme.Spacing.MD,
         )
         self.padding = Theme.Spacing.MD
 
@@ -120,43 +79,21 @@ class ConfigurationSection(ft.Container):
         free_tier = metadata.get("provider_free_tier", False)
 
         # Provider color
-        provider_color = PROVIDER_COLORS.get(provider.lower(), ft.Colors.GREY)
+        provider_color = PROVIDER_COLORS.get(
+            provider.lower(), ft.Colors.ON_SURFACE_VARIANT
+        )
 
         # Build configuration rows
         config_rows = []
 
         # Provider row with badges
         provider_badges = [
-            ft.Container(
-                content=ft.Text(
-                    provider.upper(),
-                    size=Theme.Typography.BODY_SMALL,
-                    weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                    color=Theme.Colors.BADGE_TEXT,
-                ),
-                padding=ft.padding.symmetric(
-                    horizontal=Theme.Spacing.SM, vertical=Theme.Spacing.XS
-                ),
-                bgcolor=provider_color,
-                border_radius=Theme.Components.BADGE_RADIUS,
-            ),
+            Tag(text=provider.upper(), color=provider_color),
         ]
 
         if free_tier:
             provider_badges.append(
-                ft.Container(
-                    content=ft.Text(
-                        "FREE TIER",
-                        size=Theme.Typography.BODY_SMALL,
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        color=Theme.Colors.BADGE_TEXT,
-                    ),
-                    padding=ft.padding.symmetric(
-                        horizontal=Theme.Spacing.SM, vertical=Theme.Spacing.XS
-                    ),
-                    bgcolor=Theme.Colors.SUCCESS,
-                    border_radius=Theme.Components.BADGE_RADIUS,
-                ),
+                Tag(text="FREE TIER", color=Theme.Colors.SUCCESS),
             )
 
         config_rows.append(
@@ -182,7 +119,7 @@ class ConfigurationSection(ft.Container):
                         weight=Theme.Typography.WEIGHT_SEMIBOLD,
                         width=150,
                     ),
-                    BodyText(model),
+                    Tag(text=model, color=Theme.Colors.INFO),
                 ],
                 spacing=Theme.Spacing.MD,
             )
@@ -238,7 +175,7 @@ class ConfigurationSection(ft.Container):
 
         self.content = ft.Column(
             [
-                H2Text("Configuration"),
+                H3Text("Configuration"),
                 ft.Container(height=Theme.Spacing.SM),
                 ft.Column(config_rows, spacing=Theme.Spacing.SM),
             ],
@@ -291,17 +228,17 @@ class StatisticsSection(ft.Container):
 
         self.content = ft.Column(
             [
-                H2Text("Statistics"),
+                H3Text("Statistics"),
                 ft.Container(height=Theme.Spacing.SM),
                 stat_row("Component Status", status.value.upper()),
                 stat_row("Health Message", message),
                 stat_row("Response Time", f"{response_time:.2f}ms"),
-                ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE),
                 stat_row("Total Conversations", str(total_conversations)),
                 stat_row("Total Messages", str(total_messages)),
                 stat_row("Unique Users", str(unique_users)),
                 stat_row("Avg Messages/Conv", f"{avg_messages:.1f}"),
-                ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE),
                 stat_row("Engine", engine),
                 stat_row("Configuration Valid", "Yes" if config_valid else "No"),
                 stat_row("Validation Errors", str(validation_errors_count)),
@@ -311,83 +248,35 @@ class StatisticsSection(ft.Container):
         self.padding = Theme.Spacing.MD
 
 
-class AIDetailDialog(ft.AlertDialog):
+class AIDetailDialog(BaseDetailPopup):
     """
-    AI service detail modal dialog.
+    AI service detail popup.
 
     Displays comprehensive AI service information including provider configuration,
     conversation statistics, and usage metrics.
     """
 
-    def __init__(self, component_data: ComponentStatus) -> None:
+    def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         """
-        Initialize AI detail dialog.
+        Initialize the ai service details popup.
 
         Args:
-            component_data: AI service ComponentStatus from health check
+            component_data: ComponentStatus containing component health and metrics
         """
-        self.component_data = component_data
         metadata = component_data.metadata or {}
 
-        # Determine status badge color
-        status = component_data.status
-        if status.value == "healthy":
-            status_color = Theme.Colors.SUCCESS
-        elif status.value == "info":
-            status_color = Theme.Colors.INFO
-        elif status.value == "warning":
-            status_color = Theme.Colors.WARNING
-        else:  # unhealthy
-            status_color = Theme.Colors.ERROR
+        # Build sections
+        sections = [
+            OverviewSection(metadata),
+            ConfigurationSection(metadata),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            StatisticsSection(component_data),
+        ]
 
-        # Build modal content
-        title = ft.Row(
-            [
-                H2Text("🤖 AI Service Details"),
-                ft.Container(
-                    content=ft.Text(
-                        status.value.upper(),
-                        size=Theme.Typography.BODY_SMALL,
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        color=Theme.Colors.BADGE_TEXT,
-                    ),
-                    padding=ft.padding.symmetric(
-                        horizontal=Theme.Spacing.SM, vertical=Theme.Spacing.XS
-                    ),
-                    bgcolor=status_color,
-                    border_radius=Theme.Components.BADGE_RADIUS,
-                ),
-            ],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        )
-
-        content = ft.Container(
-            content=ft.Column(
-                [
-                    OverviewSection(metadata),
-                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
-                    ConfigurationSection(metadata),
-                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
-                    StatisticsSection(component_data),
-                ],
-                spacing=0,
-                scroll=ft.ScrollMode.AUTO,
-            ),
-            width=900,
-            height=700,
-        )
-
+        # Initialize base popup with custom sections
         super().__init__(
-            modal=False,
-            title=title,
-            content=content,
-            actions=[
-                ft.TextButton("Close", on_click=self._close),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
+            page=page,
+            component_data=component_data,
+            title_text="AI Service",
+            sections=sections,
         )
-
-    def _close(self, e: ft.ControlEvent) -> None:
-        """Close the modal dialog."""
-        self.open = False
-        e.page.update()

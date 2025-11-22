@@ -8,45 +8,15 @@ configuration, and integration status.
 import flet as ft
 from app.components.frontend.controls import (
     BodyText,
-    DisplayText,
-    H2Text,
+    H3Text,
+    LabelText,
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
-
-class MetricCard(ft.Container):
-    """Reusable metric display card with icon, value, and label."""
-
-    def __init__(self, label: str, value: str, icon: str, color: str) -> None:
-        """
-        Initialize metric card.
-
-        Args:
-            label: Metric label text
-            value: Metric value to display
-            icon: Flet icon constant
-            color: Icon and accent color
-        """
-        super().__init__()
-
-        self.content = ft.Column(
-            [
-                ft.Icon(icon, size=32, color=color),
-                DisplayText(value),
-                SecondaryText(
-                    label,
-                    size=Theme.Typography.BODY_SMALL,
-                ),
-            ],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=Theme.Spacing.SM,
-        )
-        self.padding = Theme.Spacing.MD
-        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.OUTLINE_VARIANT)
-        self.border_radius = Theme.Components.CARD_RADIUS
-        self.expand = True
+from .base_detail_popup import BaseDetailPopup
+from .modal_sections import MetricCard
 
 
 class OverviewSection(ft.Container):
@@ -66,35 +36,25 @@ class OverviewSection(ft.Container):
         integration = metadata.get("integration", "FastAPI")
         theme_support = metadata.get("theme_support", "Light / Dark")
 
-        self.content = ft.Column(
+        self.content = ft.Row(
             [
-                H2Text("Overview"),
-                ft.Container(height=Theme.Spacing.SM),
-                ft.Row(
-                    [
-                        MetricCard(
-                            "Framework",
-                            f"{framework} {version}",
-                            ft.Icons.WEB,
-                            Theme.Colors.PRIMARY,
-                        ),
-                        MetricCard(
-                            "Integration",
-                            integration,
-                            ft.Icons.LINK,
-                            Theme.Colors.SUCCESS,
-                        ),
-                        MetricCard(
-                            "Theme",
-                            theme_support,
-                            ft.Icons.PALETTE,
-                            Theme.Colors.INFO,
-                        ),
-                    ],
-                    spacing=Theme.Spacing.MD,
+                MetricCard(
+                    "Framework",
+                    f"{framework} {version}",
+                    Theme.Colors.PRIMARY,
+                ),
+                MetricCard(
+                    "Integration",
+                    integration,
+                    Theme.Colors.SUCCESS,
+                ),
+                MetricCard(
+                    "Theme",
+                    theme_support,
+                    Theme.Colors.INFO,
                 ),
             ],
-            spacing=0,
+            spacing=Theme.Spacing.MD,
         )
         self.padding = Theme.Spacing.MD
 
@@ -133,11 +93,8 @@ class ConfigurationSection(ft.Container):
                         width=200,
                     ),
                     ft.Container(
-                        content=ft.Text(
-                            f"{framework} {version}",
-                            size=Theme.Typography.BODY_SMALL,
-                            weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                            color=Theme.Colors.BADGE_TEXT,
+                        content=LabelText(
+                            f"{framework} {version}", color=Theme.Colors.BADGE_TEXT
                         ),
                         padding=ft.padding.symmetric(
                             horizontal=Theme.Spacing.SM, vertical=Theme.Spacing.XS
@@ -242,7 +199,7 @@ class ConfigurationSection(ft.Container):
 
         self.content = ft.Column(
             [
-                H2Text("Configuration"),
+                H3Text("Configuration"),
                 ft.Container(height=Theme.Spacing.SM),
                 ft.Column(config_rows, spacing=Theme.Spacing.SM),
             ],
@@ -267,76 +224,28 @@ class CapabilitiesSection(ft.Container):
         capability_rows = []
 
         # Material Design 3
-        capability_rows.append(
-            ft.Row(
-                [
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, size=20, color=Theme.Colors.SUCCESS),
-                    BodyText("Material Design 3"),
-                ],
-                spacing=Theme.Spacing.SM,
-            )
-        )
+        capability_rows.append(BodyText("• Material Design 3"))
 
         # Theme Switching
-        capability_rows.append(
-            ft.Row(
-                [
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, size=20, color=Theme.Colors.SUCCESS),
-                    BodyText("Theme Switching (Light/Dark)"),
-                ],
-                spacing=Theme.Spacing.SM,
-            )
-        )
+        capability_rows.append(BodyText("• Theme Switching (Light/Dark)"))
 
         # Auto Refresh
         auto_refresh = metadata.get("auto_refresh", 30)
-        capability_rows.append(
-            ft.Row(
-                [
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, size=20, color=Theme.Colors.SUCCESS),
-                    BodyText(f"Auto Refresh ({auto_refresh}s)"),
-                ],
-                spacing=Theme.Spacing.SM,
-            )
-        )
+        capability_rows.append(BodyText(f"• Auto Refresh ({auto_refresh}s)"))
 
         # Reactive UI Updates
-        capability_rows.append(
-            ft.Row(
-                [
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, size=20, color=Theme.Colors.SUCCESS),
-                    BodyText("Reactive UI Updates"),
-                ],
-                spacing=Theme.Spacing.SM,
-            )
-        )
+        capability_rows.append(BodyText("• Reactive UI Updates"))
 
         # Cross-platform Rendering
-        capability_rows.append(
-            ft.Row(
-                [
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, size=20, color=Theme.Colors.SUCCESS),
-                    BodyText("Cross-platform Rendering"),
-                ],
-                spacing=Theme.Spacing.SM,
-            )
-        )
+        capability_rows.append(BodyText("• Cross-platform Rendering"))
 
         # FastAPI Integration
         integration = metadata.get("integration", "FastAPI")
-        capability_rows.append(
-            ft.Row(
-                [
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, size=20, color=Theme.Colors.SUCCESS),
-                    BodyText(f"{integration} Integration"),
-                ],
-                spacing=Theme.Spacing.SM,
-            )
-        )
+        capability_rows.append(BodyText(f"• {integration} Integration"))
 
         self.content = ft.Column(
             [
-                H2Text("Capabilities"),
+                H3Text("Capabilities"),
                 ft.Container(height=Theme.Spacing.SM),
                 ft.Column(capability_rows, spacing=Theme.Spacing.SM),
             ],
@@ -348,7 +257,7 @@ class CapabilitiesSection(ft.Container):
 class StatisticsSection(ft.Container):
     """Statistics section showing detailed metrics and technical information."""
 
-    def __init__(self, component_data: ComponentStatus) -> None:
+    def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         """
         Initialize statistics section.
 
@@ -382,12 +291,12 @@ class StatisticsSection(ft.Container):
 
         self.content = ft.Column(
             [
-                H2Text("Statistics"),
+                H3Text("Statistics"),
                 ft.Container(height=Theme.Spacing.SM),
                 stat_row("Component Status", status.value.upper()),
                 stat_row("Health Message", message),
                 stat_row("Response Time", f"{response_time:.2f}ms"),
-                ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE),
                 stat_row("Backend Integration", backend_dep),
             ],
             spacing=Theme.Spacing.XS,
@@ -395,85 +304,37 @@ class StatisticsSection(ft.Container):
         self.padding = Theme.Spacing.MD
 
 
-class FrontendDetailDialog(ft.AlertDialog):
+class FrontendDetailDialog(BaseDetailPopup):
     """
-    Frontend detail modal dialog.
+    Frontend detail popup dialog.
 
     Displays comprehensive frontend framework information including Flet capabilities,
     configuration, and integration status.
     """
 
-    def __init__(self, component_data: ComponentStatus) -> None:
+    def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         """
-        Initialize frontend detail dialog.
+        Initialize the frontend details popup.
 
         Args:
-            component_data: Frontend ComponentStatus from health check
+            component_data: ComponentStatus containing component health and metrics
         """
-        self.component_data = component_data
         metadata = component_data.metadata or {}
 
-        # Determine status badge color
-        status = component_data.status
-        if status.value == "healthy":
-            status_color = Theme.Colors.SUCCESS
-        elif status.value == "info":
-            status_color = Theme.Colors.INFO
-        elif status.value == "warning":
-            status_color = Theme.Colors.WARNING
-        else:  # unhealthy
-            status_color = Theme.Colors.ERROR
+        # Build sections
+        sections = [
+            OverviewSection(metadata),
+            ConfigurationSection(metadata),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            CapabilitiesSection(metadata),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            StatisticsSection(component_data, page),
+        ]
 
-        # Build modal content
-        title = ft.Row(
-            [
-                H2Text("🎨 Frontend Details"),
-                ft.Container(
-                    content=ft.Text(
-                        status.value.upper(),
-                        size=Theme.Typography.BODY_SMALL,
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        color=Theme.Colors.BADGE_TEXT,
-                    ),
-                    padding=ft.padding.symmetric(
-                        horizontal=Theme.Spacing.SM, vertical=Theme.Spacing.XS
-                    ),
-                    bgcolor=status_color,
-                    border_radius=Theme.Components.BADGE_RADIUS,
-                ),
-            ],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        )
-
-        content = ft.Container(
-            content=ft.Column(
-                [
-                    OverviewSection(metadata),
-                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
-                    ConfigurationSection(metadata),
-                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
-                    CapabilitiesSection(metadata),
-                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
-                    StatisticsSection(component_data),
-                ],
-                spacing=0,
-                scroll=ft.ScrollMode.AUTO,
-            ),
-            width=900,
-            height=700,
-        )
-
+        # Initialize base popup with custom sections
         super().__init__(
-            modal=False,
-            title=title,
-            content=content,
-            actions=[
-                ft.TextButton("Close", on_click=self._close),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
+            page=page,
+            component_data=component_data,
+            title_text="Frontend",
+            sections=sections,
         )
-
-    def _close(self, e: ft.ControlEvent) -> None:
-        """Close the modal dialog."""
-        self.open = False
-        e.page.update()

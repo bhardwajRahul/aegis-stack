@@ -9,33 +9,34 @@ from flet import PageDisconnectedException
 
 from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
+
+from .controls.text import TitleText
 from .dashboard.cards import (
     FastAPICard,
     FletCard,
-    {%- if cookiecutter.include_ai == "yes" %}
+{%- if cookiecutter.include_ai == "yes" %}
     AICard,
-    {%- endif %}
-    {%- if cookiecutter.include_auth == "yes" %}
+{%- endif %}
+{%- if cookiecutter.include_auth == "yes" %}
     AuthCard,
     ServicesCard,
-    {%- endif %}
-    {%- if cookiecutter.include_comms == "yes" %}
+{%- endif %}
+{%- if cookiecutter.include_comms == "yes" %}
     CommsCard,
-    {%- endif %}
-    {%- if cookiecutter.include_database == "yes" %}
+{%- endif %}
+{%- if cookiecutter.include_database == "yes" %}
     DatabaseCard,
-    {%- endif %}
-    {%- if cookiecutter.include_redis == "yes" %}
+{%- endif %}
+{%- if cookiecutter.include_redis == "yes" %}
     RedisCard,
-    {%- endif %}
-    {%- if cookiecutter.include_scheduler == "yes" %}
+{%- endif %}
+{%- if cookiecutter.include_scheduler == "yes" %}
     SchedulerCard,
-    {%- endif %}
-    {%- if cookiecutter.include_worker == "yes" %}
+{%- endif %}
+{%- if cookiecutter.include_worker == "yes" %}
     WorkerCard,
-    {%- endif %}
+{%- endif %}
 )
-from .controls.text import TitleText
 from .dashboard.cards.card_utils import create_health_status_indicator
 from .theme import ThemeManager
 
@@ -88,8 +89,11 @@ class SystemDashboard:
 
         # Log Flet version for debugging connection check compatibility
         try:
-            logger.debug(f"Initializing dashboard with Flet version: {ft.__version__}")
-        except AttributeError:
+            from importlib.metadata import version
+
+            flet_version = version("flet")
+            logger.debug(f"Initializing dashboard with Flet version: {flet_version}")
+        except Exception:
             logger.debug("Flet version not available for compatibility logging")
 
     def _is_page_connected(self) -> bool:
@@ -272,11 +276,11 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
         theme_manager = ThemeManager(page)
         await theme_manager.initialize_themes()
 
-        # Aegis Stack logo - bigger size and theme-aware loading
+        # Aegis Stack logo - theme-aware loading
         logo_image = ft.Image(
             src_base64=get_logo_base64(theme_manager.is_dark_mode),
-            width=120,
-            height=120,
+            width=96,
+            height=96,
             fit=ft.ImageFit.CONTAIN,
             error_content=ft.Text(
                 "OVERSEER",
@@ -365,18 +369,9 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
         header = ft.Container(
             content=ft.Row(
                 [
-                    ft.Row(
-                        [
-                            ft.Container(
-                                content=logo_image,
-                                padding=ft.padding.all(10),
-                            ),
-                            ft.Container(
-                                content=TitleText("Overseer"),
-                                margin=ft.margin.only(left=10),  # Logo spacing
-                            ),
-                        ],
-                        alignment=ft.MainAxisAlignment.START,
+                    ft.Container(
+                        content=logo_image,
+                        padding=ft.padding.all(10),
                     ),
                     ft.Row(
                         [
@@ -442,46 +437,44 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                     return FastAPICard(component_data).build()
                 elif component_name == "frontend":
                     return FletCard(component_data).build()
-                {%- if cookiecutter.include_worker == "yes" %}
+{%- if cookiecutter.include_worker == "yes" %}
                 elif component_name == "worker":
                     return WorkerCard(component_data).build()
-                {%- endif %}
-                {%- if cookiecutter.include_redis == "yes" %}
+{%- endif %}
+{%- if cookiecutter.include_redis == "yes" %}
                 elif component_name == "cache":
                     return RedisCard(component_data).build()
-                {%- endif %}
-                {%- if cookiecutter.include_database == "yes" %}
+{%- endif %}
+{%- if cookiecutter.include_database == "yes" %}
                 elif component_name == "database":
                     return DatabaseCard(component_data).build()
-                {%- endif %}
-                {%- if cookiecutter.include_scheduler == "yes" %}
+{%- endif %}
+{%- if cookiecutter.include_scheduler == "yes" %}
                 elif component_name == "scheduler":
                     return SchedulerCard(component_data).build()
-                {%- endif %}
-                {%- if cookiecutter.include_ai == "yes" or cookiecutter.include_auth == "yes" or cookiecutter.include_comms == "yes" %}
-                {%- if cookiecutter.include_auth == "yes" %}
+{%- endif %}
+{%- if cookiecutter.include_auth == "yes" %}
                 elif component_name == "services":
                     return ServicesCard(component_data).build()
-                {%- endif %}
-                # Individual service cards
-                {%- if cookiecutter.include_ai == "yes" %}
+{%- endif %}
+                # Individual service cards - specific checks BEFORE generic service_* fallback
+{%- if cookiecutter.include_ai == "yes" %}
                 elif component_name == "service_ai":
                     return AICard(component_data).build()
-                {%- endif %}
-                {%- if cookiecutter.include_auth == "yes" %}
+{%- endif %}
+{%- if cookiecutter.include_auth == "yes" %}
                 elif component_name == "service_auth":
                     return AuthCard(component_data).build()
-                {%- endif %}
-                {%- if cookiecutter.include_comms == "yes" %}
+{%- endif %}
+{%- if cookiecutter.include_comms == "yes" %}
                 elif component_name == "service_comms":
                     return CommsCard(component_data).build()
-                {%- endif %}
-                {%- if cookiecutter.include_auth == "yes" %}
+{%- endif %}
+{%- if cookiecutter.include_auth == "yes" %}
                 elif component_name.startswith("service_"):
                     # For other services, use generic ServicesCard for now
                     return ServicesCard(component_data).build()
-                {%- endif %}
-                {%- endif %}
+{%- endif %}
                 else:
                     # Fallback for unknown components - should not happen in practice
                     logger.warning(f"Unknown component type: {component_name}")
@@ -547,11 +540,17 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                             ].items():
                                 sub_components[sub_name] = convert_component(sub_data)
 
+                        # Parse status from API response
+                        status_str = comp_data.get("status", "unhealthy")
+                        try:
+                            status = ComponentStatusType(status_str)
+                        except ValueError:
+                            logger.warning(f"Unknown status value: {status_str}, defaulting to UNHEALTHY")
+                            status = ComponentStatusType.UNHEALTHY
+
                         return ComponentStatus(
                             name=comp_data.get("name", "Unknown"),
-                            status=ComponentStatusType.HEALTHY
-                            if comp_data.get("healthy", False)
-                            else ComponentStatusType.UNHEALTHY,
+                            status=status,
                             message=comp_data.get("message", "No message"),
                             response_time_ms=comp_data.get("response_time_ms"),
                             metadata=comp_data.get("metadata", {}),
@@ -563,7 +562,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                             exc_info=True,
                             extra={
                                 "error_type": type(e).__name__,
-                                "function": "convert_component", 
+                                "function": "convert_component",
                                 "comp_data": comp_data
                             }
                         )

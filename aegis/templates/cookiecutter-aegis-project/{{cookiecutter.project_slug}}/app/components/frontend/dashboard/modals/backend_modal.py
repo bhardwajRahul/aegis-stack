@@ -9,15 +9,16 @@ import flet as ft
 from app.components.frontend.controls import (
     BodyText,
     DisplayText,
-    H2Text,
+    H3Text,
     LabelText,
     PrimaryText,
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.services.system.models import ComponentStatus, ComponentStatusType
+from app.services.system.models import ComponentStatus
 
 from ..cards.card_utils import create_progress_indicator
+from .base_detail_popup import BaseDetailPopup
 
 # Route section column widths (pixels)
 COL_WIDTH_PATH = 300
@@ -35,28 +36,18 @@ COL_WIDTH_SECURITY = 100
 class MetricCard(ft.Container):
     """Reusable metric card component for backend statistics."""
 
-    def __init__(self, icon: str, value: str, label: str, color: str) -> None:
+    def __init__(self, value: str, label: str, color: str) -> None:
         """
         Initialize metric card.
 
         Args:
-            icon: Icon emoji or text
             value: Metric value to display
             label: Metric label text
-            color: Icon background color
+            color: Accent color (unused but kept for API compatibility)
         """
         super().__init__()
         self.content = ft.Column(
             [
-                ft.Container(
-                    content=ft.Text(icon, size=32),
-                    padding=ft.padding.all(8),
-                    bgcolor=color,
-                    border_radius=8,
-                    width=48,
-                    height=48,
-                    alignment=ft.alignment.center,
-                ),
                 DisplayText(value),
                 SecondaryText(
                     label,
@@ -67,8 +58,9 @@ class MetricCard(ft.Container):
             spacing=Theme.Spacing.SM,
         )
         self.padding = Theme.Spacing.MD
-        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.OUTLINE_VARIANT)
+        self.bgcolor = ft.Colors.SURFACE
         self.border_radius = Theme.Components.CARD_RADIUS
+        self.border = ft.border.all(1, ft.Colors.OUTLINE)
         self.expand = True
 
 
@@ -96,25 +88,21 @@ class OverviewSection(ft.Container):
         # Build metric cards
         metric_cards = [
             MetricCard(
-                icon="🛣️",
                 value=str(total_routes),
                 label="Total Routes",
                 color=ft.Colors.BLUE,
             ),
             MetricCard(
-                icon="🎯",
                 value=str(total_endpoints),
                 label="Endpoints",
                 color=ft.Colors.GREEN,
             ),
             MetricCard(
-                icon="🔧",
                 value=str(total_middleware),
                 label="Middleware",
                 color=ft.Colors.PURPLE,
             ),
             MetricCard(
-                icon="🔒",
                 value=str(security_count),
                 label="Security Layers",
                 color=ft.Colors.AMBER,
@@ -125,7 +113,6 @@ class OverviewSection(ft.Container):
         if deprecated_count > 0:
             metric_cards.append(
                 MetricCard(
-                    icon="⚠️",
                     value=str(deprecated_count),
                     label="Deprecated",
                     color=ft.Colors.ORANGE,
@@ -139,8 +126,6 @@ class OverviewSection(ft.Container):
 
         self.content = ft.Column(
             [
-                H2Text("Overview"),
-                ft.Divider(height=1, color=ft.Colors.GREY_300),
                 ft.Row(
                     metric_cards,
                     spacing=Theme.Spacing.MD,
@@ -186,7 +171,7 @@ class RouteCard(ft.Container):
         self.tags = list(route_info.get("tags", []))
         self.deprecated = bool(route_info.get("deprecated", False))
         self.path_params = list(route_info.get("path_params", []))
-        self.dependencies = route_info.get("dependencies", 0)
+        self.dependencies = list(route_info.get("dependencies", []))
         self.response_model = str(route_info.get("response_model", ""))
 
         # Create method badges
@@ -206,7 +191,7 @@ class RouteCard(ft.Container):
                         color=Theme.Colors.BADGE_TEXT,
                     ),
                     padding=ft.padding.symmetric(horizontal=8, vertical=2),
-                    bgcolor=method_colors.get(method, ft.Colors.GREY),
+                    bgcolor=method_colors.get(method, ft.Colors.ON_SURFACE_VARIANT),
                     border_radius=4,
                 )
             )
@@ -218,10 +203,10 @@ class RouteCard(ft.Container):
                 ft.Container(
                     content=LabelText(
                         tag,
-                        color=Theme.Colors.BADGE_TEXT,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
                     padding=ft.padding.symmetric(horizontal=6, vertical=2),
-                    bgcolor=ft.Colors.GREY_700,
+                    bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
                     border_radius=4,
                 )
             )
@@ -234,7 +219,7 @@ class RouteCard(ft.Container):
                         ft.Icon(
                             ft.Icons.ARROW_RIGHT,
                             size=16,
-                            color=ft.Colors.GREY_600,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
                         ),
                         ft.Container(
                             content=PrimaryText(self.path),
@@ -244,21 +229,29 @@ class RouteCard(ft.Container):
                             method_badges,
                             spacing=4,
                         ),
+                        ft.Icon(
+                            ft.Icons.LOCK,
+                            size=14,
+                            color=Theme.Colors.WARNING,
+                            visible=self._has_auth_dependencies(),
+                        ),
                         ft.Row(
                             tag_badges,
                             spacing=4,
                         ),
-                        ft.Icon(
-                            ft.Icons.WARNING,
-                            size=16,
-                            color=ft.Colors.ORANGE,
+                        ft.Container(
+                            content=SecondaryText(
+                                "DEPRECATED",
+                                size=10,
+                                weight=Theme.Typography.WEIGHT_SEMIBOLD,
+                                color=ft.Colors.ORANGE,
+                            ),
                             visible=self.deprecated,
                         ),
                     ],
                     spacing=Theme.Spacing.SM,
                 ),
                 padding=ft.padding.all(Theme.Spacing.SM),
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
                 border_radius=8,
             ),
             on_tap=self._toggle_expand,
@@ -309,15 +302,58 @@ class RouteCard(ft.Container):
                 )
             )
 
-        detail_rows.append(
-            ft.Row(
-                [
-                    SecondaryText("Dependencies:"),
-                    BodyText(str(self.dependencies)),
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+        # Create dependency badges
+        if self.dependencies:
+            dep_badges = []
+            auth_keywords = [
+                "auth",
+                "token",
+                "verify",
+                "current_user",
+                "permission",
+                "oauth2",
+                "bearer",
+            ]
+
+            for dep_name in self.dependencies:
+                is_auth = any(keyword in dep_name.lower() for keyword in auth_keywords)
+
+                if is_auth:
+                    badge_content = ft.Row(
+                        [
+                            ft.Icon(ft.Icons.LOCK, size=12, color=Theme.Colors.WARNING),
+                            LabelText(dep_name, color=ft.Colors.ON_SURFACE_VARIANT),
+                        ],
+                        spacing=4,
+                        tight=True,
+                    )
+                else:
+                    badge_content = LabelText(
+                        dep_name, color=ft.Colors.ON_SURFACE_VARIANT
+                    )
+
+                dep_badges.append(
+                    ft.Container(
+                        content=badge_content,
+                        padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        border_radius=4,
+                    )
+                )
+
+            detail_rows.append(
+                ft.Column(
+                    [
+                        SecondaryText("Dependencies:"),
+                        ft.Row(
+                            dep_badges,
+                            spacing=4,
+                            wrap=True,
+                        ),
+                    ],
+                    spacing=4,
+                )
             )
-        )
 
         if self.response_model:
             detail_rows.append(
@@ -333,14 +369,8 @@ class RouteCard(ft.Container):
         if self.deprecated:
             detail_rows.append(
                 ft.Container(
-                    content=ft.Row(
-                        [
-                            ft.Icon(ft.Icons.WARNING, size=16, color=ft.Colors.ORANGE),
-                            SecondaryText("This route is deprecated"),
-                        ],
-                        spacing=4,
-                    ),
-                    bgcolor=ft.Colors.ORANGE_50,
+                    content=SecondaryText("⚠ This route is deprecated"),
+                    bgcolor=ft.Colors.SURFACE,
                     padding=ft.padding.all(8),
                     border_radius=4,
                 )
@@ -364,6 +394,25 @@ class RouteCard(ft.Container):
         )
         self.padding = ft.padding.symmetric(
             horizontal=Theme.Spacing.SM, vertical=Theme.Spacing.XS
+        )
+
+    def _has_auth_dependencies(self) -> bool:
+        """Check if route has authentication dependencies."""
+        if not self.dependencies:
+            return False
+
+        auth_keywords = [
+            "auth",
+            "token",
+            "verify",
+            "current_user",
+            "permission",
+            "oauth2",
+            "bearer",
+        ]
+        return any(
+            any(keyword in dep_name.lower() for keyword in auth_keywords)
+            for dep_name in self.dependencies
         )
 
     def _toggle_expand(self, e: ft.ControlEvent) -> None:
@@ -411,8 +460,8 @@ class RoutesSection(ft.Container):
         # Build section
         self.content = ft.Column(
             [
-                H2Text(f"Routes ({len(routes)})"),
-                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                H3Text(f"Routes ({len(routes)})"),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE),
                 ft.Container(
                     content=ft.Column(
                         route_cards
@@ -457,7 +506,7 @@ class MiddlewareCard(ft.Container):
                         ft.Icon(
                             ft.Icons.ARROW_RIGHT,
                             size=16,
-                            color=ft.Colors.GREY_600,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
                         ),
                         ft.Container(
                             content=LabelText(str(self.order)),
@@ -485,7 +534,6 @@ class MiddlewareCard(ft.Container):
                     spacing=Theme.Spacing.SM,
                 ),
                 padding=ft.padding.all(Theme.Spacing.SM),
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
                 border_radius=8,
             ),
             on_tap=self._toggle_expand,
@@ -573,8 +621,8 @@ class MiddlewareSection(ft.Container):
         # Build section
         self.content = ft.Column(
             [
-                H2Text(f"Middleware Stack ({len(middleware_stack)})"),
-                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                H3Text(f"Middleware Stack ({len(middleware_stack)})"),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE),
                 ft.Container(
                     content=ft.Column(
                         middleware_cards
@@ -658,8 +706,8 @@ class SystemMetricsSection(ft.Container):
         # Build section
         self.content = ft.Column(
             [
-                H2Text("System Metrics"),
-                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                H3Text("System Metrics"),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE),
                 ft.Container(
                     content=ft.Column(
                         metrics if metrics else [SecondaryText("No metrics available")],
@@ -675,83 +723,40 @@ class SystemMetricsSection(ft.Container):
     def _get_metric_color(self, percent: float) -> str:
         """Get color based on metric percentage."""
         if percent >= 90:
-            return ft.Colors.RED
+            return Theme.Colors.ERROR
         elif percent >= 70:
-            return ft.Colors.ORANGE
+            return Theme.Colors.WARNING
         else:
-            return ft.Colors.GREEN
+            return Theme.Colors.SUCCESS
 
 
-class BackendDetailDialog(ft.AlertDialog):
+class BackendDetailDialog(BaseDetailPopup):
     """
-    Comprehensive backend detail modal.
+    Comprehensive backend detail popup.
 
     Displays routes, middleware stack, system metrics, and configuration
     details for the FastAPI backend component.
     """
 
-    def __init__(self, backend_component: ComponentStatus) -> None:
+    def __init__(self, backend_component: ComponentStatus, page: ft.Page) -> None:
         """
-        Initialize backend detail dialog.
+        Initialize backend detail popup.
 
         Args:
             backend_component: ComponentStatus containing backend data
         """
-        # Get status badge
-        status_badge = self._create_status_badge(backend_component.status)
+        # Build sections
+        sections = [
+            OverviewSection(backend_component),
+            RoutesSection(backend_component),
+            MiddlewareSection(backend_component),
+            SystemMetricsSection(backend_component),
+        ]
 
-        # Create sections
-        overview = OverviewSection(backend_component)
-        routes = RoutesSection(backend_component)
-        middleware = MiddlewareSection(backend_component)
-        system_metrics = SystemMetricsSection(backend_component)
-
-        # Build scrollable content
-        content = ft.Container(
-            content=ft.Column(
-                [overview, routes, middleware, system_metrics],
-                spacing=Theme.Spacing.LG,
-                scroll=ft.ScrollMode.AUTO,
-            ),
-            width=900,
-            height=700,
-        )
-
+        # Initialize base popup with custom sections
         super().__init__(
-            modal=False,
-            title=ft.Row(
-                [
-                    ft.Text("Backend Details", size=24, weight=ft.FontWeight.BOLD),
-                    status_badge,
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            ),
-            content=content,
-            actions=[
-                ft.TextButton("Close", on_click=self._close_dialog),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
+            page=page,
+            component_data=backend_component,
+            title_text="Backend",
+            sections=sections,
         )
-
-    def _create_status_badge(self, status: ComponentStatusType) -> ft.Container:
-        """Create status badge for dialog title."""
-        status_colors = {
-            ComponentStatusType.HEALTHY: (ft.Colors.GREEN, "Healthy"),
-            ComponentStatusType.INFO: (ft.Colors.BLUE, "Info"),
-            ComponentStatusType.WARNING: (ft.Colors.ORANGE, "Warning"),
-            ComponentStatusType.UNHEALTHY: (ft.Colors.RED, "Unhealthy"),
-        }
-
-        color, text = status_colors.get(status, (ft.Colors.GREY, "Unknown"))
-
-        return ft.Container(
-            content=LabelText(text, color=Theme.Colors.BADGE_TEXT),
-            padding=ft.padding.symmetric(horizontal=12, vertical=4),
-            bgcolor=color,
-            border_radius=12,
-        )
-
-    def _close_dialog(self, e: ft.ControlEvent) -> None:
-        """Close the dialog."""
-        if e.page:
-            e.page.close(self)

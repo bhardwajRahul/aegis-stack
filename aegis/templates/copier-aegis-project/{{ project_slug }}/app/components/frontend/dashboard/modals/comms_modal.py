@@ -8,45 +8,15 @@ channel status, and message capabilities.
 import flet as ft
 from app.components.frontend.controls import (
     BodyText,
-    DisplayText,
-    H2Text,
+    H3Text,
     SecondaryText,
+    Tag,
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
-
-class MetricCard(ft.Container):
-    """Reusable metric display card with icon, value, and label."""
-
-    def __init__(self, label: str, value: str, icon: str, color: str) -> None:
-        """
-        Initialize metric card.
-
-        Args:
-            label: Metric label text
-            value: Metric value to display
-            icon: Flet icon constant
-            color: Icon and accent color
-        """
-        super().__init__()
-
-        self.content = ft.Column(
-            [
-                ft.Icon(icon, size=32, color=color),
-                DisplayText(value),
-                SecondaryText(
-                    label,
-                    size=Theme.Typography.BODY_SMALL,
-                ),
-            ],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=Theme.Spacing.SM,
-        )
-        self.padding = Theme.Spacing.MD
-        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.OUTLINE_VARIANT)
-        self.border_radius = Theme.Components.CARD_RADIUS
-        self.expand = True
+from .base_detail_popup import BaseDetailPopup
+from .modal_sections import MetricCard
 
 
 class OverviewSection(ft.Container):
@@ -76,37 +46,25 @@ class OverviewSection(ft.Container):
             status_color = Theme.Colors.ERROR
             status_text = "Not Configured"
 
-        self.content = ft.Column(
+        self.content = ft.Row(
             [
-                H2Text("Overview"),
-                ft.Container(height=Theme.Spacing.SM),
-                ft.Row(
-                    [
-                        MetricCard(
-                            "Channels",
-                            f"{channels_configured}/{channels_total}",
-                            ft.Icons.HUB,
-                            status_color,
-                        ),
-                        MetricCard(
-                            "Status",
-                            status_text,
-                            ft.Icons.CHECK_CIRCLE
-                            if channels_configured > 0
-                            else ft.Icons.ERROR,
-                            status_color,
-                        ),
-                        MetricCard(
-                            "Capabilities",
-                            ", ".join(capabilities) if capabilities else "None",
-                            ft.Icons.SEND,
-                            Theme.Colors.PRIMARY,
-                        ),
-                    ],
-                    spacing=Theme.Spacing.MD,
+                MetricCard(
+                    "Channels",
+                    f"{channels_configured}/{channels_total}",
+                    status_color,
+                ),
+                MetricCard(
+                    "Status",
+                    status_text,
+                    status_color,
+                ),
+                MetricCard(
+                    "Capabilities",
+                    ", ".join(capabilities) if capabilities else "None",
+                    Theme.Colors.PRIMARY,
                 ),
             ],
-            spacing=0,
+            spacing=Theme.Spacing.MD,
         )
         self.padding = Theme.Spacing.MD
 
@@ -142,22 +100,13 @@ class ProvidersSection(ft.Container):
                         weight=Theme.Typography.WEIGHT_SEMIBOLD,
                         width=200,
                     ),
-                    ft.Container(
-                        content=ft.Text(
-                            email_provider.title()
-                            if email_provider
-                            else "Not Configured",
-                            size=Theme.Typography.BODY_SMALL,
-                            weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                            color=Theme.Colors.BADGE_TEXT,
-                        ),
-                        padding=ft.padding.symmetric(
-                            horizontal=Theme.Spacing.SM, vertical=Theme.Spacing.XS
-                        ),
-                        bgcolor=Theme.Colors.SUCCESS
+                    Tag(
+                        text=email_provider.title()
+                        if email_provider
+                        else "Not Configured",
+                        color=Theme.Colors.SUCCESS
                         if email_configured
                         else Theme.Colors.WARNING,
-                        border_radius=Theme.Components.BADGE_RADIUS,
                     ),
                 ],
                 spacing=Theme.Spacing.MD,
@@ -189,20 +138,11 @@ class ProvidersSection(ft.Container):
                         weight=Theme.Typography.WEIGHT_SEMIBOLD,
                         width=200,
                     ),
-                    ft.Container(
-                        content=ft.Text(
-                            sms_provider.title() if sms_provider else "Not Configured",
-                            size=Theme.Typography.BODY_SMALL,
-                            weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                            color=Theme.Colors.BADGE_TEXT,
-                        ),
-                        padding=ft.padding.symmetric(
-                            horizontal=Theme.Spacing.SM, vertical=Theme.Spacing.XS
-                        ),
-                        bgcolor=Theme.Colors.SUCCESS
+                    Tag(
+                        text=sms_provider.title() if sms_provider else "Not Configured",
+                        color=Theme.Colors.SUCCESS
                         if sms_configured
                         else Theme.Colors.WARNING,
-                        border_radius=Theme.Components.BADGE_RADIUS,
                     ),
                 ],
                 spacing=Theme.Spacing.MD,
@@ -218,22 +158,13 @@ class ProvidersSection(ft.Container):
                         weight=Theme.Typography.WEIGHT_SEMIBOLD,
                         width=200,
                     ),
-                    ft.Container(
-                        content=ft.Text(
-                            voice_provider.title()
-                            if voice_provider
-                            else "Not Configured",
-                            size=Theme.Typography.BODY_SMALL,
-                            weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                            color=Theme.Colors.BADGE_TEXT,
-                        ),
-                        padding=ft.padding.symmetric(
-                            horizontal=Theme.Spacing.SM, vertical=Theme.Spacing.XS
-                        ),
-                        bgcolor=Theme.Colors.SUCCESS
+                    Tag(
+                        text=voice_provider.title()
+                        if voice_provider
+                        else "Not Configured",
+                        color=Theme.Colors.SUCCESS
                         if voice_configured
                         else Theme.Colors.WARNING,
-                        border_radius=Theme.Components.BADGE_RADIUS,
                     ),
                 ],
                 spacing=Theme.Spacing.MD,
@@ -242,7 +173,7 @@ class ProvidersSection(ft.Container):
 
         self.content = ft.Column(
             [
-                H2Text("Providers"),
+                H3Text("Providers"),
                 ft.Container(height=Theme.Spacing.SM),
                 ft.Column(provider_rows, spacing=Theme.Spacing.SM),
             ],
@@ -277,19 +208,7 @@ class ConfigurationSection(ft.Container):
                 )
             )
             for error in config_errors:
-                config_rows.append(
-                    ft.Row(
-                        [
-                            ft.Icon(
-                                ft.Icons.ERROR,
-                                size=16,
-                                color=Theme.Colors.ERROR,
-                            ),
-                            BodyText(error),
-                        ],
-                        spacing=Theme.Spacing.SM,
-                    )
-                )
+                config_rows.append(BodyText(f"  • {error}"))
             config_rows.append(ft.Container(height=Theme.Spacing.SM))
 
         # Configuration warnings (if any)
@@ -301,39 +220,15 @@ class ConfigurationSection(ft.Container):
                 )
             )
             for warning in config_warnings:
-                config_rows.append(
-                    ft.Row(
-                        [
-                            ft.Icon(
-                                ft.Icons.WARNING_AMBER,
-                                size=16,
-                                color=Theme.Colors.WARNING,
-                            ),
-                            BodyText(warning),
-                        ],
-                        spacing=Theme.Spacing.SM,
-                    )
-                )
+                config_rows.append(BodyText(f"  • {warning}"))
 
         # If no warnings or errors, show success message
         if not config_warnings and not config_errors:
-            config_rows.append(
-                ft.Row(
-                    [
-                        ft.Icon(
-                            ft.Icons.CHECK_CIRCLE,
-                            size=16,
-                            color=Theme.Colors.SUCCESS,
-                        ),
-                        BodyText("All providers configured correctly"),
-                    ],
-                    spacing=Theme.Spacing.SM,
-                )
-            )
+            config_rows.append(BodyText("• All providers configured correctly"))
 
         self.content = ft.Column(
             [
-                H2Text("Configuration"),
+                H3Text("Configuration"),
                 ft.Container(height=Theme.Spacing.SM),
                 ft.Column(config_rows, spacing=Theme.Spacing.SM),
             ],
@@ -380,12 +275,12 @@ class StatisticsSection(ft.Container):
 
         self.content = ft.Column(
             [
-                H2Text("Statistics"),
+                H3Text("Statistics"),
                 ft.Container(height=Theme.Spacing.SM),
                 stat_row("Component Status", status.value.upper()),
                 stat_row("Health Message", message),
                 stat_row("Response Time", f"{response_time:.2f}ms"),
-                ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE),
                 stat_row("Backend Dependency", backend_dep),
                 stat_row("Worker Dependency", worker_dep),
             ],
@@ -394,85 +289,37 @@ class StatisticsSection(ft.Container):
         self.padding = Theme.Spacing.MD
 
 
-class CommsDetailDialog(ft.AlertDialog):
+class CommsDetailDialog(BaseDetailPopup):
     """
-    Communications service detail modal dialog.
+    Communications service detail popup dialog.
 
     Displays comprehensive comms service information including provider configuration,
     channel status, and message capabilities.
     """
 
-    def __init__(self, component_data: ComponentStatus) -> None:
+    def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         """
-        Initialize comms detail dialog.
+        Initialize the comms service details popup.
 
         Args:
-            component_data: Comms service ComponentStatus from health check
+            component_data: ComponentStatus containing component health and metrics
         """
-        self.component_data = component_data
         metadata = component_data.metadata or {}
 
-        # Determine status badge color
-        status = component_data.status
-        if status.value == "healthy":
-            status_color = Theme.Colors.SUCCESS
-        elif status.value == "info":
-            status_color = Theme.Colors.INFO
-        elif status.value == "warning":
-            status_color = Theme.Colors.WARNING
-        else:  # unhealthy
-            status_color = Theme.Colors.ERROR
+        # Build sections
+        sections = [
+            OverviewSection(metadata),
+            ProvidersSection(metadata),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            ConfigurationSection(metadata),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            StatisticsSection(component_data),
+        ]
 
-        # Build modal content
-        title = ft.Row(
-            [
-                H2Text("📧 Communications Service Details"),
-                ft.Container(
-                    content=ft.Text(
-                        status.value.upper(),
-                        size=Theme.Typography.BODY_SMALL,
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        color=Theme.Colors.BADGE_TEXT,
-                    ),
-                    padding=ft.padding.symmetric(
-                        horizontal=Theme.Spacing.SM, vertical=Theme.Spacing.XS
-                    ),
-                    bgcolor=status_color,
-                    border_radius=Theme.Components.BADGE_RADIUS,
-                ),
-            ],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        )
-
-        content = ft.Container(
-            content=ft.Column(
-                [
-                    OverviewSection(metadata),
-                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
-                    ProvidersSection(metadata),
-                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
-                    ConfigurationSection(metadata),
-                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
-                    StatisticsSection(component_data),
-                ],
-                spacing=0,
-                scroll=ft.ScrollMode.AUTO,
-            ),
-            width=900,
-            height=700,
-        )
-
+        # Initialize base popup with custom sections
         super().__init__(
-            modal=False,
-            title=title,
-            content=content,
-            actions=[
-                ft.TextButton("Close", on_click=self._close),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
+            page=page,
+            component_data=component_data,
+            title_text="Comms Service",
+            sections=sections,
         )
-
-    def _close(self, e: ft.ControlEvent) -> None:
-        """Close the modal dialog."""
-        self.open = False
-        e.page.update()

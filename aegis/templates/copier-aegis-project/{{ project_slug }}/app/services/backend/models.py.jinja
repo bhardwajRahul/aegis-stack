@@ -21,7 +21,7 @@ class RouteInfo(BaseModel):
     tags: list[str] = []
     deprecated: bool = False
     path_params: list[str] = []
-    dependencies: int = 0
+    dependencies: list[str] = []
     response_model: str | None = None
 
 

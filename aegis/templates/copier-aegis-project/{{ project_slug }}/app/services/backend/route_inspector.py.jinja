@@ -43,9 +43,7 @@ class FastAPIRouteInspector:
                         tags=getattr(route, "tags", []) or [],
                         deprecated=bool(getattr(route, "deprecated", False)),
                         path_params=self._extract_path_params(route.path),
-                        dependencies=(
-                            len(route.dependencies) if route.dependencies else 0
-                        ),
+                        dependencies=self._extract_dependency_names(route),
                         response_model=(
                             str(route.response_model) if route.response_model else None
                         ),
@@ -81,7 +79,45 @@ class FastAPIRouteInspector:
         """Extract path parameters from route path."""
         import re
         return re.findall(r'\{([^}]+)\}', path)
-    
+
+    def _extract_dependency_names(self, route: APIRoute) -> list[str]:
+        """Extract dependency function names from both router and parameter dependencies."""
+        import inspect
+        from fastapi.params import Depends
+
+        dependency_names = []
+
+        # Extract router-level dependencies
+        if route.dependencies:
+            for dep in route.dependencies:
+                if dep.dependency and hasattr(dep.dependency, "__name__"):
+                    dependency_names.append(dep.dependency.__name__)
+
+        # Extract parameter-level dependencies from function signature
+        if route.endpoint:
+            try:
+                sig = inspect.signature(route.endpoint)
+                for param_name, param in sig.parameters.items():
+                    # Check if parameter has a default that's a Depends instance
+                    if param.default != inspect.Parameter.empty:
+                        if isinstance(param.default, Depends):
+                            if param.default.dependency:
+                                # Try to get the name from the dependency
+                                if hasattr(param.default.dependency, "__name__"):
+                                    dep_name = param.default.dependency.__name__
+                                else:
+                                    # For objects like OAuth2PasswordBearer, use class name
+                                    dep_name = param.default.dependency.__class__.__name__
+
+                                # Avoid duplicates
+                                if dep_name not in dependency_names:
+                                    dependency_names.append(dep_name)
+            except Exception:
+                # If we can't inspect the signature, just skip parameter deps
+                pass
+
+        return dependency_names
+
     def _count_methods(self, routes: list[RouteInfo]) -> dict[str, int]:
         """Count routes by HTTP method."""
         method_counts: dict[str, int] = {}

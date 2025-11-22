@@ -228,10 +228,18 @@ async def _frontend_component_health() -> ComponentStatus:
     """
     try:
         # Check if frontend component is available
+        from importlib.metadata import version
+
         from app.components.frontend.main import create_frontend_app
 
         # Verify the frontend app factory function works
         create_frontend_app()
+
+        # Get Flet version safely
+        try:
+            flet_version = version("flet")
+        except Exception:
+            flet_version = "unknown"
 
         return ComponentStatus(
             name="frontend",
@@ -240,7 +248,8 @@ async def _frontend_component_health() -> ComponentStatus:
             response_time_ms=None,
             metadata={
                 "type": "component_check",
-                "framework": "flet",
+                "framework": "Flet",
+                "version": flet_version,
                 "note": "Frontend integrated with FastAPI",
             },
         )
