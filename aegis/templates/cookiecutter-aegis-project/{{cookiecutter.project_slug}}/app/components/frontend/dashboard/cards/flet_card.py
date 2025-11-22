@@ -67,12 +67,11 @@ class FletCard:
                     [
                         ft.Row(
                             [
-                                ft.Icon(ft.Icons.WEB, size=16, color=ft.Colors.GREY),
+                                ft.Icon(ft.Icons.WEB, size=16),
                                 ft.Text(
                                     "Framework",
                                     size=14,
                                     weight=ft.FontWeight.W_500,
-                                    color=ft.Colors.ON_SURFACE,
                                 ),
                             ],
                             spacing=8,
@@ -80,7 +79,6 @@ class FletCard:
                         ft.Text(
                             f"Flet {ft.version.version}",
                             size=13,
-                            color=ft.Colors.GREY,
                         ),
                     ],
                     spacing=4,
@@ -99,13 +97,11 @@ class FletCard:
                                 ft.Icon(
                                     ft.Icons.INTEGRATION_INSTRUCTIONS,
                                     size=16,
-                                    color=ft.Colors.GREY,
                                 ),
                                 ft.Text(
                                     "Integration",
                                     size=14,
                                     weight=ft.FontWeight.W_500,
-                                    color=ft.Colors.ON_SURFACE,
                                 ),
                             ],
                             spacing=8,
@@ -113,7 +109,6 @@ class FletCard:
                         ft.Text(
                             metadata.get("note", "FastAPI integrated"),
                             size=13,
-                            color=ft.Colors.GREY,
                         ),
                     ],
                     spacing=4,
@@ -129,14 +124,11 @@ class FletCard:
                     [
                         ft.Row(
                             [
-                                ft.Icon(
-                                    ft.Icons.PALETTE, size=16, color=ft.Colors.GREY
-                                ),
+                                ft.Icon(ft.Icons.PALETTE, size=16),
                                 ft.Text(
                                     "Theme Support",
                                     size=14,
                                     weight=ft.FontWeight.W_500,
-                                    color=ft.Colors.ON_SURFACE,
                                 ),
                             ],
                             spacing=8,
@@ -144,7 +136,6 @@ class FletCard:
                         ft.Text(
                             "Light / Dark Mode",
                             size=13,
-                            color=ft.Colors.GREY,
                         ),
                     ],
                     spacing=4,
@@ -160,14 +151,11 @@ class FletCard:
                     [
                         ft.Row(
                             [
-                                ft.Icon(
-                                    ft.Icons.REFRESH, size=16, color=ft.Colors.GREY
-                                ),
+                                ft.Icon(ft.Icons.REFRESH, size=16),
                                 ft.Text(
                                     "Auto Refresh",
                                     size=14,
                                     weight=ft.FontWeight.W_500,
-                                    color=ft.Colors.ON_SURFACE,
                                 ),
                             ],
                             spacing=8,
@@ -175,7 +163,6 @@ class FletCard:
                         ft.Text(
                             "Every 30 seconds",
                             size=13,
-                            color=ft.Colors.GREY,
                         ),
                     ],
                     spacing=4,
@@ -211,7 +198,7 @@ class FletCard:
 
         stats_content = [
             PrimaryText("UI Configuration"),
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
+            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
         ]
 
         # Add all stats
@@ -221,7 +208,7 @@ class FletCard:
         # Add status
         stats_content.extend(
             [
-                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 create_stats_row(
                     "Status",
                     self.component_data.status.value.title(),

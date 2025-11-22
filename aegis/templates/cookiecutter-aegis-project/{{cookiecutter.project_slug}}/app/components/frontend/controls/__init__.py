@@ -1,5 +1,6 @@
 """Frontend UI controls for styled components."""
 
+from .service_card import ServiceCard
 from .table import (
     TableCellText,
     TableHeaderText,
@@ -50,4 +51,6 @@ __all__ = [
     # Badge/Tag controls
     "Tag",
     "TechBadge",
+    # Card layout controls
+    "ServiceCard",
 ]

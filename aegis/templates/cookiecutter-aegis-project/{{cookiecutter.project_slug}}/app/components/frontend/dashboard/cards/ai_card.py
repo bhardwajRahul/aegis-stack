@@ -6,7 +6,7 @@ and conversation metrics in a clean 2-column layout.
 """
 
 import flet as ft
-from app.components.frontend.controls import LabelText, PrimaryText
+from app.components.frontend.controls import LabelText, PrimaryText, ServiceCard
 from app.components.frontend.controls.tech_badge import TechBadge
 from app.services.system.models import ComponentStatus
 
@@ -88,19 +88,6 @@ class AICard:
             border=ft.border.all(1, ft.Colors.with_opacity(0.15, color)),
             height=80,  # Match auth card metric height
             expand=True,
-        )
-
-    def _create_left_section(self) -> ft.Container:
-        """Create the left section with tech badge."""
-        return ft.Container(
-            content=ft.Column(
-                [
-                    self._create_technology_badge(),
-                ],
-                spacing=0,
-            ),
-            width=200,
-            padding=ft.padding.all(16),
         )
 
     def _create_technology_badge(self) -> ft.Container:
@@ -243,24 +230,12 @@ class AICard:
     def build(self) -> ft.Container:
         """Build and return the complete AI service card."""
         # Get colors based on component status
-        background_color, primary_color, border_color = get_status_colors(
-            self.component_data
-        )
+        _, _, border_color = get_status_colors(self.component_data)
 
-        # Create clean 2-column layout
-        content = ft.Row(
-            [
-                self._create_left_section(),
-                ft.Container(
-                    width=1,
-                    height=160,  # Adjust height to match content
-                    bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.GREY_400),
-                    margin=ft.margin.symmetric(horizontal=16),
-                ),
-                self._create_metrics_section(),
-            ],
-            expand=True,
-            vertical_alignment=ft.CrossAxisAlignment.START,
+        # Use ServiceCard for consistent service card layout
+        content = ServiceCard(
+            left_content=self._create_technology_badge(),
+            right_content=self._create_metrics_section(),
         )
 
         return CardContainer(

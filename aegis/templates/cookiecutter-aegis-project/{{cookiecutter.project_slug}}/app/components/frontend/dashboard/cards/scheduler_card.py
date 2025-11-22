@@ -136,13 +136,11 @@ class SchedulerCard:
                                     ft.Text(
                                         next_run_display,
                                         size=12,
-                                        color=ft.Colors.GREY,
                                     ),
-                                    ft.Text("|", size=12, color=ft.Colors.GREY),
+                                    ft.Text("|", size=12),
                                     ft.Text(
                                         format_schedule_human_readable(schedule),
                                         size=12,
-                                        color=ft.Colors.GREY,
                                     ),
                                 ],
                                 spacing=6,
@@ -166,9 +164,8 @@ class SchedulerCard:
                             ft.Icon(
                                 ft.Icons.SCHEDULE_OUTLINED,
                                 size=20,
-                                color=ft.Colors.GREY,
                             ),
-                            ft.Text("No active jobs", color=ft.Colors.GREY),
+                            ft.Text("No active jobs"),
                         ],
                         spacing=8,
                         alignment=ft.MainAxisAlignment.CENTER,

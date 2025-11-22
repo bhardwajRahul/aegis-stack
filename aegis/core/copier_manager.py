@@ -200,7 +200,8 @@ def generate_with_copier(
 
             # Update _src_path to point to repo root (where .git exists)
             # The copier.yml at repo root has _subdirectory setting to find actual template
-            answers["_src_path"] = str(template_root)
+            # Use git+file:// URL format so Copier recognizes it as git-tracked
+            answers["_src_path"] = f"git+file://{template_root}"
 
             with open(answers_file, "w") as f:
                 yaml.safe_dump(answers, f, default_flow_style=False, sort_keys=False)

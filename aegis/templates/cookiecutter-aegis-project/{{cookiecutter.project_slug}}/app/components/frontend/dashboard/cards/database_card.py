@@ -104,26 +104,12 @@ class DatabaseCard:
     def _create_technology_badge(self) -> ft.Container:
         """Create the Database/SQLite technology badge section."""
         primary_color, _, _ = self._get_status_colors()
-        metadata = self.component_data.metadata or {}
-
-        # Determine badge text based on database state
-        if self.component_data.status == ComponentStatusType.WARNING:
-            badge_text = "NOT INIT"
-            badge_color = ft.Colors.ORANGE
-        else:
-            table_count = metadata.get("table_count", 0)
-            if table_count == 0:
-                badge_text = "EMPTY"
-                badge_color = ft.Colors.BLUE
-            else:
-                badge_text = "STORAGE"
-                badge_color = ft.Colors.INDIGO
 
         return TechBadge(
             title="SQLite",
-            subtitle="Relational Database",
-            badge_text=badge_text,
-            badge_color=badge_color,
+            subtitle="SQL",
+            badge_text="Database",
+            badge_color=ft.Colors.INDIGO,
             primary_color=primary_color,
             width=160,
         )
