@@ -26,7 +26,7 @@ Eventually, I started noticing the same patterns everywhere. Every project neede
 
 Years ago, I had a boss who got it. We'd sit in one of the conference rooms dreaming about automation tools, sketching ideas, making plans. He even started working on something on the side. But that manager was long gone by the time I brought it to fruition. 
 
-Post-pandemic, I discovered Streamlit and got tired of waiting for permission. So I built what I would later name, Overseer, myself. It actually worked - I actively used it to automate monotonous domain-specific tasks that were eating up our days.
+Post-pandemic, I discovered Streamlit and got tired of waiting for permission. So I built what I would later name, **[Overseer](overseer/index.md)**, myself. It actually worked - I actively used it to automate monotonous domain-specific tasks that were eating up our days.
 
 That experience taught me what happens when you stop waiting for permission and just build the tools you need.
 
