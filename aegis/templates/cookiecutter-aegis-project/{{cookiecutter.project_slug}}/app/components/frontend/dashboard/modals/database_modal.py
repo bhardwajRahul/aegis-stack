@@ -10,14 +10,17 @@ from datetime import datetime
 import flet as ft
 from app.components.frontend.controls import (
     BodyText,
-    DisplayText,
-    H2Text,
+    H3Text,
     LabelText,
     PrimaryText,
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.services.system.models import ComponentStatus, ComponentStatusType
+from app.services.system.models import ComponentStatus
+
+from .base_detail_popup import BaseDetailPopup
+from .modal_constants import ModalLayout
+from .modal_sections import MetricCard
 
 # Table schema column widths (pixels)
 COL_WIDTH_COLUMN_NAME = 200
@@ -51,45 +54,10 @@ DB_EFFICIENCY_WARNING = 85  # % - Yellow (warning)
 MAX_DB_URL_DISPLAY_LENGTH = 50
 
 
-class MetricCard(ft.Container):
-    """Reusable metric card component for database statistics."""
-
-    def __init__(self, icon: str, value: str, label: str, color: str) -> None:
-        """
-        Initialize metric card.
-
-        Args:
-            icon: Icon emoji or text
-            value: Metric value to display
-            label: Metric label text
-            color: Icon background color
-        """
-        super().__init__()
-        self.content = ft.Column(
-            [
-                ft.Container(
-                    content=ft.Text(icon, size=24),
-                    padding=ft.padding.all(8),
-                    bgcolor=color,
-                    border_radius=8,
-                    width=48,
-                    height=48,
-                    alignment=ft.alignment.center,
-                ),
-                DisplayText(value),
-                SecondaryText(label),
-            ],
-            spacing=4,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-        )
-        self.padding = ft.padding.all(Theme.Spacing.SM)
-        self.alignment = ft.alignment.center
-
-
 class OverviewSection(ft.Container):
     """Database overview section with key metrics."""
 
-    def __init__(self, database_component: ComponentStatus) -> None:
+    def __init__(self, database_component: ComponentStatus, page: ft.Page) -> None:
         """
         Initialize overview section.
 
@@ -108,21 +76,15 @@ class OverviewSection(ft.Container):
         # Create metric cards
         metrics_row = ft.Row(
             [
-                MetricCard("📊", str(table_count), "Total Tables", Theme.Colors.INFO),
-                MetricCard("📈", f"{total_rows:,}", "Total Rows", Theme.Colors.SUCCESS),
-                MetricCard("💾", file_size_human, "Database Size", Theme.Colors.INFO),
-                MetricCard("🔢", version, "SQLite Version", Theme.Colors.SUCCESS),
+                MetricCard("Total Tables", str(table_count), Theme.Colors.INFO),
+                MetricCard("Total Rows", f"{total_rows:,}", Theme.Colors.SUCCESS),
+                MetricCard("Database Size", file_size_human, Theme.Colors.INFO),
+                MetricCard("SQLite Version", version, Theme.Colors.SUCCESS),
             ],
             alignment=ft.MainAxisAlignment.SPACE_AROUND,
         )
 
-        self.content = ft.Column(
-            [
-                H2Text("Overview"),
-                metrics_row,
-            ],
-            spacing=Theme.Spacing.MD,
-        )
+        self.content = metrics_row
         self.padding = Theme.Spacing.MD
 
 
@@ -181,7 +143,7 @@ class MigrationRow(ft.Container):
 class MigrationHistorySection(ft.Container):
     """Migration history section displaying Alembic migrations."""
 
-    def __init__(self, database_component: ComponentStatus) -> None:
+    def __init__(self, database_component: ComponentStatus, page: ft.Page) -> None:
         """
         Initialize migration history section.
 
@@ -196,7 +158,7 @@ class MigrationHistorySection(ft.Container):
         # Create header
         header = ft.Row(
             [
-                H2Text(f"Migration History ({migration_count} migrations)"),
+                H3Text(f"Migration History ({migration_count} migrations)"),
             ],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         )
@@ -221,7 +183,7 @@ class MigrationHistorySection(ft.Container):
                 spacing=Theme.Spacing.SM,
             ),
             padding=ft.padding.symmetric(vertical=Theme.Spacing.SM),
-            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            bgcolor=ft.Colors.SURFACE,
             border_radius=8,
         )
 
@@ -273,14 +235,16 @@ class ColumnRow(ft.Container):
 
         # Format nullable display
         nullable_text = "NOT NULL" if notnull else "NULL"
-        nullable_color = Theme.Colors.WARNING if notnull else ft.Colors.GREY
+        nullable_color = (
+            Theme.Colors.WARNING if notnull else ft.Colors.ON_SURFACE_VARIANT
+        )
 
         # Format default value
         default_text = str(default_value) if default_value is not None else "-"
 
         # Format primary key indicator
         pk_text = "PK" if pk else ""
-        pk_color = Theme.Colors.SUCCESS if pk else ft.Colors.GREY
+        pk_color = Theme.Colors.SUCCESS if pk else ft.Colors.ON_SURFACE_VARIANT
 
         self.content = ft.Row(
             [
@@ -328,7 +292,7 @@ class IndexRow(ft.Container):
 
         # Format unique indicator
         unique_text = "UNIQUE" if unique else "NON-UNIQUE"
-        unique_color = Theme.Colors.SUCCESS if unique else ft.Colors.GREY
+        unique_color = Theme.Colors.SUCCESS if unique else ft.Colors.ON_SURFACE_VARIANT
 
         # Format column names
         column_names = ", ".join(col.get("name", "") for col in columns)
@@ -428,7 +392,7 @@ class TableSchemaCard(ft.Container):
                     spacing=Theme.Spacing.SM,
                 ),
                 padding=ft.padding.all(Theme.Spacing.SM),
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                bgcolor=ft.Colors.SURFACE,
                 border_radius=8,
             ),
             on_tap=self._toggle_expand,
@@ -609,7 +573,7 @@ class TableSchemaCard(ft.Container):
 class TableDetailsSection(ft.Container):
     """Table details section with expandable schema cards."""
 
-    def __init__(self, database_component: ComponentStatus) -> None:
+    def __init__(self, database_component: ComponentStatus, page: ft.Page) -> None:
         """
         Initialize table details section.
 
@@ -622,7 +586,7 @@ class TableDetailsSection(ft.Container):
         table_count = len(table_schemas)
 
         # Create header
-        header = H2Text(f"Tables ({table_count} tables)")
+        header = H3Text(f"Tables ({table_count} tables)")
 
         # Create table schema cards or empty placeholder
         if table_schemas:
@@ -709,7 +673,7 @@ class PragmaSettingRow(ft.Container):
 class PragmaSettingsSection(ft.Container):
     """PRAGMA settings section with comprehensive database configuration."""
 
-    def __init__(self, database_component: ComponentStatus) -> None:
+    def __init__(self, database_component: ComponentStatus, page: ft.Page) -> None:
         """
         Initialize PRAGMA settings section.
 
@@ -722,7 +686,7 @@ class PragmaSettingsSection(ft.Container):
         comprehensive_pragma = metadata.get("comprehensive_pragma", {})
 
         # Create header
-        header = H2Text("PRAGMA Settings")
+        header = H3Text("PRAGMA Settings")
 
         # Combine basic and comprehensive PRAGMA settings
         all_pragma = {**pragma_settings, **comprehensive_pragma}
@@ -957,7 +921,7 @@ class PragmaSettingsSection(ft.Container):
 class StatisticsSection(ft.Container):
     """Database infrastructure statistics section."""
 
-    def __init__(self, database_component: ComponentStatus) -> None:
+    def __init__(self, database_component: ComponentStatus, page: ft.Page) -> None:
         """
         Initialize statistics section.
 
@@ -1036,7 +1000,7 @@ class StatisticsSection(ft.Container):
 
         self.content = ft.Column(
             [
-                H2Text("Statistics"),
+                H3Text("Statistics"),
                 ft.Column(stats_rows, spacing=Theme.Spacing.SM),
             ],
             spacing=Theme.Spacing.SM,
@@ -1044,84 +1008,38 @@ class StatisticsSection(ft.Container):
         self.padding = Theme.Spacing.MD
 
 
-class DatabaseDetailDialog(ft.AlertDialog):
-    """Database detail modal dialog."""
+class DatabaseDetailDialog(BaseDetailPopup):
+    """Database detail popup dialog."""
 
-    def __init__(self, database_component: ComponentStatus) -> None:
+    def __init__(self, database_component: ComponentStatus, page: ft.Page) -> None:
         """
-        Initialize database detail dialog.
+        Initialize database detail popup.
 
         Args:
             database_component: ComponentStatus containing database health and metrics
         """
-        # Get status colors
-        status = database_component.status
-        if status == ComponentStatusType.HEALTHY:
-            status_color = Theme.Colors.SUCCESS
-            status_text = "HEALTHY"
-        elif status == ComponentStatusType.INFO:
-            status_color = Theme.Colors.INFO
-            status_text = "INFO"
-        elif status == ComponentStatusType.WARNING:
-            status_color = Theme.Colors.WARNING
-            status_text = "WARNING"
-        else:
-            status_color = Theme.Colors.ERROR
-            status_text = "UNHEALTHY"
-
-        # Create status badge
-        status_badge = ft.Container(
-            content=LabelText(status_text, color=Theme.Colors.BADGE_TEXT),
-            padding=ft.padding.symmetric(horizontal=12, vertical=4),
-            bgcolor=status_color,
-            border_radius=12,
-        )
-
-        # Create title with status badge
-        title = ft.Row(
-            [
-                H2Text("Database Details"),
-                status_badge,
-            ],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        )
-
-        # Create all sections
+        # Build sections
         sections = [
-            OverviewSection(database_component),
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
-            MigrationHistorySection(database_component),
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
-            TableDetailsSection(database_component),
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
-            PragmaSettingsSection(database_component),
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
-            StatisticsSection(database_component),
+            OverviewSection(database_component, page),
+            MigrationHistorySection(database_component, page),
+            ft.Divider(
+                height=ModalLayout.SECTION_DIVIDER_HEIGHT, color=ft.Colors.OUTLINE
+            ),
+            TableDetailsSection(database_component, page),
+            ft.Divider(
+                height=ModalLayout.SECTION_DIVIDER_HEIGHT, color=ft.Colors.OUTLINE
+            ),
+            PragmaSettingsSection(database_component, page),
+            ft.Divider(
+                height=ModalLayout.SECTION_DIVIDER_HEIGHT, color=ft.Colors.OUTLINE
+            ),
+            StatisticsSection(database_component, page),
         ]
 
-        # Create scrollable content
-        content = ft.Container(
-            content=ft.Column(
-                sections,
-                spacing=0,
-                scroll=ft.ScrollMode.AUTO,
-            ),
-            width=900,
-            height=700,
-        )
-
-        # Initialize dialog
+        # Initialize base popup with custom sections
         super().__init__(
-            modal=False,
-            title=title,
-            content=content,
-            actions=[
-                ft.TextButton("Close", on_click=self._close),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
+            page=page,
+            component_data=database_component,
+            title_text="Database",
+            sections=sections,
         )
-
-    def _close(self, e: ft.ControlEvent) -> None:
-        """Close the dialog."""
-        if e.page:
-            e.page.close(self)

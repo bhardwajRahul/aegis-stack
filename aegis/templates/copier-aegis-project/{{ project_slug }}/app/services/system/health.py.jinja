@@ -1362,7 +1362,8 @@ async def check_worker_health() -> ComponentStatus:
                     queue_status = ComponentStatusType.INFO
                     status_parts = ["configured - no functions defined"]
                 elif not worker_alive:
-                    queue_status = ComponentStatusType.UNHEALTHY
+                    # Worker offline is informational, not an error
+                    queue_status = ComponentStatusType.INFO
                 elif failure_rate > 25:  # Unhealthy threshold at 25%
                     queue_status = ComponentStatusType.UNHEALTHY
                 elif failure_rate > 10:  # Warning threshold at 10%
@@ -1501,7 +1502,6 @@ async def check_worker_health() -> ComponentStatus:
         message_parts = []
         if active_workers == 0:
             message_parts.append("No active workers")
-            overall_healthy = False
         else:
             message_parts.append(
                 f"{active_workers}/{len(functional_queues)} workers active"
@@ -1540,11 +1540,8 @@ async def check_worker_health() -> ComponentStatus:
             sub_components=queue_sub_components,
         )
 
-        # Determine worker status based on overall health and queues status
-        if not overall_healthy:
-            worker_status = ComponentStatusType.UNHEALTHY
-        else:
-            worker_status = propagate_status([queues_status])
+        # Determine worker status from queue statuses (let propagate_status handle it)
+        worker_status = propagate_status([queues_status])
 
         return ComponentStatus(
             name="worker",

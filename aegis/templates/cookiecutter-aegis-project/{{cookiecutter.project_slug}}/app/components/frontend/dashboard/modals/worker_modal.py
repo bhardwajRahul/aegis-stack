@@ -8,13 +8,16 @@ Each section is a self-contained Flet control that can be reused and tested inde
 import flet as ft
 from app.components.frontend.controls import (
     BodyText,
-    DisplayText,
-    H2Text,
+    H3Text,
     PrimaryText,
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.services.system.models import ComponentStatus, ComponentStatusType
+from app.services.system.models import ComponentStatus
+
+from .base_detail_popup import BaseDetailPopup
+from .modal_constants import ModalLayout
+from .modal_sections import MetricCard
 
 # Worker health status thresholds
 FAILURE_RATE_CRITICAL_THRESHOLD = 20  # % - Red status (failing)
@@ -38,43 +41,10 @@ STAT_LABEL_WIDTH = 200  # Label column width
 MAX_REDIS_URL_DISPLAY_LENGTH = 50
 
 
-class MetricCard(ft.Container):
-    """Reusable metric display card with icon, value, and label."""
-
-    def __init__(self, label: str, value: str, icon: str, color: str) -> None:
-        """
-        Initialize metric card.
-
-        Args:
-            label: Metric label text
-            value: Metric value to display
-            icon: Flet icon constant
-            color: Icon and accent color
-        """
-        super().__init__()
-
-        self.content = ft.Column(
-            [
-                ft.Icon(icon, size=32, color=color),
-                DisplayText(value),
-                SecondaryText(
-                    label,
-                    size=Theme.Typography.BODY_SMALL,
-                ),
-            ],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=Theme.Spacing.SM,
-        )
-        self.padding = Theme.Spacing.MD
-        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.OUTLINE_VARIANT)
-        self.border_radius = Theme.Components.CARD_RADIUS
-        self.expand = True
-
-
 class QueueHealthRow(ft.Container):
     """Single queue health status display."""
 
-    def __init__(self, queue_component: ComponentStatus) -> None:
+    def __init__(self, queue_component: ComponentStatus, page: ft.Page) -> None:
         """
         Initialize queue health row.
 
@@ -95,7 +65,7 @@ class QueueHealthRow(ft.Container):
         # Determine status icon and color
         if not worker_alive:
             status_icon = "⚫"  # Offline
-            status_color = Theme.Colors.TEXT_DISABLED
+            status_color = ft.Colors.ON_SURFACE_VARIANT
         elif failure_rate > FAILURE_RATE_CRITICAL_THRESHOLD:
             status_icon = "🔴"  # Failing
             status_color = Theme.Colors.ERROR
@@ -170,7 +140,7 @@ class QueueHealthRow(ft.Container):
 class OverviewSection(ft.Container):
     """Overview section showing key worker metrics."""
 
-    def __init__(self, worker_component: ComponentStatus) -> None:
+    def __init__(self, worker_component: ComponentStatus, page: ft.Page) -> None:
         """
         Initialize overview section.
 
@@ -192,42 +162,32 @@ class OverviewSection(ft.Container):
         active_workers = metadata.get("active_workers", 0)
         total_ongoing = metadata.get("total_ongoing", 0)
 
-        self.content = ft.Column(
+        self.content = ft.Row(
             [
-                H2Text("Overview"),
-                ft.Container(height=Theme.Spacing.SM),
-                ft.Row(
-                    [
-                        MetricCard(
-                            "Total Queues",
-                            str(total_queues),
-                            ft.Icons.QUEUE,
-                            Theme.Colors.INFO,
-                        ),
-                        MetricCard(
-                            "Active Workers",
-                            str(active_workers),
-                            ft.Icons.PLAY_CIRCLE_OUTLINE,
-                            Theme.Colors.SUCCESS,
-                        ),
-                        MetricCard(
-                            "Jobs Processing",
-                            str(total_ongoing),
-                            ft.Icons.SYNC,
-                            Theme.Colors.INFO,
-                        ),
-                    ],
-                    spacing=Theme.Spacing.MD,
+                MetricCard(
+                    "Total Queues",
+                    str(total_queues),
+                    Theme.Colors.INFO,
+                ),
+                MetricCard(
+                    "Active Workers",
+                    str(active_workers),
+                    Theme.Colors.SUCCESS,
+                ),
+                MetricCard(
+                    "Jobs Processing",
+                    str(total_ongoing),
+                    Theme.Colors.INFO,
                 ),
             ],
-            spacing=0,
+            spacing=Theme.Spacing.MD,
         )
 
 
 class QueueHealthSection(ft.Container):
     """Queue health status table section."""
 
-    def __init__(self, worker_component: ComponentStatus) -> None:
+    def __init__(self, worker_component: ComponentStatus, page: ft.Page) -> None:
         """
         Initialize queue health section.
 
@@ -306,14 +266,14 @@ class QueueHealthSection(ft.Container):
         )
 
         # Queue rows
-        queue_rows = [QueueHealthRow(queue) for queue in queue_components]
+        queue_rows = [QueueHealthRow(queue, page) for queue in queue_components]
 
         self.content = ft.Column(
             [
-                H2Text("Queue Status"),
+                H3Text("Queue Status"),
                 ft.Container(height=Theme.Spacing.SM),
                 header_row,
-                ft.Divider(height=1, color=Theme.Colors.BORDER_DEFAULT),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE),
                 ft.Column(
                     queue_rows if queue_rows else [BodyText("No queues configured")],
                     spacing=0,
@@ -326,7 +286,7 @@ class QueueHealthSection(ft.Container):
 class StatisticsSection(ft.Container):
     """Statistics section showing worker infrastructure information."""
 
-    def __init__(self, component_data: ComponentStatus) -> None:
+    def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         """
         Initialize statistics section.
 
@@ -368,112 +328,53 @@ class StatisticsSection(ft.Container):
 
         self.content = ft.Column(
             [
-                H2Text("Worker Information"),
+                H3Text("Worker Information"),
                 ft.Container(height=Theme.Spacing.SM),
                 stat_row("Component Status", status.value.upper()),
                 stat_row("Health Message", message),
                 stat_row("Response Time", f"{response_time}ms"),
-                ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE),
                 stat_row("Total Queued", str(total_queued)),
                 stat_row("Total Completed", str(total_completed)),
                 stat_row("Total Failed", str(total_failed)),
                 stat_row("Total Retried", str(total_retried)),
                 stat_row("Overall Failure Rate", f"{overall_failure_rate:.1f}%"),
-                ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE),
                 stat_row("Redis URL", redis_url),
             ],
             spacing=Theme.Spacing.XS,
         )
 
 
-class WorkerDetailDialog(ft.AlertDialog):
+class WorkerDetailDialog(BaseDetailPopup):
     """
-    Worker component detail modal dialog.
+    Worker component detail popup dialog.
 
     Displays comprehensive worker information including queue health,
     job statistics, and infrastructure details.
     """
 
-    def __init__(self, component_data: ComponentStatus) -> None:
+    def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         """
-        Initialize worker detail dialog.
+        Initialize worker detail popup.
 
         Args:
             component_data: Worker ComponentStatus from health check
         """
-        self.component_data = component_data
-        status = component_data.status
-
-        # Determine status badge color
-        status_color_map = {
-            ComponentStatusType.HEALTHY: Theme.Colors.SUCCESS,
-            ComponentStatusType.INFO: Theme.Colors.INFO,
-            ComponentStatusType.WARNING: Theme.Colors.WARNING,
-            ComponentStatusType.UNHEALTHY: Theme.Colors.ERROR,
-        }
-        status_color = status_color_map.get(status, Theme.Colors.TEXT_DISABLED)
-
-        # Build modal content
-        title = self._create_title(status, status_color)
-        content = ft.Container(
-            content=ft.Column(
-                [
-                    OverviewSection(component_data),
-                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
-                    QueueHealthSection(component_data),
-                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
-                    StatisticsSection(component_data),
-                ],
-                spacing=Theme.Spacing.MD,
-                scroll=ft.ScrollMode.AUTO,
+        # Build sections
+        sections = [
+            OverviewSection(component_data, page),
+            QueueHealthSection(component_data, page),
+            ft.Divider(
+                height=ModalLayout.SECTION_DIVIDER_HEIGHT, color=ft.Colors.OUTLINE
             ),
-            width=900,
-            height=700,
-        )
+            StatisticsSection(component_data, page),
+        ]
 
-        # Initialize dialog
+        # Initialize base popup with custom sections
         super().__init__(
-            modal=False,
-            title=title,
-            content=content,
-            actions=[
-                ft.TextButton("Close", on_click=self._close),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
+            page=page,
+            component_data=component_data,
+            title_text="Worker",
+            sections=sections,
         )
-
-    def _create_title(self, status: ComponentStatusType, status_color: str) -> ft.Row:
-        """
-        Create modal title with status badge.
-
-        Args:
-            status: Component status enum
-            status_color: Color for status badge background
-
-        Returns:
-            Title row with header text and status badge
-        """
-        return ft.Row(
-            [
-                H2Text("⚡ Worker Details"),
-                ft.Container(
-                    content=ft.Text(
-                        status.value.upper(),
-                        size=Theme.Typography.BODY_SMALL,
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        color=Theme.Colors.BADGE_TEXT,
-                    ),
-                    padding=ft.padding.symmetric(
-                        horizontal=Theme.Spacing.SM, vertical=Theme.Spacing.XS
-                    ),
-                    bgcolor=status_color,
-                    border_radius=Theme.Components.BADGE_RADIUS,
-                ),
-            ],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        )
-
-    def _close(self, e: ft.ControlEvent) -> None:
-        """Close the modal dialog."""
-        self.open = False
-        e.page.update()

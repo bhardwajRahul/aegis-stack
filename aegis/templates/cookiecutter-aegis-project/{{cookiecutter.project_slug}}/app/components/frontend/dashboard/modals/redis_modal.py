@@ -11,12 +11,14 @@ from datetime import datetime
 import flet as ft
 from app.components.frontend.controls import (
     BodyText,
-    DisplayText,
-    H2Text,
+    H3Text,
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.services.system.models import ComponentStatus, ComponentStatusType
+from app.services.system.models import ComponentStatus
+
+from .base_detail_popup import BaseDetailPopup
+from .modal_sections import MetricCard
 
 # Slow query thresholds
 SLOWLOG_CRITICAL_MS = 1000  # 1 second - Critical (red)
@@ -42,43 +44,10 @@ STAT_LABEL_WIDTH = 200
 MAX_REDIS_URL_DISPLAY_LENGTH = 50
 
 
-class MetricCard(ft.Container):
-    """Reusable metric display card with icon, value, and label."""
-
-    def __init__(self, label: str, value: str, icon: str, color: str) -> None:
-        """
-        Initialize metric card.
-
-        Args:
-            label: Metric label text
-            value: Metric value to display
-            icon: Flet icon constant
-            color: Icon and accent color
-        """
-        super().__init__()
-
-        self.content = ft.Column(
-            [
-                ft.Icon(icon, size=32, color=color),
-                DisplayText(value),
-                SecondaryText(
-                    label,
-                    size=Theme.Typography.BODY_SMALL,
-                ),
-            ],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=Theme.Spacing.SM,
-        )
-        self.padding = Theme.Spacing.MD
-        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.OUTLINE_VARIANT)
-        self.border_radius = Theme.Components.CARD_RADIUS
-        self.expand = True
-
-
 class OverviewSection(ft.Container):
     """Overview section showing key Redis metrics."""
 
-    def __init__(self, redis_component: ComponentStatus) -> None:
+    def __init__(self, redis_component: ComponentStatus, page: ft.Page) -> None:
         """
         Initialize overview section.
 
@@ -102,42 +71,32 @@ class OverviewSection(ft.Container):
         else:
             hit_rate_color = Theme.Colors.ERROR
 
-        self.content = ft.Column(
+        self.content = ft.Row(
             [
-                H2Text("Overview"),
-                ft.Container(height=Theme.Spacing.SM),
-                ft.Row(
-                    [
-                        MetricCard(
-                            "Total Keys",
-                            str(total_keys),
-                            ft.Icons.KEY,
-                            Theme.Colors.INFO,
-                        ),
-                        MetricCard(
-                            "Connected Clients",
-                            str(connected_clients),
-                            ft.Icons.PEOPLE,
-                            Theme.Colors.SUCCESS,
-                        ),
-                        MetricCard(
-                            "Cache Hit Rate",
-                            f"{hit_rate:.1f}%",
-                            ft.Icons.TRENDING_UP,
-                            hit_rate_color,
-                        ),
-                    ],
-                    spacing=Theme.Spacing.MD,
+                MetricCard(
+                    "Total Keys",
+                    str(total_keys),
+                    Theme.Colors.INFO,
+                ),
+                MetricCard(
+                    "Connected Clients",
+                    str(connected_clients),
+                    Theme.Colors.SUCCESS,
+                ),
+                MetricCard(
+                    "Cache Hit Rate",
+                    f"{hit_rate:.1f}%",
+                    hit_rate_color,
                 ),
             ],
-            spacing=0,
+            spacing=Theme.Spacing.MD,
         )
 
 
 class PerformanceSection(ft.Container):
     """Performance metrics section showing memory, ops, and cache stats."""
 
-    def __init__(self, redis_component: ComponentStatus) -> None:
+    def __init__(self, redis_component: ComponentStatus, page: ft.Page) -> None:
         """
         Initialize performance section.
 
@@ -177,12 +136,12 @@ class PerformanceSection(ft.Container):
 
         self.content = ft.Column(
             [
-                H2Text("Performance Metrics"),
+                H3Text("Performance Metrics"),
                 ft.Container(height=Theme.Spacing.SM),
                 metric_row("Memory Usage", f"{used_memory_human} / {maxmemory_human}"),
                 metric_row("Memory Fragmentation", f"{mem_fragmentation:.2f}"),
                 metric_row("Operations/Sec", str(ops_per_sec)),
-                ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE),
                 metric_row("Cache Hits", str(keyspace_hits)),
                 metric_row("Cache Misses", str(keyspace_misses)),
                 metric_row("Evicted Keys", str(evicted_keys)),
@@ -250,7 +209,7 @@ class SlowQueryRow(ft.Container):
 class SlowQueriesSection(ft.Container):
     """Slow queries log section displaying recent slow commands from Redis SLOWLOG."""
 
-    def __init__(self, redis_component: ComponentStatus) -> None:
+    def __init__(self, redis_component: ComponentStatus, page: ft.Page) -> None:
         """
         Initialize slow queries section.
 
@@ -300,10 +259,10 @@ class SlowQueriesSection(ft.Container):
 
         self.content = ft.Column(
             [
-                H2Text("Slow Query Log"),
+                H3Text("Slow Query Log"),
                 ft.Container(height=Theme.Spacing.SM),
                 header_row,
-                ft.Divider(height=1, color=Theme.Colors.BORDER_DEFAULT),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE),
                 ft.Column(
                     query_rows
                     if query_rows
@@ -369,7 +328,7 @@ class ClientConnectionRow(ft.Container):
 class ActiveConnectionsSection(ft.Container):
     """Active client connections section."""
 
-    def __init__(self, redis_component: ComponentStatus) -> None:
+    def __init__(self, redis_component: ComponentStatus, page: ft.Page) -> None:
         """
         Initialize active connections section.
 
@@ -438,10 +397,10 @@ class ActiveConnectionsSection(ft.Container):
 
         self.content = ft.Column(
             [
-                H2Text("Active Connections"),
+                H3Text("Active Connections"),
                 ft.Container(height=Theme.Spacing.SM),
                 header_row,
-                ft.Divider(height=1, color=Theme.Colors.BORDER_DEFAULT),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE),
                 ft.Column(
                     client_rows if client_rows else [BodyText("No active connections")],
                     spacing=0,
@@ -454,7 +413,7 @@ class ActiveConnectionsSection(ft.Container):
 class StatisticsSection(ft.Container):
     """Statistics section showing Redis infrastructure information."""
 
-    def __init__(self, component_data: ComponentStatus) -> None:
+    def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         """
         Initialize statistics section.
 
@@ -502,116 +461,55 @@ class StatisticsSection(ft.Container):
 
         self.content = ft.Column(
             [
-                H2Text("Redis Information"),
+                H3Text("Redis Information"),
                 ft.Container(height=Theme.Spacing.SM),
                 stat_row("Component Status", status.value.upper()),
                 stat_row("Health Message", message),
                 stat_row("Response Time", f"{response_time}ms"),
-                ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE),
                 stat_row("Redis Version", version),
                 stat_row("Server Uptime", uptime_str),
                 stat_row("Total Commands", str(total_commands)),
                 stat_row("Total Connections", str(total_connections)),
                 stat_row("Peak Memory", used_memory_peak),
-                ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE),
                 stat_row("Redis URL", redis_url),
             ],
             spacing=Theme.Spacing.XS,
         )
 
 
-class RedisDetailDialog(ft.AlertDialog):
+class RedisDetailDialog(BaseDetailPopup):
     """
-    Redis cache detail modal dialog.
+    Redis cache detail popup dialog.
 
     Displays comprehensive Redis information including performance metrics,
     slow query log, active client connections, and infrastructure details.
     """
 
-    def __init__(self, component_data: ComponentStatus) -> None:
+    def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         """
-        Initialize Redis detail dialog.
+        Initialize the redis details popup.
 
         Args:
-            component_data: Redis ComponentStatus from health check
+            component_data: ComponentStatus containing component health and metrics
         """
-        self.component_data = component_data
-        status = component_data.status
+        # Build sections
+        sections = [
+            OverviewSection(component_data, page),
+            PerformanceSection(component_data, page),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            SlowQueriesSection(component_data, page),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            ActiveConnectionsSection(component_data, page),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            StatisticsSection(component_data, page),
+        ]
 
-        # Determine status badge color
-        status_color_map = {
-            ComponentStatusType.HEALTHY: Theme.Colors.SUCCESS,
-            ComponentStatusType.INFO: Theme.Colors.INFO,
-            ComponentStatusType.WARNING: Theme.Colors.WARNING,
-            ComponentStatusType.UNHEALTHY: Theme.Colors.ERROR,
-        }
-        status_color = status_color_map.get(status, Theme.Colors.TEXT_DISABLED)
-
-        # Build modal content
-        title = self._create_title(status, status_color)
-        content = ft.Container(
-            content=ft.Column(
-                [
-                    OverviewSection(component_data),
-                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
-                    PerformanceSection(component_data),
-                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
-                    SlowQueriesSection(component_data),
-                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
-                    ActiveConnectionsSection(component_data),
-                    ft.Divider(height=20, color=Theme.Colors.BORDER_DEFAULT),
-                    StatisticsSection(component_data),
-                ],
-                spacing=Theme.Spacing.MD,
-                scroll=ft.ScrollMode.AUTO,
-            ),
-            width=900,
-            height=700,
-        )
-
-        # Initialize dialog
+        # Initialize base popup with custom sections
         super().__init__(
-            modal=False,
-            title=title,
-            content=content,
-            actions=[
-                ft.TextButton("Close", on_click=self._close),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
+            page=page,
+            component_data=component_data,
+            title_text="Redis",
+            sections=sections,
         )
-
-    def _create_title(self, status: ComponentStatusType, status_color: str) -> ft.Row:
-        """
-        Create modal title with status badge.
-
-        Args:
-            status: Component status enum
-            status_color: Color for status badge background
-
-        Returns:
-            Title row with header text and status badge
-        """
-        return ft.Row(
-            [
-                H2Text("💾 Redis Details"),
-                ft.Container(
-                    content=ft.Text(
-                        status.value.upper(),
-                        size=Theme.Typography.BODY_SMALL,
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        color=Theme.Colors.BADGE_TEXT,
-                    ),
-                    padding=ft.padding.symmetric(
-                        horizontal=Theme.Spacing.SM, vertical=Theme.Spacing.XS
-                    ),
-                    bgcolor=status_color,
-                    border_radius=Theme.Components.BADGE_RADIUS,
-                ),
-            ],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        )
-
-    def _close(self, e: ft.ControlEvent) -> None:
-        """Close the modal dialog."""
-        self.open = False
-        e.page.update()
