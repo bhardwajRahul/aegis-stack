@@ -16,9 +16,9 @@ You work with Datadog until management decides to migrate to New Relic. Or you'r
 
 ## What It Is
 
-**Overseer is a read-only health monitoring dashboard** built into your Aegis Stack application. It provides real-time visibility into component and service health through a web UI and CLI commands.
+**Overseer is a health monitoring dashboard** built into your Aegis Stack application. It provides real-time visibility into component and service health through a web UI and CLI commands.
 
-![Overseer Dashboard](../images/overseer-dashboard-1-dark.png)
+![Overseer Dashboard](../images/overseer-demo.gif)
 
 The dashboard displays:
 
@@ -123,13 +123,13 @@ your-app health
 └────────────────────────────────────────┘
 ```
 
-## What's Coming
+## The Story
 
-Overseer is evolving into a full operational control plane. Want to know where this is headed and why I'm so confident it'll work?
+Want to know how this came to be?
 
-**[Read the full story →](story.md)** - How Overseer evolved from solving production problems at iHeartMedia (2022-2024) to becoming the built-in control plane for Aegis Stack.
+**[Read the full story →](story.md)** - How Overseer evolved from solving real production problems to becoming part of Aegis Stack.
 
 ## Next Steps
 
-- **[The Overseer Story](story.md)** - Evolution from Streamlit to Aegis Stack, roadmap, and vision
+- **[The Overseer Story](story.md)** - Evolution from Streamlit to Aegis Stack and vision
 - **[Integration Guide](integration.md)** - Add health checks to custom components/services

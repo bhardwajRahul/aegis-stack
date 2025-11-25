@@ -75,7 +75,7 @@ Most frameworks lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your
 
 ### Overseer - Built-In Health Monitoring
 
-![Overseer](docs/images/overseer-dashboard-1-dark.png)
+![Overseer](docs/images/overseer-demo.gif)
 
 **[Overseer](docs/overseer/index.md)** is the read-only health monitoring dashboard built into every Aegis Stack project. It provides real-time visibility into all your components (Backend, Database, Worker, Scheduler) and services (Auth, AI, Comms) through a web UI and CLI commands.
 

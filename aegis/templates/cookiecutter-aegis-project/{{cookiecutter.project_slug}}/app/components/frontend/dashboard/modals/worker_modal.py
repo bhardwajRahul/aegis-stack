@@ -61,6 +61,7 @@ class QueueHealthRow(ft.Container):
         jobs_completed = metadata.get("jobs_completed", 0)
         jobs_failed = metadata.get("jobs_failed", 0)
         failure_rate = metadata.get("failure_rate_percent", 0.0)
+        has_job_history = (jobs_completed + jobs_failed) > 0
 
         # Determine status icon and color
         if not worker_alive:
@@ -77,8 +78,13 @@ class QueueHealthRow(ft.Container):
             status_color = Theme.Colors.SUCCESS
 
         # Success rate display with color coding
-        success_rate = 100 - failure_rate if worker_alive else 0
-        if success_rate >= SUCCESS_RATE_HEALTHY_THRESHOLD:
+        # Show N/A when no jobs have been processed yet
+        success_rate: float | None = (
+            (100 - failure_rate) if (worker_alive and has_job_history) else None
+        )
+        if success_rate is None:
+            rate_color = ft.Colors.ON_SURFACE_VARIANT
+        elif success_rate >= SUCCESS_RATE_HEALTHY_THRESHOLD:
             rate_color = Theme.Colors.SUCCESS
         elif success_rate >= SUCCESS_RATE_WARNING_THRESHOLD:
             rate_color = Theme.Colors.WARNING
@@ -115,7 +121,7 @@ class QueueHealthRow(ft.Container):
                 ),
                 ft.Container(
                     content=SecondaryText(
-                        f"{success_rate:.1f}%",
+                        f"{success_rate:.1f}%" if success_rate is not None else "N/A",
                         color=rate_color,
                         weight=Theme.Typography.WEIGHT_SEMIBOLD,
                         text_align=ft.TextAlign.CENTER,

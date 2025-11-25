@@ -67,7 +67,9 @@ class FletCard:
                     [
                         ft.Row(
                             [
-                                ft.Icon(ft.Icons.WEB, size=16),
+                                ft.Icon(
+                                    ft.Icons.WEB, size=16, color=ft.Colors.GREY_600
+                                ),
                                 ft.Text(
                                     "Framework",
                                     size=14,
@@ -97,6 +99,7 @@ class FletCard:
                                 ft.Icon(
                                     ft.Icons.INTEGRATION_INSTRUCTIONS,
                                     size=16,
+                                    color=ft.Colors.GREY_600,
                                 ),
                                 ft.Text(
                                     "Integration",
@@ -124,7 +127,9 @@ class FletCard:
                     [
                         ft.Row(
                             [
-                                ft.Icon(ft.Icons.PALETTE, size=16),
+                                ft.Icon(
+                                    ft.Icons.PALETTE, size=16, color=ft.Colors.GREY_600
+                                ),
                                 ft.Text(
                                     "Theme Support",
                                     size=14,
@@ -151,7 +156,9 @@ class FletCard:
                     [
                         ft.Row(
                             [
-                                ft.Icon(ft.Icons.REFRESH, size=16),
+                                ft.Icon(
+                                    ft.Icons.REFRESH, size=16, color=ft.Colors.GREY_600
+                                ),
                                 ft.Text(
                                     "Auto Refresh",
                                     size=14,

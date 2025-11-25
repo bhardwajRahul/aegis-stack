@@ -308,5 +308,5 @@ except ImportError:
 ## Next Steps
 
 - **[Overseer Overview](index.md)** - Learn about Overseer's architecture and purpose
-- **[The Overseer Story](story.md)** - Evolution, roadmap, and vision
+- **[The Overseer Story](story.md)** - Evolution and vision
 - **[CLI Reference](../cli-reference.md)** - Health command documentation (search for "health")

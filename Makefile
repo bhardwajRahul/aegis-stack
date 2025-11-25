@@ -131,6 +131,66 @@ help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 # ============================================================================
+# MEDIA/GIF GENERATION COMMANDS
+# For converting screen recordings to high-quality GIFs
+# ============================================================================
+
+gif: ## Convert MP4 to high-quality GIF (usage: make gif INPUT=recording.mp4)
+ifndef INPUT
+	@echo "Usage: make gif INPUT=path/to/video.mp4 [OUTPUT=output.gif] [FPS=15] [WIDTH=1200] [TRIM=2]"
+	@echo ""
+	@echo "Options:"
+	@echo "  INPUT   - Required. Path to input MP4 file"
+	@echo "  OUTPUT  - Optional. Output GIF path (default: same name as input with .gif)"
+	@echo "  FPS     - Optional. Frames per second (default: 15, max 30)"
+	@echo "  WIDTH   - Optional. Output width in pixels (default: 1200)"
+	@echo "  TRIM    - Optional. Seconds to trim from end (default: 0)"
+	@exit 1
+endif
+	@echo "🎬 Converting $(INPUT) to GIF..."
+	@mkdir -p .gif-frames
+ifdef TRIM
+	$(eval DURATION := $(shell ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$(INPUT)"))
+	$(eval END_TIME := $(shell echo "$(DURATION) - $(TRIM)" | bc))
+	@ffmpeg -i "$(INPUT)" -t $(END_TIME) -vf "fps=$(or $(FPS),15),scale=$(or $(WIDTH),1200):-1:flags=lanczos" -y .gif-frames/frame_%04d.png
+else
+	@ffmpeg -i "$(INPUT)" -vf "fps=$(or $(FPS),15),scale=$(or $(WIDTH),1200):-1:flags=lanczos" -y .gif-frames/frame_%04d.png
+endif
+	@gifski -o "$(or $(OUTPUT),$(basename $(INPUT)).gif)" --fps $(or $(FPS),15) --quality 90 .gif-frames/*.png
+	@rm -rf .gif-frames
+	@echo "✅ Created: $(or $(OUTPUT),$(basename $(INPUT)).gif)"
+
+gif-quick: ## Quick lower-quality GIF (smaller file, usage: make gif-quick INPUT=recording.mp4)
+ifndef INPUT
+	@echo "Usage: make gif-quick INPUT=path/to/video.mp4"
+	@exit 1
+endif
+	@echo "⚡ Quick GIF conversion..."
+	@ffmpeg -i "$(INPUT)" -vf "fps=10,scale=800:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -y "$(basename $(INPUT)).gif"
+	@echo "✅ Created: $(basename $(INPUT)).gif"
+
+gif-demo: ## Convert demo recording to GIF (usage: make gif-demo NAME=overseer)
+ifndef NAME
+	@echo "Usage: make gif-demo NAME=overseer [TRIM=2]"
+	@echo "  Converts demos/recordings/NAME.mov -> docs/images/NAME-demo.gif"
+	@echo ""
+	@echo "Options:"
+	@echo "  NAME    - Required. Name of recording (without extension)"
+	@echo "  TRIM    - Optional. Seconds to trim from end"
+	@echo ""
+	@echo "Workflow:"
+	@echo "  1. Record screen on Mac"
+	@echo "  2. Save to demos/recordings/NAME.mov"
+	@echo "  3. Run: make gif-demo NAME=NAME TRIM=2"
+	@exit 1
+endif
+ifdef TRIM
+	@$(MAKE) gif INPUT=demos/recordings/$(NAME).mov OUTPUT=docs/images/$(NAME)-demo.gif FPS=30 WIDTH=1920 TRIM=$(TRIM)
+else
+	@$(MAKE) gif INPUT=demos/recordings/$(NAME).mov OUTPUT=docs/images/$(NAME)-demo.gif FPS=30 WIDTH=1920
+endif
+
+# ============================================================================
 # TEMPLATE TESTING TARGETS
 # For rapid iteration on cookiecutter template changes
 # 
@@ -380,7 +440,7 @@ test-engines-copier: ## Run tests with Copier engine only
 	@echo "📋 Testing with Copier engine..."
 	@uv run pytest -v --engine=copier
 
-.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test redis-start redis-stop redis-cli redis-logs redis-stats redis-reset redis-queues redis-workers redis-failed redis-monitor redis-info test-template-quick test-template test-template-with-components test-template-database test-template-worker test-template-auth test-template-ai test-template-full test-component-quick test-stacks test-stacks-build test-stacks-runtime test-stacks-full clean-test-projects test-parity test-parity-quick test-parity-components test-parity-services test-parity-full test-engines test-engines-quick test-engines-cookiecutter test-engines-copier help
+.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test gif gif-quick gif-demo redis-start redis-stop redis-cli redis-logs redis-stats redis-reset redis-queues redis-workers redis-failed redis-monitor redis-info test-template-quick test-template test-template-with-components test-template-database test-template-worker test-template-auth test-template-ai test-template-full test-component-quick test-stacks test-stacks-build test-stacks-runtime test-stacks-full clean-test-projects test-parity test-parity-quick test-parity-components test-parity-services test-parity-full test-engines test-engines-quick test-engines-cookiecutter test-engines-copier help
 
 # Default target
 .DEFAULT_GOAL := help

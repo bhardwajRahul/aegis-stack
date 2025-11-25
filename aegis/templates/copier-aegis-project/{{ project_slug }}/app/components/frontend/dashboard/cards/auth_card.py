@@ -110,7 +110,7 @@ class AuthCard:
                     ft.Row(
                         [
                             self._create_metric_container(
-                                "JWT Algorithm", jwt_algorithm, ft.Colors.BLUE
+                                "Algorithm", jwt_algorithm, ft.Colors.BLUE
                             ),
                             self._create_metric_container(
                                 "Token Expiry", token_expiry_display, ft.Colors.GREEN
@@ -123,7 +123,7 @@ class AuthCard:
                     ft.Row(
                         [
                             self._create_metric_container(
-                                "Security Level", security_level.title(), security_color
+                                "Level", security_level.title(), security_color
                             ),
                             self._create_metric_container(
                                 "Database",
