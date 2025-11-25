@@ -130,6 +130,10 @@ jobs:
   test-template-engines:
     runs-on: ubuntu-latest
     continue-on-error: true  # Non-blocking until Copier template is fixed
+    strategy:
+      fail-fast: false  # Let both engines complete even if one fails
+      matrix:
+        engine: [cookiecutter, copier]
     steps:
     - uses: actions/checkout@v5
 
@@ -145,11 +149,8 @@ jobs:
     - name: Install dependencies
       run: uv sync --all-extras
 
-    - name: Run tests with Cookiecutter engine (fast tests)
-      run: uv run pytest -v -m "not slow" --engine=cookiecutter
-
-    - name: Run tests with Copier engine (fast tests)
-      run: uv run pytest -v -m "not slow" --engine=copier
+    - name: Run tests with ${{ matrix.engine }} engine (fast tests)
+      run: uv run pytest -v -m "not slow" --engine=${{ matrix.engine }}
       # Note: Copier tests will be skipped via skip_copier_tests fixture until
       # template is fixed (ticket #128). This validates the test infrastructure.
 
