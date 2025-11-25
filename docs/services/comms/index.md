@@ -114,6 +114,9 @@ my-app comms sms send '+1YOUR_NUMBER' 'Hello from Aegis Stack!'
 | **Resend** | 100 emails/day | 3,000/month, no credit card |
 | **Twilio** | $15 trial credit | ~1,900 SMS or ~1,765 call minutes |
 
+!!! example "Musings: On SMS Registration (November 25th, 2025)"
+    It's been more annoying than I thought to get a toll-free number, or any number for that matter. Voice calls work fine, but I need to jump through more hoops than I anticipated for text messaging. Which makes this less "just works" than I would like. It also looks to be a systemic issue that I'll run into with other providers...
+
 ## Configuration
 
 ### Email (Resend)

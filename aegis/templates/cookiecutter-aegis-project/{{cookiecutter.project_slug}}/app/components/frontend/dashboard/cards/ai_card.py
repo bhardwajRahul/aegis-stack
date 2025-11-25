@@ -121,7 +121,7 @@ class AICard:
         validation_errors = self.metadata.get("validation_errors", [])
 
         if config_valid:
-            return ("✅ Valid", ft.Colors.GREEN)
+            return ("Valid", ft.Colors.GREEN)
 
         # Show specific error if only one
         if len(validation_errors) == 1:
@@ -166,7 +166,7 @@ class AICard:
         provider_color = self._get_provider_color(provider)
         model_display = self._truncate_model_name(model)
         conversations_display = str(total_conversations)
-        streaming_display = "✅ Available"
+        streaming_display = "Available"
         config_status, config_color = self._get_config_status_display()
         response_time_display = f"{response_time:.1f}ms" if response_time else "N/A"
         response_time_color = self._get_response_time_color(response_time)
@@ -210,7 +210,7 @@ class AICard:
                     ft.Row(
                         [
                             self._create_metric_container(
-                                "Configuration", config_status, config_color
+                                "Config", config_status, config_color
                             ),
                             self._create_metric_container(
                                 "Response Time",

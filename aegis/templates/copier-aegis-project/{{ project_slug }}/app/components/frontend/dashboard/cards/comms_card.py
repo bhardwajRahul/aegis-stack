@@ -74,7 +74,6 @@ class CommsCard:
         voice_configured = self.metadata.get("voice_configured", False)
         channels_configured = self.metadata.get("channels_configured", 0)
         channels_total = self.metadata.get("channels_total", 3)
-        response_time = self.component_data.response_time_ms
 
         # Get provider info
         email_provider = self.metadata.get("email_provider", "None")
@@ -89,16 +88,12 @@ class CommsCard:
                         [
                             self._create_metric_container(
                                 "Email",
-                                email_provider.title()
-                                if email_configured
-                                else "Not configured",
+                                email_provider.title() if email_configured else "None",
                                 ft.Colors.GREEN if email_configured else ft.Colors.GREY,
                             ),
                             self._create_metric_container(
                                 "SMS",
-                                sms_provider.title()
-                                if sms_configured
-                                else "Not configured",
+                                sms_provider.title() if sms_configured else "None",
                                 ft.Colors.GREEN if sms_configured else ft.Colors.GREY,
                             ),
                         ],
@@ -110,7 +105,7 @@ class CommsCard:
                         [
                             self._create_metric_container(
                                 "Voice",
-                                "Twilio" if voice_configured else "Not configured",
+                                "Twilio" if voice_configured else "None",
                                 ft.Colors.GREEN if voice_configured else ft.Colors.GREY,
                             ),
                             self._create_metric_container(
@@ -128,33 +123,15 @@ class CommsCard:
                         expand=True,
                     ),
                     ft.Container(height=12),  # Vertical spacing
-                    # Row 3: Response time and Status
-                    ft.Row(
-                        [
-                            self._create_metric_container(
-                                "Response Time",
-                                f"{response_time:.1f}ms" if response_time else "N/A",
-                                (
-                                    ft.Colors.GREEN
-                                    if response_time and response_time < 100
-                                    else ft.Colors.ORANGE
-                                ),
-                            ),
-                            self._create_metric_container(
-                                "Status",
-                                (
-                                    "Ready"
-                                    if channels_configured > 0
-                                    else "Configure providers"
-                                ),
-                                (
-                                    ft.Colors.GREEN
-                                    if channels_configured > 0
-                                    else ft.Colors.ORANGE
-                                ),
-                            ),
-                        ],
-                        expand=True,
+                    # Row 3: Status (full width)
+                    self._create_metric_container(
+                        "Status",
+                        "Ready" if channels_configured > 0 else "Configure providers",
+                        (
+                            ft.Colors.GREEN
+                            if channels_configured > 0
+                            else ft.Colors.ORANGE
+                        ),
                     ),
                 ],
                 spacing=0,
