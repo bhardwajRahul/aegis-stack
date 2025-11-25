@@ -2,6 +2,32 @@
 
 Aegis Stack can be used in multiple ways depending on your needs and preferences.
 
+## System Requirements
+
+Before installing Aegis Stack, ensure you have the following:
+
+### Required
+
+- **Python 3.11 or higher** - Core runtime for Aegis Stack and generated projects
+- **Docker & Docker Compose** - Required for generated projects' development workflow
+
+### Why Docker?
+
+Generated projects use Docker for:
+
+- **Consistent development environments** - Same setup across all machines
+- **Service dependencies** - Redis for worker component, health monitoring infrastructure
+- **Standard workflow** - The `make serve` command uses `docker compose` under the hood
+- **Production parity** - Development closely mirrors production deployment
+
+!!! note "Docker Alternatives"
+    While the standard workflow uses Docker, generated projects are standard Python applications. Advanced users can manually run components (uvicorn for backend, direct Redis installation, etc.), but this workflow is currently undocumented and unsupported.
+
+### Installing Docker
+
+- **macOS/Windows**: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- **Linux**: [Docker Engine](https://docs.docker.com/engine/install/) + [Docker Compose](https://docs.docker.com/compose/install/)
+
 ## Installation
 
 Choose the method that works best for your workflow:

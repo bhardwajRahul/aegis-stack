@@ -8,6 +8,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Commits per Month](https://img.shields.io/github/commit-activity/m/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
 [![Total Commits](https://img.shields.io/github/commit-activity/t/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
+[![Monthly Downloads](https://img.shields.io/pypi/dm/aegis-stack)](https://pypi.org/project/aegis-stack/)
 [![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-orange.json)](https://github.com/copier-org/copier)
 
 You need to ship reliable software, but management only gave you 2 weeks.
@@ -19,6 +20,11 @@ No time for health checks, proper testing, or clean architecture. Just enough ti
 ![Aegis Stack Quick Start Demo](docs/images/aegis-demo.gif)
 
 Aegis Stack is a modular Python framework that grows with your projects — start with an API, add Auth, Scheduler, Workers, or AI services when you need them.
+
+## Prerequisites
+
+- **Python 3.11+**
+- **Docker & Docker Compose** - Required for the standard development workflow (`make serve`). Generated projects use Docker for consistent environments and service dependencies (Redis for workers, health monitoring, etc.).
 
 ## Quick Start
 
@@ -67,11 +73,13 @@ Most frameworks lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your
 
 ## See It In Action
 
-### Overseer
+### Overseer - Built-In Health Monitoring
 
 ![Overseer](docs/images/overseer-dashboard-1-dark.png)
 
-Real-time monitoring dashboard showing how every component and service is performing with detailed health metrics and status information.
+**[Overseer](docs/overseer/index.md)** is the read-only health monitoring dashboard built into every Aegis Stack project. It provides real-time visibility into all your components (Backend, Database, Worker, Scheduler) and services (Auth, AI, Comms) through a web UI and CLI commands.
+
+No Datadog. No New Relic. No vendor lock-in. Just centralized monitoring you own from day one.
 
 ### CLI Health Monitoring
 

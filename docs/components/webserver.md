@@ -72,6 +72,11 @@ async def register_middleware(app: FastAPI) -> None:
 
 **No registration required** - just drop the file and restart. See the [Integration Patterns](../integration-patterns.md) for complete details.
 
+!!! example "Musings: Backend Middleware Auto-Discovery (November 22nd, 2025)"
+    I'm not sure how I ultimately feel about the auto-discovery middleware pattern. I don't have enough experience with FastAPI plugins yet, but it's something I'm thinking about as the architecture evolves.
+
+    The current approach works well for explicit component registration, but auto-discovery could reduce boilerplate at the cost of making the registration flow less obvious. Trade-offs worth considering as Aegis Stack matures.
+
 ## Integration
 
 FastAPI integrates with your application and provides:

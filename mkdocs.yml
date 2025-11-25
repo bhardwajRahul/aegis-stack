@@ -74,6 +74,10 @@ nav:
       - Provider Setup: services/comms/setup.md
       - API Reference: services/comms/api.md
       - CLI Commands: services/comms/cli.md
+  - Overseer:
+    - Overview: overseer/index.md
+    - The Story: overseer/story.md
+    - Integration: overseer/integration.md
   - Reference:
     - CLI Reference: cli-reference.md
     - Evolving Your Stack: evolving-your-stack.md
