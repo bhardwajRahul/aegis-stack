@@ -93,3 +93,6 @@ DEFAULT_PYTHON_VERSION = _max_version
 
 # Supported Python versions (auto-generated from min to max)
 SUPPORTED_PYTHON_VERSIONS = _generate_supported_versions(_min_version, _max_version)
+
+# GitHub URL for template source (used when installed via pip/uvx)
+GITHUB_TEMPLATE_URL = "gh:lbedner/aegis-stack"

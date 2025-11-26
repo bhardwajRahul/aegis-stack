@@ -15,6 +15,7 @@ from ..core.copier_manager import is_copier_project, load_copier_answers
 from ..core.copier_updater import (
     analyze_conflict_files,
     cleanup_backup_tag,
+    count_commits_between,
     create_backup_point,
     format_conflict_report,
     get_changelog,
@@ -22,6 +23,7 @@ from ..core.copier_updater import (
     get_latest_version,
     get_template_root,
     is_version_downgrade,
+    resolve_ref_to_commit,
     resolve_version_to_ref,
     rollback_to_backup,
     validate_clean_git_tree,
@@ -155,14 +157,33 @@ def update_command(
         target_ref = resolve_version_to_ref(to_version, template_root)
         target_version_display = to_version
     else:
-        # Default to latest
+        # Default to HEAD - Copier handles version detection via git describe
+        # This ensures unreleased commits are picked up (not just tagged releases)
+        target_ref = "HEAD"
+
+        # Show user-friendly version info
+        head_commit = resolve_ref_to_commit("HEAD", template_root)
         latest = get_latest_version(template_root)
         if latest:
-            target_ref = f"v{latest}"
-            target_version_display = f"{latest} (latest)"
+            latest_commit = resolve_ref_to_commit(f"v{latest}", template_root)
+            if head_commit and latest_commit and head_commit == latest_commit:
+                target_version_display = f"{latest} (latest release)"
+            elif head_commit:
+                # Count commits ahead of latest tag
+                commits_ahead = count_commits_between(
+                    f"v{latest}", "HEAD", template_root
+                )
+                if commits_ahead > 0:
+                    target_version_display = f"{latest}+{commits_ahead} commits (HEAD)"
+                else:
+                    target_version_display = f"HEAD ({head_commit[:8]}...)"
+            else:
+                target_version_display = "HEAD (latest commit)"
         else:
-            target_ref = "HEAD"
-            target_version_display = "HEAD (latest commit)"
+            if head_commit:
+                target_version_display = f"HEAD ({head_commit[:8]}...)"
+            else:
+                target_version_display = "HEAD (latest commit)"
 
     # Display version information
     typer.echo("")
@@ -184,8 +205,6 @@ def update_command(
 
     # Check if already at target commit (for HEAD/branch updates)
     if current_commit and target_ref:
-        from ..core.copier_updater import resolve_ref_to_commit
-
         target_commit = resolve_ref_to_commit(target_ref, template_root)
 
         if target_commit and current_commit == target_commit:
