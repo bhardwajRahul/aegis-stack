@@ -12,9 +12,22 @@ from typing import Any
 import yaml
 from copier import run_copy, run_update
 
-from ..config.defaults import DEFAULT_PYTHON_VERSION
+from ..config.defaults import DEFAULT_PYTHON_VERSION, GITHUB_TEMPLATE_URL
 from .post_gen_tasks import cleanup_components, run_post_generation_tasks
 from .template_generator import TemplateGenerator
+
+
+def is_git_repo(path: Path) -> bool:
+    """
+    Check if path is inside a git repository.
+
+    Args:
+        path: Path to check
+
+    Returns:
+        True if path has a .git directory (is a git repo root)
+    """
+    return (path / ".git").exists()
 
 
 def generate_with_copier(
@@ -74,25 +87,28 @@ def generate_with_copier(
         "ai_providers": cookiecutter_context.get("ai_providers", "openai"),
     }
 
-    # Resolve vcs_ref to actual commit if version specified
-    resolved_ref = None
-    if vcs_ref:
-        from .copier_updater import get_template_root, resolve_version_to_ref
+    # Detect dev vs production mode for template sourcing
+    # - Development: Use git+file:// URL for local git repo (enables aegis update)
+    # - Production (pip/uvx install): Use GitHub URL (no local git repo)
+    from .copier_updater import get_template_root, resolve_version_to_ref
 
-        template_root = get_template_root()
-        resolved_ref = resolve_version_to_ref(vcs_ref, template_root)
+    template_root = get_template_root()
 
-    # Determine which template path to use
-    # When using vcs_ref, we MUST use the repo root (so git can checkout the ref)
-    # Otherwise, use template subdirectory to avoid copying repo files
-    if resolved_ref:
-        # Use repo root when specifying a version (vcs_ref requires git repo)
-        template_source = str(template_root)
-    else:
-        # Use template subdirectory to avoid copying aegis-stack repo files
-        template_source = str(
-            Path(__file__).parent.parent / "templates" / "copier-aegis-project"
+    if is_git_repo(template_root):
+        # Development mode: local git repository available
+        # Use git+file:// URL format - this is CRITICAL for:
+        # 1. Copier to recognize it as a git-tracked template
+        # 2. Copier to set _commit correctly (not None)
+        # 3. Future updates to work via `aegis update`
+        template_source = f"git+file://{template_root}"
+        resolved_ref = (
+            resolve_version_to_ref(vcs_ref, template_root) if vcs_ref else "HEAD"
         )
+    else:
+        # Production mode: installed via pip/uvx (no .git directory)
+        # Use GitHub URL for template source with HEAD as default ref
+        template_source = GITHUB_TEMPLATE_URL
+        resolved_ref = vcs_ref if vcs_ref else "HEAD"
 
     # Generate project - Copier creates the project_slug directory automatically
     # NOTE: _tasks removed from copier.yml - we run them ourselves below
@@ -160,48 +176,32 @@ def generate_with_copier(
         print(f"⚠️  Failed to initialize git repository: {e}")
         print("💡 Run 'git init && git add . && git commit' manually")
 
-    # CRITICAL: Update .copier-answers.yml for future updates to work
-    # We need to:
-    # 1. Store git commit hash (_commit) - tells Copier which template version was used
-    # 2. Update template path (_src_path) - point to repo root, not subdirectory
-    #    (repo root has .git so Copier can detect version changes)
+    # CRITICAL: Fix _src_path in .copier-answers.yml for future updates to work
+    #
+    # Problem: Copier stores a temp directory path during generation (e.g.,
+    # /private/var/folders/...) which won't exist later when running updates.
+    #
+    # Solution: Update _src_path to point to the actual template repository:
+    # - Development: git+file:// URL for local git repo
+    # - Production: GitHub URL for remote repo
+    #
+    # IMPORTANT: We do NOT modify _commit - Copier sets this correctly when using
+    # git+file:// URL. Manually overwriting _commit breaks Copier's 3-way merge
+    # algorithm for updates. See: https://copier.readthedocs.io/en/stable/updating/
     try:
-        # Get commit hash from aegis-stack repo
-        template_root = Path(__file__).parent.parent.parent
-
-        # If vcs_ref was used, resolve it to a commit hash
-        # Otherwise use current HEAD
-        if resolved_ref:
-            result = subprocess.run(
-                ["git", "rev-parse", resolved_ref],
-                cwd=template_root,
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-        else:
-            result = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                cwd=template_root,
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-        commit_hash = result.stdout.strip()
-
-        # Update .copier-answers.yml with commit hash AND repo root path
         answers_file = project_path / ".copier-answers.yml"
         if answers_file.exists():
             with open(answers_file) as f:
                 answers = yaml.safe_load(f)
 
-            # Update _commit field (was None, now has actual hash)
-            answers["_commit"] = commit_hash
-
-            # Update _src_path to point to repo root (where .git exists)
-            # The copier.yml at repo root has _subdirectory setting to find actual template
-            # Use git+file:// URL format so Copier recognizes it as git-tracked
-            answers["_src_path"] = f"git+file://{template_root}"
+            # Fix _src_path based on dev vs production mode
+            # We already determined template_root above
+            if is_git_repo(template_root):
+                # Development mode: use local git repo
+                answers["_src_path"] = f"git+file://{template_root}"
+            else:
+                # Production mode: use GitHub URL
+                answers["_src_path"] = GITHUB_TEMPLATE_URL
 
             with open(answers_file, "w") as f:
                 yaml.safe_dump(answers, f, default_flow_style=False, sort_keys=False)
@@ -219,7 +219,7 @@ def generate_with_copier(
                         "git",
                         "commit",
                         "-m",
-                        "Update .copier-answers.yml with template version",
+                        "Fix .copier-answers.yml _src_path for template updates",
                     ],
                     cwd=project_path,
                     check=True,
@@ -230,8 +230,8 @@ def generate_with_copier(
                 pass
 
     except Exception:
-        # If we can't get commit hash, that's OK - updates won't work but
-        # project generation succeeded. This can happen in non-git environments.
+        # If we can't fix _src_path, that's OK - project generation succeeded
+        # but updates won't work. This can happen in non-git environments.
         pass
 
     return project_path

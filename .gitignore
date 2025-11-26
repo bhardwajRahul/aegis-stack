@@ -129,5 +129,7 @@ dmypy.json
 ehthumbs.db
 Thumbs.db
 
-# Data
+# Data and test artifacts
 data/
+native-test/
+test-project/
