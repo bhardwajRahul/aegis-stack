@@ -167,10 +167,10 @@ def init_database() -> None:
         SQLModel.metadata.create_all(engine)
 
         if db_path.exists():
-            logger.info(f"✅ Database initialized: {DATABASE_PATH}")
+            logger.info(f"Database initialized: {DATABASE_PATH}")
         else:
-            logger.info(f"✅ Database will be created on first use: {DATABASE_PATH}")
+            logger.info(f"Database will be created on first use: {DATABASE_PATH}")
 
     except Exception as e:
-        logger.error(f"❌ Database initialization failed: {e}")
+        logger.error(f"Database initialization failed: {e}")
         raise

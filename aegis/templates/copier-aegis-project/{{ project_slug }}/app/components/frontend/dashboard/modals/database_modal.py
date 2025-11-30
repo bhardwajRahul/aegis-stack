@@ -661,7 +661,7 @@ class PragmaSettingRow(ft.Container):
         if recommendation:
             rows.append(
                 ft.Container(
-                    content=BodyText(f"💡 {recommendation}", color=Theme.Colors.INFO),
+                    content=BodyText(recommendation, color=Theme.Colors.INFO),
                     padding=ft.padding.only(left=Theme.Spacing.MD),
                 )
             )

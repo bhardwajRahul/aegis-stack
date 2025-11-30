@@ -15,9 +15,10 @@ def validate_project_name(project_name: str) -> None:
     # Check for invalid characters (only allow letters, numbers, hyphens,
     # underscores)
     if not re.match(r"^[a-zA-Z0-9_-]+$", project_name):
-        typer.echo(
-            "❌ Invalid project name. Only letters, numbers, hyphens, and "
+        typer.secho(
+            "Invalid project name. Only letters, numbers, hyphens, and "
             "underscores are allowed.",
+            fg="red",
             err=True,
         )
         raise typer.Exit(1)
@@ -25,10 +26,12 @@ def validate_project_name(project_name: str) -> None:
     # Check for reserved names
     reserved_names = {"aegis", "aegis-stack"}
     if project_name.lower() in reserved_names:
-        typer.echo(f"❌ '{project_name}' is a reserved name.", err=True)
+        typer.secho(f"'{project_name}' is a reserved name.", fg="red", err=True)
         raise typer.Exit(1)
 
     # Check length limit
     if len(project_name) > 50:
-        typer.echo("❌ Project name too long. Maximum 50 characters allowed.", err=True)
+        typer.secho(
+            "Project name too long. Maximum 50 characters allowed.", fg="red", err=True
+        )
         raise typer.Exit(1)

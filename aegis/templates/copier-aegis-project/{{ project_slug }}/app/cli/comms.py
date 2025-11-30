@@ -36,71 +36,81 @@ def status() -> None:
     from app.services.comms.email import get_email_status, validate_email_config
     from app.services.comms.sms import get_sms_status, validate_sms_config
 
-    typer.echo("📧 Communications Service Status")
-    typer.echo("=" * 50)
+    typer.secho("Communications Service Status", fg=typer.colors.BLUE, bold=True)
 
     # Email status
     email_status = get_email_status()
     email_errors = validate_email_config()
 
-    typer.echo("\n📨 Email (Resend)")
-    typer.echo(
-        f"  Status: {'✅ Configured' if email_status['configured'] else '❌ Not configured'}"
+    typer.secho("\nEmail (Resend)", fg=typer.colors.CYAN, bold=True)
+    status_color = (
+        typer.colors.GREEN if email_status["configured"] else typer.colors.RED
     )
     typer.echo(
-        f"  API Key: {'✅ Set' if email_status['api_key_set'] else '❌ Not set'}"
+        f"  Status: {typer.style('Configured' if email_status['configured'] else 'Not configured', fg=status_color)}"
     )
-    typer.echo(f"  From Email: {email_status['from_email'] or '❌ Not set'}")
+    typer.echo(
+        f"  API Key: {typer.style('Set' if email_status['api_key_set'] else 'Not set', fg=typer.colors.GREEN if email_status['api_key_set'] else typer.colors.RED)}"
+    )
+    typer.echo(
+        f"  From Email: {email_status['from_email'] or typer.style('Not set', fg=typer.colors.RED)}"
+    )
 
     if email_errors:
         for error in email_errors:
-            typer.echo(f"  ⚠️  {error}")
+            typer.secho(f"  Warning: {error}", fg=typer.colors.YELLOW)
 
     # SMS status
     sms_status = get_sms_status()
     sms_errors = validate_sms_config()
 
-    typer.echo("\n📱 SMS (Twilio)")
+    typer.secho("\nSMS (Twilio)", fg=typer.colors.CYAN, bold=True)
+    status_color = typer.colors.GREEN if sms_status["configured"] else typer.colors.RED
     typer.echo(
-        f"  Status: {'✅ Configured' if sms_status['configured'] else '❌ Not configured'}"
+        f"  Status: {typer.style('Configured' if sms_status['configured'] else 'Not configured', fg=status_color)}"
     )
     typer.echo(
-        f"  Account SID: {'✅ Set' if sms_status['account_sid_set'] else '❌ Not set'}"
+        f"  Account SID: {typer.style('Set' if sms_status['account_sid_set'] else 'Not set', fg=typer.colors.GREEN if sms_status['account_sid_set'] else typer.colors.RED)}"
     )
     typer.echo(
-        f"  Auth Token: {'✅ Set' if sms_status['auth_token_set'] else '❌ Not set'}"
+        f"  Auth Token: {typer.style('Set' if sms_status['auth_token_set'] else 'Not set', fg=typer.colors.GREEN if sms_status['auth_token_set'] else typer.colors.RED)}"
     )
     typer.echo(
-        f"  Messaging Service: {'✅ Set' if sms_status.get('messaging_service_sid_set') else '❌ Not set'}"
+        f"  Messaging Service: {typer.style('Set' if sms_status.get('messaging_service_sid_set') else 'Not set', fg=typer.colors.GREEN if sms_status.get('messaging_service_sid_set') else typer.colors.RED)}"
     )
-    typer.echo(f"  Phone Number: {sms_status['phone_number'] or '❌ Not set'}")
+    typer.echo(
+        f"  Phone Number: {sms_status['phone_number'] or typer.style('Not set', fg=typer.colors.RED)}"
+    )
 
     if sms_errors:
         for error in sms_errors:
-            typer.echo(f"  ⚠️  {error}")
+            typer.secho(f"  Warning: {error}", fg=typer.colors.YELLOW)
 
     # Voice status
     call_status = get_call_status()
     call_errors = validate_call_config()
 
-    typer.echo("\n📞 Voice (Twilio)")
+    typer.secho("\nVoice (Twilio)", fg=typer.colors.CYAN, bold=True)
+    status_color = typer.colors.GREEN if call_status["configured"] else typer.colors.RED
     typer.echo(
-        f"  Status: {'✅ Configured' if call_status['configured'] else '❌ Not configured'}"
+        f"  Status: {typer.style('Configured' if call_status['configured'] else 'Not configured', fg=status_color)}"
     )
     typer.echo(
-        f"  Account SID: {'✅ Set' if call_status['account_sid_set'] else '❌ Not set'}"
+        f"  Account SID: {typer.style('Set' if call_status['account_sid_set'] else 'Not set', fg=typer.colors.GREEN if call_status['account_sid_set'] else typer.colors.RED)}"
     )
     typer.echo(
-        f"  Auth Token: {'✅ Set' if call_status['auth_token_set'] else '❌ Not set'}"
+        f"  Auth Token: {typer.style('Set' if call_status['auth_token_set'] else 'Not set', fg=typer.colors.GREEN if call_status['auth_token_set'] else typer.colors.RED)}"
     )
-    typer.echo(f"  Phone Number: {call_status['phone_number'] or '❌ Not set'}")
+    typer.echo(
+        f"  Phone Number: {call_status['phone_number'] or typer.style('Not set', fg=typer.colors.RED)}"
+    )
 
     if call_errors:
         for error in call_errors:
-            typer.echo(f"  ⚠️  {error}")
+            typer.secho(f"  Warning: {error}", fg=typer.colors.YELLOW)
 
     # Summary
-    typer.echo("\n" + "=" * 50)
+    typer.echo()
     services_configured = sum(
         [
             email_status["configured"],
@@ -108,15 +118,23 @@ def status() -> None:
             call_status["configured"],
         ]
     )
-    typer.echo(f"📊 {services_configured}/3 services configured")
+    summary_color = (
+        typer.colors.GREEN if services_configured == 3 else typer.colors.YELLOW
+    )
+    typer.secho(
+        f"{services_configured}/3 services configured", fg=summary_color, bold=True
+    )
 
     if services_configured < 3:
-        typer.echo("\n💡 Quick start:")
+        typer.secho("\nQuick start:", dim=True)
         if not email_status["configured"]:
-            typer.echo("   Email: Sign up at https://resend.com (free tier available)")
+            typer.secho(
+                "  Email: Sign up at https://resend.com (free tier available)", dim=True
+            )
         if not sms_status["configured"] or not call_status["configured"]:
-            typer.echo(
-                "   SMS/Voice: Sign up at https://twilio.com/try-twilio (free trial)"
+            typer.secho(
+                "  SMS/Voice: Sign up at https://twilio.com/try-twilio (free trial)",
+                dim=True,
             )
 
 
@@ -145,7 +163,7 @@ async def _email_send(
     )
 
     if not text and not html:
-        typer.echo("❌ Either --text or --html is required", err=True)
+        typer.secho("Error: Either --text or --html is required", fg=typer.colors.RED)
         raise typer.Exit(1)
 
     try:
@@ -156,16 +174,16 @@ async def _email_send(
             html=html,
         )
 
-        typer.echo("✅ Email sent successfully!")
-        typer.echo(f"📧 Message ID: {result.id}")
-        typer.echo(f"📮 To: {', '.join(result.to)}")
-        typer.echo(f"📝 Subject: {subject}")
+        typer.secho("Email sent successfully!", fg=typer.colors.GREEN, bold=True)
+        typer.echo(f"{typer.style('Message ID:', fg=typer.colors.CYAN)} {result.id}")
+        typer.echo(f"{typer.style('To:', fg=typer.colors.CYAN)} {', '.join(result.to)}")
+        typer.echo(f"{typer.style('Subject:', fg=typer.colors.CYAN)} {subject}")
 
     except EmailConfigurationError as e:
-        typer.echo(f"❌ Configuration error: {e}", err=True)
+        typer.secho(f"Configuration error: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
     except EmailError as e:
-        typer.echo(f"❌ Failed to send email: {e}", err=True)
+        typer.secho(f"Failed to send email: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
 
 
@@ -185,16 +203,18 @@ async def _sms_send(to: str, body: str) -> None:
     try:
         result = await send_sms_simple(to=to, body=body)
 
-        typer.echo("✅ SMS sent successfully!")
-        typer.echo(f"📱 Message SID: {result.sid}")
-        typer.echo(f"📮 To: {result.to}")
-        typer.echo(f"📊 Segments: {result.segments}")
+        typer.secho("SMS sent successfully!", fg=typer.colors.GREEN, bold=True)
+        typer.echo(f"{typer.style('Message SID:', fg=typer.colors.CYAN)} {result.sid}")
+        typer.echo(f"{typer.style('To:', fg=typer.colors.CYAN)} {result.to}")
+        typer.echo(
+            f"{typer.style('Segments:', fg=typer.colors.CYAN)} {result.segments}"
+        )
 
     except SMSConfigurationError as e:
-        typer.echo(f"❌ Configuration error: {e}", err=True)
+        typer.secho(f"Configuration error: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
     except SMSError as e:
-        typer.echo(f"❌ Failed to send SMS: {e}", err=True)
+        typer.secho(f"Failed to send SMS: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
 
 
@@ -221,23 +241,23 @@ async def _call_make(to: str, twiml_url: str, timeout: int) -> None:
         request = MakeCallRequest(to=to, twiml_url=twiml_url, timeout=timeout)
         result = await make_call(request)
 
-        typer.echo("✅ Call initiated successfully!")
-        typer.echo(f"📞 Call SID: {result.sid}")
-        typer.echo(f"📮 To: {result.to}")
-        typer.echo(f"📊 Status: {result.status}")
+        typer.secho("Call initiated successfully!", fg=typer.colors.GREEN, bold=True)
+        typer.echo(f"{typer.style('Call SID:', fg=typer.colors.CYAN)} {result.sid}")
+        typer.echo(f"{typer.style('To:', fg=typer.colors.CYAN)} {result.to}")
+        typer.echo(f"{typer.style('Status:', fg=typer.colors.CYAN)} {result.status}")
 
     except CallConfigurationError as e:
-        typer.echo(f"❌ Configuration error: {e}", err=True)
+        typer.secho(f"Configuration error: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
     except CallError as e:
-        typer.echo(f"❌ Failed to make call: {e}", err=True)
+        typer.secho(f"Failed to make call: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
 
 
 @app.command("providers")
 def providers() -> None:
     """Show available communications providers."""
-    table = Table(title="📧 Communications Providers", width=70)
+    table = Table(title="Communications Providers", width=70)
     table.add_column("Channel", style="cyan", width=10)
     table.add_column("Provider", style="green", width=10)
     table.add_column("Free Tier", style="yellow", width=12)
@@ -264,9 +284,9 @@ def providers() -> None:
 
     console.print(table)
 
-    typer.echo("\n📚 Sign up links:")
-    typer.echo("   Resend: https://resend.com")
-    typer.echo("   Twilio: https://twilio.com/try-twilio")
+    typer.secho("\nSign up links:", dim=True)
+    typer.secho("  Resend: https://resend.com", dim=True)
+    typer.secho("  Twilio: https://twilio.com/try-twilio", dim=True)
 
 
 if __name__ == "__main__":

@@ -204,16 +204,16 @@ def render_ai_header(console: Console, inline: bool = True) -> None:
 
     Args:
         console: Rich console instance
-        inline: If True, use inline style (🤖:), else use separate line style
+        inline: If True, use inline style (>), else use separate line style
 
     Examples:
-        >>> render_ai_header(console, inline=True)  # Outputs: "🤖: "
-        >>> render_ai_header(console, inline=False) # Outputs: "🤖 Response:"
+        >>> render_ai_header(console, inline=True)  # Outputs: "> "
+        >>> render_ai_header(console, inline=False) # Outputs: "> Response:"
     """
     if inline:
-        console.print("🤖: ", style="bright_blue", end="")
+        console.print("> ", style="bright_blue", end="")
     else:
-        console.print("🤖 ", style="bright_blue", end="")
+        console.print("> ", style="bright_blue", end="")
         console.print("Response:", style="bright_blue bold")
 
 
@@ -312,11 +312,11 @@ def render_conversation_metadata(
         ... )
     """
     console.print()  # Blank line for spacing
-    console.print(f"💬 Conversation: {conversation_id}", style="dim")
+    console.print(f"Conversation: {conversation_id}", style="dim")
     if message_count:
-        console.print(f"ℹ️  Messages: {message_count}", style="dim")
+        console.print(f"Messages: {message_count}", style="dim")
     if response_time:
-        console.print(f"⏱️  Response time: {response_time:.1f}ms", style="dim")
+        console.print(f"Response time: {response_time:.1f}ms", style="dim")
 
 
 def render_error_message(
@@ -334,9 +334,9 @@ def render_error_message(
         >>> render_error_message(console, "Connection failed")
         >>> render_error_message(console, "API key invalid", "Check your .env file")
     """
-    console.print(f"❌ Error: {error}", style="red")
+    console.print(f"Error: {error}", style="red")
     if suggestion:
-        console.print(f"💡 Suggestion: {suggestion}", style="yellow dim")
+        console.print(f"Tip: {suggestion}", style="yellow dim")
 
 
 def render_thinking_spinner(console: Console) -> tuple:
@@ -355,6 +355,6 @@ def render_thinking_spinner(console: Console) -> tuple:
     from rich.live import Live
     from rich.spinner import Spinner
 
-    spinner = Spinner("dots", text="🤖 Thinking...", style="bright_blue")
+    spinner = Spinner("dots", text="Thinking...", style="bright_blue")
     live = Live(spinner, console=console, refresh_per_second=12)
     return spinner, live

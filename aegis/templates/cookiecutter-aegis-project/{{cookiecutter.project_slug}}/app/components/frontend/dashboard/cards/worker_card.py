@@ -117,7 +117,7 @@ class WorkerCard:
             status_icon = "🔴"
         elif failure_rate > 5:
             queue_color = ft.Colors.ORANGE
-            status_icon = "🟡"
+            status_icon = "🟠"
         else:
             queue_color = ft.Colors.GREEN
             status_icon = "🟢"
@@ -144,7 +144,7 @@ class WorkerCard:
                     ft.Column(
                         [
                             LabelText(f"Q:{queued_jobs} A:{jobs_ongoing}", size=8),
-                            LabelText(f"✓{jobs_completed} ✗{jobs_failed}", size=8),
+                            LabelText(f"OK:{jobs_completed} ERR:{jobs_failed}", size=8),
                             LabelText(
                                 f"{failure_rate:.1f}%" if worker_alive else "OFFLINE",
                                 size=8,
@@ -203,7 +203,7 @@ class WorkerCard:
                 ft.Container(
                     content=ft.Column(
                         [
-                            ft.Text("📭", size=24),
+                            ft.Text("[EMPTY]", size=14),
                             LabelText("No Active Queues"),
                         ],
                         alignment=ft.MainAxisAlignment.CENTER,

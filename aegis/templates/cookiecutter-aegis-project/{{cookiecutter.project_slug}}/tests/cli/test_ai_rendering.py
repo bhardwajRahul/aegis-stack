@@ -37,14 +37,14 @@ class TestRenderAIHeader:
     """Test AI header rendering."""
 
     def test_inline_header(self):
-        """Test inline header style (🤖:)."""
+        """Test inline header style (>)."""
         output = StringIO()
         console = Console(file=output, force_terminal=True, width=80)
 
         render_ai_header(console, inline=True)
 
         result = output.getvalue()
-        assert "🤖: " in result
+        assert "> " in result
         assert "Response:" not in result
         # Should not have a newline at the end (end="" parameter)
         assert not result.endswith("\n\n")
@@ -57,7 +57,7 @@ class TestRenderAIHeader:
         render_ai_header(console, inline=False)
 
         result = output.getvalue()
-        assert "🤖 " in result
+        assert "> " in result
         assert "Response:" in result
 
     def test_header_styles(self):
@@ -70,7 +70,7 @@ class TestRenderAIHeader:
         render_ai_header(console, inline=True)
 
         result = output.getvalue()
-        assert "🤖" in result
+        assert "> " in result
 
 
 class TestRenderMarkdownResponse:
@@ -161,7 +161,7 @@ class TestRenderConversationMetadata:
         render_conversation_metadata(console, "conv-123")
 
         result = strip_ansi_codes(output.getvalue())
-        assert "💬 Conversation: conv-123" in result
+        assert "Conversation: conv-123" in result
         assert "Messages:" not in result
         assert "Response time:" not in result
 
@@ -177,9 +177,9 @@ class TestRenderConversationMetadata:
         )
 
         result = strip_ansi_codes(output.getvalue())
-        assert "💬 Conversation: conv-123" in result
-        assert "ℹ️  Messages: 5" in result
-        assert "⏱️  Response time: 123.4ms" in result
+        assert "Conversation: conv-123" in result
+        assert "Messages: 5" in result
+        assert "Response time: 123.4ms" in result
 
     def test_partial_metadata(self):
         """Test with only some metadata fields."""
@@ -191,8 +191,8 @@ class TestRenderConversationMetadata:
         render_conversation_metadata(console, "conv-456", message_count=10)
 
         result = strip_ansi_codes(output.getvalue())
-        assert "💬 Conversation: conv-456" in result
-        assert "ℹ️  Messages: 10" in result
+        assert "Conversation: conv-456" in result
+        assert "Messages: 10" in result
         assert "Response time:" not in result
 
     def test_response_time_formatting(self):
@@ -205,7 +205,7 @@ class TestRenderConversationMetadata:
         render_conversation_metadata(console, "conv-789", response_time=1234.56789)
 
         result = strip_ansi_codes(output.getvalue())
-        assert "⏱️  Response time: 1234.6ms" in result
+        assert "Response time: 1234.6ms" in result
 
 
 class TestRenderErrorMessage:
@@ -219,8 +219,8 @@ class TestRenderErrorMessage:
         render_error_message(console, "Connection failed")
 
         result = output.getvalue()
-        assert "❌ Error: Connection failed" in result
-        assert "💡 Suggestion:" not in result
+        assert "Error: Connection failed" in result
+        assert "Tip:" not in result
 
     def test_error_with_suggestion(self):
         """Test error message with suggestion."""
@@ -230,8 +230,8 @@ class TestRenderErrorMessage:
         render_error_message(console, "API key invalid", "Check your .env file")
 
         result = output.getvalue()
-        assert "❌ Error: API key invalid" in result
-        assert "💡 Suggestion: Check your .env file" in result
+        assert "Error: API key invalid" in result
+        assert "Tip: Check your .env file" in result
 
 
 class TestRenderThinkingSpinner:
@@ -246,7 +246,7 @@ class TestRenderThinkingSpinner:
 
         assert spinner is not None
         assert live is not None
-        assert str(spinner.text) == "🤖 Thinking..."
+        assert str(spinner.text) == "Thinking..."
         assert spinner.style == "bright_blue"
 
     def test_spinner_lifecycle(self):
@@ -260,7 +260,7 @@ class TestRenderThinkingSpinner:
         live.start()
         live.stop()
 
-        assert str(spinner.text) == "🤖 Thinking..."
+        assert str(spinner.text) == "Thinking..."
 
 
 class TestStreamingMarkdownRenderer:

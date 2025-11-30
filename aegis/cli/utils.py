@@ -63,7 +63,7 @@ def expand_scheduler_dependencies(components: list[str]) -> list[str]:
                 if "database" not in existing_clean:
                     result.append(database_component)
                     typer.echo(
-                        f"📦 Auto-added database[{backend}] for "
+                        f"Auto-added database[{backend}] for "
                         f"scheduler[{backend}] persistence"
                     )
 

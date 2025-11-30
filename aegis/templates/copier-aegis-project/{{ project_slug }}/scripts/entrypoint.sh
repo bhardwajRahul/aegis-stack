@@ -4,26 +4,26 @@ set -e
 
 # More comprehensive venv cleanup to prevent Docker container conflicts
 if [ -d ".venv" ]; then
-    echo "🧹 Found existing .venv directory, checking compatibility..."
+    echo "Found existing .venv directory, checking compatibility..."
     
     # Check if .venv has issues (broken symlinks, wrong Python version, etc.)
     if [ -L ".venv/bin/python3" ] && [ ! -e ".venv/bin/python3" ]; then
-        echo "🧹 Cleaning up broken venv symlinks..."
+        echo "Cleaning up broken venv symlinks..."
         rm -rf .venv
     elif [ -f ".venv/bin/python3" ]; then
         # Check if the Python executable is compatible and accessible
         if ! .venv/bin/python3 --version > /dev/null 2>&1; then
-            echo "🧹 Cleaning up incompatible venv..."
+            echo "Cleaning up incompatible venv..."
             rm -rf .venv
         fi
     elif [ ! -w ".venv" ] || [ ! -x ".venv" ]; then
         # Check for permission issues in Docker containers
-        echo "🧹 Cleaning up venv with permission issues..."
+        echo "Cleaning up venv with permission issues..."
         rm -rf .venv
     else
         # If directory exists but has no python executable, clean it up
         if [ ! -f ".venv/bin/python3" ] && [ ! -f ".venv/bin/python" ]; then
-            echo "🧹 Cleaning up incomplete venv..."
+            echo "Cleaning up incomplete venv..."
             rm -rf .venv
         fi
     fi
@@ -31,7 +31,7 @@ fi
 
 # Configure UV environment based on execution context
 if [ -n "$DOCKER_CONTAINER" ] || [ "$USER" = "root" ]; then
-    echo "🐳 Running in Docker container, configuring UV for containerized environment..."
+    echo "Running in Docker container, configuring UV for containerized environment..."
     
     # Set Docker-specific UV configuration
     export UV_PROJECT_ENVIRONMENT=/code/.venv
@@ -41,16 +41,16 @@ if [ -n "$DOCKER_CONTAINER" ] || [ "$USER" = "root" ]; then
     # Ensure .venv path is in PATH for CLI commands
     export PATH="/code/.venv/bin:$PATH"
     
-    echo "✅ UV configured for Docker: UV_PROJECT_ENVIRONMENT=/code/.venv"
+    echo "UV configured for Docker: UV_PROJECT_ENVIRONMENT=/code/.venv"
 else
-    echo "🖥️  Running in local environment, UV will use project defaults"
+    echo "Running in local environment, UV will use project defaults"
     
     # Ensure we don't inherit Docker environment variables
     unset UV_PROJECT_ENVIRONMENT
     unset UV_SYSTEM_PYTHON
     
     # Let UV auto-detect local .venv
-    echo "✅ UV configured for local development"
+    echo "UV configured for local development"
 fi
 
 # Pop run_command from arguments

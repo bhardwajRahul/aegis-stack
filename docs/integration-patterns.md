@@ -336,15 +336,6 @@ api_timeout = settings.API_TIMEOUT
 - **Constants** (`app.core.constants`): Immutable values (API paths, default timeouts)
 - **Config** (`app.core.config`): Environment-dependent values (URLs, secrets, feature flags)
 
-## Key Principles
-
-1. **Services are the integration point** - business logic lives here, components call it
-2. **Explicit imports for clarity** - no magic auto-discovery for services or routes
-3. **Validate at boundaries** - security and reliability at entry points
-4. **Trust internally** - clean, readable code once validated
-5. **Container isolation** - independent scaling and lifecycle management
-6. **One pattern, many entry points** - same service logic works everywhere
-
 ---
 
 ## Next Steps

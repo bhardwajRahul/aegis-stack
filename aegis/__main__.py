@@ -24,14 +24,14 @@ from .core.verbosity import set_verbose
 app = typer.Typer(
     name="aegis",
     help=(
-        "🛡️ Aegis Stack - Production-ready Python foundation\n\n"
+        "Aegis Stack - Production-ready Python foundation\n\n"
         "Quick start: uvx aegis-stack init my-project\n\n"
         "Available components: redis, worker, scheduler, scheduler[sqlite], database\n"
         "Backend selection: Use --backend flag or bracket syntax (sqlite only)"
     ),
     epilog=(
-        "💡 Try it instantly: uvx aegis-stack init my-project\n"
-        "📚 More info: https://lbedner.github.io/aegis-stack/"
+        "Try it instantly: uvx aegis-stack init my-project\n"
+        "More info: https://lbedner.github.io/aegis-stack/"
     ),
     add_completion=False,
 )

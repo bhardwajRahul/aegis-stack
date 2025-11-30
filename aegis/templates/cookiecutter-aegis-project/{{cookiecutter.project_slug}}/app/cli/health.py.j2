@@ -255,7 +255,7 @@ def health_status(
             error_data = {"error": str(e), "status": "error"}
             print(json.dumps(error_data, indent=2))
         else:
-            console.print(f"[red]❌ Health status failed: {e}[/red]")
+            console.print(f"[red]Health status failed: {e}[/red]")
         # Exit 1 only on actual errors (connection failures, etc), not unhealthy status
         sys.exit(1)
 
@@ -269,14 +269,14 @@ def health_probe() -> None:
         healthy = asyncio.run(is_system_healthy())
 
         if healthy:
-            console.print("[green]✅ System is healthy[/green]")
+            console.print("[green]System is healthy[/green]")
             sys.exit(0)
         else:
-            console.print("[red]❌ System is unhealthy[/red]")
+            console.print("[red]System is unhealthy[/red]")
             sys.exit(1)
 
     except Exception as e:
-        console.print(f"[red]💥 Health probe failed: {e}[/red]")
+        console.print(f"[red]Health probe failed: {e}[/red]")
         sys.exit(1)
 
 
@@ -384,13 +384,12 @@ def _display_health_status(
             health_percentage = 0.0
 
     overall_color = "green" if overall_healthy else "red"
-    overall_icon = "✅" if overall_healthy else "❌"
 
-    title = f"System Health - {overall_icon}"
+    title = "System Health"
     if overall_healthy:
-        title += " Healthy"
+        title += " - Healthy"
     else:
-        title += " Unhealthy"
+        title += " - Unhealthy"
 
     # Get component status breakdown
     components_group_dict = {}

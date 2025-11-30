@@ -53,12 +53,12 @@ def create_scheduler() -> AsyncIOScheduler:
     jobstore = SQLAlchemyJobStore(engine=engine, tablename='apscheduler_jobs')
     jobstores = {'default': jobstore}
     scheduler = AsyncIOScheduler(jobstores=jobstores)
-    logger.info("📊 Scheduler using SQLite database for job persistence")
+    logger.info("Scheduler using SQLite database for job persistence")
 {% else %}
     # Use in-memory jobstore (default)
     scheduler = AsyncIOScheduler()
     logger.info(
-        "🕒 Scheduler running in memory mode (jobs won't persist across restarts)"
+        "Scheduler running in memory mode (jobs won't persist across restarts)"
     )
 {% endif %}
 
@@ -92,9 +92,9 @@ def create_scheduler() -> AsyncIOScheduler:
 
     if not job_exists or force_update:
         if job_exists and force_update:
-            logger.info(f"🔄 Force updating job '{job_id}' from code configuration")
+            logger.info(f"Force updating job '{job_id}' from code configuration")
         else:
-            logger.info(f"➕ Adding new job '{job_id}'")
+            logger.info(f"Adding new job '{job_id}'")
 
         scheduler.add_job(
             backup_database_job,
@@ -109,11 +109,11 @@ def create_scheduler() -> AsyncIOScheduler:
         )
     else:
 {% if scheduler_backend != "memory" %}
-        msg = f"✅ Job '{job_id}' exists in database, preserving current configuration"
+        msg = f"Job '{job_id}' exists in database, preserving current configuration"
         logger.info(msg)
 {% else %}
         logger.info(
-            f"✅ Job '{job_id}' exists, preserving current configuration: "
+            f"Job '{job_id}' exists, preserving current configuration: "
             f"{existing_job.trigger}"
         )
 {% endif %}
@@ -128,14 +128,14 @@ def create_scheduler() -> AsyncIOScheduler:
 async def run_scheduler() -> None:
     """Main scheduler runner with lifecycle management."""
 
-    logger.info("🕒 Starting {{ project_name }} Scheduler")
+    logger.info("Starting {{ project_name }} Scheduler")
 
     scheduler = create_scheduler()
 
     try:
         scheduler.start()
-        logger.info("✅ Scheduler started successfully")
-        logger.info(f"📋 {len(scheduler.get_jobs())} jobs scheduled:")
+        logger.info("Scheduler started successfully")
+        logger.info(f"{len(scheduler.get_jobs())} jobs scheduled:")
 
         for job in scheduler.get_jobs():
             logger.info(f"   • {job.name} - {job.trigger}")
@@ -146,11 +146,11 @@ async def run_scheduler() -> None:
             await asyncio.sleep(1)
 
     except KeyboardInterrupt:
-        logger.info("🛑 Received shutdown signal")
+        logger.info("Received shutdown signal")
     except Exception as e:
-        logger.error(f"❌ Scheduler error: {e}")
+        logger.error(f"Scheduler error: {e}")
         raise
     finally:
         if scheduler.running:
             scheduler.shutdown()
-            logger.info("✅ Scheduler stopped gracefully")
+            logger.info("Scheduler stopped gracefully")

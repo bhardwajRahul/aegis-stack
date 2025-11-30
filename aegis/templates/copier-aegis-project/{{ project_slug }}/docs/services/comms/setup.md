@@ -92,26 +92,26 @@ After setting up your environment variables, verify everything works:
 {{ cookiecutter.project_slug }} comms status
 
 # Expected output:
-# 📧 Communications Service Status
+# Communications Service Status
 # ==================================================
 #
-# 📨 Email (Resend)
-#   Status: ✅ Configured
-#   API Key: ✅ Set
+# Email (Resend)
+#   Status: Configured
+#   API Key: Set
 #   From Email: noreply@yourdomain.com
 #
-# 📱 SMS (Twilio)
-#   Status: ✅ Configured
-#   Account SID: ✅ Set
-#   Auth Token: ✅ Set
+# SMS (Twilio)
+#   Status: Configured
+#   Account SID: Set
+#   Auth Token: Set
 #   Phone Number: +15551234567
 #
-# 📞 Voice (Twilio)
-#   Status: ✅ Configured
+# Voice (Twilio)
+#   Status: Configured
 #   ...
 #
 # ==================================================
-# 📊 3/3 services configured
+# 3/3 services configured
 ```
 
 ## Test Messages

@@ -163,7 +163,7 @@ def format_version_warning(
     """
     lines = [
         "",
-        "⚠️  Version Mismatch Detected",
+        "Version Mismatch Detected",
         "=" * 50,
         f"CLI Version:      {cli_version}",
         f"Project Version:  {project_version}",
@@ -173,7 +173,7 @@ def format_version_warning(
     if compatibility == VersionCompatibility.MAJOR_MISMATCH:
         lines.extend(
             [
-                "❌ Major version mismatch - update required",
+                "Major version mismatch - update required",
                 "",
                 "The CLI version has breaking changes. You must:",
                 f"  1. Update project:  aegis update --to-version {cli_version}",
@@ -185,7 +185,7 @@ def format_version_warning(
     elif compatibility == VersionCompatibility.MINOR_MISMATCH:
         lines.extend(
             [
-                "⚠️  Minor version mismatch - review recommended",
+                "Minor version mismatch - review recommended",
                 "",
                 "Choose one option:",
                 "  1. Update project:  aegis update",
@@ -253,7 +253,7 @@ def validate_version_compatibility(
         else:
             # Show warning but allow through with --force
             typer.secho(
-                f"\n⚠️  Forcing through version mismatch "
+                f"\nWarning: Forcing through version mismatch "
                 f"(CLI: {cli_version}, Project: {project_version})\n",
                 fg="yellow",
             )

@@ -39,15 +39,15 @@ async def backup_database_job() -> None:
         # Copy database file
         if Path(DATABASE_PATH).exists():
             shutil.copy2(DATABASE_PATH, backup_path)
-            logger.info(f"💾 Database backup created: {backup_path}")
+            logger.info(f"Database backup created: {backup_path}")
         else:
-            logger.warning(f"⚠️  Database file not found for backup: {DATABASE_PATH}")
+            logger.warning(f"Database file not found for backup: {DATABASE_PATH}")
 
         # Clean up old backups (keep last 7) - always run regardless of backup success
         await _cleanup_old_backups(backup_dir)
 
     except Exception as e:
-        logger.error(f"❌ Database backup failed: {e}")
+        logger.error(f"Database backup failed: {e}")
 
 
 async def _cleanup_old_backups(backup_dir: Path, keep_count: int = 7) -> None:
@@ -70,16 +70,16 @@ async def _cleanup_old_backups(backup_dir: Path, keep_count: int = 7) -> None:
         old_backups = backup_files[keep_count:]
         for old_backup in old_backups:
             old_backup.unlink()
-            logger.info(f"🗑️  Removed old backup: {old_backup.name}")
+            logger.info(f"Removed old backup: {old_backup.name}")
 
         if old_backups:
             kept_count = min(len(backup_files), keep_count)
             logger.info(
-                f"✅ Cleaned up {len(old_backups)} old backups, kept {kept_count}"
+                f"Cleaned up {len(old_backups)} old backups, kept {kept_count}"
             )
 
     except Exception as e:
-        logger.error(f"❌ Backup cleanup failed: {e}")
+        logger.error(f"Backup cleanup failed: {e}")
 
 
 async def restore_database_from_backup(backup_filename: str) -> bool:
@@ -97,7 +97,7 @@ async def restore_database_from_backup(backup_filename: str) -> bool:
         backup_path = backup_dir / backup_filename
 
         if not backup_path.exists():
-            logger.error(f"❌ Backup file not found: {backup_path}")
+            logger.error(f"Backup file not found: {backup_path}")
             return False
 
         # Create backup of current database before restore
@@ -106,14 +106,14 @@ async def restore_database_from_backup(backup_filename: str) -> bool:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             current_backup = backup_dir / f"pre_restore_backup_{timestamp}.db"
             shutil.copy2(current_db, current_backup)
-            logger.info(f"💾 Created pre-restore backup: {current_backup}")
+            logger.info(f"Created pre-restore backup: {current_backup}")
 
         # Restore from backup
         shutil.copy2(backup_path, DATABASE_PATH)
-        logger.info(f"✅ Database restored from backup: {backup_filename}")
+        logger.info(f"Database restored from backup: {backup_filename}")
         return True
 
     except Exception as e:
-        logger.error(f"❌ Database restore failed: {e}")
+        logger.error(f"Database restore failed: {e}")
         return False
 {% endif %}

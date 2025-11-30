@@ -55,7 +55,7 @@ class TestUpdateIntegration:
         )
 
         assert result.returncode == 0, f"Init failed: {result.stderr}"
-        assert "📦 Template Version:" in result.stdout
+        assert "Template Version:" in result.stdout
         project_path = tmp_path / "test-project"
         assert project_path.exists()
 
@@ -268,7 +268,7 @@ class TestUpdateIntegration:
         )
 
         # Should display version info
-        assert "📦 Version Information:" in result.stdout
+        assert "Version Information:" in result.stdout
         assert "Current Template:" in result.stdout
         assert "Target Template:" in result.stdout
 

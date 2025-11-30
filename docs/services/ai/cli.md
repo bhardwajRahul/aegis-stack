@@ -39,18 +39,18 @@ my-app ai chat
 
 ```bash
 $ my-app ai chat
-🤖 AI Chat Session
+AI Chat Session
 Provider: groq | Model: llama-3.1-70b-versatile
 Type 'exit', 'quit', 'bye' or press Ctrl+C to end session
 
 You: What is FastAPI?
-🤖: FastAPI is a modern Python web framework...
+> FastAPI is a modern Python web framework...
 
 You: Show me an example
-🤖: Here's a simple FastAPI example...
+> Here's a simple FastAPI example...
 
 You: exit
-👋 Goodbye!
+Goodbye!
 ```
 
 ### Send Message
@@ -92,7 +92,7 @@ my-app ai config show
 **Output:**
 
 ```
-🔧 AI Service Configuration
+AI Service Configuration
 ========================================
 Enabled: True
 Provider: groq
@@ -101,7 +101,7 @@ Temperature: 0.7
 Max Tokens: 1000
 Timeout: 30.0s
 
-🔐 Provider Configuration (groq):
+Provider Configuration (groq):
 API Key: ✅ Set
 
 ✅ Available Providers (3):
@@ -121,21 +121,21 @@ my-app ai config validate
 **Success:**
 
 ```
-🔍 Validating AI Service Configuration...
+Validating AI Service Configuration...
 ✅ Configuration is valid!
    Provider: groq
    Model: llama-3.1-70b-versatile
-   💰 Uses free tier
+   Uses free tier
 ```
 
 **Errors:**
 
 ```
-🔍 Validating AI Service Configuration...
+Validating AI Service Configuration...
 ❌ Configuration has issues:
    • Missing API key for openai provider. Set OPENAI_API_KEY environment variable.
 
-💡 Try these free providers: public, groq, google
+Tip: Try these free providers: public, groq, google
 ```
 
 ## Provider Commands
@@ -151,7 +151,7 @@ my-app ai providers list
 **Output:**
 
 ```
-           🤖 AI Providers
+           AI Providers
 ┏━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━━━┓
 ┃ Provider┃ Status      ┃ Free┃ Features   ┃
 ┡━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━━━┩
@@ -174,7 +174,7 @@ my-app ai version
 **Output:**
 
 ```
-🤖 AI Service Configuration System
+AI Service Configuration System
 Engine: PydanticAI
 Status: ✅ Enabled
 Provider: groq

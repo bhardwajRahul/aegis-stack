@@ -18,7 +18,7 @@ def get_status_icon(status: ComponentStatusType) -> str:
     if status == ComponentStatusType.INFO:
         return "ℹ️ "
     if status == ComponentStatusType.WARNING:
-        return "⚠️"
+        return "⚠️ "
     if status == ComponentStatusType.UNHEALTHY:
         return "❌"
     return "❓"

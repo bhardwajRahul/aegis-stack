@@ -4,33 +4,33 @@ set -e
 
 # More comprehensive venv cleanup to prevent Docker container conflicts
 if [ -d ".venv" ]; then
-    echo "🧹 Found existing .venv directory, checking compatibility..."
+    echo "Found existing .venv directory, checking compatibility..."
 
     # Check if .venv has issues (broken symlinks, wrong Python version, etc.)
     if [ -L ".venv/bin/python3" ] && [ ! -e ".venv/bin/python3" ]; then
-        echo "🧹 Cleaning up broken venv symlinks..."
+        echo "Cleaning up broken venv symlinks..."
         rm -rf .venv
     elif [ -f ".venv/bin/python3" ]; then
         # Check if the Python executable is compatible and accessible
         if ! .venv/bin/python3 --version > /dev/null 2>&1; then
-            echo "🧹 Cleaning up incompatible venv..."
+            echo "Cleaning up incompatible venv..."
             rm -rf .venv
         fi
     elif [ ! -w ".venv" ] || [ ! -x ".venv" ]; then
         # Check for permission issues in Docker containers
-        echo "🧹 Cleaning up venv with permission issues..."
+        echo "Cleaning up venv with permission issues..."
         rm -rf .venv
     else
         # If directory exists but has no python executable, clean it up
         if [ ! -f ".venv/bin/python3" ] && [ ! -f ".venv/bin/python" ]; then
-            echo "🧹 Cleaning up incomplete venv..."
+            echo "Cleaning up incomplete venv..."
             rm -rf .venv
         fi
     fi
 fi
 
 # Configure UV for Docker container (this is always a Docker entrypoint)
-echo "🐳 Configuring UV for Docker container..."
+echo "Configuring UV for Docker container..."
 
 # Set Docker-specific UV configuration
 export UV_PROJECT_ENVIRONMENT=/code/.venv
@@ -40,7 +40,7 @@ export VIRTUAL_ENV=/code/.venv
 # Ensure .venv path is in PATH for CLI commands
 export PATH="/code/.venv/bin:$PATH"
 
-echo "✅ UV configured for Docker: UV_PROJECT_ENVIRONMENT=/code/.venv"
+echo "UV configured for Docker: UV_PROJECT_ENVIRONMENT=/code/.venv"
 
 # Pop run_command from arguments
 run_command="$1"
@@ -62,10 +62,10 @@ elif [ "$run_command" = "worker" ]; then
 
     # Development mode auto-reload (APP_ENV from .env or WORKER_WATCH override)
     if [ "$APP_ENV" = "dev" ] || [ "$WORKER_WATCH" = "true" ]; then
-        echo "🔄 Starting ${queue_type} worker with auto-reload..."
+        echo "Starting ${queue_type} worker with auto-reload..."
         exec uv run python -m arq "${worker_module}" --watch /code/app "$@"
     else
-        echo "🚀 Starting ${queue_type} worker..."
+        echo "Starting ${queue_type} worker..."
         exec uv run python -m arq "${worker_module}" "$@"
     fi
 elif [ "$run_command" = "lint" ]; then

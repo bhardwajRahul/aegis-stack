@@ -137,25 +137,18 @@ help: ## Show this help message
 
 gif: ## Convert MP4 to high-quality GIF (usage: make gif INPUT=recording.mp4)
 ifndef INPUT
-	@echo "Usage: make gif INPUT=path/to/video.mp4 [OUTPUT=output.gif] [FPS=15] [WIDTH=1200] [TRIM=2]"
+	@echo "Usage: make gif INPUT=path/to/video.mp4 [OUTPUT=output.gif] [FPS=15] [WIDTH=1200]"
 	@echo ""
 	@echo "Options:"
 	@echo "  INPUT   - Required. Path to input MP4 file"
 	@echo "  OUTPUT  - Optional. Output GIF path (default: same name as input with .gif)"
 	@echo "  FPS     - Optional. Frames per second (default: 15, max 30)"
 	@echo "  WIDTH   - Optional. Output width in pixels (default: 1200)"
-	@echo "  TRIM    - Optional. Seconds to trim from end (default: 0)"
 	@exit 1
 endif
 	@echo "🎬 Converting $(INPUT) to GIF..."
 	@mkdir -p .gif-frames
-ifdef TRIM
-	$(eval DURATION := $(shell ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$(INPUT)"))
-	$(eval END_TIME := $(shell echo "$(DURATION) - $(TRIM)" | bc))
-	@ffmpeg -i "$(INPUT)" -t $(END_TIME) -vf "fps=$(or $(FPS),15),scale=$(or $(WIDTH),1200):-1:flags=lanczos" -y .gif-frames/frame_%04d.png
-else
 	@ffmpeg -i "$(INPUT)" -vf "fps=$(or $(FPS),15),scale=$(or $(WIDTH),1200):-1:flags=lanczos" -y .gif-frames/frame_%04d.png
-endif
 	@gifski -o "$(or $(OUTPUT),$(basename $(INPUT)).gif)" --fps $(or $(FPS),15) --quality 90 .gif-frames/*.png
 	@rm -rf .gif-frames
 	@echo "✅ Created: $(or $(OUTPUT),$(basename $(INPUT)).gif)"
@@ -171,24 +164,16 @@ endif
 
 gif-demo: ## Convert demo recording to GIF (usage: make gif-demo NAME=overseer)
 ifndef NAME
-	@echo "Usage: make gif-demo NAME=overseer [TRIM=2]"
+	@echo "Usage: make gif-demo NAME=overseer"
 	@echo "  Converts demos/recordings/NAME.mov -> docs/images/NAME-demo.gif"
-	@echo ""
-	@echo "Options:"
-	@echo "  NAME    - Required. Name of recording (without extension)"
-	@echo "  TRIM    - Optional. Seconds to trim from end"
 	@echo ""
 	@echo "Workflow:"
 	@echo "  1. Record screen on Mac"
 	@echo "  2. Save to demos/recordings/NAME.mov"
-	@echo "  3. Run: make gif-demo NAME=NAME TRIM=2"
+	@echo "  3. Run: make gif-demo NAME=NAME"
 	@exit 1
 endif
-ifdef TRIM
-	@$(MAKE) gif INPUT=demos/recordings/$(NAME).mov OUTPUT=docs/images/$(NAME)-demo.gif FPS=30 WIDTH=1920 TRIM=$(TRIM)
-else
 	@$(MAKE) gif INPUT=demos/recordings/$(NAME).mov OUTPUT=docs/images/$(NAME)-demo.gif FPS=30 WIDTH=1920
-endif
 
 # ============================================================================
 # TEMPLATE TESTING TARGETS

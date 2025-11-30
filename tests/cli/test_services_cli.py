@@ -24,11 +24,11 @@ class TestServicesCommand:
         output = result.stdout
 
         # Check for main header
-        assert "🔧 AVAILABLE SERVICES" in output
+        assert "AVAILABLE SERVICES" in output
         assert "=" * 40 in output
 
         # Check for auth service section
-        assert "🔐 Authentication Services" in output
+        assert "Authentication Services" in output
         assert "-" * 40 in output
 
         # Check for auth service details
@@ -37,9 +37,7 @@ class TestServicesCommand:
         assert "Requires components: backend, database" in output
 
         # Check for usage guidance
-        assert (
-            "💡 Use 'aegis init PROJECT_NAME --services auth' to add services" in output
-        )
+        assert "Use 'aegis init PROJECT_NAME --services auth' to add services" in output
 
     def test_services_command_help(self):
         """Test that services command help works."""
@@ -91,9 +89,9 @@ class TestServicesOptionIntegration:
             output = result.stdout
 
             # Check that service dependency resolution worked
-            assert "📦 Services require components: backend, database" in output
-            assert "🔧 Services: auth" in output
-            assert "📦 Infrastructure: database" in output
+            assert "Services require components: backend, database" in output
+            assert "Services: auth" in output
+            assert "Infrastructure: database" in output
 
             # Check that project was created
             project_path = Path(temp_dir) / "test-auth-service"
@@ -112,7 +110,7 @@ class TestServicesOptionIntegration:
         )
 
         assert result.returncode != 0
-        assert "❌ Unknown services: invalid-service" in result.stderr
+        assert "Unknown services: invalid-service" in result.stderr
         assert "Available services: auth" in result.stderr
 
     def test_init_with_multiple_services(self):
@@ -130,7 +128,7 @@ class TestServicesOptionIntegration:
             )
 
             assert result.returncode == 0
-            assert "🔧 Services: auth" in result.stdout
+            assert "Services: auth" in result.stdout
 
     def test_init_with_empty_service_name(self):
         """Test init command with empty service name."""
@@ -149,7 +147,7 @@ class TestServicesOptionIntegration:
             # Empty string is treated as "no services provided", so it should succeed
             assert result.returncode == 0
             # Should not show any services section
-            assert "🔧 Services:" not in result.stdout
+            assert "Services:" not in result.stdout
 
     def test_init_with_services_and_components_together(self):
         """Test init command with both services and components specified."""
@@ -171,8 +169,8 @@ class TestServicesOptionIntegration:
             output = result.stdout
 
             # Should show both services and components
-            assert "🔧 Services: auth" in output
-            assert "📦 Infrastructure:" in output
+            assert "Services: auth" in output
+            assert "Infrastructure:" in output
             # Should have all components: backend, database (auth), worker and redis (worker dep)
             assert "backend" in output
             assert "database" in output
@@ -209,7 +207,7 @@ class TestServicesOptionIntegration:
 
             assert result.returncode == 0
             # Should not show interactive prompts
-            assert "🎯 Component Selection" not in result.stdout
+            assert "Component Selection" not in result.stdout
 
 
 class TestInteractiveServiceSelection:
@@ -320,7 +318,7 @@ class TestServicesIntegrationWithExistingFeatures:
             )
 
             assert result.returncode == 0
-            assert "⚠️  Overwriting existing directory" in result.stdout
+            assert "Overwriting existing directory" in result.stdout
 
     def test_services_work_with_custom_output_dir(self):
         """Test that services work with custom output directory."""
@@ -356,7 +354,7 @@ class TestServicesIntegrationWithExistingFeatures:
         )
 
         # Check that dependency messages are shown
-        assert "📦 Services require components:" in result.stdout
+        assert "Services require components:" in result.stdout
         assert (
             "backend, database" in result.stdout or "database, backend" in result.stdout
         )
@@ -377,7 +375,7 @@ class TestServicesErrorHandling:
         )
 
         assert result.returncode != 0
-        assert "❌ Empty service name is not allowed" in result.stderr
+        assert "Empty service name is not allowed" in result.stderr
 
     def test_service_with_whitespace(self):
         """Test service names with whitespace."""
@@ -416,7 +414,7 @@ class TestServiceComponentCompatibilityValidation:
             )
 
             assert result.returncode == 0
-            assert "🔧 Services: auth" in result.stdout
+            assert "Services: auth" in result.stdout
             assert "backend" in result.stdout
             assert "database" in result.stdout
 
@@ -438,7 +436,7 @@ class TestServiceComponentCompatibilityValidation:
         assert result.returncode == 1
         assert "Service-component compatibility errors:" in result.stderr
         assert "Service 'auth' requires component 'database'" in result.stderr
-        assert "💡 Suggestion:" in result.stderr
+        assert "Suggestion:" in result.stderr
         # Should suggest adding missing components (worker auto-adds redis dependency)
         assert "database" in result.stderr
 
@@ -457,7 +455,7 @@ class TestServiceComponentCompatibilityValidation:
             )
 
             assert result.returncode == 0
-            assert "🔧 Services: auth" in result.stdout
+            assert "Services: auth" in result.stdout
             # Should auto-add both required components
             assert "backend" in result.stdout
             assert "database" in result.stdout
@@ -518,7 +516,7 @@ class TestServiceComponentCompatibilityValidation:
         )
 
         assert result.returncode == 1
-        assert "💡 Suggestion: Add missing components" in result.stderr
+        assert "Suggestion: Add missing components" in result.stderr
         assert "remove --components to let services auto-add" in result.stderr
 
 
@@ -543,8 +541,8 @@ class TestAuthServiceMigrationIntegration:
             output = result.stdout
 
             # Should show that migrations are being included
-            assert "🔧 Services: auth" in output
-            assert "📦 Infrastructure: database" in output
+            assert "Services: auth" in output
+            assert "Infrastructure: database" in output
 
             # Verify migration infrastructure files were actually generated
             project_path = Path(temp_dir) / "test-auth-migration-mention"
@@ -572,13 +570,13 @@ class TestAuthServiceMigrationIntegration:
             output = result.stdout
 
             # Should clearly show service requires database
-            assert "📦 Services require components: backend, database" in output
+            assert "Services require components: backend, database" in output
 
             # Should show database in infrastructure
-            assert "📦 Infrastructure: database" in output
+            assert "Infrastructure: database" in output
 
             # Should show auth in services
-            assert "🔧 Services: auth" in output
+            assert "Services: auth" in output
 
             # Check that actual project has migration infrastructure
             project_path = Path(temp_dir) / "test-auth-auto-db"
@@ -602,10 +600,10 @@ class TestAuthServiceMigrationIntegration:
             output = result.stdout
 
             # Should show database component
-            assert "📦 Infrastructure: database" in output
+            assert "Infrastructure: database" in output
 
             # Should NOT mention services (auth)
-            assert "🔧 Services:" not in output
+            assert "Services:" not in output
 
             # Check that project has database but no migrations
             project_path = Path(temp_dir) / "test-db-only-no-migration"
@@ -620,12 +618,12 @@ class TestAuthServiceMigrationIntegration:
         output = result.stdout
 
         # Should show auth service with clear requirements
-        assert "🔐 Authentication Services" in output
+        assert "Authentication Services" in output
         assert "auth" in output
         assert "Requires components: backend, database" in output
 
         # Should provide usage guidance
-        assert "💡 Use 'aegis init PROJECT_NAME --services auth'" in output
+        assert "Use 'aegis init PROJECT_NAME --services auth'" in output
 
     def test_auth_service_file_generation_completeness(self):
         """Test that auth service generates all expected migration and auth files."""
@@ -646,7 +644,7 @@ class TestAuthServiceMigrationIntegration:
             project_path = Path(temp_dir) / "test-auth-completeness"
 
             # Check CLI shows file generation
-            files_section = output.split("📄 Component Files:")[1].split("\n\n")[0]
+            files_section = output.split("Component Files:")[1].split("\n\n")[0]
 
             # Should include auth-related files
             assert "app/components/backend/api/auth/" in files_section
@@ -682,10 +680,10 @@ class TestAuthServiceMigrationIntegration:
             output = result.stdout
 
             # Should show proper dependency resolution
-            assert "📦 Services require components: backend, database" in output
+            assert "Services require components: backend, database" in output
 
             # Should show Python dependencies
-            deps_section = output.split("📦 Dependencies to be installed:")[1].split(
+            deps_section = output.split("Dependencies to be installed:")[1].split(
                 "\n\n"
             )[0]
 

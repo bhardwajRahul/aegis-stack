@@ -1,4 +1,4 @@
-# {{ cookiecutter.project_name }} 🛡️
+# {{ cookiecutter.project_name }}
 
 {{ cookiecutter.project_description }}
 
@@ -6,16 +6,16 @@
 
 This Aegis Stack project includes the following components:
 
-- **✅ Backend**: FastAPI-based async web server
-- **✅ Frontend**: Flet-based Python UI framework
+- **Backend**: FastAPI-based async web server
+- **Frontend**: Flet-based Python UI framework
 {%- if cookiecutter.include_scheduler == "yes" %}
-- **✅ Scheduler**: APScheduler-based async task scheduling
+- **Scheduler**: APScheduler-based async task scheduling
 {%- endif %}
 {%- if cookiecutter.include_database == "yes" %}
-- **✅ Database**: SQLite database with SQLModel ORM
+- **Database**: SQLite database with SQLModel ORM
 {%- endif %}
 {%- if cookiecutter.include_cache == "yes" %}
-- **✅ Cache**: Redis-based async caching
+- **Cache**: Redis-based async caching
 {%- endif %}
 
 ## Getting Started
@@ -80,7 +80,7 @@ make check  # Run linting, type checking, and tests
 
 ### CLI Commands
 
-Your project gets its own CLI command **automatically installed** when first used - no setup required! 🎉
+Your project gets its own CLI command **automatically installed** when first used - no setup required! 
 
 ```bash
 # Health monitoring (auto-installs CLI if needed)
@@ -193,4 +193,4 @@ with db_session() as session:
 
 ---
 
-Generated with [Aegis Stack](https://github.com/lbedner/aegis-stack) 🛡️
+Generated with [Aegis Stack](https://github.com/lbedner/aegis-stack)

@@ -155,7 +155,7 @@ def _create_public_agent(config: AIServiceConfig) -> Agent:
 
             async def send(self, request, **kwargs):
                 # logger.info(
-                #     f"🔧 FixedLLM7Client.send: {request.method} {request.url}"
+                #     f"FixedLLM7Client.send: {request.method} {request.url}"
                 # )
                 response = await super().send(request, **kwargs)
 
@@ -261,12 +261,12 @@ def _create_public_agent(config: AIServiceConfig) -> Agent:
         # Fallback with helpful instructions if public endpoint fails
         error_msg = (
             f"Public endpoint failed ({e}). Here are reliable free alternatives:\n\n"
-            "🌟 RECOMMENDED - Groq (Fastest, Most Generous Free Tier):\n"
+            "RECOMMENDED - Groq (Fastest, Most Generous Free Tier):\n"
             "   1. Visit: https://console.groq.com/keys\n"
             "   2. Get API key: export GROQ_API_KEY=your_key_here\n"
             "   3. Switch: {{ project_slug }} ai config "
             "set-provider groq\n\n"
-            "🔥 Google AI Studio (Also Free):\n"
+            "Google AI Studio (Also Free):\n"
             "   1. Visit: https://aistudio.google.com/app/apikey\n"
             "   2. Get API key: export GOOGLE_API_KEY=your_key_here\n"
             "   3. Switch: {{ project_slug }} ai config set-provider google"

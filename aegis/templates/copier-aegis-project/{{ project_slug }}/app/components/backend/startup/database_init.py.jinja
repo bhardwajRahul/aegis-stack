@@ -50,31 +50,31 @@ async def startup_database_init() -> None:
 
                 if "alembic_version" in table_names:
                     logger.info(
-                        "✅ Database connectivity and auth schema verified "
+                        "Database connectivity and auth schema verified "
                         "(migrations applied)"
                     )
                 else:
                     logger.warning(
-                        "⚠️  alembic_version table missing - migrations may not be "
+                        "alembic_version table missing - migrations may not be "
                         "fully applied"
                     )
                     logger.warning(
-                        "💡 Run 'alembic upgrade head' to ensure all migrations "
+                        "Run 'alembic upgrade head' to ensure all migrations "
                         "are applied"
                     )
 
         except Exception as e:
-            logger.warning(f"⚠️  Database check failed: {e}")
-            logger.warning("💡 Run 'alembic upgrade head' to apply migrations")
+            logger.warning(f"Database check failed: {e}")
+            logger.warning("Run 'alembic upgrade head' to apply migrations")
             # Don't fail startup - let the app run and show clear errors
         {% else %}
         # Database component only - ensure tables exist
         init_database()
-        logger.info("🗃️  Database initialization completed")
+        logger.info("Database initialization completed")
         {% endif %}
 
     except Exception as e:
-        logger.error(f"❌ Database initialization failed: {e}")
+        logger.error(f"Database initialization failed: {e}")
         raise
 
 

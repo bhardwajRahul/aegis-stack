@@ -273,7 +273,7 @@ class TerminalRenderer(Renderer):
             Image placeholder text
         """
         title = getattr(element, "title", "") or "image"
-        return f"🖼️  [{title}]"
+        return f"[Image: {title}]"
 
     def render_thematic_break(self, element) -> str:
         """Render horizontal rule."""

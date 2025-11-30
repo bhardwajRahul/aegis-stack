@@ -25,7 +25,7 @@ With Aegis Stack, you can confidently choose **B** - because adding components l
 uvx aegis-stack init mvp-api
 cd mvp-api && uv sync && make serve
 
-# Monday 9 AM: It's live 🎉
+# Monday 9 AM: It's live
 ```
 
 ---
@@ -361,50 +361,55 @@ git add . && git commit -m "Remove scheduler component"
 
 ---
 
-## Template Updates: Stay Current
+## Template Updates: Your Safety Net
 
-Your project isn't frozen at `init`. Aegis Stack templates evolve, and your projects can evolve with them.
+**Most template tools abandon you at `init`. Aegis stays with you.**
 
-### Version Tracking
+Six months from now, we'll fix a security bug in our FastAPI template. Or add a better health check pattern. Or improve Docker configurations.
 
-Every generated project tracks its template version:
+With most scaffolding tools? You're on your own. Manually diff templates. Copy-paste fixes. Hope nothing breaks.
 
-```yaml
-# .copier-answers.yml
-_commit: f359779a...  # Template snapshot you're on
-_src_path: /path/to/aegis-stack
-```
-
-### Staying Updated
-
-**Coming in v0.2.0:** Template update command
+With Aegis Stack:
 
 ```bash
-# Check for template updates
+aegis update
+```
+
+### What `aegis update` Actually Does
+
+Powered by [Copier](https://copier.readthedocs.io/)'s **git-based 3-way merge engine**, your project stays connected to its template. When you run `aegis update`:
+
+1. **Fetches latest template** from your configured source
+2. **Compares three versions**: Original template → Your customizations → New template
+3. **Merges intelligently** - template improvements flow in, your code stays intact
+4. **Shows conflicts clearly** - when manual review is needed, you see exactly where
+
+```bash
+# Preview what would change
 aegis update --dry-run
 
-# Update to latest template
+# Apply template updates
 aegis update
 
 # What gets updated:
-# - Bug fixes in generated code
-# - New best practices
-# - Improved patterns
-# - Enhanced tooling
+# ✓ Security fixes in generated code
+# ✓ Improved Docker configurations
+# ✓ Better testing patterns
+# ✓ Enhanced tooling setup
 
 # What stays yours:
-# - Your business logic
-# - Custom modifications
-# - Database data
-# - Git history
+# ✓ Your business logic
+# ✓ Custom modifications
+# ✓ Database data
+# ✓ Git history
 ```
 
-### Update Philosophy
+### The Safety Guarantee
 
-- **Non-destructive**: Your custom code is preserved
-- **Incremental**: Small, frequent updates over big migrations
-- **Transparent**: See exactly what changes before applying
-- **Reversible**: Git keeps full history for rollback
+- **Non-destructive**: Your custom code is preserved through Copier's 3-way merge
+- **Transparent**: `--dry-run` shows exactly what changes before applying
+- **Reversible**: Full git history for rollback if needed
+- **Incremental**: Small, frequent updates over painful migrations
 
 ---
 

@@ -114,9 +114,7 @@ class ConfigurationSection(ft.Container):
         )
 
         # Secret Key Status row
-        secret_key_status = (
-            "✅ Configured" if secret_key_configured else "❌ Not Configured"
-        )
+        secret_key_status = "Configured" if secret_key_configured else "Not Configured"
         config_rows.append(
             ft.Row(
                 [
@@ -151,7 +149,7 @@ class ConfigurationSection(ft.Container):
             )
 
         # Database Status row
-        database_status = "✅ Available" if database_available else "❌ Unavailable"
+        database_status = "Available" if database_available else "Unavailable"
         config_rows.append(
             ft.Row(
                 [

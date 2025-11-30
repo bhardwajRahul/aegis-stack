@@ -25,21 +25,21 @@
 
 **Output:**
 ```
-✅ {{ cookiecutter.project_name }} - System Status: HEALTHY
+{{ cookiecutter.project_name }} - System Status: HEALTHY
 
-🖥️  System Health:
+System Health:
    • CPU Usage: 15.2%
    • Memory Usage: 45.8%  
    • Disk Usage: 32.1%
    • Response Time: 2.1ms{% if cookiecutter.include_scheduler == "yes" %}
 
-⏰ Scheduler Health:
+Scheduler Health:
    • Status: HEALTHY
    • Active Jobs: 2
    • Next Run: 2024-01-01 02:00:00
    • Response Time: 1.5ms{% endif %}
 
-🔍 Overall Health: 98.5%
+Overall Health: 98.5%
 ```
 
 ### Detailed Health Check

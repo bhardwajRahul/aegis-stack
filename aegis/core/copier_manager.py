@@ -88,7 +88,8 @@ def generate_with_copier(
     }
 
     # Detect dev vs production mode for template sourcing
-    # - Development: Use git+file:// URL for local git repo (enables aegis update)
+    # - Development (no vcs_ref): Use direct file path for working directory changes
+    # - Development (with vcs_ref): Use git+file:// URL to access specific version
     # - Production (pip/uvx install): Use GitHub URL (no local git repo)
     from .copier_updater import get_template_root, resolve_version_to_ref
 
@@ -96,14 +97,18 @@ def generate_with_copier(
 
     if is_git_repo(template_root):
         # Development mode: local git repository available
-        # Use git+file:// URL format - this is CRITICAL for:
-        # 1. Copier to recognize it as a git-tracked template
-        # 2. Copier to set _commit correctly (not None)
-        # 3. Future updates to work via `aegis update`
-        template_source = f"git+file://{template_root}"
-        resolved_ref = (
-            resolve_version_to_ref(vcs_ref, template_root) if vcs_ref else "HEAD"
-        )
+        if vcs_ref:
+            # Specific version requested - use git+file:// URL to access git history
+            # This is CRITICAL for aegis update to work properly
+            template_source = f"git+file://{template_root}"
+            resolved_ref = resolve_version_to_ref(vcs_ref, template_root)
+        else:
+            # No version specified - use direct file path for working directory
+            # This allows uncommitted template changes to be picked up during dev
+            template_source = str(
+                Path(__file__).parent.parent / "templates" / "copier-aegis-project"
+            )
+            resolved_ref = None
     else:
         # Production mode: installed via pip/uvx (no .git directory)
         # Use GitHub URL for template source with HEAD as default ref
@@ -171,10 +176,10 @@ def generate_with_copier(
             check=True,
             capture_output=True,
         )
-        print("✅ Git repository initialized")
+        print("Git repository initialized")
     except subprocess.CalledProcessError as e:
-        print(f"⚠️  Failed to initialize git repository: {e}")
-        print("💡 Run 'git init && git add . && git commit' manually")
+        print(f"Warning: Failed to initialize git repository: {e}")
+        print("Run 'git init && git add . && git commit' manually")
 
     # CRITICAL: Fix _src_path in .copier-answers.yml for future updates to work
     #

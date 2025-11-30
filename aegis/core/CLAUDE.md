@@ -218,7 +218,7 @@ def init(
     show_project_configuration(project_name, components, output_dir)
     
     # Confirm before proceeding
-    if not yes and not typer.confirm("🚀 Create this project?"):
+    if not yes and not typer.confirm("Create this project?"):
         typer.echo("❌ Project creation cancelled")
         raise typer.Exit(0)
     
@@ -231,14 +231,14 @@ def init(
 def interactive_component_selection() -> list[str]:
     """Interactive component selection with dependency awareness."""
     
-    typer.echo("🎯 Component Selection")
+    typer.echo("Component Selection")
     typer.echo("=" * 40)
     typer.echo("✅ Core components (backend + frontend) included automatically\\n")
     
     selected = []
     
     # Infrastructure components
-    typer.echo("🏗️  Infrastructure Components:")
+    typer.echo("Infrastructure Components:")
     if typer.confirm("  Add Redis (caching, message queues)?"):
         selected.append("redis")
     
@@ -289,7 +289,7 @@ def validate_and_resolve_components(
     # Show dependency resolution
     auto_added = DependencyResolver.get_missing_dependencies(selected)
     if auto_added:
-        typer.echo(f"📦 Auto-added dependencies: {', '.join(auto_added)}")
+        typer.echo(f"Auto-added dependencies: {', '.join(auto_added)}")
     
     return resolved
 ```

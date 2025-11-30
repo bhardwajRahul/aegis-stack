@@ -362,7 +362,7 @@ async def startup_hook() -> None:
     logger.info("Backend component health check registered")
 
     register_health_check("frontend", _frontend_component_health)
-    logger.info("️Frontend component health check registered")
+    logger.info("Frontend component health check registered")
 
     {%- if cookiecutter.include_scheduler == "yes" %}
     # Register scheduler component health check
@@ -395,7 +395,7 @@ async def startup_hook() -> None:
     logger.info("Database component health check registered")
     {%- endif %}
 
-    logger.info("✅ Component health detection complete")
+    logger.info("Component health detection complete")
 
     # ==========================================
     # Service Health Checks Registration
@@ -403,7 +403,7 @@ async def startup_hook() -> None:
 
     from app.services.system.health import register_service_health_check
 
-    logger.info("🔧 Registering service health checks...")
+    logger.info("Registering service health checks...")
 
     {%- if cookiecutter.include_auth == "yes" %}
     # Register auth service health check
@@ -431,4 +431,4 @@ async def startup_hook() -> None:
     #     from app.services.payment.health import check_payment_service_health
     #     register_service_health_check("payment", check_payment_service_health)
 
-    logger.info("✅ Service health detection complete")
+    logger.info("Service health detection complete")

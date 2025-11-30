@@ -88,7 +88,7 @@ def update_command(
     Note: This command requires a clean git working tree.
     """
 
-    typer.echo("🛡️  Aegis Stack - Update Template")
+    typer.echo("Aegis Stack - Update Template")
     typer.echo("=" * 50)
 
     # Resolve project path
@@ -96,8 +96,10 @@ def update_command(
 
     # Validate it's a Copier project
     if not is_copier_project(target_path):
-        typer.echo(
-            f"❌ Project at {target_path} was not generated with Copier.", err=True
+        typer.secho(
+            f"Project at {target_path} was not generated with Copier.",
+            fg="red",
+            err=True,
         )
         typer.echo(
             "   The 'aegis update' command only works with Copier-generated projects.",
@@ -109,12 +111,12 @@ def update_command(
         )
         raise typer.Exit(1)
 
-    typer.echo(f"📁 Project: {target_path}")
+    typer.echo(f"Project: {target_path}")
 
     # Check git status
     is_clean, git_message = validate_clean_git_tree(target_path)
     if not is_clean:
-        typer.echo(f"❌ {git_message}", err=True)
+        typer.secho(git_message, fg="red", err=True)
         typer.echo(
             "   Commit or stash your changes before running 'aegis update'.",
             err=True,
@@ -124,14 +126,12 @@ def update_command(
         )
         raise typer.Exit(1)
 
-    typer.echo("✅ Git tree is clean")
+    typer.secho("Git tree is clean", fg="green")
 
     # Get current template version
     current_commit = get_current_template_commit(target_path)
     if not current_commit:
-        typer.secho(
-            "⚠️  Warning: Cannot determine current template version", fg="yellow"
-        )
+        typer.secho("Warning: Cannot determine current template version", fg="yellow")
         typer.echo("   Project may have been generated from an untagged commit")
 
     current_version = get_project_template_version(target_path)
@@ -145,12 +145,12 @@ def update_command(
     try:
         template_root = get_template_root(effective_template_path)
     except ValueError as e:
-        typer.echo(f"❌ {e}", err=True)
+        typer.secho(str(e), fg="red", err=True)
         raise typer.Exit(1)
 
     if effective_template_path:
         source = "flag" if template_path else "AEGIS_TEMPLATE_PATH"
-        typer.echo(f"📦 Using custom template ({source}): {template_root}")
+        typer.echo(f"Using custom template ({source}): {template_root}")
 
     # Resolve target version
     if to_version:
@@ -187,7 +187,7 @@ def update_command(
 
     # Display version information
     typer.echo("")
-    typer.echo("📦 Version Information:")
+    typer.echo("Version Information:")
     typer.echo(f"   Current CLI:      {cli_version}")
     if current_version:
         typer.echo(f"   Current Template: {current_version}")
@@ -200,7 +200,7 @@ def update_command(
     # Check if already up to date (version-based)
     if current_version and to_version and current_version == to_version:
         typer.echo("")
-        typer.secho("✅ Project is already at the requested version", fg="green")
+        typer.secho("Project is already at the requested version", fg="green")
         return
 
     # Check if already at target commit (for HEAD/branch updates)
@@ -209,7 +209,7 @@ def update_command(
 
         if target_commit and current_commit == target_commit:
             typer.echo("")
-            typer.secho("✅ Project is already at the target commit", fg="green")
+            typer.secho("Project is already at the target commit", fg="green")
             typer.echo(f"   Current: {current_commit[:8]}...")
             typer.echo(f"   Target:  {target_commit[:8]}...")
             return
@@ -220,7 +220,7 @@ def update_command(
         ):
             if not allow_downgrade:
                 typer.echo("")
-                typer.secho("❌ Downgrade detected", fg="red", err=True)
+                typer.secho("Downgrade detected", fg="red", err=True)
                 typer.echo(f"   Current: {current_commit[:8]}...", err=True)
                 typer.echo(f"   Target:  {target_commit[:8]}...", err=True)
                 typer.echo(
@@ -230,16 +230,14 @@ def update_command(
 
             # Downgrade allowed - show warning
             typer.echo("")
-            typer.secho(
-                "⚠️  WARNING: Downgrading to older template version", fg="yellow"
-            )
+            typer.secho("WARNING: Downgrading to older template version", fg="yellow")
             typer.echo(f"   Current: {current_commit[:8]}...")
             typer.echo(f"   Target:  {target_commit[:8]}...")
 
     # Get and display changelog
     if current_commit:
         typer.echo("")
-        typer.echo("📋 Changelog:")
+        typer.echo("Changelog:")
         typer.echo("-" * 50)
         changelog = get_changelog(current_commit, target_ref, template_root)
         typer.echo(changelog)
@@ -248,7 +246,7 @@ def update_command(
     # Dry run mode
     if dry_run:
         typer.echo("")
-        typer.secho("🔍 DRY RUN MODE - No changes will be applied", fg="cyan")
+        typer.secho("DRY RUN MODE - No changes will be applied", fg="cyan")
         typer.echo("")
         typer.echo("To apply this update, run:")
         if to_version:
@@ -260,22 +258,22 @@ def update_command(
     # Confirmation
     if not yes:
         typer.echo("")
-        if not typer.confirm("🚀 Apply this update?"):
-            typer.echo("❌ Update cancelled")
+        if not typer.confirm("Apply this update?"):
+            typer.secho("Update cancelled", fg="red")
             raise typer.Exit(0)
 
     # Create backup point before update
     typer.echo("")
-    typer.echo("📸 Creating backup point...")
+    typer.echo("Creating backup point...")
     backup_tag = create_backup_point(target_path)
     if backup_tag:
         typer.echo(f"   Backup created: {backup_tag}")
     else:
-        typer.secho("⚠️  Could not create backup point", fg="yellow")
+        typer.secho("Could not create backup point", fg="yellow")
 
     # Perform update using Copier
     typer.echo("")
-    typer.echo("🔄 Updating project...")
+    typer.echo("Updating project...")
 
     try:
         # Import here to avoid circular dependency
@@ -342,7 +340,7 @@ def update_command(
         include_auth = answers.get("include_auth", False)
 
         # Run post-generation tasks
-        typer.echo("🔨 Running post-generation tasks...")
+        typer.echo("Running post-generation tasks...")
         tasks_success = run_post_generation_tasks(
             target_path, include_auth=include_auth
         )
@@ -350,15 +348,15 @@ def update_command(
         # Show update result
         typer.echo("")
         if tasks_success:
-            typer.secho("✅ Update completed successfully!", fg="green")
+            typer.secho("Update completed successfully!", fg="green")
         else:
             typer.secho(
-                "⚠️  Update completed with some post-generation task failures",
+                "Update completed with some post-generation task failures",
                 fg="yellow",
             )
             typer.echo("   Some setup tasks failed. See details above.")
         typer.echo("")
-        typer.echo("📝 Next Steps:")
+        typer.echo("Next Steps:")
         typer.echo("   1. Review changes: git diff")
         typer.echo("   2. Check for conflicts (*.rej files)")
         typer.echo("   3. Run tests: make check")
@@ -381,29 +379,29 @@ def update_command(
         # Check if this is a Copier downgrade error
         error_msg = str(e)
         if "downgrad" in error_msg.lower() and not allow_downgrade:
-            typer.secho(f"❌ Update failed: {e}", fg="red", err=True)
+            typer.secho(f"Update failed: {e}", fg="red", err=True)
             typer.echo("")
-            typer.echo("💡 This appears to be a downgrade.")
+            typer.echo("This appears to be a downgrade.")
             typer.echo("   Use --allow-downgrade to proceed (not recommended)")
         else:
-            typer.secho(f"❌ Update failed: {e}", fg="red", err=True)
+            typer.secho(f"Update failed: {e}", fg="red", err=True)
 
         # Offer rollback if backup exists
         if backup_tag:
             typer.echo("")
-            if yes or typer.confirm("🔄 Rollback to previous state?"):
+            if yes or typer.confirm("Rollback to previous state?"):
                 success, message = rollback_to_backup(target_path, backup_tag)
                 if success:
-                    typer.secho(f"✅ {message}", fg="green")
+                    typer.secho(message, fg="green")
                     cleanup_backup_tag(target_path, backup_tag)
                 else:
-                    typer.secho(f"❌ {message}", fg="red", err=True)
+                    typer.secho(message, fg="red", err=True)
                     typer.echo(f"   Manual rollback: git reset --hard {backup_tag}")
             else:
-                typer.echo(f"💡 Manual rollback: git reset --hard {backup_tag}")
+                typer.echo(f"Manual rollback: git reset --hard {backup_tag}")
 
         typer.echo("")
-        typer.echo("💡 Troubleshooting:")
+        typer.echo("Troubleshooting:")
         typer.echo("   - Ensure you have a clean git tree")
         typer.echo("   - Check that the version/commit exists")
         typer.echo("   - Review Copier documentation for update issues")
