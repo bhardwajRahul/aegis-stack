@@ -333,20 +333,20 @@ async def check_system_status() -> None:
     This function gets the system status and logs any issues.
     Can be extended to send alerts to Slack, email, etc.
     """
-    logger.info("🩺 Running scheduled system health check")
+    logger.info("Running scheduled system health check")
 
     try:
         status = await get_system_status()
 
         if status.overall_healthy:
             log_msg = (
-                f"✅ System healthy: {len(status.healthy_top_level_components)}/"
+                f"System healthy: {len(status.healthy_top_level_components)}/"
                 f"{status.total_components} components OK"
             )
             logger.info(log_msg)
         else:
             logger.warning(
-                f"⚠️ System issues detected: "
+                f"System issues detected: "
                 f"{len(status.unhealthy_components)} unhealthy components",
                 extra={
                     "unhealthy_components": status.unhealthy_components,
@@ -358,7 +358,7 @@ async def check_system_status() -> None:
             for component_name in status.unhealthy_components:
                 component = status.components[component_name]
                 logger.error(
-                    f"❌ {component_name}: {component.message}",
+                    f"{component_name}: {component.message}",
                     extra={"component": component.name, "metadata": component.metadata},
                 )
 
@@ -366,7 +366,7 @@ async def check_system_status() -> None:
             await send_health_alert(status)
 
     except Exception as e:
-        logger.error(f"💥 System health check failed: {e}")
+        logger.error(f"System health check failed: {e}")
         # Send critical alert about monitoring failure
         await send_critical_alert(f"Health monitoring failed: {e}", str(e))
 

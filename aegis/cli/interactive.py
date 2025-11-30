@@ -36,10 +36,11 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
         Tuple of (selected_components, scheduler_backend, selected_services)
     """
 
-    typer.echo("🎯 Component Selection")
+    typer.echo("Component Selection")
     typer.echo("=" * 40)
-    typer.echo(
-        f"✅ Core components ({' + '.join(CORE_COMPONENTS)}) included automatically\n"
+    typer.secho(
+        f"Core components ({' + '.join(CORE_COMPONENTS)}) included automatically\n",
+        fg="green",
     )
 
     selected = []
@@ -50,7 +51,7 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
     # Get all infrastructure components from registry
     infra_components = get_interactive_infrastructure_components()
 
-    typer.echo("🏗️  Infrastructure Components:")
+    typer.echo("Infrastructure Components:")
 
     # Process components in a specific order to handle dependencies
     component_order = ["redis", "worker", "scheduler", "database"]
@@ -84,19 +85,19 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
                 selected.append("scheduler")
 
                 # Follow-up: persistence question
-                typer.echo("\n💾 Scheduler Persistence:")
+                typer.echo("\nScheduler Persistence:")
                 persistence_prompt = (
                     "  Do you want to persist scheduled jobs? "
                     "(Enables job history, recovery after restarts)"
                 )
                 if typer.confirm(persistence_prompt):
                     # Database engine selection (SQLite only for now)
-                    typer.echo("\n🗃️  Database Engine:")
+                    typer.echo("\nDatabase Engine:")
                     typer.echo("  SQLite will be configured for job persistence")
                     typer.echo("  (PostgreSQL support coming in future releases)")
 
                     # Show SQLite limitations
-                    typer.echo("\n⚠️  SQLite Limitations:")
+                    typer.secho("\nSQLite Limitations:", fg="yellow")
                     typer.echo(
                         "  • Multi-container API access works in development only "
                         "(shared volumes)"
@@ -112,16 +113,19 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
                         database_added_by_scheduler = True
                         # Mark scheduler backend as sqlite
                         scheduler_backend = "sqlite"
-                        typer.echo("✅ Scheduler + SQLite database configured")
+                        typer.secho(
+                            "Scheduler + SQLite database configured", fg="green"
+                        )
 
                         # Show bonus backup job message only when database is added
-                        typer.echo("\n🎯 Bonus: Adding database backup job")
-                        typer.echo(
-                            "✅ Scheduled daily database backup job included "
-                            "(runs at 2 AM)"
+                        typer.echo("\nBonus: Adding database backup job")
+                        typer.secho(
+                            "Scheduled daily database backup job included "
+                            "(runs at 2 AM)",
+                            fg="green",
                         )
                     else:
-                        typer.echo("⏹️  Scheduler persistence cancelled")
+                        typer.echo("Scheduler persistence cancelled")
                         # Don't add database if user declines SQLite
 
                 typer.echo()  # Extra spacing after scheduler section
@@ -137,9 +141,10 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
 
                 # Show bonus backup job message when database added with scheduler
                 if "scheduler" in selected:
-                    typer.echo("\n🎯 Bonus: Adding database backup job")
-                    typer.echo(
-                        "✅ Scheduled daily database backup job included (runs at 2 AM)"
+                    typer.echo("\nBonus: Adding database backup job")
+                    typer.secho(
+                        "Scheduled daily database backup job included (runs at 2 AM)",
+                        fg="green",
                     )
         else:
             # Standard prompt for other components
@@ -162,7 +167,7 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
     selected_services = []
 
     if SERVICES:  # Only show services if any are available
-        typer.echo("\n🔧 Service Selection")
+        typer.echo("\nService Selection")
         typer.echo("=" * 40)
         typer.echo(
             "Services provide business logic functionality for your application.\n"
@@ -172,12 +177,12 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
         auth_services = get_services_by_type(ServiceType.AUTH)
 
         if auth_services:
-            typer.echo("🔐 Authentication Services:")
+            typer.echo("Authentication Services:")
             for service_name, service_spec in auth_services.items():
                 prompt = f"  Add {service_spec.description.lower()}?"
                 if typer.confirm(prompt):
                     # Auth service requires database - provide explicit confirmation
-                    typer.echo("\n🗃️  Database Required:")
+                    typer.echo("\nDatabase Required:")
                     typer.echo("  Authentication requires a database for user storage")
                     typer.echo("  (user accounts, sessions, JWT tokens)")
 
@@ -187,45 +192,47 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
                     )
 
                     if database_already_selected:
-                        typer.echo("✅ Database component already selected")
+                        typer.secho("Database component already selected", fg="green")
                         selected_services.append(service_name)
                     else:
                         auth_confirm_prompt = "  Continue and add database component?"
                         if typer.confirm(auth_confirm_prompt, default=True):
                             selected_services.append(service_name)
                             # Note: Database will be auto-added by service resolution in init.py
-                            typer.echo("✅ Authentication + Database configured")
+                            typer.secho(
+                                "Authentication + Database configured", fg="green"
+                            )
                         else:
-                            typer.echo("⏹️  Authentication service cancelled")
+                            typer.echo("Authentication service cancelled")
 
         # AI & Machine Learning Services
         ai_services = get_services_by_type(ServiceType.AI)
 
         if ai_services:
-            typer.echo("\n🤖 AI & Machine Learning Services:")
+            typer.echo("\nAI & Machine Learning Services:")
             for service_name, service_spec in ai_services.items():
                 prompt = f"  Add {service_spec.description.lower()}?"
                 if typer.confirm(prompt):
                     # AI service requires backend (always available) - no dependency issues
-                    typer.echo("\n🤖 AI Provider Selection:")
+                    typer.echo("\nAI Provider Selection:")
                     typer.echo(
                         "  Choose AI providers to include (multiple selection supported)"
                     )
-                    typer.echo("  📋 Provider Options:")
+                    typer.echo("  Provider Options:")
 
                     # Provider selection with recommendations
                     providers = []
                     provider_info = [
-                        ("openai", "OpenAI", "GPT models", "💰 Paid", False),
-                        ("anthropic", "Anthropic", "Claude models", "💰 Paid", False),
-                        ("google", "Google", "Gemini models", "🆓 Free tier", True),
-                        ("groq", "Groq", "Fast inference", "🆓 Free tier", True),
-                        ("mistral", "Mistral", "Open models", "💰 Mostly paid", False),
+                        ("openai", "OpenAI", "GPT models", "Paid", False),
+                        ("anthropic", "Anthropic", "Claude models", "Paid", False),
+                        ("google", "Google", "Gemini models", "Free tier", True),
+                        ("groq", "Groq", "Fast inference", "Free tier", True),
+                        ("mistral", "Mistral", "Open models", "Mostly paid", False),
                         (
                             "cohere",
                             "Cohere",
                             "Enterprise focus",
-                            "💰 Limited free",
+                            "Limited free",
                             False,
                         ),
                     ]
@@ -247,19 +254,22 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
 
                     # Handle no providers selected
                     if not providers:
-                        typer.echo(
-                            "  ⚠️  No providers selected, adding recommended defaults..."
+                        typer.secho(
+                            "  No providers selected, adding recommended defaults...",
+                            fg="yellow",
                         )
                         providers = ["groq", "google"]  # Safe defaults with free tiers
 
                     # Show selected providers
-                    typer.echo(f"\n  ✅ Selected providers: {', '.join(providers)}")
-                    typer.echo("  📦 Dependencies will be optimized for your selection")
+                    typer.secho(
+                        f"\n  Selected providers: {', '.join(providers)}", fg="green"
+                    )
+                    typer.echo("  Dependencies will be optimized for your selection")
 
                     # Store provider selection in global context for template generation
                     _ai_provider_selection[service_name] = providers
                     selected_services.append(service_name)
-                    typer.echo("✅ AI service configured")
+                    typer.secho("AI service configured", fg="green")
 
         # Future service types can be added here as they become available
         # payment_services = get_services_by_type(ServiceType.PAYMENT)
@@ -305,10 +315,10 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
     try:
         current_answers = load_copier_answers(project_path)
     except Exception as e:
-        typer.echo(f"❌ Failed to load project configuration: {e}", err=True)
+        typer.secho(f"Failed to load project configuration: {e}", fg="red", err=True)
         raise typer.Exit(1)
 
-    typer.echo("\n🎯 Component Selection")
+    typer.echo("\nComponent Selection")
     typer.echo("=" * 40)
 
     # Show currently enabled components
@@ -318,11 +328,11 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
             enabled_components.append(component)
 
     if enabled_components:
-        typer.echo(f"✅ Currently enabled: {', '.join(enabled_components)}")
+        typer.secho(f"Currently enabled: {', '.join(enabled_components)}", fg="green")
     else:
-        typer.echo("✅ Currently enabled: backend, frontend (core only)")
+        typer.secho("Currently enabled: backend, frontend (core only)", fg="green")
 
-    typer.echo("\n🏗️  Available Components:\n")
+    typer.echo("\nAvailable Components:\n")
 
     selected = []
     scheduler_backend = "memory"
@@ -333,7 +343,7 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
     for component_name in component_order:
         # Skip if already enabled
         if component_name in enabled_components:
-            typer.echo(f"  ✅ {component_name} - Already enabled")
+            typer.secho(f"  {component_name} - Already enabled", fg="green")
             continue
 
         # Skip if already selected in this session (e.g., database auto-added by scheduler)
@@ -372,27 +382,31 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
 
                 if database_available:
                     # Database already available - offer persistence
-                    typer.echo("\n💾 Scheduler Persistence:")
+                    typer.echo("\nScheduler Persistence:")
                     if typer.confirm("  Enable job persistence with SQLite?"):
                         scheduler_backend = "sqlite"
-                        typer.echo("  ✅ Scheduler will use SQLite for job persistence")
+                        typer.secho(
+                            "  Scheduler will use SQLite for job persistence",
+                            fg="green",
+                        )
                     else:
                         typer.echo(
-                            "  ℹ️  Scheduler will use memory backend (no persistence)"
+                            "  Scheduler will use memory backend (no persistence)"
                         )
                 else:
                     # Ask if they plan to add database
-                    typer.echo("\n💾 Scheduler Persistence:")
+                    typer.echo("\nScheduler Persistence:")
                     typer.echo("  Job persistence requires SQLite database component")
                     if typer.confirm("  Add database component for job persistence?"):
                         selected.append("database")
                         scheduler_backend = "sqlite"
-                        typer.echo(
-                            "  ✅ Database will be added - scheduler will use SQLite"
+                        typer.secho(
+                            "  Database will be added - scheduler will use SQLite",
+                            fg="green",
                         )
                     else:
                         typer.echo(
-                            "  ℹ️  Scheduler will use memory backend (no persistence)"
+                            "  Scheduler will use memory backend (no persistence)"
                         )
 
         elif component_name == "redis":
@@ -430,12 +444,14 @@ def interactive_component_remove_selection(project_path: Path) -> list[str]:
     try:
         current_answers = load_copier_answers(project_path)
     except Exception as e:
-        typer.echo(f"❌ Failed to load project configuration: {e}", err=True)
+        typer.secho(f"Failed to load project configuration: {e}", fg="red", err=True)
         raise typer.Exit(1)
 
-    typer.echo("\n⚠️  Component Removal")
+    typer.secho("\nComponent Removal", fg="yellow")
     typer.echo("=" * 40)
-    typer.echo("⚠️  WARNING: This will DELETE component files from your project!")
+    typer.secho(
+        "WARNING: This will DELETE component files from your project!", fg="yellow"
+    )
     typer.echo()
 
     # Find enabled components
@@ -445,15 +461,15 @@ def interactive_component_remove_selection(project_path: Path) -> list[str]:
             enabled_removable.append(component)
 
     if not enabled_removable:
-        typer.echo("ℹ️  No optional components to remove")
+        typer.echo("No optional components to remove")
         typer.echo("   (Core components backend + frontend cannot be removed)")
         return []
 
     typer.echo("Currently enabled components:\n")
 
     # Show core components (not removable)
-    typer.echo("  ⚪ backend - Core component (cannot remove)")
-    typer.echo("  ⚪ frontend - Core component (cannot remove)")
+    typer.echo("  backend - Core component (cannot remove)")
+    typer.echo("  frontend - Core component (cannot remove)")
     typer.echo()
 
     # Show removable components
@@ -487,10 +503,10 @@ def interactive_service_selection(project_path: Path) -> list[str]:
     try:
         current_answers = load_copier_answers(project_path)
     except Exception as e:
-        typer.echo(f"❌ Failed to load project configuration: {e}", err=True)
+        typer.secho(f"Failed to load project configuration: {e}", fg="red", err=True)
         raise typer.Exit(1)
 
-    typer.echo("\n🔧 Service Selection")
+    typer.echo("\nService Selection")
     typer.echo("=" * 40)
     typer.echo("Services provide business logic functionality for your application.\n")
 
@@ -510,7 +526,7 @@ def interactive_service_selection(project_path: Path) -> list[str]:
         typer.echo("Currently enabled services:")
         for service_name in enabled_services:
             service_spec = SERVICES[service_name]
-            typer.echo(f"  ✅ {service_name}: {service_spec.description}")
+            typer.secho(f"  {service_name}: {service_spec.description}", fg="green")
         typer.echo()
 
     # Show available services grouped by type
@@ -519,11 +535,11 @@ def interactive_service_selection(project_path: Path) -> list[str]:
     # Authentication Services
     auth_services = get_services_by_type(ServiceType.AUTH)
     if auth_services:
-        typer.echo("🔐 Authentication Services:")
+        typer.echo("Authentication Services:")
         for service_name, service_spec in auth_services.items():
             # Skip if already enabled
             if service_name in enabled_services:
-                typer.echo(f"  ✅ {service_name} - Already enabled")
+                typer.secho(f"  {service_name} - Already enabled", fg="green")
                 continue
 
             # Check component requirements
@@ -544,17 +560,17 @@ def interactive_service_selection(project_path: Path) -> list[str]:
 
                 if missing_components:
                     typer.echo(
-                        f"    📦 Required components will be added: {', '.join(missing_components)}"
+                        f"    Required components will be added: {', '.join(missing_components)}"
                     )
 
     # AI & Machine Learning Services
     ai_services = get_services_by_type(ServiceType.AI)
     if ai_services:
-        typer.echo("\n🤖 AI & Machine Learning Services:")
+        typer.echo("\nAI & Machine Learning Services:")
         for service_name, service_spec in ai_services.items():
             # Skip if already enabled
             if service_name in enabled_services:
-                typer.echo(f"  ✅ {service_name} - Already enabled")
+                typer.secho(f"  {service_name} - Already enabled", fg="green")
                 continue
 
             # Check component requirements
@@ -575,16 +591,16 @@ def interactive_service_selection(project_path: Path) -> list[str]:
 
                 if missing_components:
                     typer.echo(
-                        f"    📦 Required components will be added: {', '.join(missing_components)}"
+                        f"    Required components will be added: {', '.join(missing_components)}"
                     )
 
     # Payment Services (when they exist)
     payment_services = get_services_by_type(ServiceType.PAYMENT)
     if payment_services:
-        typer.echo("\n💰 Payment Services:")
+        typer.echo("\nPayment Services:")
         for service_name, service_spec in payment_services.items():
             if service_name in enabled_services:
-                typer.echo(f"  ✅ {service_name} - Already enabled")
+                typer.secho(f"  {service_name} - Already enabled", fg="green")
                 continue
 
             missing_components = [
@@ -605,7 +621,7 @@ def interactive_service_selection(project_path: Path) -> list[str]:
 
                 if missing_components:
                     typer.echo(
-                        f"    📦 Required components will be added: {', '.join(missing_components)}"
+                        f"    Required components will be added: {', '.join(missing_components)}"
                     )
 
     return selected_services

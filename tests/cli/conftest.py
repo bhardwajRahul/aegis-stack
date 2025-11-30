@@ -222,7 +222,7 @@ def generated_db_project(session_temp_dir: Path) -> CLITestResult:
         raise RuntimeError(f"Failed to generate database project: {result.stderr}")
 
     # Install dependencies in the generated project
-    print("📦 Installing dependencies in generated project...")
+    print("Installing dependencies in generated project...")
     from .test_utils import run_project_command
 
     assert result.project_path is not None, "Project path should not be None"

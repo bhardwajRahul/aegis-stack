@@ -501,25 +501,25 @@ def get_changelog(from_ref: str, to_ref: str, template_root: Path | None = None)
         lines = []
 
         if breaking:
-            lines.append("⚠️  Breaking Changes:")
+            lines.append("Breaking Changes:")
             for commit in breaking:
                 lines.append(f"  • {commit}")
             lines.append("")
 
         if features:
-            lines.append("✨ New Features:")
+            lines.append("New Features:")
             for commit in features:
                 lines.append(f"  • {commit}")
             lines.append("")
 
         if fixes:
-            lines.append("🐛 Bug Fixes:")
+            lines.append("Bug Fixes:")
             for commit in fixes:
                 lines.append(f"  • {commit}")
             lines.append("")
 
         if other:
-            lines.append("📝 Other Changes:")
+            lines.append("Other Changes:")
             for commit in other:
                 lines.append(f"  • {commit}")
 
@@ -700,20 +700,20 @@ def format_conflict_report(conflicts: list[dict[str, str]]) -> str:
         return ""
 
     lines = []
-    lines.append("⚠️  Conflicts detected - manual resolution required")
+    lines.append("Conflicts detected - manual resolution required")
     lines.append("")
 
     for conflict in conflicts:
-        lines.append(f"  📄 {conflict['original']}")
+        lines.append(f"  {conflict['original']}")
         lines.append(f"     Rejected changes: {conflict['path']}")
         lines.append(f"     Details: {conflict['summary']}")
         lines.append("")
 
-    lines.append("📋 Resolution steps:")
+    lines.append("Resolution steps:")
     lines.append("   1. Open the .rej file to see rejected changes")
     lines.append("   2. Manually apply changes to the original file")
     lines.append("   3. Delete the .rej file when resolved")
     lines.append("")
-    lines.append("💡 Tip: Use 'git diff' to see all changes made by the update")
+    lines.append("Tip: Use 'git diff' to see all changes made by the update")
 
     return "\n".join(lines)

@@ -34,7 +34,7 @@ def validate_and_resolve_components(
 
     # Check for empty components before filtering
     if any(not c for c in components_raw):
-        typer.echo("❌ Empty component name is not allowed", err=True)
+        typer.secho("Empty component name is not allowed", fg="red", err=True)
         raise typer.Exit(1)
 
     selected = [c for c in components_raw if c]
@@ -47,7 +47,7 @@ def validate_and_resolve_components(
     errors = DependencyResolver.validate_components(clean_selected)
     if errors:
         for error in errors:
-            typer.echo(f"❌ {error}", err=True)
+            typer.secho(error, fg="red", err=True)
         raise typer.Exit(1)
 
     # Resolve dependencies (using clean names)
@@ -60,13 +60,13 @@ def validate_and_resolve_components(
     original_clean = clean_component_names(selected)
     auto_added = DependencyResolver.get_missing_dependencies(original_clean)
     if auto_added:
-        typer.echo(f"📦 Auto-added dependencies: {', '.join(auto_added)}")
+        typer.echo(f"Auto-added dependencies: {', '.join(auto_added)}")
 
     # Show recommendations
     recommendations = DependencyResolver.get_recommendations(resolved_clean)
     if recommendations:
         rec_list = ", ".join(recommendations)
-        typer.echo(f"💡 Recommended: {rec_list}")
+        typer.echo(f"Recommended: {rec_list}")
         # Note: Skip interactive recommendations for now to keep it simple
 
     return resolved
@@ -89,7 +89,7 @@ def validate_and_resolve_services(
 
     # Check for empty services before filtering
     if any(not s for s in services_raw):
-        typer.echo("❌ Empty service name is not allowed", err=True)
+        typer.secho("Empty service name is not allowed", fg="red", err=True)
         raise typer.Exit(1)
 
     selected_services = [s for s in services_raw if s]
@@ -97,7 +97,9 @@ def validate_and_resolve_services(
     # Validate services exist
     unknown_services = [s for s in selected_services if s not in SERVICES]
     if unknown_services:
-        typer.echo(f"❌ Unknown services: {', '.join(unknown_services)}", err=True)
+        typer.secho(
+            f"Unknown services: {', '.join(unknown_services)}", fg="red", err=True
+        )
         available = list(SERVICES.keys())
         typer.echo(f"Available services: {', '.join(available)}", err=True)
         raise typer.Exit(1)
@@ -109,6 +111,6 @@ def validate_and_resolve_services(
 
     # Show what components were added by services
     if service_added:
-        typer.echo(f"📦 Services require components: {', '.join(service_added)}")
+        typer.echo(f"Services require components: {', '.join(service_added)}")
 
     return selected_services

@@ -71,7 +71,7 @@ class QueueHealthRow(ft.Container):
             status_icon = "🔴"  # Failing
             status_color = Theme.Colors.ERROR
         elif failure_rate > FAILURE_RATE_WARNING_THRESHOLD:
-            status_icon = "🟡"  # Degraded
+            status_icon = "🟠"  # Degraded
             status_color = Theme.Colors.WARNING
         else:
             status_icon = "🟢"  # Healthy

@@ -369,7 +369,7 @@ class RouteCard(ft.Container):
         if self.deprecated:
             detail_rows.append(
                 ft.Container(
-                    content=SecondaryText("⚠ This route is deprecated"),
+                    content=SecondaryText("Warning: This route is deprecated"),
                     bgcolor=ft.Colors.SURFACE,
                     padding=ft.padding.all(8),
                     border_radius=4,
@@ -522,7 +522,7 @@ class MiddlewareCard(ft.Container):
                         ),
                         ft.Container(
                             content=LabelText(
-                                "🔒 Security",
+                                "Security",
                                 color=Theme.Colors.BADGE_TEXT,
                             ),
                             padding=ft.padding.symmetric(horizontal=8, vertical=2),

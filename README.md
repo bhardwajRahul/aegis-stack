@@ -42,9 +42,9 @@ uvx aegis-stack init task-processor --components scheduler,worker
 cd my-api && uv sync && cp .env.example .env && make serve
 ```
 
-**Installation alternatives:** See the [Installation Guide](docs/installation.md) for `uv tool install`, `pip install`, and development setup.
+**Installation alternatives:** See the [Installation Guide](https://lbedner.github.io/aegis-stack/installation/) for `uv tool install`, `pip install`, and development setup.
 
-## 🌱 Your Stack Grows With You
+## Your Stack Grows With You
 
 **Your choices aren't permanent.** Start with what you need today, add components when requirements change, remove what you outgrow.
 
@@ -60,6 +60,9 @@ aegis add worker --project-path ./my-api
 
 # Month 6: Scheduler not needed
 aegis remove scheduler --project-path ./my-api
+
+# Stay current with template improvements
+aegis update
 ```
 
 | Framework | Add Later? | Remove Later? | Git Conflicts? |
@@ -69,7 +72,7 @@ aegis remove scheduler --project-path ./my-api
 
 ![Component Evolution Demo](docs/images/aegis-evolution-demo.gif)
 
-Most frameworks lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your Stack](docs/evolving-your-stack.md)** for the complete guide.
+Most frameworks lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your Stack](https://lbedner.github.io/aegis-stack/evolving-your-stack/)** for the complete guide.
 
 ## See It In Action
 
@@ -77,7 +80,7 @@ Most frameworks lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your
 
 ![Overseer](docs/images/overseer-demo.gif)
 
-**[Overseer](docs/overseer/index.md)** is the read-only health monitoring dashboard built into every Aegis Stack project. It provides real-time visibility into all your components (Backend, Database, Worker, Scheduler) and services (Auth, AI, Comms) through a web UI and CLI commands.
+**[Overseer](https://lbedner.github.io/aegis-stack/overseer/)** is the read-only health monitoring dashboard built into every Aegis Stack project. It provides real-time visibility into all your components (Backend, Database, Worker, Scheduler) and services (Auth, AI, Comms) through a web UI and CLI commands.
 
 No Datadog. No New Relic. No vendor lock-in. Just centralized monitoring you own from day one.
 
@@ -89,30 +92,27 @@ Rich terminal output showing detailed component status, health metrics, and syst
 
 ## Available Components & Services
 
-### Infrastructure Components
-| Component | Purpose | Status |
-|-----------|---------|--------|
-| **Core** (FastAPI + Flet) | Web API + Frontend | ✅ **Always Included** |
-| **Database** | SQLite + SQLModel ORM | ✅ **Available** |
-| **Scheduler** | Background tasks, cron jobs | ✅ **Available** |
-| **Worker** | Async task queues (arq + Redis) | 🧪 **Experimental** |
-| **Cache** | Redis caching and sessions | 🚧 **Coming Soon** |
+**Components** (infrastructure)
 
-### Business Services
-| Service | Purpose | Status |
-|---------|---------|--------|
-| **[Auth](docs/services/auth/index.md)** | User authentication & JWT | ✅ **Available** |
-| **[AI](docs/services/ai/index.md)** | Multi-provider AI chat | 🧪 **Experimental** |
-| **[Comms](docs/services/comms/index.md)** | Email, SMS, voice calls | 🧪 **Experimental** |
+- **Core** - FastAPI + Flet (always included)
+- **Database** - SQLite + SQLModel ORM
+- **Scheduler** - Background tasks, cron jobs
+- **Worker** - Async task queues (arq + Redis)
 
-**See detailed documentation:** [Components →](docs/components/index.md) | [Services →](docs/services/index.md)
+**Services** (business logic)
+
+- **[Auth](https://lbedner.github.io/aegis-stack/services/auth/)** - User authentication & JWT
+- **[AI](https://lbedner.github.io/aegis-stack/services/ai/)** - Multi-provider AI chat
+- **[Comms](https://lbedner.github.io/aegis-stack/services/comms/)** - Email, SMS, voice calls
+
+[Components Docs →](https://lbedner.github.io/aegis-stack/components/) | [Services Docs →](https://lbedner.github.io/aegis-stack/services/)
 
 ## Learn More
 
-- **[CLI Reference](docs/cli-reference.md)** - Complete command reference
-- **[About](docs/about.md)** - The philosophy and vision behind Aegis Stack
-- **[Evolving Your Stack](docs/evolving-your-stack.md)** - Add/remove components as needs change
-- **[Technology Stack](docs/technology.md)** - Battle-tested technology choices
+- **[CLI Reference](https://lbedner.github.io/aegis-stack/cli-reference/)** - Complete command reference
+- **[About](https://lbedner.github.io/aegis-stack/about/)** - The philosophy and vision behind Aegis Stack
+- **[Evolving Your Stack](https://lbedner.github.io/aegis-stack/evolving-your-stack/)** - Add/remove components as needs change
+- **[Technology Stack](https://lbedner.github.io/aegis-stack/technology/)** - Battle-tested technology choices
 
 ## For The Veterans
 

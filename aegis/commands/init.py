@@ -100,8 +100,9 @@ def init_command(
 
     # Validate Python version
     if python_version not in SUPPORTED_PYTHON_VERSIONS:
-        typer.echo(
-            f"❌ Invalid Python version '{python_version}'. Must be one of: {', '.join(SUPPORTED_PYTHON_VERSIONS)}",
+        typer.secho(
+            f"Invalid Python version '{python_version}'. Must be one of: {', '.join(SUPPORTED_PYTHON_VERSIONS)}",
+            fg="red",
             err=True,
         )
         raise typer.Exit(1)
@@ -109,34 +110,40 @@ def init_command(
     # Validate engine parameter
     valid_engines = ["cookiecutter", "copier"]
     if engine not in valid_engines:
-        typer.echo(
-            f"❌ Invalid engine '{engine}'. Must be one of: {', '.join(valid_engines)}",
+        typer.secho(
+            f"Invalid engine '{engine}'. Must be one of: {', '.join(valid_engines)}",
+            fg="red",
             err=True,
         )
         raise typer.Exit(1)
 
-    typer.echo("🛡️  Aegis Stack Project Initialization")
-    typer.echo("=" * 50)
+    typer.secho("Aegis Stack Project Initialization", fg=typer.colors.BLUE, bold=True)
 
     # Determine output directory
     base_output_dir = Path(output_dir) if output_dir else Path.cwd()
     project_path = base_output_dir / project_name
 
-    typer.echo(f"📁 Project will be created in: {project_path.resolve()}")
+    typer.echo(
+        f"{typer.style('Location:', fg=typer.colors.CYAN)} {project_path.resolve()}"
+    )
 
     if to_version:
-        typer.echo(f"📦 Template Version: {to_version}")
+        typer.echo(
+            f"{typer.style('Template Version:', fg=typer.colors.CYAN)} {to_version}"
+        )
 
     # Check if directory already exists
     if project_path.exists():
         if not force:
-            typer.echo(f"❌ Directory '{project_path}' already exists", err=True)
+            typer.secho(
+                f"Directory '{project_path}' already exists", fg="red", err=True
+            )
             typer.echo(
                 "   Use --force to overwrite or choose a different name", err=True
             )
             raise typer.Exit(1)
         else:
-            typer.echo(f"⚠️  Overwriting existing directory: {project_path}")
+            typer.secho(f"Overwriting existing directory: {project_path}", fg="yellow")
 
     # Interactive component selection
     # Note: components is list[str] after callback, despite str annotation
@@ -157,7 +164,9 @@ def init_command(
                 selected_services, components_for_validation
             )
             if errors:
-                typer.echo("❌ Service-component compatibility errors:", err=True)
+                typer.secho(
+                    "Service-component compatibility errors:", fg="red", err=True
+                )
                 for error in errors:
                     typer.echo(f"   • {error}", err=True)
 
@@ -169,7 +178,7 @@ def init_command(
                 )
                 if missing_components:
                     typer.echo(
-                        f"💡 Suggestion: Add missing components --components {','.join(sorted(set(selected_components + missing_components)))}",
+                        f"Suggestion: Add missing components --components {','.join(sorted(set(selected_components + missing_components)))}",
                         err=True,
                     )
                     typer.echo(
@@ -187,8 +196,9 @@ def init_command(
                 selected_services
             )
             if service_components:
-                typer.echo(
-                    f"📦 Services require components: {', '.join(sorted(service_components))}"
+                typer.secho(
+                    f"Services require components: {', '.join(sorted(service_components))}",
+                    fg=typer.colors.YELLOW,
                 )
             selected_components = service_components
 
@@ -204,8 +214,9 @@ def init_command(
     if selected_components:
         scheduler_backend = detect_scheduler_backend(selected_components)
         if scheduler_backend != SchedulerBackend.MEMORY.value:
-            typer.echo(
-                f"📊 Auto-detected: Scheduler with {scheduler_backend} persistence"
+            typer.secho(
+                f"Auto-detected: Scheduler with {scheduler_backend} persistence",
+                fg=typer.colors.YELLOW,
             )
 
     if interactive and not components and not services:
@@ -233,7 +244,10 @@ def init_command(
                 clean_selected_only
             )
             if auto_added:
-                typer.echo(f"\n📦 Auto-added dependencies: {', '.join(auto_added)}")
+                typer.secho(
+                    f"\nAuto-added dependencies: {', '.join(auto_added)}",
+                    fg=typer.colors.YELLOW,
+                )
 
         # Merge interactively selected services with any already selected services
         selected_services = list(set(selected_services + interactive_services))
@@ -270,10 +284,12 @@ def init_command(
                                 service_component_map[comp] = []
                             service_component_map[comp].append(service_name)
 
-                typer.echo("\n📦 Auto-added by services:")
+                typer.secho("\nAuto-added by services:", fg=typer.colors.YELLOW)
                 for comp, requiring_services in service_component_map.items():
                     services_str = ", ".join(requiring_services)
-                    typer.echo(f"   • {comp} (required by {services_str})")
+                    typer.echo(
+                        f"   • {comp} {typer.style(f'(required by {services_str})', dim=True)}"
+                    )
 
     # Create template generator with scheduler backend context
     template_gen = TemplateGenerator(
@@ -286,9 +302,11 @@ def init_command(
 
     # Show selected configuration
     typer.echo()
-    typer.echo(f"📁 Project Name: {project_name}")
-    typer.echo("🏗️  Project Structure:")
-    typer.echo(f"   ✅ Core: {', '.join(CORE_COMPONENTS)}")
+    typer.secho("Project Configuration", fg=typer.colors.CYAN, bold=True)
+    typer.echo(f"   {typer.style('Name:', fg=typer.colors.CYAN)} {project_name}")
+    typer.echo(
+        f"   {typer.style('Core:', fg=typer.colors.CYAN)} {', '.join(CORE_COMPONENTS)}"
+    )
 
     # Show infrastructure components
     infra_components = []
@@ -302,57 +320,61 @@ def init_command(
             infra_components.append(name)
 
     if infra_components:
-        typer.echo(f"   📦 Infrastructure: {', '.join(infra_components)}")
+        typer.echo(
+            f"   {typer.style('Infrastructure:', fg=typer.colors.CYAN)} {', '.join(infra_components)}"
+        )
 
     # Show selected services
     if selected_services:
-        typer.echo(f"   🔧 Services: {', '.join(selected_services)}")
+        typer.echo(
+            f"   {typer.style('Services:', fg=typer.colors.CYAN)} {', '.join(selected_services)}"
+        )
 
     # Show template files that will be generated
     template_files = template_gen.get_template_files()
     if template_files:
-        typer.echo("\n📄 Component Files:")
+        typer.secho("\nComponent Files:", fg=typer.colors.CYAN, bold=True)
         for file_path in template_files:
             typer.echo(f"   • {file_path}")
 
     # Show entrypoints that will be created
     entrypoints = template_gen.get_entrypoints()
     if entrypoints:
-        typer.echo("\n🚀 Entrypoints:")
+        typer.secho("\nEntrypoints:", fg=typer.colors.CYAN, bold=True)
         for entrypoint in entrypoints:
             typer.echo(f"   • {entrypoint}")
 
     # Show worker queues that will be created
     worker_queues = template_gen.get_worker_queues()
     if worker_queues:
-        typer.echo("\n👷 Worker Queues:")
+        typer.secho("\nWorker Queues:", fg=typer.colors.CYAN, bold=True)
         for queue in worker_queues:
             typer.echo(f"   • {queue}")
 
     # Show dependency information using template generator
     deps = template_gen._get_pyproject_deps()
     if deps:
-        typer.echo("\n📦 Dependencies to be installed:")
+        typer.secho("\nDependencies to be installed:", fg=typer.colors.CYAN, bold=True)
         for dep in deps:
             typer.echo(f"   • {dep}")
 
     # Confirm before proceeding
     typer.echo()
-    if not yes and not typer.confirm("🚀 Create this project?"):
-        typer.echo("❌ Project creation cancelled")
+    if not yes and not typer.confirm("Create this project?"):
+        typer.secho("Project creation cancelled", fg="red")
         raise typer.Exit(0)
 
     # Handle force overwrite by completely removing existing directory
     project_path = base_output_dir / project_name
     if force and project_path.exists():
-        typer.echo(f"🗑️  Removing existing directory: {project_path}")
+        typer.echo(f"Removing existing directory: {project_path}")
         import shutil
 
         shutil.rmtree(project_path)
 
     # Create project using selected template engine
     typer.echo()
-    typer.echo(f"🔧 Creating project: {project_name}")
+    typer.secho(f"Creating project: {project_name}", fg=typer.colors.BLUE, bold=True)
 
     try:
         if engine == "copier":
@@ -388,9 +410,9 @@ def init_command(
         # which provides better status reporting and automated setup
 
     except ImportError as e:
-        typer.echo(f"❌ Error: {e}", err=True)
+        typer.secho(f"Error: {e}", fg="red", err=True)
         typer.echo("   Required template engine not installed", err=True)
         raise typer.Exit(1)
     except Exception as e:
-        typer.echo(f"❌ Error creating project: {e}", err=True)
+        typer.secho(f"Error creating project: {e}", fg="red", err=True)
         raise typer.Exit(1)

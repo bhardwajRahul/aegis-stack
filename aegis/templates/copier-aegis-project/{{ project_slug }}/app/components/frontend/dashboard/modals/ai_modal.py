@@ -126,7 +126,7 @@ class ConfigurationSection(ft.Container):
         )
 
         # Status row
-        status_text = "✅ Enabled" if enabled else "❌ Disabled"
+        status_text = "Enabled" if enabled else "Disabled"
         config_rows.append(
             ft.Row(
                 [
@@ -142,7 +142,7 @@ class ConfigurationSection(ft.Container):
         )
 
         # Streaming support row
-        streaming_text = "✅ Supported" if streaming_supported else "❌ Not Supported"
+        streaming_text = "Supported" if streaming_supported else "Not Supported"
         config_rows.append(
             ft.Row(
                 [
@@ -158,7 +158,7 @@ class ConfigurationSection(ft.Container):
         )
 
         # Configuration validation row
-        validation_text = "✅ Valid" if config_valid else "❌ Invalid"
+        validation_text = "Valid" if config_valid else "Invalid"
         config_rows.append(
             ft.Row(
                 [

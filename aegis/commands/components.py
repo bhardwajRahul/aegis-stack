@@ -10,7 +10,7 @@ from ..core.components import CORE_COMPONENTS, ComponentType, get_components_by_
 def components_command() -> None:
     """List available components and their dependencies."""
 
-    typer.echo("\n📦 CORE COMPONENTS")
+    typer.echo("\nCORE COMPONENTS")
     typer.echo("=" * 40)
     for component in CORE_COMPONENTS:
         if component == "backend":
@@ -18,7 +18,7 @@ def components_command() -> None:
         elif component == "frontend":
             typer.echo("  frontend     - Flet frontend interface (always included)")
 
-    typer.echo("\n🏗️  INFRASTRUCTURE COMPONENTS")
+    typer.echo("\nINFRASTRUCTURE COMPONENTS")
     typer.echo("=" * 40)
 
     infra_components = get_components_by_type(ComponentType.INFRASTRUCTURE)
@@ -30,6 +30,5 @@ def components_command() -> None:
             typer.echo(f"               Recommends: {', '.join(spec.recommends)}")
 
     typer.echo(
-        "\n💡 Use 'aegis init PROJECT_NAME --components redis,worker' "
-        "to select components"
+        "\nUse 'aegis init PROJECT_NAME --components redis,worker' to select components"
     )

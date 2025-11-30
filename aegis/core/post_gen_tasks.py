@@ -11,6 +11,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import typer
+
 # Task configuration constants (following tests/cli/test_utils.py pattern)
 POST_GEN_TIMEOUT_INSTALL = 300  # 5 minutes for dependency installation
 POST_GEN_TIMEOUT_FORMAT = 60  # 1 minute for code formatting
@@ -322,17 +324,25 @@ def copy_service_files(
     # Get the file mapping for this service
     file_mapping = get_component_file_mapping()
     if service_name not in file_mapping:
-        print(f"⚠️  Unknown service '{service_name}' - skipping file copy")
+        typer.secho(
+            f"Unknown service '{service_name}' - skipping file copy",
+            fg=typer.colors.YELLOW,
+        )
         return
 
     service_files = file_mapping[service_name]
-    print(f"📁 Copying {service_name} service files from template...")
+    typer.secho(
+        f"Copying {service_name} service files from template...", fg=typer.colors.CYAN
+    )
 
     # The template is at: aegis-stack/aegis/templates/copier-aegis-project/{{ project_slug }}/
     # We need to find the template content directory
     template_content = template_path / "{{ project_slug }}"
     if not template_content.exists():
-        print(f"⚠️  Template content directory not found: {template_content}")
+        typer.secho(
+            f"Warning: Template content directory not found: {template_content}",
+            fg=typer.colors.YELLOW,
+        )
         return
 
     copied_count = 0
@@ -365,9 +375,13 @@ def copy_service_files(
             copied_count += 1
 
     if copied_count > 0:
-        print(f"✅ Copied {copied_count} {service_name} service files")
+        typer.secho(
+            f"Copied {copied_count} {service_name} service files", fg=typer.colors.GREEN
+        )
     else:
-        print(f"⚠️  No {service_name} files copied (may already exist or be templates)")
+        typer.echo(
+            f"No {service_name} files copied (may already exist or be templates)"
+        )
 
 
 def install_dependencies(project_path: Path, python_version: str | None = None) -> bool:
@@ -392,7 +406,7 @@ def install_dependencies(project_path: Path, python_version: str | None = None) 
         allowing uv to auto-detect a compatible Python version.
     """
     try:
-        print("📦 Installing dependencies with uv...")
+        typer.secho("Installing dependencies with uv...", fg=typer.colors.CYAN)
 
         # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
         env = os.environ.copy()
@@ -413,27 +427,34 @@ def install_dependencies(project_path: Path, python_version: str | None = None) 
         )
 
         if result.returncode == 0:
-            print("✅ Dependencies installed successfully")
+            typer.secho("Dependencies installed successfully", fg=typer.colors.GREEN)
             return True
         else:
-            print("⚠️  Dependency installation failed")
+            typer.secho(
+                "Warning: Dependency installation failed", fg=typer.colors.YELLOW
+            )
             if result.stderr:
                 truncated = _truncate_stderr(result.stderr)
                 for line in truncated.split("\n"):
-                    print(f"   {line}")
-            print("💡 Run 'uv sync' manually after project creation")
+                    typer.echo(f"   {line}")
+            typer.secho("Run 'uv sync' manually after project creation", dim=True)
             return False
 
     except subprocess.TimeoutExpired:
-        print("⚠️  Dependency installation timeout - run 'uv sync' manually")
+        typer.secho(
+            "Warning: Dependency installation timeout - run 'uv sync' manually",
+            fg=typer.colors.YELLOW,
+        )
         return False
     except FileNotFoundError:
-        print("⚠️  uv not found in PATH")
-        print("💡 Install uv first: https://github.com/astral-sh/uv")
+        typer.secho("Warning: uv not found in PATH", fg=typer.colors.YELLOW)
+        typer.secho("Install uv first: https://github.com/astral-sh/uv", dim=True)
         return False
     except Exception as e:
-        print(f"⚠️  Dependency installation failed: {e}")
-        print("💡 Run 'uv sync' manually after project creation")
+        typer.secho(
+            f"Warning: Dependency installation failed: {e}", fg=typer.colors.YELLOW
+        )
+        typer.secho("Run 'uv sync' manually after project creation", dim=True)
         return False
 
 
@@ -448,24 +469,26 @@ def setup_env_file(project_path: Path) -> bool:
         True if setup succeeded or .env already exists, False on error
     """
     try:
-        print("📄 Setting up environment configuration...")
+        typer.secho("Setting up environment configuration...", fg=typer.colors.CYAN)
         env_example = project_path / ".env.example"
         env_file = project_path / ".env"
 
         if env_example.exists() and not env_file.exists():
             shutil.copy(env_example, env_file)
-            print("✅ Environment file created from .env.example")
+            typer.secho(
+                "Environment file created from .env.example", fg=typer.colors.GREEN
+            )
             return True
         elif env_file.exists():
-            print("✅ Environment file already exists")
+            typer.echo("Environment file already exists")
             return True
         else:
-            print("⚠️  No .env.example file found")
+            typer.secho("Warning: No .env.example file found", fg=typer.colors.YELLOW)
             return False
 
     except Exception as e:
-        print(f"⚠️  Environment setup failed: {e}")
-        print("💡 Copy .env.example to .env manually")
+        typer.secho(f"Warning: Environment setup failed: {e}", fg=typer.colors.YELLOW)
+        typer.secho("Copy .env.example to .env manually", dim=True)
         return False
 
 
@@ -484,7 +507,7 @@ def run_migrations(project_path: Path, include_auth: bool = False) -> bool:
         return True  # No migrations needed
 
     try:
-        print("🗃️  Setting up database with auth schema...")
+        typer.secho("Setting up database with auth schema...", fg=typer.colors.CYAN)
 
         # Ensure data directory exists
         data_dir = project_path / "data"
@@ -493,10 +516,14 @@ def run_migrations(project_path: Path, include_auth: bool = False) -> bool:
         # Verify alembic config exists before running migration
         alembic_ini_path = project_path / "alembic" / "alembic.ini"
         if not alembic_ini_path.exists():
-            print(f"⚠️  Alembic config file not found at {alembic_ini_path}")
-            print(
-                "💡 Skipping database migration. Please ensure the config file exists "
-                "and run 'alembic upgrade head' manually."
+            typer.secho(
+                f"Warning: Alembic config file not found at {alembic_ini_path}",
+                fg=typer.colors.YELLOW,
+            )
+            typer.secho(
+                "Skipping database migration. Please ensure the config file exists "
+                "and run 'alembic upgrade head' manually.",
+                dim=True,
             )
             return False
 
@@ -523,23 +550,32 @@ def run_migrations(project_path: Path, include_auth: bool = False) -> bool:
         )
 
         if result.returncode == 0:
-            print("✅ Database tables created successfully")
+            typer.secho("Database tables created successfully", fg=typer.colors.GREEN)
             return True
         else:
-            print("⚠️  Database migration setup failed")
+            typer.secho(
+                "Warning: Database migration setup failed", fg=typer.colors.YELLOW
+            )
             if result.stderr:
                 truncated = _truncate_stderr(result.stderr)
                 for line in truncated.split("\n"):
-                    print(f"   {line}")
-            print("💡 Run 'alembic upgrade head' manually after project creation")
+                    typer.echo(f"   {line}")
+            typer.secho(
+                "Run 'alembic upgrade head' manually after project creation", dim=True
+            )
             return False
 
     except subprocess.TimeoutExpired:
-        print("⚠️  Migration setup timeout - run 'alembic upgrade head' manually")
+        typer.secho(
+            "Warning: Migration setup timeout - run 'alembic upgrade head' manually",
+            fg=typer.colors.YELLOW,
+        )
         return False
     except Exception as e:
-        print(f"⚠️  Migration setup failed: {e}")
-        print("💡 Run 'alembic upgrade head' manually after project creation")
+        typer.secho(f"Warning: Migration setup failed: {e}", fg=typer.colors.YELLOW)
+        typer.secho(
+            "Run 'alembic upgrade head' manually after project creation", dim=True
+        )
         return False
 
 
@@ -554,7 +590,7 @@ def format_code(project_path: Path) -> bool:
         True if formatting succeeded, False otherwise
     """
     try:
-        print("🎨 Auto-formatting generated code...")
+        typer.secho("Auto-formatting generated code...", fg=typer.colors.CYAN)
 
         # Call make fix to auto-format the generated project
         # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
@@ -571,24 +607,28 @@ def format_code(project_path: Path) -> bool:
         )
 
         if result.returncode == 0:
-            print("✅ Code formatting completed successfully")
+            typer.secho("Code formatting completed successfully", fg=typer.colors.GREEN)
             return True
         else:
-            print(
-                "⚠️  Some formatting issues detected, but project created successfully"
+            typer.secho(
+                "Some formatting issues detected, but project created successfully",
+                fg=typer.colors.YELLOW,
             )
-            print("💡 Run 'make fix' manually to resolve remaining issues")
+            typer.secho("Run 'make fix' manually to resolve remaining issues", dim=True)
             return False
 
     except FileNotFoundError:
-        print("💡 Run 'make fix' to format code when ready")
+        typer.secho("Run 'make fix' to format code when ready", dim=True)
         return False
     except subprocess.TimeoutExpired:
-        print("⚠️  Formatting timeout - run 'make fix' manually when ready")
+        typer.secho(
+            "Warning: Formatting timeout - run 'make fix' manually when ready",
+            fg=typer.colors.YELLOW,
+        )
         return False
     except Exception as e:
-        print(f"⚠️  Auto-formatting skipped: {e}")
-        print("💡 Run 'make fix' manually to format code")
+        typer.secho(f"Warning: Auto-formatting skipped: {e}", fg=typer.colors.YELLOW)
+        typer.secho("Run 'make fix' manually to format code", dim=True)
         return False
 
 
@@ -613,7 +653,10 @@ def run_post_generation_tasks(
         Individual task failures don't stop execution - we try to complete
         as many tasks as possible and report what needs manual intervention.
     """
-    print("\n🚀 Setting up your project environment...")
+    typer.echo()
+    typer.secho(
+        "Setting up your project environment...", fg=typer.colors.BLUE, bold=True
+    )
 
     # Task 1: Install dependencies (critical)
     deps_success = install_dependencies(project_path, python_version)
@@ -628,22 +671,26 @@ def run_post_generation_tasks(
     format_code(project_path)
 
     # Print final status
-    print("\n" + "=" * 60)
+    typer.echo()
     if deps_success:
-        print("✅ Project ready to run!")
-        print("\n📋 Next steps:")
-        print(f"   cd {project_path.name}")
-        print("   make serve")
-        print("\n💡 Your application is fully configured and ready to use!")
+        typer.secho("Project ready to run!", fg=typer.colors.GREEN, bold=True)
+        typer.echo()
+        typer.secho("Next steps:", fg=typer.colors.CYAN, bold=True)
+        typer.echo(f"   cd {project_path.name}")
+        typer.echo("   make serve")
+        typer.echo()
+        typer.secho("Your application is fully configured and ready to use!", dim=True)
     else:
-        print("⚠️  Project created with some setup issues")
-        print("\n📋 Manual setup required:")
-        print(f"   cd {project_path.name}")
-        print("   uv sync")
-        print("   cp .env.example .env")
+        typer.secho(
+            "Project created with some setup issues", fg=typer.colors.YELLOW, bold=True
+        )
+        typer.echo()
+        typer.secho("Manual setup required:", fg=typer.colors.CYAN, bold=True)
+        typer.echo(f"   cd {project_path.name}")
+        typer.echo("   uv sync")
+        typer.echo("   cp .env.example .env")
         if include_auth:
-            print("   alembic upgrade head")
-        print("   make serve")
-    print("=" * 60)
+            typer.echo("   alembic upgrade head")
+        typer.echo("   make serve")
 
     return deps_success

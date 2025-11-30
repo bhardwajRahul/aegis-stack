@@ -459,7 +459,7 @@ async def failure_testing_task(ctx: dict[str, Any], **kwargs: Any) -> dict[str, 
         )
 
         # Log failure details before raising
-        logger.warning(f"🧪 Intentional test failure: {error_message}")
+        logger.warning(f"Intentional test failure: {error_message}")
 
         raise Exception(error_message)
 

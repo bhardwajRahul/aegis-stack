@@ -80,6 +80,8 @@ Set TypingSpeed 30ms
 Enter
 Sleep 12s
 
+Set TypingSpeed 100ms
 Type "exit"
+Set TypingSpeed 30ms
 Enter
 Sleep 2s

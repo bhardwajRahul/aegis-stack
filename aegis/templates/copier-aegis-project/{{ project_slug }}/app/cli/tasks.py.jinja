@@ -38,17 +38,17 @@ def list_jobs() -> None:
     Shows job details including next run time, status, and configuration.
     """
 
-    rprint("📋 [bold blue]Listing Scheduled Jobs[/bold blue]")
+    rprint("[bold blue]Listing Scheduled Jobs[/bold blue]")
 
     try:
         tasks = asyncio.run(_get_scheduled_tasks())
 
         if not tasks:
-            rprint("ℹ️  [yellow]No scheduled jobs found[/yellow]")
+            rprint("[yellow]No scheduled jobs found[/yellow]")
             return
 
         table = Table(
-            title="🕒 Scheduled Jobs",
+            title="Scheduled Jobs",
             show_header=True,
             header_style="bold magenta",
         )
@@ -78,10 +78,10 @@ def list_jobs() -> None:
             )
 
         console.print(table)
-        rprint(f"\n📊 [cyan]Total jobs:[/cyan] {len(tasks)}")
+        rprint(f"\n[cyan]Total jobs:[/cyan] {len(tasks)}")
 
     except Exception as e:
-        rprint(f"❌ [red]Failed to list jobs:[/red] {e}")
+        rprint(f"[red]Failed to list jobs:[/red] {e}")
         raise typer.Exit(1)
 
 
@@ -103,10 +103,10 @@ def job_statistics(
 
     try:
         if job_id:
-            rprint(f"📊 [bold blue]Job Statistics for: {job_id}[/bold blue]")
+            rprint(f"[bold blue]Job Statistics for: {job_id}[/bold blue]")
             stats = asyncio.run(_get_job_statistics(job_id))
         else:
-            rprint("📊 [bold blue]Overall Scheduler Statistics[/bold blue]")
+            rprint("[bold blue]Overall Scheduler Statistics[/bold blue]")
             stats = asyncio.run(_get_overall_statistics())
 
         if json_output:
@@ -116,7 +116,7 @@ def job_statistics(
         _display_statistics(stats, job_id)
 
     except Exception as e:
-        rprint(f"❌ [red]Failed to get statistics:[/red] {e}")
+        rprint(f"[red]Failed to get statistics:[/red] {e}")
         raise typer.Exit(1)
 
 
@@ -141,12 +141,12 @@ def job_history(
     try:
         if job_id:
             rprint(
-                f"📚 [bold blue]Execution History for: {job_id}[/bold blue] "
+                f"[bold blue]Execution History for: {job_id}[/bold blue] "
                 f"(last {limit})"
             )
         else:
             rprint(
-                f"📚 [bold blue]Recent Job Execution History[/bold blue] "
+                f"[bold blue]Recent Job Execution History[/bold blue] "
                 f"(last {limit})"
             )
 
@@ -157,11 +157,11 @@ def job_history(
             return
 
         if not history:
-            rprint("ℹ️  [yellow]No execution history found[/yellow]")
+            rprint("[yellow]No execution history found[/yellow]")
             return
 
         table = Table(
-            title="🕰️  Job Execution History",
+            title="Job Execution History",
             show_header=True,
             header_style="bold magenta",
         )
@@ -192,7 +192,7 @@ def job_history(
         console.print(table)
 
     except Exception as e:
-        rprint(f"❌ [red]Failed to get job history:[/red] {e}")
+        rprint(f"[red]Failed to get job history:[/red] {e}")
         raise typer.Exit(1)
 
 
@@ -211,7 +211,7 @@ def trigger_job(
     Useful for testing job functionality or running jobs on-demand.
     """
 
-    rprint(f"🚀 [bold blue]Triggering job:[/bold blue] {job_id}")
+    rprint(f"[bold blue]Triggering job:[/bold blue] {job_id}")
 
     try:
         # First verify the job exists
@@ -219,26 +219,26 @@ def trigger_job(
         job_exists = any(task.job_id == job_id for task in tasks)
 
         if not job_exists:
-            rprint(f"❌ [red]Job not found:[/red] {job_id}")
-            rprint("💡 [yellow]Use 'tasks list' to see available jobs[/yellow]")
+            rprint(f"[red]Job not found:[/red] {job_id}")
+            rprint("[yellow]Use 'tasks list' to see available jobs[/yellow]")
             raise typer.Exit(1)
 
         # Trigger the job
         result = asyncio.run(_trigger_job_execution(job_id, wait, timeout))
 
         if result.get("status") == "success":
-            rprint(f"✅ [green]Job triggered successfully![/green]")
+            rprint("[green]Job triggered successfully![/green]")
             if wait and result.get("execution_details"):
                 details = result["execution_details"]
                 duration_ms = details.get('duration_ms', 0)
-                rprint(f"⏱️  [cyan]Duration:[/cyan] {duration_ms:.1f}ms")
-                rprint(f"📋 [cyan]Result:[/cyan] {details.get('result', 'No result')}")
+                rprint(f"[cyan]Duration:[/cyan] {duration_ms:.1f}ms")
+                rprint(f"[cyan]Result:[/cyan] {details.get('result', 'No result')}")
         else:
             error_msg = result.get('error', 'Unknown error')
-            rprint(f"❌ [red]Job execution failed:[/red] {error_msg}")
+            rprint(f"[red]Job execution failed:[/red] {error_msg}")
 
     except Exception as e:
-        rprint(f"❌ [red]Failed to trigger job:[/red] {e}")
+        rprint(f"[red]Failed to trigger job:[/red] {e}")
         raise typer.Exit(1)
 
 
@@ -282,20 +282,20 @@ def _display_statistics(stats: dict[str, Any], job_id: str | None) -> None:
         info_text = f"""
 [bold cyan]Job Performance Metrics[/bold cyan]
 
-🏃 [yellow]Executions:[/yellow] {stats.get('total_executions', 0)}
-✅ [yellow]Successful:[/yellow] {stats.get('successful_executions', 0)}
-❌ [yellow]Failed:[/yellow] {stats.get('failed_executions', 0)}
-📊 [yellow]Success Rate:[/yellow] {stats.get('success_rate_percent', 0):.1f}%
+[yellow]Executions:[/yellow] {stats.get('total_executions', 0)}
+[yellow]Successful:[/yellow] {stats.get('successful_executions', 0)}
+[yellow]Failed:[/yellow] {stats.get('failed_executions', 0)}
+[yellow]Success Rate:[/yellow] {stats.get('success_rate_percent', 0):.1f}%
 
-⏱️  [yellow]Avg Duration:[/yellow] {stats.get('avg_duration_ms', 0):.1f}ms
-🚀 [yellow]Min Duration:[/yellow] {stats.get('min_duration_ms', 0):.1f}ms
-🐌 [yellow]Max Duration:[/yellow] {stats.get('max_duration_ms', 0):.1f}ms
+[yellow]Avg Duration:[/yellow] {stats.get('avg_duration_ms', 0):.1f}ms
+[yellow]Min Duration:[/yellow] {stats.get('min_duration_ms', 0):.1f}ms
+[yellow]Max Duration:[/yellow] {stats.get('max_duration_ms', 0):.1f}ms
 
-🕐 [yellow]Last Execution:[/yellow] {stats.get('last_execution', 'Never')}
-🕑 [yellow]Next Scheduled:[/yellow] {stats.get('next_run', 'Not scheduled')}
+[yellow]Last Execution:[/yellow] {stats.get('last_execution', 'Never')}
+[yellow]Next Scheduled:[/yellow] {stats.get('next_run', 'Not scheduled')}
         """.strip()
 
-        title = f"📊 Statistics for {job_id}"
+        title = f"Statistics for {job_id}"
         console.print(Panel(info_text, title=title, border_style="blue"))
 
     else:
@@ -303,23 +303,23 @@ def _display_statistics(stats: dict[str, Any], job_id: str | None) -> None:
         info_text = f"""
 [bold cyan]Scheduler Overview[/bold cyan]
 
-📋 [yellow]Total Jobs:[/yellow] {stats.get('total_jobs', 0)}
-🟢 [yellow]Active Jobs:[/yellow] {stats.get('active_jobs', 0)}
-🔴 [yellow]Paused Jobs:[/yellow] {stats.get('paused_jobs', 0)}
+[yellow]Total Jobs:[/yellow] {stats.get('total_jobs', 0)}
+[yellow]Active Jobs:[/yellow] {stats.get('active_jobs', 0)}
+[yellow]Paused Jobs:[/yellow] {stats.get('paused_jobs', 0)}
 
-🏃 [yellow]Total Executions:[/yellow] {stats.get('total_executions', 0)}
-✅ [yellow]Successful:[/yellow] {stats.get('successful_executions', 0)}
-❌ [yellow]Failed:[/yellow] {stats.get('failed_executions', 0)}
+[yellow]Total Executions:[/yellow] {stats.get('total_executions', 0)}
+[yellow]Successful:[/yellow] {stats.get('successful_executions', 0)}
+[yellow]Failed:[/yellow] {stats.get('failed_executions', 0)}
 
-📊 [yellow]Overall Success Rate:[/yellow] {stats.get('success_rate_percent', 0):.1f}%
-⏱️  [yellow]Avg Execution Time:[/yellow] {stats.get('avg_duration_ms', 0):.1f}ms
+[yellow]Overall Success Rate:[/yellow] {stats.get('success_rate_percent', 0):.1f}%
+[yellow]Avg Execution Time:[/yellow] {stats.get('avg_duration_ms', 0):.1f}ms
 
-🕐 [yellow]Scheduler Uptime:[/yellow] {stats.get('uptime', 'Unknown')}
-🔄 [yellow]Last Activity:[/yellow] {stats.get('last_activity', 'No recent activity')}
+[yellow]Scheduler Uptime:[/yellow] {stats.get('uptime', 'Unknown')}
+[yellow]Last Activity:[/yellow] {stats.get('last_activity', 'No recent activity')}
         """.strip()
 
         console.print(
-            Panel(info_text, title="📊 Scheduler Statistics", border_style="green")
+            Panel(info_text, title="Scheduler Statistics", border_style="green")
         )
 
 

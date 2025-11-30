@@ -173,7 +173,7 @@ class AICard:
 
         # If service disabled, show that prominently
         if not enabled:
-            config_status = "🔴 Disabled"
+            config_status = "Disabled"
             config_color = ft.Colors.RED
 
         # Create metrics grid (3 rows x 2 columns)

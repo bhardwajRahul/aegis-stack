@@ -10,17 +10,17 @@ from ..core.services import ServiceType, get_services_by_type
 def services_command() -> None:
     """List available services and their dependencies."""
 
-    typer.echo("\n🔧 AVAILABLE SERVICES")
+    typer.echo("\nAVAILABLE SERVICES")
     typer.echo("=" * 40)
 
     # Group services by type
     service_types = [
-        (ServiceType.AUTH, "🔐 Authentication Services"),
-        (ServiceType.PAYMENT, "💰 Payment Services"),
-        (ServiceType.AI, "🤖 AI & Machine Learning Services"),
-        (ServiceType.NOTIFICATION, "📧 Notification Services"),
-        (ServiceType.ANALYTICS, "📊 Analytics Services"),
-        (ServiceType.STORAGE, "💾 Storage Services"),
+        (ServiceType.AUTH, "Authentication Services"),
+        (ServiceType.PAYMENT, "Payment Services"),
+        (ServiceType.AI, "AI & Machine Learning Services"),
+        (ServiceType.NOTIFICATION, "Notification Services"),
+        (ServiceType.ANALYTICS, "Analytics Services"),
+        (ServiceType.STORAGE, "Storage Services"),
     ]
 
     services_found = False
@@ -49,4 +49,4 @@ def services_command() -> None:
     if not services_found:
         typer.echo("  No services available yet.")
 
-    typer.echo("\n💡 Use 'aegis init PROJECT_NAME --services auth' to add services")
+    typer.echo("\nUse 'aegis init PROJECT_NAME --services auth' to add services")

@@ -6,23 +6,23 @@
 #=============================================================================
 
 build: ## Build all Docker images (safe, sequential)
-	@echo "🔨 Building Docker images..."
+	@echo "Building Docker images..."
 	@docker compose --profile dev build
 
 serve: ## Run all services (assumes images are built)
-	@echo "🚀 Starting services... (Press Ctrl+C to stop)"
+	@echo "Starting services... (Press Ctrl+C to stop)"
 	@docker compose --profile dev up --remove-orphans
 
 serve-bg: ## Run all services in background
-	@echo "🚀 Starting services in background..."
+	@echo "Starting services in background..."
 	@docker compose --profile dev up -d --remove-orphans
 
 stop: ## Gracefully stop all services
-	@echo "⏹️  Stopping services..."
+	@echo "Stopping services..."
 	@docker compose --profile dev down --remove-orphans
 
 clean: ## Nuclear cleanup - remove containers, networks, and images
-	@echo "🧹 Nuclear cleanup - removing everything..."
+	@echo "Nuclear cleanup - removing everything..."
 	@docker compose down --remove-orphans --volumes --rmi all 2>/dev/null || true
 	@docker system prune -f
 
@@ -41,35 +41,35 @@ restart: stop serve ## Quick restart (no rebuild)
 #=============================================================================
 
 logs: ## Follow logs from all services
-	@echo "📋 Following all service logs..."
+	@echo "Following all service logs..."
 	@docker compose logs -f
 
 logs-web: ## Follow webserver logs only
-	@echo "📋 Following webserver logs..."
+	@echo "Following webserver logs..."
 	@docker compose logs -f webserver
 
 logs-worker: ## Follow worker logs only
-	@echo "📋 Following worker logs..."
+	@echo "Following worker logs..."
 	@docker compose logs -f worker-system worker-load-test
 
 logs-redis: ## Follow Redis logs only
-	@echo "📋 Following Redis logs..."
+	@echo "Following Redis logs..."
 	@docker compose logs -f redis{% if include_scheduler %}
 
 logs-scheduler: ## Follow scheduler logs only
-	@echo "📋 Following scheduler logs..."
+	@echo "Following scheduler logs..."
 	@docker compose logs -f scheduler{% endif %}
 
 shell: ## Open shell in webserver container
-	@echo "🐚 Opening shell in webserver container..."
+	@echo "Opening shell in webserver container..."
 	@docker compose exec webserver /bin/bash
 
 shell-worker: ## Open shell in worker container
-	@echo "🐚 Opening shell in worker container..."
+	@echo "Opening shell in worker container..."
 	@docker compose exec worker-system /bin/bash
 
 ps: ## Show running containers
-	@echo "📊 Docker containers status:"
+	@echo "Docker containers status:"
 	@docker compose ps
 
 #=============================================================================
@@ -77,19 +77,19 @@ ps: ## Show running containers
 #=============================================================================
 
 redis-cli: ## Connect to Redis CLI
-	@echo "🔧 Connecting to Redis CLI..."
+	@echo "Connecting to Redis CLI..."
 	@docker compose exec redis redis-cli
 
 redis-stats: ## Show Redis memory and stats
-	@echo "📊 Redis statistics:"
+	@echo "Redis statistics:"
 	@docker compose exec redis redis-cli info memory
 
 redis-keys: ## Show all Redis keys
-	@echo "🔑 Redis keys:"
+	@echo "Redis keys:"
 	@docker compose exec redis redis-cli keys "*"
 
 redis-reset: ## Clear all Redis data
-	@echo "🔄 Clearing all Redis data..."
+	@echo "Clearing all Redis data..."
 	@docker compose exec redis redis-cli flushall
 
 #=============================================================================
@@ -97,11 +97,11 @@ redis-reset: ## Clear all Redis data
 #=============================================================================
 
 health: ## Check system health status
-	@echo "🩺 Checking system health..."
+	@echo "Checking system health..."
 	@uv run {{ project_slug }} health status
 
 health-detailed: ## Detailed system health information
-	@echo "🩺 Detailed system health..."
+	@echo "Detailed system health..."
 	@uv run {{ project_slug }} health status --detailed
 
 health-json: ## System health as JSON
@@ -111,11 +111,11 @@ health-probe: ## Health probe (exits 1 if unhealthy)
 	@uv run {{ project_slug }} health probe
 
 test: ## Run tests locally
-	@echo "🧪 Running tests..."
+	@echo "Running tests..."
 	@uv run pytest
 
 test-verbose: ## Run tests with verbose output
-	@echo "🧪 Running tests (verbose)..."
+	@echo "Running tests (verbose)..."
 	@uv run pytest -v
 
 #=============================================================================
@@ -123,39 +123,39 @@ test-verbose: ## Run tests with verbose output
 #=============================================================================
 
 lint: ## Check code style with ruff
-	@echo "🔍 Running linting..."
+	@echo "Running linting..."
 	@uv run ruff check .
 
 fix: ## Auto-fix linting and formatting issues
-	@echo "🔧 Auto-fixing code issues..."
+	@echo "Auto-fixing code issues..."
 	@uv run ruff check . --fix
 	@uv run ruff format .
 
 format: ## Format code with ruff
-	@echo "💄 Formatting code..."
+	@echo "Formatting code..."
 	@uv run ruff format .
 
 typecheck: ## Run type checking with ty
-	@echo "🔍 Running type checking..."
+	@echo "Running type checking..."
 	@uv run ty check
 
 check: lint typecheck test ## Run all code quality checks
-	@echo "✅ All checks completed successfully!"
+	@echo "All checks completed successfully!"
 
 #=============================================================================
 # PROJECT MANAGEMENT
 #=============================================================================
 
 install: ## Install/sync dependencies with uv
-	@echo "📦 Installing dependencies..."
+	@echo "Installing dependencies..."
 	@uv sync --all-extras
 
 deps-update: ## Update dependencies
-	@echo "📦 Updating dependencies..."
+	@echo "Updating dependencies..."
 	@uv sync --upgrade
 
 clean-cache: ## Clean Python cache files
-	@echo "🧹 Cleaning Python cache files..."
+	@echo "Cleaning Python cache files..."
 	@find . -type d -name "__pycache__" -exec rm -rf {} +
 	@find . -type f -name "*.pyc" -delete
 
@@ -164,11 +164,11 @@ clean-cache: ## Clean Python cache files
 #=============================================================================
 
 docs-serve: ## Serve documentation locally (http://localhost:8001)
-	@echo "📚 Serving documentation on http://localhost:8001"
+	@echo "Serving documentation on http://localhost:8001"
 	@uv run mkdocs serve --dev-addr 0.0.0.0:8001
 
 docs-build: ## Build static documentation
-	@echo "📚 Building documentation..."
+	@echo "Building documentation..."
 	@uv run mkdocs build
 
 {% if include_database %}#=============================================================================
@@ -176,23 +176,23 @@ docs-build: ## Build static documentation
 #=============================================================================
 
 migrate: ## Apply database migrations
-	@echo "🗃️  Applying database migrations..."
+	@echo "Applying database migrations..."
 	@docker compose exec webserver uv run alembic -c alembic/alembic.ini upgrade head
 
 migrate-check: ## Check migration status
-	@echo "🔍 Checking migration status..."
+	@echo "Checking migration status..."
 	@docker compose exec webserver uv run alembic -c alembic/alembic.ini current
 
 migrate-history: ## Show migration history
-	@echo "📜 Migration history:"
+	@echo "Migration history:"
 	@docker compose exec webserver uv run alembic -c alembic/alembic.ini history --verbose
 
 migrate-reset: ## Reset database (WARNING: destructive)
-	@echo "⚠️  This will destroy all data in the database!"
+	@echo "WARNING: This will destroy all data in the database!"
 	@read -p "Are you sure? Type 'yes' to continue: " confirm && [ "$$confirm" = "yes" ] || exit 1
 	@docker compose exec webserver uv run alembic -c alembic/alembic.ini downgrade base
 	@docker compose exec webserver uv run alembic -c alembic/alembic.ini upgrade head
-	@echo "✅ Database reset complete"
+	@echo "Database reset complete"
 
 {% endif %}
 
@@ -201,7 +201,7 @@ migrate-reset: ## Reset database (WARNING: destructive)
 #=============================================================================
 
 worker-test: ## Test workers in burst mode (process and exit)
-	@echo "🧪 Testing system worker in burst mode..."
+	@echo "Testing system worker in burst mode..."
 	@uv run python -m arq app.components.worker.queues.system.WorkerSettings --burst
 
 #=============================================================================
@@ -209,26 +209,26 @@ worker-test: ## Test workers in burst mode (process and exit)
 #=============================================================================
 
 status: ## Show current system status
-	@echo "📊 Current system status:"
+	@echo "Current system status:"
 	@echo
-	@echo "🐳 Docker containers:"
+	@echo "Docker containers:"
 	@docker compose ps || echo "No containers running"
 	@echo
-	@echo "📦 Dependencies:"
+	@echo "Dependencies:"
 	@uv pip list | head -20 || echo "Dependencies not installed"
 
 help: ## Show this help message
 	@echo "{{ project_name }} development commands:"
 	@echo
-	@echo "🚀 WORKFLOW COMMANDS (start here):"
+	@echo "WORKFLOW COMMANDS (start here):"
 	@echo "  make refresh      - Nuclear reset (clean + build + serve)"
 	@echo "  make rebuild      - Build and serve"
 	@echo "  make restart      - Quick restart"
 	@echo
-	@echo "🔧 CORE COMMANDS:"
+	@echo "CORE COMMANDS:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 	@echo
-	@echo "💡 TIP: Use 'make refresh' when everything is broken!"
+	@echo "TIP: Use 'make refresh' when everything is broken!"
 
 .PHONY: build serve stop clean rebuild refresh restart logs logs-web logs-worker logs-redis{% if include_scheduler %} logs-scheduler{% endif %} shell shell-worker ps redis-cli redis-stats redis-keys redis-reset health health-detailed health-json health-probe test test-verbose lint fix format typecheck check install deps-update clean-cache docs-serve docs-build{% if include_database %} migrate migrate-check migrate-history migrate-reset{% endif %} worker-test status help
 

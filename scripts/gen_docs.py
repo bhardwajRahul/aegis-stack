@@ -75,6 +75,28 @@ with open("README.md") as readme:
     # Use regex to catch all docs/*.md links instead of manually listing each one
     content = re.sub(r"\]\(docs/([^)]+\.md)\)", r"](\1)", content)
 
+    # Convert absolute docs URLs to relative for MkDocs (works locally and deployed)
+    content = content.replace("https://lbedner.github.io/aegis-stack/", "")
+
+    # Fix trailing slash links to explicit file references for MkDocs
+    # Check if it's a directory (has index.md) or a top-level page
+    from pathlib import Path
+
+    docs_dir = Path("docs")
+
+    def fix_trailing_slash(match: re.Match[str]) -> str:
+        path = match.group(1).rstrip("/")
+        check_path = docs_dir / path / "index.md"
+        # Check if it's a directory with index.md
+        if check_path.exists():
+            return f"]({path}/index.md)"
+        else:
+            # Top-level page, convert to .md
+            print(f"  DEBUG: {check_path} does not exist, using {path}.md")
+            return f"]({path}.md)"
+
+    content = re.sub(r"\]\(([a-z][a-z0-9-/]*)/\)", fix_trailing_slash, content)
+
     # Use mkdocs_gen_files to create a virtual file instead of writing directly
     # This prevents triggering file change detection loops
     with mkdocs_gen_files.open("index.md", "w") as index:

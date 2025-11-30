@@ -65,17 +65,17 @@ def version() -> None:
     """Show AI service version and configuration."""
     ai_config = get_ai_config(settings)
 
-    typer.echo("🤖 AI Service Configuration System")
+    typer.echo("AI Service Configuration System")
     typer.echo("Engine: PydanticAI")
-    typer.echo(f"Status: {'✅ Enabled' if ai_config.enabled else '❌ Disabled'}")
+    typer.echo(f"Status: {'Enabled' if ai_config.enabled else 'Disabled'}")
     typer.echo(f"Provider: {ai_config.provider}")
     typer.echo(f"Model: {ai_config.model}")
     typer.echo("")
     typer.echo("Available commands:")
-    typer.echo("  • ai chat \"message\"       - Send a chat message")
-    typer.echo("  • ai config show         - Show detailed configuration")
-    typer.echo("  • ai config validate     - Validate current configuration")
-    typer.echo("  • ai providers list      - List available providers")
+    typer.echo("  - ai chat \"message\"       - Send a chat message")
+    typer.echo("  - ai config show         - Show detailed configuration")
+    typer.echo("  - ai config validate     - Validate current configuration")
+    typer.echo("  - ai providers list      - List available providers")
 
 
 # Chat command group
@@ -116,10 +116,10 @@ def chat_main(
                     # Interactive session mode
                     await _interactive_chat_session(ai_service, conversation_id)
         except KeyboardInterrupt:
-            typer.echo("\n⚠️ Chat interrupted by user", err=True)
+            typer.echo("\nWarning: Chat interrupted by user", err=True)
             raise typer.Exit(1)
         except Exception as e:
-            typer.echo(f"❌ Error: {e}", err=True)
+            typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(1)
 
     asyncio.run(run_chat())
@@ -174,9 +174,9 @@ def chat_send(
                     conv_id = response.metadata.get("conversation_id", "unknown")
                     conversation = ai_service.get_conversation(conv_id)
                     if conversation:
-                        typer.echo(f"💬 Conversation: {conversation.id}")
+                        typer.echo(f"Conversation: {conversation.id}")
                         if conversation.title:
-                            typer.echo(f"📝 Title: {conversation.title}")
+                            typer.echo(f"Title: {conversation.title}")
 
                     console.print()
 
@@ -197,10 +197,10 @@ def chat_send(
                         )
 
         except KeyboardInterrupt:
-            typer.echo("\n⚠️ Chat interrupted by user", err=True)
+            typer.echo("\nWarning: Chat interrupted by user", err=True)
             raise typer.Exit(1)
         except Exception as e:
-            typer.echo(f"❌ Error: {e}", err=True)
+            typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(1)
 
     asyncio.run(send_message())
@@ -224,7 +224,7 @@ def chat_list(
         typer.echo(f"No conversations found for user: {user_id}")
         return
 
-    typer.echo(f"💬 Conversations for {user_id}:")
+    typer.echo(f"Conversations for {user_id}:")
     typer.echo("")
 
     for conv in conversations:
@@ -233,7 +233,7 @@ def chat_list(
         updated = conv.updated_at.strftime("%Y-%m-%d %H:%M")
 
         typer.echo(f"• {conv.id[:8]}... - {title}")
-        typer.echo(f"  📊 {messages} messages | 🕒 {updated}")
+        typer.echo(f"  {messages} messages | {updated}")
         typer.echo("")
 
 
@@ -250,24 +250,24 @@ def chat_history(
     conversation = ai_service.get_conversation(conversation_id)
 
     if not conversation:
-        typer.echo(f"❌ Conversation not found: {conversation_id}")
+        typer.echo(f"Error: Conversation not found: {conversation_id}")
         raise typer.Exit(1)
 
     # Check if user owns conversation
     if conversation.metadata.get("user_id") != user_id:
-        typer.echo("❌ Access denied: You don't own this conversation")
+        typer.echo("Error: Access denied: You don't own this conversation")
         raise typer.Exit(1)
 
-    typer.echo(f"💬 Conversation: {conversation_id}")
+    typer.echo(f"Conversation: {conversation_id}")
     if conversation.title:
-        typer.echo(f"📝 Title: {conversation.title}")
-    typer.echo(f"🤖 Provider: {conversation.provider.value}")
-    typer.echo(f"📊 Messages: {conversation.get_message_count()}")
+        typer.echo(f"Title: {conversation.title}")
+    typer.echo(f"Provider: {conversation.provider.value}")
+    typer.echo(f"Messages: {conversation.get_message_count()}")
     typer.echo("")
 
     for i, message in enumerate(conversation.messages):
         timestamp = message.timestamp.strftime("%H:%M:%S")
-        role_icon = "👤" if message.role == MessageRole.USER else "🤖"
+        role_icon = "" if message.role == MessageRole.USER else ""
 
         typer.echo(f"{role_icon} [{timestamp}] {message.content}")
         if i < len(conversation.messages) - 1:
@@ -279,7 +279,7 @@ def config_show() -> None:
     """Show detailed AI service configuration."""
     ai_config = get_ai_config(settings)
 
-    typer.echo("🔧 AI Service Configuration")
+    typer.echo("AI Service Configuration")
     typer.echo("=" * 40)
     typer.echo(f"Enabled: {ai_config.enabled}")
     typer.echo(f"Provider: {ai_config.provider}")
@@ -290,14 +290,14 @@ def config_show() -> None:
 
     # Provider-specific configuration
     provider_config = ai_config.get_provider_config(settings)
-    typer.echo(f"\n🔐 Provider Configuration ({ai_config.provider}):")
-    typer.echo(f"API Key: {'✅ Set' if provider_config.api_key else '❌ Not set'}")
+    typer.echo(f"\nProvider Configuration ({ai_config.provider}):")
+    typer.echo(f"API Key: {'Set' if provider_config.api_key else 'Not set'}")
 
     # Available providers
     available = ai_config.get_available_providers(settings)
-    typer.echo(f"\n✅ Available Providers ({len(available)}):")
+    typer.echo(f"\nAvailable Providers ({len(available)}):")
     for provider in available:
-        typer.echo(f"  • {provider.value}")
+        typer.echo(f"  - {provider.value}")
 
 
 @config_app.command("validate")
@@ -305,33 +305,33 @@ def config_validate() -> None:
     """Validate AI service configuration."""
     ai_config = get_ai_config(settings)
 
-    typer.echo("🔍 Validating AI Service Configuration...")
+    typer.echo("Validating AI Service Configuration...")
 
     errors = ai_config.validate_configuration(settings)
 
     if not errors:
-        typer.echo("✅ Configuration is valid!")
+        typer.echo("Configuration is valid!")
         typer.echo(f"   Provider: {ai_config.provider}")
         typer.echo(f"   Model: {ai_config.model}")
 
         # Show provider capabilities
         capabilities = get_provider_capabilities(ai_config.provider)
         if capabilities.free_tier_available:
-            typer.echo("   💰 Uses free tier")
+            typer.echo("   Uses free tier")
         else:
-            typer.echo("   💳 Requires paid account")
+            typer.echo("   Requires paid account")
 
     else:
-        typer.echo("❌ Configuration has issues:")
+        typer.echo("Configuration has issues:")
         for error in errors:
-            typer.echo(f"   • {error}")
+            typer.echo(f"   - {error}")
 
         # Suggest free providers if API key issues
         if any("API key" in error for error in errors):
             free_providers = get_free_providers()
             if free_providers:
                 providers_list = ', '.join(p.value for p in free_providers)
-                typer.echo(f"\n💡 Try these free providers: {providers_list}")
+                typer.echo(f"\nTry these free providers: {providers_list}")
 
 
 @providers_app.command("list")
@@ -341,7 +341,7 @@ def providers_list() -> None:
     available = ai_config.get_available_providers(settings)
     free_providers = get_free_providers()
 
-    table = Table(title="🤖 AI Providers", width=75)
+    table = Table(title="AI Providers", width=75)
     table.add_column("Provider", style="cyan", width=9)
     table.add_column("Status", style="green", width=26, no_wrap=True)
     table.add_column("Free", style="yellow", width=4)
@@ -353,15 +353,15 @@ def providers_list() -> None:
         is_current = provider == ai_config.provider
 
         if is_available:
-            status = "✅ Available"
+            status = "Available"
         else:
             # Make status more informative about what's missing
             if provider == AIProvider.PUBLIC:
-                status = "❌ Error"  # Shouldn't happen for PUBLIC
+                status = "[FAIL] Error"  # Shouldn't happen for PUBLIC
             else:
                 # Show abbreviated environment variable name
                 env_var = f"{provider.value.upper()}_API_KEY"
-                status = f"❌ Need {env_var}"
+                status = f"[FAIL] Need {env_var}"
 
         if is_current:
             status += " (current)"
@@ -406,7 +406,7 @@ async def _single_message(
         from rich.live import Live
         from rich.spinner import Spinner
 
-        spinner = Spinner("dots", text="🤖 Thinking...", style="bright_blue")
+        spinner = Spinner("dots", text="Thinking...", style="bright_blue")
         spinner_live = Live(
             spinner, console=console, refresh_per_second=20, transient=True
         )
@@ -440,7 +440,7 @@ async def _interactive_chat_session(
     # Show welcome banner
     ai_config = get_ai_config(settings)
     welcome_text = (
-        f"[bold cyan]🤖 AI Chat Session[/bold cyan]\n"
+        f"[bold cyan]AI Chat Session[/bold cyan]\n"
         f"[dim]Provider: {ai_config.provider} | Model: {ai_config.model}[/dim]\n"
         f"[dim]Type 'exit', 'quit', 'bye' or press Ctrl+C to end session[/dim]"
     )
@@ -460,12 +460,12 @@ async def _interactive_chat_session(
                 )
             except (KeyboardInterrupt, EOFError):
                 # Single Ctrl+C should exit immediately
-                console.print("\n[yellow]👋 Chat session ended[/yellow]")
+                console.print("\n[yellow]Chat session ended[/yellow]")
                 break
 
             # Check for exit commands
             if user_message.lower().strip() in ["exit", "quit", "bye", "q"]:
-                console.print("[yellow]👋 Goodbye![/yellow]")
+                console.print("[yellow]Goodbye![/yellow]")
                 break
 
             if not user_message.strip():
@@ -497,7 +497,7 @@ async def _interactive_chat_session(
                     from rich.spinner import Spinner
 
                     spinner = Spinner(
-                        "dots", text="🤖 Thinking...", style="bright_blue"
+                        "dots", text="Thinking...", style="bright_blue"
                     )
                     spinner_live = Live(
                         spinner,
@@ -530,7 +530,7 @@ async def _interactive_chat_session(
                         "conversation_id", current_conversation_id
                     )
             except Exception as stream_error:
-                console.print(f"[red]❌ Streaming failed: {stream_error}[/red]")
+                console.print(f"[red]Streaming failed: {stream_error}[/red]")
                 console.print(
                     "[dim]This might be a provider issue. "
                     "Try a different provider or check your connection.[/dim]"
@@ -546,7 +546,7 @@ async def _interactive_chat_session(
             console.print()  # Add space after response
 
         except Exception as e:
-            console.print(f"[red]❌ Error: {e}[/red]")
+            console.print(f"[red]Error: {e}[/red]")
             console.print(
                 "[dim]You can continue chatting or type 'exit' to quit.[/dim]"
             )
@@ -605,7 +605,7 @@ async def _stream_chat_response(
         from rich.spinner import Spinner
 
         # Show thinking spinner initially
-        spinner = Spinner("dots", text="🤖 Thinking...", style="bright_blue")
+        spinner = Spinner("dots", text="Thinking...", style="bright_blue")
         spinner_live = Live(
             spinner, console=console, refresh_per_second=20, transient=True
         )
@@ -625,7 +625,7 @@ async def _stream_chat_response(
                     if interrupted:
                         spinner_live.stop()
                         console.print(
-                            "\n⚠️ Streaming interrupted by user", style="yellow"
+                            "\nWarning: Streaming interrupted by user", style="yellow"
                         )
                         break
 
@@ -645,7 +645,7 @@ async def _stream_chat_response(
                         # Show compact inline header only when first content arrives
                         if not header_shown:
                             spinner_live.stop()  # Stop spinner when content starts
-                            console.print("🤖: ", style="bright_blue", end="")
+                            console.print(": ", style="bright_blue", end="")
                             header_shown = True
 
                         # Process delta with new streaming renderer
@@ -658,7 +658,7 @@ async def _stream_chat_response(
                         break
         except TimeoutError:
             spinner_live.stop()
-            console.print("\n❌ Request timed out after 30 seconds", style="red")
+            console.print("\nError: Request timed out after 30 seconds", style="red")
             return None
         finally:
             # Ensure spinner is stopped in all cases
@@ -674,18 +674,18 @@ async def _stream_chat_response(
                 # Get conversation details
                 conversation = ai_service.get_conversation(conversation_info)
                 if conversation:
-                    console.print(f"💬 Conversation: {conversation.id}", style="dim")
+                    console.print(f"Conversation: {conversation.id}", style="dim")
                     console.print(
-                        f"ℹ️  Messages: {conversation.get_message_count()}", style="dim"
+                        f"Messages: {conversation.get_message_count()}", style="dim"
                     )
                     if response_time:
                         console.print(
-                            f"⏱️  Response time: {response_time:.1f}ms", style="dim"
+                            f"Response time: {response_time:.1f}ms", style="dim"
                         )
 
     except Exception as e:
         if not interrupted:
-            console.print(f"❌ Streaming error: {e}", style="red")
+            console.print(f"Streaming error: {e}", style="red")
         raise
 
     finally:

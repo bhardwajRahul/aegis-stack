@@ -21,7 +21,7 @@
 
 set -e  # Exit on first error
 
-echo "🛡️  Worker Component Addition - Integration Test"
+echo "Worker Component Addition - Integration Test"
 echo "============================================================"
 
 # Configuration
@@ -34,7 +34,7 @@ OUTPUT_DIR="$PROJECT_ROOT/../$PROJECT_NAME"
 # Cleanup function
 cleanup() {
     echo ""
-    echo "🧹 Cleaning up..."
+    echo "Cleaning up..."
     if [ -d "$OUTPUT_DIR" ]; then
         chmod -R +w "$OUTPUT_DIR" 2>/dev/null || true
         rm -rf "$OUTPUT_DIR"
@@ -47,7 +47,7 @@ trap cleanup EXIT
 
 # Step 1: Generate base project
 echo ""
-echo "📦 Step 1: Generating base project..."
+echo "Step 1: Generating base project..."
 echo "  Command: aegis init $PROJECT_NAME --no-interactive --yes --force"
 
 "$AEGIS_CLI" init "$PROJECT_NAME" --output-dir .. --no-interactive --yes --force
@@ -61,7 +61,7 @@ echo "✅ Base project generated"
 
 # Step 2: Verify baseline (no worker components)
 echo ""
-echo "🔍 Step 2: Verifying baseline state (no worker/redis)..."
+echo "Step 2: Verifying baseline state (no worker/redis)..."
 
 cd "$OUTPUT_DIR"
 
@@ -92,7 +92,7 @@ echo "✅ Baseline verified: worker and redis not present"
 
 # Step 3: Add worker component
 echo ""
-echo "⚡ Step 3: Adding worker component..."
+echo "Step 3: Adding worker component..."
 echo "  Command: aegis add worker --yes"
 
 "$AEGIS_CLI" add worker --yes --project-path .
@@ -106,7 +106,7 @@ echo "✅ Worker component added"
 
 # Step 4: Verify worker and redis were added
 echo ""
-echo "🔍 Step 4: Verifying worker and redis addition..."
+echo "Step 4: Verifying worker and redis addition..."
 
 # Check .copier-answers.yml
 if ! grep -q "include_worker: true" .copier-answers.yml; then
@@ -123,7 +123,7 @@ echo "✅ Worker and Redis enabled in answers file"
 
 # Step 5: Verify worker files were created
 echo ""
-echo "📁 Step 5: Verifying worker files were created..."
+echo "Step 5: Verifying worker files were created..."
 
 EXPECTED_FILES=(
     "app/components/worker/__init__.py"
@@ -148,7 +148,7 @@ echo "✅ All expected worker files exist"
 
 # Step 6: Verify shared files were regenerated
 echo ""
-echo "🔄 Step 6: Verifying shared files were regenerated..."
+echo "Step 6: Verifying shared files were regenerated..."
 
 # Check component_health.py for worker registration
 if ! grep -q "check_worker_health" app/components/backend/startup/component_health.py; then
@@ -178,7 +178,7 @@ echo "✅ Shared files regenerated correctly"
 
 # Step 7: Verify Docker Compose configuration
 echo ""
-echo "🐳 Step 7: Verifying Docker Compose configuration..."
+echo "Step 7: Verifying Docker Compose configuration..."
 
 # Check for worker services
 if ! grep -q "worker-system:" docker-compose.yml; then
@@ -207,7 +207,7 @@ echo "✅ Docker Compose configuration updated"
 
 # Step 8: Verify pyproject.toml dependencies
 echo ""
-echo "📦 Step 8: Verifying dependencies in pyproject.toml..."
+echo "Step 8: Verifying dependencies in pyproject.toml..."
 
 # Check for arq dependency
 if ! grep -q "arq" pyproject.toml; then
@@ -229,7 +229,7 @@ echo "✅ Dependencies updated correctly"
 
 # Step 9: Run code quality checks
 echo ""
-echo "🔍 Step 9: Running code quality checks..."
+echo "Step 9: Running code quality checks..."
 
 # Sync dependencies
 echo "  Installing dependencies..."
@@ -268,5 +268,5 @@ echo "  • Docker Compose updated (worker + redis services)"
 echo "  • Dependencies added to pyproject.toml (arq, redis)"
 echo "  • Code quality checks passed"
 echo ""
-echo "🎉 All validation steps completed successfully!"
+echo "All validation steps completed successfully!"
 echo "============================================================"

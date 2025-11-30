@@ -76,10 +76,10 @@ Send an email via Resend.
 
 **Output:**
 ```
-✅ Email sent successfully!
-📧 Message ID: re_123abc
-📮 To: user@example.com
-📝 Subject: Welcome!
+Email sent successfully!
+Message ID: re_123abc
+To: user@example.com
+Subject: Welcome!
 ```
 
 ---
@@ -110,10 +110,10 @@ Send an SMS message via Twilio.
 
 **Output:**
 ```
-✅ SMS sent successfully!
-📱 Message SID: SM123abc
-📮 To: +15559876543
-📊 Segments: 1
+SMS sent successfully!
+Message SID: SM123abc
+To: +15559876543
+Segments: 1
 ```
 
 **Note:** Messages over 160 characters will be split into multiple segments.
@@ -149,10 +149,10 @@ Initiate a voice call via Twilio.
 
 **Output:**
 ```
-✅ Call initiated successfully!
-📞 Call SID: CA123abc
-📮 To: +15559876543
-📊 Status: queued
+Call initiated successfully!
+Call SID: CA123abc
+To: +15559876543
+Status: queued
 ```
 
 ---
@@ -163,17 +163,17 @@ All commands exit with code 1 on error and display helpful messages:
 
 **Configuration errors:**
 ```
-❌ Configuration error: RESEND_API_KEY is not set. Sign up at https://resend.com
+Configuration error: RESEND_API_KEY is not set. Sign up at https://resend.com
 ```
 
 **Provider errors:**
 ```
-❌ Failed to send email: Invalid API key
+Failed to send email: Invalid API key
 ```
 
 **Validation errors:**
 ```
-❌ Either --text or --html is required
+Either --text or --html is required
 ```
 
 ---

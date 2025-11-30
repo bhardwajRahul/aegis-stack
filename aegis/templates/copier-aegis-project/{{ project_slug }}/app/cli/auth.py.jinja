@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     pass
 
+from rich.console import Console
+from rich.table import Table
 import typer
 
 from app.core.db import get_async_session
@@ -19,6 +21,7 @@ from app.models.user import UserCreate
 from app.services.auth.user_service import UserService
 
 app = typer.Typer(help="Authentication management commands")
+console = Console()
 
 
 def generate_password(length: int = 12) -> str:
@@ -110,12 +113,12 @@ async def _create_test_user(
             # Auto-generate email if not provided
             if email is None:
                 email = await find_next_available_email(user_service, prefix, domain)
-                typer.echo(f"📧 Auto-generated email: {email} (next in sequence)")
+                typer.secho(f"Auto-generated email: {email} (next in sequence)", dim=True)
 
             # Check if user already exists
             existing_user = await user_service.get_user_by_email(email)
             if existing_user:
-                typer.echo(f"❌ User with email '{email}' already exists", err=True)
+                typer.secho(f"Error: User with email '{email}' already exists", fg=typer.colors.RED)
                 raise typer.Exit(1)
 
             # Create user data
@@ -129,22 +132,26 @@ async def _create_test_user(
             user = await user_service.create_user(user_data)
 
             # Display success message
-            typer.echo("✅ Test user created successfully!")
-            typer.echo("=" * 50)
-            typer.echo(f"📧 Email: {user.email}")
-            typer.echo(f"🔑 Password: {password}")
+            typer.secho("Test user created successfully!", fg=typer.colors.GREEN, bold=True)
+
+            # Show user details in a table
+            table = Table(title="User Details", show_header=False, width=50)
+            table.add_column("Field", style="cyan")
+            table.add_column("Value", style="green")
+            table.add_row("Email", user.email)
+            table.add_row("Password", password)
             if user.full_name:
-                typer.echo(f"👤 Name: {user.full_name}")
-            typer.echo(f"🆔 User ID: {user.id}")
-            typer.echo("=" * 50)
+                table.add_row("Name", user.full_name)
+            table.add_row("User ID", str(user.id))
+            console.print(table)
 
             if generated_password:
-                typer.echo("💡 Password was auto-generated. Save it for testing!")
+                typer.secho("Password was auto-generated. Save it for testing!", fg=typer.colors.YELLOW)
 
-            typer.echo("🚀 Ready to test auth endpoints at http://localhost:8000/docs")
+            typer.secho("Ready to test auth endpoints at http://localhost:8000/docs", dim=True)
 
     except Exception as e:
-        typer.echo(f"❌ Failed to create test user: {str(e)}", err=True)
+        typer.secho(f"Error: Failed to create test user: {str(e)}", fg=typer.colors.RED)
         raise typer.Exit(1)
 
 
@@ -173,7 +180,7 @@ async def _create_test_users(
         generated_password = False
 
     if count <= 0:
-        typer.echo("❌ Count must be greater than 0", err=True)
+        typer.secho("Error: Count must be greater than 0", fg=typer.colors.RED)
         raise typer.Exit(1)
 
     try:
@@ -181,8 +188,7 @@ async def _create_test_users(
             user_service = UserService(session)
             created_users = []
 
-            typer.echo(f"🚀 Creating {count} test users with prefix '{prefix}'...")
-            typer.echo("=" * 60)
+            typer.secho(f"Creating {count} test users with prefix '{prefix}'...", fg=typer.colors.BLUE, bold=True)
 
             for i in range(count):
                 # Find next available email
@@ -199,20 +205,20 @@ async def _create_test_users(
                 user = await user_service.create_user(user_data)
                 created_users.append(user)
 
-                typer.echo(f"✅ Created: {user.email} (ID: {user.id})")
+                typer.echo(f"{typer.style('Created:', fg=typer.colors.GREEN)} {user.email} {typer.style(f'(ID: {user.id})', dim=True)}")
 
             # Display summary
-            typer.echo("=" * 60)
-            typer.echo(f"🎉 Successfully created {len(created_users)} test users!")
-            typer.echo(f"🔑 Shared password: {password}")
+            typer.echo()
+            typer.secho(f"Successfully created {len(created_users)} test users!", fg=typer.colors.GREEN, bold=True)
+            typer.echo(f"{typer.style('Shared password:', fg=typer.colors.CYAN)} {password}")
 
             if generated_password:
-                typer.echo("💡 Password was auto-generated. Save it for testing!")
+                typer.secho("Password was auto-generated. Save it for testing!", fg=typer.colors.YELLOW)
 
-            typer.echo("🚀 Ready to test auth endpoints at http://localhost:8000/docs")
+            typer.secho("Ready to test auth endpoints at http://localhost:8000/docs", dim=True)
 
     except Exception as e:
-        typer.echo(f"❌ Failed to create test users: {str(e)}", err=True)
+        typer.secho(f"Error: Failed to create test users: {str(e)}", fg=typer.colors.RED)
         raise typer.Exit(1)
 
 
@@ -230,22 +236,29 @@ async def _list_users() -> None:
             users = await user_service.list_users()
 
             if not users:
-                typer.echo("No users found.")
+                typer.secho("No users found.", fg=typer.colors.YELLOW)
                 return
 
-            typer.echo(f"Found {len(users)} user(s):")
-            typer.echo("=" * 60)
+            typer.secho(f"Found {len(users)} user(s):", fg=typer.colors.BLUE, bold=True)
+
+            table = Table(title="Users", show_header=True, header_style="bold magenta")
+            table.add_column("ID", style="cyan", no_wrap=True)
+            table.add_column("Email", style="green")
+            table.add_column("Name", style="white")
+            table.add_column("Created", style="dim")
 
             for user in users:
-                typer.echo(f"🆔 ID: {user.id}")
-                typer.echo(f"📧 Email: {user.email}")
-                if user.full_name:
-                    typer.echo(f"👤 Name: {user.full_name}")
-                typer.echo(f"📅 Created: {user.created_at}")
-                typer.echo("-" * 40)
+                table.add_row(
+                    str(user.id),
+                    user.email,
+                    user.full_name or "-",
+                    str(user.created_at)[:19] if user.created_at else "-",
+                )
+
+            console.print(table)
 
     except Exception as e:
-        typer.echo(f"❌ Failed to list users: {str(e)}", err=True)
+        typer.secho(f"Error: Failed to list users: {str(e)}", fg=typer.colors.RED)
         raise typer.Exit(1)
 
 
