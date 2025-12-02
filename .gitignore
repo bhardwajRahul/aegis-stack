@@ -131,5 +131,6 @@ Thumbs.db
 
 # Data and test artifacts
 data/
-native-test/
-test-project/
+
+# Demos
+demos/recordings

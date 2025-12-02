@@ -3,7 +3,7 @@
 Built-in performance testing capabilities for the worker component.
 
 !!! info "Extra Component"
-    Adds a dedicated `load_test` queue with 30 concurrent workers for performance testing.
+    Adds a dedicated `load_test` queue with 50 concurrent jobs for performance testing.
 
 ## What You Get
 
@@ -43,7 +43,7 @@ The load testing extra adds one additional queue:
 
 | Queue | Concurrency | Purpose |
 |-------|:-----------:|---------|
-| **load_test** | 30 jobs | Performance testing and benchmarking |
+| **load_test** | 50 jobs | Performance testing and benchmarking |
 
 !!! danger "Isolation Required"
     Never use the load_test queue for production tasks.

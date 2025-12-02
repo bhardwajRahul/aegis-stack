@@ -11,6 +11,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import typer
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from pydantic import BaseModel, Field
 
@@ -524,8 +525,14 @@ class ManualUpdater:
                 capture_output=True,
             )
             print("   Code formatted (make fix)")
-        except subprocess.CalledProcessError as e:
-            print(f"   Warning: Failed to format code: {e}")
+        except subprocess.CalledProcessError:
+            typer.echo(
+                "   "
+                + typer.style("Warning:", fg=typer.colors.YELLOW)
+                + " "
+                + typer.style("make fix", fg=typer.colors.CYAN)
+                + " had issues. Run it manually to see details."
+            )
 
 
 def add_component_manual(

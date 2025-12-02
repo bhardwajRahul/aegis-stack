@@ -4,34 +4,34 @@ Set FontSize 48
 Set Width 2560
 Set Height 1440
 Set Theme "TokyoNight"
-Set TypingSpeed 30ms
+Set TypingSpeed 100ms
 Set Framerate 60
 
 # Comment appears instantly at top
 Hide
 Type "# AI-powered apps in seconds"
+Sleep 2s
 Enter
 Show
 
 Sleep 2s
 
-Set TypingSpeed 100ms
-Type "uvx aegis-stack init ai-poc --services ai --yes --force"
-Set TypingSpeed 30ms
+Type "uv run aegis init ai-poc --services ai --yes --force"
+Sleep 2s
 Enter
 Sleep 8s
 Enter 2
 
-Set TypingSpeed 100ms
+
 Type "cd ai-poc"
-Set TypingSpeed 30ms
+Sleep 2s
 Enter
 Sleep 500ms
 Enter
 
-Set TypingSpeed 100ms
+
 Type "source .venv/bin/activate"
-Set TypingSpeed 30ms
+Sleep 2s
 Enter
 Sleep 500ms
 Enter 2
@@ -41,23 +41,23 @@ Type "# Check CLI commands"
 Enter
 Show
 
-Set TypingSpeed 100ms
+
 Type "ai-poc ai version"
-Set TypingSpeed 30ms
+Sleep 2s
 Enter
 Sleep 5s
 Enter 2
 
-Set TypingSpeed 100ms
+
 Type "ai-poc ai config show"
-Set TypingSpeed 30ms
+Sleep 2s
 Enter
 Sleep 6s
 Enter 2
 
-Set TypingSpeed 100ms
+
 Type "ai-poc ai providers list"
-Set TypingSpeed 30ms
+Sleep 2s
 Enter
 Sleep 6s
 Enter 2
@@ -67,21 +67,14 @@ Type "# Start chatting"
 Enter
 Show
 
-Set TypingSpeed 100ms
-Type "ai-poc ai chat"
-Set TypingSpeed 30ms
-Enter
-Sleep 2s
-Enter
 
-Set TypingSpeed 100ms
-Type "What is a python boilerplate?"
-Set TypingSpeed 30ms
+Type 'ai-poc ai chat send "What is a python boilerplate in 2025?"'
+Sleep 5s
 Enter
-Sleep 12s
+Sleep 30s
 
-Set TypingSpeed 100ms
+
 Type "exit"
-Set TypingSpeed 30ms
+Sleep 2s
 Enter
 Sleep 2s

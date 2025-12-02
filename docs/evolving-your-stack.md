@@ -2,7 +2,7 @@
 
 **Your architecture isn't set in stone.** Build for today's requirements, adapt as they change, refactor when needed.
 
-Most frameworks lock you into decisions made during `init`. Aegis Stack gives you the freedom to evolve your stack as your product evolves.
+Most project starters lock you into decisions made during `init`. Aegis Stack gives you the freedom to evolve your stack as your product evolves.
 
 ---
 

@@ -65,17 +65,34 @@ def version() -> None:
     """Show AI service version and configuration."""
     ai_config = get_ai_config(settings)
 
-    typer.echo("AI Service Configuration System")
-    typer.echo("Engine: PydanticAI")
-    typer.echo(f"Status: {'Enabled' if ai_config.enabled else 'Disabled'}")
-    typer.echo(f"Provider: {ai_config.provider}")
-    typer.echo(f"Model: {ai_config.model}")
+    typer.secho("AI Service Configuration System", fg=typer.colors.BLUE, bold=True)
+    typer.echo(typer.style("Engine: ", fg=typer.colors.CYAN) + "PydanticAI")
+    status_color = typer.colors.GREEN if ai_config.enabled else typer.colors.RED
+    status_text = "Enabled" if ai_config.enabled else "Disabled"
+    typer.echo(
+        typer.style("Status: ", fg=typer.colors.CYAN)
+        + typer.style(status_text, fg=status_color)
+    )
+    typer.echo(typer.style("Provider: ", fg=typer.colors.CYAN) + str(ai_config.provider))
+    typer.echo(typer.style("Model: ", fg=typer.colors.CYAN) + str(ai_config.model))
     typer.echo("")
-    typer.echo("Available commands:")
-    typer.echo("  - ai chat \"message\"       - Send a chat message")
-    typer.echo("  - ai config show         - Show detailed configuration")
-    typer.echo("  - ai config validate     - Validate current configuration")
-    typer.echo("  - ai providers list      - List available providers")
+    typer.secho("Available commands:", bold=True)
+    typer.echo(
+        "  " + typer.style("ai chat \"message\"", fg=typer.colors.GREEN)
+        + "       - Send a chat message"
+    )
+    typer.echo(
+        "  " + typer.style("ai config show", fg=typer.colors.GREEN)
+        + "         - Show detailed configuration"
+    )
+    typer.echo(
+        "  " + typer.style("ai config validate", fg=typer.colors.GREEN)
+        + "     - Validate current configuration"
+    )
+    typer.echo(
+        "  " + typer.style("ai providers list", fg=typer.colors.GREEN)
+        + "      - List available providers"
+    )
 
 
 # Chat command group
@@ -135,6 +152,9 @@ def chat_send(
         None, "--conversation-id", "-c", help="Conversation ID"
     ),
     user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show conversation metadata"
+    ),
 ) -> None:
     """Send a chat message and get AI response."""
     import asyncio
@@ -154,7 +174,7 @@ def chat_send(
 
                 if use_streaming:
                     await _stream_chat_response(
-                        ai_service, message, conversation_id, user_id, verbose=True
+                        ai_service, message, conversation_id, user_id, verbose=verbose
                     )
                 else:
                     response = await ai_service.chat(
@@ -170,22 +190,21 @@ def chat_send(
                         render_markdown_response,
                     )
 
-                    # Show conversation info
+                    # Show conversation info (only in verbose mode)
                     conv_id = response.metadata.get("conversation_id", "unknown")
                     conversation = ai_service.get_conversation(conv_id)
-                    if conversation:
+                    if verbose and conversation:
                         typer.echo(f"Conversation: {conversation.id}")
                         if conversation.title:
                             typer.echo(f"Title: {conversation.title}")
-
-                    console.print()
+                        console.print()
 
                     # Render response using new shared functions
                     render_ai_header(console, inline=True)
                     render_markdown_response(console, response.content)
 
-                    # Show response metadata using new shared function
-                    if conversation:
+                    # Show response metadata (only in verbose mode)
+                    if verbose and conversation:
                         response_time = conversation.metadata.get(
                             "last_response_time_ms"
                         )
@@ -279,25 +298,44 @@ def config_show() -> None:
     """Show detailed AI service configuration."""
     ai_config = get_ai_config(settings)
 
-    typer.echo("AI Service Configuration")
-    typer.echo("=" * 40)
-    typer.echo(f"Enabled: {ai_config.enabled}")
-    typer.echo(f"Provider: {ai_config.provider}")
-    typer.echo(f"Model: {ai_config.model}")
-    typer.echo(f"Temperature: {ai_config.temperature}")
-    typer.echo(f"Max Tokens: {ai_config.max_tokens}")
-    typer.echo(f"Timeout: {ai_config.timeout_seconds}s")
+    typer.secho("AI Service Configuration", fg=typer.colors.BLUE, bold=True)
+    typer.secho("=" * 40, dim=True)
+    typer.echo(typer.style("Enabled: ", fg=typer.colors.YELLOW) + str(ai_config.enabled))
+    typer.echo(
+        typer.style("Provider: ", fg=typer.colors.YELLOW) + str(ai_config.provider)
+    )
+    typer.echo(typer.style("Model: ", fg=typer.colors.YELLOW) + str(ai_config.model))
+    typer.echo(
+        typer.style("Temperature: ", fg=typer.colors.YELLOW)
+        + str(ai_config.temperature)
+    )
+    typer.echo(
+        typer.style("Max Tokens: ", fg=typer.colors.YELLOW) + str(ai_config.max_tokens)
+    )
+    typer.echo(
+        typer.style("Timeout: ", fg=typer.colors.YELLOW)
+        + f"{ai_config.timeout_seconds}s"
+    )
 
     # Provider-specific configuration
     provider_config = ai_config.get_provider_config(settings)
-    typer.echo(f"\nProvider Configuration ({ai_config.provider}):")
-    typer.echo(f"API Key: {'Set' if provider_config.api_key else 'Not set'}")
+    typer.echo("")
+    typer.secho(f"Provider Configuration ({ai_config.provider}):", fg=typer.colors.CYAN, bold=True)
+    api_key_color = typer.colors.GREEN if provider_config.api_key else typer.colors.RED
+    api_key_text = "Set" if provider_config.api_key else "Not set"
+    typer.echo(
+        typer.style("API Key: ", fg=typer.colors.YELLOW)
+        + typer.style(api_key_text, fg=api_key_color)
+    )
 
     # Available providers
     available = ai_config.get_available_providers(settings)
-    typer.echo(f"\nAvailable Providers ({len(available)}):")
+    typer.echo("")
+    typer.secho(f"Available Providers ({len(available)}):", fg=typer.colors.CYAN, bold=True)
     for provider in available:
-        typer.echo(f"  - {provider.value}")
+        typer.echo(
+            "  " + typer.style("•", fg=typer.colors.GREEN) + f" {provider.value}"
+        )
 
 
 @config_app.command("validate")
@@ -305,33 +343,45 @@ def config_validate() -> None:
     """Validate AI service configuration."""
     ai_config = get_ai_config(settings)
 
-    typer.echo("Validating AI Service Configuration...")
+    typer.secho("Validating AI Service Configuration...", fg=typer.colors.BLUE, bold=True)
 
     errors = ai_config.validate_configuration(settings)
 
     if not errors:
-        typer.echo("Configuration is valid!")
-        typer.echo(f"   Provider: {ai_config.provider}")
-        typer.echo(f"   Model: {ai_config.model}")
+        typer.secho("✓ Configuration is valid!", fg=typer.colors.GREEN)
+        typer.echo(
+            "   " + typer.style("Provider: ", fg=typer.colors.YELLOW)
+            + str(ai_config.provider)
+        )
+        typer.echo(
+            "   " + typer.style("Model: ", fg=typer.colors.YELLOW)
+            + str(ai_config.model)
+        )
 
         # Show provider capabilities
         capabilities = get_provider_capabilities(ai_config.provider)
         if capabilities.free_tier_available:
-            typer.echo("   Uses free tier")
+            typer.secho("   Uses free tier", fg=typer.colors.CYAN)
         else:
-            typer.echo("   Requires paid account")
+            typer.secho("   Requires paid account", dim=True)
 
     else:
-        typer.echo("Configuration has issues:")
+        typer.secho("✗ Configuration has issues:", fg=typer.colors.RED)
         for error in errors:
-            typer.echo(f"   - {error}")
+            typer.echo(
+                "   " + typer.style("•", fg=typer.colors.RED) + f" {error}"
+            )
 
         # Suggest free providers if API key issues
         if any("API key" in error for error in errors):
             free_providers = get_free_providers()
             if free_providers:
                 providers_list = ', '.join(p.value for p in free_providers)
-                typer.echo(f"\nTry these free providers: {providers_list}")
+                typer.echo("")
+                typer.echo(
+                    typer.style("Try these free providers: ", fg=typer.colors.YELLOW)
+                    + providers_list
+                )
 
 
 @providers_app.command("list")
@@ -361,7 +411,7 @@ def providers_list() -> None:
             else:
                 # Show abbreviated environment variable name
                 env_var = f"{provider.value.upper()}_API_KEY"
-                status = f"[FAIL] Need {env_var}"
+                status = f"[red]Need {env_var}[/red]"
 
         if is_current:
             status += " (current)"

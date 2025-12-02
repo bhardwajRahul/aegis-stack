@@ -16,7 +16,7 @@ You work with Datadog until management decides to migrate to New Relic. Or you'r
 
 ## What It Is
 
-**Overseer is a health monitoring dashboard** built into your Aegis Stack application. It provides real-time visibility into component and service health through a web UI and CLI commands.
+**Overseer is a health monitoring dashboard** built into your Aegis Stack application. It provides real-time visibility into component and service health through a web UI.
 
 ![Overseer Dashboard](../images/overseer-demo.gif)
 
@@ -34,7 +34,6 @@ The dashboard displays:
 - System metrics (CPU, memory, disk usage)
 - Status hierarchy (Healthy, Warning, Unhealthy, Info)
 - Web dashboard with auto-refresh (30-second polling)
-- CLI health commands via your generated app
 
 ## How It Works
 
@@ -67,10 +66,6 @@ sequenceDiagram
 3. **Polling**: The dashboard polls the health endpoint every 30 seconds
 4. **Display**: Component and service cards render with real-time status, metrics, and details
 
-## Component & Service Cards
-
-Each card shows real-time health status, component-specific metrics, and configuration details. Click any card to open a detailed modal with diagnostics, performance data, and system information.
-
 ## Health Status Indicators
 
 Each card displays a status indicator using the Overseer status hierarchy:
@@ -88,40 +83,6 @@ Each card displays a status indicator using the Overseer status hierarchy:
 - Any child **Warning** (no unhealthy) → Parent **Warning**
 - Any child **Info** (no unhealthy/warning) → Parent **Info**
 - All children **Healthy** → Parent **Healthy**
-
-## Theme Support
-
-The dashboard automatically adapts to light and dark themes:
-
-- **Light Mode**: White cards, dark text, subtle shadows
-- **Dark Mode**: Dark cards, light text, enhanced contrast
-- **Toggle**: Click the theme icon in the header to switch
-
-Images and status colors adjust automatically to maintain visibility in both themes.
-
-## CLI Health Access
-
-The same health data is accessible via CLI:
-
-```bash
-# View system health
-your-app health
-
-# Example output:
-┌────────────────────────────────────────┐
-│ System Health                          │
-├────────────────────────────────────────┤
-│ Components                             │
-│   ✅ backend    - FastAPI healthy      │
-│   ✅ database   - SQLite connected     │
-│   ✅ worker     - arq processing       │
-│   ✅ scheduler  - 3 jobs scheduled     │
-│                                        │
-│ Services                               │
-│   ✅ auth       - 42 users, HS256      │
-│   ✅ ai         - Anthropic/Claude     │
-└────────────────────────────────────────┘
-```
 
 ## The Story
 
