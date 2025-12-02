@@ -251,14 +251,13 @@ make worker-test
 Worker behavior is configured in `app/core/config.py`:
 
 ```python
-# Redis connection
-REDIS_HOST: str = "localhost"
-REDIS_PORT: int = 6379
+# Redis connection (DSN format)
+REDIS_URL: str = "redis://localhost:6379"
 REDIS_DB: int = 0
 
 # Worker settings
-WORKER_MAX_JOBS: int = 10
-WORKER_MAX_TRIES: int = 5
+WORKER_KEEP_RESULT_SECONDS: int = 3600
+WORKER_MAX_TRIES: int = 3
 ```
 
 See **[Configuration](configuration.md)** for complete details.

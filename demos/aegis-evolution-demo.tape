@@ -4,7 +4,7 @@ Set FontSize 48
 Set Width 2560
 Set Height 1440
 Set Theme "TokyoNight"
-Set TypingSpeed 30ms
+Set TypingSpeed 100ms
 Set Framerate 60
 
 # Comment appears instantly at top
@@ -26,45 +26,44 @@ Type "# Add components anytime"
 Enter
 Show
 
-Set TypingSpeed 100ms
 Type "../.venv/bin/aegis add scheduler --backend sqlite -p . -y"
-Set TypingSpeed 30ms
+Sleep 2s
 Enter
 Sleep 4s
 Enter 2
 
 Hide
 Type "# Check the scheduled tasks"
+Sleep 2s
 Enter
 Show
 
-Set TypingSpeed 100ms
 Type "uv run demo-app tasks list"
-Set TypingSpeed 30ms
+Sleep 2s
 Enter
-Sleep 6s
+Sleep 8s
 Enter 2
 
 Hide
 Type "# Remove what you don't need"
+Sleep 2s
 Enter
 Show
 
-Set TypingSpeed 100ms
 Type "../.venv/bin/aegis remove scheduler -p . -y"
-Set TypingSpeed 30ms
+Sleep 2s
 Enter
-Sleep 4s
+Sleep 7s
 Enter 2
 
 Hide
 Type "# Scheduler is really gone"
+Sleep 2s
 Enter
 Show
 
-Set TypingSpeed 100ms
 Type "../.venv/bin/aegis remove scheduler -p . -y"
-Set TypingSpeed 30ms
+Sleep 2s
 Enter
-Sleep 3s
+Sleep 7s
 Enter 2

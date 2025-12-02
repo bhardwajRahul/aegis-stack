@@ -10,7 +10,7 @@ Build user interfaces entirely in Python using [Flet](https://flet.dev/) - no Ja
 - **Python-only development** - Same language for frontend and backend
 - **Direct service integration** - Call Python functions instead of REST APIs
 - **Cross-platform foundation** - Web, desktop, and mobile from same code
-- **[Health Dashboard Extra](frontend/extras/dashboard.md)** - Production monitoring interface
+- **[Overseer](../overseer/index.md)** - Built-in health monitoring dashboard
 
 ## Quick Start
 
@@ -67,5 +67,5 @@ app.mount("/dashboard", flet_app)
 
 ## Next Steps
 
-- **[Health Dashboard Extra](frontend/extras/dashboard.md)** - Production monitoring interface
+- **[Overseer](../overseer/index.md)** - Built-in health monitoring dashboard
 - **[Flet Documentation](https://flet.dev/docs/)** - Complete UI framework reference

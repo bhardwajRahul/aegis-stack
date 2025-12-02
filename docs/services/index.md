@@ -212,19 +212,19 @@ aegis services
 Shows all available services by category with their dependencies:
 
 ```
-🔧 AVAILABLE SERVICES
+AVAILABLE SERVICES
 ========================================
 
-🔐 Authentication Services
+Authentication Services
 ----------------------------------------
   auth         - User authentication and authorization with JWT tokens
                Requires components: backend, database
 
-💰 Payment Services
+Payment Services
 ----------------------------------------
   No services available yet.
 
-🤖 AI & Machine Learning Services
+AI & Machine Learning Services
 ----------------------------------------
   No services available yet.
 ```
@@ -243,19 +243,13 @@ aegis init full-app --services auth,ai --components database,worker
 
 ## Dashboard Integration
 
-Services automatically appear in the health dashboard alongside components, providing real-time monitoring of your business capabilities.
-
-!!! success "Visual Monitoring"
-    When you include services in your project, they appear as dedicated dashboard cards showing service-specific metrics and health status.
-
-    **[See Services Dashboard Documentation →](dashboard.md)**
+Services automatically appear in the health dashboard alongside components, providing real-time monitoring of your business capabilities. See **[Overseer](../overseer/index.md)** for dashboard documentation.
 
 ---
 
 **Next Steps:**
 
 - **[Integration Patterns](../integration-patterns.md)** - How services integrate with components and architectural patterns
-- **[Services Dashboard](dashboard.md)** - Services dashboard integration and monitoring
 - **[Authentication Service](auth/index.md)** - Complete JWT auth implementation
 - **[AI Service](ai/index.md)** - Multi-provider AI chat with PydanticAI
 - **[Communications Service](comms/index.md)** - Email, SMS, and voice via Resend/Twilio

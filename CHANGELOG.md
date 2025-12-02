@@ -5,9 +5,63 @@
   The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-  ## [0.2.0] - 2025-11-05
+  ## [0.3.0] - 2025-12-01
 
-  ### 🌟 Major Features
+### Major Features
+
+#### Dashboard V2 - Complete UI Overhaul
+- Light and dark theme support with system preference detection
+- Component modal system - detailed info panels for each component:
+  - Scheduler modal: Job stats, task history, next run times, cron expressions
+  - Worker modal: Queue depth, job history, worker health, Redis connection
+  - Redis modal: Memory usage, connection stats, key counts
+  - Database modal: Table stats, connection pool info, query metrics
+  - Backend modal: Route inspection, middleware detection, request stats
+  - AI modal: Provider status, model info, conversation history
+  - Auth modal: User count, session stats, JWT configuration
+  - Frontend modal: Component tree, render stats, routing info
+- Modern card-based architecture with improved visual hierarchy
+- Enhanced health check visualization
+
+#### New CLI Features
+- `aegis update` rollback support - automatically restore on failed updates
+- `--template-path` flag - use local template directories for development
+- `--verbose` flag - control output verbosity across all commands
+- Improved error messages with actionable suggestions for generation failures
+
+#### Comms Service (New Service Layer)
+- Communication service foundation for inter-component messaging
+- Event-driven architecture support
+- Service discovery patterns
+
+### Added
+
+- Copier integration testing for template validation
+- CI/CD parallelization for faster builds
+- Commit badges in generated project READMEs
+- Scheduler environment variable configuration
+- Enhanced Overseer documentation
+
+### Fixed
+
+- `aegis update` now correctly targets HEAD instead of latest tag
+- Template path handling with `git+file://` URL format for Copier
+- Dashboard rendering edge cases with component state
+
+---
+
+## [0.2.1] - 2025-11-10
+
+### Fixed
+
+- Minor bug fixes and stability improvements
+- Added verbosity flag foundation
+
+---
+
+## [0.2.0] - 2025-11-05
+
+### Major Features
 
   #### Dynamic Component Management
   - **NEW**: `aegis add` command - Add components to existing projects post-generation
@@ -48,7 +102,7 @@
   - Enhanced health checks with task execution tracking
   - Job statistics and history
 
-  ### ✨ Added
+### Added
 
   #### CLI Commands
   - `aegis add` - Add components to existing projects
@@ -110,7 +164,7 @@
   - Service dependency resolver
   - Manual updater for Cookiecutter-based projects
 
-  ### 🔧 Changed
+### Changed
 
   - **Default template engine** is now Copier (Cookiecutter still fully supported via `--engine cookiecutter`)
   - Type checker migrated from mypy to `ty` for improved performance
@@ -123,7 +177,7 @@
   - Restructured CLI command organization into separate modules
   - Dashboard rendering optimizations
 
-  ### 🐛 Fixed
+### Fixed
 
   - Dashboard rendering bugs with component state management
   - Worker type annotations and kwargs handling
@@ -135,7 +189,7 @@
   - Template generation with various component combinations
   - Health check caching race conditions
 
-  ### 🔐 Security
+### Security
 
   - JWT-based authentication with secure token handling
   - Password hashing with bcrypt (cost factor 12)
@@ -144,7 +198,7 @@
   - API key handling for AI providers
   - Environment variable-based secrets management
 
-  ### ⚡ Performance
+### Performance
 
   - Faster type checking with `ty` replacing mypy
   - Optimized component dependency resolution
@@ -152,7 +206,7 @@
   - Enhanced health check caching strategies
   - Reduced template generation time
 
-  ### 📊 Statistics
+### Statistics
 
   - 62 pull requests merged since v0.1.0
   - 456 files changed (72,387 insertions, 4,590 deletions)
@@ -162,7 +216,7 @@
   - 100+ new test files
   - 10 weeks of development (Aug 28 - Nov 5, 2025)
 
-  ### 🎯 Highlights for Users
+### Highlights for Users
 
   1. **Your stack can now evolve** - Add/remove components after project creation
   2. **Authentication ready** - Production JWT auth with one command (`--services auth`)
@@ -171,7 +225,7 @@
   5. **Scheduler persistence** - SQLite-backed job storage for reliability
   6. **Enhanced DX** - Rich CLI tools, better dashboard, comprehensive health monitoring
 
-  ### 📝 Notes
+### Notes
 
   - Copier is now the default template engine, enabling `aegis add/remove/update` commands
   - Both Copier and Cookiecutter templates are fully supported
@@ -212,5 +266,7 @@
   - Worker (arq/Redis) - Optional
   - Scheduler (APScheduler) - Optional
 
-  [0.2.0]: https://github.com/lbedner/aegis-stack/compare/v0.1.0...v0.2.0
-  [0.1.0]: https://github.com/lbedner/aegis-stack/releases/tag/v0.1.0
+[0.3.0]: https://github.com/lbedner/aegis-stack/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/lbedner/aegis-stack/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/lbedner/aegis-stack/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/lbedner/aegis-stack/releases/tag/v0.1.0

@@ -2,11 +2,6 @@
 
 Comprehensive guide to configuring and scaling the worker component in your Aegis Stack application.
 
-## Configuration Overview
-
-??? note "Configuration Philosophy"
-    Worker configuration follows the 12-Factor App methodology. Use environment variables for deployment-specific settings and keep defaults sensible for development.
-
 ## Worker Settings
 
 Workers use arq's native `WorkerSettings` classes with direct task imports. Each queue has its own configuration:
@@ -27,13 +22,18 @@ class WorkerSettings:
 ### Load Test Worker (`app/components/worker/queues/load_test.py`)
 
 ```python
-from app.components.worker.tasks.load_test import light_cpu_task, light_io_task
+from app.components.worker.tasks.load_tasks import (
+    cpu_intensive_task,
+    io_simulation_task,
+    memory_operations_task,
+    failure_testing_task,
+)
 
 class WorkerSettings:
-    functions = [light_cpu_task, light_io_task]
+    functions = [cpu_intensive_task, io_simulation_task, memory_operations_task, failure_testing_task]
     queue_name = "arq:queue:load_test"
-    max_jobs = 30
-    job_timeout = 600
+    max_jobs = 50
+    job_timeout = 60
 ```
 
 ### Global Configuration (`app/core/config.py`)
@@ -185,13 +185,13 @@ class WorkerSettings:
     queue_name = "arq:queue:system"
     max_jobs = 30  # Increased from 15
     job_timeout = 300
-    
+
 # app/components/worker/queues/load_test.py
 class WorkerSettings:
-    functions = [light_cpu_task, light_io_task]
+    functions = [cpu_intensive_task, io_simulation_task]
     queue_name = "arq:queue:load_test"
-    max_jobs = 50  # Increased from 30
-    job_timeout = 600
+    max_jobs = 100  # Increased from 50
+    job_timeout = 60
 ```
 
 ### Environment-Based Configuration
@@ -314,19 +314,13 @@ Set timeouts based on task complexity in each `WorkerSettings` class:
 # app/components/worker/queues/system.py
 class WorkerSettings:
     functions = [system_health_check, cleanup_temp_files]
-    job_timeout = 60  # Quick system tasks
-    
-# app/components/worker/queues/media.py
-class WorkerSettings:
-    functions = [process_video, resize_images]
-    job_timeout = 1800  # 30 minutes for large files
-    max_jobs = 5  # Lower concurrency for resource-intensive tasks
-    
+    job_timeout = 300  # 5 minutes for system tasks
+
 # app/components/worker/queues/load_test.py
 class WorkerSettings:
-    functions = [light_cpu_task, light_io_task]
-    job_timeout = 300  # 5 minutes for test runs
-    max_jobs = 30
+    functions = [cpu_intensive_task, io_simulation_task]
+    job_timeout = 60  # Quick test tasks
+    max_jobs = 50
 ```
 
 ### Connection Pooling

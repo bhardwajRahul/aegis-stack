@@ -62,7 +62,7 @@ aegis components
 
 **Example Output:**
 ```
-🧩 AVAILABLE COMPONENTS
+AVAILABLE COMPONENTS
 ========================================
 
 Infrastructure Components
@@ -84,15 +84,15 @@ aegis services
 
 **Example Output:**
 ```
-🔧 AVAILABLE SERVICES
+AVAILABLE SERVICES
 ========================================
 
-🔐 Authentication Services
+Authentication Services
 ----------------------------------------
   auth         - User authentication and authorization with JWT tokens
                Requires components: backend, database
 
-🤖 AI & Machine Learning Services
+AI & Machine Learning Services
 ----------------------------------------
   ai           - AI chatbot with PydanticAI engine
                Requires components: backend

@@ -12,7 +12,7 @@ Components are the **infrastructure building blocks** of your Aegis Stack applic
 
 **Your choices aren't permanent.** Components can be added or removed as your requirements change.
 
-Unlike most frameworks that lock you in at `init`, Aegis Stack lets you evolve:
+Unlike most starters that lock you in at `init`, Aegis Stack lets you evolve:
 
 - **Add components**: `aegis add scheduler --project-path ./my-api`
 - **Remove components**: `aegis remove scheduler --project-path ./my-api`

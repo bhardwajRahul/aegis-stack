@@ -7,7 +7,7 @@
 [![Documentation](https://github.com/lbedner/aegis-stack/workflows/Deploy%20Documentation/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/docs.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-Aegis Stack is a CLI-driven framework for creating custom Python applications. Select exactly the components you need - no bloat, no unused dependencies.
+Aegis Stack is a CLI that scaffolds modular Python applications. Select exactly the components you need - no bloat, no unused dependencies.
 
 ## Quick Start
 
@@ -57,12 +57,12 @@ aegis add worker --project-path ./my-api
 aegis remove scheduler --project-path ./my-api
 ```
 
-| Framework | Add Later? | Remove Later? | Git Conflicts? |
+| Starter | Add Later? | Remove Later? | Git Conflicts? |
 |-----------|------------|---------------|----------------|
 | **Others** | ❌ Locked at init | ❌ Manual deletion | ⚠️ High risk |
 | **Aegis Stack** | ✅ One command | ✅ One command | ✅ Auto-handled |
 
-Most frameworks lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your Stack](evolving-your-stack.md)** for the complete guide.
+Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your Stack](evolving-your-stack.md)** for the complete guide.
 
 ## Available Components & Services
 
@@ -110,8 +110,8 @@ Rich terminal output showing detailed component status, health metrics, and syst
 
 ![Ron Swanson](images/ron-swanson.gif)
 
-No magic. No reinventing the wheel. Just the tools you already know, pre-configured and ready to compose.
+No reinventing the wheel. Just the tools you already know, pre-configured and ready to compose.
 
 Aegis Stack respects your expertise. We maintain existing standards - FastAPI for APIs, SQLModel for databases, arq for workers. No custom abstractions or proprietary patterns to learn. Pick your components, get a production-ready foundation, and build your way.
 
-The framework gets out of your way so you can get started.
+The tool gets out of your way so you can get started.
