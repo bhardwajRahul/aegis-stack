@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import Any
 
 from ..config.defaults import DEFAULT_PYTHON_VERSION
+from ..constants import AnswerKeys, ComponentNames, StorageBackends
 from .component_utils import extract_base_component_name, extract_engine_info
-from .components import COMPONENTS, CORE_COMPONENTS, SchedulerBackend
+from .components import COMPONENTS, CORE_COMPONENTS
 from .services import SERVICES
 
 
@@ -21,7 +22,7 @@ class TemplateGenerator:
         self,
         project_name: str,
         selected_components: list[str],
-        scheduler_backend: str = SchedulerBackend.MEMORY.value,
+        scheduler_backend: str = StorageBackends.MEMORY,
         selected_services: list[str] | None = None,
         python_version: str = DEFAULT_PYTHON_VERSION,
     ):
@@ -56,7 +57,7 @@ class TemplateGenerator:
         # Extract database engine from database[engine] format for template context
         self.database_engine = None
         for component in self.components:
-            if extract_base_component_name(component) == "database":
+            if extract_base_component_name(component) == ComponentNames.DATABASE:
                 self.database_engine = extract_engine_info(component)
                 if self.database_engine:
                     break
@@ -64,7 +65,7 @@ class TemplateGenerator:
         # Extract scheduler backend from scheduler[backend] format or use passed param
         # If scheduler[backend] syntax is used, it overrides the passed parameter
         for component in self.components:
-            if extract_base_component_name(component) == "scheduler":
+            if extract_base_component_name(component) == ComponentNames.SCHEDULER:
                 backend = extract_engine_info(component)
                 if backend:
                     self.scheduler_backend = backend
@@ -88,40 +89,51 @@ class TemplateGenerator:
         selected_only = [c for c in self.components if c not in CORE_COMPONENTS]
 
         # Check for components using base names
-        has_database = any(c.startswith("database") for c in self.components)
+        has_database = any(
+            c.startswith(ComponentNames.DATABASE) for c in self.components
+        )
 
         return {
             "project_name": self.project_name,
             "project_slug": self.project_slug,
             "python_version": self.python_version,
             # Component flags for template conditionals - cookiecutter needs yes/no
-            "include_redis": "yes" if "redis" in self.components else "no",
-            "include_worker": "yes" if "worker" in self.components else "no",
-            "include_scheduler": "yes"
-            if any(c.startswith("scheduler") for c in self.components)
+            AnswerKeys.REDIS: "yes"
+            if ComponentNames.REDIS in self.components
             else "no",
-            "include_database": "yes" if has_database else "no",
+            AnswerKeys.WORKER: "yes"
+            if ComponentNames.WORKER in self.components
+            else "no",
+            AnswerKeys.SCHEDULER: "yes"
+            if any(c.startswith(ComponentNames.SCHEDULER) for c in self.components)
+            else "no",
+            AnswerKeys.DATABASE: "yes" if has_database else "no",
             # Database engine selection
-            "database_engine": self.database_engine or "sqlite",
+            "database_engine": self.database_engine or StorageBackends.SQLITE,
             # Scheduler backend selection
-            "scheduler_backend": self.scheduler_backend,
+            AnswerKeys.SCHEDULER_BACKEND: self.scheduler_backend,
             # Legacy scheduler persistence flag for backwards compatibility
-            "scheduler_with_persistence": (
-                "yes"
-                if self.scheduler_backend != SchedulerBackend.MEMORY.value
-                else "no"
+            AnswerKeys.SCHEDULER_WITH_PERSISTENCE: (
+                "yes" if self.scheduler_backend != StorageBackends.MEMORY else "no"
             ),
             # Derived flags for template logic
             "has_background_infrastructure": any(
-                name in self.components for name in ["worker", "scheduler"]
+                name in self.components
+                for name in [ComponentNames.WORKER, ComponentNames.SCHEDULER]
             ),
-            "needs_redis": "redis" in self.components,
+            "needs_redis": ComponentNames.REDIS in self.components,
             # Service flags for template conditionals
-            "include_auth": "yes" if "auth" in self.selected_services else "no",
-            "include_ai": "yes" if "ai" in self.selected_services else "no",
-            "include_comms": "yes" if "comms" in self.selected_services else "no",
+            AnswerKeys.AUTH: "yes"
+            if AnswerKeys.SERVICE_AUTH in self.selected_services
+            else "no",
+            AnswerKeys.AI: "yes"
+            if AnswerKeys.SERVICE_AI in self.selected_services
+            else "no",
+            AnswerKeys.COMMS: "yes"
+            if AnswerKeys.SERVICE_COMMS in self.selected_services
+            else "no",
             # AI provider selection for dynamic dependency generation
-            "ai_providers": self._get_ai_providers_string(),
+            AnswerKeys.AI_PROVIDERS: self._get_ai_providers_string(),
             # Dependency lists for templates
             "selected_components": selected_only,  # Original selection for context
             "docker_services": self._get_docker_services(),
@@ -165,7 +177,10 @@ class TemplateGenerator:
                 if service_spec.pyproject_deps:
                     # Process service dependencies with dynamic substitution
                     for dep in service_spec.pyproject_deps:
-                        if service_name == "ai" and "{AI_PROVIDERS}" in dep:
+                        if (
+                            service_name == AnswerKeys.SERVICE_AI
+                            and "{AI_PROVIDERS}" in dep
+                        ):
                             # Substitute AI providers dynamically
                             providers = self._get_ai_providers_string()
                             dep = dep.replace("{AI_PROVIDERS}", providers)
@@ -205,7 +220,7 @@ class TemplateGenerator:
         Returns:
             Comma-separated string of provider names (e.g., "openai,anthropic,google")
         """
-        if "ai" not in self.selected_services:
+        if AnswerKeys.SERVICE_AI not in self.selected_services:
             return "openai"  # Default for PUBLIC provider
 
         # Import here to avoid circular imports
@@ -248,7 +263,7 @@ class TemplateGenerator:
         queues: list[str] = []
 
         # Only check if worker component is included
-        if not any(c.startswith("worker") for c in self.components):
+        if not any(c.startswith(ComponentNames.WORKER) for c in self.components):
             return queues
 
         # Discover queue files from the template directory

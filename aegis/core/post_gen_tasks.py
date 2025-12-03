@@ -13,6 +13,8 @@ from typing import Any
 
 import typer
 
+from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
+
 # Task configuration constants (following tests/cli/test_utils.py pattern)
 POST_GEN_TIMEOUT_INSTALL = 300  # 5 minutes for dependency installation
 POST_GEN_TIMEOUT_FORMAT = 60  # 1 minute for code formatting
@@ -58,7 +60,7 @@ def get_component_file_mapping() -> dict[str, list[str]]:
         Dict mapping component names to file paths (relative to project root)
     """
     return {
-        "scheduler": [
+        ComponentNames.SCHEDULER: [
             "app/entrypoints/scheduler.py",
             "app/components/scheduler",
             "tests/components/test_scheduler.py",
@@ -68,14 +70,14 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/components/frontend/dashboard/cards/scheduler_card.py",
             "tests/services/test_scheduled_task_manager.py",
         ],
-        "scheduler_persistence": [  # Only for sqlite backend
+        f"{ComponentNames.SCHEDULER}_persistence": [  # Only for sqlite backend
             "app/services/scheduler",
             "app/cli/tasks.py",
             "app/components/backend/api/scheduler.py",
             "tests/api/test_scheduler_endpoints.py",
             "tests/services/test_scheduled_task_manager.py",
         ],
-        "worker": [
+        ComponentNames.WORKER: [
             "app/components/worker",
             "app/cli/load_test.py",
             "app/services/load_test.py",
@@ -87,10 +89,10 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "tests/api/test_worker_endpoints.py",
             "app/components/frontend/dashboard/cards/worker_card.py",
         ],
-        "database": [
+        ComponentNames.DATABASE: [
             "app/core/db.py",
         ],
-        "auth": [
+        AnswerKeys.SERVICE_AUTH: [
             "app/components/backend/api/auth",
             "app/models/user.py",
             "app/services/auth",
@@ -102,7 +104,7 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "tests/models/test_user.py",
             "alembic",
         ],
-        "ai": [
+        AnswerKeys.SERVICE_AI: [
             "app/components/backend/api/ai",
             "app/services/ai",
             "app/cli/ai.py",
@@ -165,7 +167,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         return value is True or value == "yes"
 
     # Remove scheduler component if not selected
-    if not is_enabled("include_scheduler"):
+    if not is_enabled(AnswerKeys.SCHEDULER):
         remove_file(project_path, "app/entrypoints/scheduler.py")
         remove_dir(project_path, "app/components/scheduler")
         remove_file(project_path, "tests/components/test_scheduler.py")
@@ -182,8 +184,10 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
 
     # Remove scheduler service if using memory backend
     # The service is only useful when we can persist to a database
-    scheduler_backend = context.get("scheduler_backend", "memory")
-    if scheduler_backend == "memory":
+    scheduler_backend = context.get(
+        AnswerKeys.SCHEDULER_BACKEND, StorageBackends.MEMORY
+    )
+    if scheduler_backend == StorageBackends.MEMORY:
         remove_dir(project_path, "app/services/scheduler")
         remove_file(project_path, "app/cli/tasks.py")
         remove_file(project_path, "app/components/backend/api/scheduler.py")
@@ -191,7 +195,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/services/test_scheduled_task_manager.py")
 
     # Remove worker component if not selected
-    if not is_enabled("include_worker"):
+    if not is_enabled(AnswerKeys.WORKER):
         remove_dir(project_path, "app/components/worker")
         remove_file(project_path, "app/cli/load_test.py")
         remove_file(project_path, "app/services/load_test.py")
@@ -209,12 +213,12 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         )
 
     # Remove shared component integration tests only when BOTH scheduler AND worker disabled
-    if not is_enabled("include_scheduler") and not is_enabled("include_worker"):
+    if not is_enabled(AnswerKeys.SCHEDULER) and not is_enabled(AnswerKeys.WORKER):
         remove_file(project_path, "tests/services/test_component_integration.py")
         remove_file(project_path, "tests/services/test_health_logic.py")
 
     # Remove database component if not selected
-    if not is_enabled("include_database"):
+    if not is_enabled(AnswerKeys.DATABASE):
         remove_file(project_path, "app/core/db.py")
         remove_file(
             project_path, "app/components/frontend/dashboard/cards/database_card.py"
@@ -224,7 +228,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         )
 
     # Remove redis component dashboard files if not selected
-    if not is_enabled("include_redis"):
+    if not is_enabled(AnswerKeys.REDIS):
         remove_file(
             project_path, "app/components/frontend/dashboard/cards/redis_card.py"
         )
@@ -233,11 +237,11 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         )
 
     # Remove cache component if not selected
-    if not is_enabled("include_cache"):
+    if not is_enabled(AnswerKeys.CACHE):
         pass  # Placeholder - cache component doesn't exist yet
 
     # Remove auth service if not selected
-    if not is_enabled("include_auth"):
+    if not is_enabled(AnswerKeys.AUTH):
         remove_dir(project_path, "app/components/backend/api/auth")
         remove_file(project_path, "app/models/user.py")
         remove_dir(project_path, "app/services/auth")
@@ -250,7 +254,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_dir(project_path, "alembic")
 
     # Remove AI service if not selected
-    if not is_enabled("include_ai"):
+    if not is_enabled(AnswerKeys.AI):
         remove_dir(project_path, "app/components/backend/api/ai")
         remove_dir(project_path, "app/services/ai")
         remove_file(project_path, "app/cli/ai.py")
@@ -267,7 +271,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         )
 
     # Remove comms service if not selected
-    if not is_enabled("include_comms"):
+    if not is_enabled(AnswerKeys.COMMS):
         remove_dir(project_path, "app/components/backend/api/comms")
         remove_dir(project_path, "app/services/comms")
         remove_file(project_path, "app/cli/comms.py")
@@ -282,7 +286,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         )
 
     # Remove auth service dashboard files if not selected
-    if not is_enabled("include_auth"):
+    if not is_enabled(AnswerKeys.AUTH):
         remove_file(
             project_path, "app/components/frontend/dashboard/cards/auth_card.py"
         )
@@ -295,10 +299,10 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
 
     # Clean up empty docs/components directory if no components selected
     if (
-        not is_enabled("include_scheduler")
-        and not is_enabled("include_worker")
-        and not is_enabled("include_database")
-        and not is_enabled("include_cache")
+        not is_enabled(AnswerKeys.SCHEDULER)
+        and not is_enabled(AnswerKeys.WORKER)
+        and not is_enabled(AnswerKeys.DATABASE)
+        and not is_enabled(AnswerKeys.CACHE)
     ):
         remove_dir(project_path, "docs/components")
 

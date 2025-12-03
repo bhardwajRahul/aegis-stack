@@ -13,6 +13,7 @@ from copier import run_update
 from packaging.version import parse
 from pydantic import BaseModel, Field
 
+from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
 from aegis.core.copier_manager import load_copier_answers
 from aegis.core.post_gen_tasks import run_post_generation_tasks
 
@@ -74,7 +75,7 @@ def get_template_root(override_path: str | None = None) -> Path:
 def update_with_copier_native(
     project_path: Path,
     components_to_add: list[str],
-    scheduler_backend: str = "memory",
+    scheduler_backend: str = StorageBackends.MEMORY,
 ) -> CopierUpdateResult:
     """
     EXPERIMENTAL: Use Copier's native update with git root template.
@@ -102,13 +103,15 @@ def update_with_copier_native(
         update_data: dict[str, bool | str] = {}
 
         for component in components_to_add:
-            include_key = f"include_{component}"
+            include_key = AnswerKeys.include_key(component)
             update_data[include_key] = True
 
         # Add scheduler backend configuration if adding scheduler
-        if "scheduler" in components_to_add:
-            update_data["scheduler_backend"] = scheduler_backend
-            update_data["scheduler_with_persistence"] = scheduler_backend == "sqlite"
+        if ComponentNames.SCHEDULER in components_to_add:
+            update_data[AnswerKeys.SCHEDULER_BACKEND] = scheduler_backend
+            update_data[AnswerKeys.SCHEDULER_WITH_PERSISTENCE] = (
+                scheduler_backend == StorageBackends.SQLITE
+            )
 
         # CRITICAL: Manually update .copier-answers.yml BEFORE running copier update
         # The `data` parameter in run_update() doesn't actually update existing answers
@@ -174,9 +177,9 @@ def update_with_copier_native(
 
         # Check for services in components_to_add (they start with 'include_')
         # Service names: auth, ai
-        service_names = {"auth", "ai"}
+        service_names = {AnswerKeys.SERVICE_AUTH, AnswerKeys.SERVICE_AI}
         newly_added_services = [
-            svc for svc in service_names if f"include_{svc}" in update_data
+            svc for svc in service_names if AnswerKeys.include_key(svc) in update_data
         ]
 
         if newly_added_services:
@@ -192,7 +195,7 @@ def update_with_copier_native(
 
         # Run post-generation tasks with explicit working directory control
         # This ensures consistent behavior with initial generation
-        include_auth = answers.get("include_auth", False)
+        include_auth = answers.get(AnswerKeys.AUTH, False)
 
         # Run shared post-generation tasks
         run_post_generation_tasks(project_path, include_auth=include_auth)

@@ -7,6 +7,7 @@ component detection, dependency expansion, and other common tasks.
 
 import typer
 
+from ..constants import ComponentNames, StorageBackends
 from ..core.component_utils import (
     clean_component_names,
     extract_base_component_name,
@@ -26,7 +27,7 @@ def detect_scheduler_backend(components: list[str]) -> str:
     """
     for component in components:
         base_name = extract_base_component_name(component)
-        if base_name == "scheduler":
+        if base_name == ComponentNames.SCHEDULER:
             engine = extract_engine_info(component)
             if engine:
                 # Direct scheduler[backend] syntax
@@ -34,9 +35,9 @@ def detect_scheduler_backend(components: list[str]) -> str:
             else:
                 # Check if database is also present (legacy detection)
                 clean_names = clean_component_names(components)
-                if "database" in clean_names:
-                    return "sqlite"  # Default database backend
-    return "memory"  # Default to memory-only
+                if ComponentNames.DATABASE in clean_names:
+                    return StorageBackends.SQLITE  # Default database backend
+    return StorageBackends.MEMORY  # Default to memory-only
 
 
 def expand_scheduler_dependencies(components: list[str]) -> list[str]:
@@ -53,18 +54,18 @@ def expand_scheduler_dependencies(components: list[str]) -> list[str]:
 
     for component in components:
         base_name = extract_base_component_name(component)
-        if base_name == "scheduler":
+        if base_name == ComponentNames.SCHEDULER:
             backend = extract_engine_info(component)
-            if backend and backend != "memory":
+            if backend and backend != StorageBackends.MEMORY:
                 # Auto-add database with same backend if not already present
-                database_component = f"database[{backend}]"
+                database_component = f"{ComponentNames.DATABASE}[{backend}]"
                 existing_clean = clean_component_names(result)
 
-                if "database" not in existing_clean:
+                if ComponentNames.DATABASE not in existing_clean:
                     result.append(database_component)
                     typer.echo(
-                        f"Auto-added database[{backend}] for "
-                        f"scheduler[{backend}] persistence"
+                        f"Auto-added {ComponentNames.DATABASE}[{backend}] for "
+                        f"{ComponentNames.SCHEDULER}[{backend}] persistence"
                     )
 
     return result

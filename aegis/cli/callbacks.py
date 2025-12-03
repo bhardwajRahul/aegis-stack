@@ -7,6 +7,7 @@ CLI options before command execution.
 
 import typer
 
+from ..constants import Messages
 from ..core.component_utils import (
     clean_component_names,
     restore_engine_info,
@@ -34,7 +35,7 @@ def validate_and_resolve_components(
 
     # Check for empty components before filtering
     if any(not c for c in components_raw):
-        typer.secho("Empty component name is not allowed", fg="red", err=True)
+        typer.secho(Messages.EMPTY_COMPONENT_NAME, fg="red", err=True)
         raise typer.Exit(1)
 
     selected = [c for c in components_raw if c]
@@ -89,7 +90,7 @@ def validate_and_resolve_services(
 
     # Check for empty services before filtering
     if any(not s for s in services_raw):
-        typer.secho("Empty service name is not allowed", fg="red", err=True)
+        typer.secho(Messages.EMPTY_SERVICE_NAME, fg="red", err=True)
         raise typer.Exit(1)
 
     selected_services = [s for s in services_raw if s]

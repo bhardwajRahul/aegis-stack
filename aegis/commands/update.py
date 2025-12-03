@@ -11,6 +11,7 @@ from pathlib import Path
 
 import typer
 
+from ..constants import AnswerKeys
 from ..core.copier_manager import is_copier_project, load_copier_answers
 from ..core.copier_updater import (
     analyze_conflict_files,
@@ -337,7 +338,7 @@ def update_command(
 
         # Load answers to determine what services are enabled
         answers = load_copier_answers(target_path)
-        include_auth = answers.get("include_auth", False)
+        include_auth = answers.get(AnswerKeys.AUTH, False)
 
         # Run post-generation tasks
         typer.echo("Running post-generation tasks...")

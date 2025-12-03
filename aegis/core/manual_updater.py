@@ -16,9 +16,9 @@ from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from pydantic import BaseModel, Field
 
 from aegis.config.shared_files import SHARED_TEMPLATE_FILES
+from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
 
 from .component_files import get_component_files, get_template_path
-from .components import SchedulerBackend
 from .copier_manager import is_copier_project, load_copier_answers
 from .verbosity import verbose_print
 
@@ -126,7 +126,7 @@ class ManualUpdater:
 
         try:
             # Check if already enabled
-            include_key = f"include_{component}"
+            include_key = AnswerKeys.include_key(component)
             if self.answers.get(include_key) is True:
                 raise ValueError(f"Component '{component}' is already enabled")
 
@@ -139,8 +139,8 @@ class ManualUpdater:
 
             # Get files for this component
             backend_variant = (
-                update_data.get("scheduler_backend")
-                if component == "scheduler"
+                update_data.get(AnswerKeys.SCHEDULER_BACKEND)
+                if component == ComponentNames.SCHEDULER
                 else None
             )
             component_files = get_component_files(component, backend_variant)
@@ -240,14 +240,14 @@ class ManualUpdater:
 
         try:
             # Check if enabled
-            include_key = f"include_{component}"
+            include_key = AnswerKeys.include_key(component)
             if not self.answers.get(include_key):
                 raise ValueError(f"Component '{component}' is not enabled")
 
             # Get files for this component
             backend_variant = (
-                self.answers.get("scheduler_backend")
-                if component == "scheduler"
+                self.answers.get(AnswerKeys.SCHEDULER_BACKEND)
+                if component == ComponentNames.SCHEDULER
                 else None
             )
             component_files = get_component_files(component, backend_variant)
@@ -287,9 +287,9 @@ class ManualUpdater:
             updated_answers = {**self.answers, include_key: False}
 
             # Also reset backend variant if removing scheduler
-            if component == "scheduler":
-                updated_answers["scheduler_backend"] = SchedulerBackend.MEMORY.value
-                updated_answers["scheduler_with_persistence"] = False
+            if component == ComponentNames.SCHEDULER:
+                updated_answers[AnswerKeys.SCHEDULER_BACKEND] = StorageBackends.MEMORY
+                updated_answers[AnswerKeys.SCHEDULER_WITH_PERSISTENCE] = False
 
             # Update .copier-answers.yml before regenerating shared files
             self._save_answers(updated_answers)

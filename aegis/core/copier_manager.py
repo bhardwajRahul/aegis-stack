@@ -13,6 +13,7 @@ import yaml
 from copier import run_copy, run_update
 
 from ..config.defaults import DEFAULT_PYTHON_VERSION, GITHUB_TEMPLATE_URL
+from ..constants import AnswerKeys
 from .post_gen_tasks import cleanup_components, run_post_generation_tasks
 from .template_generator import TemplateGenerator
 
@@ -73,18 +74,24 @@ def generate_with_copier(
             "python_version", DEFAULT_PYTHON_VERSION
         ),
         # Convert yes/no strings to booleans
-        "include_scheduler": cookiecutter_context["include_scheduler"] == "yes",
-        "scheduler_backend": cookiecutter_context["scheduler_backend"],
-        "scheduler_with_persistence": cookiecutter_context["scheduler_with_persistence"]
+        AnswerKeys.SCHEDULER: cookiecutter_context[AnswerKeys.SCHEDULER] == "yes",
+        AnswerKeys.SCHEDULER_BACKEND: cookiecutter_context[
+            AnswerKeys.SCHEDULER_BACKEND
+        ],
+        AnswerKeys.SCHEDULER_WITH_PERSISTENCE: cookiecutter_context[
+            AnswerKeys.SCHEDULER_WITH_PERSISTENCE
+        ]
         == "yes",
-        "include_worker": cookiecutter_context["include_worker"] == "yes",
-        "include_redis": cookiecutter_context["include_redis"] == "yes",
-        "include_database": cookiecutter_context["include_database"] == "yes",
-        "include_cache": False,  # Default to no
-        "include_auth": cookiecutter_context.get("include_auth", "no") == "yes",
-        "include_ai": cookiecutter_context.get("include_ai", "no") == "yes",
-        "include_comms": cookiecutter_context.get("include_comms", "no") == "yes",
-        "ai_providers": cookiecutter_context.get("ai_providers", "openai"),
+        AnswerKeys.WORKER: cookiecutter_context[AnswerKeys.WORKER] == "yes",
+        AnswerKeys.REDIS: cookiecutter_context[AnswerKeys.REDIS] == "yes",
+        AnswerKeys.DATABASE: cookiecutter_context[AnswerKeys.DATABASE] == "yes",
+        AnswerKeys.CACHE: False,  # Default to no
+        AnswerKeys.AUTH: cookiecutter_context.get(AnswerKeys.AUTH, "no") == "yes",
+        AnswerKeys.AI: cookiecutter_context.get(AnswerKeys.AI, "no") == "yes",
+        AnswerKeys.COMMS: cookiecutter_context.get(AnswerKeys.COMMS, "no") == "yes",
+        AnswerKeys.AI_PROVIDERS: cookiecutter_context.get(
+            AnswerKeys.AI_PROVIDERS, "openai"
+        ),
     }
 
     # Detect dev vs production mode for template sourcing
@@ -135,7 +142,7 @@ def generate_with_copier(
 
     # Run post-generation tasks with explicit working directory control
     # This ensures consistent behavior with Cookiecutter
-    include_auth = copier_data.get("include_auth", False)
+    include_auth = copier_data.get(AnswerKeys.AUTH, False)
     python_version = copier_data.get("python_version")
     run_post_generation_tasks(
         project_path, include_auth=include_auth, python_version=python_version
