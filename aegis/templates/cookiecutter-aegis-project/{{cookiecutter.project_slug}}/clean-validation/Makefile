@@ -5,9 +5,9 @@
 # CORE DOCKER COMMANDS
 #=============================================================================
 
-build: ## Build all Docker images (safe, sequential)
-	@echo "Building Docker images..."
-	@docker compose build
+build: ## Build Docker image
+	@echo "Building Docker image..."
+	@docker compose build webserver
 
 serve: build ## Run all services (builds if needed)
 	@echo "Starting services... (Press Ctrl+C to stop)"
