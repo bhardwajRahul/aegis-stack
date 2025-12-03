@@ -15,6 +15,7 @@ from ..cli.interactive import interactive_project_selection
 from ..cli.utils import detect_scheduler_backend
 from ..cli.validators import validate_project_name
 from ..config.defaults import DEFAULT_PYTHON_VERSION, SUPPORTED_PYTHON_VERSIONS
+from ..constants import StorageBackends
 from ..core.component_utils import (
     clean_component_names,
     extract_base_component_name,
@@ -24,7 +25,6 @@ from ..core.components import (
     COMPONENTS,
     CORE_COMPONENTS,
     ComponentType,
-    SchedulerBackend,
 )
 from ..core.dependency_resolver import DependencyResolver
 from ..core.service_resolver import ServiceResolver
@@ -149,7 +149,7 @@ def init_command(
     # Note: components is list[str] after callback, despite str annotation
     selected_components = cast(list[str], components) if components else []
     selected_services = cast(list[str], services) if services else []
-    scheduler_backend = SchedulerBackend.MEMORY.value  # Default to in-memory scheduler
+    scheduler_backend = StorageBackends.MEMORY  # Default to in-memory scheduler
 
     # Resolve services to components if services were provided (non-interactive mode only)
     if selected_services and not interactive:
@@ -213,7 +213,7 @@ def init_command(
     # Auto-detect scheduler backend when components are specified
     if selected_components:
         scheduler_backend = detect_scheduler_backend(selected_components)
-        if scheduler_backend != SchedulerBackend.MEMORY.value:
+        if scheduler_backend != StorageBackends.MEMORY:
             typer.secho(
                 f"Auto-detected: Scheduler with {scheduler_backend} persistence",
                 fg=typer.colors.YELLOW,

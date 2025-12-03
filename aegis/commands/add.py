@@ -9,12 +9,15 @@ from pathlib import Path
 import typer
 
 from ..cli.utils import detect_scheduler_backend
-from ..core.component_utils import extract_base_component_name, extract_engine_info
-from ..core.components import COMPONENTS, CORE_COMPONENTS, SchedulerBackend
-from ..core.copier_manager import (
-    is_copier_project,
-    load_copier_answers,
+from ..cli.validation import (
+    parse_comma_separated_list,
+    validate_copier_project,
+    validate_git_repository,
 )
+from ..constants import AnswerKeys, ComponentNames, Messages, StorageBackends
+from ..core.component_utils import extract_base_component_name, extract_engine_info
+from ..core.components import COMPONENTS, CORE_COMPONENTS
+from ..core.copier_manager import load_copier_answers
 from ..core.dependency_resolver import DependencyResolver
 from ..core.manual_updater import ManualUpdater
 from ..core.version_compatibility import validate_version_compatibility
@@ -80,21 +83,7 @@ def add_command(
     target_path = Path(project_path).resolve()
 
     # Validate it's a Copier project
-    if not is_copier_project(target_path):
-        typer.secho(
-            f"Project at {target_path} was not generated with Copier.",
-            fg="red",
-            err=True,
-        )
-        typer.echo(
-            "   The 'aegis add' command only works with Copier-generated projects.",
-            err=True,
-        )
-        typer.echo(
-            "   To add components, regenerate the project with the new components included.",
-            err=True,
-        )
-        raise typer.Exit(1)
+    validate_copier_project(target_path, "add")
 
     typer.echo(f"Project: {target_path}")
 
@@ -137,37 +126,19 @@ def add_command(
         yes = True
 
     # Verify project is in a git repository (required for Copier updates)
-    git_dir = target_path / ".git"
-    if not git_dir.exists():
-        typer.secho("\nProject is not in a git repository", fg="red", err=True)
-        typer.echo("   Copier updates require git for change tracking", err=True)
-        typer.echo(
-            "   Projects created with 'aegis init' should have git initialized automatically",
-            err=True,
-        )
-        typer.echo(
-            "   If you created this project manually, run: git init && git add . && git commit -m 'Initial commit'",
-            err=True,
-        )
-        raise typer.Exit(1)
+    validate_git_repository(target_path)
 
     # Parse and validate components
     assert components is not None  # Already validated by check above
-    components_raw = [c.strip() for c in components.split(",")]
-
-    # Check for empty components
-    if any(not c for c in components_raw):
-        typer.secho("Empty component name is not allowed", fg="red", err=True)
-        raise typer.Exit(1)
-
-    selected_components = [c for c in components_raw if c]
+    selected_components = parse_comma_separated_list(components, "component")
+    components_raw = selected_components  # Keep for bracket syntax parsing
 
     # Parse bracket syntax for scheduler backend (e.g., "scheduler[sqlite]")
     # Bracket syntax takes precedence over --backend flag
     for comp in components_raw:
         try:
             base_name = extract_base_component_name(comp)
-            if base_name == "scheduler":
+            if base_name == ComponentNames.SCHEDULER:
                 engine = extract_engine_info(comp)
                 if engine:
                     if backend and backend != engine:
@@ -222,7 +193,7 @@ def add_command(
     already_enabled = []
     for component in resolved_components:
         # Check if component is already enabled in answers
-        include_key = f"include_{component}"
+        include_key = AnswerKeys.include_key(component)
         if existing_answers.get(include_key) is True:
             already_enabled.append(component)
 
@@ -241,19 +212,19 @@ def add_command(
         raise typer.Exit(0)
 
     # Detect scheduler backend if adding scheduler
-    scheduler_backend = SchedulerBackend.MEMORY.value
-    if "scheduler" in components_to_add:
+    scheduler_backend = StorageBackends.MEMORY
+    if ComponentNames.SCHEDULER in components_to_add:
         # Use explicit backend flag/bracket syntax if provided, otherwise detect
         scheduler_backend = backend or detect_scheduler_backend(components_to_add)
 
         # Validate backend (only memory and sqlite supported)
-        valid_backends = [SchedulerBackend.MEMORY.value, SchedulerBackend.SQLITE.value]
+        valid_backends = [StorageBackends.MEMORY, StorageBackends.SQLITE]
         if scheduler_backend not in valid_backends:
             typer.secho(
                 f"Invalid scheduler backend: '{scheduler_backend}'", fg="red", err=True
             )
             typer.echo(f"   Valid options: {', '.join(valid_backends)}", err=True)
-            if scheduler_backend == SchedulerBackend.POSTGRES.value:
+            if scheduler_backend == StorageBackends.POSTGRES:
                 typer.echo(
                     "   Note: PostgreSQL support coming in future release", err=True
                 )
@@ -261,10 +232,10 @@ def add_command(
 
         # Auto-add database component for sqlite backend
         if (
-            scheduler_backend == SchedulerBackend.SQLITE.value
-            and "database" not in components_to_add
+            scheduler_backend == StorageBackends.SQLITE
+            and ComponentNames.DATABASE not in components_to_add
         ):
-            components_to_add.append("database")
+            components_to_add.append(ComponentNames.DATABASE)
             typer.echo(
                 "Auto-added database component for scheduler persistence", err=False
             )
@@ -277,8 +248,8 @@ def add_command(
             typer.echo(f"   • {component}: {desc}")
 
     if (
-        "scheduler" in components_to_add
-        and scheduler_backend != SchedulerBackend.MEMORY.value
+        ComponentNames.SCHEDULER in components_to_add
+        and scheduler_backend != StorageBackends.MEMORY
     ):
         typer.echo(f"\nScheduler backend: {scheduler_backend}")
 
@@ -292,20 +263,20 @@ def add_command(
     update_data: dict[str, bool | str] = {}
 
     for component in components_to_add:
-        include_key = f"include_{component}"
+        include_key = AnswerKeys.include_key(component)
         update_data[include_key] = True
 
     # Add scheduler backend configuration if adding scheduler
-    if "scheduler" in components_to_add:
-        update_data["scheduler_backend"] = scheduler_backend
-        update_data["scheduler_with_persistence"] = (
-            scheduler_backend == SchedulerBackend.SQLITE.value
+    if ComponentNames.SCHEDULER in components_to_add:
+        update_data[AnswerKeys.SCHEDULER_BACKEND] = scheduler_backend
+        update_data[AnswerKeys.SCHEDULER_WITH_PERSISTENCE] = (
+            scheduler_backend == StorageBackends.SQLITE
         )
 
     # Add database engine configuration if adding database
-    if "database" in components_to_add:
+    if ComponentNames.DATABASE in components_to_add:
         # SQLite is the only supported engine for now
-        update_data["database_engine"] = "sqlite"
+        update_data[AnswerKeys.DATABASE_ENGINE] = StorageBackends.SQLITE
 
     # Add components using ManualUpdater
     # This is the standard approach for adding components at the same template version
@@ -320,13 +291,23 @@ def add_command(
 
             # Prepare component-specific data
             component_data: dict[str, bool | str] = {}
-            if component == "scheduler" and "scheduler_backend" in update_data:
-                component_data["scheduler_backend"] = update_data["scheduler_backend"]
-                component_data["scheduler_with_persistence"] = update_data.get(
-                    "scheduler_with_persistence", False
+            if (
+                component == ComponentNames.SCHEDULER
+                and AnswerKeys.SCHEDULER_BACKEND in update_data
+            ):
+                component_data[AnswerKeys.SCHEDULER_BACKEND] = update_data[
+                    AnswerKeys.SCHEDULER_BACKEND
+                ]
+                component_data[AnswerKeys.SCHEDULER_WITH_PERSISTENCE] = update_data.get(
+                    AnswerKeys.SCHEDULER_WITH_PERSISTENCE, False
                 )
-            elif component == "database" and "database_engine" in update_data:
-                component_data["database_engine"] = update_data["database_engine"]
+            elif (
+                component == ComponentNames.DATABASE
+                and AnswerKeys.DATABASE_ENGINE in update_data
+            ):
+                component_data[AnswerKeys.DATABASE_ENGINE] = update_data[
+                    AnswerKeys.DATABASE_ENGINE
+                ]
 
             # Add the component
             result = updater.add_component(component, component_data)
@@ -354,14 +335,9 @@ def add_command(
         # Just provide next steps
 
         if len(components_to_add) > 0:
-            typer.echo("\nReview changes:")
-            typer.echo("   git diff docker-compose.yml")
-            typer.echo("   git diff pyproject.toml")
+            Messages.print_review_changes()
 
-        typer.echo("\nNext steps:")
-        typer.echo("   1. Run 'make check' to verify the update")
-        typer.echo("   2. Test your application")
-        typer.echo("   3. Commit the changes with: git add . && git commit")
+        Messages.print_next_steps()
 
     except Exception as e:
         typer.secho(f"\nFailed to add components: {e}", fg="red", err=True)

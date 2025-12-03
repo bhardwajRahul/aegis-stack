@@ -9,9 +9,9 @@ build: ## Build all Docker images (safe, sequential)
 	@echo "Building Docker images..."
 	@docker compose --profile dev build
 
-serve: ## Run all services (assumes images are built)
+serve: ## Run all services (builds if needed)
 	@echo "Starting services... (Press Ctrl+C to stop)"
-	@docker compose --profile dev up --remove-orphans
+	@docker compose --profile dev up --build --remove-orphans
 
 serve-bg: ## Run all services in background
 	@echo "Starting services in background..."

@@ -4,6 +4,7 @@ Components command implementation.
 
 import typer
 
+from ..constants import ComponentNames
 from ..core.components import CORE_COMPONENTS, ComponentType, get_components_by_type
 
 
@@ -13,9 +14,9 @@ def components_command() -> None:
     typer.echo("\nCORE COMPONENTS")
     typer.echo("=" * 40)
     for component in CORE_COMPONENTS:
-        if component == "backend":
+        if component == ComponentNames.BACKEND:
             typer.echo("  backend      - FastAPI backend server (always included)")
-        elif component == "frontend":
+        elif component == ComponentNames.FRONTEND:
             typer.echo("  frontend     - Flet frontend interface (always included)")
 
     typer.echo("\nINFRASTRUCTURE COMPONENTS")

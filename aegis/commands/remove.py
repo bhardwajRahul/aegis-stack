@@ -8,11 +8,13 @@ from pathlib import Path
 
 import typer
 
-from ..core.components import COMPONENTS, CORE_COMPONENTS, SchedulerBackend
-from ..core.copier_manager import (
-    is_copier_project,
-    load_copier_answers,
+from ..cli.validation import (
+    parse_comma_separated_list,
+    validate_copier_project,
 )
+from ..constants import AnswerKeys, ComponentNames, Messages, StorageBackends
+from ..core.components import COMPONENTS, CORE_COMPONENTS
+from ..core.copier_manager import load_copier_answers
 from ..core.dependency_resolver import DependencyResolver
 from ..core.manual_updater import ManualUpdater
 from ..core.version_compatibility import validate_version_compatibility
@@ -67,17 +69,7 @@ def remove_command(
     target_path = Path(project_path).resolve()
 
     # Validate it's a Copier project
-    if not is_copier_project(target_path):
-        typer.secho(
-            f"Project at {target_path} was not generated with Copier.",
-            fg="red",
-            err=True,
-        )
-        typer.echo(
-            "   The 'aegis remove' command only works with Copier-generated projects.",
-            err=True,
-        )
-        raise typer.Exit(1)
+    validate_copier_project(target_path, "remove")
 
     typer.echo(f"Project: {target_path}")
 
@@ -119,14 +111,7 @@ def remove_command(
 
     # Parse and validate components
     assert components is not None  # Already validated by check above
-    components_raw = [c.strip() for c in components.split(",")]
-
-    # Check for empty components
-    if any(not c for c in components_raw):
-        typer.secho("Empty component name is not allowed", fg="red", err=True)
-        raise typer.Exit(1)
-
-    selected_components = [c for c in components_raw if c]
+    selected_components = parse_comma_separated_list(components, "component")
 
     # Validate components exist
     try:
@@ -159,7 +144,7 @@ def remove_command(
             continue
 
         # Check if component is enabled
-        include_key = f"include_{component}"
+        include_key = AnswerKeys.include_key(component)
         if not existing_answers.get(include_key):
             not_enabled.append(component)
         else:
@@ -175,23 +160,23 @@ def remove_command(
     # Auto-remove redis if worker is being removed (redis has no standalone functionality)
     # Don't remove redis if cache component is using it
     if (
-        "worker" in components_to_remove
-        and "redis" not in components_to_remove
-        and existing_answers.get("include_redis")
+        ComponentNames.WORKER in components_to_remove
+        and ComponentNames.REDIS not in components_to_remove
+        and existing_answers.get(AnswerKeys.REDIS)
         and not existing_answers.get(
-            "include_cache"
+            AnswerKeys.CACHE
         )  # Future: cache component may use redis
     ):
-        components_to_remove.append("redis")
+        components_to_remove.append(ComponentNames.REDIS)
         typer.echo(
             "Auto-removing redis (no standalone functionality, only used by worker)",
             err=False,
         )
 
     # Check for scheduler with sqlite backend - warn about persistence
-    if "scheduler" in components_to_remove:
-        scheduler_backend = existing_answers.get("scheduler_backend")
-        if scheduler_backend == SchedulerBackend.SQLITE.value:
+    if ComponentNames.SCHEDULER in components_to_remove:
+        scheduler_backend = existing_answers.get(AnswerKeys.SCHEDULER_BACKEND)
+        if scheduler_backend == StorageBackends.SQLITE:
             typer.secho("\nIMPORTANT: Scheduler Persistence Warning", fg="yellow")
             typer.echo("   Your scheduler uses SQLite for job persistence.")
             typer.echo("   The database file at data/scheduler.db will remain.")
@@ -244,10 +229,7 @@ def remove_command(
                 typer.secho(f"   Removed {len(result.files_deleted)} files", fg="green")
 
         typer.secho("\nComponents removed successfully!", fg="green")
-        typer.echo("\nNext steps:")
-        typer.echo("   1. Run 'make check' to verify the changes")
-        typer.echo("   2. Test your application")
-        typer.echo("   3. Commit the changes to git")
+        Messages.print_next_steps()
 
     except Exception as e:
         typer.secho(f"\nFailed to remove components: {e}", fg="red", err=True)

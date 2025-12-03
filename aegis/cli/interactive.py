@@ -9,6 +9,7 @@ from pathlib import Path
 
 import typer
 
+from ..constants import AnswerKeys, ComponentNames, StorageBackends
 from ..core.components import COMPONENTS, CORE_COMPONENTS, ComponentSpec, ComponentType
 from ..core.services import SERVICES, ServiceType, get_services_by_type
 
@@ -46,7 +47,7 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
     selected = []
     database_engine = None  # Track database engine selection
     database_added_by_scheduler = False  # Track if database was added by scheduler
-    scheduler_backend = "memory"  # Track scheduler backend: memory, sqlite, postgres
+    scheduler_backend = StorageBackends.MEMORY
 
     # Get all infrastructure components from registry
     infra_components = get_interactive_infrastructure_components()
@@ -54,7 +55,7 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
     typer.echo("Infrastructure Components:")
 
     # Process components in a specific order to handle dependencies
-    component_order = ["redis", "worker", "scheduler", "database"]
+    component_order = ComponentNames.INFRASTRUCTURE_ORDER
 
     for component_name in component_order:
         # Find the component spec
@@ -65,24 +66,24 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
             continue  # Skip if component doesn't exist in registry
 
         # Handle special worker dependency logic
-        if component_name == "worker":
-            if "redis" in selected:
+        if component_name == ComponentNames.WORKER:
+            if ComponentNames.REDIS in selected:
                 # Redis already selected, simple worker prompt
                 prompt = f"  Add {component_spec.description.lower()}?"
                 if typer.confirm(prompt):
-                    selected.append("worker")
+                    selected.append(ComponentNames.WORKER)
             else:
                 # Redis not selected, offer to add both
                 prompt = (
                     f"  Add {component_spec.description.lower()}? (will auto-add Redis)"
                 )
                 if typer.confirm(prompt):
-                    selected.extend(["redis", "worker"])
-        elif component_name == "scheduler":
+                    selected.extend([ComponentNames.REDIS, ComponentNames.WORKER])
+        elif component_name == ComponentNames.SCHEDULER:
             # Enhanced scheduler selection with persistence and database options
             prompt = f"  Add {component_spec.description}?"
             if typer.confirm(prompt):
-                selected.append("scheduler")
+                selected.append(ComponentNames.SCHEDULER)
 
                 # Follow-up: persistence question
                 typer.echo("\nScheduler Persistence:")
@@ -108,11 +109,11 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
                     )
 
                     if typer.confirm("  Continue with SQLite?", default=True):
-                        database_engine = "sqlite"
-                        selected.append("database")
+                        database_engine = StorageBackends.SQLITE
+                        selected.append(ComponentNames.DATABASE)
                         database_added_by_scheduler = True
                         # Mark scheduler backend as sqlite
-                        scheduler_backend = "sqlite"
+                        scheduler_backend = StorageBackends.SQLITE
                         typer.secho(
                             "Scheduler + SQLite database configured", fg="green"
                         )
@@ -129,7 +130,7 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
                         # Don't add database if user declines SQLite
 
                 typer.echo()  # Extra spacing after scheduler section
-        elif component_name == "database":
+        elif component_name == ComponentNames.DATABASE:
             # Skip generic database prompt if already added by scheduler
             if database_added_by_scheduler:
                 continue
@@ -137,10 +138,10 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
             # Standard database prompt (when not added by scheduler)
             prompt = f"  Add {component_spec.description}?"
             if typer.confirm(prompt):
-                selected.append("database")
+                selected.append(ComponentNames.DATABASE)
 
                 # Show bonus backup job message when database added with scheduler
-                if "scheduler" in selected:
+                if ComponentNames.SCHEDULER in selected:
                     typer.echo("\nBonus: Adding database backup job")
                     typer.secho(
                         "Scheduled daily database backup job included (runs at 2 AM)",
@@ -153,15 +154,18 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
                 selected.append(component_name)
 
     # Update selected list with engine info for display
-    if "database" in selected and database_engine:
+    if ComponentNames.DATABASE in selected and database_engine:
         # Replace "database" with formatted version for display
-        db_index = selected.index("database")
-        selected[db_index] = f"database[{database_engine}]"
+        db_index = selected.index(ComponentNames.DATABASE)
+        selected[db_index] = f"{ComponentNames.DATABASE}[{database_engine}]"
 
     # Update scheduler with backend info if not memory
-    if "scheduler" in selected and scheduler_backend != "memory":
-        scheduler_index = selected.index("scheduler")
-        selected[scheduler_index] = f"scheduler[{scheduler_backend}]"
+    if (
+        ComponentNames.SCHEDULER in selected
+        and scheduler_backend != StorageBackends.MEMORY
+    ):
+        scheduler_index = selected.index(ComponentNames.SCHEDULER)
+        selected[scheduler_index] = f"{ComponentNames.SCHEDULER}[{scheduler_backend}]"
 
     # Service selection
     selected_services = []
@@ -188,7 +192,7 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
 
                     # Check if database is already selected
                     database_already_selected = any(
-                        "database" in comp for comp in selected
+                        ComponentNames.DATABASE in comp for comp in selected
                     )
 
                     if database_already_selected:
@@ -323,8 +327,8 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
 
     # Show currently enabled components
     enabled_components = []
-    for component in ["redis", "worker", "scheduler", "database"]:
-        if current_answers.get(f"include_{component}"):
+    for component in ComponentNames.INFRASTRUCTURE_ORDER:
+        if current_answers.get(AnswerKeys.include_key(component)):
             enabled_components.append(component)
 
     if enabled_components:
@@ -335,10 +339,10 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
     typer.echo("\nAvailable Components:\n")
 
     selected = []
-    scheduler_backend = "memory"
+    scheduler_backend = StorageBackends.MEMORY
 
     # Get all infrastructure components in order
-    component_order = ["redis", "worker", "scheduler", "database"]
+    component_order = ComponentNames.INFRASTRUCTURE_ORDER
 
     for component_name in component_order:
         # Skip if already enabled
@@ -356,35 +360,39 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
             continue
 
         # Handle special logic for each component
-        if component_name == "worker":
-            if "redis" in enabled_components or "redis" in selected:
+        if component_name == ComponentNames.WORKER:
+            if (
+                ComponentNames.REDIS in enabled_components
+                or ComponentNames.REDIS in selected
+            ):
                 # Redis already available
                 prompt = f"  Add {component_spec.description.lower()}?"
                 if typer.confirm(prompt):
-                    selected.append("worker")
+                    selected.append(ComponentNames.WORKER)
             else:
                 # Need to add redis too
                 prompt = (
                     f"  Add {component_spec.description.lower()}? (will auto-add Redis)"
                 )
                 if typer.confirm(prompt):
-                    selected.extend(["redis", "worker"])
+                    selected.extend([ComponentNames.REDIS, ComponentNames.WORKER])
 
-        elif component_name == "scheduler":
+        elif component_name == ComponentNames.SCHEDULER:
             prompt = f"  Add {component_spec.description}?"
             if typer.confirm(prompt):
-                selected.append("scheduler")
+                selected.append(ComponentNames.SCHEDULER)
 
                 # Check if database is available or will be added
                 database_available = (
-                    "database" in enabled_components or "database" in selected
+                    ComponentNames.DATABASE in enabled_components
+                    or ComponentNames.DATABASE in selected
                 )
 
                 if database_available:
                     # Database already available - offer persistence
                     typer.echo("\nScheduler Persistence:")
                     if typer.confirm("  Enable job persistence with SQLite?"):
-                        scheduler_backend = "sqlite"
+                        scheduler_backend = StorageBackends.SQLITE
                         typer.secho(
                             "  Scheduler will use SQLite for job persistence",
                             fg="green",
@@ -398,8 +406,8 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
                     typer.echo("\nScheduler Persistence:")
                     typer.echo("  Job persistence requires SQLite database component")
                     if typer.confirm("  Add database component for job persistence?"):
-                        selected.append("database")
-                        scheduler_backend = "sqlite"
+                        selected.append(ComponentNames.DATABASE)
+                        scheduler_backend = StorageBackends.SQLITE
                         typer.secho(
                             "  Database will be added - scheduler will use SQLite",
                             fg="green",
@@ -409,12 +417,12 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
                             "  Scheduler will use memory backend (no persistence)"
                         )
 
-        elif component_name == "redis":
+        elif component_name == ComponentNames.REDIS:
             # Only offer if not already added by worker
-            if "redis" not in selected:
+            if ComponentNames.REDIS not in selected:
                 prompt = f"  Add {component_spec.description}?"
                 if typer.confirm(prompt):
-                    selected.append("redis")
+                    selected.append(ComponentNames.REDIS)
 
         else:
             # Standard prompt for other components
@@ -456,8 +464,8 @@ def interactive_component_remove_selection(project_path: Path) -> list[str]:
 
     # Find enabled components
     enabled_removable = []
-    for component in ["redis", "worker", "scheduler", "database"]:
-        if current_answers.get(f"include_{component}"):
+    for component in ComponentNames.INFRASTRUCTURE_ORDER:
+        if current_answers.get(AnswerKeys.include_key(component)):
             enabled_removable.append(component)
 
     if not enabled_removable:
@@ -513,13 +521,13 @@ def interactive_service_selection(project_path: Path) -> list[str]:
     # Find already enabled services
     enabled_services = []
     for service_name in SERVICES:
-        if current_answers.get(f"include_{service_name}"):
+        if current_answers.get(AnswerKeys.include_key(service_name)):
             enabled_services.append(service_name)
 
     # Find enabled components
     enabled_components = set(CORE_COMPONENTS)  # Always have core components
-    for component in ["redis", "worker", "scheduler", "database"]:
-        if current_answers.get(f"include_{component}"):
+    for component in ComponentNames.INFRASTRUCTURE_ORDER:
+        if current_answers.get(AnswerKeys.include_key(component)):
             enabled_components.add(component)
 
     if enabled_services:

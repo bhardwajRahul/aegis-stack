@@ -9,8 +9,14 @@ from pathlib import Path
 import typer
 
 from ..cli.utils import detect_scheduler_backend
-from ..core.components import COMPONENTS, CORE_COMPONENTS, SchedulerBackend
-from ..core.copier_manager import is_copier_project, load_copier_answers
+from ..cli.validation import (
+    parse_comma_separated_list,
+    validate_copier_project,
+    validate_git_repository,
+)
+from ..constants import AnswerKeys, ComponentNames, Messages, StorageBackends
+from ..core.components import COMPONENTS, CORE_COMPONENTS
+from ..core.copier_manager import load_copier_answers
 from ..core.manual_updater import ManualUpdater
 from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES
@@ -60,21 +66,7 @@ def add_service_command(
     target_path = Path(project_path).resolve()
 
     # Validate it's a Copier project
-    if not is_copier_project(target_path):
-        typer.secho(
-            f"Project at {target_path} was not generated with Copier.",
-            fg="red",
-            err=True,
-        )
-        typer.echo(
-            "   The 'aegis add service' command only works with Copier-generated projects.",
-            err=True,
-        )
-        typer.echo(
-            "   To add services, regenerate the project with the services included.",
-            err=True,
-        )
-        raise typer.Exit(1)
+    validate_copier_project(target_path, "add-service")
 
     typer.echo(f"Project: {target_path}")
 
@@ -112,30 +104,11 @@ def add_service_command(
         yes = True
 
     # Verify project is in a git repository (required for Copier updates)
-    git_dir = target_path / ".git"
-    if not git_dir.exists():
-        typer.secho("\nProject is not in a git repository", fg="red", err=True)
-        typer.echo("   Copier updates require git for change tracking", err=True)
-        typer.echo(
-            "   Projects created with 'aegis init' should have git initialized automatically",
-            err=True,
-        )
-        typer.echo(
-            "   If you created this project manually, run: git init && git add . && git commit -m 'Initial commit'",
-            err=True,
-        )
-        raise typer.Exit(1)
+    validate_git_repository(target_path)
 
     # Parse and validate services
     assert services is not None  # Already validated by check above
-    services_raw = [s.strip() for s in services.split(",")]
-
-    # Check for empty services
-    if any(not s for s in services_raw):
-        typer.secho("Empty service name is not allowed", fg="red", err=True)
-        raise typer.Exit(1)
-
-    selected_services = [s for s in services_raw if s]
+    selected_services = parse_comma_separated_list(services, "service")
 
     # Validate services exist
     try:
@@ -159,7 +132,7 @@ def add_service_command(
     already_enabled = []
     for service in selected_services:
         # Check if service is already enabled in answers
-        include_key = f"include_{service}"
+        include_key = AnswerKeys.include_key(service)
         if existing_answers.get(include_key) is True:
             already_enabled.append(service)
 
@@ -187,7 +160,7 @@ def add_service_command(
     missing_components = []
 
     for component in required_components:
-        include_key = f"include_{component}"
+        include_key = AnswerKeys.include_key(component)
         if existing_answers.get(include_key) is True or component in CORE_COMPONENTS:
             enabled_components.append(component)
         else:
@@ -228,12 +201,12 @@ def add_service_command(
 
     # Add service flags
     for service in services_to_add:
-        include_key = f"include_{service}"
+        include_key = AnswerKeys.include_key(service)
         update_data[include_key] = True
 
     # Add missing component flags
     for component in missing_components:
-        include_key = f"include_{component}"
+        include_key = AnswerKeys.include_key(component)
         update_data[include_key] = True
 
     # Add services using ManualUpdater
@@ -249,14 +222,14 @@ def add_service_command(
             component_data: dict[str, bool | str] = {}
 
             # Handle scheduler backend if needed
-            if component == "scheduler":
+            if component == ComponentNames.SCHEDULER:
                 scheduler_backend = detect_scheduler_backend([component])
-                component_data["scheduler_backend"] = scheduler_backend
-                component_data["scheduler_with_persistence"] = (
-                    scheduler_backend == SchedulerBackend.SQLITE.value
+                component_data[AnswerKeys.SCHEDULER_BACKEND] = scheduler_backend
+                component_data[AnswerKeys.SCHEDULER_WITH_PERSISTENCE] = (
+                    scheduler_backend == StorageBackends.SQLITE
                 )
-            elif component == "database":
-                component_data["database_engine"] = "sqlite"
+            elif component == ComponentNames.DATABASE:
+                component_data[AnswerKeys.DATABASE_ENGINE] = StorageBackends.SQLITE
 
             # Add the component
             result = updater.add_component(component, component_data)
@@ -285,8 +258,8 @@ def add_service_command(
             service_data: dict[str, bool | str] = {}
 
             # For AI service, set default providers
-            if service == "ai":
-                service_data["ai_providers"] = "openai"
+            if service == AnswerKeys.SERVICE_AI:
+                service_data[AnswerKeys.AI_PROVIDERS] = "openai"
 
             # Add the service (services are added like components)
             result = updater.add_component(service, service_data)
@@ -312,18 +285,13 @@ def add_service_command(
 
         # Provide next steps
         if len(services_to_add) > 0 or len(missing_components) > 0:
-            typer.echo("\nReview changes:")
-            typer.echo("   git diff docker-compose.yml")
-            typer.echo("   git diff pyproject.toml")
+            Messages.print_review_changes()
 
-        typer.echo("\nNext steps:")
-        typer.echo("   1. Run 'make check' to verify the update")
-        typer.echo("   2. Test your application")
-        typer.echo("   3. Commit the changes with: git add . && git commit")
+        Messages.print_next_steps()
 
         # Service-specific guidance
-        if "auth" in services_to_add:
-            project_slug = existing_answers.get("project_slug", "my-project")
+        if AnswerKeys.SERVICE_AUTH in services_to_add:
+            project_slug = existing_answers.get(AnswerKeys.PROJECT_SLUG, "my-project")
             typer.echo("\nAuth Service Setup:")
             typer.echo("   1. Run 'make migrate' to apply auth migrations")
             typer.echo(
@@ -331,8 +299,8 @@ def add_service_command(
             )
             typer.echo("   3. Check auth routes at /api/auth/docs")
 
-        if "ai" in services_to_add:
-            project_slug = existing_answers.get("project_slug", "my-project")
+        if AnswerKeys.SERVICE_AI in services_to_add:
+            project_slug = existing_answers.get(AnswerKeys.PROJECT_SLUG, "my-project")
             typer.echo("\nAI Service Setup:")
             typer.echo(
                 "   1. Set AI_PROVIDER in .env (openai, anthropic, google, groq)"
