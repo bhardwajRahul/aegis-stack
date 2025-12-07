@@ -55,6 +55,7 @@ def process_j2_templates():
             "include_auth": "{{ cookiecutter.include_auth }}",
             "include_ai": "{{ cookiecutter.include_ai }}",
             "include_comms": "{{ cookiecutter.include_comms }}",
+            "worker_backend": "{{ cookiecutter.worker_backend }}",
         }
     }
 
@@ -133,15 +134,102 @@ def main():
         remove_file("app/cli/load_test.py")
         remove_file("app/services/load_test.py")
         remove_file("app/services/load_test_models.py")
+        remove_file("app/services/load_test_workloads.py")
         remove_file("tests/services/test_load_test_models.py")
         remove_file("tests/services/test_load_test_service.py")
         remove_file("tests/services/test_worker_health_registration.py")
         # Remove worker API endpoints (empty when worker not included)
         remove_file("app/components/backend/api/worker.py")
+        remove_file("app/components/backend/api/worker_taskiq.py")
         remove_file("tests/api/test_worker_endpoints.py")
         # Remove worker dashboard card and modal
         remove_file("app/components/frontend/dashboard/cards/worker_card.py")
         remove_file("app/components/frontend/dashboard/modals/worker_modal.py")
+    else:
+        # Worker is included - select correct backend files
+        queues_dir = os.path.join(PROJECT_DIRECTORY, "app/components/worker/queues")
+        worker_dir = os.path.join(PROJECT_DIRECTORY, "app/components/worker")
+        api_dir = os.path.join(PROJECT_DIRECTORY, "app/components/backend/api")
+
+        if "{{ cookiecutter.worker_backend }}" == "taskiq":
+            # Use taskiq files: rename _taskiq.py and remove ALL arq files
+            if os.path.exists(queues_dir):
+                # Track which files we rename so we know what to keep
+                taskiq_final_names = {"__init__.py"}  # Always keep __init__.py
+
+                # Rename taskiq files to replace arq versions
+                for taskiq_file in Path(queues_dir).glob("*_taskiq.py"):
+                    final_name = taskiq_file.name.replace("_taskiq.py", ".py")
+                    arq_file = taskiq_file.with_name(final_name)
+                    # Remove arq version if it exists
+                    if arq_file.exists():
+                        arq_file.unlink()
+                    # Rename taskiq version
+                    taskiq_file.rename(Path(queues_dir) / final_name)
+                    taskiq_final_names.add(final_name)
+
+                # Remove arq-only files (those without taskiq counterparts)
+                for py_file in Path(queues_dir).glob("*.py"):
+                    if py_file.name not in taskiq_final_names:
+                        py_file.unlink()
+
+            # TaskIQ: Rename pools_taskiq.py -> pools.py, remove arq version
+            pools_arq = Path(worker_dir) / "pools.py"
+            pools_taskiq = Path(worker_dir) / "pools_taskiq.py"
+            if pools_arq.exists():
+                pools_arq.unlink()
+            if pools_taskiq.exists():
+                pools_taskiq.rename(Path(worker_dir) / "pools.py")
+
+            # TaskIQ: Rename worker_taskiq.py -> worker.py, remove arq version
+            worker_api_arq = Path(api_dir) / "worker.py"
+            worker_api_taskiq = Path(api_dir) / "worker_taskiq.py"
+            if worker_api_arq.exists():
+                worker_api_arq.unlink()
+            if worker_api_taskiq.exists():
+                worker_api_taskiq.rename(Path(api_dir) / "worker.py")
+
+            # TaskIQ: Rename registry_taskiq.py -> registry.py, remove arq version
+            registry_arq = Path(worker_dir) / "registry.py"
+            registry_taskiq = Path(worker_dir) / "registry_taskiq.py"
+            if registry_arq.exists():
+                registry_arq.unlink()
+            if registry_taskiq.exists():
+                registry_taskiq.rename(Path(worker_dir) / "registry.py")
+
+            # TaskIQ: Rename load_test_taskiq.py -> load_test.py, remove arq version
+            services_dir = os.path.join(PROJECT_DIRECTORY, "app/services")
+            load_test_arq = Path(services_dir) / "load_test.py"
+            load_test_taskiq = Path(services_dir) / "load_test_taskiq.py"
+            if load_test_arq.exists():
+                load_test_arq.unlink()
+            if load_test_taskiq.exists():
+                load_test_taskiq.rename(Path(services_dir) / "load_test.py")
+        else:
+            # Use arq files (default): remove taskiq versions
+            if os.path.exists(queues_dir):
+                for taskiq_file in Path(queues_dir).glob("*_taskiq.py"):
+                    taskiq_file.unlink()
+
+            # arq: Remove TaskIQ pool and API files
+            pools_taskiq = Path(worker_dir) / "pools_taskiq.py"
+            if pools_taskiq.exists():
+                pools_taskiq.unlink()
+
+            worker_api_taskiq = Path(api_dir) / "worker_taskiq.py"
+            if worker_api_taskiq.exists():
+                worker_api_taskiq.unlink()
+
+            # arq: Remove TaskIQ registry file
+            registry_taskiq = Path(worker_dir) / "registry_taskiq.py"
+            if registry_taskiq.exists():
+                registry_taskiq.unlink()
+
+            # arq: Remove TaskIQ load_test service
+            services_dir = os.path.join(PROJECT_DIRECTORY, "app/services")
+            load_test_taskiq = Path(services_dir) / "load_test_taskiq.py"
+            if load_test_taskiq.exists():
+                load_test_taskiq.unlink()
 
     # Remove shared component integration tests only when BOTH scheduler AND worker disabled
     if (

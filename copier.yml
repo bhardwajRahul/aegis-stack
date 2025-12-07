@@ -77,8 +77,17 @@ include_redis:
 
 include_worker:
   type: bool
-  help: "Include arq worker for background jobs?"
+  help: "Include worker for background jobs?"
   default: false
+
+worker_backend:
+  type: str
+  help: "Worker backend (arq or taskiq)"
+  default: "arq"
+  choices:
+    - "arq"
+    - "taskiq"
+  when: "{{ include_worker }}"
 
 include_database:
   type: bool

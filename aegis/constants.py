@@ -28,6 +28,15 @@ class StorageBackends:
     POSTGRES = "postgres"
 
 
+class WorkerBackends:
+    """Worker backend options for task processing."""
+
+    ARQ = "arq"
+    TASKIQ = "taskiq"
+
+    ALL = [ARQ, TASKIQ]
+
+
 class AnswerKeys:
     """Keys in Copier .copier-answers.yml configuration."""
 
@@ -51,6 +60,7 @@ class AnswerKeys:
     # Configuration values
     SCHEDULER_BACKEND = "scheduler_backend"
     SCHEDULER_WITH_PERSISTENCE = "scheduler_with_persistence"
+    WORKER_BACKEND = "worker_backend"
     DATABASE_ENGINE = "database_engine"
     AI_PROVIDERS = "ai_providers"
     PROJECT_SLUG = "project_slug"

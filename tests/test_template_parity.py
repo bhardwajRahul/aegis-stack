@@ -236,6 +236,7 @@ def generate_with_copier(
         "scheduler_with_persistence": cookiecutter_context["scheduler_with_persistence"]
         == "yes",
         "include_worker": cookiecutter_context["include_worker"] == "yes",
+        "worker_backend": cookiecutter_context.get("worker_backend", "arq"),
         "include_redis": cookiecutter_context["include_redis"] == "yes",
         "include_database": cookiecutter_context["include_database"] == "yes",
         "include_cache": False,  # Default to no
@@ -541,6 +542,29 @@ class TestTemplateParity:
             cp_path = generate_with_copier(
                 project_name="test-worker",
                 components=["worker"],
+                output_dir=temp_path / "copier",
+            )
+
+            # Compare outputs
+            result = compare_projects(ck_path, cp_path)
+
+            # Assert parity
+            assert result.is_identical, result.get_failure_report()
+
+    def test_parity_with_worker_taskiq(self) -> None:
+        """Test parity with worker component using TaskIQ backend."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            # Generate with both engines using worker[taskiq] syntax
+            ck_path = generate_with_cookiecutter(
+                project_name="test-worker-taskiq",
+                components=["worker[taskiq]"],
+                output_dir=temp_path / "cookiecutter",
+            )
+            cp_path = generate_with_copier(
+                project_name="test-worker-taskiq",
+                components=["worker[taskiq]"],
                 output_dir=temp_path / "copier",
             )
 

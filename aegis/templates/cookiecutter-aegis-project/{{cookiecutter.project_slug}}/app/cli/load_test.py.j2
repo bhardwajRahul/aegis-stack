@@ -105,14 +105,25 @@ def run_load_test(
     rprint("[bold blue]Starting load test...[/bold blue]")
 
     try:
-        task_id = asyncio.run(LoadTestService.enqueue_load_test(config))
+        # Use single asyncio.run() for both enqueue and wait to avoid
+        # 'Event loop is closed' errors from Redis connection cleanup
+        task_id, result = asyncio.run(
+            _run_load_test_and_wait(config, target_queue.value, timeout, wait)
+        )
+
         rprint("[green]Load test enqueued successfully![/green]")
         rprint(f"[cyan]Task ID:[/cyan] {task_id}")
 
         if wait:
-            _wait_for_completion_and_display_results(
-                task_id, target_queue.value, timeout
-            )
+            if result is None:
+                rprint(f"\n[red]Timeout reached after {timeout}s[/red]")
+                rprint(
+                    f"[yellow]Check results manually:[/yellow] "
+                    f"{{ cookiecutter.project_slug }} load-test results {task_id}"
+                )
+            else:
+                rprint("\n [bold green]Load test completed![/bold green]")
+                _display_load_test_results(result, detailed=True)
         else:
             rprint("\n[yellow]Use this command to check results later:[/yellow]")
             rprint(
@@ -144,13 +155,23 @@ def quick_cpu_test_cmd(
     rprint("[cyan]Work type:[/cyan] Fibonacci + math operations + prime checking")
 
     try:
-        task_id = asyncio.run(quick_cpu_test(num_tasks))
+        # Use single asyncio.run() for both enqueue and wait to avoid
+        # 'Event loop is closed' errors from Redis connection cleanup
+        task_id, result = asyncio.run(
+            _run_quick_test_and_wait(quick_cpu_test, num_tasks, wait)
+        )
         rprint(f"[green]CPU test started![/green] Task ID: {task_id}")
 
         if wait:
-            _wait_for_completion_and_display_results(
-                task_id, get_load_test_queue(), 600
-            )
+            if result is None:
+                rprint("\n[red]Timeout reached[/red]")
+                rprint(
+                    f"[yellow]Check results:[/yellow] "
+                    f"{{ cookiecutter.project_slug }} load-test results {task_id}"
+                )
+            else:
+                rprint("\n [bold green]Load test completed![/bold green]")
+                _display_load_test_results(result, detailed=True)
         else:
             rprint(
                 f"[yellow]Check results:[/yellow] "
@@ -183,13 +204,23 @@ def quick_io_test_cmd(
     )
 
     try:
-        task_id = asyncio.run(quick_io_test(num_tasks))
+        # Use single asyncio.run() for both enqueue and wait to avoid
+        # 'Event loop is closed' errors from Redis connection cleanup
+        task_id, result = asyncio.run(
+            _run_quick_test_and_wait(quick_io_test, num_tasks, wait)
+        )
         rprint(f"[green]I/O test started![/green] Task ID: {task_id}")
 
         if wait:
-            _wait_for_completion_and_display_results(
-                task_id, get_load_test_queue(), 600
-            )
+            if result is None:
+                rprint("\n[red]Timeout reached[/red]")
+                rprint(
+                    f"[yellow]Check results:[/yellow] "
+                    f"{{ cookiecutter.project_slug }} load-test results {task_id}"
+                )
+            else:
+                rprint("\n [bold green]Load test completed![/bold green]")
+                _display_load_test_results(result, detailed=True)
         else:
             rprint(
                 f"[yellow]Check results:[/yellow] "
@@ -222,13 +253,23 @@ def quick_memory_test_cmd(
     )
 
     try:
-        task_id = asyncio.run(quick_memory_test(num_tasks))
+        # Use single asyncio.run() for both enqueue and wait to avoid
+        # 'Event loop is closed' errors from Redis connection cleanup
+        task_id, result = asyncio.run(
+            _run_quick_test_and_wait(quick_memory_test, num_tasks, wait)
+        )
         rprint(f"[green]Memory test started![/green] Task ID: {task_id}")
 
         if wait:
-            _wait_for_completion_and_display_results(
-                task_id, get_load_test_queue(), 600
-            )
+            if result is None:
+                rprint("\n[red]Timeout reached[/red]")
+                rprint(
+                    f"[yellow]Check results:[/yellow] "
+                    f"{{ cookiecutter.project_slug }} load-test results {task_id}"
+                )
+            else:
+                rprint("\n [bold green]Load test completed![/bold green]")
+                _display_load_test_results(result, detailed=True)
         else:
             rprint(
                 f"[yellow]Check results:[/yellow] "
@@ -244,7 +285,7 @@ def quick_memory_test_cmd(
 def show_results(
     task_id: str = typer.Argument(..., help="Load test task ID"),
     target_queue: QueueChoice = typer.Option(
-        QueueChoice.system, "--queue", "-q", help="Queue where test was run"
+        QueueChoice.load_test, "--queue", "-q", help="Queue where test was run"
     ),
     detailed: bool = typer.Option(
         False, "--detailed", "-d", help="Show detailed analysis and metrics"
@@ -387,16 +428,15 @@ def _display_test_type_info(test_type: str, info: dict[str, Any]) -> None:
     )
 
 
-def _wait_for_completion_and_display_results(
+async def _poll_for_result_with_progress(
     task_id: str, target_queue: str, timeout: int
-) -> None:
-    """Wait for load test completion and display results."""
+) -> dict[str, Any] | None:
+    """
+    Poll for load test result with progress display.
 
-    rprint(
-        f"\n[yellow]Waiting for load test completion (timeout: {timeout}s)..."
-        f"[/yellow]"
-    )
-
+    Uses a single event loop for all async operations to avoid
+    'Event loop is closed' errors from orphaned Redis connections.
+    """
     start_time = time.time()
 
     with Progress(
@@ -413,33 +453,99 @@ def _wait_for_completion_and_display_results(
 
             if elapsed > timeout:
                 progress.update(wait_task, description="Timeout reached")
-                rprint(f"\n[red]Timeout reached after {timeout}s[/red]")
-                rprint(
-                    f"[yellow]Check results manually:[/yellow] "
-                    f"{{ cookiecutter.project_slug }} load-test results {task_id}"
-                )
-                return
+                return None
 
             try:
-                result = asyncio.run(
-                    LoadTestService.get_load_test_result(task_id, target_queue)
+                result = await LoadTestService.get_load_test_result(
+                    task_id, target_queue
                 )
-
                 if result:
                     progress.update(wait_task, description="Load test completed!")
-                    break
-
+                    return result
             except Exception as e:
                 logger.debug(f"Error checking results: {e}")
 
-            # Update progress description with elapsed time
             progress.update(
                 wait_task, description=f"Waiting for completion... ({elapsed:.1f}s)"
             )
-            time.sleep(2)
+            await asyncio.sleep(2)
 
-    rprint("\n [bold green]Load test completed![/bold green]")
-    _display_load_test_results(result, detailed=True)
+
+async def _run_load_test_and_wait(
+    config: LoadTestConfiguration,
+    target_queue: str,
+    timeout: int,
+    wait: bool,
+) -> tuple[str, dict[str, Any] | None]:
+    """
+    Run load test enqueue and optional wait in single event loop.
+
+    Combines enqueue and polling to avoid 'Event loop is closed' errors
+    from Redis connections that span multiple asyncio.run() calls.
+    """
+{% if cookiecutter.worker_backend == "taskiq" %}
+    from app.components.worker.pools import shutdown_brokers
+{% else %}
+    from app.components.worker.pools import clear_pool_cache
+{% endif %}
+
+    try:
+        task_id = await LoadTestService.enqueue_load_test(config)
+
+        if not wait:
+            return task_id, None
+
+        rprint(
+            f"\n[yellow]Waiting for load test completion (timeout: {timeout}s)..."
+            f"[/yellow]"
+        )
+        result = await _poll_for_result_with_progress(task_id, target_queue, timeout)
+        return task_id, result
+    finally:
+{% if cookiecutter.worker_backend == "taskiq" %}
+        await shutdown_brokers()
+{% else %}
+        await clear_pool_cache()
+{% endif %}
+
+
+async def _run_quick_test_and_wait(
+    quick_test_func: Any,
+    num_tasks: int,
+    wait: bool,
+    timeout: int = 600,
+) -> tuple[str, dict[str, Any] | None]:
+    """
+    Run quick test enqueue and optional wait in single event loop.
+
+    Combines enqueue and polling to avoid 'Event loop is closed' errors.
+    """
+{% if cookiecutter.worker_backend == "taskiq" %}
+    from app.components.worker.pools import shutdown_brokers
+{% else %}
+    from app.components.worker.pools import clear_pool_cache
+{% endif %}
+
+    try:
+        task_id = await quick_test_func(num_tasks)
+
+        if not wait:
+            return task_id, None
+
+        rprint(
+            f"\n[yellow]Waiting for load test completion (timeout: {timeout}s)..."
+            f"[/yellow]"
+        )
+        result = await _poll_for_result_with_progress(
+            task_id, get_load_test_queue(), timeout
+        )
+        return task_id, result
+    finally:
+{% if cookiecutter.worker_backend == "taskiq" %}
+        await shutdown_brokers()
+{% else %}
+        await clear_pool_cache()
+{% endif %}
 
 
 def _display_load_test_results(result: dict[str, Any], detailed: bool = False) -> None:

@@ -90,7 +90,7 @@ And if they don't like it? No cleanup. No virtual environments to delete. No "ho
 
 ## The Pattern
 
-If you're reading this and noticing a pattern, you're paying attention.
+<img src="../images/greivous.gif" alt="General Greivous" width="300">
 
 I don't collect tools - I collect ecosystems. When I find creators who demonstrate consistent philosophy, proven execution, and genuine care for developer experience, I don't just adopt one tool. I watch what else they build, because chances are it'll solve problems I'm already facing or will face soon.
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config.defaults import DEFAULT_PYTHON_VERSION
-from ..constants import AnswerKeys, ComponentNames, StorageBackends
+from ..constants import AnswerKeys, ComponentNames, StorageBackends, WorkerBackends
 from .component_utils import extract_base_component_name, extract_engine_info
 from .components import COMPONENTS, CORE_COMPONENTS
 from .services import SERVICES
@@ -71,6 +71,15 @@ class TemplateGenerator:
                     self.scheduler_backend = backend
                     break
 
+        # Extract worker backend from worker[backend] format
+        self.worker_backend = WorkerBackends.ARQ  # Default to arq
+        for component in self.components:
+            if extract_base_component_name(component) == ComponentNames.WORKER:
+                backend = extract_engine_info(component)
+                if backend:
+                    self.worker_backend = backend
+                    break
+
         # Build component specs using base names
         self.component_specs = {}
         for name in self.components:
@@ -102,7 +111,7 @@ class TemplateGenerator:
             if ComponentNames.REDIS in self.components
             else "no",
             AnswerKeys.WORKER: "yes"
-            if ComponentNames.WORKER in self.components
+            if any(c.startswith(ComponentNames.WORKER) for c in self.components)
             else "no",
             AnswerKeys.SCHEDULER: "yes"
             if any(c.startswith(ComponentNames.SCHEDULER) for c in self.components)
@@ -112,14 +121,17 @@ class TemplateGenerator:
             "database_engine": self.database_engine or StorageBackends.SQLITE,
             # Scheduler backend selection
             AnswerKeys.SCHEDULER_BACKEND: self.scheduler_backend,
+            # Worker backend selection
+            AnswerKeys.WORKER_BACKEND: self.worker_backend,
             # Legacy scheduler persistence flag for backwards compatibility
             AnswerKeys.SCHEDULER_WITH_PERSISTENCE: (
                 "yes" if self.scheduler_backend != StorageBackends.MEMORY else "no"
             ),
             # Derived flags for template logic
             "has_background_infrastructure": any(
-                name in self.components
-                for name in [ComponentNames.WORKER, ComponentNames.SCHEDULER]
+                c.startswith(ComponentNames.WORKER)
+                or c.startswith(ComponentNames.SCHEDULER)
+                for c in self.components
             ),
             "needs_redis": ComponentNames.REDIS in self.components,
             # Service flags for template conditionals
@@ -165,10 +177,18 @@ class TemplateGenerator:
         deps = []
         # Collect component dependencies
         for component_name in self.components:
-            if component_name in self.component_specs:
-                spec = self.component_specs[component_name]
+            base_name = extract_base_component_name(component_name)
+            if base_name in self.component_specs:
+                spec = self.component_specs[base_name]
                 if spec.pyproject_deps:
-                    deps.extend(spec.pyproject_deps)
+                    # Handle worker backend-specific dependencies
+                    if base_name == ComponentNames.WORKER:
+                        if self.worker_backend == WorkerBackends.TASKIQ:
+                            deps.extend(["taskiq>=0.11.11", "taskiq-redis>=1.0.2"])
+                        else:
+                            deps.extend(spec.pyproject_deps)  # arq deps from spec
+                    else:
+                        deps.extend(spec.pyproject_deps)
 
         # Collect service dependencies
         for service_name in self.selected_services:
@@ -281,7 +301,19 @@ class TemplateGenerator:
 
         if worker_queues_dir.exists():
             for queue_file in worker_queues_dir.glob("*.py"):
-                if queue_file.stem != "__init__":
-                    queues.append(f"app/components/worker/queues/{queue_file.name}")
+                if queue_file.stem == "__init__":
+                    continue
+                # Filter based on worker backend
+                # _taskiq.py files are for taskiq, others are for arq
+                is_taskiq_file = queue_file.stem.endswith("_taskiq")
+                if self.worker_backend == WorkerBackends.TASKIQ:
+                    # Show taskiq files without the _taskiq suffix (how they'll appear after rename)
+                    if is_taskiq_file:
+                        final_name = queue_file.name.replace("_taskiq.py", ".py")
+                        queues.append(f"app/components/worker/queues/{final_name}")
+                else:
+                    # Show arq files (non-taskiq files)
+                    if not is_taskiq_file:
+                        queues.append(f"app/components/worker/queues/{queue_file.name}")
 
         return sorted(queues)

@@ -63,19 +63,33 @@ class QueueHealthRow(ft.Container):
         failure_rate = metadata.get("failure_rate_percent", 0.0)
         has_job_history = (jobs_completed + jobs_failed) > 0
 
-        # Determine status icon and color
+        # Determine status icon and color (matching card behavior)
+        message = queue_component.message or ""
         if not worker_alive:
-            status_icon = "⚫"  # Offline
-            status_color = ft.Colors.ON_SURFACE_VARIANT
+            if "no functions" in message.lower():
+                status_icon = "⚪"  # No tasks defined
+                status_color = ft.Colors.GREY_600
+                status_text = "No Tasks"
+            else:
+                status_icon = "🔴"  # Offline - problem
+                status_color = Theme.Colors.ERROR
+                status_text = "Offline"
         elif failure_rate > FAILURE_RATE_CRITICAL_THRESHOLD:
             status_icon = "🔴"  # Failing
             status_color = Theme.Colors.ERROR
+            status_text = "Failing"
         elif failure_rate > FAILURE_RATE_WARNING_THRESHOLD:
             status_icon = "🟠"  # Degraded
             status_color = Theme.Colors.WARNING
+            status_text = "Degraded"
+        elif jobs_ongoing > 0:
+            status_icon = "🔵"  # Active - processing
+            status_color = Theme.Colors.INFO
+            status_text = "Active"
         else:
             status_icon = "🟢"  # Healthy
             status_color = Theme.Colors.SUCCESS
+            status_text = "Online"
 
         # Success rate display with color coding
         # Show N/A when no jobs have been processed yet
@@ -130,7 +144,7 @@ class QueueHealthRow(ft.Container):
                 ),
                 ft.Container(
                     content=SecondaryText(
-                        "Online" if worker_alive else "Offline",
+                        status_text,
                         color=status_color,
                         weight=Theme.Typography.WEIGHT_SEMIBOLD,
                         text_align=ft.TextAlign.CENTER,

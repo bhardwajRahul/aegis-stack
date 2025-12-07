@@ -167,12 +167,17 @@ class WorkerCard:
         )
 
     def _create_technology_badge(self) -> ft.Container:
-        """Create the Worker/arq technology badge section."""
+        """Create the Worker technology badge section."""
         primary_color, _, _ = self._get_status_colors()
 
         return TechBadge(
+{% if cookiecutter.worker_backend == "taskiq" %}
+            title="Taskiq",
+            subtitle="Async Task Queue",
+{% else %}
             title="arq",
             subtitle="Async Job Queue",
+{% endif %}
             badge_text="Worker",
             badge_color=ft.Colors.PURPLE,
             primary_color=primary_color,
@@ -454,6 +459,12 @@ class WorkerCard:
             status_message = (
                 f"{((completed / total_jobs) * 100):.1f}%" if total_jobs > 0 else "N/A"
             )
+        elif active > 0:
+            # Actively processing jobs - show blue
+            status_icon = "🔵"
+            status_color = ft.Colors.BLUE
+            total_jobs = completed + failed
+            status_message = f"{((completed / total_jobs) * 100):.1f}%" if total_jobs > 0 else "active"
         else:
             status_icon = "🟢"
             status_color = ft.Colors.GREEN

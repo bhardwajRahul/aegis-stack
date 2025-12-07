@@ -98,15 +98,19 @@ services:
     environment:
       # Docker container marker for entrypoint script
       - DOCKER_CONTAINER=1
-      # Load test worker configuration (high concurrency)
+      # Load test worker configuration
       - WORKER_QUEUE_TYPE=load_test
-      - WORKER_CONCURRENCY=${LOAD_TEST_WORKER_CONCURRENCY:-20}
+{%- if cookiecutter.worker_backend == "taskiq" %}
+      - WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-4}
+{%- endif %}
       - WORKER_TIMEOUT_SECONDS=${LOAD_TEST_WORKER_TIMEOUT:-60}
       - WORKER_MAX_TRIES=${LOAD_TEST_WORKER_MAX_TRIES:-1}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+{%- if cookiecutter.worker_backend == "taskiq" %}
       # Docker file watching fix - force polling for volume mounts
       - WATCHFILES_FORCE_POLLING=true
       - WATCHFILES_POLL_DELAY_MS=800
+{%- endif %}
     deploy:
       resources:
         limits:
@@ -134,15 +138,19 @@ services:
     environment:
       # Docker container marker for entrypoint script
       - DOCKER_CONTAINER=1
-      # System worker configuration (low concurrency, high reliability)
+      # System worker configuration (high reliability)
       - WORKER_QUEUE_TYPE=system
-      - WORKER_CONCURRENCY=${SYSTEM_WORKER_CONCURRENCY:-2}
+{%- if cookiecutter.worker_backend == "taskiq" %}
+      - WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-2}
+{%- endif %}
       - WORKER_TIMEOUT_SECONDS=${SYSTEM_WORKER_TIMEOUT:-1800}
       - WORKER_MAX_TRIES=${SYSTEM_WORKER_MAX_TRIES:-5}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+{%- if cookiecutter.worker_backend == "taskiq" %}
       # Docker file watching fix - force polling for volume mounts
       - WATCHFILES_FORCE_POLLING=true
       - WATCHFILES_POLL_DELAY_MS=800
+{%- endif %}
     deploy:
       resources:
         limits:

@@ -71,9 +71,13 @@ def test_copier_worker_conditional_uses_boolean_logic(tmp_path: Path) -> None:
 
     content = template_file.read_text()
 
-    # Verify worker section uses boolean logic
-    assert "{% if include_worker %}" in content, (
-        "Worker section should use: {% if include_worker %}"
+    # Verify worker section uses boolean logic (accept whitespace control variants)
+    has_worker_boolean = (
+        "{% if include_worker %}" in content or "{%- if include_worker %}" in content
+    )
+    assert has_worker_boolean, (
+        "Worker section should use boolean logic: "
+        "{% if include_worker %} or {%- if include_worker %}"
     )
 
     # Ensure it doesn't use string comparison
