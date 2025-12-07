@@ -83,6 +83,9 @@ def generate_with_copier(
         ]
         == "yes",
         AnswerKeys.WORKER: cookiecutter_context[AnswerKeys.WORKER] == "yes",
+        AnswerKeys.WORKER_BACKEND: cookiecutter_context.get(
+            AnswerKeys.WORKER_BACKEND, "arq"
+        ),
         AnswerKeys.REDIS: cookiecutter_context[AnswerKeys.REDIS] == "yes",
         AnswerKeys.DATABASE: cookiecutter_context[AnswerKeys.DATABASE] == "yes",
         AnswerKeys.CACHE: False,  # Default to no

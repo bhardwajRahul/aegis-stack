@@ -200,7 +200,9 @@ class LoadTestResult(BaseModel):
 class OrchestratorRawResult(BaseModel):
     """Raw orchestrator result format for transformation."""
 
-    test_id: str = Field(..., description="Test identifier")
+    test_id: str | None = Field(
+        None, description="Test identifier (optional for TaskIQ)"
+    )
     task_type: str = Field(..., description="Task type executed")
     tasks_sent: int = Field(..., description="Tasks enqueued")
     tasks_completed: int = Field(0, description="Successfully completed")
@@ -240,9 +242,14 @@ class OrchestratorRawResult(BaseModel):
             monitor_duration_seconds=self.monitor_duration_seconds,
         )
 
+        # Use test_id if provided, otherwise generate from task_ids or use "unknown"
+        effective_test_id = self.test_id or (
+            self.task_ids[0] if self.task_ids else "unknown"
+        )
+
         return LoadTestResult(
             status="completed",
-            test_id=self.test_id,
+            test_id=effective_test_id,
             configuration=configuration,
             metrics=metrics,
             start_time=self.start_time,

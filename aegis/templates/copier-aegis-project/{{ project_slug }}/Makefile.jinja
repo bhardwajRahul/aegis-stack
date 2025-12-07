@@ -21,10 +21,9 @@ stop: ## Gracefully stop all services
 	@echo "Stopping services..."
 	@docker compose --profile dev down --remove-orphans
 
-clean: ## Nuclear cleanup - remove containers, networks, and images
-	@echo "Nuclear cleanup - removing everything..."
+clean: ## Clean up project containers, networks, volumes, and images
+	@echo "Cleaning up project Docker resources..."
 	@docker compose down --remove-orphans --volumes --rmi all 2>/dev/null || true
-	@docker system prune -f
 
 #=============================================================================
 # DEVELOPER WORKFLOW COMMANDS (the ones you'll actually use)

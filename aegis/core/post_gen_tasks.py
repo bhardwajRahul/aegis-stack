@@ -13,7 +13,7 @@ from typing import Any
 
 import typer
 
-from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
+from aegis.constants import AnswerKeys, ComponentNames, StorageBackends, WorkerBackends
 
 # Task configuration constants (following tests/cli/test_utils.py pattern)
 POST_GEN_TIMEOUT_INSTALL = 300  # 5 minutes for dependency installation
@@ -82,6 +82,7 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/cli/load_test.py",
             "app/services/load_test.py",
             "app/services/load_test_models.py",
+            "app/services/load_test_workloads.py",
             "tests/services/test_load_test_models.py",
             "tests/services/test_load_test_service.py",
             "tests/services/test_worker_health_registration.py",
@@ -200,10 +201,12 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/cli/load_test.py")
         remove_file(project_path, "app/services/load_test.py")
         remove_file(project_path, "app/services/load_test_models.py")
+        remove_file(project_path, "app/services/load_test_workloads.py")
         remove_file(project_path, "tests/services/test_load_test_models.py")
         remove_file(project_path, "tests/services/test_load_test_service.py")
         remove_file(project_path, "tests/services/test_worker_health_registration.py")
         remove_file(project_path, "app/components/backend/api/worker.py")
+        remove_file(project_path, "app/components/backend/api/worker_taskiq.py")
         remove_file(project_path, "tests/api/test_worker_endpoints.py")
         remove_file(
             project_path, "app/components/frontend/dashboard/cards/worker_card.py"
@@ -211,6 +214,88 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(
             project_path, "app/components/frontend/dashboard/modals/worker_modal.py"
         )
+    else:
+        # Worker is included - clean up backend-specific files
+        worker_backend = context.get(AnswerKeys.WORKER_BACKEND, WorkerBackends.ARQ)
+        queues_dir = project_path / "app/components/worker/queues"
+        worker_dir = project_path / "app/components/worker"
+        api_dir = project_path / "app/components/backend/api"
+
+        if queues_dir.exists():
+            if worker_backend == WorkerBackends.TASKIQ:
+                # Using TaskIQ: rename _taskiq.py files and remove ALL arq files
+                # Track which files we rename so we know what to keep
+                taskiq_final_names = {"__init__.py"}  # Always keep __init__.py
+
+                for taskiq_file in queues_dir.glob("*_taskiq.py"):
+                    final_name = taskiq_file.name.replace("_taskiq.py", ".py")
+                    arq_file = taskiq_file.with_name(final_name)
+                    if arq_file.exists():
+                        arq_file.unlink()
+                    taskiq_file.rename(queues_dir / final_name)
+                    taskiq_final_names.add(final_name)
+
+                # Remove arq-only files (those without taskiq counterparts)
+                for py_file in queues_dir.glob("*.py"):
+                    if py_file.name not in taskiq_final_names:
+                        py_file.unlink()
+
+                # TaskIQ: Keep pools_taskiq.py, remove pools.py (arq version)
+                pools_arq = worker_dir / "pools.py"
+                pools_taskiq = worker_dir / "pools_taskiq.py"
+                if pools_arq.exists():
+                    pools_arq.unlink()
+                if pools_taskiq.exists():
+                    pools_taskiq.rename(worker_dir / "pools.py")
+
+                # TaskIQ: Keep worker_taskiq.py, remove worker.py (arq version)
+                worker_api_arq = api_dir / "worker.py"
+                worker_api_taskiq = api_dir / "worker_taskiq.py"
+                if worker_api_arq.exists():
+                    worker_api_arq.unlink()
+                if worker_api_taskiq.exists():
+                    worker_api_taskiq.rename(api_dir / "worker.py")
+
+                # TaskIQ: Keep registry_taskiq.py, remove registry.py (arq version)
+                registry_arq = worker_dir / "registry.py"
+                registry_taskiq = worker_dir / "registry_taskiq.py"
+                if registry_arq.exists():
+                    registry_arq.unlink()
+                if registry_taskiq.exists():
+                    registry_taskiq.rename(worker_dir / "registry.py")
+
+                # TaskIQ: Keep load_test_taskiq.py, remove load_test.py (arq version)
+                services_dir = project_path / "app/services"
+                load_test_arq = services_dir / "load_test.py"
+                load_test_taskiq = services_dir / "load_test_taskiq.py"
+                if load_test_arq.exists():
+                    load_test_arq.unlink()
+                if load_test_taskiq.exists():
+                    load_test_taskiq.rename(services_dir / "load_test.py")
+            else:
+                # Using arq (default): remove taskiq versions
+                for taskiq_file in queues_dir.glob("*_taskiq.py"):
+                    taskiq_file.unlink()
+
+                # arq: Remove TaskIQ pool, API, and registry files
+                pools_taskiq = worker_dir / "pools_taskiq.py"
+                if pools_taskiq.exists():
+                    pools_taskiq.unlink()
+
+                worker_api_taskiq = api_dir / "worker_taskiq.py"
+                if worker_api_taskiq.exists():
+                    worker_api_taskiq.unlink()
+
+                # arq: Remove TaskIQ registry file
+                registry_taskiq = worker_dir / "registry_taskiq.py"
+                if registry_taskiq.exists():
+                    registry_taskiq.unlink()
+
+                # arq: Remove TaskIQ load_test service
+                services_dir = project_path / "app/services"
+                load_test_taskiq = services_dir / "load_test_taskiq.py"
+                if load_test_taskiq.exists():
+                    load_test_taskiq.unlink()
 
     # Remove shared component integration tests only when BOTH scheduler AND worker disabled
     if not is_enabled(AnswerKeys.SCHEDULER) and not is_enabled(AnswerKeys.WORKER):

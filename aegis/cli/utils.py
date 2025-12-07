@@ -7,7 +7,7 @@ component detection, dependency expansion, and other common tasks.
 
 import typer
 
-from ..constants import ComponentNames, StorageBackends
+from ..constants import ComponentNames, StorageBackends, WorkerBackends
 from ..core.component_utils import (
     clean_component_names,
     extract_base_component_name,
@@ -38,6 +38,25 @@ def detect_scheduler_backend(components: list[str]) -> str:
                 if ComponentNames.DATABASE in clean_names:
                     return StorageBackends.SQLITE  # Default database backend
     return StorageBackends.MEMORY  # Default to memory-only
+
+
+def detect_worker_backend(components: list[str]) -> str:
+    """
+    Detect worker backend from component list.
+
+    Args:
+        components: List of component names, possibly including worker[backend]
+
+    Returns:
+        Backend name: "arq" or "taskiq"
+    """
+    for component in components:
+        base_name = extract_base_component_name(component)
+        if base_name == ComponentNames.WORKER:
+            engine = extract_engine_info(component)
+            if engine:
+                return engine
+    return WorkerBackends.ARQ  # Default to arq
 
 
 def expand_scheduler_dependencies(components: list[str]) -> list[str]:

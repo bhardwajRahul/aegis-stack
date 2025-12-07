@@ -7,9 +7,11 @@ CLI options before command execution.
 
 import typer
 
-from ..constants import Messages
+from ..constants import ComponentNames, Messages, WorkerBackends
 from ..core.component_utils import (
     clean_component_names,
+    extract_base_component_name,
+    extract_engine_info,
     restore_engine_info,
 )
 from ..core.dependency_resolver import DependencyResolver
@@ -42,6 +44,20 @@ def validate_and_resolve_components(
 
     # Expand scheduler[backend] dependencies first
     selected = expand_scheduler_dependencies(selected)
+
+    # Validate worker backend options
+    for component in selected:
+        base_name = extract_base_component_name(component)
+        if base_name == ComponentNames.WORKER:
+            backend = extract_engine_info(component)
+            if backend and backend not in WorkerBackends.ALL:
+                typer.secho(
+                    f"Invalid worker backend '{backend}'. "
+                    f"Available: {', '.join(WorkerBackends.ALL)}",
+                    fg="red",
+                    err=True,
+                )
+                raise typer.Exit(1)
 
     # Validate components exist (use clean names for validation)
     clean_selected = clean_component_names(selected)
