@@ -10,7 +10,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     
     - name: Install uv
       uses: astral-sh/setup-uv@v6
@@ -30,7 +30,7 @@ jobs:
   typecheck:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     
     - name: Install uv
       uses: astral-sh/setup-uv@v6
@@ -50,7 +50,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     
     - name: Install uv
       uses: astral-sh/setup-uv@v6
@@ -70,7 +70,7 @@ jobs:
   test-uvx:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     
     - name: Install uv
       uses: astral-sh/setup-uv@v6
@@ -106,7 +106,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true  # Non-blocking until Copier template is fixed
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
 
     - name: Install uv
       uses: astral-sh/setup-uv@v6
@@ -135,7 +135,7 @@ jobs:
       matrix:
         engine: [cookiecutter, copier]
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
 
     - name: Install uv
       uses: astral-sh/setup-uv@v6
