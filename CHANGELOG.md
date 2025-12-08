@@ -5,6 +5,61 @@
   The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2025-12-07
+
+### Added
+
+#### TaskIQ Worker Backend
+- Alternative worker backend using TaskIQ: `uvx aegis-stack init my-app --components "worker[taskiq]"`
+- Full feature parity with arq backend
+- TaskIQ-specific pool management, registry, and queue implementations
+- Load testing support for TaskIQ workers
+- Health monitoring integration for TaskIQ
+
+### Fixed
+
+- Windows compatibility: Removed Jinja2 conditional syntax from template filenames
+  - Files with `{% if %}` in names caused OS Error 123 on Windows
+  - Affected: `tasks.py` and `scheduler.py` in Cookiecutter templates
+
+### Changed
+
+- Release workflow now creates draft releases with auto-generated notes
+
+---
+
+## [0.3.4] - 2025-12-03
+
+### Changed
+
+- Docker build optimization: only build image for one service instead of all
+
+---
+
+## [0.3.3] - 2025-12-03
+
+### Changed
+
+- Version bump and dependency updates
+
+---
+
+## [0.3.2] - 2025-12-03
+
+### Changed
+
+- Version updates
+
+---
+
+## [0.3.1] - 2025-12-03
+
+### Fixed
+
+- Fixed `make serve` command by refactoring magic string handling
+
+---
+
   ## [0.3.0] - 2025-12-01
 
 ### Major Features
@@ -266,6 +321,11 @@
   - Worker (arq/Redis) - Optional
   - Scheduler (APScheduler) - Optional
 
+[0.4.0]: https://github.com/lbedner/aegis-stack/compare/v0.3.4...v0.4.0
+[0.3.4]: https://github.com/lbedner/aegis-stack/compare/v0.3.3...v0.3.4
+[0.3.3]: https://github.com/lbedner/aegis-stack/compare/v0.3.2...v0.3.3
+[0.3.2]: https://github.com/lbedner/aegis-stack/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/lbedner/aegis-stack/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/lbedner/aegis-stack/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/lbedner/aegis-stack/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/lbedner/aegis-stack/compare/v0.1.0...v0.2.0

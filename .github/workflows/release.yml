@@ -72,27 +72,19 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "v${{ steps.version.outputs.VERSION }} (Release Candidate)"
+          draft: true
+          generate_release_notes: true
           body: |
-            ## 🧪 Test Release Published to TestPyPI
-
-            This is a pre-release version for testing. Install and test with:
+            ## Test Release (TestPyPI)
 
             ```bash
-            # Test the CLI
-            uvx --index-url https://test.pypi.org/simple/ aegis-stack --version
-
-            # Test project generation
-            uvx --index-url https://test.pypi.org/simple/ aegis-stack init test-project --no-interactive
-            cd test-project
-            make check
+            uvx --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ --index-strategy unsafe-best-match aegis-stack@${{ steps.version.outputs.VERSION }} init test-project
             ```
 
-            **⚠️ This is a test release from TestPyPI - not for production use!**
-
-            If testing is successful, promote to production with:
+            Not for production use. If testing passes, promote with:
             ```bash
-            git tag v${{ steps.version.outputs.VERSION }}
-            git push --tags
+            git tag v<version>
+            git push origin v<version>
             ```
           prerelease: true
           files: dist/*
@@ -128,44 +120,28 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - name: Extract changelog for this version
-        id: changelog
-        run: |
-          # Extract changelog section for this version (if CHANGELOG.md exists)
-          if [ -f CHANGELOG.md ]; then
-            # Try to extract the section for this version
-            VERSION="${{ steps.version.outputs.VERSION }}"
-            CHANGELOG=$(awk "/## \[${VERSION}\]|## ${VERSION}/,/## \[|## [0-9]/" CHANGELOG.md | sed '1d;$d' || echo "See CHANGELOG.md for details")
-            echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
-            echo "$CHANGELOG" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          else
-            echo "CHANGELOG=See commit history for details" >> $GITHUB_OUTPUT
-          fi
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: "v${{ steps.version.outputs.VERSION }}"
+          draft: true
+          generate_release_notes: true
           body: |
-            ## 🚀 Released to PyPI
+            ## Installation
 
-            Install with:
             ```bash
-            pip install --upgrade aegis-stack
+            pip install aegis-stack==${{ steps.version.outputs.VERSION }}
             ```
 
-            Or use directly with `uvx`:
+            Or run directly:
             ```bash
             uvx aegis-stack init my-project
             ```
 
-            ## 📦 Package Information
-            - **PyPI**: https://pypi.org/project/aegis-stack/${{ steps.version.outputs.VERSION }}/
-            - **Documentation**: https://lbedner.github.io/aegis-stack/
+            ## Links
 
-            ## 📝 Changes
-
-            ${{ steps.changelog.outputs.CHANGELOG }}
+            - [PyPI](https://pypi.org/project/aegis-stack/${{ steps.version.outputs.VERSION }}/)
+            - [Documentation](https://lbedner.github.io/aegis-stack/)
+            - [Changelog](https://github.com/lbedner/aegis-stack/blob/main/CHANGELOG.md)
           files: dist/*
           prerelease: false
