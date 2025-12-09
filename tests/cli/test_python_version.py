@@ -25,7 +25,7 @@ class TestPythonVersionValidation:
 
     def test_valid_python_versions(self) -> None:
         """Test that valid Python versions are accepted."""
-        for version in ["3.11", "3.12", "3.13"]:
+        for version in ["3.11", "3.12", "3.13", "3.14"]:
             result = run_aegis_command(
                 "init",
                 "test-project",
@@ -74,7 +74,7 @@ class TestPythonVersionGeneration:
         skip_copier_tests: Any,
         engine: str,
     ) -> None:
-        """Test that default Python version is 3.13."""
+        """Test that default Python version is 3.14."""
         result = run_aegis_init(
             project_name="test-default-python",
             output_dir=temp_output_dir,
@@ -85,20 +85,20 @@ class TestPythonVersionGeneration:
         project_path = result.project_path
         assert project_path is not None
 
-        # Check .python-version file contains 3.13
+        # Check .python-version file contains 3.14
         assert_file_exists(project_path, ".python-version")
         python_version_file = project_path / ".python-version"
         content = python_version_file.read_text().strip()
-        assert content == "3.13", f"Expected Python 3.13, got {content}"
+        assert content == "3.14", f"Expected Python 3.14, got {content}"
 
         # Check pyproject.toml has correct requires-python
         assert_file_exists(project_path, "pyproject.toml")
         assert_file_contains(
-            project_path, "pyproject.toml", 'requires-python = ">=3.13"'
+            project_path, "pyproject.toml", 'requires-python = ">=3.14"'
         )
 
         # Check Dockerfile has correct Python version
-        assert_file_contains(project_path, "Dockerfile", "FROM python:3.13-slim")
+        assert_file_contains(project_path, "Dockerfile", "FROM python:3.14-slim")
 
     @pytest.mark.slow
     def test_python_version_3_11(
@@ -201,6 +201,40 @@ class TestPythonVersionGeneration:
 
         # Check Dockerfile has correct Python version
         assert_file_contains(project_path, "Dockerfile", "FROM python:3.13-slim")
+
+    @pytest.mark.slow
+    def test_python_version_3_14(
+        self,
+        temp_output_dir: Any,
+        skip_slow_tests: Any,
+        skip_copier_tests: Any,
+        engine: str,
+    ) -> None:
+        """Test generating project with Python 3.14."""
+        result = run_aegis_init(
+            project_name="test-python-314",
+            output_dir=temp_output_dir,
+            python_version="3.14",
+            engine=engine,
+        )
+
+        assert result.success, f"CLI command failed: {result.stderr}"
+        project_path = result.project_path
+        assert project_path is not None
+
+        # Check .python-version file
+        python_version_file = project_path / ".python-version"
+        assert python_version_file.exists()
+        content = python_version_file.read_text().strip()
+        assert content == "3.14", f"Expected Python 3.14, got {content}"
+
+        # Check pyproject.toml
+        assert_file_contains(
+            project_path, "pyproject.toml", 'requires-python = ">=3.14"'
+        )
+
+        # Check Dockerfile has correct Python version
+        assert_file_contains(project_path, "Dockerfile", "FROM python:3.14-slim")
 
     @pytest.mark.slow
     def test_python_version_with_components(

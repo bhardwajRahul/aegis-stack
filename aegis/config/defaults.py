@@ -12,15 +12,15 @@ def _parse_python_version_bounds() -> tuple[str, str]:
     """
     Parse Python version bounds from aegis-stack's pyproject.toml.
 
-    Extracts requires-python (e.g., ">=3.11,<3.14") and returns:
+    Extracts requires-python (e.g., ">=3.11,<3.15") and returns:
     - Lower bound (minimum supported): "3.11"
-    - Upper bound (maximum supported): "3.13" (derived from <3.14)
+    - Upper bound (maximum supported): "3.14" (derived from <3.15)
 
     Returns:
         Tuple of (min_version, max_version) as strings
 
     Note:
-        Falls back to ("3.11", "3.13") if parsing fails.
+        Falls back to ("3.11", "3.14") if parsing fails.
     """
     try:
         pyproject_path = Path(__file__).parent.parent.parent / "pyproject.toml"
@@ -49,7 +49,7 @@ def _parse_python_version_bounds() -> tuple[str, str]:
         pass
 
     # Fallback defaults
-    return ("3.11", "3.13")
+    return ("3.11", "3.14")
 
 
 def _generate_supported_versions(min_version: str, max_version: str) -> list[str]:
@@ -58,10 +58,10 @@ def _generate_supported_versions(min_version: str, max_version: str) -> list[str
 
     Args:
         min_version: Minimum version (e.g., "3.11")
-        max_version: Maximum version (e.g., "3.13")
+        max_version: Maximum version (e.g., "3.14")
 
     Returns:
-        List of version strings (e.g., ["3.11", "3.12", "3.13"])
+        List of version strings (e.g., ["3.11", "3.12", "3.13", "3.14"])
 
     Note:
         Only works for same major version. Falls back to hardcoded list
@@ -73,7 +73,7 @@ def _generate_supported_versions(min_version: str, max_version: str) -> list[str
 
         # Only works if same major version
         if min_parts[0] != max_parts[0]:
-            return ["3.11", "3.12", "3.13"]  # Fallback
+            return ["3.11", "3.12", "3.13", "3.14"]  # Fallback
 
         major = min_parts[0]
         min_minor = int(min_parts[1])

@@ -52,7 +52,7 @@ def init_command(
     python_version: str = typer.Option(
         DEFAULT_PYTHON_VERSION,
         "--python-version",
-        help="Python version for generated project (3.11, 3.12, or 3.13)",
+        help="Python version for generated project (3.11, 3.12, 3.13, or 3.14)",
     ),
     interactive: bool = typer.Option(
         True,

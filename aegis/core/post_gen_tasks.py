@@ -721,6 +721,12 @@ def format_code(project_path: Path) -> bool:
         return False
 
 
+class DependencyInstallationError(Exception):
+    """Raised when dependency installation fails during project generation."""
+
+    pass
+
+
 def run_post_generation_tasks(
     project_path: Path, include_auth: bool = False, python_version: str | None = None
 ) -> bool:
@@ -736,19 +742,44 @@ def run_post_generation_tasks(
         python_version: Python version to use (e.g., "3.13")
 
     Returns:
-        True if all critical tasks succeeded, False otherwise
+        True if all critical tasks succeeded
+
+    Raises:
+        DependencyInstallationError: If dependency installation fails.
+            This is a hard failure that aborts project generation.
 
     Note:
-        Individual task failures don't stop execution - we try to complete
-        as many tasks as possible and report what needs manual intervention.
+        Dependency installation is critical - if it fails, the entire project
+        generation fails. Other tasks (env setup, migrations, formatting) are
+        non-critical and won't cause hard failures.
     """
     typer.echo()
     typer.secho(
         "Setting up your project environment...", fg=typer.colors.BLUE, bold=True
     )
 
-    # Task 1: Install dependencies (critical)
+    # Task 1: Install dependencies (CRITICAL - fails entire generation if this fails)
     deps_success = install_dependencies(project_path, python_version)
+
+    if not deps_success:
+        typer.echo()
+        typer.secho(
+            "Project generation failed: dependency installation failed",
+            fg=typer.colors.RED,
+            bold=True,
+        )
+        typer.echo()
+        typer.secho(
+            "The generated project files remain in place, but the project is not usable.",
+            dim=True,
+        )
+        typer.secho(
+            "Fix the dependency issue (check Python version compatibility) and try again.",
+            dim=True,
+        )
+        raise DependencyInstallationError(
+            f"Failed to install dependencies for project at {project_path}"
+        )
 
     # Task 2: Setup .env file (non-critical)
     setup_env_file(project_path)
@@ -759,27 +790,14 @@ def run_post_generation_tasks(
     # Task 4: Format code (non-critical)
     format_code(project_path)
 
-    # Print final status
+    # Print final status (only reached if deps succeeded)
     typer.echo()
-    if deps_success:
-        typer.secho("Project ready to run!", fg=typer.colors.GREEN, bold=True)
-        typer.echo()
-        typer.secho("Next steps:", fg=typer.colors.CYAN, bold=True)
-        typer.echo(f"   cd {project_path.name}")
-        typer.echo("   make serve")
-        typer.echo()
-        typer.secho("Your application is fully configured and ready to use!", dim=True)
-    else:
-        typer.secho(
-            "Project created with some setup issues", fg=typer.colors.YELLOW, bold=True
-        )
-        typer.echo()
-        typer.secho("Manual setup required:", fg=typer.colors.CYAN, bold=True)
-        typer.echo(f"   cd {project_path.name}")
-        typer.echo("   uv sync")
-        typer.echo("   cp .env.example .env")
-        if include_auth:
-            typer.echo("   alembic upgrade head")
-        typer.echo("   make serve")
+    typer.secho("Project ready to run!", fg=typer.colors.GREEN, bold=True)
+    typer.echo()
+    typer.secho("Next steps:", fg=typer.colors.CYAN, bold=True)
+    typer.echo(f"   cd {project_path.name}")
+    typer.echo("   make serve")
+    typer.echo()
+    typer.secho("Your application is fully configured and ready to use!", dim=True)
 
-    return deps_success
+    return True
