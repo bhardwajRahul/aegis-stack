@@ -21,9 +21,9 @@ class TestParsePythonVersionBounds:
         """Test parsing actual aegis-stack pyproject.toml."""
         min_ver, max_ver = _parse_python_version_bounds()
 
-        # Should parse requires-python = ">=3.11,<3.14"
+        # Should parse requires-python = ">=3.11,<3.15"
         assert min_ver == "3.11"
-        assert max_ver == "3.13"  # <3.14 → max is 3.13
+        assert max_ver == "3.14"  # <3.15 → max is 3.14
 
     def test_parse_with_mock_pyproject(self, tmp_path: Path) -> None:
         """Test parsing with a mock pyproject.toml file."""
@@ -63,7 +63,7 @@ requires-python = ">=3.12,<3.15"
         assert isinstance(min_ver, str)
         assert isinstance(max_ver, str)
         assert min_ver == "3.11"
-        assert max_ver == "3.13"
+        assert max_ver == "3.14"
 
     def test_parse_handles_no_upper_bound(self) -> None:
         """Test parsing when there's no upper bound specified."""
@@ -94,15 +94,15 @@ class TestGenerateSupportedVersions:
 
     def test_generate_different_major_versions_fallback(self) -> None:
         """Test fallback when major versions differ (e.g., 3.x → 4.x)."""
-        versions = _generate_supported_versions("3.13", "4.0")
+        versions = _generate_supported_versions("3.14", "4.0")
         # Should fallback to hardcoded list
-        assert versions == ["3.11", "3.12", "3.13"]
+        assert versions == ["3.11", "3.12", "3.13", "3.14"]
 
     def test_generate_handles_invalid_format(self) -> None:
         """Test graceful handling of invalid version format."""
         versions = _generate_supported_versions("invalid", "also-invalid")
         # Should fallback to hardcoded list
-        assert versions == ["3.11", "3.12", "3.13"]
+        assert versions == ["3.11", "3.12", "3.13", "3.14"]
 
 
 class TestConfigurationConstants:
@@ -121,9 +121,9 @@ class TestConfigurationConstants:
 
     def test_default_python_version_current_value(self) -> None:
         """Test DEFAULT_PYTHON_VERSION equals expected value."""
-        # Based on current pyproject.toml: requires-python = ">=3.11,<3.14"
-        # Should be max supported version: 3.13
-        assert DEFAULT_PYTHON_VERSION == "3.13"
+        # Based on current pyproject.toml: requires-python = ">=3.11,<3.15"
+        # Should be max supported version: 3.14
+        assert DEFAULT_PYTHON_VERSION == "3.14"
 
     def test_supported_python_versions_is_list(self) -> None:
         """Test SUPPORTED_PYTHON_VERSIONS is a list."""
@@ -139,9 +139,9 @@ class TestConfigurationConstants:
 
     def test_supported_python_versions_current_value(self) -> None:
         """Test SUPPORTED_PYTHON_VERSIONS equals expected value."""
-        # Based on current pyproject.toml: requires-python = ">=3.11,<3.14"
-        # Should be ["3.11", "3.12", "3.13"]
-        assert SUPPORTED_PYTHON_VERSIONS == ["3.11", "3.12", "3.13"]
+        # Based on current pyproject.toml: requires-python = ">=3.11,<3.15"
+        # Should be ["3.11", "3.12", "3.13", "3.14"]
+        assert SUPPORTED_PYTHON_VERSIONS == ["3.11", "3.12", "3.13", "3.14"]
 
     def test_default_version_in_supported_versions(self) -> None:
         """Test DEFAULT_PYTHON_VERSION is in SUPPORTED_PYTHON_VERSIONS."""

@@ -39,6 +39,7 @@ class TestUpdateIntegration:
     ) -> None:
         """Test generating project from specific version."""
         # Generate project from old commit
+        # Use --python-version 3.11 to ensure compatibility with old template versions
         result = subprocess.run(
             [
                 "aegis",
@@ -46,6 +47,8 @@ class TestUpdateIntegration:
                 "test-project",
                 "--to-version",
                 old_commit_hash,
+                "--python-version",
+                "3.11",
                 "--no-interactive",
                 "--yes",
             ],
@@ -70,6 +73,7 @@ class TestUpdateIntegration:
     ) -> None:
         """Test updating from old commit to HEAD."""
         # Generate project from old commit
+        # Use --python-version 3.11 to ensure compatibility with old template versions
         subprocess.run(
             [
                 "aegis",
@@ -77,6 +81,8 @@ class TestUpdateIntegration:
                 "test-project",
                 "--to-version",
                 old_commit_hash,
+                "--python-version",
+                "3.11",
                 "--no-interactive",
                 "--yes",
             ],
@@ -235,6 +241,7 @@ class TestUpdateIntegration:
     ) -> None:
         """Test that update displays version information."""
         # Generate from old version
+        # Use --python-version 3.11 to ensure compatibility with old template versions
         subprocess.run(
             [
                 "aegis",
@@ -242,6 +249,8 @@ class TestUpdateIntegration:
                 "test-project",
                 "--to-version",
                 old_commit_hash,
+                "--python-version",
+                "3.11",
                 "--no-interactive",
                 "--yes",
             ],

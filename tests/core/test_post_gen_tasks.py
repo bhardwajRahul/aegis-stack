@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from aegis.core.post_gen_tasks import (
+    DependencyInstallationError,
     _truncate_stderr,
     format_code,
     install_dependencies,
@@ -288,16 +289,17 @@ class TestRunPostGenerationTasks:
             assert result is True
 
     def test_dependency_install_failure(self, tmp_path: Path) -> None:
-        """Test when dependency installation fails (critical)."""
+        """Test when dependency installation fails (critical - raises exception)."""
         with (
             patch("aegis.core.post_gen_tasks.install_dependencies", return_value=False),
             patch("aegis.core.post_gen_tasks.setup_env_file", return_value=True),
             patch("aegis.core.post_gen_tasks.run_migrations", return_value=True),
             patch("aegis.core.post_gen_tasks.format_code", return_value=True),
         ):
-            result = run_post_generation_tasks(tmp_path, include_auth=False)
+            with pytest.raises(DependencyInstallationError) as exc_info:
+                run_post_generation_tasks(tmp_path, include_auth=False)
 
-            assert result is False  # Critical failure
+            assert str(tmp_path) in str(exc_info.value)
 
     def test_non_critical_failures_continue(self, tmp_path: Path) -> None:
         """Test that non-critical failures don't stop execution."""

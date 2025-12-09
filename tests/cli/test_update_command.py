@@ -507,6 +507,7 @@ class TestUpdateCommandRollback:
         # Either creates backup or hits early exit
         assert result.stdout
 
+    @patch("aegis.commands.update.run_post_generation_tasks")
     @patch("copier.run_update")
     @patch("aegis.commands.update.get_current_template_commit")
     @patch("aegis.commands.update.cleanup_backup_tag")
@@ -517,11 +518,13 @@ class TestUpdateCommandRollback:
         mock_cleanup: MagicMock,
         mock_get_commit: MagicMock,
         mock_copier_update: MagicMock,
+        mock_post_gen: MagicMock,
         project_factory: "ProjectFactory",
     ) -> None:
         """Test that backup tag is cleaned up on successful update."""
         mock_create_backup.return_value = "aegis-backup-123"
         mock_get_commit.return_value = "different-commit"  # Prevent early exit
+        mock_post_gen.return_value = True  # Mock successful post-gen tasks
 
         project_path = project_factory("base")
 

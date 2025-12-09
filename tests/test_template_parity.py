@@ -152,11 +152,13 @@ def generate_with_cookiecutter(
         Path to generated project
     """
     # Build template context using TemplateGenerator
+    # Use Python 3.11 explicitly to ensure test compatibility (Python 3.14 may not be available)
     generator = TemplateGenerator(
         project_name=project_name,
         selected_components=components,
         scheduler_backend=scheduler_backend,
         selected_services=services or [],
+        python_version="3.11",
     )
     context = generator.get_template_context()
 
@@ -169,7 +171,6 @@ def generate_with_cookiecutter(
     context.setdefault("author_email", "your.email@example.com")
     context.setdefault("github_username", "your-username")
     context.setdefault("version", "0.1.0")
-    context.setdefault("python_version", "3.11")
 
     # Get cookiecutter template path
     template_path = (
@@ -211,11 +212,13 @@ def generate_with_copier(
         Path to generated project
     """
     # Build Copier data (similar to cookiecutter context)
+    # Use Python 3.11 explicitly to ensure test compatibility (Python 3.14 may not be available)
     generator = TemplateGenerator(
         project_name=project_name,
         selected_components=components,
         scheduler_backend=scheduler_backend,
         selected_services=services or [],
+        python_version="3.11",
     )
     cookiecutter_context = generator.get_template_context()
 
@@ -230,7 +233,7 @@ def generate_with_copier(
         "author_email": "your.email@example.com",
         "github_username": "your-username",
         "version": "0.1.0",
-        "python_version": cookiecutter_context.get("python_version", "3.13"),
+        "python_version": "3.11",  # Use 3.11 to match Cookiecutter and ensure test compatibility
         "include_scheduler": cookiecutter_context["include_scheduler"] == "yes",
         "scheduler_backend": cookiecutter_context["scheduler_backend"],
         "scheduler_with_persistence": cookiecutter_context["scheduler_with_persistence"]
