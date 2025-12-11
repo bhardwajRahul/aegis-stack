@@ -359,7 +359,9 @@ class AIService:
 
     def get_service_status(self) -> dict[str, Any]:
         """Get current service status and metrics."""
-        total_conversations = len(self.conversation_manager.conversations)
+        # Use get_stats() which works for both memory and SQLite backends
+        stats = self.conversation_manager.get_stats()
+        total_conversations = stats["total_conversations"]
 
         return {
             "enabled": self.config.enabled,

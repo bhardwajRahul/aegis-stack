@@ -14,6 +14,9 @@ from .component_utils import extract_base_component_name, extract_engine_info
 from .components import COMPONENTS, CORE_COMPONENTS
 from .services import SERVICES
 
+# Service names for bracket syntax detection
+SERVICE_AI = "ai"
+
 
 class TemplateGenerator:
     """Handles template context generation for cookiecutter."""
@@ -80,6 +83,15 @@ class TemplateGenerator:
                     self.worker_backend = backend
                     break
 
+        # Extract AI backend from ai[backend] format in services
+        self.ai_backend = StorageBackends.MEMORY  # Default to memory
+        for service in self.selected_services:
+            if extract_base_component_name(service) == SERVICE_AI:
+                backend = extract_engine_info(service)
+                if backend:
+                    self.ai_backend = backend
+                    break
+
         # Build component specs using base names
         self.component_specs = {}
         for name in self.components:
@@ -135,15 +147,31 @@ class TemplateGenerator:
             ),
             "needs_redis": ComponentNames.REDIS in self.components,
             # Service flags for template conditionals
+            # Use base name extraction to handle bracket syntax (e.g., ai[sqlite])
             AnswerKeys.AUTH: "yes"
-            if AnswerKeys.SERVICE_AUTH in self.selected_services
+            if any(
+                extract_base_component_name(s) == AnswerKeys.SERVICE_AUTH
+                for s in self.selected_services
+            )
             else "no",
             AnswerKeys.AI: "yes"
-            if AnswerKeys.SERVICE_AI in self.selected_services
+            if any(
+                extract_base_component_name(s) == AnswerKeys.SERVICE_AI
+                for s in self.selected_services
+            )
             else "no",
             AnswerKeys.COMMS: "yes"
-            if AnswerKeys.SERVICE_COMMS in self.selected_services
+            if any(
+                extract_base_component_name(s) == AnswerKeys.SERVICE_COMMS
+                for s in self.selected_services
+            )
             else "no",
+            # AI backend selection for conversation persistence
+            AnswerKeys.AI_BACKEND: self.ai_backend,
+            # AI persistence flag for backwards compatibility with template conditionals
+            AnswerKeys.AI_WITH_PERSISTENCE: (
+                "yes" if self.ai_backend != StorageBackends.MEMORY else "no"
+            ),
             # AI provider selection for dynamic dependency generation
             AnswerKeys.AI_PROVIDERS: self._get_ai_providers_string(),
             # Dependency lists for templates
@@ -225,9 +253,10 @@ class TemplateGenerator:
                     files.extend(spec.template_files)
 
         # Collect service template files
-        for service_name in self.selected_services:
-            if service_name in SERVICES:
-                service_spec = SERVICES[service_name]
+        for service in self.selected_services:
+            base_service = extract_base_component_name(service)
+            if base_service in SERVICES:
+                service_spec = SERVICES[base_service]
                 if service_spec.template_files:
                     files.extend(service_spec.template_files)
 
@@ -240,7 +269,12 @@ class TemplateGenerator:
         Returns:
             Comma-separated string of provider names (e.g., "openai,anthropic,google")
         """
-        if AnswerKeys.SERVICE_AI not in self.selected_services:
+        # Check if AI service is selected (handle bracket syntax)
+        has_ai = any(
+            extract_base_component_name(s) == AnswerKeys.SERVICE_AI
+            for s in self.selected_services
+        )
+        if not has_ai:
             return "openai"  # Default for PUBLIC provider
 
         # Import here to avoid circular imports

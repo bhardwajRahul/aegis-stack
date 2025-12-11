@@ -237,8 +237,8 @@ test-template-with-components: ## Test template with scheduler component include
 
 clean-test-projects: ## Remove all generated test project directories
 	@echo "🧹 Cleaning up test projects..."
-	@chmod -R +w ../test-basic-stack ../test-component-stack ../test-worker-stack ../test-database-stack ../test-full-stack 2>/dev/null || true
-	@rm -rf ../test-basic-stack ../test-component-stack ../test-worker-stack ../test-database-stack ../test-full-stack 2>/dev/null || true
+	@chmod -R +w ../test-basic-stack ../test-component-stack ../test-worker-stack ../test-database-stack ../test-full-stack ../test-auth-stack ../test-ai-stack ../test-ai-memory-stack ../test-ai-sqlite-stack 2>/dev/null || true
+	@rm -rf ../test-basic-stack ../test-component-stack ../test-worker-stack ../test-database-stack ../test-full-stack ../test-auth-stack ../test-ai-stack ../test-ai-memory-stack ../test-ai-sqlite-stack 2>/dev/null || true
 	@echo "✅ Test projects cleaned up"
 
 # ============================================================================
@@ -348,6 +348,37 @@ test-template-ai: ## Test template with AI service
 	@cd ../test-ai-stack && env -u VIRTUAL_ENV uv run python -c "import pydantic_ai; print('✅ PydanticAI v' + pydantic_ai.__version__ + ' installed')" || echo "⚠️  PydanticAI import test failed"
 	@echo "✅ AI service template test completed successfully!"
 	@echo "   Test project available in ../test-ai-stack/"
+
+test-template-ai-memory: ## Test AI service with memory backend (default)
+	@echo "🧠 Testing AI service with memory backend..."
+	@chmod -R +w ../test-ai-memory-stack 2>/dev/null || true
+	@rm -rf ../test-ai-memory-stack
+	@env -u VIRTUAL_ENV uv run aegis init test-ai-memory-stack --services ai --output-dir .. --no-interactive --force --yes
+	@echo "📦 Installing dependencies and CLI..."
+	@cd ../test-ai-memory-stack && chmod -R +w .venv 2>/dev/null || true && rm -rf .venv && env -u VIRTUAL_ENV uv sync --extra dev --extra docs
+	@cd ../test-ai-memory-stack && env -u VIRTUAL_ENV uv pip install -e .
+	@echo "🔍 Running validation checks..."
+	@cd ../test-ai-memory-stack && env -u VIRTUAL_ENV make check
+	@echo "🧪 Verifying memory backend..."
+	@test ! -f ../test-ai-memory-stack/app/models/conversation.py && echo "✅ No SQLModel conversation tables (memory mode)" || echo "❌ SQLModel tables should not exist in memory mode"
+	@grep -q '"persistence": "memory"' ../test-ai-memory-stack/app/services/ai/health.py && echo "✅ Health shows memory persistence" || echo "⚠️  Health persistence check failed"
+	@echo "✅ AI memory backend template test completed!"
+
+test-template-ai-sqlite: ## Test AI service with SQLite persistence
+	@echo "💾 Testing AI service with SQLite persistence..."
+	@chmod -R +w ../test-ai-sqlite-stack 2>/dev/null || true
+	@rm -rf ../test-ai-sqlite-stack
+	@env -u VIRTUAL_ENV uv run aegis init test-ai-sqlite-stack --services "ai[sqlite]" --output-dir .. --no-interactive --force --yes
+	@echo "📦 Installing dependencies and CLI..."
+	@cd ../test-ai-sqlite-stack && chmod -R +w .venv 2>/dev/null || true && rm -rf .venv && env -u VIRTUAL_ENV uv sync --extra dev --extra docs
+	@cd ../test-ai-sqlite-stack && env -u VIRTUAL_ENV uv pip install -e .
+	@echo "🔍 Running validation checks..."
+	@cd ../test-ai-sqlite-stack && env -u VIRTUAL_ENV make check
+	@echo "🧪 Verifying SQLite backend..."
+	@test -f ../test-ai-sqlite-stack/app/models/conversation.py && echo "✅ SQLModel conversation tables exist" || echo "❌ SQLModel tables missing"
+	@grep -q '"persistence": "sqlite"' ../test-ai-sqlite-stack/app/services/ai/health.py && echo "✅ Health shows sqlite persistence" || echo "⚠️  Health persistence check failed"
+	@grep -q 'from app.core.db import db_session' ../test-ai-sqlite-stack/app/services/ai/conversation.py && echo "✅ SQLite imports present" || echo "❌ SQLite imports missing"
+	@echo "✅ AI SQLite persistence template test completed!"
 
 test-template-full: ## Test template with all components (worker + scheduler + database)
 	@echo "🌟 Testing full component template..."

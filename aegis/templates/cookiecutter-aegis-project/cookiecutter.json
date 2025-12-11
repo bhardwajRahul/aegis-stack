@@ -23,6 +23,8 @@
   "include_ai": "no",
   "include_comms": "no",
   "ai_providers": "openai",
+  "ai_backend": "memory",
+  "ai_with_persistence": "no",
   
   "_comment_internal": "Internal variables for template logic",
   "_has_additional_components": "{% if cookiecutter.include_scheduler == 'yes' or cookiecutter.include_redis == 'yes' or cookiecutter.include_worker == 'yes' or cookiecutter.include_database == 'yes' or cookiecutter.include_cache == 'yes' %}yes{% else %}no{% endif %}",

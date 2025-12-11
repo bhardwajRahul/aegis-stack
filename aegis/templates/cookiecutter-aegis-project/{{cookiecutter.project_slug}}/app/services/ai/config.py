@@ -33,9 +33,6 @@ class AIServiceConfig(BaseModel):
     max_tokens: int = Field(default=1000, gt=0, le=8000)
     timeout_seconds: float = Field(default=30.0, gt=0)
 
-    class Config:
-        use_enum_values = True
-
     @classmethod
     def from_settings(cls, settings: Any) -> "AIServiceConfig":
         """Create configuration from main application settings."""

@@ -63,6 +63,8 @@ class AnswerKeys:
     WORKER_BACKEND = "worker_backend"
     DATABASE_ENGINE = "database_engine"
     AI_PROVIDERS = "ai_providers"
+    AI_BACKEND = "ai_backend"
+    AI_WITH_PERSISTENCE = "ai_with_persistence"
     PROJECT_SLUG = "project_slug"
     SRC_PATH = "_src_path"
 

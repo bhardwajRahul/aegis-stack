@@ -104,6 +104,10 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "tests/services/test_auth_integration.py",
             "tests/models/test_user.py",
             "alembic",
+            # Frontend dashboard files
+            "app/components/frontend/dashboard/cards/auth_card.py",
+            "app/components/frontend/dashboard/cards/services_card.py",
+            "app/components/frontend/dashboard/modals/auth_modal.py",
         ],
         AnswerKeys.SERVICE_AI: [
             "app/components/backend/api/ai",
@@ -354,6 +358,14 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(
             project_path, "app/components/frontend/dashboard/modals/ai_modal.py"
         )
+        # Remove AI conversation SQLModel tables
+        remove_file(project_path, "app/models/conversation.py")
+
+    # AI conversation persistence handling
+    # When AI backend is memory (or not specified), remove SQLModel tables
+    ai_backend = context.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
+    if ai_backend == StorageBackends.MEMORY:
+        remove_file(project_path, "app/models/conversation.py")
 
     # Remove comms service if not selected
     if not is_enabled(AnswerKeys.COMMS):

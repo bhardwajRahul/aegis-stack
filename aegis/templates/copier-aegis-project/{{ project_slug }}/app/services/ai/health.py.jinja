@@ -58,12 +58,22 @@ async def check_ai_service_health() -> ComponentStatus:
             "configuration_valid": service_status["configuration_valid"],
             "validation_errors": validation_errors,
             "validation_errors_count": len(validation_errors),
+{% if ai_backend == "memory" %}
+            "persistence": "memory",
+            "storage": "in-memory (conversations lost on restart)",
+{% else %}
+            "persistence": "sqlite",
+            "storage": "database (conversations persist across restarts)",
+{% endif %}
         }
 
         # Add dependency status
         metadata["dependencies"] = {
             "backend": "required",
             "pydantic_ai": "required",
+{% if ai_backend != "memory" %}
+            "database": "required",
+{% endif %}
         }
 
         # Add provider-specific info

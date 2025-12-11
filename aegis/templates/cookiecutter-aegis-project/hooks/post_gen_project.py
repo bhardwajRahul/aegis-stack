@@ -56,6 +56,7 @@ def process_j2_templates():
             "include_ai": "{{ cookiecutter.include_ai }}",
             "include_comms": "{{ cookiecutter.include_comms }}",
             "worker_backend": "{{ cookiecutter.worker_backend }}",
+            "ai_backend": "{{ cookiecutter.ai_backend }}",
         }
     }
 
@@ -291,6 +292,13 @@ def main():
         remove_file("tests/cli/test_conversation_memory.py")
         # Remove AI test directory (contains test_service.py, test_health.py, etc.)
         remove_dir("tests/services/ai")
+        # Remove AI conversation SQLModel tables (only exists for AI service)
+        remove_file("app/models/conversation.py")
+
+    # AI conversation persistence handling
+    # When AI backend is memory, remove SQLModel tables (not needed)
+    if "{{ cookiecutter.ai_backend }}" == "memory":
+        remove_file("app/models/conversation.py")
 
     if "{{ cookiecutter.include_comms }}" != "yes":
         # Remove comms service files

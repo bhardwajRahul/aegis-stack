@@ -5,6 +5,7 @@ This module handles dependency resolution, validation, and recommendations
 for component selection during project generation.
 """
 
+from .component_utils import extract_base_component_name
 from .components import COMPONENTS
 
 
@@ -18,6 +19,7 @@ class DependencyResolver:
 
         Args:
             selected_components: List of component names selected by user
+                                (may include bracket syntax like database[sqlite])
 
         Returns:
             Complete list of components including dependencies
@@ -36,10 +38,12 @@ class DependencyResolver:
         while True:
             before_size = len(resolved)
             for component_name in list(resolved):
-                if component_name not in COMPONENTS:
+                # Extract base name for lookup in COMPONENTS
+                base_name = extract_base_component_name(component_name)
+                if base_name not in COMPONENTS:
                     continue
 
-                component = COMPONENTS[component_name]
+                component = COMPONENTS[base_name]
                 if component.requires:
                     resolved.update(component.requires)
 
@@ -55,25 +59,31 @@ class DependencyResolver:
 
         Args:
             components: List of component names to validate
+                       (may include bracket syntax like database[sqlite])
 
         Returns:
             List of error messages (empty if valid)
         """
         errors = []
 
+        # Extract base names for conflict checking
+        base_components = [extract_base_component_name(c) for c in components]
+
         for component in components:
-            if component not in COMPONENTS:
-                errors.append(f"Unknown component: {component}")
+            # Extract base name for lookup
+            base_name = extract_base_component_name(component)
+            if base_name not in COMPONENTS:
+                errors.append(f"Unknown component: {base_name}")
                 continue
 
-            spec = COMPONENTS[component]
+            spec = COMPONENTS[base_name]
 
-            # Check conflicts
+            # Check conflicts using base names
             if spec.conflicts:
                 for conflict in spec.conflicts:
-                    if conflict in components:
+                    if conflict in base_components:
                         errors.append(
-                            f"Component '{component}' conflicts with '{conflict}'"
+                            f"Component '{base_name}' conflicts with '{conflict}'"
                         )
 
         return errors
@@ -85,20 +95,24 @@ class DependencyResolver:
 
         Args:
             selected_components: List of already selected components
+                                (may include bracket syntax like database[sqlite])
 
         Returns:
             List of recommended component names not already selected
         """
         recommendations = set()
+        base_selected = {extract_base_component_name(c) for c in selected_components}
 
         for component_name in selected_components:
-            if component_name not in COMPONENTS:
+            # Extract base name for lookup
+            base_name = extract_base_component_name(component_name)
+            if base_name not in COMPONENTS:
                 continue
 
-            component = COMPONENTS[component_name]
+            component = COMPONENTS[base_name]
             if component.recommends:
                 for rec in component.recommends:
-                    if rec not in selected_components:
+                    if rec not in base_selected:
                         recommendations.add(rec)
 
         return sorted(recommendations)

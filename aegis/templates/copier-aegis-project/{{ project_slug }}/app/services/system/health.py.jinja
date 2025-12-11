@@ -1116,11 +1116,12 @@ async def check_database_health() -> ComponentStatus:
                         current_version = version_result[0] if version_result else None
                         enhanced_metadata["current_migration"] = current_version
 
-                        # Find alembic versions directory (standard Alembic structure)
+                        # Find alembic versions directory (standard structure)
                         alembic_versions_path = Path("alembic/versions")
                         if alembic_versions_path.exists():
                             # Parse migration files
-                            for migration_file in sorted(alembic_versions_path.glob("*.py")):
+                            migration_files = alembic_versions_path.glob("*.py")
+                            for migration_file in sorted(migration_files):
                                 if migration_file.name == "__init__.py":
                                     continue
 
@@ -1137,22 +1138,26 @@ async def check_database_health() -> ComponentStatus:
                                     create_date = None
 
                                     # Parse docstring for description
-                                    doc_match = re.search(r'"""(.+?)"""', content, re.DOTALL)
+                                    doc_pat = r'"""(.+?)"""'
+                                    doc_match = re.search(doc_pat, content, re.DOTALL)
                                     if doc_match:
                                         description = doc_match.group(1).strip()
 
                                     # Parse revision metadata
-                                    revision_match = re.search(r'revision\s*=\s*[\'"](.+?)[\'"]', content)
+                                    rev_pat = r'revision\s*=\s*[\'"](.+?)[\'"]'
+                                    revision_match = re.search(rev_pat, content)
                                     if revision_match:
                                         revision_id = revision_match.group(1)
 
-                                    down_revision_match = re.search(r'down_revision\s*=\s*[\'"](.+?)[\'"]', content)
-                                    if down_revision_match:
-                                        down_revision = down_revision_match.group(1)
+                                    down_pat = r'down_revision\s*=\s*[\'"](.+?)[\'"]'
+                                    down_match = re.search(down_pat, content)
+                                    if down_match:
+                                        down_revision = down_match.group(1)
 
-                                    create_date_match = re.search(r'create_date\s*=\s*.+?datetime\((.+?)\)', content)
-                                    if create_date_match:
-                                        create_date = create_date_match.group(0)
+                                    date_pat = r'create_date\s*=\s*.+?datetime\((.+?)\)'
+                                    date_match = re.search(date_pat, content)
+                                    if date_match:
+                                        create_date = date_match.group(0)
 
                                     # Get file modification time as fallback
                                     file_mtime = os.path.getmtime(migration_file)
@@ -1167,7 +1172,9 @@ async def check_database_health() -> ComponentStatus:
                                     })
 
                                 except Exception as e:
-                                    logger.debug(f"Failed to parse migration file {migration_file}: {e}")
+                                    logger.debug(
+                                        f"Failed to parse migration {migration_file}: {e}"
+                                    )
 
                         enhanced_metadata["migrations"] = migrations
                         enhanced_metadata["migration_count"] = len(migrations)
