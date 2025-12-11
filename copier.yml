@@ -132,6 +132,21 @@ ai_providers:
   default: "openai"
   when: "{{ include_ai }}"
 
+ai_backend:
+  type: str
+  help: "AI conversation storage backend"
+  default: "memory"
+  choices:
+    - "memory"
+    - "sqlite"
+  when: "{{ include_ai }}"
+
+ai_with_persistence:
+  type: bool
+  help: "Enable AI conversation persistence?"
+  default: "{{ ai_backend == 'sqlite' }}"
+  when: "{{ include_ai }}"
+
 # Internal computed values (using Jinja2)
 _has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache }}"
 _include_migrations: "{{ include_auth }}"

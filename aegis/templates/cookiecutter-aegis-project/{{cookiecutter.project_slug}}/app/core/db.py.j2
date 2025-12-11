@@ -44,10 +44,14 @@ def _extract_database_path(database_url: str) -> str:
 DATABASE_PATH = _extract_database_path(settings.DATABASE_URL)
 
 # Create SQLite engine with proper configuration (sync)
+# pool_pre_ping validates connections before use, ensuring fresh reads
+# isolation_level="AUTOCOMMIT" ensures no implicit transactions hold stale data
 engine = create_engine(
     settings.DATABASE_URL,
     connect_args=settings.DATABASE_CONNECT_ARGS,
     echo=settings.DATABASE_ENGINE_ECHO,
+    isolation_level="AUTOCOMMIT",
+    pool_pre_ping=True,
 )
 
 # Create async engine for non-blocking operations

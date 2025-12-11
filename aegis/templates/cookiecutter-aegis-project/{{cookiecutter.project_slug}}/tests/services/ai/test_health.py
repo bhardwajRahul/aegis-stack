@@ -36,14 +36,10 @@ class TestAIHealthCheck:
 
     @pytest.mark.asyncio
     async def test_health_check_provider_metadata(self) -> None:
-        """Test provider-specific metadata in health check.
-
-        This test would have caught the bug where provider
-        was returned as enum when it should be string.
-        """
+        """Test provider-specific metadata in health check."""
         status = await check_ai_service_health()
 
-        # Provider should be a string (due to use_enum_values=True in config)
+        # Provider in metadata should be a string value for serialization
         provider = status.metadata.get("provider")
         assert isinstance(provider, str)
         assert provider in [p.value for p in AIProvider]

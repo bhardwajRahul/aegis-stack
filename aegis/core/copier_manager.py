@@ -95,6 +95,13 @@ def generate_with_copier(
         AnswerKeys.AI_PROVIDERS: cookiecutter_context.get(
             AnswerKeys.AI_PROVIDERS, "openai"
         ),
+        AnswerKeys.AI_BACKEND: cookiecutter_context.get(
+            AnswerKeys.AI_BACKEND, "memory"
+        ),
+        AnswerKeys.AI_WITH_PERSISTENCE: cookiecutter_context.get(
+            AnswerKeys.AI_WITH_PERSISTENCE, "no"
+        )
+        == "yes",
     }
 
     # Detect dev vs production mode for template sourcing

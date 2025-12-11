@@ -260,3 +260,53 @@ class TestHealthEndpoints:
                 assert isinstance(worker_component["healthy"], bool)
 
 {%- endif %}
+
+    @pytest.mark.asyncio
+    async def test_dashboard_endpoint_accessible(
+        self, async_client: AsyncClient
+    ) -> None:
+        """Test /health/dashboard endpoint is accessible and returns valid structure."""
+        response = await async_client.get("/health/dashboard")
+
+        # Should return a valid response
+        assert response.status_code in [200, 503]
+        data = response.json()
+
+        if response.status_code == 200:
+            # Verify top-level structure
+            assert "status" in data
+            assert "service" in data
+            assert "version" in data
+            assert "dashboard_data" in data
+
+            dashboard_data = data["dashboard_data"]
+
+            # Verify dashboard_data structure
+            assert "overall_status" in dashboard_data
+            assert "components" in dashboard_data
+            assert "summary" in dashboard_data
+            assert "services" in dashboard_data
+            assert "system_info" in dashboard_data
+            assert "timestamp" in dashboard_data
+            assert "last_updated" in dashboard_data
+
+            # Verify overall_status structure
+            overall = dashboard_data["overall_status"]
+            assert "healthy" in overall
+            assert "percentage" in overall
+            assert "status_text" in overall
+
+            # Verify services structure (this catches the .items() bug)
+            services = dashboard_data["services"]
+            assert "enabled" in services
+            assert isinstance(services.get("services", {}), dict)
+
+            # If services are enabled, verify each service has required fields
+            if services.get("enabled") and services.get("services"):
+                for svc_name, svc_data in services["services"].items():
+                    assert "name" in svc_data, f"Service {svc_name} missing 'name'"
+                    assert "healthy" in svc_data, f"Service {svc_name} missing 'healthy'"
+                    assert "message" in svc_data, f"Service {svc_name} missing 'message'"
+        else:
+            # For 503 responses, check error structure
+            assert "detail" in data

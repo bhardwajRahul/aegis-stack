@@ -297,6 +297,80 @@ class TestServiceResolver:
         assert component_auto == []
 
 
+class TestAIServiceBackend:
+    """Test AI service bracket syntax and backend handling."""
+
+    def test_validate_ai_service_memory_backend(self):
+        """Test that ai[memory] is valid."""
+        errors = ServiceResolver.validate_services(["ai[memory]"])
+        assert errors == []
+
+    def test_validate_ai_service_sqlite_backend(self):
+        """Test that ai[sqlite] is valid."""
+        errors = ServiceResolver.validate_services(["ai[sqlite]"])
+        assert errors == []
+
+    def test_validate_ai_service_invalid_backend(self):
+        """Test that ai[invalid] is rejected."""
+        errors = ServiceResolver.validate_services(["ai[postgres]"])
+        assert len(errors) == 1
+        assert "Invalid backend" in errors[0]
+        assert "postgres" in errors[0]
+
+    def test_validate_ai_service_no_bracket(self):
+        """Test that plain 'ai' is valid (defaults to memory)."""
+        errors = ServiceResolver.validate_services(["ai"])
+        assert errors == []
+
+    def test_resolve_ai_sqlite_adds_database(self):
+        """Test that ai[sqlite] auto-adds database[sqlite] component."""
+        services = ["ai[sqlite]"]
+
+        resolved_components, auto_added = ServiceResolver.resolve_service_dependencies(
+            services
+        )
+
+        # Should auto-add database with sqlite backend
+        assert any("database" in c for c in resolved_components)
+        assert any("database[sqlite]" in c for c in auto_added)
+
+    def test_resolve_ai_memory_no_database(self):
+        """Test that ai[memory] does NOT auto-add database."""
+        services = ["ai[memory]"]
+
+        resolved_components, auto_added = ServiceResolver.resolve_service_dependencies(
+            services
+        )
+
+        # Should NOT add database for memory backend
+        # AI service requires backend, which is core, but not database
+        assert "database[sqlite]" not in auto_added
+        assert not any("database" in c for c in auto_added)
+
+    def test_resolve_ai_plain_no_database(self):
+        """Test that plain 'ai' (defaults to memory) does NOT auto-add database."""
+        services = ["ai"]
+
+        resolved_components, auto_added = ServiceResolver.resolve_service_dependencies(
+            services
+        )
+
+        # Plain ai defaults to memory, should NOT add database
+        assert "database[sqlite]" not in auto_added
+
+    def test_ai_sqlite_with_existing_database(self):
+        """Test that ai[sqlite] doesn't duplicate database if already present."""
+        services = ["ai[sqlite]"]
+
+        resolved_components, auto_added = ServiceResolver.resolve_service_dependencies(
+            services
+        )
+
+        # Database should appear only once
+        database_count = sum(1 for c in resolved_components if c.startswith("database"))
+        assert database_count == 1
+
+
 class TestServiceResolverIntegration:
     """Integration tests for service resolver with real component system."""
 

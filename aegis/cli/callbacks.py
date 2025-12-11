@@ -111,8 +111,10 @@ def validate_and_resolve_services(
 
     selected_services = [s for s in services_raw if s]
 
-    # Validate services exist
-    unknown_services = [s for s in selected_services if s not in SERVICES]
+    # Validate services exist (extract base name to support bracket syntax like ai[sqlite])
+    unknown_services = [
+        s for s in selected_services if extract_base_component_name(s) not in SERVICES
+    ]
     if unknown_services:
         typer.secho(
             f"Unknown services: {', '.join(unknown_services)}", fg="red", err=True

@@ -151,8 +151,9 @@ def init_command(
     selected_services = cast(list[str], services) if services else []
     scheduler_backend = StorageBackends.MEMORY  # Default to in-memory scheduler
 
-    # Resolve services to components if services were provided (non-interactive mode only)
-    if selected_services and not interactive:
+    # Resolve services to components if services were provided
+    # This runs in both interactive and non-interactive modes when --services is specified
+    if selected_services:
         # Check if --components was explicitly provided
         components_explicitly_provided = components is not None
 

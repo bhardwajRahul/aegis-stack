@@ -633,3 +633,59 @@ def interactive_service_selection(project_path: Path) -> list[str]:
                     )
 
     return selected_services
+
+
+def interactive_service_remove_selection(project_path: Path) -> list[str]:
+    """
+    Interactive service selection for removing from existing project.
+
+    Shows currently enabled services and allows user to select which to remove.
+
+    Args:
+        project_path: Path to the existing project
+
+    Returns:
+        List of services to remove
+    """
+    from ..core.copier_manager import load_copier_answers
+
+    # Load current project state
+    try:
+        current_answers = load_copier_answers(project_path)
+    except Exception as e:
+        typer.secho(f"Failed to load project configuration: {e}", fg="red", err=True)
+        raise typer.Exit(1)
+
+    typer.echo("\nService Removal Selection")
+    typer.echo("=" * 40)
+    typer.secho("WARNING: Removing services deletes files permanently!\n", fg="yellow")
+
+    # Find enabled services
+    enabled_services = []
+    for service_name in SERVICES:
+        if current_answers.get(AnswerKeys.include_key(service_name)):
+            enabled_services.append(service_name)
+
+    if not enabled_services:
+        typer.echo("No services are currently enabled.")
+        typer.echo("   (Core components backend + frontend cannot be removed)")
+        return []
+
+    typer.echo("Currently enabled services:")
+    for service_name in enabled_services:
+        service_spec = SERVICES[service_name]
+        typer.secho(f"  • {service_name}: {service_spec.description}", fg="cyan")
+    typer.echo()
+
+    # Ask which to remove
+    selected_services = []
+
+    for service_name in enabled_services:
+        service_spec = SERVICES[service_name]
+
+        prompt = f"  Remove {service_name} ({service_spec.description})?"
+        if typer.confirm(prompt, default=False):
+            selected_services.append(service_name)
+            typer.secho(f"    Will remove: {service_name}", fg="yellow")
+
+    return selected_services
