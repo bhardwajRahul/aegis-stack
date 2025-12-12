@@ -8,15 +8,18 @@ CLI options before command execution.
 import typer
 
 from ..constants import ComponentNames, Messages, WorkerBackends
+from ..core.ai_service_parser import is_ai_service_with_options, parse_ai_service_config
 from ..core.component_utils import (
     clean_component_names,
     extract_base_component_name,
+    extract_base_service_name,
     extract_engine_info,
     restore_engine_info,
 )
 from ..core.dependency_resolver import DependencyResolver
 from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES
+from .interactive import set_ai_service_config
 from .utils import expand_scheduler_dependencies
 
 
@@ -89,6 +92,47 @@ def validate_and_resolve_components(
     return resolved
 
 
+def _split_service_list(value: str) -> list[str]:
+    """
+    Split comma-separated service list respecting bracket syntax.
+
+    Handles ai[langchain, openai] where commas inside brackets are preserved.
+
+    Args:
+        value: Comma-separated service string like "ai[langchain, openai], auth"
+
+    Returns:
+        List of service strings with brackets preserved
+    """
+    services = []
+    current = ""
+    bracket_depth = 0
+
+    for char in value:
+        if char == "[":
+            bracket_depth += 1
+            current += char
+        elif char == "]":
+            # Only decrement if we're inside brackets to prevent negative depth
+            # from mismatched brackets like "ai],auth"
+            if bracket_depth > 0:
+                bracket_depth -= 1
+            current += char
+        elif char == "," and bracket_depth == 0:
+            # Only split on comma if we're not inside brackets
+            if current.strip():
+                services.append(current.strip())
+            current = ""
+        else:
+            current += char
+
+    # Don't forget the last service
+    if current.strip():
+        services.append(current.strip())
+
+    return services
+
+
 def validate_and_resolve_services(
     ctx: typer.Context, param: typer.CallbackParam, value: str | None
 ) -> list[str] | None:
@@ -101,8 +145,8 @@ def validate_and_resolve_services(
     if hasattr(ctx, "resilient_parsing") and ctx.resilient_parsing is True:
         return None
 
-    # Parse comma-separated string
-    services_raw = [s.strip() for s in value.split(",")]
+    # Parse comma-separated string, respecting bracket syntax
+    services_raw = _split_service_list(value)
 
     # Check for empty services before filtering
     if any(not s for s in services_raw):
@@ -111,9 +155,9 @@ def validate_and_resolve_services(
 
     selected_services = [s for s in services_raw if s]
 
-    # Validate services exist (extract base name to support bracket syntax like ai[sqlite])
+    # Validate services exist (extract base name to support bracket syntax like ai[langchain, openai])
     unknown_services = [
-        s for s in selected_services if extract_base_component_name(s) not in SERVICES
+        s for s in selected_services if extract_base_service_name(s) not in SERVICES
     ]
     if unknown_services:
         typer.secho(
@@ -122,6 +166,26 @@ def validate_and_resolve_services(
         available = list(SERVICES.keys())
         typer.echo(f"Available services: {', '.join(available)}", err=True)
         raise typer.Exit(1)
+
+    # Parse AI service bracket syntax and store config
+    for service in selected_services:
+        if is_ai_service_with_options(service):
+            try:
+                ai_config = parse_ai_service_config(service)
+                set_ai_service_config(
+                    service_name="ai",
+                    framework=ai_config.framework,
+                    backend=ai_config.backend,
+                    providers=ai_config.providers,
+                )
+                typer.echo(
+                    f"AI service: framework={ai_config.framework}, "
+                    f"backend={ai_config.backend}, "
+                    f"providers={','.join(ai_config.providers)}"
+                )
+            except ValueError as e:
+                typer.secho(f"Invalid AI service syntax: {e}", fg="red", err=True)
+                raise typer.Exit(1)
 
     # Resolve services to components
     resolved_components, service_added = ServiceResolver.resolve_service_dependencies(

@@ -22,6 +22,7 @@
   "include_auth": "no",
   "include_ai": "no",
   "include_comms": "no",
+  "ai_framework": "pydantic-ai",
   "ai_providers": "openai",
   "ai_backend": "memory",
   "ai_with_persistence": "no",

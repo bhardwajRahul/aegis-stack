@@ -9,12 +9,18 @@ from pathlib import Path
 
 import typer
 
-from ..constants import AnswerKeys, ComponentNames, StorageBackends
+from ..constants import AIFrameworks, AnswerKeys, ComponentNames, StorageBackends
 from ..core.components import COMPONENTS, CORE_COMPONENTS, ComponentSpec, ComponentType
 from ..core.services import SERVICES, ServiceType, get_services_by_type
 
 # Global variable to store AI provider selections for template generation
 _ai_provider_selection: dict[str, list[str]] = {}
+
+# Global variable to store AI framework selection for template generation
+_ai_framework_selection: dict[str, str] = {}
+
+# Global variable to store AI backend selection for template generation
+_ai_backend_selection: dict[str, str] = {}
 
 
 def get_interactive_infrastructure_components() -> list[ComponentSpec]:
@@ -218,6 +224,28 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
                 prompt = f"  Add {service_spec.description.lower()}?"
                 if typer.confirm(prompt):
                     # AI service requires backend (always available) - no dependency issues
+
+                    # Framework selection
+                    typer.echo("\nAI Framework Selection:")
+                    typer.echo("  Choose your AI framework:")
+                    typer.echo(
+                        "    1. PydanticAI - Type-safe, Pythonic AI framework (default)"
+                    )
+                    typer.echo(
+                        "    2. LangChain - Popular framework with extensive integrations"
+                    )
+
+                    use_langchain = typer.confirm(
+                        "  Use LangChain instead of PydanticAI?", default=False
+                    )
+                    framework = (
+                        AIFrameworks.LANGCHAIN
+                        if use_langchain
+                        else AIFrameworks.PYDANTIC_AI
+                    )
+                    _ai_framework_selection[service_name] = framework
+                    typer.secho(f"  Selected framework: {framework}", fg="green")
+
                     typer.echo("\nAI Provider Selection:")
                     typer.echo(
                         "  Choose AI providers to include (multiple selection supported)"
@@ -294,10 +322,82 @@ def get_ai_provider_selection(service_name: str = "ai") -> list[str]:
     return _ai_provider_selection.get(service_name, ["openai"])
 
 
+def get_ai_framework_selection(service_name: str = "ai") -> str:
+    """
+    Get AI framework selection from interactive session.
+
+    Args:
+        service_name: Name of the AI service (defaults to "ai")
+
+    Returns:
+        Selected framework name, or default (pydantic-ai) if none selected
+    """
+    return _ai_framework_selection.get(service_name, AIFrameworks.PYDANTIC_AI)
+
+
 def clear_ai_provider_selection() -> None:
     """Clear stored AI provider selection (useful for testing)."""
     global _ai_provider_selection
     _ai_provider_selection.clear()
+
+
+def clear_ai_framework_selection() -> None:
+    """Clear stored AI framework selection (useful for testing)."""
+    global _ai_framework_selection
+    _ai_framework_selection.clear()
+
+
+def get_ai_backend_selection(service_name: str = "ai") -> str:
+    """
+    Get AI backend selection from interactive session or CLI.
+
+    Args:
+        service_name: Name of the AI service (defaults to "ai")
+
+    Returns:
+        Selected backend name, or default (memory) if none selected
+    """
+    return _ai_backend_selection.get(service_name, StorageBackends.MEMORY)
+
+
+def clear_ai_backend_selection() -> None:
+    """Clear stored AI backend selection (useful for testing)."""
+    global _ai_backend_selection
+    _ai_backend_selection.clear()
+
+
+def set_ai_service_config(
+    service_name: str = "ai",
+    framework: str | None = None,
+    backend: str | None = None,
+    providers: list[str] | None = None,
+) -> None:
+    """
+    Set AI service configuration from CLI arguments or bracket syntax.
+
+    This allows non-interactive mode to set AI config parsed from ai[...] syntax.
+
+    Args:
+        service_name: Name of the AI service (defaults to "ai")
+        framework: AI framework (pydantic-ai or langchain)
+        backend: Storage backend (memory or sqlite)
+        providers: List of AI providers
+    """
+    global _ai_framework_selection, _ai_backend_selection, _ai_provider_selection
+
+    if framework is not None:
+        _ai_framework_selection[service_name] = framework
+    if backend is not None:
+        _ai_backend_selection[service_name] = backend
+    if providers is not None:
+        _ai_provider_selection[service_name] = providers
+
+
+def clear_all_ai_selections() -> None:
+    """Clear all AI selections (useful for testing)."""
+    clear_ai_provider_selection()
+    clear_ai_framework_selection()
+    clear_ai_backend_selection()
 
 
 def interactive_component_add_selection(project_path: Path) -> tuple[list[str], str]:

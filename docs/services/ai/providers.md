@@ -53,7 +53,7 @@ COHERE_API_KEY=...                 # Cohere API key
 
     ```bash
     # Already configured by default - just start chatting
-    my-app ai chat send "Hello! Can you help me?"
+    my-app ai chat "Hello! Can you help me?"
     ```
 
     **Best for:** Instant testing, demos, getting started without any setup
@@ -200,10 +200,10 @@ make serve
 
 ```bash
 # Verify new provider is active
-my-app ai config show
+my-app ai status
 
 # Test with a message
-my-app ai chat send "Hello from the new provider!"
+my-app ai chat "Hello from the new provider!"
 ```
 
 ## Troubleshooting
@@ -225,13 +225,13 @@ GROQ_API_KEY=your-actual-key-here
 **Check configuration:**
 
 ```bash
-my-app ai config validate
+my-app ai status
 ```
 
 **Verify provider is installed:**
 
 ```bash
-my-app ai providers list
+my-app ai providers
 ```
 
 ---

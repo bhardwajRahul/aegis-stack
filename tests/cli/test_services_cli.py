@@ -283,17 +283,16 @@ class TestServicesValidation:
         result = validate_and_resolve_services(mock_ctx, mock_param, None)
         assert result is None
 
-    def test_service_validation_callback_with_empty_string(self):
-        """Test service validation callback with empty string."""
-        import typer
-
+    def test_service_validation_callback_with_trailing_comma(self):
+        """Test service validation callback with trailing comma is lenient."""
         from aegis.cli.callbacks import validate_and_resolve_services
 
         mock_ctx = mock.MagicMock()
         mock_param = mock.MagicMock()
 
-        with pytest.raises(typer.Exit):
-            validate_and_resolve_services(mock_ctx, mock_param, "auth,")
+        # Trailing comma should be handled gracefully - no error, just returns valid services
+        result = validate_and_resolve_services(mock_ctx, mock_param, "auth,")
+        assert result == ["auth"]
 
 
 class TestServicesIntegrationWithExistingFeatures:
@@ -364,7 +363,7 @@ class TestServicesErrorHandling:
     """Test error handling for services functionality."""
 
     def test_malformed_service_list(self):
-        """Test handling of malformed service lists."""
+        """Test handling of malformed service lists with unknown services."""
         result = run_aegis_command(
             "init",
             "test-malformed",
@@ -374,8 +373,10 @@ class TestServicesErrorHandling:
             "--yes",
         )
 
+        # Empty entries between commas are now handled gracefully (ignored)
+        # The error should be for the unknown "invalid" service
         assert result.returncode != 0
-        assert "Empty service name is not allowed" in result.stderr
+        assert "Unknown services: invalid" in result.stderr
 
     def test_service_with_whitespace(self):
         """Test service names with whitespace."""
@@ -696,3 +697,114 @@ class TestAuthServiceMigrationIntegration:
             assert "sqlmodel" in deps_section
             assert "sqlalchemy" in deps_section
             assert "aiosqlite" in deps_section
+
+
+class TestAIServiceDependencyValidation:
+    """Tests for AI service dependency display with bracket syntax."""
+
+    def test_ai_service_langchain_deps_shown_in_cli(self) -> None:
+        """Test that LangChain dependencies appear in CLI output with ai[langchain]."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = run_aegis_command(
+                "init",
+                "test-ai-langchain",
+                "--services",
+                "ai[langchain]",
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                temp_dir,
+            )
+
+            assert result.returncode == 0
+            output = result.stdout
+
+            # Should show AI framework info
+            assert "AI service: framework=langchain" in output
+
+            # Should show Python dependencies
+            deps_section = output.split("Dependencies to be installed:")[1].split(
+                "\n\n"
+            )[0]
+
+            # LangChain-specific dependencies
+            assert "langchain-core" in deps_section
+            assert "langchain-openai" in deps_section
+
+    def test_ai_service_pydantic_ai_deps_shown_in_cli(self) -> None:
+        """Test that PydanticAI dependencies appear in CLI output with bare ai service."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = run_aegis_command(
+                "init",
+                "test-ai-pydantic",
+                "--services",
+                "ai",
+                "--no-interactive",
+                "--yes",
+                "--output-dir",
+                temp_dir,
+            )
+
+            assert result.returncode == 0
+            output = result.stdout
+
+            # Should show AI framework info (default is pydantic-ai)
+            assert "AI service: framework=pydantic-ai" in output
+
+            # Should show Python dependencies
+            deps_section = output.split("Dependencies to be installed:")[1].split(
+                "\n\n"
+            )[0]
+
+            # PydanticAI-specific dependencies
+            assert "pydantic-ai-slim" in deps_section
+
+
+class TestSplitServiceList:
+    """Test the _split_service_list function for parsing bracket syntax."""
+
+    def test_mismatched_closing_bracket_handles_gracefully(self) -> None:
+        """
+        Test that unmatched closing brackets don't cause negative bracket_depth.
+
+        This is a defensive coding test for the edge case where input like
+        "ai],auth" has an unmatched ']' character. The function should handle
+        this gracefully without going to negative bracket_depth.
+        """
+        from aegis.cli.callbacks import _split_service_list
+
+        # Mismatched closing bracket at the start - should not crash
+        result = _split_service_list("ai],auth")
+        # The ']' is treated as a literal character since we're not inside brackets
+        # Result should split on the comma: ["ai]", "auth"]
+        assert result == ["ai]", "auth"]
+
+    def test_normal_bracket_syntax_still_works(self) -> None:
+        """Test that normal bracket syntax is not affected by the fix."""
+        from aegis.cli.callbacks import _split_service_list
+
+        # Normal case: brackets contain options, comma inside preserved
+        result = _split_service_list("ai[langchain, sqlite],auth")
+        assert result == ["ai[langchain, sqlite]", "auth"]
+
+    def test_multiple_bracketed_services(self) -> None:
+        """Test multiple services with bracket options."""
+        from aegis.cli.callbacks import _split_service_list
+
+        result = _split_service_list("ai[langchain],scheduler[sqlite]")
+        assert result == ["ai[langchain]", "scheduler[sqlite]"]
+
+    def test_empty_brackets(self) -> None:
+        """Test services with empty brackets."""
+        from aegis.cli.callbacks import _split_service_list
+
+        result = _split_service_list("ai[],auth")
+        assert result == ["ai[]", "auth"]
+
+    def test_nested_brackets_edge_case(self) -> None:
+        """Test that multiple bracket levels are handled correctly."""
+        from aegis.cli.callbacks import _split_service_list
+
+        # Nested brackets (unusual but possible)
+        result = _split_service_list("ai[[test]],auth")
+        assert result == ["ai[[test]]", "auth"]

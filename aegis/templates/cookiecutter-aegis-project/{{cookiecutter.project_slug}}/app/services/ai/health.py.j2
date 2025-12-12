@@ -44,7 +44,7 @@ async def check_ai_service_health() -> ComponentStatus:
         # Collect comprehensive metadata
         metadata = {
             "service_type": "ai",
-            "engine": "pydantic-ai",
+            "engine": "{{ cookiecutter.ai_framework }}",
             "enabled": service_status["enabled"],
             "provider": service_status["provider"],
             "model": service_status["model"],
@@ -70,7 +70,11 @@ async def check_ai_service_health() -> ComponentStatus:
         # Add dependency status
         metadata["dependencies"] = {
             "backend": "required",
+{% if cookiecutter.ai_framework == "pydantic-ai" %}
             "pydantic_ai": "required",
+{% else %}
+            "langchain": "required",
+{% endif %}
 {% if cookiecutter.ai_backend != "memory" %}
             "database": "required",
 {% endif %}
@@ -107,7 +111,7 @@ async def check_ai_service_health() -> ComponentStatus:
             response_time_ms=None,
             metadata={
                 "service_type": "ai",
-                "engine": "pydantic-ai",
+                "engine": "{{ cookiecutter.ai_framework }}",
                 "error": str(e),
                 "error_type": "health_check_failure",
             },

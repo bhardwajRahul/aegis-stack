@@ -1,25 +1,24 @@
 """
-AI provider factory for creating PydanticAI agents.
+AI provider factory for creating AI model instances.
 
-Simple factory that maps providers to PydanticAI model classes and creates
-Agent instances. Supports PydanticAI 1.0+ API with demo mode for immediate testing.
+{% if ai_framework == "pydantic-ai" %}
+Uses PydanticAI agents with support for multiple providers.
+{% else %}
+Uses LangChain chat models with support for multiple providers.
+{% endif %}
 """
+{% if ai_framework == "pydantic-ai" %}
 
 import json
 import os
 from typing import Any
 
 import httpx
-from openai import AsyncOpenAI
 from pydantic_ai import Agent
-
-# Import only what's needed for PUBLIC provider by default
-# Other providers imported dynamically when needed
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 
-# Removed TestModel - that's for unit tests, not user demos
 from app.core.log import logger
 
 from .config import AIServiceConfig
@@ -122,7 +121,6 @@ def get_agent(config: AIServiceConfig, settings: Any) -> Agent:
             ),
         )
 
-        # logger.info(f"Created {config.provider} agent with model {config.model}")
         return agent
 
     except Exception as e:
@@ -136,27 +134,16 @@ def _create_public_agent(config: AIServiceConfig) -> Agent:
     Create agent for PUBLIC provider using free public endpoints.
 
     Uses LLM7.io service which provides free access through an OpenAI-compatible API.
-    Note: The service accepts model names for compatibility but routes to their
-    available models (actual model used may differ from requested).
-
-    Args:
-        config: AI service configuration
-
-    Returns:
-        Agent: Configured PydanticAI Agent for public endpoint
-
-    Raises:
-        ProviderError: If agent creation fails
     """
+    # Lazy import - only needed for PUBLIC provider
+    from openai import AsyncOpenAI
+
     try:
         # Create a custom HTTP client that fixes LLM7.io response format
         class FixedLLM7Client(httpx.AsyncClient):
             """Custom HTTP client that adds missing index field to LLM7.io responses."""
 
             async def send(self, request, **kwargs):
-                # logger.info(
-                #     f"FixedLLM7Client.send: {request.method} {request.url}"
-                # )
                 response = await super().send(request, **kwargs)
 
                 # If this is a chat completions request, fix the response
@@ -164,10 +151,6 @@ def _create_public_agent(config: AIServiceConfig) -> Agent:
                     "/chat/completions" in str(request.url)
                     and request.method.upper() == "POST"
                 ):
-                    # logger.debug(
-                    #     "Detected chat completions request, attempting to "
-                    #     "fix response"
-                    # )
                     try:
                         # Check if this is a streaming response first
                         content_type = response.headers.get("content-type", "")
@@ -176,64 +159,48 @@ def _create_public_agent(config: AIServiceConfig) -> Agent:
                             or "text/event-stream" in content_type
                             or "application/x-ndjson" in content_type
                         ):
-                            # logger.debug("Skipping fix for streaming response")
                             return response
 
                         # Only process non-streaming JSON responses
                         if not response.headers.get("content-type", "").startswith(
                             "application/json"
                         ):
-                            # logger.debug("Skipping fix for non-JSON response")
                             return response
 
-                        # Get response text, letting httpx handle encoding/decompression
+                        # Get response text
                         response_text = response.text
                         data = json.loads(response_text)
-
-                        # logger.debug(f"Original response data: {data}")
 
                         # Add missing index field to choices
                         if "choices" in data and isinstance(data["choices"], list):
                             for i, choice in enumerate(data["choices"]):
                                 if "index" not in choice or choice["index"] is None:
-                                    choice["index"] = i  # Always set index
-                                    # logger.debug(f"Added index {i} to choice")
+                                    choice["index"] = i
 
                         # Monkey patch the response to return fixed content
                         fixed_content = json.dumps(data)
                         response._content = fixed_content.encode()
                         response._text = fixed_content
 
-                        # logger.debug(
-                        #     f"Fixed LLM7.io response: added index fields "
-                        #     f"to {len(data.get('choices', []))} choices"
-                        # )
-
                     except Exception as e:
                         logger.warning(f"Failed to fix LLM7.io response: {e}")
-                        # If fixing fails, return original response
 
                 return response
 
         # Create custom HTTP client
         custom_http_client = FixedLLM7Client()
-        # logger.debug(f"Created custom HTTP client: {type(custom_http_client)}")
 
-        # Create the AsyncOpenAI client directly to ensure
-        # our custom HTTP client is used
+        # Create the AsyncOpenAI client directly
         openai_client = AsyncOpenAI(
-            api_key="unused",  # LLM7.io doesn't need a real key
-            base_url="https://api.llm7.io/v1",  # Public endpoint
+            api_key="unused",
+            base_url="https://api.llm7.io/v1",
             http_client=custom_http_client,
         )
-        # logger.debug("Created OpenAI client with custom HTTP client")
 
         # Create provider using the custom openai_client
         provider = OpenAIProvider(openai_client=openai_client)
-        # logger.debug(f"Created provider with custom OpenAI client: {provider}")
 
         # Create OpenAI model using the provider
-        # Note: LLM7.io accepts various model names but routes to their available models
         model_name = (
             config.model if config.model and config.model != "auto" else "gpt-4o-mini"
         )
@@ -254,18 +221,15 @@ def _create_public_agent(config: AIServiceConfig) -> Agent:
             ),
         )
 
-        # logger.info(f"Created PUBLIC agent with model {config.model} via LLM7.io")
         return agent
 
     except Exception as e:
-        # Fallback with helpful instructions if public endpoint fails
         error_msg = (
             f"Public endpoint failed ({e}). Here are reliable free alternatives:\n\n"
             "RECOMMENDED - Groq (Fastest, Most Generous Free Tier):\n"
             "   1. Visit: https://console.groq.com/keys\n"
             "   2. Get API key: export GROQ_API_KEY=your_key_here\n"
-            "   3. Switch: {{ project_slug }} ai config "
-            "set-provider groq\n\n"
+            "   3. Switch: {{ project_slug }} ai config set-provider groq\n\n"
             "Google AI Studio (Also Free):\n"
             "   1. Visit: https://aistudio.google.com/app/apikey\n"
             "   2. Get API key: export GOOGLE_API_KEY=your_key_here\n"
@@ -284,24 +248,18 @@ def _get_env_var_name(provider: AIProvider) -> str:
         AIProvider.GROQ: "GROQ_API_KEY",
         AIProvider.MISTRAL: "MISTRAL_API_KEY",
         AIProvider.COHERE: "COHERE_API_KEY",
-        AIProvider.PUBLIC: "PUBLIC_API_KEY",  # Not actually needed
+        AIProvider.PUBLIC: "PUBLIC_API_KEY",
     }
-
-    # Debug logging
-    # logger.debug(
-    #     f"Looking up env var for provider: {provider} (type: {type(provider)})"
-    # )
 
     result = env_var_map.get(provider)
     if result:
         return result
     else:
-        # Safe fallback without calling .value in case of type issues
         return f"{str(provider).upper()}_API_KEY"
 
 
 def _set_provider_env_var(provider: AIProvider, api_key: str) -> None:
-    """Set environment variable for provider API key (PydanticAI 1.0+ expects this)."""
+    """Set environment variable for provider API key."""
     env_var_map = {
         AIProvider.OPENAI: "OPENAI_API_KEY",
         AIProvider.ANTHROPIC: "ANTHROPIC_API_KEY",
@@ -309,25 +267,16 @@ def _set_provider_env_var(provider: AIProvider, api_key: str) -> None:
         AIProvider.GROQ: "GROQ_API_KEY",
         AIProvider.MISTRAL: "MISTRAL_API_KEY",
         AIProvider.COHERE: "COHERE_API_KEY",
-        AIProvider.PUBLIC: "PUBLIC_API_KEY",  # Not actually needed
+        AIProvider.PUBLIC: "PUBLIC_API_KEY",
     }
 
     env_var = env_var_map.get(provider)
     if env_var and api_key:
         os.environ[env_var] = api_key
-        # logger.debug(f"Set {env_var} environment variable")
 
 
 def validate_provider_support(provider: AIProvider) -> bool:
-    """
-    Check if a provider is supported.
-
-    Args:
-        provider: The provider to check
-
-    Returns:
-        bool: True if provider is supported
-    """
+    """Check if a provider is supported."""
     try:
         _get_model_class(provider)
         return True
@@ -336,13 +285,7 @@ def validate_provider_support(provider: AIProvider) -> bool:
 
 
 def get_supported_providers() -> list[AIProvider]:
-    """
-    Get list of supported providers.
-
-    Returns:
-        list[AIProvider]: List of supported providers
-    """
-    # Return all providers that are defined in the enum
+    """Get list of supported providers."""
     return [
         AIProvider.OPENAI,
         AIProvider.ANTHROPIC,
@@ -355,16 +298,240 @@ def get_supported_providers() -> list[AIProvider]:
 
 
 def get_provider_model_class(provider: AIProvider):
+    """Get the PydanticAI model class for a provider."""
+    return _get_model_class(provider)
+
+{% else %}
+# LangChain implementation
+
+from typing import Any
+
+from app.core.log import logger
+
+from .config import AIServiceConfig
+from .models import AIProvider
+
+
+# System prompt used for all conversations
+SYSTEM_PROMPT = (
+    "You are a helpful AI assistant. Provide clear, accurate, "
+    "and concise responses. Be friendly and professional."
+)
+
+
+class ProviderError(Exception):
+    """Exception raised when provider setup fails."""
+
+    pass
+
+
+def get_llm(config: AIServiceConfig, settings: Any):
     """
-    Get the PydanticAI model class for a provider.
+    Create a LangChain chat model for the configured provider.
 
     Args:
-        provider: The AI provider
+        config: AI service configuration
+        settings: Application settings for API keys
 
     Returns:
-        Model class for the provider
+        BaseChatModel: Configured LangChain chat model
 
     Raises:
-        ProviderError: If provider is not supported
+        ProviderError: If model creation fails
     """
-    return _get_model_class(provider)
+    try:
+        provider = config.provider
+
+        if provider == AIProvider.OPENAI:
+            return _create_openai_llm(config, settings)
+        elif provider == AIProvider.ANTHROPIC:
+            return _create_anthropic_llm(config, settings)
+        elif provider == AIProvider.GOOGLE:
+            return _create_google_llm(config, settings)
+        elif provider == AIProvider.GROQ:
+            return _create_groq_llm(config, settings)
+        elif provider == AIProvider.MISTRAL:
+            return _create_mistral_llm(config, settings)
+        elif provider == AIProvider.COHERE:
+            return _create_cohere_llm(config, settings)
+        elif provider == AIProvider.PUBLIC:
+            return _create_public_llm(config)
+        else:
+            raise ProviderError(f"Unsupported provider: {provider}")
+
+    except ImportError as e:
+        error_msg = f"Missing LangChain package for {config.provider}: {e}"
+        logger.error(error_msg)
+        raise ProviderError(error_msg) from e
+    except Exception as e:
+        error_msg = f"Failed to create LLM for {config.provider}: {e}"
+        logger.error(error_msg)
+        raise ProviderError(error_msg) from e
+
+
+def _create_openai_llm(config: AIServiceConfig, settings: Any):
+    """Create OpenAI chat model."""
+    from langchain_openai import ChatOpenAI
+
+    api_key = getattr(settings, "OPENAI_API_KEY", None)
+    if not api_key:
+        raise ProviderError(
+            "No API key configured for OpenAI. "
+            "Set OPENAI_API_KEY environment variable."
+        )
+
+    return ChatOpenAI(
+        model=config.model or "gpt-4o-mini",
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        api_key=api_key,
+        timeout=config.timeout_seconds,
+    )
+
+
+def _create_anthropic_llm(config: AIServiceConfig, settings: Any):
+    """Create Anthropic chat model."""
+    from langchain_anthropic import ChatAnthropic
+
+    api_key = getattr(settings, "ANTHROPIC_API_KEY", None)
+    if not api_key:
+        raise ProviderError(
+            "No API key configured for Anthropic. "
+            "Set ANTHROPIC_API_KEY environment variable."
+        )
+
+    return ChatAnthropic(
+        model=config.model or "claude-3-5-sonnet-20241022",
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        api_key=api_key,
+        timeout=config.timeout_seconds,
+    )
+
+
+def _create_google_llm(config: AIServiceConfig, settings: Any):
+    """Create Google Generative AI chat model."""
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    api_key = getattr(settings, "GOOGLE_API_KEY", None)
+    if not api_key:
+        raise ProviderError(
+            "No API key configured for Google. "
+            "Set GOOGLE_API_KEY environment variable. "
+            "Get a free key at: https://aistudio.google.com/app/apikey"
+        )
+
+    return ChatGoogleGenerativeAI(
+        model=config.model or "gemini-1.5-flash",
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        google_api_key=api_key,
+        timeout=config.timeout_seconds,
+    )
+
+
+def _create_groq_llm(config: AIServiceConfig, settings: Any):
+    """Create Groq chat model."""
+    from langchain_groq import ChatGroq
+
+    api_key = getattr(settings, "GROQ_API_KEY", None)
+    if not api_key:
+        raise ProviderError(
+            "No API key configured for Groq. "
+            "Set GROQ_API_KEY environment variable. "
+            "Get a free key at: https://console.groq.com/keys"
+        )
+
+    return ChatGroq(
+        model=config.model or "llama-3.1-70b-versatile",
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        api_key=api_key,
+        timeout=config.timeout_seconds,
+    )
+
+
+def _create_mistral_llm(config: AIServiceConfig, settings: Any):
+    """Create Mistral chat model."""
+    from langchain_mistralai import ChatMistralAI
+
+    api_key = getattr(settings, "MISTRAL_API_KEY", None)
+    if not api_key:
+        raise ProviderError(
+            "No API key configured for Mistral. "
+            "Set MISTRAL_API_KEY environment variable."
+        )
+
+    return ChatMistralAI(
+        model=config.model or "mistral-large-latest",
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        api_key=api_key,
+        timeout=config.timeout_seconds,
+    )
+
+
+def _create_cohere_llm(config: AIServiceConfig, settings: Any):
+    """Create Cohere chat model."""
+    from langchain_cohere import ChatCohere
+
+    api_key = getattr(settings, "COHERE_API_KEY", None)
+    if not api_key:
+        raise ProviderError(
+            "No API key configured for Cohere. "
+            "Set COHERE_API_KEY environment variable."
+        )
+
+    return ChatCohere(
+        model=config.model or "command-r-plus",
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        cohere_api_key=api_key,
+        timeout=config.timeout_seconds,
+    )
+
+
+def _create_public_llm(config: AIServiceConfig):
+    """Create LLM using free public endpoint (LLM7.io)."""
+    from langchain_openai import ChatOpenAI
+
+    model_name = (
+        config.model if config.model and config.model != "auto" else "gpt-4o-mini"
+    )
+
+    return ChatOpenAI(
+        model=model_name,
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        api_key="unused",
+        base_url="https://api.llm7.io/v1",
+        timeout=config.timeout_seconds,
+    )
+
+
+def validate_provider_support(provider: AIProvider) -> bool:
+    """Check if a provider is supported."""
+    supported = [
+        AIProvider.OPENAI,
+        AIProvider.ANTHROPIC,
+        AIProvider.GOOGLE,
+        AIProvider.GROQ,
+        AIProvider.MISTRAL,
+        AIProvider.COHERE,
+        AIProvider.PUBLIC,
+    ]
+    return provider in supported
+
+
+def get_supported_providers() -> list[AIProvider]:
+    """Get list of supported providers."""
+    return [
+        AIProvider.OPENAI,
+        AIProvider.ANTHROPIC,
+        AIProvider.GOOGLE,
+        AIProvider.GROQ,
+        AIProvider.MISTRAL,
+        AIProvider.COHERE,
+        AIProvider.PUBLIC,
+    ]
+{% endif %}

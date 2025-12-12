@@ -29,7 +29,7 @@ class TestAIHealthCheck:
         assert "service_type" in status.metadata
         assert status.metadata["service_type"] == "ai"
         assert "engine" in status.metadata
-        assert status.metadata["engine"] == "pydantic-ai"
+        assert status.metadata["engine"] == "{{ ai_framework }}"
         assert "enabled" in status.metadata
         assert "provider" in status.metadata
         assert "model" in status.metadata
@@ -93,7 +93,11 @@ class TestAIHealthCheck:
         dependencies = status.metadata["dependencies"]
 
         assert "backend" in dependencies
+{% if ai_framework == "pydantic-ai" %}
         assert "pydantic_ai" in dependencies
+{% else %}
+        assert "langchain" in dependencies
+{% endif %}
 
     @pytest.mark.asyncio
     async def test_health_check_validation_errors(self) -> None:

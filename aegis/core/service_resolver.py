@@ -6,7 +6,8 @@ to their required components and validating service-to-component compatibility.
 """
 
 from ..constants import AnswerKeys, ComponentNames, StorageBackends
-from .component_utils import extract_base_component_name, extract_engine_info
+from .ai_service_parser import is_ai_service_with_options, parse_ai_service_config
+from .component_utils import extract_base_service_name
 from .dependency_resolver import DependencyResolver
 from .services import SERVICES, get_service_dependencies
 
@@ -42,16 +43,20 @@ class ServiceResolver:
         service_required_components: set[str] = set()
         for service in selected_services:
             # Extract base service name (strip bracket info)
-            base_service = extract_base_component_name(service)
+            base_service = extract_base_service_name(service)
             service_deps = get_service_dependencies(base_service)
             service_required_components.update(service_deps)
 
-            # Handle AI service with persistence backend
-            if base_service == AnswerKeys.SERVICE_AI:
-                backend = extract_engine_info(service)
-                if backend and backend != StorageBackends.MEMORY:
+            # Handle AI service with persistence backend (from bracket syntax)
+            if base_service == AnswerKeys.SERVICE_AI and is_ai_service_with_options(
+                service
+            ):
+                ai_config = parse_ai_service_config(service)
+                if ai_config.backend != StorageBackends.MEMORY:
                     # Auto-add database component for AI persistence
-                    database_component = f"{ComponentNames.DATABASE}[{backend}]"
+                    database_component = (
+                        f"{ComponentNames.DATABASE}[{ai_config.backend}]"
+                    )
                     service_required_components.add(database_component)
 
         # Convert to list and resolve component-to-component dependencies
@@ -71,7 +76,7 @@ class ServiceResolver:
 
         Args:
             services: List of service names to validate
-                     (may include bracket syntax like ai[sqlite])
+                     (may include bracket syntax like ai[langchain, sqlite, openai])
 
         Returns:
             List of error messages (empty if valid)
@@ -79,23 +84,28 @@ class ServiceResolver:
         errors = []
 
         # Extract base names for all services (strip bracket info)
-        base_services = [extract_base_component_name(s) for s in services]
+        base_services = [extract_base_service_name(s) for s in services]
 
         for service in services:
-            base_service = extract_base_component_name(service)
+            base_service = extract_base_service_name(service)
             if base_service not in SERVICES:
                 errors.append(f"Unknown service: {base_service}")
                 continue
 
-            # Validate backend option if provided
-            backend = extract_engine_info(service)
-            if backend and base_service == AnswerKeys.SERVICE_AI:
-                valid_backends = [StorageBackends.MEMORY, StorageBackends.SQLITE]
-                if backend not in valid_backends:
-                    errors.append(
-                        f"Invalid backend '{backend}' for AI service. "
-                        f"Valid options: {', '.join(valid_backends)}"
-                    )
+            # Validate AI service bracket syntax if provided
+            if base_service == AnswerKeys.SERVICE_AI and is_ai_service_with_options(
+                service
+            ):
+                try:
+                    ai_config = parse_ai_service_config(service)
+                    valid_backends = [StorageBackends.MEMORY, StorageBackends.SQLITE]
+                    if ai_config.backend not in valid_backends:
+                        errors.append(
+                            f"Invalid backend '{ai_config.backend}' for AI service. "
+                            f"Valid options: {', '.join(valid_backends)}"
+                        )
+                except ValueError as e:
+                    errors.append(f"Invalid AI service syntax: {e}")
 
             spec = SERVICES[base_service]
 
@@ -110,7 +120,7 @@ class ServiceResolver:
 
         # Check for service-to-service dependencies
         for service in services:
-            base_service = extract_base_component_name(service)
+            base_service = extract_base_service_name(service)
             if base_service not in SERVICES:
                 continue  # Already reported above
 

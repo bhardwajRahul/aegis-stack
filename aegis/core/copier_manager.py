@@ -92,6 +92,9 @@ def generate_with_copier(
         AnswerKeys.AUTH: cookiecutter_context.get(AnswerKeys.AUTH, "no") == "yes",
         AnswerKeys.AI: cookiecutter_context.get(AnswerKeys.AI, "no") == "yes",
         AnswerKeys.COMMS: cookiecutter_context.get(AnswerKeys.COMMS, "no") == "yes",
+        AnswerKeys.AI_FRAMEWORK: cookiecutter_context.get(
+            AnswerKeys.AI_FRAMEWORK, "pydantic-ai"
+        ),
         AnswerKeys.AI_PROVIDERS: cookiecutter_context.get(
             AnswerKeys.AI_PROVIDERS, "openai"
         ),

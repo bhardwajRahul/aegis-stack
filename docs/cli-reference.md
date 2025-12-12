@@ -329,8 +329,9 @@ AI_PROVIDER=public  # Options: public, openai, anthropic, google, groq, mistral,
 
 Test the AI service:
 ```bash
+my-project ai status               # Check configuration
 my-project ai chat                 # Start interactive chat
-my-project ai providers list       # See all available providers
+my-project ai providers            # See all available providers
 ```
 
 **Important Notes:**
@@ -531,10 +532,12 @@ my-app auth list-users         # List all users
 Multi-provider AI chat interface with conversation management:
 
 ```bash
+my-app ai status               # Show configuration and validation
+my-app ai providers            # List all 7 AI providers
+my-app ai chat "Hello"         # Send single message
 my-app ai chat                 # Interactive chat session
-my-app ai chat send "Hello"    # Send single message
-my-app ai config show          # View AI configuration
-my-app ai providers list       # List all 7 AI providers
+my-app ai conversations        # List user conversations
+my-app ai history <id>         # View conversation history
 ```
 
 **→ [Complete AI CLI Reference](services/ai/cli.md)**

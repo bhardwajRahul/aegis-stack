@@ -65,11 +65,10 @@ SERVICES: dict[str, ServiceSpec] = {
     "ai": ServiceSpec(
         name="ai",
         type=ServiceType.AI,
-        description="AI chatbot service with PydanticAI engine",
+        description="AI chatbot service with multi-framework support",
         required_components=["backend"],
         pyproject_deps=[
-            "pydantic-ai-slim[{AI_PROVIDERS}]==1.0.10",  # Dynamic providers
-            "httpx>=0.27.0",  # For API providers
+            "{AI_FRAMEWORK_DEPS}",  # Dynamic framework + provider deps
         ],
         template_files=[
             "app/services/ai/",

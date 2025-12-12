@@ -56,6 +56,7 @@ def process_j2_templates():
             "include_ai": "{{ cookiecutter.include_ai }}",
             "include_comms": "{{ cookiecutter.include_comms }}",
             "worker_backend": "{{ cookiecutter.worker_backend }}",
+            "ai_framework": "{{ cookiecutter.ai_framework }}",
             "ai_backend": "{{ cookiecutter.ai_backend }}",
         }
     }

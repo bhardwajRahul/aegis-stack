@@ -50,342 +50,82 @@ def suppress_logs(level: int = logging.ERROR):
         root_logger.setLevel(original_level)
 
 
-
-# Configuration command group
-config_app = typer.Typer(help="AI service configuration commands")
-app.add_typer(config_app, name="config")
-
-# Provider command group
-providers_app = typer.Typer(help="AI provider management commands")
-app.add_typer(providers_app, name="providers")
-
-
 @app.command()
-def version() -> None:
-    """Show AI service version and configuration."""
+def status() -> None:
+    """Show AI service status, configuration, and validation."""
     ai_config = get_ai_config(settings)
 
-    typer.secho("AI Service Configuration System", fg=typer.colors.BLUE, bold=True)
-    typer.echo(typer.style("Engine: ", fg=typer.colors.CYAN) + "PydanticAI")
+    typer.secho("AI Service Status", fg=typer.colors.BLUE, bold=True)
+    typer.secho("=" * 40, dim=True)
+
+    # Basic info
+    typer.echo(
+        typer.style("Engine: ", fg=typer.colors.CYAN) + "{{ ai_framework }}"
+    )
     status_color = typer.colors.GREEN if ai_config.enabled else typer.colors.RED
     status_text = "Enabled" if ai_config.enabled else "Disabled"
     typer.echo(
         typer.style("Status: ", fg=typer.colors.CYAN)
         + typer.style(status_text, fg=status_color)
     )
-    typer.echo(typer.style("Provider: ", fg=typer.colors.CYAN) + str(ai_config.provider))
+    typer.echo(
+        typer.style("Provider: ", fg=typer.colors.CYAN) + ai_config.provider.value
+    )
     typer.echo(typer.style("Model: ", fg=typer.colors.CYAN) + str(ai_config.model))
-    typer.echo("")
-    typer.secho("Available commands:", bold=True)
     typer.echo(
-        "  " + typer.style("ai chat \"message\"", fg=typer.colors.GREEN)
-        + "       - Send a chat message"
-    )
-    typer.echo(
-        "  " + typer.style("ai config show", fg=typer.colors.GREEN)
-        + "         - Show detailed configuration"
-    )
-    typer.echo(
-        "  " + typer.style("ai config validate", fg=typer.colors.GREEN)
-        + "     - Validate current configuration"
-    )
-    typer.echo(
-        "  " + typer.style("ai providers list", fg=typer.colors.GREEN)
-        + "      - List available providers"
-    )
-
-
-# Chat command group
-chat_app = typer.Typer(help="AI chat commands")
-app.add_typer(chat_app, name="chat")
-
-
-@chat_app.callback(invoke_without_command=True)
-def chat_main(
-    ctx: typer.Context,
-    message: str | None = typer.Option(
-        None, "--message", "-m", help="Send single message"
-    ),
-    stream: bool = typer.Option(
-        True, "--stream/--no-stream", help="Enable streaming output"
-    ),
-    conversation_id: str | None = typer.Option(
-        None, "--conversation-id", "-c", help="Conversation ID"
-    ),
-) -> None:
-    """Start interactive chat session or send single message."""
-    # If a subcommand was invoked, don't run the chat logic
-    if ctx.invoked_subcommand is not None:
-        return
-
-    import asyncio
-
-    from app.services.ai.service import AIService
-
-    async def run_chat() -> None:
-        try:
-            with suppress_logs():
-                ai_service = AIService(settings)
-                if message:
-                    # Single message mode
-                    await _single_message(ai_service, message, conversation_id, stream)
-                else:
-                    # Interactive session mode
-                    await _interactive_chat_session(ai_service, conversation_id)
-        except KeyboardInterrupt:
-            typer.echo("\nWarning: Chat interrupted by user", err=True)
-            raise typer.Exit(1)
-        except Exception as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(1)
-
-    asyncio.run(run_chat())
-
-
-@chat_app.command("send")
-def chat_send(
-    message: str = typer.Argument(..., help="Message to send to AI"),
-    stream: bool = typer.Option(
-        True, "--stream/--no-stream", help="Enable streaming output"
-    ),
-    conversation_id: str | None = typer.Option(
-        None, "--conversation-id", "-c", help="Conversation ID"
-    ),
-    user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
-    verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Show conversation metadata"
-    ),
-) -> None:
-    """Send a chat message and get AI response."""
-    import asyncio
-
-    from app.services.ai.service import AIService
-
-    async def send_message() -> None:
-        try:
-            with suppress_logs():
-                ai_service = AIService(settings)
-
-                # Disable streaming for PUBLIC provider
-                # (fake streaming causes duplicates)
-                use_streaming = stream
-                if ai_service.config.provider == AIProvider.PUBLIC:
-                    use_streaming = False
-
-                if use_streaming:
-                    await _stream_chat_response(
-                        ai_service, message, conversation_id, user_id, verbose=verbose
-                    )
-                else:
-                    response = await ai_service.chat(
-                        message=message,
-                        conversation_id=conversation_id,
-                        user_id=user_id
-                    )
-
-                    # Use new shared rendering functions
-                    from app.cli.ai_rendering import (
-                        render_ai_header,
-                        render_conversation_metadata,
-                        render_markdown_response,
-                    )
-
-                    # Show conversation info (only in verbose mode)
-                    conv_id = response.metadata.get("conversation_id", "unknown")
-                    conversation = ai_service.get_conversation(conv_id)
-                    if verbose and conversation:
-                        typer.echo(f"Conversation: {conversation.id}")
-                        if conversation.title:
-                            typer.echo(f"Title: {conversation.title}")
-                        console.print()
-
-                    # Render response using new shared functions
-                    render_ai_header(console, inline=True)
-                    render_markdown_response(console, response.content)
-
-                    # Show response metadata (only in verbose mode)
-                    if verbose and conversation:
-                        response_time = conversation.metadata.get(
-                            "last_response_time_ms"
-                        )
-                        render_conversation_metadata(
-                            console,
-                            conversation.id,
-                            message_count=conversation.get_message_count(),
-                            response_time=response_time,
-                        )
-
-        except KeyboardInterrupt:
-            typer.echo("\nWarning: Chat interrupted by user", err=True)
-            raise typer.Exit(1)
-        except Exception as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(1)
-
-    asyncio.run(send_message())
-
-
-@chat_app.command("list")
-def chat_list(
-    user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
-    limit: int = typer.Option(
-        10, "--limit", "-l", help="Number of conversations to show"
-    ),
-) -> None:
-    """List conversations for a user."""
-    from app.services.ai.service import AIService
-
-    with suppress_logs():
-        ai_service = AIService(settings)
-    conversations = ai_service.list_conversations(user_id)[:limit]
-
-    if not conversations:
-        typer.echo(f"No conversations found for user: {user_id}")
-        return
-
-    typer.echo(f"Conversations for {user_id}:")
-    typer.echo("")
-
-    for conv in conversations:
-        title = conv.title or "Untitled"
-        messages = conv.get_message_count()
-        updated = conv.updated_at.strftime("%Y-%m-%d %H:%M")
-
-        typer.echo(f"• {conv.id[:8]}... - {title}")
-        typer.echo(f"  {messages} messages | {updated}")
-        typer.echo("")
-
-
-@chat_app.command("history")
-def chat_history(
-    conversation_id: str = typer.Argument(..., help="Conversation ID"),
-    user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
-) -> None:
-    """View conversation history."""
-    from app.services.ai.service import AIService
-
-    with suppress_logs():
-        ai_service = AIService(settings)
-    conversation = ai_service.get_conversation(conversation_id)
-
-    if not conversation:
-        typer.echo(f"Error: Conversation not found: {conversation_id}")
-        raise typer.Exit(1)
-
-    # Check if user owns conversation
-    if conversation.metadata.get("user_id") != user_id:
-        typer.echo("Error: Access denied: You don't own this conversation")
-        raise typer.Exit(1)
-
-    typer.echo(f"Conversation: {conversation_id}")
-    if conversation.title:
-        typer.echo(f"Title: {conversation.title}")
-    typer.echo(f"Provider: {conversation.provider.value}")
-    typer.echo(f"Messages: {conversation.get_message_count()}")
-    typer.echo("")
-
-    for i, message in enumerate(conversation.messages):
-        timestamp = message.timestamp.strftime("%H:%M:%S")
-        role_icon = "" if message.role == MessageRole.USER else ""
-
-        typer.echo(f"{role_icon} [{timestamp}] {message.content}")
-        if i < len(conversation.messages) - 1:
-            typer.echo("")
-
-
-@config_app.command("show")
-def config_show() -> None:
-    """Show detailed AI service configuration."""
-    ai_config = get_ai_config(settings)
-
-    typer.secho("AI Service Configuration", fg=typer.colors.BLUE, bold=True)
-    typer.secho("=" * 40, dim=True)
-    typer.echo(typer.style("Enabled: ", fg=typer.colors.YELLOW) + str(ai_config.enabled))
-    typer.echo(
-        typer.style("Provider: ", fg=typer.colors.YELLOW) + str(ai_config.provider)
-    )
-    typer.echo(typer.style("Model: ", fg=typer.colors.YELLOW) + str(ai_config.model))
-    typer.echo(
-        typer.style("Temperature: ", fg=typer.colors.YELLOW)
+        typer.style("Temperature: ", fg=typer.colors.CYAN)
         + str(ai_config.temperature)
     )
     typer.echo(
-        typer.style("Max Tokens: ", fg=typer.colors.YELLOW) + str(ai_config.max_tokens)
-    )
-    typer.echo(
-        typer.style("Timeout: ", fg=typer.colors.YELLOW)
-        + f"{ai_config.timeout_seconds}s"
+        typer.style("Max Tokens: ", fg=typer.colors.CYAN) + str(ai_config.max_tokens)
     )
 
-    # Provider-specific configuration
+    # API Key status
     provider_config = ai_config.get_provider_config(settings)
-    typer.echo("")
-    typer.secho(f"Provider Configuration ({ai_config.provider}):", fg=typer.colors.CYAN, bold=True)
     api_key_color = typer.colors.GREEN if provider_config.api_key else typer.colors.RED
     api_key_text = "Set" if provider_config.api_key else "Not set"
     typer.echo(
-        typer.style("API Key: ", fg=typer.colors.YELLOW)
+        typer.style("API Key: ", fg=typer.colors.CYAN)
         + typer.style(api_key_text, fg=api_key_color)
     )
 
-    # Available providers
-    available = ai_config.get_available_providers(settings)
+    # Validation
     typer.echo("")
-    typer.secho(f"Available Providers ({len(available)}):", fg=typer.colors.CYAN, bold=True)
-    for provider in available:
-        typer.echo(
-            "  " + typer.style("•", fg=typer.colors.GREEN) + f" {provider.value}"
-        )
-
-
-@config_app.command("validate")
-def config_validate() -> None:
-    """Validate AI service configuration."""
-    ai_config = get_ai_config(settings)
-
-    typer.secho("Validating AI Service Configuration...", fg=typer.colors.BLUE, bold=True)
-
     errors = ai_config.validate_configuration(settings)
-
     if not errors:
-        typer.secho("✓ Configuration is valid!", fg=typer.colors.GREEN)
-        typer.echo(
-            "   " + typer.style("Provider: ", fg=typer.colors.YELLOW)
-            + str(ai_config.provider)
-        )
-        typer.echo(
-            "   " + typer.style("Model: ", fg=typer.colors.YELLOW)
-            + str(ai_config.model)
-        )
-
-        # Show provider capabilities
+        typer.secho("✓ Configuration valid", fg=typer.colors.GREEN)
         capabilities = get_provider_capabilities(ai_config.provider)
         if capabilities.free_tier_available:
-            typer.secho("   Uses free tier", fg=typer.colors.CYAN)
-        else:
-            typer.secho("   Requires paid account", dim=True)
-
+            typer.echo("  " + typer.style("Free tier", fg=typer.colors.CYAN))
+        if capabilities.supports_streaming:
+            typer.echo("  " + typer.style("Streaming supported", fg=typer.colors.CYAN))
     else:
-        typer.secho("✗ Configuration has issues:", fg=typer.colors.RED)
+        typer.secho("✗ Configuration issues:", fg=typer.colors.RED)
         for error in errors:
-            typer.echo(
-                "   " + typer.style("•", fg=typer.colors.RED) + f" {error}"
-            )
+            typer.echo("  " + typer.style("•", fg=typer.colors.RED) + f" {error}")
 
         # Suggest free providers if API key issues
         if any("API key" in error for error in errors):
             free_providers = get_free_providers()
             if free_providers:
-                providers_list = ', '.join(p.value for p in free_providers)
+                providers_list = ", ".join(p.value for p in free_providers)
                 typer.echo("")
                 typer.echo(
-                    typer.style("Try these free providers: ", fg=typer.colors.YELLOW)
-                    + providers_list
+                    typer.style("Tip: ", fg=typer.colors.YELLOW)
+                    + f"Try free providers: {providers_list}"
                 )
 
+    # Available providers count
+    available = ai_config.get_available_providers(settings)
+    typer.echo("")
+    typer.echo(
+        typer.style("Available providers: ", fg=typer.colors.CYAN)
+        + f"{len(available)} (run 'ai providers' to list)"
+    )
 
-@providers_app.command("list")
-def providers_list() -> None:
+
+@app.command()
+def providers() -> None:
     """List all available AI providers."""
     ai_config = get_ai_config(settings)
     available = ai_config.get_available_providers(settings)
@@ -430,27 +170,151 @@ def providers_list() -> None:
             provider.value,
             status,
             free_tier,
-            ", ".join(features) if features else "Basic"
+            ", ".join(features) if features else "Basic",
         )
 
     console.print(table)
 
 
-async def _single_message(
+@app.command()
+def chat(
+    message: str | None = typer.Argument(None, help="Message to send to AI"),
+    stream: bool = typer.Option(
+        True, "--stream/--no-stream", help="Enable streaming output"
+    ),
+    conversation_id: str | None = typer.Option(
+        None, "--conversation-id", "-c", help="Continue existing conversation"
+    ),
+    user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show conversation metadata"
+    ),
+) -> None:
+    """Send a chat message or start interactive session.
+
+    Examples:
+        ai chat "What is Python?"     - Send a single message
+        ai chat                       - Start interactive session
+        ai chat -c abc123 "Continue"  - Continue a conversation
+    """
+    import asyncio
+
+    from app.services.ai.service import AIService
+
+    async def run_chat() -> None:
+        try:
+            with suppress_logs():
+                ai_service = AIService(settings)
+
+                if message:
+                    # Single message mode
+                    await _send_message(
+                        ai_service, message, conversation_id, user_id, stream, verbose
+                    )
+                else:
+                    # Interactive session mode
+                    await _interactive_chat_session(ai_service, conversation_id)
+        except KeyboardInterrupt:
+            typer.echo("\nChat interrupted", err=True)
+            raise typer.Exit(1)
+        except Exception as e:
+            typer.echo(f"Error: {e}", err=True)
+            raise typer.Exit(1)
+
+    asyncio.run(run_chat())
+
+
+@app.command()
+def conversations(
+    user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
+    limit: int = typer.Option(
+        10, "--limit", "-l", help="Number of conversations to show"
+    ),
+) -> None:
+    """List conversations for a user."""
+    from app.services.ai.service import AIService
+
+    with suppress_logs():
+        ai_service = AIService(settings)
+    convos = ai_service.list_conversations(user_id)[:limit]
+
+    if not convos:
+        typer.echo(f"No conversations found for user: {user_id}")
+        return
+
+    typer.echo(f"Conversations for {user_id}:")
+    typer.echo("")
+
+    for conv in convos:
+        title = conv.title or "Untitled"
+        messages = conv.get_message_count()
+        updated = conv.updated_at.strftime("%Y-%m-%d %H:%M")
+
+        typer.echo(f"• {conv.id[:8]}... - {title}")
+        typer.echo(f"  {messages} messages | {updated}")
+        typer.echo("")
+
+
+@app.command()
+def history(
+    conversation_id: str = typer.Argument(..., help="Conversation ID"),
+    user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
+) -> None:
+    """View conversation history."""
+    from app.services.ai.service import AIService
+
+    with suppress_logs():
+        ai_service = AIService(settings)
+    conversation = ai_service.get_conversation(conversation_id)
+
+    if not conversation:
+        typer.echo(f"Error: Conversation not found: {conversation_id}")
+        raise typer.Exit(1)
+
+    # Check if user owns conversation
+    if conversation.metadata.get("user_id") != user_id:
+        typer.echo("Error: Access denied: You don't own this conversation")
+        raise typer.Exit(1)
+
+    typer.echo(f"Conversation: {conversation_id}")
+    if conversation.title:
+        typer.echo(f"Title: {conversation.title}")
+    typer.echo(f"Provider: {conversation.provider.value}")
+    typer.echo(f"Messages: {conversation.get_message_count()}")
+    typer.echo("")
+
+    for i, msg in enumerate(conversation.messages):
+        timestamp = msg.timestamp.strftime("%H:%M:%S")
+        role_icon = "" if msg.role == MessageRole.USER else ""
+
+        typer.echo(f"{role_icon} [{timestamp}] {msg.content}")
+        if i < len(conversation.messages) - 1:
+            typer.echo("")
+
+
+# ============================================================================
+# Internal helper functions
+# ============================================================================
+
+
+async def _send_message(
     ai_service,
     message: str,
     conversation_id: str | None,
+    user_id: str,
     stream: bool,
+    verbose: bool,
 ) -> None:
-    """Send a single message and get response (for scripting/CI)."""
-
+    """Send a single message and display the response."""
     # Disable streaming for PUBLIC provider (fake streaming causes duplicates)
     use_streaming = stream
     if ai_service.config.provider == AIProvider.PUBLIC:
         use_streaming = False
 
     if use_streaming:
-        await _stream_chat_response(ai_service, message, conversation_id, "cli-user")
+        await _stream_chat_response(
+            ai_service, message, conversation_id, user_id, verbose=verbose
+        )
     else:
         # Show thinking spinner for non-streaming responses
         from rich.live import Live
@@ -466,19 +330,40 @@ async def _single_message(
             response = await ai_service.chat(
                 message=message,
                 conversation_id=conversation_id,
-                user_id="cli-user",
+                user_id=user_id,
             )
         finally:
             spinner_live.stop()
 
-        # Use new shared rendering functions
+        # Use shared rendering functions
         from app.cli.ai_rendering import (
             render_ai_header,
+            render_conversation_metadata,
             render_markdown_response,
         )
 
+        # Show conversation info (only in verbose mode)
+        conv_id = response.metadata.get("conversation_id", "unknown")
+        conversation = ai_service.get_conversation(conv_id)
+        if verbose and conversation:
+            typer.echo(f"Conversation: {conversation.id}")
+            if conversation.title:
+                typer.echo(f"Title: {conversation.title}")
+            console.print()
+
+        # Render response
         render_ai_header(console, inline=True)
         render_markdown_response(console, response.content)
+
+        # Show response metadata (only in verbose mode)
+        if verbose and conversation:
+            response_time = conversation.metadata.get("last_response_time_ms")
+            render_conversation_metadata(
+                console,
+                conversation.id,
+                message_count=conversation.get_message_count(),
+                response_time=response_time,
+            )
 
 
 async def _interactive_chat_session(
@@ -486,7 +371,6 @@ async def _interactive_chat_session(
     conversation_id: str | None = None,
 ) -> None:
     """Start an interactive chat session with continuous conversation."""
-
     # Show welcome banner
     ai_config = get_ai_config(settings)
     welcome_text = (
@@ -503,13 +387,12 @@ async def _interactive_chat_session(
 
     while True:
         try:
-            # Get user input with Rich prompt - handle keyboard interrupt here
+            # Get user input with Rich prompt
             try:
                 user_message = Prompt.ask(
                     "[bold green]You[/bold green]", console=console
                 )
             except (KeyboardInterrupt, EOFError):
-                # Single Ctrl+C should exit immediately
                 console.print("\n[yellow]Chat session ended[/yellow]")
                 break
 
@@ -522,23 +405,19 @@ async def _interactive_chat_session(
                 console.print("[dim]Please enter a message or 'exit' to quit.[/dim]")
                 continue
 
-            # Stream the response using our existing beautiful renderer
-            # Disable streaming for PUBLIC provider (fake streaming causes duplicates)
+            # Disable streaming for PUBLIC provider
             use_streaming = True
             if ai_service.config.provider == AIProvider.PUBLIC:
                 use_streaming = False
 
             try:
                 if use_streaming:
-                    # Capture conversation_id from streaming response
-                    # for memory continuity
                     returned_conversation_id = await _stream_chat_response(
                         ai_service,
                         user_message,
                         current_conversation_id,
-                        "cli-user"
+                        "cli-user",
                     )
-                    # Update conversation reference if streaming completed successfully
                     if returned_conversation_id:
                         current_conversation_id = returned_conversation_id
                 else:
@@ -553,7 +432,7 @@ async def _interactive_chat_session(
                         spinner,
                         console=console,
                         refresh_per_second=20,
-                        transient=True
+                        transient=True,
                     )
                     spinner_live.start()
 
@@ -566,7 +445,7 @@ async def _interactive_chat_session(
                     finally:
                         spinner_live.stop()
 
-                    # Use new shared rendering functions
+                    # Use shared rendering functions
                     from app.cli.ai_rendering import (
                         render_ai_header,
                         render_markdown_response,
@@ -580,19 +459,11 @@ async def _interactive_chat_session(
                         "conversation_id", current_conversation_id
                     )
             except Exception as stream_error:
-                console.print(f"[red]Streaming failed: {stream_error}[/red]")
+                console.print(f"[red]Error: {stream_error}[/red]")
                 console.print(
-                    "[dim]This might be a provider issue. "
-                    "Try a different provider or check your connection.[/dim]"
-                )
-                console.print("[dim]Available providers: openai, groq, public[/dim]")
-                console.print(
-                    "[dim]Set AI_PROVIDER=openai or AI_PROVIDER=groq "
-                    "to try alternatives.[/dim]"
+                    "[dim]Try a different provider or check your connection.[/dim]"
                 )
 
-            # For subsequent messages, we want to continue the conversation
-            # The conversation_id will be maintained by the AI service
             console.print()  # Add space after response
 
         except Exception as e:
@@ -610,22 +481,15 @@ async def _stream_chat_response(
     verbose: bool = False,
 ) -> str | None:
     """
-    Stream chat response with real-time markdown rendering using Rich components.
-
-    Args:
-        ai_service: The AI service instance
-        message: User message
-        conversation_id: Optional conversation ID
-        user_id: User identifier
-        verbose: Whether to show detailed metadata
+    Stream chat response with real-time markdown rendering.
 
     Returns:
-        str | None: The conversation ID for continuing the conversation,
-            None if interrupted
+        The conversation ID for continuing the conversation, or None if interrupted.
     """
     import signal
 
     from rich.live import Live
+    from rich.spinner import Spinner
 
     from app.cli.ai_rendering import StreamingMarkdownRenderer
 
@@ -643,16 +507,8 @@ async def _stream_chat_response(
     old_handler = signal.signal(signal.SIGINT, signal_handler)
 
     try:
-        # Track if we've shown the header yet
         header_shown = False
-
-        # Stream without Live display to avoid accumulation duplication
-        # Temporarily removed suppress_logs to debug hanging issue
-        # Add timeout to prevent hanging
         import asyncio
-
-        from rich.live import Live
-        from rich.spinner import Spinner
 
         # Show thinking spinner initially
         spinner = Spinner("dots", text="Thinking...", style="bright_blue")
@@ -662,7 +518,6 @@ async def _stream_chat_response(
         spinner_live.start()
 
         try:
-            # Track processed content to prevent duplicates (fake streaming providers)
             processed_content = set()
 
             async with asyncio.timeout(30.0):  # 30 second timeout
@@ -675,14 +530,12 @@ async def _stream_chat_response(
                     if interrupted:
                         spinner_live.stop()
                         console.print(
-                            "\nWarning: Streaming interrupted by user", style="yellow"
+                            "\nStreaming interrupted", style="yellow"
                         )
                         break
 
                     # Skip duplicate content (handles fake streaming providers)
                     if chunk.content in processed_content:
-                        # Still store final chunk metadata
-                        # if this is the final duplicate
                         if chunk.is_final:
                             conversation_info = chunk.conversation_id
                             response_time = chunk.metadata.get("response_time_ms")
@@ -690,18 +543,13 @@ async def _stream_chat_response(
 
                     processed_content.add(chunk.content)
 
-                    # Process only the new delta content with Rich components
                     if chunk.is_delta and chunk.content:
-                        # Show compact inline header only when first content arrives
                         if not header_shown:
-                            spinner_live.stop()  # Stop spinner when content starts
+                            spinner_live.stop()
                             console.print(": ", style="bright_blue", end="")
                             header_shown = True
-
-                        # Process delta with new streaming renderer
                         renderer.add_delta(chunk.content)
 
-                    # Store final chunk metadata
                     if chunk.is_final:
                         conversation_info = chunk.conversation_id
                         response_time = chunk.metadata.get("response_time_ms")
@@ -711,17 +559,14 @@ async def _stream_chat_response(
             console.print("\nError: Request timed out after 30 seconds", style="red")
             return None
         finally:
-            # Ensure spinner is stopped in all cases
             if spinner_live.is_started:
                 spinner_live.stop()
 
-        # Finalize any remaining content and add spacing
         if not interrupted:
-            renderer.finalize()  # Process any remaining buffered content
+            renderer.finalize()
             console.print("\n")
 
             if verbose and conversation_info:
-                # Get conversation details
                 conversation = ai_service.get_conversation(conversation_info)
                 if conversation:
                     console.print(f"Conversation: {conversation.id}", style="dim")
@@ -739,10 +584,8 @@ async def _stream_chat_response(
         raise
 
     finally:
-        # Restore original signal handler
         signal.signal(signal.SIGINT, old_handler)
 
-    # Return conversation_id for maintaining conversation context
     return conversation_info if not interrupted else None
 
 

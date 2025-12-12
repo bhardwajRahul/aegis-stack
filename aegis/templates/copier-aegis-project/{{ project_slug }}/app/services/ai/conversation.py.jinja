@@ -87,7 +87,6 @@ class ConversationManager:
 {% else %}
         # Save to database
         self._save_to_db(conversation)
-        logger.debug(f"Created conversation {conversation_id} for user {user_id}")
 {% endif %}
 
         return conversation
@@ -152,7 +151,6 @@ class ConversationManager:
         self.conversations[conversation.id] = conversation
 {% else %}
         self._save_to_db(conversation)
-        logger.debug(f"Saved conversation {conversation.id}")
 {% endif %}
 
     def list_conversations(self, user_id: str | None = None) -> list[Conversation]:
@@ -257,7 +255,6 @@ class ConversationManager:
             session.delete(conv_db)
             session.commit()
 
-            logger.debug(f"Deleted conversation {conversation_id}")
             return True
 {% endif %}
 
