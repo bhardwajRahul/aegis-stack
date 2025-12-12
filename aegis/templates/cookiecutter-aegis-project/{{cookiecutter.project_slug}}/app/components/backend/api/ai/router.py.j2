@@ -308,7 +308,7 @@ async def ai_version() -> dict[str, Any]:
     """AI service version and feature information."""
     return {
         "service": "ai",
-        "engine": "pydantic-ai",
+        "engine": "{{ cookiecutter.ai_framework }}",
         "version": "1.0",
         "features": [
             "chat",

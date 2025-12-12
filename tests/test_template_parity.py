@@ -245,10 +245,12 @@ def generate_with_copier(
         "include_cache": False,  # Default to no
         "include_auth": "auth" in (services or []),
         "include_ai": "ai" in (services or []),
+        "ai_framework": cookiecutter_context.get("ai_framework", "pydantic-ai"),
         "ai_providers": cookiecutter_context.get("ai_providers", "openai"),
         "ai_backend": cookiecutter_context.get("ai_backend", "memory"),
         "ai_with_persistence": cookiecutter_context.get("ai_with_persistence", "no")
         == "yes",
+        "include_comms": "comms" in (services or []),
     }
 
     # Get copier template path - use the actual template directory, not repo root

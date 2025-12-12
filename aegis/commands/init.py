@@ -16,6 +16,7 @@ from ..cli.utils import detect_scheduler_backend
 from ..cli.validators import validate_project_name
 from ..config.defaults import DEFAULT_PYTHON_VERSION, SUPPORTED_PYTHON_VERSIONS
 from ..constants import StorageBackends
+from ..core.ai_service_parser import BACKENDS, FRAMEWORKS, PROVIDERS
 from ..core.component_utils import (
     clean_component_names,
     extract_base_component_name,
@@ -29,6 +30,14 @@ from ..core.components import (
 from ..core.dependency_resolver import DependencyResolver
 from ..core.service_resolver import ServiceResolver
 from ..core.template_generator import TemplateGenerator
+
+# Build services help text dynamically from constants
+_SERVICES_HELP = (
+    f"Services: auth, ai. AI options: ai[framework,backend,providers] "
+    f"where framework={'|'.join(sorted(FRAMEWORKS))}, "
+    f"backend={'|'.join(sorted(BACKENDS))}, "
+    f"providers={'|'.join(sorted(PROVIDERS))}"
+)
 
 
 def init_command(
@@ -47,7 +56,7 @@ def init_command(
         "--services",
         "-s",
         callback=validate_and_resolve_services,
-        help="Comma-separated list of services (auth). Use 'aegis services' for full list.",
+        help=_SERVICES_HELP,
     ),
     python_version: str = typer.Option(
         DEFAULT_PYTHON_VERSION,

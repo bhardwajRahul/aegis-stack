@@ -123,8 +123,17 @@ include_auth:
 
 include_ai:
   type: bool
-  help: "Include AI service with PydanticAI?"
+  help: "Include AI service?"
   default: false
+
+ai_framework:
+  type: str
+  help: "AI framework to use"
+  default: "pydantic-ai"
+  choices:
+    - "pydantic-ai"
+    - "langchain"
+  when: "{{ include_ai }}"
 
 ai_providers:
   type: str

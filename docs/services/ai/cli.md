@@ -9,19 +9,116 @@ Command-line interface for the AI service.
 All commands use the pattern: `<project-name> ai <command>`
 
 ```bash
-my-app ai chat                  # Interactive chat session
-my-app ai chat send "message"   # Send single message
-my-app ai config show           # Show configuration
-my-app ai config validate       # Validate setup
-my-app ai providers list        # List providers
-my-app ai version               # Show version
+my-app ai status          # Show configuration and validation
+my-app ai providers       # List all providers
+my-app ai chat "message"  # Send single message
+my-app ai chat            # Interactive chat session
+my-app ai conversations   # List conversations
+my-app ai history <id>    # View conversation history
 ```
 
-## Chat Commands
+## Status Command
 
-### Interactive Chat
+Show AI service status, configuration, and validation:
 
-Start an interactive chat session with conversation memory:
+```bash
+my-app ai status
+```
+
+**Output:**
+
+```
+AI Service Status
+========================================
+Engine: pydantic-ai
+Status: Enabled
+Provider: groq
+Model: llama-3.1-70b-versatile
+Temperature: 0.7
+Max Tokens: 1000
+API Key: Set
+
+✓ Configuration valid
+  Free tier
+  Streaming supported
+
+Available providers: 3 (run 'ai providers' to list)
+```
+
+**What it shows:**
+
+- Engine (pydantic-ai or langchain)
+- Enabled/Disabled status
+- Current provider and model
+- Temperature and max tokens settings
+- API key status
+- Validation errors (if any)
+- Provider capabilities (free tier, streaming)
+- Available providers count
+
+## Providers Command
+
+List all available AI providers and their status:
+
+```bash
+my-app ai providers
+```
+
+**Output:**
+
+```
+           AI Providers
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃ Provider ┃ Status                   ┃ Free ┃ Features         ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│ public   │ Available (current)      │ Yes  │ Basic            │
+│ groq     │ Need GROQ_API_KEY        │ Yes  │ Stream           │
+│ openai   │ Need OPENAI_API_KEY      │ No   │ Stream, Functions│
+│ anthropic│ Need ANTHROPIC_API_KEY   │ No   │ Stream, Vision   │
+│ google   │ Need GOOGLE_API_KEY      │ Yes  │ Stream           │
+│ mistral  │ Need MISTRAL_API_KEY     │ No   │ Stream           │
+│ cohere   │ Need COHERE_API_KEY      │ No   │ Stream           │
+└──────────┴──────────────────────────┴──────┴──────────────────┘
+```
+
+## Chat Command
+
+Send messages to the AI or start interactive sessions.
+
+### Single Message Mode
+
+Send a single message and get a response:
+
+```bash
+my-app ai chat "What is FastAPI?"
+```
+
+**Options:**
+
+- `--stream / --no-stream` - Enable/disable streaming (default: enabled)
+- `--conversation-id, -c` - Continue an existing conversation
+- `--user-id, -u` - User identifier (default: cli-user)
+- `--verbose, -v` - Show conversation metadata
+
+**Examples:**
+
+```bash
+# Simple message
+my-app ai chat "Explain async/await in Python"
+
+# Disable streaming
+my-app ai chat "Quick question" --no-stream
+
+# Continue a conversation
+my-app ai chat -c abc123 "Tell me more about that"
+
+# Custom user ID with verbose output
+my-app ai chat "Hello" -u "user-456" --verbose
+```
+
+### Interactive Mode
+
+Start an interactive chat session (no message argument):
 
 ```bash
 my-app ai chat
@@ -29,19 +126,20 @@ my-app ai chat
 
 **Features:**
 
-- Conversation memory (context maintained during session only)
+- Conversation memory (context maintained during session)
 - Markdown rendering
 - Streaming responses (when supported)
-- Type `exit`, `quit`, or `Ctrl+C` to quit
+- Type `exit`, `quit`, `bye`, or `Ctrl+C` to quit
 
 **Example:**
 
-
 ```bash
 $ my-app ai chat
-AI Chat Session
-Provider: groq | Model: llama-3.1-70b-versatile
-Type 'exit', 'quit', 'bye' or press Ctrl+C to end session
+┌────────────────────────────────────────────────────┐
+│ AI Chat Session                                    │
+│ Provider: groq | Model: llama-3.1-70b-versatile    │
+│ Type 'exit', 'quit', 'bye' or press Ctrl+C to end  │
+└────────────────────────────────────────────────────┘
 
 You: What is FastAPI?
 > FastAPI is a modern Python web framework...
@@ -53,138 +151,64 @@ You: exit
 Goodbye!
 ```
 
-### Send Message
+## Conversations Command
 
-Send a single message:
+List conversations for a user:
 
 ```bash
-my-app ai chat send "Your message here"
+my-app ai conversations
 ```
 
 **Options:**
 
-- `--stream / --no-stream` - Enable/disable streaming
-- `--user-id ID` or `-u ID` - Set user identifier
+- `--user-id, -u` - User identifier (default: cli-user)
+- `--limit, -l` - Number of conversations to show (default: 10)
 
-**Examples:**
+**Output:**
 
-```bash
-# Simple message
-my-app ai chat send "Explain async/await"
+```
+Conversations for cli-user:
 
-# Disable streaming
-my-app ai chat send "Quick question" --no-stream
+• abc12345... - FastAPI Discussion
+  5 messages | 2024-01-15 14:30
 
-# Custom user ID
-my-app ai chat send "Hello" -u "user-456"
+• def67890... - Python Async Patterns
+  12 messages | 2024-01-14 09:15
 ```
 
-## Configuration Commands
+## History Command
 
-### Show Configuration
-
-Display current AI service configuration:
+View the message history of a conversation:
 
 ```bash
-my-app ai config show
+my-app ai history <conversation-id>
+```
+
+**Options:**
+
+- `--user-id, -u` - User identifier (default: cli-user)
+
+**Example:**
+
+```bash
+my-app ai history abc12345
 ```
 
 **Output:**
 
 ```
-AI Service Configuration
-========================================
-Enabled: True
+Conversation: abc12345
+Title: FastAPI Discussion
 Provider: groq
-Model: llama-3.1-70b-versatile
-Temperature: 0.7
-Max Tokens: 1000
-Timeout: 30.0s
+Messages: 5
 
-Provider Configuration (groq):
-API Key: ✅ Set
+👤 [14:30:15] What is FastAPI?
 
-✅ Available Providers (3):
-  • public
-  • groq
-  • google
-```
+🤖 [14:30:18] FastAPI is a modern, fast web framework...
 
-### Validate Configuration
+👤 [14:31:02] How does dependency injection work?
 
-Check if configuration is valid:
-
-```bash
-my-app ai config validate
-```
-
-**Success:**
-
-```
-Validating AI Service Configuration...
-✅ Configuration is valid!
-   Provider: groq
-   Model: llama-3.1-70b-versatile
-   Uses free tier
-```
-
-**Errors:**
-
-```
-Validating AI Service Configuration...
-❌ Configuration has issues:
-   • Missing API key for openai provider. Set OPENAI_API_KEY environment variable.
-
-Tip: Try these free providers: public, groq, google
-```
-
-## Provider Commands
-
-### List Providers
-
-Show all available providers and their status:
-
-```bash
-my-app ai providers list
-```
-
-**Output:**
-
-```
-           AI Providers
-┏━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━━━┓
-┃ Provider┃ Status      ┃ Free┃ Features   ┃
-┡━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━━━┩
-│ public  │ ✅ Available│ Yes │ Basic      │
-│ groq    │ ✅ Available│ Yes │ Stream     │
-│ openai  │ ❌ Need key │ No  │ Stream,    │
-│         │             │     │ Functions, │
-│         │             │     │ Vision     │
-└─────────┴─────────────┴─────┴────────────┘
-```
-
-## Version Command
-
-Show AI service version and capabilities:
-
-```bash
-my-app ai version
-```
-
-**Output:**
-
-```
-AI Service Configuration System
-Engine: PydanticAI
-Status: ✅ Enabled
-Provider: groq
-Model: llama-3.1-70b-versatile
-
-Available commands:
-  • ai chat "message"       - Send a chat message
-  • ai config show         - Show detailed configuration
-  • ai config validate     - Validate current configuration
-  • ai providers list      - List available providers
+🤖 [14:31:05] FastAPI uses a powerful dependency injection system...
 ```
 
 ---

@@ -11,7 +11,7 @@ The **AI Service** provides multi-provider AI chat capabilities with conversatio
     uvx aegis-stack init my-app --services ai
     cd my-app
     uv sync && source .venv/bin/activate
-    my-app ai chat send "Hello! Can you help me understand what you can do?"
+    my-app ai chat "Hello! Can you help me understand what you can do?"
     ```
 
     No API key required with the PUBLIC provider - perfect for testing!
@@ -75,10 +75,10 @@ The PUBLIC provider is configured by default and requires no setup:
 my-app ai chat
 
 # Single message
-my-app ai chat send "Explain async/await in Python"
+my-app ai chat "Explain async/await in Python"
 
 # Check service status
-my-app ai config show
+my-app ai status
 ```
 
 ### 3. API Usage
@@ -130,10 +130,10 @@ CLI automatically streams for supported providers:
 
 ```bash
 # Streaming enabled by default
-my-app ai chat send "Write a Python function to calculate fibonacci"
+my-app ai chat "Write a Python function to calculate fibonacci"
 
 # Disable streaming
-my-app ai chat send "Same question" --no-stream
+my-app ai chat "Same question" --no-stream
 ```
 
 API streaming uses Server-Sent Events:
@@ -159,8 +159,8 @@ async with httpx.AsyncClient() as client:
 # Check service health
 curl http://localhost:8000/ai/health
 
-# Validate configuration
-my-app ai config validate
+# Validate configuration (included in ai status output)
+my-app ai status
 ```
 
 ---

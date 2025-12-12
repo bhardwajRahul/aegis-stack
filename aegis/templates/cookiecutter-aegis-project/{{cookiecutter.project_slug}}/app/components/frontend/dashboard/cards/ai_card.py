@@ -94,17 +94,20 @@ class AICard:
         """Create technology badge for AI service."""
         primary_color, _, _ = get_status_colors(self.component_data)
 
-        # Infer engine from metadata (e.g., "pydantic-ai")
-        engine = self.metadata.get("engine", "pydantic-ai")
-        # Convert "pydantic-ai" to "Pydantic AI" for display
-        if engine == "pydantic-ai":
-            engine_display = "Pydantic AI"
-        else:
-            engine_display = engine.replace("-", " ").title() if engine else "AI Engine"
+        # Infer engine from metadata (e.g., "pydantic-ai" or "langchain")
+        engine = self.metadata.get("engine", "AI Engine")
+        # Convert engine name to display format
+        engine_display_map = {
+            "pydantic-ai": "Pydantic AI",
+            "langchain": "LangChain",
+        }
+        engine_display = engine_display_map.get(
+            engine, engine.replace("-", " ").title() if engine else "AI Engine"
+        )
 
         return TechBadge(
             title=engine_display,
-            subtitle="AI Agent",
+            subtitle="AI Framework",
             badge_text="AI",
             badge_color=ft.Colors.CYAN,
             primary_color=primary_color,
@@ -166,7 +169,8 @@ class AICard:
         provider_color = self._get_provider_color(provider)
         model_display = self._truncate_model_name(model)
         conversations_display = str(total_conversations)
-        streaming_display = "Available"
+        supports_streaming = self.metadata.get("provider_supports_streaming", False)
+        streaming_display = "Yes" if supports_streaming else "No"
         config_status, config_color = self._get_config_status_display()
         response_time_display = f"{response_time:.1f}ms" if response_time else "N/A"
         response_time_color = self._get_response_time_color(response_time)

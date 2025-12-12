@@ -314,7 +314,8 @@ class TestAIServiceBackend:
         """Test that ai[invalid] is rejected."""
         errors = ServiceResolver.validate_services(["ai[postgres]"])
         assert len(errors) == 1
-        assert "Invalid backend" in errors[0]
+        # Error message changed from "Invalid backend" to "Unknown value" in ai parser
+        assert "Unknown value" in errors[0] or "Invalid" in errors[0]
         assert "postgres" in errors[0]
 
     def test_validate_ai_service_no_bracket(self):

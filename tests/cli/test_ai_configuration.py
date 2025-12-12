@@ -33,6 +33,7 @@ class TestAIProviderSelection:
             False,  # redis, worker, scheduler, database
             False,  # auth service
             True,  # AI service
+            False,  # Use LangChain? No (use PydanticAI)
             False,
             False,
             False,
@@ -62,6 +63,7 @@ class TestAIProviderSelection:
             False,  # redis, worker, scheduler, database
             False,  # auth service
             True,  # AI service
+            True,  # Use LangChain? Yes
             True,  # OpenAI
             True,  # Anthropic
             False,
@@ -92,6 +94,7 @@ class TestAIProviderSelection:
             False,  # redis, worker, scheduler, database
             False,  # auth service
             True,  # AI service
+            False,  # Use LangChain? No (use PydanticAI)
             False,
             False,  # OpenAI, Anthropic
             True,
@@ -255,6 +258,7 @@ class TestAIConfigurationEndToEnd:
             False,  # No infrastructure components
             False,  # No auth service
             True,  # Yes AI service
+            True,  # Use LangChain? Yes
             True,
             False,
             True,

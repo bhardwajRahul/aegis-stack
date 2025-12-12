@@ -1,5 +1,5 @@
 """
-AI service core implementation using PydanticAI.
+AI service core implementation.
 
 This module provides the main AIService class that handles AI chat functionality,
 conversation management, and provider integration.
@@ -10,7 +10,9 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
 
+{% if ai_framework == "pydantic-ai" %}
 from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
+{% endif %}
 
 from app.core.log import logger
 
@@ -23,7 +25,11 @@ from .models import (
     StreamingConversation,
     StreamingMessage,
 )
+{% if ai_framework == "pydantic-ai" %}
 from .providers import get_agent
+{% else %}
+from .providers import get_llm, SYSTEM_PROMPT
+{% endif %}
 
 
 class AIServiceError(Exception):
@@ -46,10 +52,9 @@ class ConversationError(AIServiceError):
 
 class AIService:
     """
-    Core AI service using PydanticAI for chat functionality.
+    Core AI service for chat functionality.
 
     Handles chat completions, conversation management, and provider abstraction.
-    Creates Agent instances per request for simplicity and resource efficiency.
     """
 
     def __init__(self, settings: Any):
@@ -57,11 +62,6 @@ class AIService:
         self.settings = settings
         self.config = get_ai_config(settings)
         self.conversation_manager = ConversationManager()
-
-        # logger.info(
-        #     f"AI service initialized - Provider: {self.config.provider}, "
-        #     f"Enabled: {self.config.enabled}"
-        # )
 
     async def chat(
         self, message: str, conversation_id: str | None = None, user_id: str = "default"
@@ -89,6 +89,7 @@ class AIService:
             # Setup conversation and add user message
             conversation = self._setup_conversation(message, conversation_id, user_id)
 
+{% if ai_framework == "pydantic-ai" %}
             # Prepare agent and conversation context
             agent, conversation_context = self._prepare_agent_and_context(conversation)
 
@@ -102,6 +103,21 @@ class AIService:
             ai_message = conversation.add_message(
                 MessageRole.ASSISTANT, result.output, message_id=str(uuid.uuid4())
             )
+{% else %}
+            # Prepare LLM and messages
+            llm, messages = self._prepare_llm_and_messages(conversation)
+
+            # Get AI response
+            start_time = datetime.now(UTC)
+            result = await llm.ainvoke(messages)
+            end_time = datetime.now(UTC)
+            response_time_ms = (end_time - start_time).total_seconds() * 1000
+
+            # Add AI response to conversation
+            ai_message = conversation.add_message(
+                MessageRole.ASSISTANT, result.content, message_id=str(uuid.uuid4())
+            )
+{% endif %}
 
             # Store conversation ID in message metadata for easy lookup
             ai_message.metadata["conversation_id"] = conversation.id
@@ -111,10 +127,12 @@ class AIService:
 
             return ai_message
 
+{% if ai_framework == "pydantic-ai" %}
         except (ModelRetry, UnexpectedModelBehavior) as e:
             error_msg = f"AI provider error: {e}"
             logger.error(error_msg)
             raise ProviderError(error_msg) from e
+{% endif %}
         except Exception as e:
             error_msg = f"Chat processing failed: {e}"
             logger.error(error_msg)
@@ -155,8 +173,13 @@ class AIService:
             streaming_conv = StreamingConversation(conversation=conversation)
             streaming_conv.reset_stream()
 
+{% if ai_framework == "pydantic-ai" %}
             # Prepare agent and conversation context
             agent, conversation_context = self._prepare_agent_and_context(conversation)
+{% else %}
+            # Prepare LLM and messages
+            llm, messages = self._prepare_llm_and_messages(conversation)
+{% endif %}
 
             # Start streaming
             start_time = datetime.now(UTC)
@@ -164,6 +187,7 @@ class AIService:
             # Generate a message ID for the streaming response
             message_id = str(uuid.uuid4())
 
+{% if ai_framework == "pydantic-ai" %}
             # Use PydanticAI's run_stream method for streaming
             async with agent.run_stream(conversation_context) as result:
                 # Stream text chunks
@@ -186,6 +210,33 @@ class AIService:
                             "stream_delta": stream_delta,
                         },
                     )
+{% else %}
+            # Use LangChain's astream method for streaming
+            async for chunk in llm.astream(messages):
+                # Get content from chunk
+                text_chunk = chunk.content if hasattr(chunk, 'content') else str(chunk)
+                if not text_chunk:
+                    continue
+
+                # Accumulate content (LangChain always streams deltas)
+                total_content = streaming_conv.accumulate_content(
+                    text_chunk, is_delta=True
+                )
+
+                # Yield streaming message chunk
+                yield StreamingMessage(
+                    content=text_chunk if stream_delta else total_content,
+                    is_final=False,
+                    is_delta=stream_delta,
+                    message_id=message_id,
+                    conversation_id=conversation.id,
+                    metadata={
+                        "provider": self.config.provider,
+                        "model": self.config.model,
+                        "stream_delta": stream_delta,
+                    },
+                )
+{% endif %}
 
             end_time = datetime.now(UTC)
             response_time_ms = (end_time - start_time).total_seconds() * 1000
@@ -219,10 +270,12 @@ class AIService:
                 },
             )
 
+{% if ai_framework == "pydantic-ai" %}
         except (ModelRetry, UnexpectedModelBehavior) as e:
             error_msg = f"AI provider streaming error: {e}"
             logger.error(error_msg)
             raise ProviderError(error_msg) from e
+{% endif %}
         except Exception as e:
             error_msg = f"Streaming failed: {e}"
             logger.error(error_msg)
@@ -265,6 +318,7 @@ class AIService:
 
         return conversation
 
+{% if ai_framework == "pydantic-ai" %}
     def _prepare_agent_and_context(self, conversation: Conversation) -> tuple[Any, str]:
         """
         Create agent for request and build conversation context.
@@ -282,6 +336,54 @@ class AIService:
         conversation_context = self._build_conversation_context(conversation)
 
         return agent, conversation_context
+{% else %}
+    def _prepare_llm_and_messages(self, conversation: Conversation) -> tuple[Any, list]:
+        """
+        Create LLM instance and build message list for LangChain.
+
+        Args:
+            conversation: The conversation to prepare messages from
+
+        Returns:
+            tuple[Any, list]: (LLM instance, list of message tuples)
+        """
+        # Create LLM for this request
+        llm = get_llm(self.config, self.settings)
+
+        # Build messages list for LangChain
+        messages = self._build_langchain_messages(conversation)
+
+        return llm, messages
+
+    def _build_langchain_messages(self, conversation: Conversation) -> list:
+        """
+        Build LangChain message list from conversation history.
+
+        Args:
+            conversation: The conversation with message history
+
+        Returns:
+            list: List of message tuples for LangChain
+        """
+        # Start with system prompt
+        messages = [("system", SYSTEM_PROMPT)]
+
+        if not conversation.messages:
+            return messages
+
+        # For continuous conversation, include recent message history
+        # Limit to last 10 messages to manage context window
+        recent_messages = conversation.messages[-10:]
+
+        # Format messages for LangChain
+        for msg in recent_messages:
+            if msg.role == MessageRole.USER:
+                messages.append(("human", msg.content))
+            elif msg.role == MessageRole.ASSISTANT:
+                messages.append(("assistant", msg.content))
+
+        return messages
+{% endif %}
 
     def _finalize_conversation(
         self,
@@ -312,6 +414,7 @@ class AIService:
         # Save conversation
         self.conversation_manager.save_conversation(conversation)
 
+{% if ai_framework == "pydantic-ai" %}
     def _build_conversation_context(self, conversation: Conversation) -> str:
         """
         Build conversation context for AI from message history.
@@ -348,6 +451,7 @@ class AIService:
                 return latest_message.content
 
         return ""
+{% endif %}
 
     def get_conversation(self, conversation_id: str) -> Conversation | None:
         """Get a conversation by ID."""
@@ -382,9 +486,5 @@ class AIService:
         # Check configuration
         config_errors = self.config.validate_configuration(self.settings)
         errors.extend(config_errors)
-
-        # Check agent initialization (agents created per request,
-        # always available when enabled)
-        # No persistent agent check needed in agent-per-request pattern
 
         return errors

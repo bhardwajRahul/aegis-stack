@@ -209,7 +209,6 @@ class StatisticsSection(ft.Container):
 
         # Configuration
         engine = metadata.get("engine", "Unknown")
-        config_valid = metadata.get("configuration_valid", False)
         validation_errors_count = metadata.get("validation_errors_count", 0)
 
         def stat_row(label: str, value: str) -> ft.Row:
@@ -240,7 +239,6 @@ class StatisticsSection(ft.Container):
                 stat_row("Avg Messages/Conv", f"{avg_messages:.1f}"),
                 ft.Divider(height=20, color=ft.Colors.OUTLINE),
                 stat_row("Engine", engine),
-                stat_row("Configuration Valid", "Yes" if config_valid else "No"),
                 stat_row("Validation Errors", str(validation_errors_count)),
             ],
             spacing=Theme.Spacing.XS,

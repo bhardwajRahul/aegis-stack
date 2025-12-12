@@ -37,6 +37,15 @@ class WorkerBackends:
     ALL = [ARQ, TASKIQ]
 
 
+class AIFrameworks:
+    """AI framework options for the AI service."""
+
+    PYDANTIC_AI = "pydantic-ai"
+    LANGCHAIN = "langchain"
+
+    ALL = [PYDANTIC_AI, LANGCHAIN]
+
+
 class AnswerKeys:
     """Keys in Copier .copier-answers.yml configuration."""
 
@@ -62,6 +71,7 @@ class AnswerKeys:
     SCHEDULER_WITH_PERSISTENCE = "scheduler_with_persistence"
     WORKER_BACKEND = "worker_backend"
     DATABASE_ENGINE = "database_engine"
+    AI_FRAMEWORK = "ai_framework"
     AI_PROVIDERS = "ai_providers"
     AI_BACKEND = "ai_backend"
     AI_WITH_PERSISTENCE = "ai_with_persistence"

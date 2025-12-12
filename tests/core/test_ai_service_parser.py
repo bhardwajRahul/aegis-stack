@@ -1,0 +1,319 @@
+"""
+Tests for AI service bracket syntax parser.
+
+Tests the parsing of ai[framework, backend, providers...] syntax where:
+- Frameworks: pydantic-ai, langchain
+- Backends: memory, sqlite
+- Providers: public, openai, anthropic, google, groq, mistral, cohere
+
+Values are detected by type, order doesn't matter.
+Defaults: pydantic-ai, memory, public
+"""
+
+import pytest
+
+from aegis.core.ai_service_parser import AIServiceConfig, parse_ai_service_config
+
+
+class TestAIServiceParserDefaults:
+    """Test default values when no options specified."""
+
+    def test_bare_ai_returns_all_defaults(self) -> None:
+        """ai → pydantic-ai, memory, public"""
+        result = parse_ai_service_config("ai")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "memory"
+        assert result.providers == ["public"]
+
+    def test_empty_brackets_returns_defaults(self) -> None:
+        """ai[] → same as ai"""
+        result = parse_ai_service_config("ai[]")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "memory"
+        assert result.providers == ["public"]
+
+
+class TestAIServiceParserSingleOption:
+    """Test with single option specified."""
+
+    def test_backend_only(self) -> None:
+        """ai[sqlite] → pydantic-ai, sqlite, public"""
+        result = parse_ai_service_config("ai[sqlite]")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "sqlite"
+        assert result.providers == ["public"]
+
+    def test_framework_only_langchain(self) -> None:
+        """ai[langchain] → langchain, memory, public"""
+        result = parse_ai_service_config("ai[langchain]")
+        assert result.framework == "langchain"
+        assert result.backend == "memory"
+        assert result.providers == ["public"]
+
+    def test_framework_only_pydantic_ai(self) -> None:
+        """ai[pydantic-ai] → pydantic-ai, memory, public"""
+        result = parse_ai_service_config("ai[pydantic-ai]")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "memory"
+        assert result.providers == ["public"]
+
+    def test_single_provider_groq(self) -> None:
+        """ai[groq] → pydantic-ai, memory, groq"""
+        result = parse_ai_service_config("ai[groq]")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "memory"
+        assert result.providers == ["groq"]
+
+    def test_single_provider_openai(self) -> None:
+        """ai[openai] → pydantic-ai, memory, openai"""
+        result = parse_ai_service_config("ai[openai]")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "memory"
+        assert result.providers == ["openai"]
+
+    def test_single_provider_anthropic(self) -> None:
+        """ai[anthropic] → pydantic-ai, memory, anthropic"""
+        result = parse_ai_service_config("ai[anthropic]")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "memory"
+        assert result.providers == ["anthropic"]
+
+    def test_single_provider_google(self) -> None:
+        """ai[google] → pydantic-ai, memory, google"""
+        result = parse_ai_service_config("ai[google]")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "memory"
+        assert result.providers == ["google"]
+
+    def test_single_provider_mistral(self) -> None:
+        """ai[mistral] → pydantic-ai, memory, mistral"""
+        result = parse_ai_service_config("ai[mistral]")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "memory"
+        assert result.providers == ["mistral"]
+
+    def test_single_provider_cohere(self) -> None:
+        """ai[cohere] → pydantic-ai, memory, cohere"""
+        result = parse_ai_service_config("ai[cohere]")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "memory"
+        assert result.providers == ["cohere"]
+
+    def test_single_provider_public(self) -> None:
+        """ai[public] → pydantic-ai, memory, public"""
+        result = parse_ai_service_config("ai[public]")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "memory"
+        assert result.providers == ["public"]
+
+    def test_memory_backend_explicit(self) -> None:
+        """ai[memory] → pydantic-ai, memory, public"""
+        result = parse_ai_service_config("ai[memory]")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "memory"
+        assert result.providers == ["public"]
+
+
+class TestAIServiceParserMultipleOptions:
+    """Test with multiple options specified."""
+
+    def test_framework_and_backend(self) -> None:
+        """ai[langchain, sqlite] → langchain, sqlite, public"""
+        result = parse_ai_service_config("ai[langchain, sqlite]")
+        assert result.framework == "langchain"
+        assert result.backend == "sqlite"
+        assert result.providers == ["public"]
+
+    def test_framework_and_provider(self) -> None:
+        """ai[langchain, anthropic] → langchain, memory, anthropic"""
+        result = parse_ai_service_config("ai[langchain, anthropic]")
+        assert result.framework == "langchain"
+        assert result.backend == "memory"
+        assert result.providers == ["anthropic"]
+
+    def test_backend_and_provider(self) -> None:
+        """ai[sqlite, groq] → pydantic-ai, sqlite, groq"""
+        result = parse_ai_service_config("ai[sqlite, groq]")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "sqlite"
+        assert result.providers == ["groq"]
+
+    def test_backend_and_multiple_providers(self) -> None:
+        """ai[sqlite, groq, google] → pydantic-ai, sqlite, [groq, google]"""
+        result = parse_ai_service_config("ai[sqlite, groq, google]")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "sqlite"
+        assert result.providers == ["groq", "google"]
+
+    def test_multiple_providers(self) -> None:
+        """ai[openai, anthropic, google] → pydantic-ai, memory, [openai, anthropic, google]"""
+        result = parse_ai_service_config("ai[openai, anthropic, google]")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "memory"
+        assert result.providers == ["openai", "anthropic", "google"]
+
+    def test_all_options(self) -> None:
+        """ai[langchain, sqlite, anthropic, groq] → langchain, sqlite, [anthropic, groq]"""
+        result = parse_ai_service_config("ai[langchain, sqlite, anthropic, groq]")
+        assert result.framework == "langchain"
+        assert result.backend == "sqlite"
+        assert result.providers == ["anthropic", "groq"]
+
+    def test_all_providers(self) -> None:
+        """ai[openai, anthropic, google, groq, mistral, cohere] → all providers"""
+        result = parse_ai_service_config(
+            "ai[openai, anthropic, google, groq, mistral, cohere]"
+        )
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "memory"
+        assert set(result.providers) == {
+            "openai",
+            "anthropic",
+            "google",
+            "groq",
+            "mistral",
+            "cohere",
+        }
+
+
+class TestAIServiceParserOrderIndependent:
+    """Test that order of options doesn't matter."""
+
+    def test_order_variation_sqlite_langchain_groq(self) -> None:
+        """ai[sqlite, langchain, groq] same as ai[langchain, sqlite, groq]"""
+        result = parse_ai_service_config("ai[sqlite, langchain, groq]")
+        assert result.framework == "langchain"
+        assert result.backend == "sqlite"
+        assert result.providers == ["groq"]
+
+    def test_order_variation_groq_sqlite_langchain(self) -> None:
+        """ai[groq, sqlite, langchain] same as above"""
+        result = parse_ai_service_config("ai[groq, sqlite, langchain]")
+        assert result.framework == "langchain"
+        assert result.backend == "sqlite"
+        assert result.providers == ["groq"]
+
+    def test_order_variation_providers_first(self) -> None:
+        """ai[anthropic, openai, langchain] → langchain with providers"""
+        result = parse_ai_service_config("ai[anthropic, openai, langchain]")
+        assert result.framework == "langchain"
+        assert result.backend == "memory"
+        assert set(result.providers) == {"anthropic", "openai"}
+
+    def test_order_variation_all_mixed(self) -> None:
+        """ai[groq, pydantic-ai, sqlite, google] → pydantic-ai, sqlite, [groq, google]"""
+        result = parse_ai_service_config("ai[groq, pydantic-ai, sqlite, google]")
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "sqlite"
+        assert set(result.providers) == {"groq", "google"}
+
+
+class TestAIServiceParserWhitespace:
+    """Test whitespace handling."""
+
+    def test_no_spaces(self) -> None:
+        """ai[langchain,sqlite,groq] parses correctly"""
+        result = parse_ai_service_config("ai[langchain,sqlite,groq]")
+        assert result.framework == "langchain"
+        assert result.backend == "sqlite"
+        assert result.providers == ["groq"]
+
+    def test_extra_spaces(self) -> None:
+        """ai[  langchain  ,  sqlite  ,  groq  ] parses correctly"""
+        result = parse_ai_service_config("ai[  langchain  ,  sqlite  ,  groq  ]")
+        assert result.framework == "langchain"
+        assert result.backend == "sqlite"
+        assert result.providers == ["groq"]
+
+    def test_tabs(self) -> None:
+        """ai[langchain\t,\tsqlite] parses correctly"""
+        result = parse_ai_service_config("ai[langchain\t,\tsqlite]")
+        assert result.framework == "langchain"
+        assert result.backend == "sqlite"
+        assert result.providers == ["public"]
+
+    def test_leading_trailing_whitespace(self) -> None:
+        """Whitespace around whole string handled"""
+        result = parse_ai_service_config("  ai[langchain]  ")
+        assert result.framework == "langchain"
+        assert result.backend == "memory"
+        assert result.providers == ["public"]
+
+
+class TestAIServiceParserErrors:
+    """Test error cases."""
+
+    def test_unknown_value_raises_error(self) -> None:
+        """Unknown value should raise ValueError with helpful message."""
+        with pytest.raises(ValueError) as exc_info:
+            parse_ai_service_config("ai[postgres]")
+        error_msg = str(exc_info.value)
+        assert "Unknown value 'postgres'" in error_msg or "postgres" in error_msg
+
+    def test_multiple_frameworks_raises_error(self) -> None:
+        """Can't specify both frameworks."""
+        with pytest.raises(ValueError) as exc_info:
+            parse_ai_service_config("ai[langchain, pydantic-ai]")
+        error_msg = str(exc_info.value).lower()
+        assert "multiple" in error_msg or "framework" in error_msg
+
+    def test_multiple_backends_raises_error(self) -> None:
+        """Can't specify both backends."""
+        with pytest.raises(ValueError) as exc_info:
+            parse_ai_service_config("ai[memory, sqlite]")
+        error_msg = str(exc_info.value).lower()
+        assert "multiple" in error_msg or "backend" in error_msg
+
+    def test_invalid_service_name_raises_error(self) -> None:
+        """Non-ai service should raise error."""
+        with pytest.raises(ValueError) as exc_info:
+            parse_ai_service_config("auth[sqlite]")
+        error_msg = str(exc_info.value).lower()
+        assert "ai" in error_msg
+
+    def test_malformed_brackets_raises_error(self) -> None:
+        """Malformed brackets should raise error."""
+        with pytest.raises(ValueError):
+            parse_ai_service_config("ai[langchain")
+
+    def test_gibberish_raises_error(self) -> None:
+        """Completely invalid input raises error."""
+        with pytest.raises(ValueError):
+            parse_ai_service_config("not_a_service")
+
+
+class TestAIServiceConfigDataclass:
+    """Test the AIServiceConfig dataclass."""
+
+    def test_config_attributes(self) -> None:
+        """AIServiceConfig has expected attributes."""
+        config = AIServiceConfig(
+            framework="langchain", backend="sqlite", providers=["openai", "anthropic"]
+        )
+        assert config.framework == "langchain"
+        assert config.backend == "sqlite"
+        assert config.providers == ["openai", "anthropic"]
+
+    def test_config_equality(self) -> None:
+        """AIServiceConfig instances with same values are equal."""
+        config1 = AIServiceConfig(
+            framework="pydantic-ai", backend="memory", providers=["public"]
+        )
+        config2 = AIServiceConfig(
+            framework="pydantic-ai", backend="memory", providers=["public"]
+        )
+        assert config1 == config2
+
+
+class TestAIServiceParserProviderOrder:
+    """Test that provider order is preserved."""
+
+    def test_provider_order_preserved(self) -> None:
+        """Providers should be in the order specified."""
+        result = parse_ai_service_config("ai[openai, anthropic, google]")
+        assert result.providers == ["openai", "anthropic", "google"]
+
+    def test_provider_order_preserved_reversed(self) -> None:
+        """Providers should be in the order specified (reversed)."""
+        result = parse_ai_service_config("ai[google, anthropic, openai]")
+        assert result.providers == ["google", "anthropic", "openai"]
