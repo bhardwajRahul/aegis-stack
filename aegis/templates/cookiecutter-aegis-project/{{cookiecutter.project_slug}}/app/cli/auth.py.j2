@@ -113,12 +113,18 @@ async def _create_test_user(
             # Auto-generate email if not provided
             if email is None:
                 email = await find_next_available_email(user_service, prefix, domain)
-                typer.secho(f"Auto-generated email: {email} (next in sequence)", dim=True)
+                typer.secho(
+                    f"Auto-generated email: {email} (next in sequence)",
+                    dim=True,
+                )
 
             # Check if user already exists
             existing_user = await user_service.get_user_by_email(email)
             if existing_user:
-                typer.secho(f"Error: User with email '{email}' already exists", fg=typer.colors.RED)
+                typer.secho(
+                    f"Error: User with email '{email}' already exists",
+                    fg=typer.colors.RED,
+                )
                 raise typer.Exit(1)
 
             # Create user data
@@ -132,7 +138,11 @@ async def _create_test_user(
             user = await user_service.create_user(user_data)
 
             # Display success message
-            typer.secho("Test user created successfully!", fg=typer.colors.GREEN, bold=True)
+            typer.secho(
+                "Test user created successfully!",
+                fg=typer.colors.GREEN,
+                bold=True,
+            )
 
             # Show user details in a table
             table = Table(title="User Details", show_header=False, width=50)
@@ -146,9 +156,15 @@ async def _create_test_user(
             console.print(table)
 
             if generated_password:
-                typer.secho("Password was auto-generated. Save it for testing!", fg=typer.colors.YELLOW)
+                typer.secho(
+                    "Password was auto-generated. Save it for testing!",
+                    fg=typer.colors.YELLOW,
+                )
 
-            typer.secho("Ready to test auth endpoints at http://localhost:8000/docs", dim=True)
+            typer.secho(
+                "Ready to test auth endpoints at http://localhost:8000/docs",
+                dim=True,
+            )
 
     except Exception as e:
         typer.secho(f"Error: Failed to create test user: {str(e)}", fg=typer.colors.RED)
@@ -188,7 +204,11 @@ async def _create_test_users(
             user_service = UserService(session)
             created_users = []
 
-            typer.secho(f"Creating {count} test users with prefix '{prefix}'...", fg=typer.colors.BLUE, bold=True)
+            typer.secho(
+                f"Creating {count} test users with prefix '{prefix}'...",
+                fg=typer.colors.BLUE,
+                bold=True,
+            )
 
             for i in range(count):
                 # Find next available email
@@ -205,20 +225,37 @@ async def _create_test_users(
                 user = await user_service.create_user(user_data)
                 created_users.append(user)
 
-                typer.echo(f"{typer.style('Created:', fg=typer.colors.GREEN)} {user.email} {typer.style(f'(ID: {user.id})', dim=True)}")
+                typer.echo(
+                    f"{typer.style('Created:', fg=typer.colors.GREEN)} "
+                    f"{user.email} {typer.style(f'(ID: {user.id})', dim=True)}"
+                )
 
             # Display summary
             typer.echo()
-            typer.secho(f"Successfully created {len(created_users)} test users!", fg=typer.colors.GREEN, bold=True)
-            typer.echo(f"{typer.style('Shared password:', fg=typer.colors.CYAN)} {password}")
+            typer.secho(
+                f"Successfully created {len(created_users)} test users!",
+                fg=typer.colors.GREEN,
+                bold=True,
+            )
+            pwd_label = typer.style("Shared password:", fg=typer.colors.CYAN)
+            typer.echo(f"{pwd_label} {password}")
 
             if generated_password:
-                typer.secho("Password was auto-generated. Save it for testing!", fg=typer.colors.YELLOW)
+                typer.secho(
+                    "Password was auto-generated. Save it for testing!",
+                    fg=typer.colors.YELLOW,
+                )
 
-            typer.secho("Ready to test auth endpoints at http://localhost:8000/docs", dim=True)
+            typer.secho(
+                "Ready to test auth endpoints at http://localhost:8000/docs",
+                dim=True,
+            )
 
     except Exception as e:
-        typer.secho(f"Error: Failed to create test users: {str(e)}", fg=typer.colors.RED)
+        typer.secho(
+            f"Error: Failed to create test users: {str(e)}",
+            fg=typer.colors.RED,
+        )
         raise typer.Exit(1)
 
 

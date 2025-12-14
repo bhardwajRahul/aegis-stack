@@ -73,7 +73,8 @@ def _format_status_breakdown(counts: dict[str, int]) -> str:
     if counts["healthy"] > 0:
         parts.append(f"{counts['healthy']} healthy")
     if counts["warning"] > 0:
-        parts.append(f"{counts['warning']} warning{'s' if counts['warning'] > 1 else ''}")
+        suffix = "s" if counts["warning"] > 1 else ""
+        parts.append(f"{counts['warning']} warning{suffix}")
     if counts["info"] > 0:
         parts.append(f"{counts['info']} info")
     if counts["unhealthy"] > 0:
@@ -417,7 +418,8 @@ def _display_health_status(
         + f"[/bold {overall_color}]",
         f"Health Percentage: [bold]"
         f"{health_percentage:.{CLI.HEALTH_PERCENTAGE_DECIMALS}f}%[/bold]",
-        f"Components: [bold {component_status_color}]{component_breakdown}[/bold {component_status_color}]",
+        f"Components: [bold {component_status_color}]"
+        f"{component_breakdown}[/bold {component_status_color}]",
     ]
 
     # Add service information
@@ -442,7 +444,8 @@ def _display_health_status(
         service_status_color = _get_status_color(service_counts)
 
         panel_content.append(
-            f"Services: [bold {service_status_color}]{service_breakdown}[/bold {service_status_color}]"
+            f"Services: [bold {service_status_color}]"
+            f"{service_breakdown}[/bold {service_status_color}]"
         )
 
     panel_content.append(f"Timestamp: {timestamp}")

@@ -1,8 +1,8 @@
 """
 Scheduler Detail Modal
 
-Displays comprehensive scheduler component information using component composition.
-Each section is a self-contained Flet control that can be reused and tested independently.
+Displays comprehensive scheduler component information using composition.
+Each section is self-contained and can be reused and tested independently.
 """
 
 import flet as ft

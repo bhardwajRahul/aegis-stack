@@ -208,7 +208,9 @@ def create_progress_indicator(
                         value=value / 100.0,
                         height=8,
                         color=color,
-                        bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.ON_SURFACE_VARIANT),
+                        bgcolor=ft.Colors.with_opacity(
+                            0.3, ft.Colors.ON_SURFACE_VARIANT
+                        ),
                         border_radius=4,
                     ),
                     margin=ft.margin.only(top=4, bottom=4),

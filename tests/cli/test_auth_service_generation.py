@@ -37,8 +37,8 @@ class TestAuthServiceGeneration:
         versions_dir = alembic_dir / "versions"
         assert versions_dir.exists()
 
-        # Check for auth migration file (should start with 001_initial_auth)
-        migration_files = list(versions_dir.glob("001_initial_auth.py"))
+        # Check for auth migration file (should start with 001_auth)
+        migration_files = list(versions_dir.glob("001_auth.py"))
         assert len(migration_files) == 1, "Should have initial auth migration"
 
     def test_database_only_excludes_alembic_directory(
@@ -237,7 +237,7 @@ class TestAuthServiceMigrationConfiguration:
         project_path = project_factory("base_with_auth_service")
 
         # Read migration file
-        migration_file = project_path / "alembic" / "versions" / "001_initial_auth.py"
+        migration_file = project_path / "alembic" / "versions" / "001_auth.py"
         assert migration_file.exists()
 
         migration_content = migration_file.read_text()

@@ -52,6 +52,16 @@ SHARED_TEMPLATE_FILES: dict[str, SharedFilePolicy] = {
         "backup": True,
         "warn": False,
     },  # Card exports
+    "app/components/frontend/dashboard/cards/card_utils.py": {
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Contains modal_map with conditional component entries
+    "app/components/frontend/dashboard/modals/__init__.py": {
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Modal exports (conditional)
     "app/components/backend/api/routing.py": {
         "overwrite": True,
         "backup": True,

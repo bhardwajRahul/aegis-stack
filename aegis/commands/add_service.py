@@ -8,16 +8,23 @@ from pathlib import Path
 
 import typer
 
+from ..cli.callbacks import _split_service_list
 from ..cli.utils import detect_scheduler_backend
 from ..cli.validation import (
-    parse_comma_separated_list,
     validate_copier_project,
     validate_git_repository,
 )
 from ..constants import AnswerKeys, ComponentNames, Messages, StorageBackends
+from ..core.component_utils import extract_base_service_name
 from ..core.components import COMPONENTS, CORE_COMPONENTS
 from ..core.copier_manager import load_copier_answers
 from ..core.manual_updater import ManualUpdater
+from ..core.migration_generator import (
+    MIGRATION_SPECS,
+    bootstrap_alembic,
+    generate_migration,
+    service_has_migration,
+)
 from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES
 
@@ -59,7 +66,7 @@ def add_service_command(
     (the default since v0.2.0). Services may auto-add required components.
     """
 
-    typer.echo("Aegis Stack - Add Services")
+    typer.secho("Aegis Stack - Add Services", fg=typer.colors.BLUE, bold=True)
     typer.echo("=" * 50)
 
     # Resolve project path
@@ -68,7 +75,7 @@ def add_service_command(
     # Validate it's a Copier project
     validate_copier_project(target_path, "add-service")
 
-    typer.echo(f"Project: {target_path}")
+    typer.echo(f"{typer.style('Project:', fg=typer.colors.CYAN)} {target_path}")
 
     # Validate services argument or interactive mode
     if not interactive and not services:
@@ -106,9 +113,15 @@ def add_service_command(
     # Verify project is in a git repository (required for Copier updates)
     validate_git_repository(target_path)
 
-    # Parse and validate services
+    # Parse services (respecting bracket syntax like ai[langchain,sqlite])
     assert services is not None  # Already validated by check above
-    selected_services = parse_comma_separated_list(services, "service")
+    selected_services = _split_service_list(services)
+
+    # Create mapping: full name -> base name (for bracket syntax like ai[langchain,sqlite])
+    # This is done once and used throughout to keep things DRY
+    service_base_map: dict[str, str] = {
+        s: extract_base_service_name(s) for s in selected_services
+    }
 
     # Validate services exist
     try:
@@ -131,8 +144,9 @@ def add_service_command(
     # Check which services are already enabled
     already_enabled = []
     for service in selected_services:
-        # Check if service is already enabled in answers
-        include_key = AnswerKeys.include_key(service)
+        # Check if service is already enabled in answers (use base name for bracket syntax)
+        base_service = service_base_map[service]
+        include_key = AnswerKeys.include_key(base_service)
         if existing_answers.get(include_key) is True:
             already_enabled.append(service)
 
@@ -167,15 +181,18 @@ def add_service_command(
             missing_components.append(component)
 
     # Show what will be added
-    typer.echo("\nServices to add:")
+    typer.secho("\nServices to add:", fg=typer.colors.CYAN, bold=True)
     for service in services_to_add:
-        if service in SERVICES:
-            desc = SERVICES[service].description
+        base_service = service_base_map[service]
+        if base_service in SERVICES:
+            desc = SERVICES[base_service].description
             typer.echo(f"   • {service}: {desc}")
 
     # Show component requirements
     if missing_components:
-        typer.echo("\nRequired components (will be auto-added):")
+        typer.secho(
+            "\nRequired components (will be auto-added):", fg=typer.colors.YELLOW
+        )
         for component in missing_components:
             if component in COMPONENTS:
                 desc = COMPONENTS[component].description
@@ -210,13 +227,15 @@ def add_service_command(
         update_data[include_key] = True
 
     # Add services using ManualUpdater
-    typer.echo("\nUpdating project...")
+    typer.secho("\nUpdating project...", fg=typer.colors.CYAN, bold=True)
     try:
         updater = ManualUpdater(target_path)
 
         # Add missing components first
         for component in missing_components:
-            typer.echo(f"\nAdding required component: {component}...")
+            typer.secho(
+                f"\nAdding required component: {component}...", fg=typer.colors.CYAN
+            )
 
             # Prepare component-specific data
             component_data: dict[str, bool | str] = {}
@@ -252,17 +271,21 @@ def add_service_command(
 
         # Now add each service sequentially
         for service in services_to_add:
-            typer.echo(f"\nAdding service: {service}...")
+            typer.secho(f"\nAdding service: {service}...", fg=typer.colors.CYAN)
 
             # Prepare service-specific data
             service_data: dict[str, bool | str] = {}
 
+            # Get base service name (strips variant syntax like [langchain,sqlite])
+            base_service = service_base_map[service]
+
             # For AI service, set default providers
-            if service == AnswerKeys.SERVICE_AI:
+            if base_service == AnswerKeys.SERVICE_AI:
                 service_data[AnswerKeys.AI_PROVIDERS] = "openai"
 
             # Add the service (services are added like components)
-            result = updater.add_component(service, service_data)
+            # Use base_service for file lookup, not the full variant name
+            result = updater.add_component(base_service, service_data)
 
             if not result.success:
                 typer.secho(
@@ -281,6 +304,46 @@ def add_service_command(
                     fg="yellow",
                 )
 
+        # Generate migrations for services that need them
+        for service in services_to_add:
+            base_service = service_base_map[service]
+            if base_service not in MIGRATION_SPECS:
+                continue
+
+            alembic_dir = target_path / "alembic"
+            if not alembic_dir.exists():
+                typer.secho(
+                    "\nBootstrapping alembic infrastructure...", fg=typer.colors.CYAN
+                )
+                created = bootstrap_alembic(
+                    target_path, updater.jinja_env, updater.answers
+                )
+                for f in created:
+                    typer.echo(f"   Created: {f}")
+
+            if not service_has_migration(target_path, base_service):
+                migration_path = generate_migration(target_path, base_service)
+                if migration_path:
+                    typer.secho(
+                        f"   Generated migration: {migration_path.name}", fg="green"
+                    )
+
+        # Auto-run migrations for services that need them
+        services_with_migrations = [
+            s for s in services_to_add if service_base_map[s] in MIGRATION_SPECS
+        ]
+        if services_with_migrations:
+            typer.secho("\nApplying database migrations...", fg=typer.colors.CYAN)
+            from ..core.post_gen_tasks import run_migrations
+
+            migration_success = run_migrations(target_path, include_migrations=True)
+
+            if not migration_success:
+                typer.secho(
+                    "Warning: Auto-migration failed. Run 'make migrate' manually.",
+                    fg="yellow",
+                )
+
         typer.secho("\nServices added successfully!", fg="green")
 
         # Provide next steps
@@ -289,24 +352,28 @@ def add_service_command(
 
         Messages.print_next_steps()
 
-        # Service-specific guidance
-        if AnswerKeys.SERVICE_AUTH in services_to_add:
-            project_slug = existing_answers.get(AnswerKeys.PROJECT_SLUG, "my-project")
-            typer.echo("\nAuth Service Setup:")
-            typer.echo("   1. Run 'make migrate' to apply auth migrations")
-            typer.echo(
-                f"   2. Create test users with CLI: '{project_slug} auth create-test-users'"
-            )
-            typer.echo("   3. Check auth routes at /api/auth/docs")
+        # Service-specific guidance (use base service names for comparison)
+        base_services_added = [service_base_map[s] for s in services_to_add]
 
-        if AnswerKeys.SERVICE_AI in services_to_add:
+        if AnswerKeys.SERVICE_AUTH in base_services_added:
             project_slug = existing_answers.get(AnswerKeys.PROJECT_SLUG, "my-project")
-            typer.echo("\nAI Service Setup:")
+            typer.secho("\nAuth Service Setup:", fg=typer.colors.CYAN, bold=True)
+            cmd = typer.style(f"{project_slug} auth create-test-users", bold=True)
+            typer.echo(f"   1. Create test users: {cmd}")
+            url = typer.style("http://localhost:8000/docs", bold=True)
+            typer.echo(f"   2. View auth routes: {url}")
+
+        if AnswerKeys.SERVICE_AI in base_services_added:
+            project_slug = existing_answers.get(AnswerKeys.PROJECT_SLUG, "my-project")
+            typer.secho("\nAI Service Setup:", fg=typer.colors.CYAN, bold=True)
             typer.echo(
-                "   1. Set AI_PROVIDER in .env (openai, anthropic, google, groq)"
+                f"   1. Set {typer.style('AI_PROVIDER', bold=True)} in .env (openai, anthropic, google, groq)"
             )
-            typer.echo("   2. Set provider API key (OPENAI_API_KEY, etc.)")
-            typer.echo(f"   3. Test with CLI: '{project_slug} ai chat'")
+            typer.echo(
+                f"   2. Set provider API key ({typer.style('OPENAI_API_KEY', bold=True)}, etc.)"
+            )
+            cmd = typer.style(f"{project_slug} ai chat", bold=True)
+            typer.echo(f"   3. Test with CLI: {cmd}")
 
     except Exception as e:
         typer.secho(f"\nFailed to add services: {e}", fg="red", err=True)

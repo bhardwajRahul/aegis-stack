@@ -251,7 +251,9 @@ def get_logo_base64(dark_mode: bool = False) -> str:
         from pathlib import Path
 
         # Use overseer.png for both light and dark mode
-        logo_path = Path(__file__).parent.parent.parent.parent / "assets" / "overseer.png"
+        logo_path = (
+            Path(__file__).parent.parent.parent.parent / "assets" / "overseer.png"
+        )
         with open(logo_path, "rb") as f:
             return base64.b64encode(f.read()).decode()
     except Exception:
@@ -365,7 +367,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             margin=ft.margin.only(right=20),  # Space before theme button
         )
 
-        # Professional header with modern layout: logo far left, status+controls far right
+        # Header with modern layout: logo left, status+controls right
         header = ft.Container(
             content=ft.Row(
                 [
@@ -376,7 +378,8 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                     ft.Row(
                         [
                             health_indicator_container,  # Health status
-                            ft.Container(content=theme_button, padding=10),  # Theme toggle
+                            # Theme toggle
+                            ft.Container(content=theme_button, padding=10),
                         ],
                         alignment=ft.MainAxisAlignment.END,
                     ),
@@ -457,7 +460,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 elif component_name == "services":
                     return ServicesCard(component_data).build()
 {%- endif %}
-                # Individual service cards - specific checks BEFORE generic service_* fallback
+                # Service cards - specific checks BEFORE generic fallback
 {%- if cookiecutter.include_ai == "yes" %}
                 elif component_name == "service_ai":
                     return AICard(component_data).build()
@@ -545,7 +548,9 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                         try:
                             status = ComponentStatusType(status_str)
                         except ValueError:
-                            logger.warning(f"Unknown status value: {status_str}, defaulting to UNHEALTHY")
+                            logger.warning(
+                                f"Unknown status: {status_str}, default UNHEALTHY"
+                            )
                             status = ComponentStatusType.UNHEALTHY
 
                         return ComponentStatus(

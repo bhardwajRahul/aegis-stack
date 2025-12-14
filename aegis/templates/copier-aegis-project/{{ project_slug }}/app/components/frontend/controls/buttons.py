@@ -40,7 +40,7 @@ class BaseElevatedButton(ft.ElevatedButton):
         self.args = args
         self.content = ft.Text(self.text, **asdict(self.text_style))
         self.on_click = lambda _: self.on_click_callable()
-        self.on_hover = self.on_hover_event
+        self.on_hover = self.on_hover_event  # type: ignore[assignment]
         self.kwargs = kwargs
         self.height = 36  # Consistent button height
 

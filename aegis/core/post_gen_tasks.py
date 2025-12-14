@@ -92,6 +92,12 @@ def get_component_file_mapping() -> dict[str, list[str]]:
         ],
         ComponentNames.DATABASE: [
             "app/core/db.py",
+            "app/components/frontend/dashboard/cards/database_card.py",
+            "app/components/frontend/dashboard/modals/database_modal.py",
+        ],
+        ComponentNames.REDIS: [
+            "app/components/frontend/dashboard/cards/redis_card.py",
+            "app/components/frontend/dashboard/modals/redis_modal.py",
         ],
         AnswerKeys.SERVICE_AUTH: [
             "app/components/backend/api/auth",
@@ -103,7 +109,7 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "tests/services/test_auth_service.py",
             "tests/services/test_auth_integration.py",
             "tests/models/test_user.py",
-            "alembic",
+            # Note: alembic is now shared between auth and AI services
             # Frontend dashboard files
             "app/components/frontend/dashboard/cards/auth_card.py",
             "app/components/frontend/dashboard/cards/services_card.py",
@@ -115,11 +121,26 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/cli/ai.py",
             "app/cli/ai_rendering.py",
             "app/cli/marko_terminal_renderer.py",
+            "app/models/conversation.py",
             "tests/api/test_ai_endpoints.py",
             "tests/services/test_conversation_persistence.py",
             "tests/cli/test_ai_rendering.py",
             "tests/cli/test_conversation_memory.py",
             "tests/services/ai",
+            # Frontend dashboard files
+            "app/components/frontend/dashboard/cards/ai_card.py",
+            "app/components/frontend/dashboard/modals/ai_modal.py",
+        ],
+        AnswerKeys.SERVICE_COMMS: [
+            "app/components/backend/api/comms",
+            "app/services/comms",
+            "app/cli/comms.py",
+            "tests/api/test_comms_endpoints.py",
+            "tests/services/comms",
+            "docs/services/comms",
+            # Frontend dashboard files
+            "app/components/frontend/dashboard/cards/comms_card.py",
+            "app/components/frontend/dashboard/modals/comms_modal.py",
         ],
     }
 
@@ -340,7 +361,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/services/test_auth_service.py")
         remove_file(project_path, "tests/services/test_auth_integration.py")
         remove_file(project_path, "tests/models/test_user.py")
-        remove_dir(project_path, "alembic")
+        # Note: alembic removal is handled below based on whether ANY service needs migrations
 
     # Remove AI service if not selected
     if not is_enabled(AnswerKeys.AI):
@@ -394,6 +415,17 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
             project_path, "app/components/frontend/dashboard/modals/auth_modal.py"
         )
 
+    # Remove Alembic directory only if NO service needs migrations
+    # Alembic is needed when: auth is enabled OR (AI is enabled AND backend is NOT memory)
+    include_auth = is_enabled(AnswerKeys.AUTH)
+    include_ai = is_enabled(AnswerKeys.AI)
+    ai_backend = context.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
+    ai_needs_migrations = include_ai and ai_backend != StorageBackends.MEMORY
+    needs_migrations = include_auth or ai_needs_migrations
+
+    if not needs_migrations:
+        remove_dir(project_path, "alembic")
+
     # Clean up empty docs/components directory if no components selected
     if (
         not is_enabled(AnswerKeys.SCHEDULER)
@@ -402,6 +434,56 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         and not is_enabled(AnswerKeys.CACHE)
     ):
         remove_dir(project_path, "docs/components")
+
+
+def _render_jinja_template(src: Path, dst: Path, project_path: Path) -> None:
+    """
+    Render a Jinja2 template file and write to destination.
+
+    Args:
+        src: Path to the .jinja template file
+        dst: Path to write the rendered output (without .jinja extension)
+        project_path: Path to the project (used to derive template variables)
+    """
+    from jinja2 import Environment, FileSystemLoader
+
+    # Get project name from project path
+    project_slug = project_path.name
+
+    # Set up Jinja2 environment
+    env = Environment(
+        loader=FileSystemLoader(src.parent),
+        keep_trailing_newline=True,
+    )
+
+    # Load and render template
+    template = env.get_template(src.name)
+
+    # Build context with common variables
+    # These match the variables used in copier.yml
+    context = {
+        "project_slug": project_slug,
+        "project_name": project_slug.replace("-", " ").title(),
+        # Service flags - assume true since we're copying service files
+        "include_auth": True,
+        "include_ai": True,
+        "include_comms": True,
+        # Component flags - check what exists in project
+        "include_scheduler": (project_path / "app/components/scheduler").exists(),
+        "include_worker": (project_path / "app/components/worker").exists(),
+        "include_database": (project_path / "app/core/db.py").exists(),
+        "include_cache": (project_path / "app/components/cache").exists(),
+        # AI-specific settings (defaults)
+        "ai_framework": "anthropic",
+        "ai_backend": "sqlite",
+        "ai_provider_anthropic": True,
+        "ai_provider_openai": False,
+    }
+
+    rendered = template.render(**context)
+
+    # Write to destination
+    dst.write_text(rendered)
 
 
 def copy_service_files(
@@ -451,8 +533,19 @@ def copy_service_files(
         src = template_content / rel_path
         dst = project_path / rel_path
 
+        # Check for .jinja version if plain file doesn't exist
+        jinja_src = template_content / (rel_path + ".jinja")
+        is_jinja_template = False
+        if not src.exists() and jinja_src.exists():
+            src = jinja_src
+            is_jinja_template = True
+
         # Skip if source doesn't exist (might be conditional on other settings)
         if not src.exists():
+            continue
+
+        # Skip if destination already exists (don't overwrite existing customizations)
+        if dst.exists():
             continue
 
         # Create parent directory if needed
@@ -460,17 +553,13 @@ def copy_service_files(
 
         # Copy file or directory
         if src.is_dir():
-            if dst.exists():
-                # Skip if already exists (don't overwrite existing customizations)
-                continue
             shutil.copytree(src, dst)
             copied_count += 1
+        elif is_jinja_template or src.suffix == ".jinja":
+            # Render Jinja2 template
+            _render_jinja_template(src, dst, project_path)
+            copied_count += 1
         else:
-            # For files, check if .jinja extension (template file)
-            if src.suffix == ".jinja":
-                # This is a Jinja2 template - we need to render it
-                # For now, skip template files (they'll be handled by Copier update)
-                continue
             # Copy regular file
             shutil.copy2(src, dst)
             copied_count += 1
@@ -593,22 +682,26 @@ def setup_env_file(project_path: Path) -> bool:
         return False
 
 
-def run_migrations(project_path: Path, include_auth: bool = False) -> bool:
+def run_migrations(project_path: Path, include_migrations: bool = False) -> bool:
     """
-    Run Alembic database migrations if auth service is enabled.
+    Run Alembic database migrations if any service requiring migrations is enabled.
+
+    Migrations are needed when:
+    - Auth service is enabled
+    - AI service is enabled with a persistence backend (not memory)
 
     Args:
         project_path: Path to the project directory
-        include_auth: Whether auth service is enabled
+        include_migrations: Whether any service requiring migrations is enabled
 
     Returns:
         True if migrations succeeded or not needed, False on error
     """
-    if not include_auth:
+    if not include_migrations:
         return True  # No migrations needed
 
     try:
-        typer.secho("Setting up database with auth schema...", fg=typer.colors.CYAN)
+        typer.secho("Setting up database schema...", fg=typer.colors.CYAN)
 
         # Ensure data directory exists
         data_dir = project_path / "data"
@@ -740,7 +833,9 @@ class DependencyInstallationError(Exception):
 
 
 def run_post_generation_tasks(
-    project_path: Path, include_auth: bool = False, python_version: str | None = None
+    project_path: Path,
+    include_migrations: bool = False,
+    python_version: str | None = None,
 ) -> bool:
     """
     Run all post-generation tasks for a project.
@@ -750,7 +845,7 @@ def run_post_generation_tasks(
 
     Args:
         project_path: Path to the generated/updated project
-        include_auth: Whether auth service is enabled (triggers migrations)
+        include_migrations: Whether to run Alembic migrations (auth or AI with persistence)
         python_version: Python version to use (e.g., "3.13")
 
     Returns:
@@ -796,8 +891,8 @@ def run_post_generation_tasks(
     # Task 2: Setup .env file (non-critical)
     setup_env_file(project_path)
 
-    # Task 3: Run migrations if auth enabled (non-critical)
-    run_migrations(project_path, include_auth)
+    # Task 3: Run migrations if needed (non-critical)
+    run_migrations(project_path, include_migrations)
 
     # Task 4: Format code (non-critical)
     format_code(project_path)

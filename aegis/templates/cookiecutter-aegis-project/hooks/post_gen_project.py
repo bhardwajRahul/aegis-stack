@@ -11,6 +11,10 @@ from jinja2 import Environment
 AEGIS_STACK_ROOT = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(AEGIS_STACK_ROOT))
 
+from aegis.core.migration_generator import (  # noqa: E402
+    generate_migrations_for_services,
+    get_services_needing_migrations,
+)
 from aegis.core.post_gen_tasks import run_post_generation_tasks  # noqa: E402
 
 PROJECT_DIRECTORY = os.path.realpath(os.path.curdir)
@@ -325,9 +329,28 @@ def main():
     ):
         remove_dir("docs/components")
 
-    # Remove Alembic directory if auth service not included
-    if "{{ cookiecutter.include_auth }}" != "yes":
+    # Remove Alembic directory only if NO service needs migrations
+    # Alembic is needed when: auth is included OR (AI is included AND backend is NOT memory)
+    include_auth = "{{ cookiecutter.include_auth }}" == "yes"
+    include_ai = "{{ cookiecutter.include_ai }}" == "yes"
+    ai_needs_migrations = include_ai and "{{ cookiecutter.ai_backend }}" != "memory"
+    needs_migrations = include_auth or ai_needs_migrations
+
+    if not needs_migrations:
         remove_dir("alembic")
+    else:
+        # Generate migrations for services that need them
+        context = {
+            "include_auth": include_auth,
+            "include_ai": include_ai,
+            "ai_backend": "{{ cookiecutter.ai_backend }}",
+        }
+        services = get_services_needing_migrations(context)
+        if services:
+            project_path = Path(PROJECT_DIRECTORY)
+            generated = generate_migrations_for_services(project_path, services)
+            for migration_path in generated:
+                print(f"Generated migration: {migration_path.name}")
 
     # Print only templates that survived cleanup
     for file_path in processed_files:
@@ -336,11 +359,10 @@ def main():
 
     # Complete project setup: dependencies, env file, migrations, formatting
     # Use shared post-generation tasks module (also used by Copier)
-    include_auth = "{{ cookiecutter.include_auth }}" == "yes"
     python_version = "{{ cookiecutter.python_version }}"
     run_post_generation_tasks(
         Path(PROJECT_DIRECTORY),
-        include_auth=include_auth,
+        include_migrations=needs_migrations,
         python_version=python_version,
     )
 

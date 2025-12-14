@@ -304,9 +304,15 @@ class TestHealthEndpoints:
             # If services are enabled, verify each service has required fields
             if services.get("enabled") and services.get("services"):
                 for svc_name, svc_data in services["services"].items():
-                    assert "name" in svc_data, f"Service {svc_name} missing 'name'"
-                    assert "healthy" in svc_data, f"Service {svc_name} missing 'healthy'"
-                    assert "message" in svc_data, f"Service {svc_name} missing 'message'"
+                    assert "name" in svc_data, (
+                        f"Service {svc_name} missing 'name'"
+                    )
+                    assert "healthy" in svc_data, (
+                        f"Service {svc_name} missing 'healthy'"
+                    )
+                    assert "message" in svc_data, (
+                        f"Service {svc_name} missing 'message'"
+                    )
         else:
             # For 503 responses, check error structure
             assert "detail" in data

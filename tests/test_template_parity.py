@@ -273,6 +273,10 @@ def generate_with_copier(
     project_path = output_dir / cookiecutter_context["project_slug"]
 
     # Import cleanup function from shared module
+    from aegis.core.migration_generator import (
+        generate_migrations_for_services,
+        get_services_needing_migrations,
+    )
     from aegis.core.post_gen_tasks import (
         cleanup_components,
         format_code,
@@ -285,14 +289,33 @@ def generate_with_copier(
     # This must happen BEFORE post-generation tasks (which run linting on remaining files)
     cleanup_components(project_path, copier_data)
 
+    # Generate migrations for services that need them (must happen BEFORE install_dependencies)
+    include_auth = copier_data.get("include_auth", False)
+    include_ai = copier_data.get("include_ai", False)
+    ai_backend = copier_data.get("ai_backend", "memory")
+
+    context = {
+        "include_auth": include_auth,
+        "include_ai": include_ai,
+        "ai_backend": ai_backend,
+    }
+    services_needing_migrations = get_services_needing_migrations(context)
+    if services_needing_migrations:
+        generated = generate_migrations_for_services(
+            project_path, services_needing_migrations
+        )
+        for migration_path in generated:
+            print(f"Generated migration: {migration_path.name}")
+
     # Run post-generation tasks (install deps, format code, etc.)
     # NOTE: We run tasks individually and skip git initialization to avoid
     # nested git repo issues in test environments
-    include_auth = copier_data.get("include_auth", False)
 
     install_dependencies(project_path)
     setup_env_file(project_path)
-    run_migrations(project_path, include_auth)
+    # Determine if migrations are needed (auth OR AI with persistence backend)
+    include_migrations = include_auth or (include_ai and ai_backend != "memory")
+    run_migrations(project_path, include_migrations)
     format_code(project_path)
 
     # Skip git initialization in tests - not needed for parity comparison
@@ -413,6 +436,21 @@ def compare_projects(cookiecutter_path: Path, copier_path: Path) -> ParityTestRe
 
     # Compare content of common files
     common_files = ck_files & cp_files
+
+    def normalize_content(content: str, file_path: Path) -> str:
+        """Normalize file content for parity comparison."""
+        # For migration files, normalize the Create Date line (timestamp differs)
+        if "alembic/versions/" in str(file_path) and file_path.suffix == ".py":
+            lines = content.splitlines(keepends=True)
+            normalized = []
+            for line in lines:
+                if line.startswith("Create Date:"):
+                    normalized.append("Create Date: <NORMALIZED>\n")
+                else:
+                    normalized.append(line)
+            return "".join(normalized)
+        return content
+
     for rel_path in sorted(common_files):
         ck_file = cookiecutter_path / rel_path
         cp_file = copier_path / rel_path
@@ -421,8 +459,16 @@ def compare_projects(cookiecutter_path: Path, copier_path: Path) -> ParityTestRe
         if not filecmp.cmp(ck_file, cp_file, shallow=False):
             # Get content preview for debugging
             try:
-                ck_content = ck_file.read_text(encoding="utf-8")
-                cp_content = cp_file.read_text(encoding="utf-8")
+                ck_content = normalize_content(
+                    ck_file.read_text(encoding="utf-8"), rel_path
+                )
+                cp_content = normalize_content(
+                    cp_file.read_text(encoding="utf-8"), rel_path
+                )
+
+                # If normalized content is identical, skip this file
+                if ck_content == cp_content:
+                    continue
 
                 # Show first differing line
                 ck_lines = ck_content.splitlines()

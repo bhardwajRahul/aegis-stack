@@ -157,6 +157,10 @@ class ManualUpdater:
                 # Continue to regenerate shared files even if no component files
             else:
                 # Render and copy each file for this component
+                typer.secho(
+                    f"   Processing {len(component_files)} component files...",
+                    fg=typer.colors.CYAN,
+                )
                 for file_path in component_files:
                     # Convert relative path to template path
                     # copier_files: "app/components/scheduler"
@@ -170,6 +174,11 @@ class ManualUpdater:
                         # Output path in project
                         output_path = self.project_path / file_path
                         rendered_files[output_path] = content
+                    else:
+                        typer.secho(
+                            f"   Warning: Template not found for: {file_path}",
+                            fg=typer.colors.YELLOW,
+                        )
 
                 # Copy files to project
                 for output_path, content in rendered_files.items():

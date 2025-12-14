@@ -14,6 +14,10 @@ from copier import run_copy, run_update
 
 from ..config.defaults import DEFAULT_PYTHON_VERSION, GITHUB_TEMPLATE_URL
 from ..constants import AnswerKeys
+from .migration_generator import (
+    generate_migrations_for_services,
+    get_services_needing_migrations,
+)
 from .post_gen_tasks import cleanup_components, run_post_generation_tasks
 from .template_generator import TemplateGenerator
 
@@ -156,9 +160,29 @@ def generate_with_copier(
     # Run post-generation tasks with explicit working directory control
     # This ensures consistent behavior with Cookiecutter
     include_auth = copier_data.get(AnswerKeys.AUTH, False)
+    include_ai = copier_data.get(AnswerKeys.AI, False)
+    ai_backend = copier_data.get(AnswerKeys.AI_BACKEND, "memory")
+    ai_needs_migrations = include_ai and ai_backend != "memory"
+    include_migrations = include_auth or ai_needs_migrations
+
+    # Generate migrations for services that need them
+    if include_migrations:
+        context = {
+            "include_auth": include_auth,
+            "include_ai": include_ai,
+            "ai_backend": ai_backend,
+        }
+        services = get_services_needing_migrations(context)
+        if services:
+            generated = generate_migrations_for_services(project_path, services)
+            for migration_path in generated:
+                print(f"Generated migration: {migration_path.name}")
+
     python_version = copier_data.get("python_version")
     run_post_generation_tasks(
-        project_path, include_auth=include_auth, python_version=python_version
+        project_path,
+        include_migrations=include_migrations,
+        python_version=python_version,
     )
 
     # Initialize git repository for Copier updates

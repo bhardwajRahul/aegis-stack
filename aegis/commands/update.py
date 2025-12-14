@@ -336,14 +336,18 @@ def update_command(
             vcs_ref=target_ref,  # Use specified version
         )
 
-        # Load answers to determine what services are enabled
+        # Load answers to determine what services need migrations
         answers = load_copier_answers(target_path)
         include_auth = answers.get(AnswerKeys.AUTH, False)
+        include_ai = answers.get(AnswerKeys.AI, False)
+        ai_backend = answers.get(AnswerKeys.AI_BACKEND, "memory")
+        ai_needs_migrations = include_ai and ai_backend != "memory"
+        include_migrations = include_auth or ai_needs_migrations
 
         # Run post-generation tasks
         typer.echo("Running post-generation tasks...")
         tasks_success = run_post_generation_tasks(
-            target_path, include_auth=include_auth
+            target_path, include_migrations=include_migrations
         )
 
         # Show update result
