@@ -13,6 +13,12 @@ from typing import Any
 {% if ai_framework == "pydantic-ai" %}
 from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
 {% endif %}
+{% if ai_backend != "memory" %}
+from sqlmodel import select
+
+from app.core.db import db_session
+from .models.llm import LargeLanguageModel, LLMPrice, LLMUsage
+{% endif %}
 
 from app.core.log import logger
 
@@ -122,6 +128,12 @@ class AIService:
             # Store conversation ID in message metadata for easy lookup
             ai_message.metadata["conversation_id"] = conversation.id
 
+{% if ai_backend != "memory" %}
+            # Record usage tracking
+            usage = self._extract_usage(result)
+            self._record_usage("chat", usage, user_id)
+{% endif %}
+
             # Finalize conversation (update metadata and save)
             self._finalize_conversation(conversation, response_time_ms)
 
@@ -189,6 +201,9 @@ class AIService:
 
 {% if ai_framework == "pydantic-ai" %}
             # Use PydanticAI's run_stream method for streaming
+{% if ai_backend != "memory" %}
+            stream_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
+{% endif %}
             async with agent.run_stream(conversation_context) as result:
                 # Stream text chunks
                 async for text_chunk in result.stream_text(delta=stream_delta):
@@ -210,6 +225,17 @@ class AIService:
                             "stream_delta": stream_delta,
                         },
                     )
+
+{% if ai_backend != "memory" %}
+                # Capture usage after streaming completes (still inside async with)
+                if hasattr(result, "usage") and callable(result.usage):
+                    usage_obj = result.usage()
+                    if usage_obj:
+                        stream_usage = {
+                            "input_tokens": usage_obj.request_tokens or 0,
+                            "output_tokens": usage_obj.response_tokens or 0,
+                        }
+{% endif %}
 {% else %}
             # Use LangChain's astream method for streaming
             async for chunk in llm.astream(messages):
@@ -249,6 +275,17 @@ class AIService:
 
             # Store conversation metadata
             ai_message.metadata["conversation_id"] = conversation.id
+
+{% if ai_backend != "memory" %}
+{% if ai_framework == "pydantic-ai" %}
+            # Record usage tracking (PydanticAI provides streaming usage)
+            self._record_usage("stream_chat", stream_usage, user_id)
+{% else %}
+            # LangChain streaming doesn't provide token counts
+            # Record with zero tokens - actual usage tracking requires non-streaming
+            self._record_usage("stream_chat", {"input_tokens": 0, "output_tokens": 0}, user_id)
+{% endif %}
+{% endif %}
 
             # Finalize conversation (update metadata and save)
             self._finalize_conversation(
@@ -488,3 +525,111 @@ class AIService:
         errors.extend(config_errors)
 
         return errors
+
+{% if ai_backend != "memory" %}
+    def _extract_usage(self, result: Any) -> dict[str, int]:
+        """
+        Extract token usage from AI response.
+
+        Args:
+            result: The response from the AI provider
+
+        Returns:
+            dict: Token usage with input_tokens and output_tokens
+        """
+{% if ai_framework == "pydantic-ai" %}
+        # PydanticAI stores usage in result.usage (attribute, not method)
+        if hasattr(result, "usage") and result.usage and not callable(result.usage):
+            return {
+                "input_tokens": result.usage.request_tokens or 0,
+                "output_tokens": result.usage.response_tokens or 0,
+            }
+{% else %}
+        # LangChain stores usage in response_metadata
+        if hasattr(result, "response_metadata"):
+            token_usage = result.response_metadata.get("token_usage", {})
+            return {
+                "input_tokens": token_usage.get("prompt_tokens", 0),
+                "output_tokens": token_usage.get("completion_tokens", 0),
+            }
+{% endif %}
+        return {"input_tokens": 0, "output_tokens": 0}
+
+    def _record_usage(
+        self,
+        action: str,
+        usage: dict[str, int],
+        user_id: str,
+        success: bool = True,
+        error_message: str | None = None,
+    ) -> None:
+        """
+        Record LLM usage with cost calculation.
+
+        Args:
+            action: The action type (e.g., "chat", "stream_chat")
+            usage: Token usage dict with input_tokens and output_tokens
+            user_id: User identifier
+            success: Whether the request succeeded
+            error_message: Error message if request failed
+        """
+        model_name = self.config.model
+
+        # Strip vendor prefix if present (e.g., "openai/gpt-4o" -> "gpt-4o")
+        if "/" in model_name:
+            model_name = model_name.split("/", 1)[1]
+
+        try:
+            with db_session() as session:
+                # Look up the LLM by model_id
+                stmt = select(LargeLanguageModel).where(
+                    LargeLanguageModel.model_id == model_name
+                )
+                llm = session.exec(stmt).first()
+
+                if not llm:
+                    logger.warning("LLM not found for usage tracking", model_id=model_name)
+                    return
+
+                # Get latest price for this LLM
+                price_stmt = (
+                    select(LLMPrice)
+                    .where(LLMPrice.llm_id == llm.id)
+                    .order_by(LLMPrice.effective_date.desc())
+                )
+                price = session.exec(price_stmt).first()
+
+                # Calculate cost
+                if price:
+                    input_cost = usage.get("input_tokens", 0) * price.input_cost_per_token
+                    output_cost = usage.get("output_tokens", 0) * price.output_cost_per_token
+                    total_cost = input_cost + output_cost
+                else:
+                    logger.warning("No price found for LLM", llm_id=llm.id)
+                    total_cost = 0.0
+
+                # Create usage record
+                llm_usage = LLMUsage(
+                    action=action,
+                    llm_id=llm.id,
+                    user_id=user_id,
+                    timestamp=datetime.now(UTC),
+                    input_tokens=usage.get("input_tokens", 0),
+                    output_tokens=usage.get("output_tokens", 0),
+                    total_cost=total_cost,
+                    success=success,
+                    error_message=error_message,
+                )
+                session.add(llm_usage)
+
+                logger.debug(
+                    "Recorded LLM usage",
+                    model=model_name,
+                    tokens=usage,
+                    cost=total_cost,
+                )
+
+        except Exception as e:
+            # Don't fail the request if usage tracking fails
+            logger.error("Failed to record LLM usage", error=str(e))
+{% endif %}
