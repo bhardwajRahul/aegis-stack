@@ -1,6 +1,6 @@
 # AI Service
 
-The **AI Service** provides multi-provider AI chat capabilities with conversation management, streaming responses, and both CLI and API interfaces powered by [PydanticAI](https://ai.pydantic.dev/).
+The **AI Service** provides multi-provider AI chat capabilities with conversation management, streaming responses, and both CLI and API interfaces. Choose between [Pydantic AI](https://ai.pydantic.dev/) or [LangChain](https://python.langchain.com/) as your underlying engine.
 
 ![AI Service Demo](../../images/aegis-ai-demo.gif)
 
@@ -32,15 +32,15 @@ The **AI Service** provides multi-provider AI chat capabilities with conversatio
 ```mermaid
 graph TB
     subgraph "AI Service"
-        AIService[🤖 AI Service<br/>PydanticAI]
+        AIService[AI Service<br/>Pydantic AI / LangChain]
 
-        CLI[💻 CLI Interface<br/>ai chat, config, providers]
-        API[🌐 REST API<br/>/ai/chat, /ai/conversations]
-        Providers[🔌 Providers<br/>OpenAI, Anthropic, Google<br/>Groq, Mistral, Cohere, PUBLIC]
-        Conv[💬 Conversations<br/>In-memory storage]
+        CLI[CLI Interface<br/>ai chat, config, providers]
+        API[REST API<br/>/ai/chat, /ai/conversations]
+        Providers[Providers<br/>OpenAI, Anthropic, Google<br/>Groq, Mistral, Cohere, PUBLIC]
+        Conv[Conversations<br/>In-memory storage]
     end
 
-    Backend[⚡ Backend Component<br/>FastAPI]
+    Backend[Backend Component<br/>FastAPI]
 
     AIService --> CLI
     AIService --> API
@@ -167,6 +167,8 @@ my-app ai status
 
 **Next Steps:**
 
+- **[Engines](engines.md)** - Choose between Pydantic AI and LangChain
+- **[Provider Setup](providers.md)** - Configure your AI provider
 - **[API Reference](api.md)** - Complete REST API documentation
 - **[Service Layer](integration.md)** - Integration patterns and architecture
 - **[CLI Commands](cli.md)** - Command-line interface reference

@@ -60,6 +60,7 @@ nav:
       - Examples: services/auth/examples.md
     - AI Service:
       - Getting Started: services/ai/index.md
+      - Engines: services/ai/engines.md
       - Provider Setup: services/ai/providers.md
       - API Reference: services/ai/api.md
       - Service Layer: services/ai/integration.md

@@ -4,7 +4,10 @@ Complete setup guide for all supported AI providers.
 
 ## Overview
 
-The AI service supports multiple providers through [PydanticAI](https://ai.pydantic.dev/), giving you flexibility to choose based on your needs: cost, speed, features, or specific model capabilities.
+The AI service supports multiple providers through either [Pydantic AI](https://ai.pydantic.dev/) or [LangChain](https://python.langchain.com/) (see [Engines](engines.md)), giving you flexibility to choose based on your needs: cost, speed, features, or specific model capabilities.
+
+!!! tip "All Providers Work with Both Engines"
+    Whether you chose Pydantic AI or LangChain as your engine, all 7 providers are fully supported with identical configuration.
 
 **Quick comparison:**
 

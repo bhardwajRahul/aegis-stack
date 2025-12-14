@@ -649,8 +649,16 @@ async def check_cache_health() -> ComponentStatus:
                 {
                     "id": entry["id"],
                     "timestamp": entry["start_time"],
-                    "duration_ms": round(entry["duration"] / 1000, 2),  # Convert microseconds to ms
-                    "command": " ".join(str(arg.decode('utf-8', errors='replace') if isinstance(arg, bytes) else arg) for arg in entry["command"]),
+                    # Convert microseconds to ms
+                    "duration_ms": round(entry["duration"] / 1000, 2),
+                    "command": " ".join(
+                        str(
+                            arg.decode("utf-8", errors="replace")
+                            if isinstance(arg, bytes)
+                            else arg
+                        )
+                        for arg in entry["command"]
+                    ),
                 }
                 for entry in slowlog
             ]
@@ -1000,7 +1008,10 @@ async def check_database_health() -> ComponentStatus:
                     enhanced_metadata["comprehensive_pragma"] = comprehensive_pragma
 
                 except Exception as e:
-                    logger.debug("Failed to collect comprehensive PRAGMA settings", exc_info=True)
+                    logger.debug(
+                        "Failed to collect comprehensive PRAGMA settings",
+                        exc_info=True,
+                    )
 
             # Collect table schema details (columns, indexes, foreign keys)
             if db_url.startswith("sqlite:///") and table_info:
@@ -1096,7 +1107,9 @@ async def check_database_health() -> ComponentStatus:
                         enhanced_metadata["largest_table"] = largest_table
 
                 except Exception as e:
-                    logger.debug("Failed to collect table schema details", exc_info=True)
+                    logger.debug(
+                        "Failed to collect table schema details", exc_info=True
+                    )
 
             # Collect migration history from Alembic
             if db_url.startswith("sqlite:///"):
@@ -1105,7 +1118,10 @@ async def check_database_health() -> ComponentStatus:
 
                     # Check if alembic_version table exists
                     result = session.execute(
-                        text("SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'")
+                        text(
+                            "SELECT name FROM sqlite_master "
+                            "WHERE type='table' AND name='alembic_version'"
+                        )
                     ).fetchone()
 
                     if result:
@@ -1173,7 +1189,8 @@ async def check_database_health() -> ComponentStatus:
 
                                 except Exception as e:
                                     logger.debug(
-                                        f"Failed to parse migration {migration_file}: {e}"
+                                        f"Failed to parse migration "
+                                        f"{migration_file}: {e}"
                                     )
 
                         enhanced_metadata["migrations"] = migrations
@@ -1323,7 +1340,11 @@ async def check_worker_health() -> ComponentStatus:
                 queued_jobs = lag if lag is not None else stream_length
                 jobs_ongoing = pending_count or 0
                 entries_read = entries_read or 0
-                jobs_completed = entries_read - jobs_ongoing if entries_read > jobs_ongoing else 0
+                jobs_completed = (
+                    entries_read - jobs_ongoing
+                    if entries_read > jobs_ongoing
+                    else 0
+                )
 
                 total_queued += queued_jobs
                 total_processed += jobs_completed

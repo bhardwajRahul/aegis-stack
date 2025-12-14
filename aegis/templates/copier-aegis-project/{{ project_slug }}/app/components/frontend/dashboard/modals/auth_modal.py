@@ -207,9 +207,11 @@ class SecuritySection(ft.Container):
 
         # Security level descriptions
         security_descriptions = {
-            "high": "Strong security configuration with robust encryption and key management.",
-            "standard": "Adequate security for most applications. Consider upgrading to asymmetric algorithms (RS256/ES256) for enhanced security.",
-            "basic": "Minimal security configuration. Strongly recommend improving secret key strength and considering stronger algorithms.",
+            "high": "Strong security with robust encryption.",
+            "standard": (
+                "Adequate security. Consider RS256/ES256 for better security."
+            ),
+            "basic": ("Minimal security. Improve secret key strength."),
         }
 
         security_description = security_descriptions.get(

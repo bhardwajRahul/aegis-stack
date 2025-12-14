@@ -2,6 +2,9 @@
 
 How the AI service works internally and basic usage in your code.
 
+!!! info "Engine-Agnostic API"
+    All code examples on this page work identically whether you chose Pydantic AI or LangChain as your engine. The `AIService` class provides a unified interface. See [Engines](engines.md) for implementation details.
+
 ## AIService Class
 
 **Location:** `app/services/ai/service.py`
@@ -139,6 +142,7 @@ print(f"Status: {status.status}")  # HEALTHY, DEGRADED, or UNHEALTHY
 
 **Next Steps:**
 
+- **[Engines](engines.md)** - Pydantic AI vs LangChain internals
 - **[API Reference](api.md)** - REST API endpoints
 - **[CLI Commands](cli.md)** - Command-line interface
 - **[Examples](examples.md)** - Usage examples

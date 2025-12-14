@@ -65,7 +65,7 @@ class FontConfig:
 class ButtonTextStyle:
     """Text styling for buttons."""
 
-    weight: str = ft.FontWeight.W_400
+    weight: str = ft.FontWeight.W_400  # type: ignore[assignment]
     size: int = 16
     font_family: str = FontConfig.FAMILY_PRIMARY
 
@@ -103,7 +103,7 @@ class PrimaryTextStyle(TextStyle):
     color: str = ColorPalette.TEXT_PRIMARY_DEFAULT
     font_family: str = FontConfig.FAMILY_PRIMARY
     size: int = FontConfig.SIZE_PRIMARY
-    weight: str = ft.FontWeight.W_400
+    weight: str = ft.FontWeight.W_400  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
@@ -113,7 +113,7 @@ class SecondaryTextStyle(TextStyle):
     color: str = ColorPalette.TEXT_SECONDARY_DEFAULT
     font_family: str = FontConfig.FAMILY_PRIMARY
     size: int = FontConfig.SIZE_SECONDARY
-    weight: str = ft.FontWeight.W_400
+    weight: str = ft.FontWeight.W_400  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
@@ -123,7 +123,7 @@ class ConfirmationTextStyle(TextStyle):
     color: str = ColorPalette.ERROR
     font_family: str = FontConfig.FAMILY_PRIMARY
     size: int = FontConfig.SIZE_SECONDARY
-    weight: str = ft.FontWeight.W_400
+    weight: str = ft.FontWeight.W_400  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
@@ -133,28 +133,28 @@ class TitleTextStyle(TextStyle):
     color: str = ColorPalette.TEXT_PRIMARY_DEFAULT
     font_family: str = FontConfig.FAMILY_PRIMARY
     size: int = FontConfig.HEADER_SIZE
-    weight: str = ft.FontWeight.W_700
+    weight: str = ft.FontWeight.W_700  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
 class ModalTitle(PrimaryTextStyle):
     """Text style for modal titles."""
 
-    weight: str = ft.FontWeight.W_700
+    weight: str = ft.FontWeight.W_700  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
 class ModalSubtitle(SecondaryTextStyle):
     """Text style for modal subtitles."""
 
-    weight: str = ft.FontWeight.W_400
+    weight: str = ft.FontWeight.W_400  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
 class TertiaryLabel(PrimaryTextStyle):
     """Small label text style."""
 
-    weight: str = ft.FontWeight.W_600
+    weight: str = ft.FontWeight.W_600  # type: ignore[assignment]
     size: int = FontConfig.SIZE_TERTIARY
 
 
@@ -162,21 +162,21 @@ class TertiaryLabel(PrimaryTextStyle):
 class SidebarLabelHeadingStyle(PrimaryTextStyle):
     """Text style for sidebar headings."""
 
-    weight: str = ft.FontWeight.W_700
+    weight: str = ft.FontWeight.W_700  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
 class SidebarLabelStyle(SecondaryTextStyle):
     """Text style for sidebar labels."""
 
-    weight: str = ft.FontWeight.W_400
+    weight: str = ft.FontWeight.W_400  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
 class SliderLabelStyle(SecondaryTextStyle):
     """Text style for slider labels."""
 
-    weight: str = ft.FontWeight.W_700
+    weight: str = ft.FontWeight.W_700  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)

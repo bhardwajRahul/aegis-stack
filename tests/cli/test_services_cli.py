@@ -659,9 +659,7 @@ class TestAuthServiceMigrationIntegration:
             assert (project_path / "app" / "models" / "user.py").exists()
             assert (project_path / "app" / "core" / "security.py").exists()
             assert (project_path / "app" / "core" / "db.py").exists()
-            assert (
-                project_path / "alembic" / "versions" / "001_initial_auth.py"
-            ).exists()
+            assert (project_path / "alembic" / "versions" / "001_auth.py").exists()
 
     def test_auth_service_dependency_chain_validation(self):
         """Test that auth service dependency chain is properly validated and resolved."""

@@ -196,9 +196,13 @@ def update_with_copier_native(
         # Run post-generation tasks with explicit working directory control
         # This ensures consistent behavior with initial generation
         include_auth = answers.get(AnswerKeys.AUTH, False)
+        include_ai = answers.get(AnswerKeys.AI, False)
+        ai_backend = answers.get(AnswerKeys.AI_BACKEND, "memory")
+        ai_needs_migrations = include_ai and ai_backend != "memory"
+        include_migrations = include_auth or ai_needs_migrations
 
         # Run shared post-generation tasks
-        run_post_generation_tasks(project_path, include_auth=include_auth)
+        run_post_generation_tasks(project_path, include_migrations=include_migrations)
 
         return CopierUpdateResult(
             success=True,

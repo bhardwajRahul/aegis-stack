@@ -168,7 +168,7 @@ class TestRunMigrations:
 
     def test_skips_when_auth_disabled(self, tmp_path: Path) -> None:
         """Test migrations are skipped when auth not enabled."""
-        result = run_migrations(tmp_path, include_auth=False)
+        result = run_migrations(tmp_path, include_migrations=False)
 
         assert result is True  # Success (no-op)
 
@@ -183,7 +183,7 @@ class TestRunMigrations:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=0, stderr="")
 
-            result = run_migrations(tmp_path, include_auth=True)
+            result = run_migrations(tmp_path, include_migrations=True)
 
             assert result is True
             mock_run.assert_called_once()
@@ -193,7 +193,7 @@ class TestRunMigrations:
 
     def test_missing_alembic_config(self, tmp_path: Path) -> None:
         """Test when alembic config doesn't exist."""
-        result = run_migrations(tmp_path, include_auth=True)
+        result = run_migrations(tmp_path, include_migrations=True)
 
         assert result is False
 
@@ -207,7 +207,7 @@ class TestRunMigrations:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=1, stderr="Migration error")
 
-            result = run_migrations(tmp_path, include_auth=True)
+            result = run_migrations(tmp_path, include_migrations=True)
 
             assert result is False
 
@@ -221,7 +221,7 @@ class TestRunMigrations:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=0, stderr="")
 
-            run_migrations(tmp_path, include_auth=True)
+            run_migrations(tmp_path, include_migrations=True)
 
             data_dir = tmp_path / "data"
             assert data_dir.exists()
@@ -284,7 +284,7 @@ class TestRunPostGenerationTasks:
             patch("aegis.core.post_gen_tasks.run_migrations", return_value=True),
             patch("aegis.core.post_gen_tasks.format_code", return_value=True),
         ):
-            result = run_post_generation_tasks(tmp_path, include_auth=False)
+            result = run_post_generation_tasks(tmp_path, include_migrations=False)
 
             assert result is True
 
@@ -297,7 +297,7 @@ class TestRunPostGenerationTasks:
             patch("aegis.core.post_gen_tasks.format_code", return_value=True),
         ):
             with pytest.raises(DependencyInstallationError) as exc_info:
-                run_post_generation_tasks(tmp_path, include_auth=False)
+                run_post_generation_tasks(tmp_path, include_migrations=False)
 
             assert str(tmp_path) in str(exc_info.value)
 
@@ -309,7 +309,7 @@ class TestRunPostGenerationTasks:
             patch("aegis.core.post_gen_tasks.run_migrations", return_value=False),
             patch("aegis.core.post_gen_tasks.format_code", return_value=False),
         ):
-            result = run_post_generation_tasks(tmp_path, include_auth=True)
+            result = run_post_generation_tasks(tmp_path, include_migrations=True)
 
             assert result is True  # Deps succeeded, so overall success
 
@@ -323,7 +323,7 @@ class TestRunPostGenerationTasks:
         ):
             mock_migrations.return_value = True
 
-            run_post_generation_tasks(tmp_path, include_auth=True)
+            run_post_generation_tasks(tmp_path, include_migrations=True)
 
             mock_migrations.assert_called_once_with(tmp_path, True)
 
@@ -357,6 +357,6 @@ class TestRunPostGenerationTasks:
             ),
             patch("aegis.core.post_gen_tasks.format_code", side_effect=track_format),
         ):
-            run_post_generation_tasks(tmp_path, include_auth=True)
+            run_post_generation_tasks(tmp_path, include_migrations=True)
 
             assert call_order == ["deps", "env", "migrations", "format"]

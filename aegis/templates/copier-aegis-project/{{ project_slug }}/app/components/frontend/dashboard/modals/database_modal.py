@@ -422,7 +422,7 @@ class TableSchemaCard(ft.Container):
         self.is_expanded = not self.is_expanded
         self.details_container.visible = self.is_expanded
 
-        # Update arrow icon (header is now GestureDetector wrapping Container wrapping Row)
+        # Update arrow icon (header wraps Container which wraps Row)
         if (
             self.header.content
             and isinstance(self.header.content, ft.Container)
@@ -704,7 +704,10 @@ class PragmaSettingsSection(ft.Container):
                 PragmaSettingRow(
                     "cache_size",
                     cache,
-                    "Number of database pages to cache in memory. Negative values are in KiB.",
+                    (
+                        "Number of database pages to cache in memory. "
+                        "Negative values are in KiB."
+                    ),
                     "Higher values improve performance but use more memory"
                     if cache < 2000
                     else "",
@@ -741,7 +744,10 @@ class PragmaSettingsSection(ft.Container):
                 PragmaSettingRow(
                     "busy_timeout",
                     f"{timeout}ms",
-                    "How long to wait when database is locked before returning SQLITE_BUSY.",
+                    (
+                        "How long to wait when database is locked "
+                        "before returning SQLITE_BUSY."
+                    ),
                 )
             )
 
@@ -766,7 +772,10 @@ class PragmaSettingsSection(ft.Container):
                 PragmaSettingRow(
                     "synchronous",
                     sync_desc,
-                    "How aggressively SQLite syncs data to disk. Higher = safer but slower.",
+                    (
+                        "How aggressively SQLite syncs data to disk. "
+                        "Higher = safer but slower."
+                    ),
                 )
             )
 
@@ -790,7 +799,10 @@ class PragmaSettingsSection(ft.Container):
                 PragmaSettingRow(
                     "journal_mode",
                     journal.upper(),
-                    "How SQLite implements atomic commit and rollback. WAL is recommended for concurrency.",
+                    (
+                        "How SQLite implements atomic commit and rollback. "
+                        "WAL is recommended for concurrency."
+                    ),
                     "Consider WAL mode for better concurrency"
                     if journal.lower() != "wal"
                     else "",

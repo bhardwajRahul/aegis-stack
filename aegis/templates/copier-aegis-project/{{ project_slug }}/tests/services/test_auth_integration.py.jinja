@@ -461,6 +461,7 @@ class TestAuthDatabaseInitialization:
 
         # Verify update
         updated_user = await user_service.get_user_by_email(user_data.email)
+        assert updated_user is not None
         assert updated_user.full_name == "Updated Name"
 
         # DELETE (via direct SQLModel operations)

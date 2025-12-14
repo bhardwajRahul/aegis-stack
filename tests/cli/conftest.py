@@ -62,6 +62,9 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
     "base_with_redis": ProjectTemplateSpec(components=("redis",)),
     "scheduler_and_database": ProjectTemplateSpec(components=("database", "scheduler")),
     "base_with_auth_service": ProjectTemplateSpec(services=("auth",)),
+    "base_with_ai_service": ProjectTemplateSpec(services=("ai",)),
+    "base_with_ai_sqlite_service": ProjectTemplateSpec(services=("ai[sqlite]",)),
+    "base_with_auth_and_ai_services": ProjectTemplateSpec(services=("auth", "ai")),
 }
 
 

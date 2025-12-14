@@ -10,7 +10,6 @@ Provides persistent conversation history across application restarts.
 {% endif %}
 """
 
-import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -22,7 +21,7 @@ from sqlmodel import select
 
 from app.core.db import db_session, init_database
 from app.models.conversation import Conversation as ConversationModel
-from app.models.conversation import Message as MessageModel
+from app.models.conversation import ConversationMessage as MessageModel
 {% endif %}
 
 from .models import AIProvider, Conversation, ConversationMessage, MessageRole
@@ -122,20 +121,23 @@ class ConversationManager:
                     role=MessageRole(msg.role),
                     content=msg.content,
                     timestamp=msg.timestamp,
-                    metadata=json.loads(msg.metadata_json) if msg.metadata_json else {},
+                    metadata=msg.meta_data or {},
                 )
                 for msg in messages_db
             ]
 
+            # Get provider/model from meta_data
+            meta_data = conv_db.meta_data or {}
+
             return Conversation(
                 id=conv_db.id,
                 title=conv_db.title,
-                provider=AIProvider(conv_db.provider),
-                model=conv_db.model,
+                provider=AIProvider(meta_data.get("provider", "openai")),
+                model=meta_data.get("model", "unknown"),
                 created_at=conv_db.created_at,
                 updated_at=conv_db.updated_at,
                 messages=messages,
-                metadata=json.loads(conv_db.metadata_json) if conv_db.metadata_json else {},
+                metadata=meta_data,
             )
 {% endif %}
 
@@ -185,10 +187,10 @@ class ConversationManager:
 
             conversations = []
             for conv_db in all_convs:
-                metadata = json.loads(conv_db.metadata_json) if conv_db.metadata_json else {}
+                meta_data = conv_db.meta_data or {}
 
                 # Filter by user_id if specified
-                if user_id and metadata.get("user_id") != user_id:
+                if user_id and meta_data.get("user_id") != user_id:
                     continue
 
                 # Load messages for this conversation
@@ -203,7 +205,7 @@ class ConversationManager:
                         role=MessageRole(msg.role),
                         content=msg.content,
                         timestamp=msg.timestamp,
-                        metadata=json.loads(msg.metadata_json) if msg.metadata_json else {},
+                        metadata=msg.meta_data or {},
                     )
                     for msg in messages_db
                 ]
@@ -211,12 +213,12 @@ class ConversationManager:
                 conversations.append(Conversation(
                     id=conv_db.id,
                     title=conv_db.title,
-                    provider=AIProvider(conv_db.provider),
-                    model=conv_db.model,
+                    provider=AIProvider(meta_data.get("provider", "openai")),
+                    model=meta_data.get("model", "unknown"),
                     created_at=conv_db.created_at,
                     updated_at=conv_db.updated_at,
                     messages=messages,
-                    metadata=metadata,
+                    metadata=meta_data,
                 ))
 
             return conversations
@@ -395,8 +397,8 @@ class ConversationManager:
             # Get unique users
             users = set()
             for conv in all_convs:
-                metadata = json.loads(conv.metadata_json) if conv.metadata_json else {}
-                user_id = metadata.get("user_id")
+                meta_data = conv.meta_data or {}
+                user_id = meta_data.get("user_id")
                 if user_id:
                     users.add(user_id)
 
@@ -414,24 +416,29 @@ class ConversationManager:
     def _save_to_db(self, conversation: Conversation) -> None:
         """Save conversation and its messages to database."""
         with db_session() as session:
+            # Build meta_data with provider/model included
+            meta_data = {
+                **conversation.metadata,
+                "provider": conversation.provider.value,
+                "model": conversation.model,
+            }
+
             # Check if conversation exists
             conv_db = session.get(ConversationModel, conversation.id)
             if conv_db:
                 # Update existing
                 conv_db.title = conversation.title
                 conv_db.updated_at = conversation.updated_at
-                conv_db.metadata_json = json.dumps(conversation.metadata)
+                conv_db.meta_data = meta_data
             else:
                 # Create new
                 conv_db = ConversationModel(
                     id=conversation.id,
                     title=conversation.title,
-                    provider=conversation.provider.value,
-                    model=conversation.model,
                     user_id=conversation.metadata.get("user_id", "default"),
                     created_at=conversation.created_at,
                     updated_at=conversation.updated_at,
-                    metadata_json=json.dumps(conversation.metadata),
+                    meta_data=meta_data,
                 )
                 session.add(conv_db)
 
@@ -445,7 +452,7 @@ class ConversationManager:
                         role=message.role.value,
                         content=message.content,
                         timestamp=message.timestamp,
-                        metadata_json=json.dumps(message.metadata),
+                        meta_data=message.metadata,
                     )
                     session.add(msg_db)
 
