@@ -1,15 +1,20 @@
 """Shared fixtures for AI service tests."""
 
 from collections.abc import Generator
-from datetime import UTC, datetime
 from unittest.mock import MagicMock
+{% if cookiecutter.ai_backend != "memory" %}
+from datetime import UTC, datetime
+
+from sqlalchemy import Engine
+from sqlmodel import Session, SQLModel, create_engine
+{% endif %}
 
 import pytest
 from app.services.ai.models import AIProvider, Conversation, MessageRole
+{% if cookiecutter.ai_backend != "memory" %}
 from app.services.ai.models.llm import LargeLanguageModel, LLMPrice, LLMVendor
+{% endif %}
 from app.services.ai.service import AIService
-from sqlalchemy import Engine
-from sqlmodel import Session, SQLModel, create_engine
 
 
 @pytest.fixture
@@ -81,6 +86,7 @@ def paid_provider_with_key_settings(mock_ai_settings):
     mock_ai_settings.AI_PROVIDER = "openai"
     mock_ai_settings.OPENAI_API_KEY = "sk-test-key-123"
     return mock_ai_settings
+{% if cookiecutter.ai_backend != "memory" %}
 
 
 # Database fixtures for LLM usage tracking tests
@@ -155,3 +161,4 @@ def sample_price(
     db_session.commit()
     db_session.refresh(price)
     return price
+{% endif %}

@@ -200,9 +200,15 @@ def update_with_copier_native(
         ai_backend = answers.get(AnswerKeys.AI_BACKEND, "memory")
         ai_needs_migrations = include_ai and ai_backend != "memory"
         include_migrations = include_auth or ai_needs_migrations
+        # AI needs seeding when using persistence backend (same condition as migrations)
+        ai_needs_seeding = ai_needs_migrations
 
         # Run shared post-generation tasks
-        run_post_generation_tasks(project_path, include_migrations=include_migrations)
+        run_post_generation_tasks(
+            project_path,
+            include_migrations=include_migrations,
+            seed_ai=ai_needs_seeding,
+        )
 
         return CopierUpdateResult(
             success=True,

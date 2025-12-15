@@ -12,8 +12,6 @@ Architecture:
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlmodel import Session, select
-
 from app.core.log import logger
 from app.services.ai.models.llm import (
     LargeLanguageModel,
@@ -21,6 +19,7 @@ from app.services.ai.models.llm import (
     LLMPrice,
     LLMVendor,
 )
+from sqlmodel import Session, select
 
 # =============================================================================
 # Vendor Data (7 providers)
