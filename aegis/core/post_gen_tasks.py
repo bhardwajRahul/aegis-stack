@@ -387,6 +387,12 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     ai_backend = context.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
     if ai_backend == StorageBackends.MEMORY:
         remove_file(project_path, "app/models/conversation.py")
+        # Remove LLM tracking models (only needed with persistence)
+        remove_dir(project_path, "app/services/ai/models/llm")
+        # Remove LLM fixtures (only needed with persistence)
+        remove_file(project_path, "app/services/ai/fixtures/llm_fixtures.py")
+        # Remove usage tracking tests (only relevant with persistence)
+        remove_file(project_path, "tests/services/ai/test_usage_tracking.py")
 
     # Remove comms service if not selected
     if not is_enabled(AnswerKeys.COMMS):
@@ -832,10 +838,80 @@ class DependencyInstallationError(Exception):
     pass
 
 
+def seed_llm_fixtures(project_path: Path) -> bool:
+    """
+    Seed LLM fixtures (vendors, models, pricing) into the database.
+
+    This runs the load_all_llm_fixtures function from the generated project
+    to populate the database with initial LLM data.
+
+    Args:
+        project_path: Path to the project directory
+
+    Returns:
+        True if seeding succeeded, False otherwise
+    """
+    try:
+        typer.secho("Seeding LLM fixtures...", fg=typer.colors.CYAN)
+
+        # Run the seeding script using uv run
+        # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
+        env = os.environ.copy()
+        env.pop("VIRTUAL_ENV", None)
+
+        # Call the fixture loading function in the generated project
+        result = subprocess.run(
+            [
+                "uv",
+                "run",
+                "python",
+                "-c",
+                "from app.core.db import SessionLocal; "
+                "from app.services.ai.fixtures import load_all_llm_fixtures; "
+                "load_all_llm_fixtures(SessionLocal())",
+            ],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            timeout=POST_GEN_TIMEOUT_MIGRATION,
+            env=env,
+        )
+
+        if result.returncode == 0:
+            typer.secho("LLM fixtures seeded successfully", fg=typer.colors.GREEN)
+            return True
+        else:
+            typer.secho(
+                "Warning: LLM fixture seeding failed",
+                fg=typer.colors.YELLOW,
+            )
+            if result.stderr:
+                # Show truncated error output
+                truncated = result.stderr[:500]
+                for line in truncated.split("\n"):
+                    typer.echo(f"   {line}")
+            typer.secho(
+                "You can seed fixtures manually by running the fixture loader",
+                dim=True,
+            )
+            return False
+
+    except subprocess.TimeoutExpired:
+        typer.secho(
+            "Warning: LLM fixture seeding timeout",
+            fg=typer.colors.YELLOW,
+        )
+        return False
+    except Exception as e:
+        typer.secho(f"Warning: LLM fixture seeding failed: {e}", fg=typer.colors.YELLOW)
+        return False
+
+
 def run_post_generation_tasks(
     project_path: Path,
     include_migrations: bool = False,
     python_version: str | None = None,
+    seed_ai: bool = False,
 ) -> bool:
     """
     Run all post-generation tasks for a project.
@@ -847,6 +923,7 @@ def run_post_generation_tasks(
         project_path: Path to the generated/updated project
         include_migrations: Whether to run Alembic migrations (auth or AI with persistence)
         python_version: Python version to use (e.g., "3.13")
+        seed_ai: Whether to seed LLM fixtures (AI service with persistence backend)
 
     Returns:
         True if all critical tasks succeeded
@@ -857,7 +934,7 @@ def run_post_generation_tasks(
 
     Note:
         Dependency installation is critical - if it fails, the entire project
-        generation fails. Other tasks (env setup, migrations, formatting) are
+        generation fails. Other tasks (env setup, migrations, formatting, seeding) are
         non-critical and won't cause hard failures.
     """
     typer.echo()
@@ -894,7 +971,11 @@ def run_post_generation_tasks(
     # Task 3: Run migrations if needed (non-critical)
     run_migrations(project_path, include_migrations)
 
-    # Task 4: Format code (non-critical)
+    # Task 4: Seed LLM fixtures if AI service with persistence (non-critical)
+    if seed_ai:
+        seed_llm_fixtures(project_path)
+
+    # Task 5: Format code (non-critical)
     format_code(project_path)
 
     # Print final status (only reached if deps succeeded)

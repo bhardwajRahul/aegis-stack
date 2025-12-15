@@ -304,6 +304,12 @@ def main():
     # When AI backend is memory, remove SQLModel tables (not needed)
     if "{{ cookiecutter.ai_backend }}" == "memory":
         remove_file("app/models/conversation.py")
+        # Remove LLM tracking models (only needed with persistence)
+        remove_dir("app/services/ai/models/llm")
+        # Remove LLM fixtures (only needed with persistence)
+        remove_file("app/services/ai/fixtures/llm_fixtures.py")
+        # Remove usage tracking tests (only relevant with persistence)
+        remove_file("tests/services/ai/test_usage_tracking.py")
 
     if "{{ cookiecutter.include_comms }}" != "yes":
         # Remove comms service files
@@ -335,6 +341,8 @@ def main():
     include_ai = "{{ cookiecutter.include_ai }}" == "yes"
     ai_needs_migrations = include_ai and "{{ cookiecutter.ai_backend }}" != "memory"
     needs_migrations = include_auth or ai_needs_migrations
+    # AI needs seeding when using persistence backend (same condition as migrations)
+    ai_needs_seeding = ai_needs_migrations
 
     if not needs_migrations:
         remove_dir("alembic")
@@ -357,13 +365,14 @@ def main():
         if file_path.exists():
             print(f"Processed template: {file_path.name}")
 
-    # Complete project setup: dependencies, env file, migrations, formatting
+    # Complete project setup: dependencies, env file, migrations, formatting, seeding
     # Use shared post-generation tasks module (also used by Copier)
     python_version = "{{ cookiecutter.python_version }}"
     run_post_generation_tasks(
         Path(PROJECT_DIRECTORY),
         include_migrations=needs_migrations,
         python_version=python_version,
+        seed_ai=ai_needs_seeding,
     )
 
 

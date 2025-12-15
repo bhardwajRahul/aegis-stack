@@ -2,7 +2,12 @@
 
 Provides seed data for LLM vendors, models, and pricing.
 """
+{% if cookiecutter.ai_backend != "memory" %}
 
 from app.services.ai.fixtures.llm_fixtures import load_all_llm_fixtures
 
 __all__ = ["load_all_llm_fixtures"]
+{% else %}
+
+__all__: list[str] = []
+{% endif %}

@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
+{% if ai_backend != "memory" %}
 
 from .llm import (
     Direction,
@@ -21,6 +22,7 @@ from .llm import (
     LLMVendor,
     Modality,
 )
+{% endif %}
 
 
 class AIProvider(str, Enum):
@@ -229,6 +231,7 @@ def get_free_providers() -> list[AIProvider]:
 
 
 __all__ = [
+{% if ai_backend != "memory" %}
     # LLM tracking models
     "LLMVendor",
     "LargeLanguageModel",
@@ -238,6 +241,7 @@ __all__ = [
     "Direction",
     "LLMDeployment",
     "LLMUsage",
+{% endif %}
     # AI service models
     "AIProvider",
     "MessageRole",

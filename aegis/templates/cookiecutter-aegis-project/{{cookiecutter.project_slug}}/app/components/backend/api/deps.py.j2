@@ -1,4 +1,5 @@
 """FastAPI dependencies for the backend API."""
+{% if cookiecutter.include_database == "yes" %}
 
 from collections.abc import AsyncGenerator, Generator
 
@@ -56,3 +57,4 @@ async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+{% endif %}

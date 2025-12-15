@@ -178,11 +178,15 @@ def generate_with_copier(
             for migration_path in generated:
                 print(f"Generated migration: {migration_path.name}")
 
+    # AI needs seeding when using persistence backend (same condition as migrations)
+    ai_needs_seeding = ai_needs_migrations
+
     python_version = copier_data.get("python_version")
     run_post_generation_tasks(
         project_path,
         include_migrations=include_migrations,
         python_version=python_version,
+        seed_ai=ai_needs_seeding,
     )
 
     # Initialize git repository for Copier updates
