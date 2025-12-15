@@ -5,41 +5,51 @@ These tables store conversation history in the project database.
 """
 
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
-from sqlmodel import Field, SQLModel
+from sqlalchemy import JSON, Column
+from sqlmodel import Field, Relationship, SQLModel
+
+if TYPE_CHECKING:
+    pass
 
 
 class Conversation(SQLModel, table=True):
-    """AI conversation table."""
+    """
+    Represents a conversation thread between a user and AI assistant.
+
+    LLM information is tracked separately in llm_* tables.
+    """
 
     __tablename__ = "conversation"
 
-    id: str = Field(primary_key=True, description="Conversation UUID")
-    title: str | None = Field(
-        default=None, description="Auto-generated conversation title"
-    )
-    provider: str = Field(
-        index=True, description="AI provider (openai, anthropic, etc)"
-    )
-    model: str = Field(description="Model name")
-    user_id: str = Field(index=True, description="User who owns this conversation")
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    title: str | None = Field(default=None, index=False)
+    user_id: str = Field(index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    metadata_json: str | None = Field(default=None, description="JSON metadata")
+    meta_data: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+
+    # Relationship to messages
+    messages: list["ConversationMessage"] = Relationship(back_populates="conversation")
 
 
-class Message(SQLModel, table=True):
-    """AI message table."""
+class ConversationMessage(SQLModel, table=True):
+    """
+    Represents a single message within a conversation.
 
-    __tablename__ = "message"
+    Role can be 'user', 'assistant', or 'system'.
+    """
 
-    id: str = Field(primary_key=True, description="Message UUID")
-    conversation_id: str = Field(
-        foreign_key="conversation.id",
-        index=True,
-        description="Parent conversation ID",
-    )
-    role: str = Field(description="Message role: user, assistant, system")
-    content: str = Field(description="Message content")
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    metadata_json: str | None = Field(default=None, description="JSON metadata")
+    __tablename__ = "conversation_message"
+
+    id: str = Field(default_factory=lambda: str(uuid4()), primary_key=True)
+    conversation_id: str = Field(foreign_key="conversation.id", index=True)
+    role: str = Field(index=False)  # user, assistant, system
+    content: str = Field(default="")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
+    meta_data: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+
+    # Relationship to conversation
+    conversation: Conversation = Relationship(back_populates="messages")

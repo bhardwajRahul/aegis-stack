@@ -19,7 +19,7 @@ class Conversation(SQLModel, table=True):
     """
     Represents a conversation thread between a user and AI assistant.
 
-    Provider and model information is stored in the meta_data dict.
+    LLM information is tracked separately in llm_* tables.
     """
 
     __tablename__ = "conversation"

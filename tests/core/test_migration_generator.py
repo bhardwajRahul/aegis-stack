@@ -284,9 +284,17 @@ class TestMigrationSpecs:
         """Test AI migration spec is defined."""
         assert "ai" in MIGRATION_SPECS
         assert AI_MIGRATION.service_name == "ai"
-        assert len(AI_MIGRATION.tables) == 2
+        assert len(AI_MIGRATION.tables) == 8
 
         table_names = [t.name for t in AI_MIGRATION.tables]
+        # LLM catalog tables
+        assert "llm_vendor" in table_names
+        assert "large_language_model" in table_names
+        assert "llm_deployment" in table_names
+        assert "llm_modality" in table_names
+        assert "llm_price" in table_names
+        assert "llm_usage" in table_names
+        # Conversation tables
         assert "conversation" in table_names
         assert "conversation_message" in table_names
 

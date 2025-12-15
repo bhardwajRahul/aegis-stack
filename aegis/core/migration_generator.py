@@ -98,8 +98,162 @@ AUTH_MIGRATION = ServiceMigrationSpec(
 
 AI_MIGRATION = ServiceMigrationSpec(
     service_name="ai",
-    description="AI conversation tables",
+    description="AI service tables (LLM catalog, usage tracking, conversations)",
     tables=[
+        # LLM Vendor - no dependencies
+        TableSpec(
+            name="llm_vendor",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("name", "sa.String()", nullable=False),
+                ColumnSpec("description", "sa.String()", nullable=True),
+                ColumnSpec("color", "sa.String()", nullable=False, default="'#6B7280'"),
+                ColumnSpec("icon_path", "sa.String()", nullable=False, default="''"),
+                ColumnSpec("api_base", "sa.String()", nullable=True),
+                ColumnSpec(
+                    "auth_method", "sa.String()", nullable=False, default="'api-key'"
+                ),
+            ],
+            indexes=[IndexSpec("ix_llm_vendor_name", ["name"], unique=True)],
+        ),
+        # Large Language Model - depends on llm_vendor
+        TableSpec(
+            name="large_language_model",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("model_id", "sa.String()", nullable=False),
+                ColumnSpec("title", "sa.String()", nullable=False),
+                ColumnSpec("description", "sa.String()", nullable=False, default="''"),
+                ColumnSpec(
+                    "context_window", "sa.Integer()", nullable=False, default="4096"
+                ),
+                ColumnSpec(
+                    "training_data", "sa.String()", nullable=False, default="''"
+                ),
+                ColumnSpec(
+                    "streamable", "sa.Boolean()", nullable=False, default="True"
+                ),
+                ColumnSpec("enabled", "sa.Boolean()", nullable=False, default="True"),
+                ColumnSpec("color", "sa.String()", nullable=False, default="'#6B7280'"),
+                ColumnSpec("icon_path", "sa.String()", nullable=False, default="''"),
+                ColumnSpec("license", "sa.String()", nullable=True),
+                ColumnSpec("source_url", "sa.String()", nullable=True),
+                ColumnSpec("released_on", "sa.DateTime()", nullable=True),
+                ColumnSpec("family", "sa.String()", nullable=True),
+                ColumnSpec("llm_vendor_id", "sa.Integer()", nullable=True),
+            ],
+            indexes=[
+                IndexSpec(
+                    "ix_large_language_model_model_id", ["model_id"], unique=True
+                ),
+                IndexSpec("ix_large_language_model_llm_vendor_id", ["llm_vendor_id"]),
+            ],
+            foreign_keys=[ForeignKeySpec(["llm_vendor_id"], "llm_vendor", ["id"])],
+        ),
+        # LLM Deployment - depends on llm_vendor and large_language_model
+        TableSpec(
+            name="llm_deployment",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("llm_id", "sa.Integer()", nullable=False),
+                ColumnSpec("llm_vendor_id", "sa.Integer()", nullable=False),
+                ColumnSpec("speed", "sa.Integer()", nullable=False, default="50"),
+                ColumnSpec(
+                    "intelligence", "sa.Integer()", nullable=False, default="50"
+                ),
+                ColumnSpec("reasoning", "sa.Integer()", nullable=False, default="50"),
+                ColumnSpec(
+                    "output_max_tokens", "sa.Integer()", nullable=False, default="4096"
+                ),
+                ColumnSpec(
+                    "function_calling", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec(
+                    "input_cache", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec(
+                    "structured_output", "sa.Boolean()", nullable=False, default="False"
+                ),
+            ],
+            indexes=[
+                IndexSpec("ix_llm_deployment_llm_id", ["llm_id"]),
+                IndexSpec("ix_llm_deployment_llm_vendor_id", ["llm_vendor_id"]),
+                IndexSpec(
+                    "ix_llm_deployment_llm_vendor_unique",
+                    ["llm_id", "llm_vendor_id"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["llm_id"], "large_language_model", ["id"]),
+                ForeignKeySpec(["llm_vendor_id"], "llm_vendor", ["id"]),
+            ],
+        ),
+        # LLM Modality - depends on large_language_model
+        TableSpec(
+            name="llm_modality",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("llm_id", "sa.Integer()", nullable=False),
+                ColumnSpec("modality", "sa.String()", nullable=False),
+                ColumnSpec("direction", "sa.String()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_llm_modality_llm_id", ["llm_id"]),
+                IndexSpec(
+                    "ix_llm_modality_unique",
+                    ["llm_id", "modality", "direction"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[ForeignKeySpec(["llm_id"], "large_language_model", ["id"])],
+        ),
+        # LLM Price - depends on llm_vendor and large_language_model
+        TableSpec(
+            name="llm_price",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("llm_vendor_id", "sa.Integer()", nullable=False),
+                ColumnSpec("llm_id", "sa.Integer()", nullable=False),
+                ColumnSpec("input_cost_per_token", "sa.Float()", nullable=False),
+                ColumnSpec("output_cost_per_token", "sa.Float()", nullable=False),
+                ColumnSpec("cache_input_cost_per_token", "sa.Float()", nullable=True),
+                ColumnSpec("effective_date", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_llm_price_llm_vendor_id", ["llm_vendor_id"]),
+                IndexSpec("ix_llm_price_llm_id", ["llm_id"]),
+                IndexSpec("ix_llm_price_effective_date", ["effective_date"]),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["llm_vendor_id"], "llm_vendor", ["id"]),
+                ForeignKeySpec(["llm_id"], "large_language_model", ["id"]),
+            ],
+        ),
+        # LLM Usage - depends on large_language_model
+        TableSpec(
+            name="llm_usage",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("llm_id", "sa.Integer()", nullable=False),
+                ColumnSpec("user_id", "sa.String()", nullable=True),
+                ColumnSpec("timestamp", "sa.DateTime()", nullable=False),
+                ColumnSpec("input_tokens", "sa.Integer()", nullable=False),
+                ColumnSpec("output_tokens", "sa.Integer()", nullable=False),
+                ColumnSpec("total_cost", "sa.Float()", nullable=False),
+                ColumnSpec("success", "sa.Boolean()", nullable=False, default="True"),
+                ColumnSpec("error_message", "sa.String()", nullable=True),
+                ColumnSpec("action", "sa.String()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_llm_usage_llm_id", ["llm_id"]),
+                IndexSpec("ix_llm_usage_user_id", ["user_id"]),
+                IndexSpec("ix_llm_usage_timestamp", ["timestamp"]),
+                IndexSpec("ix_llm_usage_action", ["action"]),
+            ],
+            foreign_keys=[ForeignKeySpec(["llm_id"], "large_language_model", ["id"])],
+        ),
+        # Conversation - no LLM dependencies
         TableSpec(
             name="conversation",
             columns=[
@@ -117,6 +271,7 @@ AI_MIGRATION = ServiceMigrationSpec(
             ],
             indexes=[IndexSpec("ix_conversation_user_id", ["user_id"])],
         ),
+        # Conversation Message - depends on conversation
         TableSpec(
             name="conversation_message",
             columns=[

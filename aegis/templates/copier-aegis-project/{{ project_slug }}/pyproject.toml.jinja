@@ -51,6 +51,8 @@ dependencies = [
     "passlib[bcrypt]==1.7.4",
     "bcrypt<5.0.0",  # Pin to 4.x due to passlib compatibility
     "python-multipart==0.0.9",
+{%- endif %}
+{%- if include_auth or (include_ai and ai_backend == "sqlite") %}
     "alembic==1.16.5",
 {%- endif %}
 {%- if include_ai %}

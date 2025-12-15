@@ -51,6 +51,8 @@ dependencies = [
     "passlib[bcrypt]==1.7.4",
     "bcrypt<5.0.0",  # Pin to 4.x due to passlib compatibility
     "python-multipart==0.0.9",
+{%- endif %}
+{%- if cookiecutter.include_auth == "yes" or (cookiecutter.include_ai == "yes" and cookiecutter.ai_backend == "sqlite") %}
     "alembic==1.16.5",
 {%- endif %}
 {%- if cookiecutter.include_ai == "yes" %}
