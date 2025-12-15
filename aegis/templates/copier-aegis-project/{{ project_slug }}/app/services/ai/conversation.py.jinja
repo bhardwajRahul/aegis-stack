@@ -22,7 +22,7 @@ from sqlmodel import select
 
 from app.core.db import db_session, init_database
 from app.models.conversation import Conversation as ConversationModel
-from app.models.conversation import Message as MessageModel
+from app.models.conversation import ConversationMessage as MessageModel
 {% endif %}
 
 from .models import AIProvider, Conversation, ConversationMessage, MessageRole
@@ -122,20 +122,25 @@ class ConversationManager:
                     role=MessageRole(msg.role),
                     content=msg.content,
                     timestamp=msg.timestamp,
-                    metadata=json.loads(msg.metadata_json) if msg.metadata_json else {},
+                    metadata=msg.meta_data or {},
                 )
                 for msg in messages_db
             ]
 
+            # Extract provider/model from meta_data (stored there since they're not DB columns)
+            meta = conv_db.meta_data or {}
+            provider_str = meta.get("provider", "public")
+            model_str = meta.get("model", "gpt-4o-mini")
+
             return Conversation(
                 id=conv_db.id,
                 title=conv_db.title,
-                provider=AIProvider(conv_db.provider),
-                model=conv_db.model,
+                provider=AIProvider(provider_str),
+                model=model_str,
                 created_at=conv_db.created_at,
                 updated_at=conv_db.updated_at,
                 messages=messages,
-                metadata=json.loads(conv_db.metadata_json) if conv_db.metadata_json else {},
+                metadata=meta,
             )
 {% endif %}
 
@@ -185,10 +190,10 @@ class ConversationManager:
 
             conversations = []
             for conv_db in all_convs:
-                metadata = json.loads(conv_db.metadata_json) if conv_db.metadata_json else {}
+                meta = conv_db.meta_data or {}
 
                 # Filter by user_id if specified
-                if user_id and metadata.get("user_id") != user_id:
+                if user_id and meta.get("user_id") != user_id:
                     continue
 
                 # Load messages for this conversation
@@ -203,20 +208,24 @@ class ConversationManager:
                         role=MessageRole(msg.role),
                         content=msg.content,
                         timestamp=msg.timestamp,
-                        metadata=json.loads(msg.metadata_json) if msg.metadata_json else {},
+                        metadata=msg.meta_data or {},
                     )
                     for msg in messages_db
                 ]
 
+                # Extract provider/model from meta_data
+                provider_str = meta.get("provider", "public")
+                model_str = meta.get("model", "gpt-4o-mini")
+
                 conversations.append(Conversation(
                     id=conv_db.id,
                     title=conv_db.title,
-                    provider=AIProvider(conv_db.provider),
-                    model=conv_db.model,
+                    provider=AIProvider(provider_str),
+                    model=model_str,
                     created_at=conv_db.created_at,
                     updated_at=conv_db.updated_at,
                     messages=messages,
-                    metadata=metadata,
+                    metadata=meta,
                 ))
 
             return conversations
@@ -395,8 +404,8 @@ class ConversationManager:
             # Get unique users
             users = set()
             for conv in all_convs:
-                metadata = json.loads(conv.metadata_json) if conv.metadata_json else {}
-                user_id = metadata.get("user_id")
+                meta = conv.meta_data or {}
+                user_id = meta.get("user_id")
                 if user_id:
                     users.add(user_id)
 
@@ -414,24 +423,27 @@ class ConversationManager:
     def _save_to_db(self, conversation: Conversation) -> None:
         """Save conversation and its messages to database."""
         with db_session() as session:
+            # Store provider/model in meta_data (not separate columns)
+            meta = dict(conversation.metadata)
+            meta["provider"] = conversation.provider.value
+            meta["model"] = conversation.model
+
             # Check if conversation exists
             conv_db = session.get(ConversationModel, conversation.id)
             if conv_db:
                 # Update existing
                 conv_db.title = conversation.title
                 conv_db.updated_at = conversation.updated_at
-                conv_db.metadata_json = json.dumps(conversation.metadata)
+                conv_db.meta_data = meta
             else:
                 # Create new
                 conv_db = ConversationModel(
                     id=conversation.id,
                     title=conversation.title,
-                    provider=conversation.provider.value,
-                    model=conversation.model,
-                    user_id=conversation.metadata.get("user_id", "default"),
+                    user_id=meta.get("user_id", "default"),
                     created_at=conversation.created_at,
                     updated_at=conversation.updated_at,
-                    metadata_json=json.dumps(conversation.metadata),
+                    meta_data=meta,
                 )
                 session.add(conv_db)
 
@@ -445,7 +457,7 @@ class ConversationManager:
                         role=message.role.value,
                         content=message.content,
                         timestamp=message.timestamp,
-                        metadata_json=json.dumps(message.metadata),
+                        meta_data=message.metadata,
                     )
                     session.add(msg_db)
 

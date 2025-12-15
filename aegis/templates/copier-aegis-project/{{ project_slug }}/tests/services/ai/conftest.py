@@ -1,10 +1,15 @@
 """Shared fixtures for AI service tests."""
 
+from collections.abc import Generator
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
 from app.services.ai.models import AIProvider, Conversation, MessageRole
+from app.services.ai.models.llm import LargeLanguageModel, LLMPrice, LLMVendor
 from app.services.ai.service import AIService
+from sqlalchemy import Engine
+from sqlmodel import Session, SQLModel, create_engine
 
 
 @pytest.fixture
@@ -76,3 +81,77 @@ def paid_provider_with_key_settings(mock_ai_settings):
     mock_ai_settings.AI_PROVIDER = "openai"
     mock_ai_settings.OPENAI_API_KEY = "sk-test-key-123"
     return mock_ai_settings
+
+
+# Database fixtures for LLM usage tracking tests
+
+
+@pytest.fixture
+def db_engine() -> Generator[Engine, None, None]:
+    """Create an in-memory SQLite database engine for testing."""
+    engine = create_engine("sqlite:///:memory:", echo=False)
+    SQLModel.metadata.create_all(engine)
+    yield engine
+    SQLModel.metadata.drop_all(engine)
+    engine.dispose()
+
+
+@pytest.fixture
+def db_session(db_engine: Engine) -> Generator[Session, None, None]:
+    """Create a database session for testing."""
+    with Session(db_engine) as session:
+        yield session
+        session.rollback()
+
+
+@pytest.fixture
+def sample_vendor(db_session: Session) -> LLMVendor:
+    """Create a sample LLM vendor (OpenAI) in the database."""
+    vendor = LLMVendor(
+        name="openai",
+        description="OpenAI API",
+        color="#10A37F",
+        api_base="https://api.openai.com/v1",
+        auth_method="api-key",
+    )
+    db_session.add(vendor)
+    db_session.commit()
+    db_session.refresh(vendor)
+    return vendor
+
+
+@pytest.fixture
+def sample_llm(db_session: Session, sample_vendor: LLMVendor) -> LargeLanguageModel:
+    """Create a sample LLM (gpt-4o) in the database."""
+    llm = LargeLanguageModel(
+        model_id="gpt-4o",
+        title="GPT-4o",
+        description="OpenAI's most advanced multimodal model",
+        context_window=128000,
+        streamable=True,
+        enabled=True,
+        color="#10A37F",
+        llm_vendor_id=sample_vendor.id,
+    )
+    db_session.add(llm)
+    db_session.commit()
+    db_session.refresh(llm)
+    return llm
+
+
+@pytest.fixture
+def sample_price(
+    db_session: Session, sample_vendor: LLMVendor, sample_llm: LargeLanguageModel
+) -> LLMPrice:
+    """Create sample pricing for gpt-4o in the database."""
+    price = LLMPrice(
+        llm_vendor_id=sample_vendor.id,
+        llm_id=sample_llm.id,
+        input_cost_per_token=0.000005,  # $5.00 per 1M tokens
+        output_cost_per_token=0.000015,  # $15.00 per 1M tokens
+        effective_date=datetime.now(UTC),
+    )
+    db_session.add(price)
+    db_session.commit()
+    db_session.refresh(price)
+    return price
