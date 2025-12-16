@@ -223,7 +223,7 @@ class DatabaseCard:
                 alignment=ft.MainAxisAlignment.START,
             ),
             padding=ft.padding.symmetric(horizontal=10, vertical=6),
-            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.GREY_300)),
+            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
         )
 
         # Table rows
@@ -323,7 +323,7 @@ class DatabaseCard:
 
         perf_content = [
             PrimaryText("Performance"),
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
+            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
         ]
 
         for stat_name, stat_value in db_stats.items():
@@ -340,7 +340,7 @@ class DatabaseCard:
         # Add status info
         perf_content.extend(
             [
-                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 ft.Row(
                     [
                         SecondaryText("Status:"),

@@ -141,7 +141,7 @@ class PerformanceSection(ft.Container):
                 metric_row("Memory Usage", f"{used_memory_human} / {maxmemory_human}"),
                 metric_row("Memory Fragmentation", f"{mem_fragmentation:.2f}"),
                 metric_row("Operations/Sec", str(ops_per_sec)),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                 metric_row("Cache Hits", str(keyspace_hits)),
                 metric_row("Cache Misses", str(keyspace_misses)),
                 metric_row("Evicted Keys", str(evicted_keys)),
@@ -262,7 +262,7 @@ class SlowQueriesSection(ft.Container):
                 H3Text("Slow Query Log"),
                 ft.Container(height=Theme.Spacing.SM),
                 header_row,
-                ft.Divider(height=1, color=ft.Colors.OUTLINE),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 ft.Column(
                     query_rows
                     if query_rows
@@ -400,7 +400,7 @@ class ActiveConnectionsSection(ft.Container):
                 H3Text("Active Connections"),
                 ft.Container(height=Theme.Spacing.SM),
                 header_row,
-                ft.Divider(height=1, color=ft.Colors.OUTLINE),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 ft.Column(
                     client_rows if client_rows else [BodyText("No active connections")],
                     spacing=0,
@@ -466,13 +466,13 @@ class StatisticsSection(ft.Container):
                 stat_row("Component Status", status.value.upper()),
                 stat_row("Health Message", message),
                 stat_row("Response Time", f"{response_time}ms"),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                 stat_row("Redis Version", version),
                 stat_row("Server Uptime", uptime_str),
                 stat_row("Total Commands", str(total_commands)),
                 stat_row("Total Connections", str(total_connections)),
                 stat_row("Peak Memory", used_memory_peak),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                 stat_row("Redis URL", redis_url),
             ],
             spacing=Theme.Spacing.XS,
@@ -498,11 +498,11 @@ class RedisDetailDialog(BaseDetailPopup):
         sections = [
             OverviewSection(component_data, page),
             PerformanceSection(component_data, page),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
             SlowQueriesSection(component_data, page),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
             ActiveConnectionsSection(component_data, page),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
             StatisticsSection(component_data, page),
         ]
 

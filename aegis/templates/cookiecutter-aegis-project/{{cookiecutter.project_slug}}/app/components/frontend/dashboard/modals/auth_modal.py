@@ -317,7 +317,7 @@ class StatisticsSection(ft.Container):
                 stat_row("Component Status", status.value.upper()),
                 stat_row("Health Message", message),
                 stat_row("Response Time", f"{response_time:.2f}ms"),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                 stat_row("Backend Dependency", backend_dep),
                 stat_row("Database Dependency", database_dep),
             ],
@@ -347,9 +347,9 @@ class AuthDetailDialog(BaseDetailPopup):
         sections = [
             OverviewSection(metadata),
             ConfigurationSection(metadata),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
             SecuritySection(metadata),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
             StatisticsSection(component_data),
         ]
 

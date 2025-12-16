@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -44,14 +45,13 @@ def _extract_database_path(database_url: str) -> str:
 DATABASE_PATH = _extract_database_path(settings.DATABASE_URL)
 
 # Create SQLite engine with proper configuration (sync)
-# pool_pre_ping validates connections before use, ensuring fresh reads
-# isolation_level="AUTOCOMMIT" ensures no implicit transactions hold stale data
+# NullPool disables connection pooling - each query gets a fresh connection
+# This ensures the server sees changes made by external processes (e.g., CLI)
 engine = create_engine(
     settings.DATABASE_URL,
     connect_args=settings.DATABASE_CONNECT_ARGS,
     echo=settings.DATABASE_ENGINE_ECHO,
-    isolation_level="AUTOCOMMIT",
-    pool_pre_ping=True,
+    poolclass=NullPool,
 )
 
 # Create async engine for non-blocking operations
@@ -72,6 +72,7 @@ def _get_async_database_url(database_url: str) -> str:
 async_engine = create_async_engine(
     _get_async_database_url(settings.DATABASE_URL),
     echo=settings.DATABASE_ENGINE_ECHO,
+    poolclass=NullPool,
     # Only add connect_args for SQLite
     connect_args=(
         settings.DATABASE_CONNECT_ARGS

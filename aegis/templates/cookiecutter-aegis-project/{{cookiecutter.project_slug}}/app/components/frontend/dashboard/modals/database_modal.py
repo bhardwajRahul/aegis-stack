@@ -1035,15 +1035,18 @@ class DatabaseDetailDialog(BaseDetailPopup):
             OverviewSection(database_component, page),
             MigrationHistorySection(database_component, page),
             ft.Divider(
-                height=ModalLayout.SECTION_DIVIDER_HEIGHT, color=ft.Colors.OUTLINE
+                height=ModalLayout.SECTION_DIVIDER_HEIGHT,
+                color=ft.Colors.OUTLINE_VARIANT,
             ),
             TableDetailsSection(database_component, page),
             ft.Divider(
-                height=ModalLayout.SECTION_DIVIDER_HEIGHT, color=ft.Colors.OUTLINE
+                height=ModalLayout.SECTION_DIVIDER_HEIGHT,
+                color=ft.Colors.OUTLINE_VARIANT,
             ),
             PragmaSettingsSection(database_component, page),
             ft.Divider(
-                height=ModalLayout.SECTION_DIVIDER_HEIGHT, color=ft.Colors.OUTLINE
+                height=ModalLayout.SECTION_DIVIDER_HEIGHT,
+                color=ft.Colors.OUTLINE_VARIANT,
             ),
             StatisticsSection(database_component, page),
         ]

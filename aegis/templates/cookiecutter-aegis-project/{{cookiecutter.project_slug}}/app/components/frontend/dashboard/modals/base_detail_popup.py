@@ -27,7 +27,7 @@ class BaseDetailPopup(BasePopup):
             def __init__(self, component_data: ComponentStatus, page: ft.Page):
                 sections = [
                     MyOverviewSection(component_data.metadata),
-                    ft.Divider(height=20, color=ft.Colors.OUTLINE),
+                    ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                     MyStatsSection(component_data),
                 ]
 
@@ -47,6 +47,7 @@ class BaseDetailPopup(BasePopup):
         sections: list[ft.Control],
         width: int = ModalLayout.DEFAULT_WIDTH,
         height: int = ModalLayout.DEFAULT_HEIGHT,
+        scrollable: bool = True,
     ) -> None:
         """
         Initialize the base detail popup.
@@ -57,9 +58,30 @@ class BaseDetailPopup(BasePopup):
             sections: List of section controls to display in modal body
             width: Modal width in pixels (default: 900)
             height: Modal height in pixels (default: 700)
+            scrollable: Whether to wrap sections in scrollable container (default: True).
+                        Set to False when using tabs that handle their own scrolling.
         """
         self.component_data = component_data
         self.title_text = title_text
+
+        # Build sections container - scrollable or direct based on parameter
+        if scrollable:
+            sections_container = ft.Container(
+                content=ft.Column(
+                    sections,
+                    spacing=0,
+                    scroll=ft.ScrollMode.AUTO,
+                ),
+                expand=True,
+            )
+        else:
+            # For tabs or content that manages its own scrolling
+            sections_container = ft.Container(
+                content=sections[0]
+                if len(sections) == 1
+                else ft.Column(sections, spacing=0),
+                expand=True,
+            )
 
         # Build modal content with title, sections, and close button
         modal_content = ft.Column(
@@ -67,15 +89,8 @@ class BaseDetailPopup(BasePopup):
                 # Title with status badge
                 self._create_title(),
                 ft.Divider(height=1),
-                # Scrollable sections
-                ft.Container(
-                    content=ft.Column(
-                        sections,
-                        spacing=0,
-                        scroll=ft.ScrollMode.AUTO,
-                    ),
-                    expand=True,
-                ),
+                # Sections (scrollable or not based on parameter)
+                sections_container,
                 # Actions
                 ft.Container(
                     content=ft.Row(

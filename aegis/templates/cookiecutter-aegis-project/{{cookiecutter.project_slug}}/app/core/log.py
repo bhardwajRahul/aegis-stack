@@ -83,7 +83,7 @@ def setup_logging() -> None:
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
     log_format = "DEV" if settings.APP_ENV == "dev" else "JSON"
-    logger.info(
+    logger.debug(
         "Logging setup complete",
         level=log_level,
         log_format=log_format,

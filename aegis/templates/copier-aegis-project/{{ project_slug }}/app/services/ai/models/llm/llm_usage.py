@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from sqlalchemy import Index
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -19,6 +20,10 @@ class LLMUsage(SQLModel, table=True):
     """
 
     __tablename__ = "llm_usage"
+    __table_args__ = (
+        # Compound index for efficient time-range + model aggregation queries
+        Index("ix_llm_usage_timestamp_llm_id", "timestamp", "llm_id"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     llm_id: int = Field(foreign_key="large_language_model.id", index=True)

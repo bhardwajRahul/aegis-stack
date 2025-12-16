@@ -133,7 +133,9 @@ class FastAPICard:
         if middleware_stack:
             # Add divider between system metrics and middleware
             if metrics_controls:
-                metrics_controls.append(ft.Divider(height=1, color=ft.Colors.GREY_400))
+                metrics_controls.append(
+                    ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT)
+                )
 
             # Add middleware pipeline header
             metrics_controls.append(PrimaryText("Middleware Pipeline"))
@@ -205,7 +207,7 @@ class FastAPICard:
 
         details_content = [
             PrimaryText("API Overview"),
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
+            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
             create_stats_row(
                 "Status",
                 self.component_data.status.value.title(),
@@ -249,7 +251,7 @@ class FastAPICard:
         if route_groups and total_routes > 0:
             details_content.extend(
                 [
-                    ft.Divider(height=1, color=ft.Colors.GREY_300),
+                    ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                     PrimaryText("Route Groups"),
                 ]
             )
@@ -267,7 +269,7 @@ class FastAPICard:
         elif not routes_data and metadata.get("fallback"):
             details_content.extend(
                 [
-                    ft.Divider(height=1, color=ft.Colors.GREY_300),
+                    ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                     LabelText(
                         "Route introspection unavailable", color=ft.Colors.ORANGE
                     ),
@@ -291,7 +293,7 @@ class FastAPICard:
                     content=self._create_tech_badge(),
                     width=200,  # Fixed width - honors TechBadge width
                 ),
-                ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
+                ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
                 # Middle: Metrics (PRIORITY - gets most space and protection)
                 ft.Container(
                     content=self._create_metrics_section(),
@@ -299,7 +301,7 @@ class FastAPICard:
                     padding=ft.padding.all(16),
                     width=300,  # Minimum width to keep metrics functional
                 ),
-                ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
+                ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
                 # Right: Details (flexible, shrinks most aggressively)
                 ft.Container(
                     content=self._create_details_section(),

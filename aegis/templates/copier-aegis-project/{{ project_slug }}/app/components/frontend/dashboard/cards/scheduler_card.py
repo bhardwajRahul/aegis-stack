@@ -217,7 +217,7 @@ class SchedulerCard:
 
         stats_content = [
             PrimaryText("Task Statistics"),
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
+            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
         ]
 
         # Add all stats using the utility function
@@ -227,7 +227,7 @@ class SchedulerCard:
         # Add scheduler status
         stats_content.extend(
             [
-                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 create_stats_row(
                     "Status",
                     self.component_data.status.value.title(),

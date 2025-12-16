@@ -191,7 +191,7 @@ class RedisCard:
         return ft.Column(
             [
                 PrimaryText("Cache Metrics"),
-                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 ft.Row(
                     metrics_controls, spacing=15, alignment=ft.MainAxisAlignment.CENTER
                 ),
@@ -231,7 +231,7 @@ class RedisCard:
 
         perf_content = [
             PrimaryText("Performance"),
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
+            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
         ]
 
         for stat_name, stat_value in performance_stats.items():
@@ -248,7 +248,7 @@ class RedisCard:
         # Add status info
         perf_content.extend(
             [
-                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 ft.Row(
                     [
                         SecondaryText("Status:"),

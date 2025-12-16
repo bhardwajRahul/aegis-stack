@@ -108,7 +108,7 @@ class BaseCard(ABC):
             section_content.extend(
                 [
                     ft.Text(title, size=16, weight=ft.FontWeight.BOLD),
-                    ft.Divider(height=1, color=ft.Colors.GREY_300),
+                    ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 ]
             )
         section_content.extend(content)
@@ -213,9 +213,9 @@ class BaseCard(ABC):
             content=ft.Row(
                 [
                     left_section,
-                    ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
+                    ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
                     middle_section,
-                    ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
+                    ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
                     right_section,
                 ],
                 spacing=0,

@@ -26,7 +26,7 @@ class BaseDetailDialog(ft.AlertDialog):
             def __init__(self, component_data: ComponentStatus):
                 sections = [
                     MyOverviewSection(component_data.metadata),
-                    ft.Divider(height=20, color=ft.Colors.OUTLINE),
+                    ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                     MyStatsSection(component_data),
                 ]
 
