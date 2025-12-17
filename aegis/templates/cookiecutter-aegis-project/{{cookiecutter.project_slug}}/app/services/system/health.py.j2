@@ -593,6 +593,7 @@ async def check_cache_health() -> ComponentStatus:
         ComponentStatus indicating cache health
     """
     try:
+        import redis
         import redis.asyncio as aioredis
 
         # Create Redis connection with timeout

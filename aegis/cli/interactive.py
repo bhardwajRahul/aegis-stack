@@ -9,7 +9,14 @@ from pathlib import Path
 
 import typer
 
-from ..constants import AIFrameworks, AnswerKeys, ComponentNames, StorageBackends
+from ..constants import (
+    AIFrameworks,
+    AIProviders,
+    AnswerKeys,
+    ComponentNames,
+    Messages,
+    StorageBackends,
+)
 from ..core.components import COMPONENTS, CORE_COMPONENTS, ComponentSpec, ComponentType
 from ..core.services import SERVICES, ServiceType, get_services_by_type
 
@@ -43,8 +50,7 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
         Tuple of (selected_components, scheduler_backend, selected_services)
     """
 
-    typer.echo("Component Selection")
-    typer.echo("=" * 40)
+    Messages.print_section_header(Messages.SECTION_COMPONENT_SELECTION)
     typer.secho(
         f"Core components ({' + '.join(CORE_COMPONENTS)}) included automatically\n",
         fg="green",
@@ -177,8 +183,9 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
     selected_services = []
 
     if SERVICES:  # Only show services if any are available
-        typer.echo("\nService Selection")
-        typer.echo("=" * 40)
+        Messages.print_section_header(
+            Messages.SECTION_SERVICE_SELECTION, newline_before=True
+        )
         typer.echo(
             "Services provide business logic functionality for your application.\n"
         )
@@ -224,83 +231,35 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
                 prompt = f"  Add {service_spec.description.lower()}?"
                 if typer.confirm(prompt):
                     # AI service requires backend (always available) - no dependency issues
-
-                    # Framework selection
-                    typer.echo("\nAI Framework Selection:")
-                    typer.echo("  Choose your AI framework:")
-                    typer.echo(
-                        "    1. PydanticAI - Type-safe, Pythonic AI framework (default)"
-                    )
-                    typer.echo(
-                        "    2. LangChain - Popular framework with extensive integrations"
+                    # Use the reusable AI configuration function
+                    backend, framework, providers = interactive_ai_service_config(
+                        service_name
                     )
 
-                    use_langchain = typer.confirm(
-                        "  Use LangChain instead of PydanticAI?", default=False
-                    )
-                    framework = (
-                        AIFrameworks.LANGCHAIN
-                        if use_langchain
-                        else AIFrameworks.PYDANTIC_AI
-                    )
-                    _ai_framework_selection[service_name] = framework
-                    typer.secho(f"  Selected framework: {framework}", fg="green")
-
-                    typer.echo("\nAI Provider Selection:")
-                    typer.echo(
-                        "  Choose AI providers to include (multiple selection supported)"
-                    )
-                    typer.echo("  Provider Options:")
-
-                    # Provider selection with recommendations
-                    providers = []
-                    provider_info = [
-                        ("openai", "OpenAI", "GPT models", "Paid", False),
-                        ("anthropic", "Anthropic", "Claude models", "Paid", False),
-                        ("google", "Google", "Gemini models", "Free tier", True),
-                        ("groq", "Groq", "Fast inference", "Free tier", True),
-                        ("mistral", "Mistral", "Open models", "Mostly paid", False),
-                        (
-                            "cohere",
-                            "Cohere",
-                            "Enterprise focus",
-                            "Limited free",
-                            False,
-                        ),
-                    ]
-
-                    # Ask about each provider
-                    for (
-                        provider_id,
-                        name,
-                        description,
-                        pricing,
-                        recommended,
-                    ) in provider_info:
-                        recommend_text = " (Recommended)" if recommended else ""
-                        if typer.confirm(
-                            f"    ☐ {name} - {description} ({pricing}){recommend_text}?",
-                            default=recommended,
-                        ):
-                            providers.append(provider_id)
-
-                    # Handle no providers selected
-                    if not providers:
-                        typer.secho(
-                            "  No providers selected, adding recommended defaults...",
-                            fg="yellow",
+                    # Handle database auto-add for SQLite backend
+                    if backend == StorageBackends.SQLITE:
+                        database_already_selected = any(
+                            ComponentNames.DATABASE in comp for comp in selected
                         )
-                        providers = ["groq", "google"]  # Safe defaults with free tiers
 
-                    # Show selected providers
-                    typer.secho(
-                        f"\n  Selected providers: {', '.join(providers)}", fg="green"
-                    )
-                    typer.echo("  Dependencies will be optimized for your selection")
+                        if database_already_selected:
+                            typer.secho(
+                                "  Database already selected - usage tracking enabled",
+                                fg="green",
+                            )
+                        else:
+                            selected.append(
+                                f"{ComponentNames.DATABASE}[{StorageBackends.SQLITE}]"
+                            )
+                            typer.secho(
+                                "  Database added for usage tracking", fg="green"
+                            )
 
-                    # Store provider selection in global context for template generation
-                    _ai_provider_selection[service_name] = providers
-                    selected_services.append(service_name)
+                    # Build AI service string with bracket syntax for TemplateGenerator
+                    # Format: ai[backend,framework,provider1,provider2,...]
+                    options = [backend, framework] + providers
+                    service_string = f"{service_name}[{','.join(options)}]"
+                    selected_services.append(service_string)
                     typer.secho("AI service configured", fg="green")
 
         # Future service types can be added here as they become available
@@ -400,6 +359,86 @@ def clear_all_ai_selections() -> None:
     clear_ai_backend_selection()
 
 
+def interactive_ai_service_config(
+    service_name: str = AnswerKeys.SERVICE_AI,
+) -> tuple[str, str, list[str]]:
+    """
+    Interactive AI service configuration prompts.
+
+    Prompts user for framework, backend, and provider selection.
+    Stores selections in global state for template generation.
+
+    Args:
+        service_name: Name of the AI service (defaults to "ai")
+
+    Returns:
+        Tuple of (backend, framework, providers)
+    """
+    global _ai_framework_selection, _ai_backend_selection, _ai_provider_selection
+
+    # Framework selection
+    typer.echo("\nAI Framework Selection:")
+    typer.echo("  Choose your AI framework:")
+    typer.echo("    1. PydanticAI - Type-safe, Pythonic AI framework (default)")
+    typer.echo("    2. LangChain - Popular framework with extensive integrations")
+
+    use_langchain = typer.confirm(
+        "  Use LangChain instead of PydanticAI?", default=False
+    )
+    framework = AIFrameworks.LANGCHAIN if use_langchain else AIFrameworks.PYDANTIC_AI
+    _ai_framework_selection[service_name] = framework
+    typer.secho(f"  Selected framework: {framework}", fg="green")
+
+    # AI Backend Selection
+    typer.echo("\nLLM Usage Tracking:")
+    use_sqlite = typer.confirm(
+        "  Enable usage tracking with SQLite? (token counts, costs)",
+        default=False,
+    )
+
+    backend = StorageBackends.SQLITE if use_sqlite else StorageBackends.MEMORY
+    _ai_backend_selection[service_name] = backend
+
+    # Provider selection
+    typer.echo("\nAI Provider Selection:")
+    typer.echo("  Choose AI providers to include (multiple selection supported)")
+    typer.echo("  Provider Options:")
+
+    providers: list[str] = []
+
+    # Ask about each provider
+    for (
+        provider_id,
+        name,
+        description,
+        pricing,
+        recommended,
+    ) in AIProviders.PROVIDER_INFO:
+        recommend_text = " (Recommended)" if recommended else ""
+        if typer.confirm(
+            f"    ☐ {name} - {description} ({pricing}){recommend_text}?",
+            default=recommended,
+        ):
+            providers.append(provider_id)
+
+    # Handle no providers selected
+    if not providers:
+        typer.secho(
+            "  No providers selected, adding recommended defaults...",
+            fg="yellow",
+        )
+        providers = list(AIProviders.INTERACTIVE_DEFAULTS)
+
+    # Show selected providers
+    typer.secho(f"\n  Selected providers: {', '.join(providers)}", fg="green")
+    typer.echo("  Dependencies will be optimized for your selection")
+
+    # Store provider selection in global context for template generation
+    _ai_provider_selection[service_name] = providers
+
+    return backend, framework, providers
+
+
 def interactive_component_add_selection(project_path: Path) -> tuple[list[str], str]:
     """
     Interactive component selection for adding to existing project.
@@ -422,8 +461,9 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
         typer.secho(f"Failed to load project configuration: {e}", fg="red", err=True)
         raise typer.Exit(1)
 
-    typer.echo("\nComponent Selection")
-    typer.echo("=" * 40)
+    Messages.print_section_header(
+        Messages.SECTION_COMPONENT_SELECTION, newline_before=True
+    )
 
     # Show currently enabled components
     enabled_components = []
@@ -555,8 +595,9 @@ def interactive_component_remove_selection(project_path: Path) -> list[str]:
         typer.secho(f"Failed to load project configuration: {e}", fg="red", err=True)
         raise typer.Exit(1)
 
-    typer.secho("\nComponent Removal", fg="yellow")
-    typer.echo("=" * 40)
+    typer.echo()
+    typer.secho(Messages.SECTION_COMPONENT_REMOVAL, fg="yellow")
+    typer.echo(Messages.SEPARATOR)
     typer.secho(
         "WARNING: This will DELETE component files from your project!", fg="yellow"
     )
@@ -614,8 +655,9 @@ def interactive_service_selection(project_path: Path) -> list[str]:
         typer.secho(f"Failed to load project configuration: {e}", fg="red", err=True)
         raise typer.Exit(1)
 
-    typer.echo("\nService Selection")
-    typer.echo("=" * 40)
+    Messages.print_section_header(
+        Messages.SECTION_SERVICE_SELECTION, newline_before=True
+    )
     typer.echo("Services provide business logic functionality for your application.\n")
 
     # Find already enabled services
@@ -756,8 +798,7 @@ def interactive_service_remove_selection(project_path: Path) -> list[str]:
         typer.secho(f"Failed to load project configuration: {e}", fg="red", err=True)
         raise typer.Exit(1)
 
-    typer.echo("\nService Removal Selection")
-    typer.echo("=" * 40)
+    Messages.print_section_header(Messages.SECTION_SERVICE_REMOVAL, newline_before=True)
     typer.secho("WARNING: Removing services deletes files permanently!\n", fg="yellow")
 
     # Find enabled services

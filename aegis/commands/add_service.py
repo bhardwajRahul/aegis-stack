@@ -160,6 +160,44 @@ def add_service_command(
         typer.secho("All requested services are already enabled!", fg="green")
         raise typer.Exit(0)
 
+    # Handle AI service interactive configuration
+    # We need to check if AI service is being added and prompt for configuration
+    ai_config: dict[str, str | list[str]] = {}
+    for i, service in enumerate(services_to_add):
+        base_service = service_base_map[service]
+        if base_service == AnswerKeys.SERVICE_AI:
+            if not service.startswith("ai["):
+                # AI service without bracket syntax - prompt for configuration
+                from ..cli.interactive import interactive_ai_service_config
+
+                backend, framework, providers = interactive_ai_service_config(
+                    base_service
+                )
+
+                # Store config for later use
+                ai_config["backend"] = backend
+                ai_config["framework"] = framework
+                ai_config["providers"] = providers
+
+                # Build bracket syntax and update the service entry
+                options = [backend, framework] + providers
+                service_string = f"{base_service}[{','.join(options)}]"
+                services_to_add[i] = service_string
+
+                # Update the mapping with the new full service name
+                service_base_map[service_string] = base_service
+                # Remove old mapping entry
+                del service_base_map[service]
+            else:
+                # AI service with bracket syntax - parse backend from options
+                # Format: ai[backend,framework,provider1,provider2,...]
+                from ..core.ai_service_parser import parse_ai_service_config
+
+                config = parse_ai_service_config(service)
+                ai_config["backend"] = config.backend
+                ai_config["framework"] = config.framework
+                ai_config["providers"] = config.providers
+
     # Resolve service dependencies to components
     try:
         required_components, _ = ServiceResolver.resolve_service_dependencies(
@@ -168,6 +206,13 @@ def add_service_command(
     except ValueError as e:
         typer.secho(f"Failed to resolve service dependencies: {e}", fg="red", err=True)
         raise typer.Exit(1)
+
+    # If AI service selected SQLite backend, ensure database is in required components
+    if (
+        ai_config.get("backend") == StorageBackends.SQLITE
+        and ComponentNames.DATABASE not in required_components
+    ):
+        required_components.append(ComponentNames.DATABASE)
 
     # Check which components are already enabled
     enabled_components = []
@@ -279,9 +324,21 @@ def add_service_command(
             # Get base service name (strips variant syntax like [langchain,sqlite])
             base_service = service_base_map[service]
 
-            # For AI service, set default providers
+            # For AI service, use the captured configuration
             if base_service == AnswerKeys.SERVICE_AI:
-                service_data[AnswerKeys.AI_PROVIDERS] = "openai"
+                # Use providers from interactive config, or default to openai
+                providers = ai_config.get("providers", ["openai"])
+                if isinstance(providers, list):
+                    service_data[AnswerKeys.AI_PROVIDERS] = ",".join(providers)
+                else:
+                    service_data[AnswerKeys.AI_PROVIDERS] = str(providers)
+
+                # Set backend and framework for pyproject.toml regeneration
+                # This ensures alembic is included when sqlite backend is selected
+                backend = ai_config.get("backend", StorageBackends.MEMORY)
+                framework = ai_config.get("framework", "pydantic-ai")
+                service_data[AnswerKeys.AI_BACKEND] = backend
+                service_data[AnswerKeys.AI_FRAMEWORK] = framework
 
             # Add the service (services are added like components)
             # Use base_service for file lookup, not the full variant name
@@ -310,6 +367,12 @@ def add_service_command(
             if base_service not in MIGRATION_SPECS:
                 continue
 
+            # AI service only needs migrations with SQLite backend (not memory)
+            if base_service == AnswerKeys.SERVICE_AI:
+                ai_backend = ai_config.get("backend", StorageBackends.MEMORY)
+                if ai_backend == StorageBackends.MEMORY:
+                    continue  # Skip migrations for memory backend
+
             alembic_dir = target_path / "alembic"
             if not alembic_dir.exists():
                 typer.secho(
@@ -329,8 +392,15 @@ def add_service_command(
                     )
 
         # Auto-run migrations for services that need them
+        # Exclude AI service with memory backend (doesn't need migrations)
+        ai_needs_migrations = (
+            ai_config.get("backend", StorageBackends.MEMORY) != StorageBackends.MEMORY
+        )
         services_with_migrations = [
-            s for s in services_to_add if service_base_map[s] in MIGRATION_SPECS
+            s
+            for s in services_to_add
+            if service_base_map[s] in MIGRATION_SPECS
+            and (service_base_map[s] != AnswerKeys.SERVICE_AI or ai_needs_migrations)
         ]
         if services_with_migrations:
             typer.secho("\nApplying database migrations...", fg=typer.colors.CYAN)
