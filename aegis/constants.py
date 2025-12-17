@@ -46,6 +46,38 @@ class AIFrameworks:
     ALL = [PYDANTIC_AI, LANGCHAIN]
 
 
+class AIProviders:
+    """AI provider options for the AI service."""
+
+    # Provider identifiers
+    PUBLIC = "public"
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    GOOGLE = "google"
+    GROQ = "groq"
+    MISTRAL = "mistral"
+    COHERE = "cohere"
+
+    # All valid providers (used for validation)
+    ALL = {PUBLIC, OPENAI, ANTHROPIC, GOOGLE, GROQ, MISTRAL, COHERE}
+
+    # Default providers for bracket syntax (non-interactive)
+    DEFAULT = [PUBLIC]
+
+    # Default providers for interactive mode (free tier recommendations)
+    INTERACTIVE_DEFAULTS = [GROQ, GOOGLE]
+
+    # Provider display information: (id, display_name, description, pricing, is_recommended)
+    PROVIDER_INFO: list[tuple[str, str, str, str, bool]] = [
+        (OPENAI, "OpenAI", "GPT models", "Paid", False),
+        (ANTHROPIC, "Anthropic", "Claude models", "Paid", False),
+        (GOOGLE, "Google", "Gemini models", "Free tier", True),
+        (GROQ, "Groq", "Fast inference", "Free tier", True),
+        (MISTRAL, "Mistral", "Open models", "Mostly paid", False),
+        (COHERE, "Cohere", "Enterprise focus", "Limited free", False),
+    ]
+
+
 class AnswerKeys:
     """Keys in Copier .copier-answers.yml configuration."""
 
@@ -87,6 +119,20 @@ class AnswerKeys:
 class Messages:
     """User-facing CLI messages."""
 
+    # Section headers and separators
+    SEPARATOR_WIDTH = 40
+    SEPARATOR = "=" * SEPARATOR_WIDTH
+
+    SECTION_COMPONENT_SELECTION = "Component Selection"
+    SECTION_SERVICE_SELECTION = "Service Selection"
+    SECTION_COMPONENT_REMOVAL = "Component Removal"
+    SECTION_SERVICE_REMOVAL = "Service Removal Selection"
+    SECTION_SCHEDULER_PERSISTENCE = "Scheduler Persistence"
+    SECTION_DATABASE_ENGINE = "Database Engine"
+    SECTION_AI_FRAMEWORK = "AI Framework Selection"
+    SECTION_AI_BACKEND = "AI Conversation Persistence"
+    SECTION_AI_PROVIDERS = "AI Provider Selection"
+
     # Git validation
     GIT_NOT_INITIALIZED = "Project is not in a git repository"
     GIT_REQUIRED_HINT = "Copier updates require git for change tracking"
@@ -124,6 +170,16 @@ class Messages:
     def copier_only_command(cls, command_name: str) -> str:
         """Generate message for Copier-only command."""
         return f"The 'aegis {command_name}' command only works with Copier-generated projects."
+
+    @classmethod
+    def print_section_header(cls, title: str, newline_before: bool = False) -> None:
+        """Print a section header with separator."""
+        import typer
+
+        if newline_before:
+            typer.echo()
+        typer.echo(title)
+        typer.echo(cls.SEPARATOR)
 
     @classmethod
     def print_next_steps(cls) -> None:

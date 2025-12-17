@@ -11,7 +11,7 @@ Order doesn't matter. Defaults: pydantic-ai, memory, public
 
 from dataclasses import dataclass
 
-from ..constants import AIFrameworks, StorageBackends
+from ..constants import AIFrameworks, AIProviders, StorageBackends
 
 
 @dataclass
@@ -23,15 +23,15 @@ class AIServiceConfig:
     providers: list[str]
 
 
-# Valid values for detection
-FRAMEWORKS = {AIFrameworks.PYDANTIC_AI, AIFrameworks.LANGCHAIN}
+# Valid values for detection (using constants)
+FRAMEWORKS = set(AIFrameworks.ALL)
 BACKENDS = {StorageBackends.MEMORY, StorageBackends.SQLITE}
-PROVIDERS = {"public", "openai", "anthropic", "google", "groq", "mistral", "cohere"}
+PROVIDERS = AIProviders.ALL
 
-# Defaults
+# Defaults (using constants)
 DEFAULT_FRAMEWORK = AIFrameworks.PYDANTIC_AI
 DEFAULT_BACKEND = StorageBackends.MEMORY
-DEFAULT_PROVIDERS = ["public"]
+DEFAULT_PROVIDERS = AIProviders.DEFAULT
 
 
 def parse_ai_service_config(service_string: str) -> AIServiceConfig:

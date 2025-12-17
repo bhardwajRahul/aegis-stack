@@ -189,10 +189,11 @@ class TestAddServiceSharedFileReRendering:
             "Base project should not have AIDetailDialog in card_utils.py"
         )
 
-        # Add ai service
+        # Add ai service with bracket syntax to skip interactive prompts
+        # Format: ai[backend,framework,provider1,...]
         result = run_aegis_command(
             "add-service",
-            "ai",
+            "ai[memory,pydantic-ai,openai]",
             "--project-path",
             str(project_path),
             "--yes",
@@ -247,3 +248,90 @@ class TestAddServiceAutoMigration:
         conn.close()
 
         assert len(tables) == 1, "User table should exist after auto-migration"
+
+
+class TestAddServiceAIBackendMigrations:
+    """Test that AI service migrations depend on backend selection."""
+
+    @pytest.mark.slow
+    def test_add_ai_memory_does_not_create_alembic(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """Test that adding AI service with memory backend does NOT create alembic."""
+        # Get cached base project copy
+        project_path = project_factory("base")
+
+        alembic_dir = project_path / "alembic"
+
+        # Verify no alembic before
+        assert not alembic_dir.exists(), "Base project should not have alembic"
+
+        # Add AI service with memory backend (no migrations needed)
+        result = run_aegis_command(
+            "add-service",
+            "ai[memory,pydantic-ai,openai]",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+        assert result.returncode == 0, f"Add-service failed: {result.stderr}"
+
+        # Verify alembic was NOT created
+        assert not alembic_dir.exists(), (
+            "AI with memory backend should NOT create alembic directory"
+        )
+
+    @pytest.mark.slow
+    def test_add_ai_sqlite_creates_alembic(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """Test that adding AI service with sqlite backend DOES create alembic."""
+        # Get cached base project copy
+        project_path = project_factory("base")
+
+        alembic_dir = project_path / "alembic"
+        versions_dir = alembic_dir / "versions"
+
+        # Verify no alembic before
+        assert not alembic_dir.exists(), "Base project should not have alembic"
+
+        # Add AI service with sqlite backend (migrations needed)
+        result = run_aegis_command(
+            "add-service",
+            "ai[sqlite,pydantic-ai,openai]",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+        assert result.returncode == 0, f"Add-service failed: {result.stderr}"
+
+        # Verify alembic WAS created
+        assert alembic_dir.exists(), (
+            "AI with sqlite backend should create alembic directory"
+        )
+        assert versions_dir.exists(), "versions directory should exist"
+
+        # Verify AI migration was generated
+        ai_migrations = list(versions_dir.glob("*_ai.py"))
+        assert len(ai_migrations) == 1, "Should have exactly one AI migration"
+
+    @pytest.mark.slow
+    def test_add_ai_memory_does_not_trigger_migration_output(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """Test that adding AI with memory backend doesn't show migration output."""
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "add-service",
+            "ai[memory,pydantic-ai,openai]",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+        assert result.returncode == 0, f"Add-service failed: {result.stderr}"
+
+        # Should NOT contain migration-related output
+        assert "Bootstrapping alembic" not in result.stdout
+        assert "Applying database migrations" not in result.stdout
+        assert "Generated migration" not in result.stdout

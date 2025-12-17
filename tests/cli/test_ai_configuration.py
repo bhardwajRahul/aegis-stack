@@ -9,7 +9,9 @@ from typing import Any
 from unittest.mock import patch
 
 from aegis.cli.interactive import (
+    clear_ai_backend_selection,
     clear_ai_provider_selection,
+    get_ai_backend_selection,
     get_ai_provider_selection,
     interactive_project_selection,
 )
@@ -34,6 +36,7 @@ class TestAIProviderSelection:
             False,  # auth service
             True,  # AI service
             False,  # Use LangChain? No (use PydanticAI)
+            False,  # Enable usage tracking with SQLite? No (memory backend)
             False,
             False,
             False,
@@ -44,8 +47,8 @@ class TestAIProviderSelection:
 
         components, scheduler_backend, services = interactive_project_selection()
 
-        # Verify AI service was selected
-        assert "ai" in services
+        # Verify AI service was selected (now uses bracket syntax like ai[backend,framework,...])
+        assert any(s.startswith("ai") for s in services)
         assert scheduler_backend == "memory"
 
         # Verify default providers were selected
@@ -64,6 +67,7 @@ class TestAIProviderSelection:
             False,  # auth service
             True,  # AI service
             True,  # Use LangChain? Yes
+            False,  # Enable usage tracking with SQLite? No (memory backend)
             True,  # OpenAI
             True,  # Anthropic
             False,
@@ -75,7 +79,7 @@ class TestAIProviderSelection:
         components, scheduler_backend, services = interactive_project_selection()
 
         # Verify AI service was selected
-        assert "ai" in services
+        assert any(s.startswith("ai") for s in services)
 
         # Verify custom providers were selected
         providers = get_ai_provider_selection("ai")
@@ -95,6 +99,7 @@ class TestAIProviderSelection:
             False,  # auth service
             True,  # AI service
             False,  # Use LangChain? No (use PydanticAI)
+            False,  # Enable usage tracking with SQLite? No (memory backend)
             False,
             False,  # OpenAI, Anthropic
             True,
@@ -106,7 +111,7 @@ class TestAIProviderSelection:
         components, scheduler_backend, services = interactive_project_selection()
 
         # Verify AI service was selected
-        assert "ai" in services
+        assert any(s.startswith("ai") for s in services)
 
         # Verify recommended providers were selected
         providers = get_ai_provider_selection("ai")
@@ -136,6 +141,131 @@ class TestAIProviderSelection:
         # Verify no provider selection was stored
         providers = get_ai_provider_selection("ai")
         assert providers == ["openai"]  # Default when not selected
+
+
+class TestAIBackendSelection:
+    """Test cases for AI backend selection (memory vs sqlite) in interactive mode."""
+
+    def setup_method(self) -> None:
+        """Clear selections before each test."""
+        clear_ai_provider_selection()
+        clear_ai_backend_selection()
+
+    @patch("typer.confirm")
+    def test_ai_backend_selection_sqlite_auto_adds_database(
+        self, mock_confirm: Any
+    ) -> None:
+        """Test that selecting SQLite backend auto-adds database component."""
+        # Mock user responses: no components, yes AI service, yes SQLite
+        mock_confirm.side_effect = [
+            False,
+            False,
+            False,
+            False,  # redis, worker, scheduler, database
+            False,  # auth service
+            True,  # AI service
+            False,  # Use LangChain? No (use PydanticAI)
+            True,  # Enable usage tracking with SQLite? Yes
+            False,
+            False,
+            True,
+            True,
+            False,
+            False,  # Provider selection (Google, Groq recommended)
+        ]
+
+        components, scheduler_backend, services = interactive_project_selection()
+
+        # Verify AI service was selected
+        assert any(s.startswith("ai") for s in services)
+
+        # Verify database component was auto-added
+        assert any("database" in comp for comp in components)
+
+        # Verify backend selection is sqlite
+        backend = get_ai_backend_selection("ai")
+        assert backend == "sqlite"
+
+    @patch("typer.confirm")
+    def test_ai_backend_selection_sqlite_with_existing_database(
+        self, mock_confirm: Any
+    ) -> None:
+        """Test SQLite backend with database already selected doesn't duplicate."""
+        # Mock user responses: yes database, yes AI service, yes SQLite
+        mock_confirm.side_effect = [
+            False,
+            False,
+            False,
+            True,  # redis, worker, scheduler, database (yes)
+            False,  # auth service
+            True,  # AI service
+            False,  # Use LangChain? No (use PydanticAI)
+            True,  # Enable usage tracking with SQLite? Yes
+            False,
+            False,
+            True,
+            True,
+            False,
+            False,  # Provider selection (Google, Groq recommended)
+        ]
+
+        components, scheduler_backend, services = interactive_project_selection()
+
+        # Verify AI service was selected
+        assert any(s.startswith("ai") for s in services)
+
+        # Verify database appears only once (no duplicate)
+        database_count = sum(1 for comp in components if "database" in comp)
+        assert database_count == 1
+
+        # Verify backend selection is sqlite
+        backend = get_ai_backend_selection("ai")
+        assert backend == "sqlite"
+
+    @patch("typer.confirm")
+    def test_ai_backend_selection_memory(self, mock_confirm: Any) -> None:
+        """Test that declining SQLite keeps memory backend."""
+        # Mock user responses: no components, yes AI service, no SQLite
+        mock_confirm.side_effect = [
+            False,
+            False,
+            False,
+            False,  # redis, worker, scheduler, database
+            False,  # auth service
+            True,  # AI service
+            False,  # Use LangChain? No (use PydanticAI)
+            False,  # Enable usage tracking with SQLite? No (memory)
+            False,
+            False,
+            True,
+            True,
+            False,
+            False,  # Provider selection (Google, Groq recommended)
+        ]
+
+        components, scheduler_backend, services = interactive_project_selection()
+
+        # Verify AI service was selected
+        assert any(s.startswith("ai") for s in services)
+
+        # Verify no database was auto-added
+        assert not any("database" in comp for comp in components)
+
+        # Verify backend selection is memory
+        backend = get_ai_backend_selection("ai")
+        assert backend == "memory"
+
+    def test_ai_backend_selection_defaults(self) -> None:
+        """Test that backend defaults to memory when not set."""
+        clear_ai_backend_selection()
+
+        # Should return memory as default
+        backend = get_ai_backend_selection("ai")
+        assert backend == "memory"
+
+        # Should return memory for unknown service too
+        backend = get_ai_backend_selection("unknown_service")
+        assert backend == "memory"
 
 
 class TestAIConfigurationIntegration:
@@ -259,6 +389,7 @@ class TestAIConfigurationEndToEnd:
             False,  # No auth service
             True,  # Yes AI service
             True,  # Use LangChain? Yes
+            False,  # Enable usage tracking with SQLite? No (memory backend)
             True,
             False,
             True,
@@ -271,7 +402,7 @@ class TestAIConfigurationEndToEnd:
         components, scheduler_backend, services = interactive_project_selection()
 
         # Verify service selection
-        assert "ai" in services
+        assert any(s.startswith("ai") for s in services)
 
         # Verify provider selection
         providers = get_ai_provider_selection("ai")
