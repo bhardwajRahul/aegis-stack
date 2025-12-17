@@ -294,7 +294,19 @@ MODELS: dict[str, list[dict[str, Any]]] = {
             "family": "command",
         },
     ],
-    # Note: "public" vendor has no unique models - it deploys existing models
+    # Public vendor's "auto" model - represents dynamic model selection via LLM7.io
+    "public": [
+        {
+            "model_id": "auto",
+            "title": "Auto (LLM7.io)",
+            "description": "Automatic model selection via LLM7.io public endpoint",
+            "context_window": 128000,
+            "streamable": False,
+            "enabled": True,
+            "color": "#6B7280",
+            "family": "auto",
+        },
+    ],
 }
 
 # =============================================================================
@@ -406,9 +418,10 @@ DEPLOYMENTS: dict[str, list[dict[str, Any]]] = {
         {"model_id": "command-r", "speed": 75, "intelligence": 75, "reasoning": 72},
         {"model_id": "command-light", "speed": 90, "intelligence": 55, "reasoning": 50},
     ],
-    # Public deploys OpenAI models via LLM7.io proxy (free but slower, no streaming)
+    # Public deploys models via LLM7.io proxy (free but slower, no streaming)
     "public": [
         {"model_id": "gpt-4o-mini", "speed": 40, "intelligence": 75, "reasoning": 70},
+        {"model_id": "auto", "speed": 40, "intelligence": 75, "reasoning": 70},
     ],
 }
 
@@ -446,6 +459,7 @@ PRICES: dict[tuple[str, str], dict[str, float]] = {
     ("cohere", "command-light"): {"input": 0.03, "output": 0.06},
     # Public pricing (free via LLM7.io)
     ("public", "gpt-4o-mini"): {"input": 0.00, "output": 0.00},
+    ("public", "auto"): {"input": 0.00, "output": 0.00},
 }
 
 

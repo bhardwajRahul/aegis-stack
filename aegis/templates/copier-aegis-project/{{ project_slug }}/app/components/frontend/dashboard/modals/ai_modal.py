@@ -2,7 +2,7 @@
 AI Service Detail Modal
 
 Displays comprehensive AI service information including provider configuration,
-conversation statistics, and usage metrics.
+conversation statistics, usage metrics, and analytics.
 """
 
 import flet as ft
@@ -16,6 +16,7 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
 from ..cards.card_utils import PROVIDER_COLORS
+from .ai_analytics_tab import AIAnalyticsTab
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
 
@@ -232,12 +233,12 @@ class StatisticsSection(ft.Container):
                 stat_row("Component Status", status.value.upper()),
                 stat_row("Health Message", message),
                 stat_row("Response Time", f"{response_time:.2f}ms"),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                 stat_row("Total Conversations", str(total_conversations)),
                 stat_row("Total Messages", str(total_messages)),
                 stat_row("Unique Users", str(unique_users)),
                 stat_row("Avg Messages/Conv", f"{avg_messages:.1f}"),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                 stat_row("Engine", engine),
                 stat_row("Validation Errors", str(validation_errors_count)),
             ],
@@ -246,12 +247,38 @@ class StatisticsSection(ft.Container):
         self.padding = Theme.Spacing.MD
 
 
+class OverviewTab(ft.Container):
+    """Overview tab content combining existing sections."""
+
+    def __init__(self, component_data: ComponentStatus) -> None:
+        """
+        Initialize overview tab.
+
+        Args:
+            component_data: ComponentStatus containing component health and metrics
+        """
+        super().__init__()
+
+        metadata = component_data.metadata or {}
+
+        self.content = ft.Column(
+            [
+                OverviewSection(metadata),
+                ConfigurationSection(metadata),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
+                StatisticsSection(component_data),
+            ],
+            spacing=0,
+            scroll=ft.ScrollMode.AUTO,
+        )
+
+
 class AIDetailDialog(BaseDetailPopup):
     """
     AI service detail popup.
 
     Displays comprehensive AI service information including provider configuration,
-    conversation statistics, and usage metrics.
+    conversation statistics, usage metrics, and analytics in a tabbed interface.
     """
 
     def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
@@ -263,18 +290,28 @@ class AIDetailDialog(BaseDetailPopup):
         """
         metadata = component_data.metadata or {}
 
-        # Build sections
-        sections = [
-            OverviewSection(metadata),
-            ConfigurationSection(metadata),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE),
-            StatisticsSection(component_data),
-        ]
+        # Create tabbed interface
+        tabs = ft.Tabs(
+            selected_index=0,
+            animation_duration=200,
+            tabs=[
+                ft.Tab(
+                    text="Overview",
+                    content=OverviewTab(component_data),
+                ),
+                ft.Tab(
+                    text="Analytics",
+                    content=AIAnalyticsTab(metadata=metadata),
+                ),
+            ],
+            expand=True,
+        )
 
-        # Initialize base popup with custom sections
+        # Initialize base popup with tabs (non-scrollable - tabs handle their own scrolling)
         super().__init__(
             page=page,
             component_data=component_data,
             title_text="AI Service",
-            sections=sections,
+            sections=[tabs],
+            scrollable=False,
         )

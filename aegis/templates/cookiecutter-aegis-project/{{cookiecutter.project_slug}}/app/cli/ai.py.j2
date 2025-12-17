@@ -14,7 +14,11 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 from ..core.config import settings
+from ..core.log import setup_logging
 from ..services.ai.config import get_ai_config
+
+# Initialize logging at module load
+setup_logging()
 from ..services.ai.models import (
     AIProvider,
     MessageRole,

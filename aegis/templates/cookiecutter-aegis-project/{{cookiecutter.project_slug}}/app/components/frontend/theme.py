@@ -46,6 +46,9 @@ class LightColorPalette:
     ERROR: str = "#D32F2F"
     BORDER_PRIMARY: str = "#E0E3E7"
     DISABLED_COLOR: str = "#B0B0B0"
+    DIVIDER_COLOR: str = (
+        "#9E9E9E"  # Darker gray for dividers (better light mode visibility)
+    )
     FOCUS_COLOR: str = "#2563eb"
 
 
@@ -271,8 +274,8 @@ class AegisTheme:
             surface_variant=LightColorPalette.BG_HOVER,
             on_surface_variant=LightColorPalette.TEXT_SECONDARY_DEFAULT,
             # Outline colors
-            outline=LightColorPalette.BORDER_PRIMARY,
-            outline_variant=LightColorPalette.DISABLED_COLOR,
+            outline=LightColorPalette.DIVIDER_COLOR,
+            outline_variant=LightColorPalette.DIVIDER_COLOR,
             # Other colors
             shadow=ft.Colors.BLACK38,
             scrim=ft.Colors.BLACK54,

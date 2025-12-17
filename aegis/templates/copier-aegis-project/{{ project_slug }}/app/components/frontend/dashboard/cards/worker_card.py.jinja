@@ -216,7 +216,7 @@ class WorkerCard:
                     ),
                     padding=ft.padding.all(16),
                     bgcolor=ft.Colors.GREY_200,
-                    border=ft.border.all(1, ft.Colors.GREY_300),
+                    border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
                     border_radius=8,
                     height=80,
                 )
@@ -226,7 +226,7 @@ class WorkerCard:
             content=ft.Column(
                 [
                     PrimaryText("Queue Status"),
-                    ft.Divider(height=1, color=ft.Colors.GREY_300),
+                    ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                     ft.Container(
                         content=ft.Row(
                             queue_controls,
@@ -268,7 +268,7 @@ class WorkerCard:
 
         stats_content = [
             PrimaryText("Worker Stats"),
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
+            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
         ]
 
         for stat_name, stat_value in worker_stats.items():
@@ -303,7 +303,7 @@ class WorkerCard:
         # Add status info
         stats_content.extend(
             [
-                ft.Divider(height=1, color=ft.Colors.GREY_300),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 ft.Row(
                     [
                         SecondaryText("Status:"),
@@ -611,7 +611,7 @@ class WorkerCard:
                 alignment=ft.MainAxisAlignment.START,
             ),
             padding=ft.padding.symmetric(horizontal=10, vertical=8),
-            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.GREY_300)),
+            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
         )
 
         # Queue rows (adjusted widths for smaller space)
@@ -648,7 +648,7 @@ class WorkerCard:
                     content=self._create_technology_badge(),
                     width=200,  # Fixed width - honors TechBadge width
                 ),
-                ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
+                ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
                 # Right: Queue table
                 ft.Container(
                     content=table_content,

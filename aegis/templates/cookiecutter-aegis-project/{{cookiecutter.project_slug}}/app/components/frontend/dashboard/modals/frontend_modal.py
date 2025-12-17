@@ -296,7 +296,7 @@ class StatisticsSection(ft.Container):
                 stat_row("Component Status", status.value.upper()),
                 stat_row("Health Message", message),
                 stat_row("Response Time", f"{response_time:.2f}ms"),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                 stat_row("Backend Integration", backend_dep),
             ],
             spacing=Theme.Spacing.XS,
@@ -325,9 +325,9 @@ class FrontendDetailDialog(BaseDetailPopup):
         sections = [
             OverviewSection(metadata),
             ConfigurationSection(metadata),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
             CapabilitiesSection(metadata),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
             StatisticsSection(component_data, page),
         ]
 

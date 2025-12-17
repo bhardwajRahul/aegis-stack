@@ -9,6 +9,7 @@ from app.services.ai.models.llm import (
     LargeLanguageModel,
     LLMPrice,
     LLMUsage,
+    LLMVendor,
 )
 from app.services.ai.service import AIService
 from sqlmodel import Session, select
@@ -253,3 +254,210 @@ class TestRecordUsage:
             )
 
         # Test passes if no exception was raised
+
+
+class TestGetUsageStats:
+    """Tests for get_usage_stats aggregation method."""
+
+    @contextmanager
+    def _mock_db_session(self, session: Session) -> Generator[MagicMock, None, None]:
+        """Create a mock db_session context manager that uses our test session."""
+
+        @contextmanager
+        def mock_session_cm() -> Generator[Session, None, None]:
+            yield session
+
+        with patch("app.services.ai.service.db_session", mock_session_cm):
+            yield mock_session_cm
+
+    def test_get_usage_stats_empty_database(
+        self,
+        db_session: Session,
+        sample_llm: LargeLanguageModel,
+        mock_ai_settings: Any,
+    ) -> None:
+        """Test stats return zeros when no usage records exist."""
+        service = AIService(mock_ai_settings)
+        with self._mock_db_session(db_session):
+            stats = service.get_usage_stats()
+
+        assert stats["total_tokens"] == 0
+        assert stats["total_requests"] == 0
+        assert stats["total_cost"] == 0.0
+        assert stats["success_rate"] == 100.0
+        assert stats["models"] == []
+        assert stats["recent_activity"] == []
+
+    def test_get_usage_stats_with_data(
+        self,
+        db_session: Session,
+        sample_llm: LargeLanguageModel,
+        mock_ai_settings: Any,
+    ) -> None:
+        """Test stats aggregation with usage records."""
+        usage1 = LLMUsage(
+            llm_id=sample_llm.id,
+            user_id="user-1",
+            input_tokens=100,
+            output_tokens=50,
+            total_cost=0.001,
+            success=True,
+            action="chat",
+        )
+        usage2 = LLMUsage(
+            llm_id=sample_llm.id,
+            user_id="user-1",
+            input_tokens=200,
+            output_tokens=100,
+            total_cost=0.002,
+            success=True,
+            action="chat",
+        )
+        db_session.add(usage1)
+        db_session.add(usage2)
+        db_session.commit()
+
+        service = AIService(mock_ai_settings)
+        with self._mock_db_session(db_session):
+            stats = service.get_usage_stats()
+
+        assert stats["total_tokens"] == 450  # 100+50+200+100
+        assert stats["input_tokens"] == 300
+        assert stats["output_tokens"] == 150
+        assert stats["total_requests"] == 2
+        assert abs(stats["total_cost"] - 0.003) < 0.0001
+        assert stats["success_rate"] == 100.0
+
+    def test_get_usage_stats_model_breakdown(
+        self,
+        db_session: Session,
+        sample_llm: LargeLanguageModel,
+        sample_vendor: LLMVendor,
+        mock_ai_settings: Any,
+    ) -> None:
+        """Test model breakdown aggregation."""
+        usage = LLMUsage(
+            llm_id=sample_llm.id,
+            user_id="user-1",
+            input_tokens=100,
+            output_tokens=50,
+            total_cost=0.001,
+            success=True,
+            action="chat",
+        )
+        db_session.add(usage)
+        db_session.commit()
+
+        service = AIService(mock_ai_settings)
+        with self._mock_db_session(db_session):
+            stats = service.get_usage_stats()
+
+        assert len(stats["models"]) == 1
+        model_stats = stats["models"][0]
+        assert model_stats["model_id"] == "gpt-4o"
+        assert model_stats["vendor"] == "openai"
+        assert model_stats["requests"] == 1
+        assert model_stats["percentage"] == 100.0
+
+    def test_get_usage_stats_recent_activity(
+        self,
+        db_session: Session,
+        sample_llm: LargeLanguageModel,
+        mock_ai_settings: Any,
+    ) -> None:
+        """Test recent activity returns correct entries."""
+        usage = LLMUsage(
+            llm_id=sample_llm.id,
+            user_id="user-1",
+            input_tokens=100,
+            output_tokens=50,
+            total_cost=0.001,
+            success=True,
+            action="chat",
+        )
+        db_session.add(usage)
+        db_session.commit()
+
+        service = AIService(mock_ai_settings)
+        with self._mock_db_session(db_session):
+            stats = service.get_usage_stats(recent_limit=5)
+
+        assert len(stats["recent_activity"]) == 1
+        activity = stats["recent_activity"][0]
+        assert activity["model"] == "GPT-4o"
+        assert activity["tokens"] == 150
+        assert activity["success"] is True
+        assert activity["action"] == "chat"
+
+    def test_get_usage_stats_user_filter(
+        self,
+        db_session: Session,
+        sample_llm: LargeLanguageModel,
+        mock_ai_settings: Any,
+    ) -> None:
+        """Test filtering by user_id."""
+        usage1 = LLMUsage(
+            llm_id=sample_llm.id,
+            user_id="user-1",
+            input_tokens=100,
+            output_tokens=50,
+            total_cost=0.001,
+            success=True,
+            action="chat",
+        )
+        usage2 = LLMUsage(
+            llm_id=sample_llm.id,
+            user_id="user-2",
+            input_tokens=200,
+            output_tokens=100,
+            total_cost=0.002,
+            success=True,
+            action="chat",
+        )
+        db_session.add(usage1)
+        db_session.add(usage2)
+        db_session.commit()
+
+        service = AIService(mock_ai_settings)
+        with self._mock_db_session(db_session):
+            stats = service.get_usage_stats(user_id="user-1")
+
+        assert stats["total_requests"] == 1
+        assert stats["total_tokens"] == 150
+
+    def test_get_usage_stats_success_rate(
+        self,
+        db_session: Session,
+        sample_llm: LargeLanguageModel,
+        mock_ai_settings: Any,
+    ) -> None:
+        """Test success rate calculation with failures."""
+        usage1 = LLMUsage(
+            llm_id=sample_llm.id,
+            user_id="user-1",
+            input_tokens=100,
+            output_tokens=50,
+            total_cost=0.001,
+            success=True,
+            action="chat",
+        )
+        usage2 = LLMUsage(
+            llm_id=sample_llm.id,
+            user_id="user-1",
+            input_tokens=100,
+            output_tokens=0,
+            total_cost=0.0,
+            success=False,
+            action="chat",
+            error_message="Provider error",
+        )
+        db_session.add(usage1)
+        db_session.add(usage2)
+        db_session.commit()
+
+        service = AIService(mock_ai_settings)
+        with self._mock_db_session(db_session):
+            stats = service.get_usage_stats()
+
+        assert stats["total_requests"] == 2
+        assert stats["success_rate"] == 50.0

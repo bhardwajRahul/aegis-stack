@@ -461,7 +461,7 @@ class RoutesSection(ft.Container):
         self.content = ft.Column(
             [
                 H3Text(f"Routes ({len(routes)})"),
-                ft.Divider(height=1, color=ft.Colors.OUTLINE),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 ft.Container(
                     content=ft.Column(
                         route_cards
@@ -622,7 +622,7 @@ class MiddlewareSection(ft.Container):
         self.content = ft.Column(
             [
                 H3Text(f"Middleware Stack ({len(middleware_stack)})"),
-                ft.Divider(height=1, color=ft.Colors.OUTLINE),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 ft.Container(
                     content=ft.Column(
                         middleware_cards
@@ -707,7 +707,7 @@ class SystemMetricsSection(ft.Container):
         self.content = ft.Column(
             [
                 H3Text("System Metrics"),
-                ft.Divider(height=1, color=ft.Colors.OUTLINE),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 ft.Container(
                     content=ft.Column(
                         metrics if metrics else [SecondaryText("No metrics available")],

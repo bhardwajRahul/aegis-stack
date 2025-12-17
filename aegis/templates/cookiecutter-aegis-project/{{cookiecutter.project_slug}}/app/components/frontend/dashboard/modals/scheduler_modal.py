@@ -233,7 +233,8 @@ class SchedulerDetailDialog(BaseDetailPopup):
             OverviewSection(metadata),
             JobsSection(metadata),
             ft.Divider(
-                height=ModalLayout.SECTION_DIVIDER_HEIGHT, color=ft.Colors.OUTLINE
+                height=ModalLayout.SECTION_DIVIDER_HEIGHT,
+                color=ft.Colors.OUTLINE_VARIANT,
             ),
             StatisticsSection(component_data, page),
         ]

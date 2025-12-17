@@ -293,7 +293,7 @@ class QueueHealthSection(ft.Container):
                 H3Text("Queue Status"),
                 ft.Container(height=Theme.Spacing.SM),
                 header_row,
-                ft.Divider(height=1, color=ft.Colors.OUTLINE),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 ft.Column(
                     queue_rows if queue_rows else [BodyText("No queues configured")],
                     spacing=0,
@@ -353,13 +353,13 @@ class StatisticsSection(ft.Container):
                 stat_row("Component Status", status.value.upper()),
                 stat_row("Health Message", message),
                 stat_row("Response Time", f"{response_time}ms"),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                 stat_row("Total Queued", str(total_queued)),
                 stat_row("Total Completed", str(total_completed)),
                 stat_row("Total Failed", str(total_failed)),
                 stat_row("Total Retried", str(total_retried)),
                 stat_row("Overall Failure Rate", f"{overall_failure_rate:.1f}%"),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                 stat_row("Redis URL", redis_url),
             ],
             spacing=Theme.Spacing.XS,
@@ -386,7 +386,8 @@ class WorkerDetailDialog(BaseDetailPopup):
             OverviewSection(component_data, page),
             QueueHealthSection(component_data, page),
             ft.Divider(
-                height=ModalLayout.SECTION_DIVIDER_HEIGHT, color=ft.Colors.OUTLINE
+                height=ModalLayout.SECTION_DIVIDER_HEIGHT,
+                color=ft.Colors.OUTLINE_VARIANT,
             ),
             StatisticsSection(component_data, page),
         ]

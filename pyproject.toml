@@ -45,6 +45,7 @@ dependencies = [
     "rich>=13.0.0",
     "pillow>=11.3.0",
     "packaging>=24.0",
+    "filelock>=3.20.1",
 ]
 
 [project.urls]

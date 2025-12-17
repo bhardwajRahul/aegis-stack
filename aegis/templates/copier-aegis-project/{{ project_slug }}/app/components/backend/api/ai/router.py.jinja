@@ -7,6 +7,9 @@ conversation management, and service status.
 
 import json
 from collections.abc import AsyncIterator
+{% if ai_backend != "memory" %}
+from datetime import datetime
+{% endif %}
 from typing import Any
 
 from app.core.config import settings
@@ -53,6 +56,45 @@ class ConversationSummary(BaseModel):
     last_activity: str
     provider: str
     model: str
+
+
+{% if ai_backend != "memory" %}
+class ModelUsageStats(BaseModel):
+    """Usage statistics for a single model."""
+
+    model_id: str
+    model_title: str
+    vendor: str
+    vendor_color: str
+    requests: int
+    tokens: int
+    cost: float
+    percentage: float
+
+
+class RecentActivity(BaseModel):
+    """A single recent usage activity entry."""
+
+    timestamp: str
+    model: str
+    tokens: int
+    cost: float
+    success: bool
+    action: str
+
+
+class UsageStatsResponse(BaseModel):
+    """Aggregated LLM usage statistics response."""
+
+    total_tokens: int
+    input_tokens: int
+    output_tokens: int
+    total_cost: float
+    total_requests: int
+    success_rate: float
+    models: list[ModelUsageStats]
+    recent_activity: list[RecentActivity]
+{% endif %}
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -327,3 +369,43 @@ async def ai_version() -> dict[str, Any]:
             "cohere",
         ],
     }
+
+
+{% if ai_backend != "memory" %}
+@router.get("/usage/stats", response_model=UsageStatsResponse)
+async def get_usage_stats(
+    user_id: str | None = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+    recent_limit: int = 10,
+) -> UsageStatsResponse:
+    """
+    Get aggregated LLM usage statistics.
+
+    All aggregations are performed at the SQL level for scalability.
+    Supports filtering by user and time range.
+
+    Args:
+        user_id: Optional filter by user
+        start_time: Optional start of time range (ISO format)
+        end_time: Optional end of time range (ISO format)
+        recent_limit: Number of recent activities to return (default: 10)
+
+    Returns:
+        Usage statistics including totals, model breakdown, and recent activity
+    """
+    try:
+        stats = ai_service.get_usage_stats(
+            user_id=user_id,
+            start_time=start_time,
+            end_time=end_time,
+            recent_limit=recent_limit,
+        )
+        return UsageStatsResponse(**stats)
+
+    except Exception as e:
+        logger.exception("Failed to get usage stats")
+        raise HTTPException(
+            status_code=500, detail="Failed to get usage stats"
+        ) from e
+{% endif %}

@@ -106,9 +106,7 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/core/security.py",
             "app/cli/auth.py",
             "tests/api/test_auth_endpoints.py",
-            "tests/services/test_auth_service.py",
             "tests/services/test_auth_integration.py",
-            "tests/models/test_user.py",
             # Note: alembic is now shared between auth and AI services
             # Frontend dashboard files
             "app/components/frontend/dashboard/cards/auth_card.py",
@@ -122,7 +120,6 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/cli/ai_rendering.py",
             "app/cli/marko_terminal_renderer.py",
             "app/models/conversation.py",
-            "tests/api/test_ai_endpoints.py",
             "tests/services/test_conversation_persistence.py",
             "tests/cli/test_ai_rendering.py",
             "tests/cli/test_conversation_memory.py",

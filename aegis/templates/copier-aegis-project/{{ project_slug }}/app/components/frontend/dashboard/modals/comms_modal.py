@@ -280,7 +280,7 @@ class StatisticsSection(ft.Container):
                 stat_row("Component Status", status.value.upper()),
                 stat_row("Health Message", message),
                 stat_row("Response Time", f"{response_time:.2f}ms"),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                 stat_row("Backend Dependency", backend_dep),
                 stat_row("Worker Dependency", worker_dep),
             ],
@@ -310,9 +310,9 @@ class CommsDetailDialog(BaseDetailPopup):
         sections = [
             OverviewSection(metadata),
             ProvidersSection(metadata),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
             ConfigurationSection(metadata),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
             StatisticsSection(component_data),
         ]
 

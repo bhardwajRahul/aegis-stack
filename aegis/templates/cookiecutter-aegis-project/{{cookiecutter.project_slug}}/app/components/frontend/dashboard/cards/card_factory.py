@@ -211,7 +211,7 @@ class CardFactory:
         """
         section_content = [
             PrimaryText(title),
-            ft.Divider(height=1, color=ft.Colors.GREY_300),
+            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
         ]
         section_content.extend(content)
 
