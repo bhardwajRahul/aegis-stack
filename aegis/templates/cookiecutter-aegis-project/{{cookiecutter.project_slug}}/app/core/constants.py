@@ -16,6 +16,7 @@ class APIEndpoints:
     HEALTH_BASIC = "/health/"
     HEALTH_DETAILED = "/health/detailed"
     HEALTH_DASHBOARD = "/health/dashboard"
+    AI_USAGE_STATS = "/ai/usage/stats"
 
 
 class Defaults:

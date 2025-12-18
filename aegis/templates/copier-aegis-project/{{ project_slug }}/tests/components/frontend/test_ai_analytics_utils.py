@@ -2,59 +2,58 @@
 
 import flet as ft
 from app.components.frontend.dashboard.modals.ai_analytics_tab import (
-    _format_cost,
-    _format_number,
     _get_success_rate_color,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.formatting import format_cost, format_number
 
 
 class TestFormatCost:
-    """Tests for the _format_cost function."""
+    """Tests for the format_cost function."""
 
     def test_format_cost_with_small_value(self) -> None:
         """Should format small costs with 6 decimal places."""
-        assert _format_cost(0.000015) == "$0.000015"
+        assert format_cost(0.000015) == "$0.000015"
 
     def test_format_cost_with_zero(self) -> None:
         """Should format zero correctly."""
-        assert _format_cost(0) == "$0.000000"
+        assert format_cost(0) == "$0.000000"
 
     def test_format_cost_with_large_value(self) -> None:
-        """Should format larger costs correctly."""
-        assert _format_cost(123.456789) == "$123.456789"
+        """Should format larger costs with 4 decimal places."""
+        assert format_cost(123.4567) == "$123.4567"
 
     def test_format_cost_with_very_small_value(self) -> None:
         """Should handle very small token costs."""
-        assert _format_cost(0.000001) == "$0.000001"
+        assert format_cost(0.000001) == "$0.000001"
 
     def test_format_cost_with_whole_number(self) -> None:
-        """Should pad whole numbers with zeros."""
-        assert _format_cost(5.0) == "$5.000000"
+        """Should pad whole numbers with zeros (4 decimals for >= 0.01)."""
+        assert format_cost(5.0) == "$5.0000"
 
 
 class TestFormatNumber:
-    """Tests for the _format_number function."""
+    """Tests for the format_number function."""
 
     def test_format_number_zero(self) -> None:
         """Should format zero correctly."""
-        assert _format_number(0) == "0"
+        assert format_number(0) == "0"
 
     def test_format_number_small(self) -> None:
         """Should not add commas to small numbers."""
-        assert _format_number(999) == "999"
+        assert format_number(999) == "999"
 
     def test_format_number_thousands(self) -> None:
         """Should add comma for thousands."""
-        assert _format_number(1000) == "1,000"
+        assert format_number(1000) == "1,000"
 
     def test_format_number_millions(self) -> None:
         """Should add commas for millions."""
-        assert _format_number(1000000) == "1,000,000"
+        assert format_number(1000000) == "1,000,000"
 
     def test_format_number_large(self) -> None:
         """Should handle large token counts."""
-        assert _format_number(1234567890) == "1,234,567,890"
+        assert format_number(1234567890) == "1,234,567,890"
 
 
 class TestGetSuccessRateColor:

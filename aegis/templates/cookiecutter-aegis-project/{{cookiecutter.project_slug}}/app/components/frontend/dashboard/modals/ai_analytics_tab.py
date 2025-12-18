@@ -17,19 +17,10 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.config import settings
+from app.core.formatting import format_cost, format_number
 
 from ..cards.card_utils import PROVIDER_COLORS, create_progress_indicator
 from .modal_sections import EmptyStatePlaceholder, MetricCard
-
-
-def _format_number(num: int) -> str:
-    """Format large numbers with commas."""
-    return f"{num:,}"
-
-
-def _format_cost(cost: float) -> str:
-    """Format cost with dollar sign and 6 decimal places for token pricing."""
-    return f"${cost:.6f}"
 
 
 def _get_success_rate_color(rate: float) -> str:
@@ -119,12 +110,12 @@ class HeroStatsSection(ft.Container):
                     [
                         MetricCard(
                             "Total Tokens",
-                            _format_number(total_tokens),
+                            format_number(total_tokens),
                             ft.Colors.PURPLE,
                         ),
                         MetricCard(
                             "Total Cost",
-                            _format_cost(total_cost),
+                            format_cost(total_cost),
                             Theme.Colors.PRIMARY,
                         ),
                         MetricCard(
@@ -134,7 +125,7 @@ class HeroStatsSection(ft.Container):
                         ),
                         MetricCard(
                             "Requests",
-                            _format_number(total_requests),
+                            format_number(total_requests),
                             ft.Colors.CYAN,
                         ),
                     ],
@@ -172,14 +163,14 @@ class TokenBreakdownSection(ft.Container):
                 create_progress_indicator(
                     label="Input Tokens",
                     value=input_pct,
-                    details=f"{_format_number(input_tokens)} tokens ({input_pct:.0f}%)",
+                    details=f"{format_number(input_tokens)} tokens ({input_pct:.0f}%)",
                     color=ft.Colors.PURPLE,
                 ),
                 ft.Container(height=Theme.Spacing.SM),
                 create_progress_indicator(
                     label="Output Tokens",
                     value=output_pct,
-                    details=f"{_format_number(output_tokens)} tokens ({output_pct:.0f}%)",
+                    details=f"{format_number(output_tokens)} tokens ({output_pct:.0f}%)",
                     color=ft.Colors.PURPLE_200,
                 ),
             ],
@@ -220,7 +211,7 @@ class ModelUsageSection(ft.Container):
                     create_progress_indicator(
                         label=model.get("name", "Unknown"),
                         value=float(model.get("pct", 0)),
-                        details=f"{model.get('requests', 0)} req • {_format_cost(model.get('cost', 0))}",
+                        details=f"{model.get('requests', 0)} req • {format_cost(model.get('cost', 0))}",
                         color=color,
                     )
                 )
@@ -291,11 +282,11 @@ class RecentActivitySection(ft.Container):
                             width=120,
                         ),
                         ft.Container(
-                            SecondaryText(_format_number(activity.get("tokens", 0))),
+                            SecondaryText(format_number(activity.get("tokens", 0))),
                             width=80,
                         ),
                         ft.Container(
-                            SecondaryText(_format_cost(activity.get("cost", 0))),
+                            SecondaryText(format_cost(activity.get("cost", 0))),
                             width=100,
                         ),
                         ft.Container(
