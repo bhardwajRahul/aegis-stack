@@ -3,9 +3,12 @@ site_name: Aegis Stack
 site_description: A production-ready Python foundation for builders who refuse to wait.
 site_author: Aegis Stack Contributors
 site_url: https://lbedner.github.io/aegis-stack/
+repo_url: https://github.com/lbedner/aegis-stack
+repo_name: lbedner/aegis-stack
 
 theme:
   name: material
+  custom_dir: docs/overrides
   palette:
     # Palette toggle for light vs dark mode
     - scheme: default
@@ -131,3 +134,4 @@ extra_css:
 extra_javascript:
   - https://unpkg.com/mermaid@10.4.0/dist/mermaid.min.js
   - javascripts/mermaid-config.js
+  - javascripts/feedback.js
