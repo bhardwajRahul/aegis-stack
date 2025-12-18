@@ -296,6 +296,258 @@ def history(
             typer.echo("")
 
 
+{% if cookiecutter.ai_backend != "memory" %}
+# ============================================================================
+# Usage Statistics Command (requires database backend)
+# ============================================================================
+
+
+@app.command()
+def usage(
+    url: str = typer.Option(
+        None,
+        "--url",
+        "-u",
+        help="API base URL (default: localhost:8000)",
+    ),
+    user_id: str | None = typer.Option(
+        None,
+        "--user-id",
+        help="Filter by user ID",
+    ),
+    recent: int = typer.Option(
+        10,
+        "--recent",
+        "-r",
+        help="Number of recent activities to show",
+        min=1,
+        max=50,
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help="Output raw JSON",
+    ),
+) -> None:
+    """
+    Show AI usage statistics.
+
+    Displays comprehensive LLM usage analytics including token counts,
+    costs, model breakdown, and recent activity.
+
+    Examples:
+        ai usage              - Show full usage report
+        ai usage --json       - Output raw JSON data
+        ai usage -r 20        - Show 20 recent activities
+    """
+    import asyncio
+    import json
+    import sys
+    from datetime import datetime
+
+    import httpx
+    from pydantic import BaseModel
+
+    from app.core.constants import APIEndpoints, Defaults
+    from app.core.formatting import format_cost, format_number, format_percentage
+
+    # Response models matching API schema
+    class ModelUsageStats(BaseModel):
+        model_id: str
+        model_title: str
+        vendor: str
+        vendor_color: str
+        requests: int
+        tokens: int
+        cost: float
+        percentage: float
+
+    class RecentActivity(BaseModel):
+        timestamp: str
+        model: str
+        tokens: int
+        cost: float
+        success: bool
+        action: str
+
+    class UsageStatsResponse(BaseModel):
+        total_tokens: int
+        input_tokens: int
+        output_tokens: int
+        total_cost: float
+        total_requests: int
+        success_rate: float
+        models: list[ModelUsageStats]
+        recent_activity: list[RecentActivity]
+
+    # CLI-specific color utilities
+    def get_success_color(rate: float) -> str:
+        if rate >= 95:
+            return "green"
+        elif rate >= 80:
+            return "yellow"
+        return "red"
+
+    def get_vendor_color(vendor: str, fallback: str = "white") -> str:
+        colors = {
+            "openai": "green",
+            "anthropic": "bright_magenta",
+            "google": "blue",
+            "groq": "yellow",
+            "mistral": "cyan",
+            "cohere": "bright_red",
+        }
+        return colors.get(vendor.lower(), fallback)
+
+    # Display functions
+    def display_summary_panel(stats: UsageStatsResponse) -> None:
+        success_color = get_success_color(stats.success_rate)
+        summary_lines = [
+            f"[bold cyan]Total Tokens:[/bold cyan]   {format_number(stats.total_tokens)}",
+            f"[bold cyan]Total Cost:[/bold cyan]     {format_cost(stats.total_cost)}",
+            f"[bold cyan]Total Requests:[/bold cyan] {format_number(stats.total_requests)}",
+            f"[bold cyan]Success Rate:[/bold cyan]   "
+            f"[{success_color}]{format_percentage(stats.success_rate)}[/{success_color}]",
+        ]
+        console.print(
+            Panel(
+                "\n".join(summary_lines),
+                title="[bold magenta]AI Usage Summary[/bold magenta]",
+                border_style="magenta",
+                padding=(1, 2),
+            )
+        )
+
+    def display_token_breakdown(stats: UsageStatsResponse) -> None:
+        total = stats.total_tokens
+        if total == 0:
+            console.print("\n[dim]No token usage recorded.[/dim]")
+            return
+        input_pct = (stats.input_tokens / total) * 100
+        output_pct = (stats.output_tokens / total) * 100
+        console.print("\n[bold blue]Token Breakdown[/bold blue]")
+        input_str = format_number(stats.input_tokens)
+        output_str = format_number(stats.output_tokens)
+        console.print(f"  [cyan]Input:[/cyan]  {input_str:>12} ({input_pct:.0f}%)")
+        console.print(f"  [cyan]Output:[/cyan] {output_str:>12} ({output_pct:.0f}%)")
+        bar_width = 40
+        input_bars = int((input_pct / 100) * bar_width)
+        output_bars = bar_width - input_bars
+        bar = (
+            f"[purple]{'█' * input_bars}[/purple]"
+            f"[bright_magenta]{'█' * output_bars}[/bright_magenta]"
+        )
+        console.print(f"\n  {bar}")
+        legend = "[purple]█ Input[/purple]  [bright_magenta]█ Output[/bright_magenta]"
+        console.print(f"  {legend}")
+
+    def display_model_usage(stats: UsageStatsResponse) -> None:
+        if not stats.models:
+            console.print("\n[dim]No model usage data available.[/dim]")
+            return
+        console.print("\n[bold blue]Model Usage[/bold blue]")
+        table = Table(show_header=True, header_style="bold magenta", box=None)
+        table.add_column("Model", style="cyan", no_wrap=True)
+        table.add_column("Vendor", style="dim")
+        table.add_column("Requests", justify="right")
+        table.add_column("Tokens", justify="right")
+        table.add_column("Cost", justify="right", style="green")
+        table.add_column("Share", justify="right")
+        for model in stats.models:
+            vendor_color = get_vendor_color(model.vendor, model.vendor_color)
+            table.add_row(
+                model.model_title,
+                f"[{vendor_color}]{model.vendor}[/{vendor_color}]",
+                format_number(model.requests),
+                format_number(model.tokens),
+                format_cost(model.cost),
+                format_percentage(model.percentage),
+            )
+        console.print(table)
+
+    def display_recent_activity(stats: UsageStatsResponse) -> None:
+        if not stats.recent_activity:
+            console.print("\n[dim]No recent activity.[/dim]")
+            return
+        console.print("\n[bold blue]Recent Activity[/bold blue]")
+        table = Table(show_header=True, header_style="bold magenta", box=None)
+        table.add_column("Time", style="dim")
+        table.add_column("Model", style="cyan")
+        table.add_column("Action")
+        table.add_column("Tokens", justify="right")
+        table.add_column("Cost", justify="right", style="green")
+        table.add_column("Status", justify="center")
+        for activity in stats.recent_activity:
+            try:
+                dt = datetime.fromisoformat(activity.timestamp.replace("Z", "+00:00"))
+                time_str = dt.strftime("%H:%M:%S")
+            except ValueError:
+                time_str = activity.timestamp[:8]
+            status = "[green]OK[/green]" if activity.success else "[red]FAIL[/red]"
+            table.add_row(
+                time_str,
+                activity.model,
+                activity.action,
+                format_number(activity.tokens),
+                format_cost(activity.cost),
+                status,
+            )
+        console.print(table)
+
+    # Async fetch function
+    async def get_usage_stats(
+        base_url: str,
+        filter_user_id: str | None = None,
+        recent_limit: int = 10,
+    ) -> UsageStatsResponse:
+        api_url = f"{base_url}{APIEndpoints.AI_USAGE_STATS}"
+        params: dict[str, str | int] = {"recent_limit": recent_limit}
+        if filter_user_id:
+            params["user_id"] = filter_user_id
+        timeout = httpx.Timeout(Defaults.API_TIMEOUT)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            try:
+                response = await client.get(api_url, params=params)
+                response.raise_for_status()
+                return UsageStatsResponse.model_validate(response.json())
+            except httpx.ConnectError:
+                raise ConnectionError(
+                    f"Cannot connect to API server at {base_url}. "
+                    "Make sure the application is running."
+                ) from None
+            except httpx.TimeoutException:
+                raise TimeoutError(
+                    f"API request timed out after {Defaults.API_TIMEOUT} seconds."
+                ) from None
+            except httpx.HTTPStatusError as e:
+                raise RuntimeError(
+                    f"API error {e.response.status_code}: {e.response.text}"
+                ) from None
+
+    # Main execution
+    base_url = url or getattr(settings, "API_BASE_URL", "http://localhost:8000")
+    try:
+        stats = asyncio.run(get_usage_stats(base_url, user_id, recent))
+        if json_output:
+            print(json.dumps(stats.model_dump(), indent=2))
+            return
+        display_summary_panel(stats)
+        display_token_breakdown(stats)
+        display_model_usage(stats)
+        display_recent_activity(stats)
+    except ConnectionError as e:
+        console.print(f"[red]Connection Error:[/red] {e}")
+        sys.exit(1)
+    except TimeoutError as e:
+        console.print(f"[red]Timeout Error:[/red] {e}")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(1)
+{% endif %}
+
+
 # ============================================================================
 # Internal helper functions
 # ============================================================================
