@@ -3,6 +3,7 @@
 
 **Build production-ready Python applications with your chosen components and services.**
 
+[![GitHub Stars](https://img.shields.io/github/stars/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack)
 [![CI](https://github.com/lbedner/aegis-stack/workflows/CI/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/ci.yml)
 [![Documentation](https://github.com/lbedner/aegis-stack/workflows/Deploy%20Documentation/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/docs.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)

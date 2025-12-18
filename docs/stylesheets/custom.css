@@ -77,3 +77,57 @@
     color: #1e293b !important;
 }
 
+/* Page Feedback Styles */
+.md-feedback {
+    margin: 2rem 0;
+    padding: 1rem;
+    border-top: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.md-feedback fieldset {
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+.md-feedback__title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.md-feedback__inner {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.md-feedback__icon {
+    background: none;
+    border: 1px solid var(--md-default-fg-color--lighter);
+    border-radius: 4px;
+    padding: 0.5rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.md-feedback__icon:hover {
+    background: var(--md-accent-fg-color--transparent);
+}
+
+.md-feedback__icon:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.md-feedback__icon svg {
+    width: 1.5rem;
+    height: 1.5rem;
+    fill: currentColor;
+}
+
+.md-feedback__note {
+    margin-top: 0.5rem;
+    min-height: 1.2rem;
+    font-size: 0.8rem;
+    color: var(--md-default-fg-color--light, #666);
+}
