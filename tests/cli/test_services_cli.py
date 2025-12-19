@@ -5,12 +5,36 @@ This module tests the services command and --services option integration.
 """
 
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
+from aegis.cli.interactive import (
+    clear_ai_backend_selection,
+    clear_ai_framework_selection,
+    clear_ai_provider_selection,
+)
 from tests.cli.test_utils import run_aegis_command, strip_ansi_codes
+
+
+@pytest.fixture(autouse=True)
+def clear_ai_state() -> Generator[None, None, None]:
+    """Clear AI service state before and after each test.
+
+    This prevents test pollution where one test's AI configuration
+    (e.g., langchain framework) affects subsequent tests.
+    """
+    # Clear before test
+    clear_ai_framework_selection()
+    clear_ai_provider_selection()
+    clear_ai_backend_selection()
+    yield
+    # Clear after test
+    clear_ai_framework_selection()
+    clear_ai_provider_selection()
+    clear_ai_backend_selection()
 
 
 class TestServicesCommand:
@@ -730,7 +754,12 @@ class TestAIServiceDependencyValidation:
             assert "langchain-openai" in deps_section
 
     def test_ai_service_pydantic_ai_deps_shown_in_cli(self) -> None:
-        """Test that PydanticAI dependencies appear in CLI output with bare ai service."""
+        """Test that PydanticAI dependencies appear in CLI output with bare ai service.
+
+        When using bare `--services ai` (no bracket syntax), the default framework
+        is pydantic-ai. Unlike bracket syntax (e.g., ai[langchain]), the framework
+        info is not echoed to output, but the correct dependencies should appear.
+        """
         with tempfile.TemporaryDirectory() as temp_dir:
             result = run_aegis_command(
                 "init",
@@ -746,16 +775,17 @@ class TestAIServiceDependencyValidation:
             assert result.returncode == 0
             output = result.stdout
 
-            # Should show AI framework info (default is pydantic-ai)
-            assert "AI service: framework=pydantic-ai" in output
+            # Note: "AI service: framework=pydantic-ai" is only shown with bracket
+            # syntax (e.g., ai[pydantic-ai]). For bare 'ai', we verify via deps.
 
             # Should show Python dependencies
             deps_section = output.split("Dependencies to be installed:")[1].split(
                 "\n\n"
             )[0]
 
-            # PydanticAI-specific dependencies
+            # PydanticAI-specific dependencies (not langchain)
             assert "pydantic-ai-slim" in deps_section
+            assert "langchain" not in deps_section
 
 
 class TestSplitServiceList:

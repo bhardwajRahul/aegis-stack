@@ -12,7 +12,11 @@ Defaults: pydantic-ai, memory, public
 
 import pytest
 
-from aegis.core.ai_service_parser import AIServiceConfig, parse_ai_service_config
+from aegis.core.ai_service_parser import (
+    AIServiceConfig,
+    is_ai_service_with_options,
+    parse_ai_service_config,
+)
 
 
 class TestAIServiceParserDefaults:
@@ -317,3 +321,54 @@ class TestAIServiceParserProviderOrder:
         """Providers should be in the order specified (reversed)."""
         result = parse_ai_service_config("ai[google, anthropic, openai]")
         assert result.providers == ["google", "anthropic", "openai"]
+
+
+class TestIsAIServiceWithOptions:
+    """Test the is_ai_service_with_options helper function.
+
+    This function determines if bracket syntax is used, which affects
+    whether auto-detection of AI backend should run.
+    """
+
+    def test_plain_ai_returns_false(self) -> None:
+        """Plain 'ai' without brackets should return False.
+
+        This is critical for auto-detection: when user specifies just 'ai',
+        the system should auto-detect backend based on available components
+        (e.g., use sqlite if database component exists).
+        """
+        assert is_ai_service_with_options("ai") is False
+
+    def test_ai_with_empty_brackets_returns_true(self) -> None:
+        """ai[] should return True (explicit but empty options)."""
+        assert is_ai_service_with_options("ai[]") is True
+
+    def test_ai_with_backend_returns_true(self) -> None:
+        """ai[sqlite] should return True."""
+        assert is_ai_service_with_options("ai[sqlite]") is True
+
+    def test_ai_with_framework_returns_true(self) -> None:
+        """ai[langchain] should return True."""
+        assert is_ai_service_with_options("ai[langchain]") is True
+
+    def test_ai_with_multiple_options_returns_true(self) -> None:
+        """ai[langchain, sqlite, openai] should return True."""
+        assert is_ai_service_with_options("ai[langchain, sqlite, openai]") is True
+
+    def test_ai_with_spaces_returns_false(self) -> None:
+        """'ai' with surrounding spaces should return False."""
+        assert is_ai_service_with_options("  ai  ") is False
+
+    def test_ai_bracket_with_spaces_returns_true(self) -> None:
+        """'ai[sqlite]' with surrounding spaces should return True."""
+        assert is_ai_service_with_options("  ai[sqlite]  ") is True
+
+    def test_non_ai_service_returns_false(self) -> None:
+        """Non-AI services should return False."""
+        assert is_ai_service_with_options("auth") is False
+        assert is_ai_service_with_options("comms") is False
+
+    def test_partial_ai_name_returns_false(self) -> None:
+        """Partial matches like 'ai_test' should return False."""
+        assert is_ai_service_with_options("ai_test") is False
+        assert is_ai_service_with_options("my_ai") is False

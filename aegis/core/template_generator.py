@@ -97,13 +97,30 @@ class TemplateGenerator:
         # Extract AI config from ai[framework, backend, providers] format in services
         self.ai_backend = StorageBackends.MEMORY  # Default to memory
         self.ai_framework = AIFrameworks.PYDANTIC_AI  # Default to pydantic-ai
+        user_specified_ai_backend = False
+
         for service in self.selected_services:
             if extract_base_service_name(service) == SERVICE_AI:
                 if is_ai_service_with_options(service):
                     ai_config = parse_ai_service_config(service)
                     self.ai_backend = ai_config.backend
                     self.ai_framework = ai_config.framework
+                    user_specified_ai_backend = True
                 break
+
+        # Auto-detect: if AI service selected AND database available AND no explicit backend,
+        # use SQLite for persistence (analytics, conversation history, LLM tracking)
+        if not user_specified_ai_backend:
+            has_ai = any(
+                extract_base_service_name(s) == SERVICE_AI
+                for s in self.selected_services
+            )
+            has_database = any(
+                extract_base_component_name(c) == ComponentNames.DATABASE
+                for c in self.components
+            )
+            if has_ai and has_database:
+                self.ai_backend = StorageBackends.SQLITE
 
         # Build component specs using base names
         self.component_specs = {}
@@ -124,7 +141,8 @@ class TemplateGenerator:
 
         # Check for components using base names
         has_database = any(
-            c.startswith(ComponentNames.DATABASE) for c in self.components
+            extract_base_component_name(c) == ComponentNames.DATABASE
+            for c in self.components
         )
 
         return {

@@ -142,11 +142,16 @@ def is_ai_service_with_options(service_string: str) -> bool:
     """
     Check if a service string is an AI service with bracket options.
 
+    This returns True ONLY when explicit bracket syntax is used (ai[...]).
+    Plain "ai" without brackets returns False to allow auto-detection of
+    backend based on available components (e.g., use sqlite if database exists).
+
     Args:
         service_string: Service specification string
 
     Returns:
-        True if this is an ai[...] format string
+        True if this is an ai[...] format string with explicit options
     """
     stripped = service_string.strip()
-    return stripped.startswith("ai[") or stripped == "ai"
+    # Only match bracket syntax - plain "ai" should allow auto-detection
+    return stripped.startswith("ai[")

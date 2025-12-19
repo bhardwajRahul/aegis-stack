@@ -15,7 +15,10 @@ from ..cli.validation import (
     validate_git_repository,
 )
 from ..constants import AnswerKeys, ComponentNames, Messages, StorageBackends
-from ..core.component_utils import extract_base_service_name
+from ..core.component_utils import (
+    extract_base_component_name,
+    extract_base_service_name,
+)
 from ..core.components import COMPONENTS, CORE_COMPONENTS
 from ..core.copier_manager import load_copier_answers
 from ..core.manual_updater import ManualUpdater
@@ -25,8 +28,9 @@ from ..core.migration_generator import (
     generate_migration,
     service_has_migration,
 )
+from ..core.project_map import render_project_map
 from ..core.service_resolver import ServiceResolver
-from ..core.services import SERVICES
+from ..core.services import SERVICES, get_service_dependencies
 
 
 def add_service_command(
@@ -261,14 +265,16 @@ def add_service_command(
     # Prepare update data for ManualUpdater
     update_data: dict[str, bool | str] = {}
 
-    # Add service flags
+    # Add service flags (use base service name to handle bracket syntax like ai[sqlite])
     for service in services_to_add:
-        include_key = AnswerKeys.include_key(service)
+        base_service = service_base_map[service]
+        include_key = AnswerKeys.include_key(base_service)
         update_data[include_key] = True
 
-    # Add missing component flags
+    # Add missing component flags (use base component name to handle bracket syntax)
     for component in missing_components:
-        include_key = AnswerKeys.include_key(component)
+        base_component = extract_base_component_name(component)
+        include_key = AnswerKeys.include_key(base_component)
         update_data[include_key] = True
 
     # Add services using ManualUpdater
@@ -415,6 +421,27 @@ def add_service_command(
                 )
 
         typer.secho("\nServices added successfully!", fg="green")
+
+        # Show project map with newly added services + auto-added components highlighted
+        base_services_for_highlight = [service_base_map[s] for s in services_to_add]
+        all_newly_added = base_services_for_highlight + list(missing_components)
+
+        # Build uses dict for existing dependencies (components that already existed)
+        # Normalize missing_components to base names for comparison
+        normalized_missing = {
+            extract_base_component_name(c) for c in missing_components
+        }
+        uses: dict[str, list[str]] = {}
+        for service in services_to_add:
+            base_service = service_base_map[service]
+            service_deps = get_service_dependencies(base_service)
+            for dep in service_deps:
+                # Only show uses for components that already existed (not newly added)
+                if dep not in normalized_missing and dep not in CORE_COMPONENTS:
+                    uses.setdefault(dep, []).append(base_service)
+
+        typer.echo()
+        render_project_map(target_path, highlight=all_newly_added, uses=uses)
 
         # Provide next steps
         if len(services_to_add) > 0 or len(missing_components) > 0:

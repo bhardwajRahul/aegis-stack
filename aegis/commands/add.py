@@ -20,6 +20,7 @@ from ..core.components import COMPONENTS, CORE_COMPONENTS
 from ..core.copier_manager import load_copier_answers
 from ..core.dependency_resolver import DependencyResolver
 from ..core.manual_updater import ManualUpdater
+from ..core.project_map import render_project_map
 from ..core.version_compatibility import validate_version_compatibility
 
 
@@ -330,6 +331,10 @@ def add_command(
                 )
 
         typer.secho("\nComponents added successfully!", fg="green")
+
+        # Show project map with newly added components highlighted
+        typer.echo()
+        render_project_map(target_path, highlight=components_to_add)
 
         # Note: Shared file updates are already shown during the update process
         # Just provide next steps
