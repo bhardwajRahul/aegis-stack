@@ -988,7 +988,5 @@ def run_post_generation_tasks(
     typer.secho("Next steps:", fg=typer.colors.CYAN, bold=True)
     typer.echo(f"   cd {project_path.name}")
     typer.echo("   make serve")
-    typer.echo()
-    typer.secho("Your application is fully configured and ready to use!", dim=True)
 
     return True

@@ -9,6 +9,7 @@ during the migration period.
 from pathlib import Path
 from typing import Any
 
+import typer
 import yaml
 from copier import run_copy, run_update
 
@@ -20,6 +21,7 @@ from .migration_generator import (
 )
 from .post_gen_tasks import cleanup_components, run_post_generation_tasks
 from .template_generator import TemplateGenerator
+from .verbosity import verbose_print
 
 
 def is_git_repo(path: Path) -> bool:
@@ -224,10 +226,15 @@ def generate_with_copier(
             check=True,
             capture_output=True,
         )
-        print("Git repository initialized")
+        verbose_print("Git repository initialized")
     except subprocess.CalledProcessError as e:
         print(f"Warning: Failed to initialize git repository: {e}")
         print("Run 'git init && git add . && git commit' manually")
+
+    # Show docs/GitHub links
+    typer.echo()
+    typer.secho("Docs: https://lbedner.github.io/aegis-stack", dim=True)
+    typer.secho("GitHub: https://github.com/lbedner/aegis-stack", dim=True)
 
     # CRITICAL: Fix _src_path in .copier-answers.yml for future updates to work
     #
