@@ -21,12 +21,14 @@ class AIServiceConfig:
     framework: str
     backend: str
     providers: list[str]
+    rag_enabled: bool = False
 
 
 # Valid values for detection (using constants)
 FRAMEWORKS = set(AIFrameworks.ALL)
 BACKENDS = {StorageBackends.MEMORY, StorageBackends.SQLITE}
 PROVIDERS = AIProviders.ALL
+FEATURES = {"rag"}  # Feature flags (e.g., rag for RAG support)
 
 # Defaults (using constants)
 DEFAULT_FRAMEWORK = AIFrameworks.PYDANTIC_AI
@@ -97,6 +99,7 @@ def parse_ai_service_config(service_string: str) -> AIServiceConfig:
     found_frameworks: list[str] = []
     found_backends: list[str] = []
     found_providers: list[str] = []
+    found_features: set[str] = set()
 
     for value in values:
         if value in FRAMEWORKS:
@@ -105,12 +108,15 @@ def parse_ai_service_config(service_string: str) -> AIServiceConfig:
             found_backends.append(value)
         elif value in PROVIDERS:
             found_providers.append(value)
+        elif value in FEATURES:
+            found_features.add(value)
         else:
             raise ValueError(
                 f"Unknown value '{value}' in ai[...] syntax. "
                 f"Valid frameworks: {', '.join(sorted(FRAMEWORKS))}. "
                 f"Valid backends: {', '.join(sorted(BACKENDS))}. "
-                f"Valid providers: {', '.join(sorted(PROVIDERS))}."
+                f"Valid providers: {', '.join(sorted(PROVIDERS))}. "
+                f"Valid features: {', '.join(sorted(FEATURES))}."
             )
 
     # Validate no duplicates in framework/backend
@@ -130,11 +136,13 @@ def parse_ai_service_config(service_string: str) -> AIServiceConfig:
     framework = found_frameworks[0] if found_frameworks else DEFAULT_FRAMEWORK
     backend = found_backends[0] if found_backends else DEFAULT_BACKEND
     providers = found_providers if found_providers else DEFAULT_PROVIDERS.copy()
+    rag_enabled = "rag" in found_features
 
     return AIServiceConfig(
         framework=framework,
         backend=backend,
         providers=providers,
+        rag_enabled=rag_enabled,
     )
 
 

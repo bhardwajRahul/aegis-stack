@@ -29,6 +29,9 @@ _ai_framework_selection: dict[str, str] = {}
 # Global variable to store AI backend selection for template generation
 _ai_backend_selection: dict[str, str] = {}
 
+# Global variable to store AI RAG selection for template generation
+_ai_rag_selection: dict[str, bool] = {}
+
 
 def get_interactive_infrastructure_components() -> list[ComponentSpec]:
     """Get infrastructure components available for interactive selection."""
@@ -232,8 +235,8 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
                 if typer.confirm(prompt):
                     # AI service requires backend (always available) - no dependency issues
                     # Use the reusable AI configuration function
-                    backend, framework, providers = interactive_ai_service_config(
-                        service_name
+                    backend, framework, providers, rag_enabled = (
+                        interactive_ai_service_config(service_name)
                     )
 
                     # Handle database auto-add for SQLite backend
@@ -256,8 +259,10 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
                             )
 
                     # Build AI service string with bracket syntax for TemplateGenerator
-                    # Format: ai[backend,framework,provider1,provider2,...]
+                    # Format: ai[backend,framework,provider1,provider2,...,rag]
                     options = [backend, framework] + providers
+                    if rag_enabled:
+                        options.append("rag")
                     service_string = f"{service_name}[{','.join(options)}]"
                     selected_services.append(service_string)
                     typer.secho("AI service configured", fg="green")
@@ -325,6 +330,25 @@ def clear_ai_backend_selection() -> None:
     _ai_backend_selection.clear()
 
 
+def get_ai_rag_selection(service_name: str = "ai") -> bool:
+    """
+    Get AI RAG selection from interactive session.
+
+    Args:
+        service_name: Name of the AI service (defaults to "ai")
+
+    Returns:
+        True if RAG is enabled, False otherwise
+    """
+    return _ai_rag_selection.get(service_name, False)
+
+
+def clear_ai_rag_selection() -> None:
+    """Clear stored AI RAG selection (useful for testing)."""
+    global _ai_rag_selection
+    _ai_rag_selection.clear()
+
+
 def set_ai_service_config(
     service_name: str = "ai",
     framework: str | None = None,
@@ -361,20 +385,24 @@ def clear_all_ai_selections() -> None:
 
 def interactive_ai_service_config(
     service_name: str = AnswerKeys.SERVICE_AI,
-) -> tuple[str, str, list[str]]:
+) -> tuple[str, str, list[str], bool]:
     """
     Interactive AI service configuration prompts.
 
-    Prompts user for framework, backend, and provider selection.
+    Prompts user for framework, backend, provider, and RAG selection.
     Stores selections in global state for template generation.
 
     Args:
         service_name: Name of the AI service (defaults to "ai")
 
     Returns:
-        Tuple of (backend, framework, providers)
+        Tuple of (backend, framework, providers, rag_enabled)
     """
-    global _ai_framework_selection, _ai_backend_selection, _ai_provider_selection
+    global \
+        _ai_framework_selection, \
+        _ai_backend_selection, \
+        _ai_provider_selection, \
+        _ai_rag_selection
 
     # Framework selection
     typer.echo("\nAI Framework Selection:")
@@ -436,7 +464,17 @@ def interactive_ai_service_config(
     # Store provider selection in global context for template generation
     _ai_provider_selection[service_name] = providers
 
-    return backend, framework, providers
+    # RAG selection
+    typer.echo("\nRAG (Retrieval-Augmented Generation):")
+    rag_enabled = typer.confirm(
+        "  Enable RAG for document indexing and semantic search?",
+        default=True,
+    )
+    _ai_rag_selection[service_name] = rag_enabled
+    if rag_enabled:
+        typer.secho("  RAG enabled with ChromaDB vector store", fg="green")
+
+    return backend, framework, providers, rag_enabled
 
 
 def interactive_component_add_selection(project_path: Path) -> tuple[list[str], str]:

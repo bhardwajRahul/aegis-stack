@@ -1,0 +1,83 @@
+"""
+RAG service data models.
+
+This module defines the core data structures for document handling,
+search results, and indexing statistics.
+"""
+
+from datetime import UTC, datetime
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+
+class Document(BaseModel):
+    """
+    A document with content and metadata.
+
+    Used throughout the RAG pipeline for loading, chunking, and indexing.
+    """
+
+    content: str = Field(..., description="Document text content")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Document metadata (source, file_name, extension, etc.)",
+    )
+
+    def __len__(self) -> int:
+        """Return content length."""
+        return len(self.content)
+
+
+class SearchResult(BaseModel):
+    """
+    A search result from the vector store.
+
+    Contains the matched content, similarity score, and original metadata.
+    """
+
+    content: str = Field(..., description="Matched document content")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Document metadata",
+    )
+    score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Similarity score (0-1, higher is more similar)",
+    )
+    rank: int = Field(..., ge=1, description="Result rank (1 = most relevant)")
+
+
+class IndexStats(BaseModel):
+    """
+    Statistics from an indexing operation.
+
+    Returned after adding documents to the vector store.
+    """
+
+    collection_name: str = Field(..., description="Name of the collection")
+    documents_added: int = Field(..., ge=0, description="Number of documents added")
+    total_documents: int = Field(..., ge=0, description="Total documents in collection")
+    duration_ms: float = Field(..., ge=0.0, description="Operation duration in ms")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class CollectionInfo(BaseModel):
+    """Information about a vector store collection."""
+
+    name: str = Field(..., description="Collection name")
+    count: int = Field(..., ge=0, description="Number of documents")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Collection metadata",
+    )
+
+
+__all__ = [
+    "Document",
+    "SearchResult",
+    "IndexStats",
+    "CollectionInfo",
+]

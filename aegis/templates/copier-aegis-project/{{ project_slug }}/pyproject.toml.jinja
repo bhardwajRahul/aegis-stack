@@ -3,7 +3,9 @@ name = "{{ project_slug }}"
 version = "{{ version }}"
 description = "{{ project_description }}"
 readme = "README.md"
-requires-python = ">={{ python_version }},<3.15"
+{% if ai_rag %}requires-python = ">=3.11,<3.14"  # chromadb→onnxruntime lacks Python 3.14 wheels
+{% else %}requires-python = ">={{ python_version }},<3.15"
+{% endif %}
 authors = [
     {name = "{{ author_name }}", email = "{{ author_email }}"}
 ]
@@ -91,6 +93,9 @@ dependencies = [
 {%- endif %}
 {%- if include_auth or include_comms %}
     "email-validator==2.2.0",  # Required for EmailStr in auth/comms models
+{%- endif %}
+{%- if ai_rag %}
+    "chromadb>=0.4.22,<1.0.0",  # Vector store - pin to 0.x for stability
 {%- endif %}
 ]
 

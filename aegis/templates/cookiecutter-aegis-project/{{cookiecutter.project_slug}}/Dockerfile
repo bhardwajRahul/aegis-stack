@@ -14,9 +14,13 @@ RUN apt-get update -y && \
 RUN pip install --no-cache-dir uv==0.4.18
 
 # Set environment variables
+# Use /opt/venv for virtual environment to avoid conflicts with volume mounts
 ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/code \
-    UV_CACHE_DIR=/tmp/uv-cache
+    UV_CACHE_DIR=/tmp/uv-cache \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /code
 

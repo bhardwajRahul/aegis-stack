@@ -94,9 +94,10 @@ class TemplateGenerator:
                     self.worker_backend = backend
                     break
 
-        # Extract AI config from ai[framework, backend, providers] format in services
+        # Extract AI config from ai[framework, backend, providers, rag] format in services
         self.ai_backend = StorageBackends.MEMORY  # Default to memory
         self.ai_framework = AIFrameworks.PYDANTIC_AI  # Default to pydantic-ai
+        self.ai_rag = False  # Default to no RAG
         user_specified_ai_backend = False
 
         for service in self.selected_services:
@@ -105,6 +106,7 @@ class TemplateGenerator:
                     ai_config = parse_ai_service_config(service)
                     self.ai_backend = ai_config.backend
                     self.ai_framework = ai_config.framework
+                    self.ai_rag = ai_config.rag_enabled
                     user_specified_ai_backend = True
                 break
 
@@ -207,6 +209,8 @@ class TemplateGenerator:
             AnswerKeys.AI_FRAMEWORK: self._get_ai_framework(),
             # AI provider selection for dynamic dependency generation
             AnswerKeys.AI_PROVIDERS: self._get_ai_providers_string(),
+            # AI RAG (Retrieval-Augmented Generation) selection
+            AnswerKeys.AI_RAG: "yes" if self.ai_rag else "no",
             # Dependency lists for templates
             "selected_components": selected_only,  # Original selection for context
             "docker_services": self._get_docker_services(),

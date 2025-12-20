@@ -3,7 +3,9 @@ name = "{{ cookiecutter.project_slug }}"
 version = "{{ cookiecutter.version }}"
 description = "{{ cookiecutter.project_description }}"
 readme = "README.md"
-requires-python = ">={{ cookiecutter.python_version }},<3.15"
+{% if cookiecutter.ai_rag == "yes" %}requires-python = ">=3.11,<3.14"  # chromadb→onnxruntime lacks Python 3.14 wheels
+{% else %}requires-python = ">={{ cookiecutter.python_version }},<3.15"
+{% endif %}
 authors = [
     {name = "{{ cookiecutter.author_name }}", email = "{{ cookiecutter.author_email }}"}
 ]
@@ -91,6 +93,9 @@ dependencies = [
 {%- endif %}
 {%- if cookiecutter.include_auth == "yes" or cookiecutter.include_comms == "yes" %}
     "email-validator==2.2.0",  # Required for EmailStr in auth/comms models
+{%- endif %}
+{%- if cookiecutter.ai_rag == "yes" %}
+    "chromadb>=0.4.22,<1.0.0",  # Vector store - pin to 0.x for stability
 {%- endif %}
 ]
 

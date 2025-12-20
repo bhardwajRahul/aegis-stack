@@ -150,6 +150,16 @@ class Settings(BaseSettings):
     SCHEDULER_FORCE_UPDATE: bool = False  # Force update jobs from code on restart
 {% endif %}
 
+{% if cookiecutter.ai_rag == "yes" %}
+    # RAG Service Configuration
+    RAG_ENABLED: bool = True
+    RAG_PERSIST_DIRECTORY: str = "./data/chromadb"
+    RAG_EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"  # ChromaDB built-in
+    RAG_CHUNK_SIZE: int = 1000
+    RAG_CHUNK_OVERLAP: int = 200
+    RAG_DEFAULT_TOP_K: int = 5
+{% endif %}
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

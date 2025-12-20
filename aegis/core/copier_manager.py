@@ -12,6 +12,7 @@ from typing import Any
 import typer
 import yaml
 from copier import run_copy, run_update
+from packaging.version import Version
 
 from ..config.defaults import DEFAULT_PYTHON_VERSION, GITHUB_TEMPLATE_URL
 from ..constants import AnswerKeys
@@ -61,6 +62,13 @@ def generate_with_copier(
     # Get cookiecutter context from template generator
     cookiecutter_context = template_gen.get_template_context()
 
+    # Determine Python version early - may need to override for RAG compatibility
+    # When RAG is enabled, chromadb requires onnxruntime which lacks Python 3.14 wheels
+    python_version = cookiecutter_context.get("python_version", DEFAULT_PYTHON_VERSION)
+    ai_rag = cookiecutter_context.get(AnswerKeys.AI_RAG, "no") == "yes"
+    if ai_rag and python_version and Version(python_version) >= Version("3.14"):
+        python_version = "3.13"
+
     # Convert cookiecutter context to Copier data format
     # Copier uses boolean values instead of "yes"/"no" strings
     copier_data = {
@@ -76,9 +84,7 @@ def generate_with_copier(
         ),
         "github_username": cookiecutter_context.get("github_username", "your-username"),
         "version": cookiecutter_context.get("version", "0.1.0"),
-        "python_version": cookiecutter_context.get(
-            "python_version", DEFAULT_PYTHON_VERSION
-        ),
+        "python_version": python_version,
         # Convert yes/no strings to booleans
         AnswerKeys.SCHEDULER: cookiecutter_context[AnswerKeys.SCHEDULER] == "yes",
         AnswerKeys.SCHEDULER_BACKEND: cookiecutter_context[
@@ -111,6 +117,7 @@ def generate_with_copier(
             AnswerKeys.AI_WITH_PERSISTENCE, "no"
         )
         == "yes",
+        AnswerKeys.AI_RAG: cookiecutter_context.get(AnswerKeys.AI_RAG, "no") == "yes",
     }
 
     # Detect dev vs production mode for template sourcing
@@ -183,7 +190,7 @@ def generate_with_copier(
     # AI needs seeding when using persistence backend (same condition as migrations)
     ai_needs_seeding = ai_needs_migrations
 
-    python_version = copier_data.get("python_version")
+    # python_version was already determined earlier (with RAG override if needed)
     run_post_generation_tasks(
         project_path,
         include_migrations=include_migrations,

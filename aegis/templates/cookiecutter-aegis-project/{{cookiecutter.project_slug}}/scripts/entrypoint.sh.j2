@@ -2,45 +2,22 @@
 
 set -e
 
-# More comprehensive venv cleanup to prevent Docker container conflicts
-if [ -d ".venv" ]; then
-    echo "Found existing .venv directory, checking compatibility..."
+# Configure UV environment based on execution context
+if [ -n "$DOCKER_CONTAINER" ] || [ "$USER" = "root" ]; then
+    echo "Running in Docker container..."
 
-    # Check if .venv has issues (broken symlinks, wrong Python version, etc.)
-    if [ -L ".venv/bin/python3" ] && [ ! -e ".venv/bin/python3" ]; then
-        echo "Cleaning up broken venv symlinks..."
-        rm -rf .venv
-    elif [ -f ".venv/bin/python3" ]; then
-        # Check if the Python executable is compatible and accessible
-        if ! .venv/bin/python3 --version > /dev/null 2>&1; then
-            echo "Cleaning up incompatible venv..."
-            rm -rf .venv
-        fi
-    elif [ ! -w ".venv" ] || [ ! -x ".venv" ]; then
-        # Check for permission issues in Docker containers
-        echo "Cleaning up venv with permission issues..."
-        rm -rf .venv
-    else
-        # If directory exists but has no python executable, clean it up
-        if [ ! -f ".venv/bin/python3" ] && [ ! -f ".venv/bin/python" ]; then
-            echo "Cleaning up incomplete venv..."
-            rm -rf .venv
-        fi
-    fi
+    # Docker uses /opt/venv (set in Dockerfile) to avoid volume mount conflicts
+    export UV_PROJECT_ENVIRONMENT=/opt/venv
+    export UV_LINK_MODE=copy
+    export VIRTUAL_ENV=/opt/venv
+    export PATH="/opt/venv/bin:$PATH"
+else
+    echo "Running in local environment, UV will use project defaults"
+
+    # Ensure we don't inherit Docker environment variables
+    unset UV_PROJECT_ENVIRONMENT
+    unset UV_SYSTEM_PYTHON
 fi
-
-# Configure UV for Docker container (this is always a Docker entrypoint)
-echo "Configuring UV for Docker container..."
-
-# Set Docker-specific UV configuration
-export UV_PROJECT_ENVIRONMENT=/code/.venv
-export UV_LINK_MODE=copy
-export VIRTUAL_ENV=/code/.venv
-
-# Ensure .venv path is in PATH for CLI commands
-export PATH="/code/.venv/bin:$PATH"
-
-echo "UV configured for Docker: UV_PROJECT_ENVIRONMENT=/code/.venv"
 
 # Pop run_command from arguments
 run_command="$1"

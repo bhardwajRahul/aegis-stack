@@ -10,8 +10,6 @@ x-app: &app
     - ${AEGIS_STACK_ENV_FILE:-.env}
   volumes:
     - .:/code
-    # Exclude .venv to prevent host/container virtual environment conflicts
-    - /code/.venv
   environment:
     # Docker container marker for entrypoint script
     - DOCKER_CONTAINER=1

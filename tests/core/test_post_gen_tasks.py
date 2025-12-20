@@ -325,7 +325,7 @@ class TestRunPostGenerationTasks:
 
             run_post_generation_tasks(tmp_path, include_migrations=True)
 
-            mock_migrations.assert_called_once_with(tmp_path, True)
+            mock_migrations.assert_called_once_with(tmp_path, True, None)
 
     def test_tasks_run_in_order(self, tmp_path: Path) -> None:
         """Test that tasks run in the correct order."""
@@ -339,7 +339,9 @@ class TestRunPostGenerationTasks:
             call_order.append("env")
             return True
 
-        def track_migrations(path: Path, auth: bool) -> bool:
+        def track_migrations(
+            path: Path, auth: bool, python_version: str | None = None
+        ) -> bool:
             call_order.append("migrations")
             return True
 
