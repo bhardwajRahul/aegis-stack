@@ -5,8 +5,6 @@ Provides consistent, beautiful output formatting across streaming
 and non-streaming modes using marko markdown parser with terminal rendering.
 """
 
-import re
-
 from marko import Markdown
 from marko.ext.gfm import GFM
 from rich.console import Console
@@ -20,6 +18,10 @@ class StreamingMarkdownRenderer:
 
     Processes markdown content as it streams in, using marko to parse complete
     blocks and render them with beautiful ANSI styling for terminal output.
+
+    Uses unified line-buffering for all content, making it compatible with both
+    PydanticAI (word-aligned tokens) and LangChain (subword/character-level tokens).
+    Content is accumulated until newlines, then rendered as complete lines.
     """
 
     def __init__(self, console: Console):
@@ -32,94 +34,23 @@ class StreamingMarkdownRenderer:
         self.console = console
         self.buffer = ""
         self.in_code_block = False
-        self.code_buffer = []
+        self.code_buffer: list[str] = []
         self.code_lang = ""
         self.markdown = Markdown(extensions=[GFM], renderer=TerminalRenderer)
 
     def add_delta(self, delta: str) -> None:
         """
-        Process streaming delta and display formatted content with smart buffering.
+        Process streaming delta using unified line-buffering.
 
-        Uses line-buffering for markdown structures (code blocks, lists, tables)
-        and word-streaming for plain conversational text for smooth output.
+        Accumulates content until newlines, then renders complete lines.
+        This simple approach works correctly with any token boundary pattern,
+        whether word-aligned (PydanticAI) or character-level (LangChain).
 
         Args:
             delta: New text content to process
         """
-        # Add new content to buffer
         self.buffer += delta
-
-        # Smart buffering based on content type
-        if self.in_code_block or self._is_markdown_structure():
-            # Use line-buffering for markdown structures (safe, correct formatting)
-            self._process_complete_lines()
-        else:
-            # Use word-streaming for plain text (smooth, responsive)
-            self._stream_plain_text()
-
-    def _is_markdown_structure(self) -> bool:
-        """
-        Detect if buffer contains markdown structures requiring line-buffering.
-
-        Returns:
-            True if buffer contains markdown patterns, False for plain text
-        """
-        if not self.buffer.strip():
-            return False
-
-        # Get the current line being built (text after last newline)
-        current_line = self.buffer.split("\n")[-1].strip()
-
-        # Markdown patterns that need careful line-by-line handling
-        markdown_indicators = [
-            "```",  # Code blocks (critical!)
-            "#",  # Headers
-            "- ",  # Unordered lists
-            "* ",  # Unordered lists (alternate)
-            "+ ",  # Unordered lists (alternate)
-            "> ",  # Blockquotes
-            "|",  # Tables
-        ]
-
-        # Check if line starts with markdown
-        for indicator in markdown_indicators:
-            if current_line.startswith(indicator):
-                return True
-
-        # Check for numbered lists using regex (handles any number)
-        # Check for inline formatting that might break across words
-        # (bold/italic can be streamed word-by-word safely)
-        return bool(re.match(r"^\d+\. ", current_line))
-
-    def _stream_plain_text(self) -> None:
-        """
-        Stream plain text word-by-word for smooth, responsive output.
-
-        Renders complete words immediately while keeping incomplete words
-        in buffer. Falls back to line-buffering when newlines are encountered.
-        """
-        # If we hit a newline, process complete lines normally
-        if "\n" in self.buffer:
-            self._process_complete_lines()
-            return
-
-        # Word-level streaming for smooth plain text output
-        # Split on spaces to identify complete words
-        if " " in self.buffer:
-            # Split and find word boundaries
-            parts = self.buffer.rsplit(" ", 1)  # Split from right to keep last word
-
-            if len(parts) == 2:
-                complete_text, incomplete_word = parts
-
-                # Render complete text with trailing space
-                if complete_text:
-                    # For plain text, just write directly (no markdown parsing needed)
-                    self.console.file.write(complete_text + " ")
-                    self.console.file.flush()
-
-                # Keep incomplete word in buffer
-                self.buffer = incomplete_word
+        self._process_complete_lines()
 
     def _process_complete_lines(self) -> None:
         """Process any complete lines in the buffer."""

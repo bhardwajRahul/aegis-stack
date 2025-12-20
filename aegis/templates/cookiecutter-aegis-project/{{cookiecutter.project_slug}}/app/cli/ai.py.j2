@@ -790,14 +790,17 @@ async def _stream_chat_response(
                         )
                         break
 
-                    # Skip duplicate content (handles fake streaming providers)
-                    if chunk.content in processed_content:
-                        if chunk.is_final:
-                            conversation_info = chunk.conversation_id
-                            response_time = chunk.metadata.get("response_time_ms")
-                        continue
-
-                    processed_content.add(chunk.content)
+                    # Skip duplicate content only for non-delta mode (fake streaming)
+                    # Delta mode sends unique incremental content that should never
+                    # be skipped - LangChain sends character-level tokens where
+                    # common chars like "a", "i", "e" would be incorrectly filtered
+                    if not chunk.is_delta:
+                        if chunk.content in processed_content:
+                            if chunk.is_final:
+                                conversation_info = chunk.conversation_id
+                                response_time = chunk.metadata.get("response_time_ms")
+                            continue
+                        processed_content.add(chunk.content)
 
                     if chunk.is_delta and chunk.content:
                         if not header_shown:

@@ -370,6 +370,138 @@ class TestStreamingMarkdownRenderer:
         assert "Second item" in result
         assert "print('test')" in result
 
+    def test_langchain_style_subword_tokens(self):
+        """Test streaming with subword token boundaries (LangChain compatibility)."""
+        output = StringIO()
+        console = Console(file=output, force_terminal=True, width=80)
+        renderer = StreamingMarkdownRenderer(console)
+
+        # Simulate LangChain-style subword tokens
+        tokens = ["Hel", "lo ", "wor", "ld", "! ", "How ", "are ", "you", "?\n"]
+        for token in tokens:
+            renderer.add_delta(token)
+        renderer.finalize()
+
+        result = strip_ansi_codes(output.getvalue())
+        assert "Hello" in result
+        assert "world" in result
+        assert "How are you?" in result
+
+    def test_character_level_tokens(self):
+        """Test streaming with character-level tokens (extreme case)."""
+        output = StringIO()
+        console = Console(file=output, force_terminal=True, width=80)
+        renderer = StreamingMarkdownRenderer(console)
+
+        # Character by character (extreme case)
+        message = "Hello world!"
+        for char in message:
+            renderer.add_delta(char)
+        renderer.add_delta("\n")
+        renderer.finalize()
+
+        result = strip_ansi_codes(output.getvalue())
+        assert "Hello world!" in result
+
+    def test_long_token_without_spaces(self):
+        """Test handling of very long tokens without word breaks."""
+        output = StringIO()
+        console = Console(file=output, force_terminal=True, width=80)
+        renderer = StreamingMarkdownRenderer(console)
+
+        # Long URL without spaces - exceeds 2x threshold so it should flush
+        long_url = (
+            "https://example.com/very/long/path/that/exceeds/threshold/and/keeps/going"
+        )
+        renderer.add_delta(long_url)
+        renderer.add_delta("\n")
+        renderer.finalize()
+
+        result = output.getvalue()
+        assert "example.com" in result
+
+    def test_line_buffering_with_sentences(self):
+        """Test that content is buffered until newline, then rendered correctly."""
+        output = StringIO()
+        console = Console(file=output, force_terminal=True, width=80)
+        renderer = StreamingMarkdownRenderer(console)
+
+        # Content without newline should be buffered
+        renderer.add_delta("First sentence.")
+        renderer.add_delta(" ")
+        renderer.add_delta("Second")
+        renderer.add_delta(" sentence.")
+
+        # No newline yet - content accumulates in buffer until newline
+
+        # Now add newline - content should be rendered
+        renderer.add_delta("\n")
+        renderer.finalize()
+
+        result = strip_ansi_codes(output.getvalue())
+        assert "First sentence." in result
+        assert "Second sentence." in result
+
+    def test_code_block_with_fragmented_fence(self):
+        """Test code blocks where fence markers are split across tokens."""
+        output = StringIO()
+        console = Console(file=output, force_terminal=True, width=80)
+        renderer = StreamingMarkdownRenderer(console)
+
+        # Fence split across tokens
+        renderer.add_delta("``")
+        renderer.add_delta("`python\n")
+        renderer.add_delta("print")
+        renderer.add_delta("('hello')\n")
+        renderer.add_delta("``")
+        renderer.add_delta("`\n")
+        renderer.finalize()
+
+        result = strip_ansi_codes(output.getvalue())
+        assert "print" in result
+        assert "hello" in result
+
+    def test_pydantic_ai_compatibility(self):
+        """Ensure PydanticAI-style word-aligned tokens still work correctly."""
+        output = StringIO()
+        console = Console(file=output, force_terminal=True, width=80)
+        renderer = StreamingMarkdownRenderer(console)
+
+        # PydanticAI-style tokens (word-aligned with trailing spaces)
+        tokens = ["Hello ", "world! ", "This ", "is ", "a ", "test.\n"]
+        for token in tokens:
+            renderer.add_delta(token)
+        renderer.finalize()
+
+        result = strip_ansi_codes(output.getvalue())
+        assert "Hello" in result
+        assert "world!" in result
+        assert "This is a test." in result
+
+    def test_mixed_markdown_and_plain_text_tokens(self):
+        """Test transitions between plain text and markdown with fragmented tokens."""
+        output = StringIO()
+        console = Console(file=output, force_terminal=True, width=80)
+        renderer = StreamingMarkdownRenderer(console)
+
+        # Start with plain text
+        renderer.add_delta("Some text. ")
+        renderer.add_delta("More ")
+        renderer.add_delta("text")
+        renderer.add_delta(".\n")
+
+        # Switch to markdown
+        renderer.add_delta("# ")
+        renderer.add_delta("Head")
+        renderer.add_delta("er\n")
+
+        renderer.finalize()
+
+        result = strip_ansi_codes(output.getvalue())
+        assert "Some text." in result
+        assert "More text." in result
+        assert "Header" in result
+
 
 class TestContentCleaning:
     """Test AI content cleaning utilities."""
