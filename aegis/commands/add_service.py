@@ -424,13 +424,13 @@ def add_service_command(
 
         # Show project map with newly added services + auto-added components highlighted
         base_services_for_highlight = [service_base_map[s] for s in services_to_add]
-        all_newly_added = base_services_for_highlight + list(missing_components)
-
-        # Build uses dict for existing dependencies (components that already existed)
-        # Normalize missing_components to base names for comparison
+        # Normalize missing_components to base names so highlight and uses are consistent
         normalized_missing = {
             extract_base_component_name(c) for c in missing_components
         }
+        all_newly_added = base_services_for_highlight + list(normalized_missing)
+
+        # Build uses dict for existing dependencies (components that already existed)
         uses: dict[str, list[str]] = {}
         for service in services_to_add:
             base_service = service_base_map[service]
