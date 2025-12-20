@@ -423,6 +423,8 @@ def compare_projects(cookiecutter_path: Path, copier_path: Path) -> ParityTestRe
                 path_str.startswith("test-"),
                 # Mac OS resource forks and filesystem artifacts
                 ".!" in path_str,  # Mac resource fork artifacts like .!57223!file.png
+                # SQLite database files (binary, will differ due to timestamps/internal metadata)
+                path_str.endswith(".db"),
             ]
         )
 

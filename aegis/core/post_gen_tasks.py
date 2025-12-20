@@ -14,6 +14,7 @@ from typing import Any
 import typer
 
 from aegis.constants import AnswerKeys, ComponentNames, StorageBackends, WorkerBackends
+from aegis.core.project_map import render_project_map
 
 # Task configuration constants (following tests/cli/test_utils.py pattern)
 POST_GEN_TIMEOUT_INSTALL = 300  # 5 minutes for dependency installation
@@ -978,6 +979,11 @@ def run_post_generation_tasks(
     # Print final status (only reached if deps succeeded)
     typer.echo()
     typer.secho("Project ready to run!", fg=typer.colors.GREEN, bold=True)
+
+    # Show project structure map
+    typer.echo()
+    render_project_map(project_path)
+
     typer.echo()
     typer.secho("Next steps:", fg=typer.colors.CYAN, bold=True)
     typer.echo(f"   cd {project_path.name}")

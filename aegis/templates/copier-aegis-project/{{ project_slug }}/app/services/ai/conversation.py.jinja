@@ -10,7 +10,6 @@ Provides persistent conversation history across application restarts.
 {% endif %}
 """
 
-import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -127,20 +126,18 @@ class ConversationManager:
                 for msg in messages_db
             ]
 
-            # Extract provider/model from meta_data (stored there since they're not DB columns)
-            meta = conv_db.meta_data or {}
-            provider_str = meta.get("provider", "public")
-            model_str = meta.get("model", "gpt-4o-mini")
+            # Get provider/model from meta_data
+            meta_data = conv_db.meta_data or {}
 
             return Conversation(
                 id=conv_db.id,
                 title=conv_db.title,
-                provider=AIProvider(provider_str),
-                model=model_str,
+                provider=AIProvider(meta_data.get("provider", "openai")),
+                model=meta_data.get("model", "unknown"),
                 created_at=conv_db.created_at,
                 updated_at=conv_db.updated_at,
                 messages=messages,
-                metadata=meta,
+                metadata=meta_data,
             )
 {% endif %}
 
@@ -190,10 +187,10 @@ class ConversationManager:
 
             conversations = []
             for conv_db in all_convs:
-                meta = conv_db.meta_data or {}
+                meta_data = conv_db.meta_data or {}
 
                 # Filter by user_id if specified
-                if user_id and meta.get("user_id") != user_id:
+                if user_id and meta_data.get("user_id") != user_id:
                     continue
 
                 # Load messages for this conversation
@@ -213,19 +210,15 @@ class ConversationManager:
                     for msg in messages_db
                 ]
 
-                # Extract provider/model from meta_data
-                provider_str = meta.get("provider", "public")
-                model_str = meta.get("model", "gpt-4o-mini")
-
                 conversations.append(Conversation(
                     id=conv_db.id,
                     title=conv_db.title,
-                    provider=AIProvider(provider_str),
-                    model=model_str,
+                    provider=AIProvider(meta_data.get("provider", "openai")),
+                    model=meta_data.get("model", "unknown"),
                     created_at=conv_db.created_at,
                     updated_at=conv_db.updated_at,
                     messages=messages,
-                    metadata=meta,
+                    metadata=meta_data,
                 ))
 
             return conversations
@@ -404,8 +397,8 @@ class ConversationManager:
             # Get unique users
             users = set()
             for conv in all_convs:
-                meta = conv.meta_data or {}
-                user_id = meta.get("user_id")
+                meta_data = conv.meta_data or {}
+                user_id = meta_data.get("user_id")
                 if user_id:
                     users.add(user_id)
 
@@ -423,10 +416,12 @@ class ConversationManager:
     def _save_to_db(self, conversation: Conversation) -> None:
         """Save conversation and its messages to database."""
         with db_session() as session:
-            # Store provider/model in meta_data (not separate columns)
-            meta = dict(conversation.metadata)
-            meta["provider"] = conversation.provider.value
-            meta["model"] = conversation.model
+            # Build meta_data with provider/model included
+            meta_data = {
+                **conversation.metadata,
+                "provider": conversation.provider.value,
+                "model": conversation.model,
+            }
 
             # Check if conversation exists
             conv_db = session.get(ConversationModel, conversation.id)
@@ -434,16 +429,16 @@ class ConversationManager:
                 # Update existing
                 conv_db.title = conversation.title
                 conv_db.updated_at = conversation.updated_at
-                conv_db.meta_data = meta
+                conv_db.meta_data = meta_data
             else:
                 # Create new
                 conv_db = ConversationModel(
                     id=conversation.id,
                     title=conversation.title,
-                    user_id=meta.get("user_id", "default"),
+                    user_id=conversation.metadata.get("user_id", "default"),
                     created_at=conversation.created_at,
                     updated_at=conversation.updated_at,
-                    meta_data=meta,
+                    meta_data=meta_data,
                 )
                 session.add(conv_db)
 

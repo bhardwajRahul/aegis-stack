@@ -30,6 +30,13 @@ COPIER_ANSWERS_HEADER = (
 PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
 JINJA_EXTENSION = ".jinja"
 
+# Files with conditional content that should be regenerated when components change.
+# These files are not user-editable and contain Jinja conditionals that depend on
+# which components/services are enabled.
+REGENERATE_ON_COMPONENT_CHANGE = {
+    "app/components/backend/api/deps.py",
+}
+
 
 class UpdateResult(BaseModel):
     """Result of a component update operation."""
@@ -189,8 +196,14 @@ class ManualUpdater:
 
                     # Check for conflicts
                     if output_path.exists():
-                        # For now, skip existing files
-                        # TODO: Implement conflict resolution
+                        # Some files have conditional content and must be regenerated
+                        if relative_path in REGENERATE_ON_COMPONENT_CHANGE:
+                            output_path.write_text(content)
+                            verbose_print(f"   Regenerated: {relative_path}")
+                            files_modified.append(relative_path)
+                            continue
+
+                        # For other files, skip existing to preserve user changes
                         verbose_print(f"   Skipping existing file: {relative_path}")
                         files_skipped.append(relative_path)
                         continue
