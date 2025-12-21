@@ -65,6 +65,14 @@ except ImportError:
     # Comms service not available, skip comms commands
     pass
 
+# Conditionally register rag command if ai_rag is enabled
+try:
+    rag_module = importlib.import_module("app.cli.rag")
+    app.add_typer(rag_module.app, name="rag")
+except ImportError:
+    # RAG not available, skip rag commands
+    pass
+
 
 def main() -> None:
     """Entry point for the CLI application."""

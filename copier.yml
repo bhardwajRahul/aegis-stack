@@ -156,6 +156,17 @@ ai_with_persistence:
   default: "{{ ai_backend == 'sqlite' }}"
   when: "{{ include_ai }}"
 
+ai_rag:
+  type: bool
+  help: "Enable RAG (Retrieval-Augmented Generation) for document indexing?"
+  default: true
+  when: "{{ include_ai }}"
+
+include_comms:
+  type: bool
+  help: "Include communications service (email/SMS)?"
+  default: false
+
 # Internal computed values (using Jinja2)
 _has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache }}"
 _include_migrations: "{{ include_auth }}"

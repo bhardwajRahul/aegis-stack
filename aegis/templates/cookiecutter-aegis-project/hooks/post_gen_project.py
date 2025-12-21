@@ -59,6 +59,7 @@ def process_j2_templates():
             "include_auth": "{{ cookiecutter.include_auth }}",
             "include_ai": "{{ cookiecutter.include_ai }}",
             "include_comms": "{{ cookiecutter.include_comms }}",
+            "ai_rag": "{{ cookiecutter.ai_rag }}",
             "worker_backend": "{{ cookiecutter.worker_backend }}",
             "ai_framework": "{{ cookiecutter.ai_framework }}",
             "ai_backend": "{{ cookiecutter.ai_backend }}",
@@ -325,6 +326,16 @@ def main():
         remove_dir("tests/services/comms")
         # Remove comms documentation
         remove_dir("docs/services/comms")
+
+    if "{{ cookiecutter.ai_rag }}" != "yes":
+        # Remove RAG service files
+        remove_dir("app/components/backend/api/rag")
+        remove_dir("app/services/rag")
+        # Remove RAG CLI
+        remove_file("app/cli/rag.py")
+        # Remove RAG-related tests if they exist
+        remove_file("tests/api/test_rag_endpoints.py")
+        remove_dir("tests/services/rag")
 
     # Clean up empty docs/components directory if no components selected
     if (

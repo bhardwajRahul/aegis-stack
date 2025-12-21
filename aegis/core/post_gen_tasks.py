@@ -140,6 +140,12 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/components/frontend/dashboard/cards/comms_card.py",
             "app/components/frontend/dashboard/modals/comms_modal.py",
         ],
+        AnswerKeys.AI_RAG: [
+            "app/components/backend/api/rag",
+            "app/services/rag",
+            "app/cli/rag.py",
+            "tests/services/rag",
+        ],
     }
 
 
@@ -391,6 +397,13 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/services/ai/fixtures/llm_fixtures.py")
         # Remove usage tracking tests (only relevant with persistence)
         remove_file(project_path, "tests/services/ai/test_usage_tracking.py")
+
+    # Remove RAG service if not enabled
+    if not is_enabled(AnswerKeys.AI_RAG):
+        remove_dir(project_path, "app/components/backend/api/rag")
+        remove_dir(project_path, "app/services/rag")
+        remove_file(project_path, "app/cli/rag.py")
+        remove_dir(project_path, "tests/services/rag")
 
     # Remove comms service if not selected
     if not is_enabled(AnswerKeys.COMMS):
@@ -686,7 +699,11 @@ def setup_env_file(project_path: Path) -> bool:
         return False
 
 
-def run_migrations(project_path: Path, include_migrations: bool = False) -> bool:
+def run_migrations(
+    project_path: Path,
+    include_migrations: bool = False,
+    python_version: str | None = None,
+) -> bool:
     """
     Run Alembic database migrations if any service requiring migrations is enabled.
 
@@ -697,6 +714,7 @@ def run_migrations(project_path: Path, include_migrations: bool = False) -> bool
     Args:
         project_path: Path to the project directory
         include_migrations: Whether any service requiring migrations is enabled
+        python_version: Python version to use (e.g., "3.13") for uv run
 
     Returns:
         True if migrations succeeded or not needed, False on error
@@ -730,16 +748,14 @@ def run_migrations(project_path: Path, include_migrations: bool = False) -> bool
         env = os.environ.copy()
         env.pop("VIRTUAL_ENV", None)
 
+        # Build command with optional --python flag
+        cmd = ["uv", "run"]
+        if python_version:
+            cmd.extend(["--python", python_version])
+        cmd.extend(["alembic", "-c", str(alembic_ini_path), "upgrade", "head"])
+
         result = subprocess.run(
-            [
-                "uv",
-                "run",
-                "alembic",
-                "-c",
-                str(alembic_ini_path),
-                "upgrade",
-                "head",
-            ],
+            cmd,
             cwd=project_path,
             capture_output=True,
             text=True,
@@ -836,7 +852,7 @@ class DependencyInstallationError(Exception):
     pass
 
 
-def seed_llm_fixtures(project_path: Path) -> bool:
+def seed_llm_fixtures(project_path: Path, python_version: str | None = None) -> bool:
     """
     Seed LLM fixtures (vendors, models, pricing) into the database.
 
@@ -845,6 +861,7 @@ def seed_llm_fixtures(project_path: Path) -> bool:
 
     Args:
         project_path: Path to the project directory
+        python_version: Python version to use (e.g., "3.13") for uv run
 
     Returns:
         True if seeding succeeded, False otherwise
@@ -857,17 +874,23 @@ def seed_llm_fixtures(project_path: Path) -> bool:
         env = os.environ.copy()
         env.pop("VIRTUAL_ENV", None)
 
-        # Call the fixture loading function in the generated project
-        result = subprocess.run(
+        # Build command with optional --python flag
+        cmd = ["uv", "run"]
+        if python_version:
+            cmd.extend(["--python", python_version])
+        cmd.extend(
             [
-                "uv",
-                "run",
                 "python",
                 "-c",
                 "from app.core.db import SessionLocal; "
                 "from app.services.ai.fixtures import load_all_llm_fixtures; "
                 "load_all_llm_fixtures(SessionLocal())",
-            ],
+            ]
+        )
+
+        # Call the fixture loading function in the generated project
+        result = subprocess.run(
+            cmd,
             cwd=project_path,
             capture_output=True,
             text=True,
@@ -967,11 +990,11 @@ def run_post_generation_tasks(
     setup_env_file(project_path)
 
     # Task 3: Run migrations if needed (non-critical)
-    run_migrations(project_path, include_migrations)
+    run_migrations(project_path, include_migrations, python_version)
 
     # Task 4: Seed LLM fixtures if AI service with persistence (non-critical)
     if seed_ai:
-        seed_llm_fixtures(project_path)
+        seed_llm_fixtures(project_path, python_version)
 
     # Task 5: Format code (non-critical)
     format_code(project_path)

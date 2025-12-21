@@ -174,17 +174,20 @@ def add_service_command(
                 # AI service without bracket syntax - prompt for configuration
                 from ..cli.interactive import interactive_ai_service_config
 
-                backend, framework, providers = interactive_ai_service_config(
-                    base_service
+                backend, framework, providers, rag_enabled = (
+                    interactive_ai_service_config(base_service)
                 )
 
                 # Store config for later use
                 ai_config["backend"] = backend
                 ai_config["framework"] = framework
                 ai_config["providers"] = providers
+                ai_config["rag_enabled"] = rag_enabled
 
                 # Build bracket syntax and update the service entry
                 options = [backend, framework] + providers
+                if rag_enabled:
+                    options.append("rag")
                 service_string = f"{base_service}[{','.join(options)}]"
                 services_to_add[i] = service_string
 

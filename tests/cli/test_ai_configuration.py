@@ -43,6 +43,7 @@ class TestAIProviderSelection:
             False,
             False,
             False,  # All AI providers declined
+            True,  # Enable RAG? Yes (default)
         ]
 
         components, scheduler_backend, services = interactive_project_selection()
@@ -74,6 +75,7 @@ class TestAIProviderSelection:
             False,
             False,
             False,  # Google, Groq, Mistral, Cohere
+            True,  # Enable RAG? Yes (default)
         ]
 
         components, scheduler_backend, services = interactive_project_selection()
@@ -106,6 +108,7 @@ class TestAIProviderSelection:
             True,  # Google (recommended), Groq (recommended)
             False,
             False,  # Mistral, Cohere
+            True,  # Enable RAG? Yes (default)
         ]
 
         components, scheduler_backend, services = interactive_project_selection()
@@ -172,6 +175,7 @@ class TestAIBackendSelection:
             True,
             False,
             False,  # Provider selection (Google, Groq recommended)
+            True,  # Enable RAG? Yes (default)
         ]
 
         components, scheduler_backend, services = interactive_project_selection()
@@ -207,6 +211,7 @@ class TestAIBackendSelection:
             True,
             False,
             False,  # Provider selection (Google, Groq recommended)
+            True,  # Enable RAG? Yes (default)
         ]
 
         components, scheduler_backend, services = interactive_project_selection()
@@ -241,6 +246,7 @@ class TestAIBackendSelection:
             True,
             False,
             False,  # Provider selection (Google, Groq recommended)
+            True,  # Enable RAG? Yes (default)
         ]
 
         components, scheduler_backend, services = interactive_project_selection()
@@ -396,6 +402,7 @@ class TestAIConfigurationEndToEnd:
             True,
             False,
             False,  # OpenAI, Google, Groq selected
+            True,  # Enable RAG? Yes (default)
         ]
 
         # Run interactive selection
