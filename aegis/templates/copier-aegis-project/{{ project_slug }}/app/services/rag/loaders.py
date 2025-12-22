@@ -14,8 +14,18 @@ from app.core.log import logger
 
 from .models import Document
 
-# Default extensions to index (conservative set for most codebases)
-DEFAULT_EXTENSIONS = [".py", ".md", ".yml", ".yaml", ".txt"]
+# Default extensions to index (code-focused for RAG)
+DEFAULT_EXTENSIONS = [
+    ".py",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".md",
+    ".yaml",
+    ".yml",
+    ".json",
+    ".toml",
+]
 
 # Supported file extensions and their metadata
 LOADER_MAP: dict[str, dict[str, Any]] = {
@@ -145,7 +155,7 @@ class CodebaseLoader:
         else:
             documents = await self._load_directory(path, extensions, exclude)
 
-        logger.info(
+        logger.debug(
             "codebase_loader.load",
             path=str(path),
             document_count=len(documents),

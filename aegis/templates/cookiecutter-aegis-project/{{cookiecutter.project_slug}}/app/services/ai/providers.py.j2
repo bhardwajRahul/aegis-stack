@@ -58,7 +58,11 @@ class ProviderError(Exception):
     pass
 
 
-def get_agent(config: AIServiceConfig, settings: Any) -> Agent:
+def get_agent(
+    config: AIServiceConfig,
+    settings: Any,
+    system_prompt_override: str | None = None,
+) -> Agent:
     """
     Create a PydanticAI Agent for the configured provider.
 
@@ -67,6 +71,7 @@ def get_agent(config: AIServiceConfig, settings: Any) -> Agent:
     Args:
         config: AI service configuration
         settings: Application settings for API keys
+        system_prompt_override: Optional custom system prompt (for RAG mode)
 
     Returns:
         Agent: Configured PydanticAI Agent
@@ -77,7 +82,7 @@ def get_agent(config: AIServiceConfig, settings: Any) -> Agent:
     try:
         # Special handling for PUBLIC provider (no API key required)
         if config.provider == AIProvider.PUBLIC:
-            return _create_public_agent(config)
+            return _create_public_agent(config, system_prompt_override)
 
         # Check if we have API key for this provider
         provider_config = config.get_provider_config(settings)
@@ -107,6 +112,12 @@ def get_agent(config: AIServiceConfig, settings: Any) -> Agent:
         # Create model instance (PydanticAI 1.0+ style)
         model = model_class(**model_kwargs)
 
+        # Determine system prompt
+        system_prompt = system_prompt_override or (
+            "You are a helpful AI assistant. Provide clear, accurate, "
+            "and concise responses. Be friendly and professional."
+        )
+
         # Create agent with system prompt and model settings
         agent = Agent(
             model=model,
@@ -115,10 +126,7 @@ def get_agent(config: AIServiceConfig, settings: Any) -> Agent:
                 max_tokens=config.max_tokens,
                 timeout=config.timeout_seconds,
             ),
-            system_prompt=(
-                "You are a helpful AI assistant. Provide clear, accurate, "
-                "and concise responses. Be friendly and professional."
-            ),
+            system_prompt=system_prompt,
         )
 
         return agent
@@ -129,11 +137,18 @@ def get_agent(config: AIServiceConfig, settings: Any) -> Agent:
         raise ProviderError(error_msg) from e
 
 
-def _create_public_agent(config: AIServiceConfig) -> Agent:
+def _create_public_agent(
+    config: AIServiceConfig,
+    system_prompt_override: str | None = None,
+) -> Agent:
     """
     Create agent for PUBLIC provider using free public endpoints.
 
     Uses LLM7.io service which provides free access through an OpenAI-compatible API.
+
+    Args:
+        config: AI service configuration
+        system_prompt_override: Optional custom system prompt (for RAG mode)
     """
     # Lazy import - only needed for PUBLIC provider
     from openai import AsyncOpenAI
@@ -206,7 +221,14 @@ def _create_public_agent(config: AIServiceConfig) -> Agent:
         )
         model = OpenAIChatModel(model_name=model_name, provider=provider)
 
-        # Create agent with friendly system prompt and model settings
+        # Determine system prompt
+        system_prompt = system_prompt_override or (
+            "You are a helpful AI assistant powered by free public endpoints. "
+            "Provide clear, accurate, and concise responses. "
+            "Be friendly and professional."
+        )
+
+        # Create agent with system prompt and model settings
         agent = Agent(
             model=model,
             model_settings=ModelSettings(
@@ -214,11 +236,7 @@ def _create_public_agent(config: AIServiceConfig) -> Agent:
                 max_tokens=config.max_tokens,
                 timeout=config.timeout_seconds,
             ),
-            system_prompt=(
-                "You are a helpful AI assistant powered by free public endpoints. "
-                "Provide clear, accurate, and concise responses. "
-                "Be friendly and professional."
-            ),
+            system_prompt=system_prompt,
         )
 
         return agent

@@ -21,12 +21,18 @@ async def check_ai_service_health() -> ComponentStatus:
         # This ensures health checks reflect actual API conversation state
         from app.components.backend.api.ai.router import ai_service
 
-        # Get service status
-        service_status = ai_service.get_service_status()
-        validation_errors = ai_service.validate_service()
+        # Read FRESH config for provider/model (not cached from server startup)
+        from app.core.config import settings
+        from app.services.ai.config import get_ai_config
 
-        # Determine overall health
-        if not service_status["enabled"]:
+        current_config = get_ai_config(settings)
+
+        # Get service status (for runtime stats like conversation count)
+        service_status = ai_service.get_service_status()
+        validation_errors = current_config.validate_configuration(settings)
+
+        # Determine overall health using fresh config
+        if not current_config.enabled:
             status = ComponentStatusType.DEGRADED
             message = "AI service is disabled"
         elif validation_errors:
@@ -36,18 +42,18 @@ async def check_ai_service_health() -> ComponentStatus:
             )
         else:
             status = ComponentStatusType.HEALTHY
-            message = f"AI service ready - {service_status['provider']} provider"
+            message = f"AI service ready - {current_config.provider.value} provider"
 
         # Get conversation statistics
         conversation_stats = ai_service.conversation_manager.get_stats()
 
-        # Collect comprehensive metadata
+        # Collect comprehensive metadata using FRESH config for provider/model
         metadata = {
             "service_type": "ai",
             "engine": "{{ ai_framework }}",
-            "enabled": service_status["enabled"],
-            "provider": service_status["provider"],
-            "model": service_status["model"],
+            "enabled": current_config.enabled,
+            "provider": current_config.provider.value,
+            "model": current_config.model,
             "agent_ready": service_status["agent_initialized"],
             "total_conversations": service_status["total_conversations"],
             "total_messages": conversation_stats["total_messages"],
@@ -55,7 +61,7 @@ async def check_ai_service_health() -> ComponentStatus:
             "avg_messages_per_conversation": conversation_stats[
                 "average_messages_per_conversation"
             ],
-            "configuration_valid": service_status["configuration_valid"],
+            "configuration_valid": len(validation_errors) == 0,
             "validation_errors": validation_errors,
             "validation_errors_count": len(validation_errors),
 {% if ai_backend == "memory" %}
@@ -80,17 +86,17 @@ async def check_ai_service_health() -> ComponentStatus:
 {% endif %}
         }
 
-        # Add provider-specific info
-        if service_status["enabled"]:
+        # Add provider-specific info using fresh config
+        if current_config.enabled:
             from .models import get_free_providers, get_provider_capabilities
 
-            provider_caps = get_provider_capabilities(ai_service.config.provider)
+            provider_caps = get_provider_capabilities(current_config.provider)
             free_providers = get_free_providers()
 
             metadata.update(
                 {
                     "provider_supports_streaming": provider_caps.supports_streaming,
-                    "provider_free_tier": ai_service.config.provider in free_providers,
+                    "provider_free_tier": current_config.provider in free_providers,
                 }
             )
 

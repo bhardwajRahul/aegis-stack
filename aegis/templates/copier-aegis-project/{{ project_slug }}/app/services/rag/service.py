@@ -5,6 +5,8 @@ This module provides the main RAGService class that handles document loading,
 chunking, indexing, and semantic search functionality.
 """
 
+import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -13,8 +15,9 @@ from app.core.log import logger
 
 from .chunking import DocumentChunker
 from .config import get_rag_config
+from .ids import get_file_hash
 from .loaders import CodebaseLoader
-from .models import Document, IndexStats, SearchResult
+from .models import Document, FileIndexResult, IndexedFile, IndexStats, SearchResult
 from .vectorstore import VectorStoreManager
 
 
@@ -77,7 +80,9 @@ class RAGService:
         )
         self.vectorstore = VectorStoreManager(
             persist_directory=self.config.persist_directory,
+            embedding_provider=self.config.embedding_provider,
             embedding_model=self.config.embedding_model,
+            openai_api_key=settings.OPENAI_API_KEY,
         )
         self._last_activity: datetime | None = None
 
@@ -140,6 +145,7 @@ class RAGService:
         documents: list[Document],
         collection_name: str,
         metadata_fields: list[str] | None = None,
+        progress_callback: Callable[[int, int, int], None] | None = None,
     ) -> IndexStats:
         """
         Add documents to ChromaDB collection.
@@ -148,6 +154,7 @@ class RAGService:
             documents: Documents (or chunks) to index
             collection_name: ChromaDB collection name
             metadata_fields: Which metadata fields to include
+            progress_callback: Optional callback(batch_num, total_batches, chunks_processed)
 
         Returns:
             IndexStats: Statistics about the indexing operation
@@ -157,7 +164,7 @@ class RAGService:
         """
         try:
             stats = await self.vectorstore.add_documents(
-                documents, collection_name, metadata_fields
+                documents, collection_name, metadata_fields, progress_callback
             )
             self._last_activity = datetime.now(UTC)
 
@@ -211,6 +218,7 @@ class RAGService:
         collection_name: str,
         extensions: list[str] | None = None,
         exclude_patterns: list[str] | None = None,
+        progress_callback: Callable[[int, int, int], None] | None = None,
     ) -> IndexStats:
         """
         Full reindex: load, chunk, and index documents.
@@ -224,11 +232,12 @@ class RAGService:
             collection_name: ChromaDB collection name
             extensions: File extensions to include
             exclude_patterns: Glob patterns to exclude
+            progress_callback: Optional callback(batch_num, total_batches, chunks_processed)
 
         Returns:
             IndexStats: Statistics about the indexing operation
         """
-        logger.info(
+        logger.debug(
             "rag_service.refresh_index.start",
             path=str(path),
             collection=collection_name,
@@ -237,8 +246,10 @@ class RAGService:
         # Delete existing collection
         await self.vectorstore.delete_collection(collection_name)
 
-        # Load documents
+        # Phase 1: Load documents
+        load_start = time.perf_counter()
         documents = await self.load_documents(path, extensions, exclude_patterns)
+        load_ms = (time.perf_counter() - load_start) * 1000
 
         if not documents:
             logger.warning(
@@ -249,24 +260,159 @@ class RAGService:
                 collection_name=collection_name,
                 documents_added=0,
                 total_documents=0,
+                source_files=0,
+                extensions=[],
                 duration_ms=0.0,
+                load_ms=load_ms,
+                chunk_ms=0.0,
             )
 
-        # Chunk documents
+        # Extract source file info before chunking
+        source_file_count = len(documents)
+        extensions_found = sorted(
+            {
+                doc.metadata.get("extension", "")
+                for doc in documents
+                if doc.metadata.get("extension")
+            }
+        )
+
+        # Phase 2: Chunk documents
+        chunk_start = time.perf_counter()
         chunks = await self.chunk_documents(documents)
+        chunk_ms = (time.perf_counter() - chunk_start) * 1000
 
-        # Index chunks
-        stats = await self.index_documents(chunks, collection_name)
+        # Phase 3: Index chunks (already timed internally, returned as duration_ms)
+        stats = await self.index_documents(
+            chunks, collection_name, progress_callback=progress_callback
+        )
 
-        logger.info(
+        # Add phase timing and source file info to stats
+        stats.load_ms = load_ms
+        stats.chunk_ms = chunk_ms
+        stats.source_files = source_file_count
+        stats.extensions = extensions_found
+
+        logger.debug(
             "rag_service.refresh_index.complete",
             collection=collection_name,
             source_docs=len(documents),
             chunks=stats.documents_added,
-            duration_ms=round(stats.duration_ms, 2),
+            load_ms=round(load_ms, 2),
+            chunk_ms=round(chunk_ms, 2),
+            index_ms=round(stats.duration_ms, 2),
         )
 
         return stats
+
+    # ============================================
+    # File-Level Operations
+    # ============================================
+
+    async def add_file(
+        self,
+        path: str | Path,
+        collection_name: str,
+    ) -> FileIndexResult:
+        """
+        Add or update a single file in the collection.
+
+        Uses upsert semantics: if the file was previously indexed,
+        its chunks are updated. Otherwise, new chunks are created.
+
+        Args:
+            path: Path to the file to index
+            collection_name: Target collection name
+
+        Returns:
+            FileIndexResult: Result with chunk IDs and action taken
+
+        Raises:
+            LoaderError: If file cannot be loaded
+            IndexingError: If indexing fails
+        """
+        file_path = Path(path)
+        if not file_path.is_file():
+            raise LoaderError(f"Path is not a file: {path}")
+
+        # Load the single file
+        documents = await self.loader.load(file_path)
+        if not documents:
+            raise LoaderError(f"No content loaded from: {path}")
+
+        # Chunk the file
+        chunks = await self.chunker.chunk(documents)
+
+        # Index chunks (upsert will update existing)
+        stats = await self.vectorstore.add_documents(chunks, collection_name)
+
+        source_path = str(file_path.absolute())
+        file_hash = get_file_hash(source_path)
+
+        logger.debug(
+            "rag_service.add_file",
+            file=str(path),
+            collection=collection_name,
+            chunks=len(chunks),
+        )
+
+        return FileIndexResult(
+            file_path=source_path,
+            file_hash=file_hash,
+            chunk_ids=stats.chunk_ids,
+            chunk_count=len(chunks),
+            action="added",
+        )
+
+    async def remove_file(
+        self,
+        source_path: str,
+        collection_name: str,
+    ) -> FileIndexResult:
+        """
+        Remove all chunks for a specific file from the collection.
+
+        Args:
+            source_path: The source path as stored in metadata
+            collection_name: Target collection name
+
+        Returns:
+            FileIndexResult: Result with count of removed chunks
+        """
+        count = await self.vectorstore.remove_by_source(collection_name, source_path)
+
+        file_hash = get_file_hash(source_path)
+
+        logger.debug(
+            "rag_service.remove_file",
+            file=source_path,
+            collection=collection_name,
+            chunks_removed=count,
+        )
+
+        return FileIndexResult(
+            file_path=source_path,
+            file_hash=file_hash,
+            chunk_ids=[],
+            chunk_count=count,
+            action="removed",
+        )
+
+    async def list_files(
+        self,
+        collection_name: str,
+    ) -> list[IndexedFile]:
+        """
+        List all files indexed in a collection.
+
+        Args:
+            collection_name: Collection to query
+
+        Returns:
+            list[IndexedFile]: List of files with chunk counts
+        """
+        raw_files = await self.vectorstore.list_indexed_files(collection_name)
+        return [IndexedFile(source=f["source"], chunks=f["chunks"]) for f in raw_files]
 
     # ============================================
     # Collection Management
@@ -296,6 +442,7 @@ class RAGService:
         return {
             "enabled": self.config.enabled,
             "persist_directory": self.config.persist_directory,
+            "embedding_provider": self.config.embedding_provider,
             "embedding_model": self.config.embedding_model,
             "chunk_size": self.config.chunk_size,
             "chunk_overlap": self.config.chunk_overlap,

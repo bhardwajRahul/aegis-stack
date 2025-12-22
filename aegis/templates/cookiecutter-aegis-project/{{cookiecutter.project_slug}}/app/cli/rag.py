@@ -26,6 +26,20 @@ def get_rag_service() -> RAGService:
     return RAGService(settings)
 
 
+def format_duration(ms: float) -> str:
+    """Format milliseconds into human-readable duration."""
+    seconds = ms / 1000
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes = int(seconds // 60)
+    remaining_seconds = seconds % 60
+    if minutes < 60:
+        return f"{minutes}m {remaining_seconds:.0f}s"
+    hours = int(minutes // 60)
+    remaining_minutes = minutes % 60
+    return f"{hours}h {remaining_minutes}m"
+
+
 @app.command("index")
 def index_documents(
     path: Annotated[
@@ -80,12 +94,21 @@ def index_documents(
             )
         )
 
+        # Calculate total duration
+        total_ms = stats.load_ms + stats.chunk_ms + stats.duration_ms
+        total_str = format_duration(total_ms)
+
+        # Format extensions for display
+        ext_display = ", ".join(stats.extensions) if stats.extensions else "none"
+
         # Display results
         console.print(
             Panel(
-                f"[green]Successfully indexed {stats.documents_added} chunks[/green]\n"
-                f"Total documents in collection: {stats.total_documents}\n"
-                f"Duration: {stats.duration_ms:.2f}ms",
+                f"[green]Successfully indexed {stats.documents_added:,} chunks "
+                f"from {stats.source_files:,} files[/green]\n\n"
+                f"[bold]Extensions:[/bold] {ext_display}\n"
+                f"[bold]Duration:[/bold] {total_str}\n"
+                f"[bold]Collection size:[/bold] {stats.total_documents:,} chunks",
                 title=f"Collection: {collection}",
                 border_style="green",
             )
