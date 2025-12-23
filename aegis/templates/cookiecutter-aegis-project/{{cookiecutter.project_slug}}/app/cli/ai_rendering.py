@@ -132,21 +132,20 @@ class StreamingMarkdownRenderer:
 
 def render_ai_header(console: Console, inline: bool = True) -> None:
     """
-    Render the AI response header.
+    Render the Illiana AI response header.
 
     Args:
         console: Rich console instance
-        inline: If True, use inline style (>), else use separate line style
+        inline: If True, use inline style, else use separate line style
 
     Examples:
-        >>> render_ai_header(console, inline=True)  # Outputs: "> "
-        >>> render_ai_header(console, inline=False) # Outputs: "> Response:"
+        >>> render_ai_header(console, inline=True)  # Outputs: "Illiana: "
+        >>> render_ai_header(console, inline=False) # Outputs: "Illiana:"
     """
     if inline:
-        console.print("> ", style="bright_blue", end="")
+        console.print("Illiana: ", style="bright_magenta", end="")
     else:
-        console.print("> ", style="bright_blue", end="")
-        console.print("Response:", style="bright_blue bold")
+        console.print("Illiana:", style="bright_magenta bold")
 
 
 def render_markdown_response(console: Console, content: str) -> None:

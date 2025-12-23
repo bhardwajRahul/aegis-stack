@@ -5,6 +5,7 @@ This module provides the main RAGService class that handles document loading,
 chunking, indexing, and semantic search functionality.
 """
 
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -77,7 +78,9 @@ class RAGService:
         )
         self.vectorstore = VectorStoreManager(
             persist_directory=self.config.persist_directory,
+            embedding_provider=self.config.embedding_provider,
             embedding_model=self.config.embedding_model,
+            openai_api_key=settings.OPENAI_API_KEY,
         )
         self._last_activity: datetime | None = None
 
@@ -228,7 +231,7 @@ class RAGService:
         Returns:
             IndexStats: Statistics about the indexing operation
         """
-        logger.info(
+        logger.debug(
             "rag_service.refresh_index.start",
             path=str(path),
             collection=collection_name,
@@ -237,8 +240,10 @@ class RAGService:
         # Delete existing collection
         await self.vectorstore.delete_collection(collection_name)
 
-        # Load documents
+        # Phase 1: Load documents
+        load_start = time.perf_counter()
         documents = await self.load_documents(path, extensions, exclude_patterns)
+        load_ms = (time.perf_counter() - load_start) * 1000
 
         if not documents:
             logger.warning(
@@ -249,21 +254,45 @@ class RAGService:
                 collection_name=collection_name,
                 documents_added=0,
                 total_documents=0,
+                source_files=0,
+                extensions=[],
                 duration_ms=0.0,
+                load_ms=load_ms,
+                chunk_ms=0.0,
             )
 
-        # Chunk documents
-        chunks = await self.chunk_documents(documents)
+        # Extract source file info before chunking
+        source_file_count = len(documents)
+        extensions_found = sorted(
+            {
+                doc.metadata.get("extension", "")
+                for doc in documents
+                if doc.metadata.get("extension")
+            }
+        )
 
-        # Index chunks
+        # Phase 2: Chunk documents
+        chunk_start = time.perf_counter()
+        chunks = await self.chunk_documents(documents)
+        chunk_ms = (time.perf_counter() - chunk_start) * 1000
+
+        # Phase 3: Index chunks (already timed internally, returned as duration_ms)
         stats = await self.index_documents(chunks, collection_name)
 
-        logger.info(
+        # Add phase timing and source file info to stats
+        stats.load_ms = load_ms
+        stats.chunk_ms = chunk_ms
+        stats.source_files = source_file_count
+        stats.extensions = extensions_found
+
+        logger.debug(
             "rag_service.refresh_index.complete",
             collection=collection_name,
             source_docs=len(documents),
             chunks=stats.documents_added,
-            duration_ms=round(stats.duration_ms, 2),
+            load_ms=round(load_ms, 2),
+            chunk_ms=round(chunk_ms, 2),
+            index_ms=round(stats.duration_ms, 2),
         )
 
         return stats
@@ -296,6 +325,7 @@ class RAGService:
         return {
             "enabled": self.config.enabled,
             "persist_directory": self.config.persist_directory,
+            "embedding_provider": self.config.embedding_provider,
             "embedding_model": self.config.embedding_model,
             "chunk_size": self.config.chunk_size,
             "chunk_overlap": self.config.chunk_overlap,

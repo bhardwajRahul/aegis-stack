@@ -96,6 +96,7 @@ dependencies = [
 {%- endif %}
 {%- if ai_rag %}
     "chromadb>=0.4.22,<1.0.0",  # Vector store - pin to 0.x for stability
+    "sentence-transformers>=3.0.0",  # Local embeddings
 {%- endif %}
 ]
 

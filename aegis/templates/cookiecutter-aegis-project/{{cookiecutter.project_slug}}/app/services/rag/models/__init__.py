@@ -60,8 +60,27 @@ class IndexStats(BaseModel):
     collection_name: str = Field(..., description="Name of the collection")
     documents_added: int = Field(..., ge=0, description="Number of documents added")
     total_documents: int = Field(..., ge=0, description="Total documents in collection")
-    duration_ms: float = Field(..., ge=0.0, description="Operation duration in ms")
+    source_files: int = Field(
+        default=0, ge=0, description="Number of source files indexed"
+    )
+    extensions: list[str] = Field(
+        default_factory=list,
+        description="File extensions that were indexed",
+    )
+    duration_ms: float = Field(
+        ..., ge=0.0, description="Vectorstore operation duration in ms"
+    )
+    load_ms: float = Field(
+        default=0.0, ge=0.0, description="Document loading duration in ms"
+    )
+    chunk_ms: float = Field(
+        default=0.0, ge=0.0, description="Document chunking duration in ms"
+    )
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    chunk_ids: list[str] = Field(
+        default_factory=list,
+        description="IDs of chunks that were added/updated",
+    )
 
 
 class CollectionInfo(BaseModel):

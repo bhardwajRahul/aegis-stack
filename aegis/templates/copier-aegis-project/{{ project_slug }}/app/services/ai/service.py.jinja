@@ -35,7 +35,14 @@ from .models import (
 {% if ai_framework == "pydantic-ai" %}
 from .providers import get_agent
 {% else %}
-from .providers import get_llm, SYSTEM_PROMPT
+from .providers import get_llm
+{% endif %}
+from .health_context import HealthContext
+from .usage_context import UsageContext
+from .prompts import build_system_prompt
+{% if ai_rag %}
+from app.services.rag.service import RAGService
+from .rag_context import RAGContext
 {% endif %}
 
 
@@ -69,9 +76,27 @@ class AIService:
         self.settings = settings
         self.config = get_ai_config(settings)
         self.conversation_manager = ConversationManager()
+{% if ai_rag %}
+        self._rag_service: RAGService | None = None
+
+    @property
+    def rag_service(self) -> RAGService:
+        """Lazy initialization of RAG service."""
+        if self._rag_service is None:
+            self._rag_service = RAGService(self.settings)
+        return self._rag_service
+{% endif %}
 
     async def chat(
-        self, message: str, conversation_id: str | None = None, user_id: str = "default"
+        self,
+        message: str,
+        conversation_id: str | None = None,
+        user_id: str = "default",
+{% if ai_rag %}
+        use_rag: bool = False,
+        rag_collection: str | None = None,
+        rag_top_k: int | None = None,
+{% endif %}
     ) -> ConversationMessage:
         """
         Send a chat message and get AI response.
@@ -80,6 +105,11 @@ class AIService:
             message: The user's message
             conversation_id: Optional conversation ID (creates new if None)
             user_id: User identifier for conversation ownership
+{% if ai_rag %}
+            use_rag: Enable RAG context injection from indexed codebase
+            rag_collection: Collection to search (uses config default if None)
+            rag_top_k: Number of results to retrieve (uses config default if None)
+{% endif %}
 
         Returns:
             ConversationMessage: The AI's response message
@@ -96,9 +126,34 @@ class AIService:
             # Setup conversation and add user message
             conversation = self._setup_conversation(message, conversation_id, user_id)
 
+{% if ai_rag %}
+            # Build RAG context if enabled
+            rag_context: RAGContext | None = None
+            if use_rag:
+                rag_context = await self._build_rag_context(
+                    query=message,
+                    collection=rag_collection,
+                    top_k=rag_top_k,
+                )
+
+{% endif %}
+            # Build health context (always included, refreshed per message)
+            health_context, health_warning = await self._build_health_context()
+
+            # Build usage context for self-awareness
+            usage_context = self._build_usage_context()
+
 {% if ai_framework == "pydantic-ai" %}
             # Prepare agent and conversation context
-            agent, conversation_context = self._prepare_agent_and_context(conversation)
+            agent, conversation_context = self._prepare_agent_and_context(
+                conversation,
+{% if ai_rag %}
+                rag_context=rag_context,
+{% endif %}
+                health_context=health_context,
+                health_warning=health_warning,
+                usage_context=usage_context,
+            )
 
             # Get AI response
             start_time = datetime.now(UTC)
@@ -111,8 +166,14 @@ class AIService:
                 MessageRole.ASSISTANT, result.output, message_id=str(uuid.uuid4())
             )
 {% else %}
-            # Prepare LLM and messages
-            llm, messages = self._prepare_llm_and_messages(conversation)
+            # Prepare LLM and messages with full context
+            llm, messages = self._prepare_llm_and_messages(
+{% if ai_rag %}
+                conversation, rag_context, health_context, health_warning, usage_context
+{% else %}
+                conversation, None, health_context, health_warning, usage_context
+{% endif %}
+            )
 
             # Get AI response
             start_time = datetime.now(UTC)
@@ -129,6 +190,13 @@ class AIService:
             # Store conversation ID in message metadata for easy lookup
             ai_message.metadata["conversation_id"] = conversation.id
 
+{% if ai_rag %}
+            # Add RAG sources to response metadata if RAG was used
+            if rag_context and rag_context.results:
+                ai_message.metadata["rag_sources"] = rag_context.to_metadata()
+                ai_message.metadata["rag_collection"] = rag_context.collection
+
+{% endif %}
 {% if ai_backend != "memory" %}
             # Record usage tracking
             usage = self._extract_usage(result)
@@ -157,6 +225,11 @@ class AIService:
         conversation_id: str | None = None,
         user_id: str = "default",
         stream_delta: bool = False,
+{% if ai_rag %}
+        use_rag: bool = False,
+        rag_collection: str | None = None,
+        rag_top_k: int | None = None,
+{% endif %}
     ) -> AsyncIterator[StreamingMessage]:
         """
         Stream a chat message with real-time response generation.
@@ -166,6 +239,11 @@ class AIService:
             conversation_id: Optional conversation ID (creates new if None)
             user_id: User identifier for conversation ownership
             stream_delta: Whether to stream delta changes or full content
+{% if ai_rag %}
+            use_rag: Enable RAG context injection from indexed codebase
+            rag_collection: Collection to search (uses config default if None)
+            rag_top_k: Number of results to retrieve (uses config default if None)
+{% endif %}
 
         Yields:
             StreamingMessage: Real-time message chunks
@@ -186,12 +264,43 @@ class AIService:
             streaming_conv = StreamingConversation(conversation=conversation)
             streaming_conv.reset_stream()
 
+{% if ai_rag %}
+            # Build RAG context if enabled
+            rag_context: RAGContext | None = None
+            if use_rag:
+                rag_context = await self._build_rag_context(
+                    query=message,
+                    collection=rag_collection,
+                    top_k=rag_top_k,
+                )
+
+{% endif %}
+            # Build health context (always included, refreshed per message)
+            health_context, health_warning = await self._build_health_context()
+
+            # Build usage context for self-awareness
+            usage_context = self._build_usage_context()
+
 {% if ai_framework == "pydantic-ai" %}
             # Prepare agent and conversation context
-            agent, conversation_context = self._prepare_agent_and_context(conversation)
+            agent, conversation_context = self._prepare_agent_and_context(
+                conversation,
+{% if ai_rag %}
+                rag_context=rag_context,
+{% endif %}
+                health_context=health_context,
+                health_warning=health_warning,
+                usage_context=usage_context,
+            )
 {% else %}
-            # Prepare LLM and messages
-            llm, messages = self._prepare_llm_and_messages(conversation)
+            # Prepare LLM and messages with full context
+            llm, messages = self._prepare_llm_and_messages(
+{% if ai_rag %}
+                conversation, rag_context, health_context, health_warning, usage_context
+{% else %}
+                conversation, None, health_context, health_warning, usage_context
+{% endif %}
+            )
 {% endif %}
 
             # Start streaming
@@ -277,6 +386,18 @@ class AIService:
             # Store conversation metadata
             ai_message.metadata["conversation_id"] = conversation.id
 
+{% if ai_rag %}
+            # Add RAG sources to response metadata if RAG was used
+            rag_metadata: dict[str, Any] = {}
+            if rag_context and rag_context.results:
+                ai_message.metadata["rag_sources"] = rag_context.to_metadata()
+                ai_message.metadata["rag_collection"] = rag_context.collection
+                rag_metadata = {
+                    "rag_sources": rag_context.to_metadata(),
+                    "rag_collection": rag_context.collection,
+                }
+
+{% endif %}
 {% if ai_backend != "memory" %}
 {% if ai_framework == "pydantic-ai" %}
             # Record usage tracking (PydanticAI provides streaming usage)
@@ -294,18 +415,22 @@ class AIService:
             )
 
             # Yield final streaming message
+            final_metadata = {
+                "provider": self.config.provider,
+                "model": self.config.model,
+                "response_time_ms": response_time_ms,
+                "stream_complete": True,
+            }
+{% if ai_rag %}
+            final_metadata.update(rag_metadata)
+{% endif %}
             yield StreamingMessage(
                 content=final_content,
                 is_final=True,
                 is_delta=False,
                 message_id=message_id,
                 conversation_id=conversation.id,
-                metadata={
-                    "provider": self.config.provider,
-                    "model": self.config.model,
-                    "response_time_ms": response_time_ms,
-                    "stream_complete": True,
-                },
+                metadata=final_metadata,
             )
 
 {% if ai_framework == "pydantic-ai" %}
@@ -357,30 +482,87 @@ class AIService:
         return conversation
 
 {% if ai_framework == "pydantic-ai" %}
-    def _prepare_agent_and_context(self, conversation: Conversation) -> tuple[Any, str]:
+    def _prepare_agent_and_context(
+        self,
+        conversation: Conversation,
+{% if ai_rag %}
+        rag_context: RAGContext | None = None,
+{% endif %}
+        health_context: HealthContext | None = None,
+        health_warning: str | None = None,
+        usage_context: UsageContext | None = None,
+    ) -> tuple[Any, str]:
         """
         Create agent for request and build conversation context.
 
         Args:
             conversation: The conversation to prepare context from
+{% if ai_rag %}
+            rag_context: Optional RAG context to inject into system prompt
+{% endif %}
+            health_context: Optional health context to inject into system prompt
+            health_warning: Optional warning if server is down
+            usage_context: Optional usage context for self-awareness
 
         Returns:
             tuple[Any, str]: (agent instance, conversation context string)
         """
+        # Build system prompt with project context and optional contexts
+        formatted_rag = None
+{% if ai_rag %}
+        if rag_context and rag_context.results:
+            formatted_rag = rag_context.format_for_prompt(include_metadata=True)
+{% endif %}
+
+        formatted_health = None
+        if health_context:
+            formatted_health = health_context.format_for_prompt()
+            logger.debug(f"Health context for prompt:\n{formatted_health}")
+
+        formatted_usage = None
+        if usage_context:
+            formatted_usage = usage_context.format_for_prompt()
+
+        system_prompt_override = build_system_prompt(
+            self.settings,
+            rag_context=formatted_rag,
+            health_context=formatted_health,
+            usage_context=formatted_usage,
+        )
+
+        # Add server-down warning if applicable
+        if health_warning:
+            system_prompt_override += f"\n\n**NOTICE**: {health_warning}"
+
         # Create agent for this request
-        agent = get_agent(self.config, self.settings)
+        agent = get_agent(self.config, self.settings, system_prompt_override)
 
         # Build conversation context for AI
         conversation_context = self._build_conversation_context(conversation)
 
         return agent, conversation_context
 {% else %}
-    def _prepare_llm_and_messages(self, conversation: Conversation) -> tuple[Any, list]:
+    def _prepare_llm_and_messages(
+        self,
+        conversation: Conversation,
+{% if ai_rag %}
+        rag_context: RAGContext | None = None,
+{% else %}
+        rag_context: Any | None = None,
+{% endif %}
+        health_context: HealthContext | None = None,
+        health_warning: str | None = None,
+        usage_context: UsageContext | None = None,
+    ) -> tuple[Any, list]:
         """
         Create LLM instance and build message list for LangChain.
 
         Args:
             conversation: The conversation to prepare messages from
+            rag_context: Optional RAG context with code search results
+            health_context: Optional health context with system status
+            health_warning: Optional warning if server is down
+            usage_context: Optional usage context with AI stats
 
         Returns:
             tuple[Any, list]: (LLM instance, list of message tuples)
@@ -389,22 +571,54 @@ class AIService:
         llm = get_llm(self.config, self.settings)
 
         # Build messages list for LangChain
-        messages = self._build_langchain_messages(conversation)
+        messages = self._build_langchain_messages(
+            conversation, rag_context, health_context, health_warning, usage_context
+        )
 
         return llm, messages
 
-    def _build_langchain_messages(self, conversation: Conversation) -> list:
+    def _build_langchain_messages(
+        self,
+        conversation: Conversation,
+{% if ai_rag %}
+        rag_context: RAGContext | None = None,
+{% else %}
+        rag_context: Any | None = None,
+{% endif %}
+        health_context: HealthContext | None = None,
+        health_warning: str | None = None,
+        usage_context: UsageContext | None = None,
+    ) -> list:
         """
         Build LangChain message list from conversation history.
 
         Args:
             conversation: The conversation with message history
+            rag_context: Optional RAG context with code search results
+            health_context: Optional health context with system status
+            health_warning: Optional warning if server is down
+            usage_context: Optional usage context with AI stats
 
         Returns:
             list: List of message tuples for LangChain
         """
-        # Start with system prompt
-        messages = [("system", SYSTEM_PROMPT)]
+        # Build dynamic system prompt with Illiana's persona
+        rag_str = rag_context.format_for_prompt() if rag_context else None
+        health_str = health_context.format_for_prompt() if health_context else None
+        usage_str = usage_context.format_for_prompt() if usage_context else None
+
+        system_prompt = build_system_prompt(
+            settings=self.settings,
+            rag_context=rag_str,
+            health_context=health_str,
+            usage_context=usage_str,
+        )
+
+        # Add server-down warning if applicable
+        if health_warning:
+            system_prompt += f"\n\n**NOTICE**: {health_warning}"
+
+        messages = [("system", system_prompt)]
 
         if not conversation.messages:
             return messages
@@ -489,6 +703,181 @@ class AIService:
                 return latest_message.content
 
         return ""
+{% endif %}
+
+{% if ai_rag %}
+    async def _build_rag_context(
+        self,
+        query: str,
+        collection: str | None = None,
+        top_k: int | None = None,
+    ) -> RAGContext:
+        """
+        Build RAG context by searching the vector store.
+
+        Args:
+            query: Search query (usually the user's message)
+            collection: Collection to search (uses config default if None)
+            top_k: Number of results (uses config default if None)
+
+        Returns:
+            RAGContext with search results
+
+        Raises:
+            AIServiceError: If no collection is specified
+        """
+        # Determine collection to use
+        target_collection = collection or self.config.rag_default_collection
+        if not target_collection:
+            raise AIServiceError(
+                "No RAG collection specified. Either pass rag_collection parameter "
+                "or set RAG_CHAT_DEFAULT_COLLECTION in config."
+            )
+
+        # Determine top_k
+        k = top_k or self.config.rag_top_k
+
+        # Search for relevant content
+        results = await self.rag_service.search(
+            query=query,
+            collection_name=target_collection,
+            top_k=k,
+        )
+
+        # Filter by minimum score
+        filtered_results = [
+            r for r in results if r.score >= self.config.rag_min_score
+        ]
+
+        # Deduplicate by source + start_line (same chunk can appear multiple times)
+        seen: set[str] = set()
+        deduped_results = []
+        for r in filtered_results:
+            key = f"{r.metadata.get('source', '')}:{r.metadata.get('start_line', 0)}"
+            if key not in seen:
+                seen.add(key)
+                deduped_results.append(r)
+
+        return RAGContext(
+            query=query,
+            collection=target_collection,
+            results=deduped_results,
+        )
+
+{% endif %}
+    async def _build_health_context(
+        self,
+    ) -> tuple[HealthContext | None, str | None]:
+        """
+        Build health context by fetching current system status.
+
+        Tries HTTP endpoint first (has all registered components from FastAPI),
+        falls back to local get_system_status() if server not running.
+
+        Returns:
+            Tuple of (HealthContext, warning_message):
+            - HealthContext with system status, or None if complete failure
+            - Warning message if server unreachable, otherwise None
+        """
+        # Try HTTP endpoint first - has all registered components
+        try:
+            import httpx
+
+            base_url = getattr(self.settings, "API_BASE_URL", "http://localhost:8000")
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{base_url}/health/detailed")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    status = self._parse_http_health(data)
+                    return HealthContext(status=status), None  # Success, no warning
+        except Exception as e:
+            # Server not running or other error, falling back to local
+            logger.debug(
+                "ai_service.http_health_check_failed",
+                exc_type=type(e).__name__,
+                exc_message=str(e),
+            )
+
+        # HTTP failed - note this for the prompt
+        warning = (
+            "Backend webserver is not running. I can't check full system health. "
+            "Start it with the run command to get complete status."
+        )
+
+        # Fallback to local (limited components without FastAPI startup)
+        try:
+            from app.services.system.health import get_system_status
+
+            status = await get_system_status()
+            return HealthContext(status=status), warning
+        except Exception as e:
+            logger.warning(f"Failed to build health context: {e}")
+            return None, warning
+
+    def _parse_http_health(self, data: dict[str, Any]) -> "SystemStatus":
+        """Parse HTTP health response into SystemStatus model."""
+        from app.services.system.models import ComponentStatus, SystemStatus
+
+        def parse_component(comp: dict[str, Any]) -> ComponentStatus:
+            return ComponentStatus(
+                name=comp["name"],
+                status=comp["status"],
+                message=comp["message"],
+                response_time_ms=comp.get("response_time_ms"),
+                metadata=comp.get("metadata", {}),
+                sub_components={
+                    k: parse_component(v)
+                    for k, v in comp.get("sub_components", {}).items()
+                },
+                healthy=comp.get("healthy", True),
+            )
+
+        return SystemStatus(
+            overall_healthy=data["healthy"],
+            components={
+                k: parse_component(v) for k, v in data["components"].items()
+            },
+            timestamp=datetime.now(),
+        )
+
+    def _build_usage_context(self) -> UsageContext | None:
+        """
+        Build usage context from AI service statistics.
+
+        Gives Illiana self-awareness about her own usage patterns,
+        token consumption, costs, and success rates.
+
+        Returns:
+            UsageContext with current stats, or None if unavailable
+        """
+{% if ai_backend != "memory" %}
+        try:
+            stats = self.get_usage_stats(recent_limit=5)
+
+            # Find top model by request count
+            top_model = None
+            top_pct = 0.0
+            models = stats.get("models", [])
+            if models:
+                top = max(models, key=lambda m: m.get("requests", 0))
+                top_model = top.get("model_title")
+                top_pct = top.get("percentage", 0.0)
+
+            return UsageContext(
+                total_tokens=stats.get("total_tokens", 0),
+                total_requests=stats.get("total_requests", 0),
+                total_cost=stats.get("total_cost", 0.0),
+                success_rate=stats.get("success_rate", 100.0),
+                top_model=top_model,
+                top_model_percentage=top_pct,
+                recent_requests=len(stats.get("recent_activity", [])),
+            )
+        except Exception as e:
+            logger.debug(f"Failed to build usage context: {e}")
+            return None
+{% else %}
+        # Usage tracking requires database backend
+        return None
 {% endif %}
 
     def get_conversation(self, conversation_id: str) -> Conversation | None:

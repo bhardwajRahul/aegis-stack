@@ -14,6 +14,13 @@ from app.core.config import settings
 from app.services.rag.service import RAGService
 from rich.console import Console
 from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+)
 from rich.table import Table
 
 app = typer.Typer(help="RAG service commands for document indexing and search")
@@ -23,6 +30,20 @@ console = Console()
 def get_rag_service() -> RAGService:
     """Get RAG service instance."""
     return RAGService(settings)
+
+
+def format_duration(ms: float) -> str:
+    """Format milliseconds into human-readable duration."""
+    seconds = ms / 1000
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes = int(seconds // 60)
+    remaining_seconds = seconds % 60
+    if minutes < 60:
+        return f"{minutes}m {remaining_seconds:.0f}s"
+    hours = int(minutes // 60)
+    remaining_minutes = minutes % 60
+    return f"{hours}h {remaining_minutes}m"
 
 
 @app.command("index")
@@ -71,20 +92,65 @@ def index_documents(
     console.print()
 
     try:
-        stats = asyncio.run(
-            rag_service.refresh_index(
-                path=Path(path),
-                collection_name=collection,
-                extensions=ext_list,
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TextColumn("[cyan]{task.fields[status]}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task(
+                "Indexing...",
+                total=None,
+                status="Loading documents...",
             )
+
+            def on_progress(batch: int, total: int, chunks: int) -> None:
+                progress.update(
+                    task,
+                    total=total,
+                    completed=batch,
+                    status=f"Batch {batch}/{total} ({chunks} chunks)",
+                )
+
+            stats = asyncio.run(
+                rag_service.refresh_index(
+                    path=Path(path),
+                    collection_name=collection,
+                    extensions=ext_list,
+                    progress_callback=on_progress,
+                )
+            )
+
+        # Calculate total duration and stats
+        total_ms = stats.load_ms + stats.chunk_ms + stats.duration_ms
+        total_str = format_duration(total_ms)
+        chunks_per_sec = (
+            stats.documents_added / (total_ms / 1000) if total_ms > 0 else 0
         )
 
-        # Display results
+        # Calculate phase percentages
+        def pct(phase_ms: float) -> str:
+            if total_ms <= 0:
+                return "0%"
+            return f"{(phase_ms / total_ms) * 100:.0f}%"
+
+        # Format extensions for display
+        ext_display = ", ".join(stats.extensions) if stats.extensions else "none"
+
+        # Display results with phase breakdown
         console.print(
             Panel(
-                f"[green]Successfully indexed {stats.documents_added} chunks[/green]\n"
-                f"Total documents in collection: {stats.total_documents}\n"
-                f"Duration: {stats.duration_ms:.2f}ms",
+                f"[green]Successfully indexed {stats.documents_added:,} chunks "
+                f"from {stats.source_files:,} files[/green]\n\n"
+                f"[bold]Extensions:[/bold] {ext_display}\n"
+                f"[bold]Duration:[/bold] {total_str}\n"
+                f"  [dim]Loading:[/dim]  {format_duration(stats.load_ms)} ({pct(stats.load_ms)})\n"
+                f"  [dim]Chunking:[/dim] {format_duration(stats.chunk_ms)} ({pct(stats.chunk_ms)})\n"
+                f"  [dim]Indexing:[/dim] {format_duration(stats.duration_ms)} ({pct(stats.duration_ms)})\n"
+                f"[bold]Throughput:[/bold] {chunks_per_sec:.1f} chunks/sec\n"
+                f"[bold]Collection size:[/bold] {stats.total_documents:,} chunks",
                 title=f"Collection: {collection}",
                 border_style="green",
             )
@@ -93,6 +159,191 @@ def index_documents(
     except FileNotFoundError as e:
         console.print(f"[bold red]Error:[/bold red] Path not found: {e}")
         raise typer.Exit(code=1)
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+
+@app.command("add")
+def add_file(
+    path: Annotated[
+        str,
+        typer.Argument(help="File path to add/update"),
+    ],
+    collection: Annotated[
+        str,
+        typer.Option("--collection", "-c", help="Collection name"),
+    ] = "default",
+    show_ids: Annotated[
+        bool,
+        typer.Option("--show-ids", help="Show chunk IDs in output"),
+    ] = False,
+) -> None:
+    """
+    Add or update a single file in the collection.
+
+    Uses upsert semantics: re-adding a file updates its chunks.
+
+    Examples:
+        # Add a single file
+        rag add app/services/auth.py --collection my-code
+
+        # Show the chunk IDs
+        rag add app/services/auth.py -c my-code --show-ids
+    """
+    rag_service = get_rag_service()
+
+    console.print(f"\n[bold blue]Adding:[/bold blue] {path}")
+    console.print(f"[bold blue]Collection:[/bold blue] {collection}")
+    console.print()
+
+    try:
+        result = asyncio.run(
+            rag_service.add_file(
+                path=Path(path),
+                collection_name=collection,
+            )
+        )
+
+        # Display result
+        file_name = Path(result.file_path).name
+        output = (
+            f"[green]Added/updated:[/green] {file_name}\n"
+            f"Chunks: {result.chunk_count}\n"
+            f"Hash: {result.file_hash}"
+        )
+
+        if show_ids and result.chunk_ids:
+            output += f"\nIDs: {', '.join(result.chunk_ids)}"
+
+        console.print(
+            Panel(
+                output,
+                title=f"Collection: {collection}",
+                border_style="green",
+            )
+        )
+
+    except FileNotFoundError as e:
+        console.print(f"[bold red]Error:[/bold red] File not found: {e}")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+
+@app.command("remove")
+def remove_file(
+    source_path: Annotated[
+        str,
+        typer.Argument(help="Source path of file to remove (as stored in metadata)"),
+    ],
+    collection: Annotated[
+        str,
+        typer.Option("--collection", "-c", help="Collection name"),
+    ] = "default",
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Skip confirmation prompt"),
+    ] = False,
+) -> None:
+    """
+    Remove a file's chunks from the collection.
+
+    Uses the source path as stored in the collection metadata.
+    Use 'rag files' to see the exact paths stored.
+
+    Examples:
+        # Remove a file
+        rag remove /path/to/app/services/auth.py --collection my-code
+
+        # Skip confirmation
+        rag remove /path/to/file.py -c my-code --force
+    """
+    rag_service = get_rag_service()
+
+    # Confirm deletion
+    if not force:
+        confirm = typer.confirm(
+            f"Remove all chunks for '{source_path}' from '{collection}'?"
+        )
+        if not confirm:
+            console.print("[yellow]Cancelled.[/yellow]")
+            return
+
+    try:
+        result = asyncio.run(
+            rag_service.remove_file(
+                source_path=source_path,
+                collection_name=collection,
+            )
+        )
+
+        if result.chunk_count > 0:
+            console.print(
+                f"[green]Removed {result.chunk_count} chunks[/green] for: {source_path}"
+            )
+        else:
+            console.print(f"[yellow]No chunks found for:[/yellow] {source_path}")
+            console.print(
+                "[dim]Tip: Use 'rag files --collection <name>' to see indexed paths.[/dim]"
+            )
+
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+
+@app.command("files")
+def list_files(
+    collection: Annotated[
+        str,
+        typer.Option("--collection", "-c", help="Collection name"),
+    ] = "default",
+) -> None:
+    """
+    List all indexed files in a collection.
+
+    Shows file paths and chunk counts.
+
+    Examples:
+        rag files --collection my-code
+    """
+    rag_service = get_rag_service()
+
+    try:
+        files = asyncio.run(rag_service.list_files(collection_name=collection))
+
+        if not files:
+            console.print(
+                f"[yellow]No files indexed in collection:[/yellow] {collection}"
+            )
+            console.print(
+                "\n[dim]Tip: Use 'rag index <path> --collection <name>' or "
+                "'rag add <file> --collection <name>' to index content.[/dim]"
+            )
+            return
+
+        # Create table
+        table = Table(
+            title=f"Indexed Files: {collection}",
+            show_header=True,
+        )
+        table.add_column("File", style="cyan")
+        table.add_column("Chunks", justify="right", style="green")
+
+        total_chunks = 0
+        for file in files:
+            table.add_row(file.source, str(file.chunks))
+            total_chunks += file.chunks
+
+        console.print()
+        console.print(table)
+        console.print(
+            f"\n[bold]Total:[/bold] {len(files)} files, {total_chunks} chunks"
+        )
+        console.print()
+
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(code=1)

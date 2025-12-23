@@ -31,7 +31,8 @@ services:
       redis:
         condition: service_healthy
     environment:
-      # Redis connection for health checks and task enqueueing
+      # Docker container marker and Redis connection for health checks
+      - DOCKER_CONTAINER=1
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
 {%- endif %}
     healthcheck:
@@ -64,7 +65,8 @@ services:
       redis:
         condition: service_healthy
     environment:
-      # Redis connection for future scheduler integration
+      # Docker container marker and Redis connection for health checks
+      - DOCKER_CONTAINER=1
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
 {%- endif %}
     restart: unless-stopped

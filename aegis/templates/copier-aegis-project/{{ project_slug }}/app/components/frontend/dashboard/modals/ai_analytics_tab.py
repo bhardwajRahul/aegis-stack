@@ -67,6 +67,7 @@ def _transform_api_response(api_data: dict[str, Any]) -> dict[str, Any]:
             {
                 "time": time_part,
                 "model": r.get("model", "Unknown"),
+                "action": r.get("action", ""),
                 "tokens": r.get("tokens", 0),
                 "cost": r.get("cost", 0.0),
                 "success": r.get("success", True),
@@ -257,6 +258,7 @@ class RecentActivitySection(ft.Container):
                 [
                     ft.Container(LabelText("Time"), width=80),
                     ft.Container(LabelText("Model"), width=120),
+                    ft.Container(LabelText("Action"), width=100),
                     ft.Container(LabelText("Tokens"), width=80),
                     ft.Container(LabelText("Cost"), width=100),
                     ft.Container(LabelText("Status"), width=60),
@@ -280,6 +282,10 @@ class RecentActivitySection(ft.Container):
                         ft.Container(
                             SecondaryText(activity.get("model", "")),
                             width=120,
+                        ),
+                        ft.Container(
+                            SecondaryText(activity.get("action", "")),
+                            width=100,
                         ),
                         ft.Container(
                             SecondaryText(format_number(activity.get("tokens", 0))),

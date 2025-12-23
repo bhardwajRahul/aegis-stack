@@ -22,20 +22,24 @@ class RAGServiceConfig(BaseModel):
         default="./data/chromadb",
         description="Directory for ChromaDB persistence",
     )
+    embedding_provider: str = Field(
+        default="sentence-transformers",
+        description="Embedding provider: 'sentence-transformers' or 'openai'",
+    )
     embedding_model: str = Field(
-        default="all-MiniLM-L6-v2",
-        description="Embedding model (ChromaDB built-in)",
+        default="BAAI/bge-small-en-v1.5",
+        description="Embedding model name for the selected provider",
     )
     chunk_size: int = Field(
-        default=1000,
+        default=2000,
         gt=0,
         le=10000,
         description="Maximum chunk size in characters",
     )
     chunk_overlap: int = Field(
-        default=200,
+        default=400,
         ge=0,
-        le=500,
+        le=1000,
         description="Overlap between chunks in characters",
     )
     default_top_k: int = Field(
@@ -45,7 +49,7 @@ class RAGServiceConfig(BaseModel):
         description="Default number of search results",
     )
     default_extensions: list[str] = Field(
-        default=[".py", ".js", ".ts", ".md", ".txt", ".json", ".yaml", ".yml"],
+        default=[".py", ".js", ".ts", ".tsx", ".md", ".yaml", ".yml", ".json", ".toml"],
         description="Default file extensions to include",
     )
 
@@ -57,11 +61,14 @@ class RAGServiceConfig(BaseModel):
             persist_directory=getattr(
                 settings, "RAG_PERSIST_DIRECTORY", "./data/chromadb"
             ),
-            embedding_model=getattr(
-                settings, "RAG_EMBEDDING_MODEL", "all-MiniLM-L6-v2"
+            embedding_provider=getattr(
+                settings, "RAG_EMBEDDING_PROVIDER", "sentence-transformers"
             ),
-            chunk_size=getattr(settings, "RAG_CHUNK_SIZE", 1000),
-            chunk_overlap=getattr(settings, "RAG_CHUNK_OVERLAP", 200),
+            embedding_model=getattr(
+                settings, "RAG_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5"
+            ),
+            chunk_size=getattr(settings, "RAG_CHUNK_SIZE", 2000),
+            chunk_overlap=getattr(settings, "RAG_CHUNK_OVERLAP", 400),
             default_top_k=getattr(settings, "RAG_DEFAULT_TOP_K", 5),
         )
 

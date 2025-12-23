@@ -193,6 +193,20 @@ def chat(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show conversation metadata"
     ),
+{% if cookiecutter.ai_rag == "yes" %}
+    use_rag: bool = typer.Option(
+        False, "--rag/--no-rag", help="Enable RAG context from indexed codebase"
+    ),
+    collection: str | None = typer.Option(
+        None, "--collection", help="RAG collection to search"
+    ),
+    top_k: int | None = typer.Option(
+        None, "--top-k", "-k", help="Number of RAG results to use"
+    ),
+    show_sources: bool = typer.Option(
+        False, "--sources/--no-sources", help="Show source references in output"
+    ),
+{% endif %}
 ) -> None:
     """Send a chat message or start interactive session.
 
@@ -200,6 +214,10 @@ def chat(
         ai chat "What is Python?"     - Send a single message
         ai chat                       - Start interactive session
         ai chat -c abc123 "Continue"  - Continue a conversation
+{% if cookiecutter.ai_rag == "yes" %}
+        ai chat --rag "How does auth work?" - Query with RAG context
+        ai chat --rag -k 10 --collection my-codebase "Explain the API"
+{% endif %}
     """
     import asyncio
 
@@ -213,15 +231,52 @@ def chat(
                 if message:
                     # Single message mode
                     await _send_message(
-                        ai_service, message, conversation_id, user_id, stream, verbose
+                        ai_service,
+                        message,
+                        conversation_id,
+                        user_id,
+                        stream,
+                        verbose,
+{% if cookiecutter.ai_rag == "yes" %}
+                        use_rag=use_rag,
+                        rag_collection=collection,
+                        rag_top_k=top_k,
+                        show_sources=show_sources,
+{% endif %}
                     )
                 else:
                     # Interactive session mode
-                    await _interactive_chat_session(ai_service, conversation_id)
+                    await _interactive_chat_session(
+                        ai_service,
+                        conversation_id,
+{% if cookiecutter.ai_rag == "yes" %}
+                        use_rag=use_rag,
+                        rag_collection=collection,
+                        show_sources=show_sources,
+{% endif %}
+                    )
         except KeyboardInterrupt:
             typer.echo("\nChat interrupted", err=True)
             raise typer.Exit(1)
         except Exception as e:
+            error_str = str(e)
+{% if cookiecutter.ai_rag == "yes" %}
+            # Provide helpful guidance for RAG collection errors
+            if "No RAG collection specified" in error_str:
+                console.print()
+                console.print("[yellow]RAG requires indexed content.[/yellow]")
+                console.print()
+                console.print("To get started:")
+                console.print()
+                console.print("  1. Index your codebase:")
+                console.print("     [cyan]{{ cookiecutter.project_slug }} rag index . --collection my-code[/cyan]")
+                console.print()
+                console.print("  2. Query with the collection:")
+                console.print('     [cyan]{{ cookiecutter.project_slug }} ai chat --rag --collection my-code "Your question"[/cyan]')
+                console.print()
+                console.print("  [dim]Tip: Run '{{ cookiecutter.project_slug }} rag list' to see existing collections.[/dim]")
+                raise typer.Exit(1)
+{% endif %}
             typer.echo(f"Error: {e}", err=True)
             raise typer.Exit(1)
 
@@ -560,6 +615,12 @@ async def _send_message(
     user_id: str,
     stream: bool,
     verbose: bool,
+{% if cookiecutter.ai_rag == "yes" %}
+    use_rag: bool = False,
+    rag_collection: str | None = None,
+    rag_top_k: int | None = None,
+    show_sources: bool = True,
+{% endif %}
 ) -> None:
     """Send a single message and display the response."""
     # Disable streaming for PUBLIC provider (fake streaming causes duplicates)
@@ -569,7 +630,17 @@ async def _send_message(
 
     if use_streaming:
         await _stream_chat_response(
-            ai_service, message, conversation_id, user_id, verbose=verbose
+            ai_service,
+            message,
+            conversation_id,
+            user_id,
+            verbose=verbose,
+{% if cookiecutter.ai_rag == "yes" %}
+            use_rag=use_rag,
+            rag_collection=rag_collection,
+            rag_top_k=rag_top_k,
+            show_sources=show_sources,
+{% endif %}
         )
     else:
         # Show thinking spinner for non-streaming responses
@@ -587,6 +658,11 @@ async def _send_message(
                 message=message,
                 conversation_id=conversation_id,
                 user_id=user_id,
+{% if cookiecutter.ai_rag == "yes" %}
+                use_rag=use_rag,
+                rag_collection=rag_collection,
+                rag_top_k=rag_top_k,
+{% endif %}
             )
         finally:
             spinner_live.stop()
@@ -608,9 +684,26 @@ async def _send_message(
             console.print()
 
         # Render response
+        console.print()  # Blank line between You: and Illiana:
         render_ai_header(console, inline=True)
         render_markdown_response(console, response.content)
 
+{% if cookiecutter.ai_rag == "yes" %}
+        # Display source references if RAG was used
+        if show_sources and response.metadata.get("rag_sources"):
+            console.print()
+            console.print("---", style="dim")
+            console.print("[bold]Sources:[/bold]", style="cyan")
+            for i, source in enumerate(response.metadata["rag_sources"], 1):
+                file_name = source.get("file", "Unknown")
+                chunk_idx = source.get("chunk_index", 0)
+                score = source.get("score", 0.0)
+                console.print(
+                    f"  [{i}] {file_name} (chunk {chunk_idx}) - score: {score:.2f}",
+                    style="dim",
+                )
+
+{% endif %}
         # Show response metadata (only in verbose mode)
         if verbose and conversation:
             response_time = conversation.metadata.get("last_response_time_ms")
@@ -625,17 +718,60 @@ async def _send_message(
 async def _interactive_chat_session(
     ai_service,
     conversation_id: str | None = None,
+{% if cookiecutter.ai_rag == "yes" %}
+    use_rag: bool = False,
+    rag_collection: str | None = None,
+    show_sources: bool = False,
+{% endif %}
 ) -> None:
     """Start an interactive chat session with continuous conversation."""
-    # Show welcome banner
-    ai_config = get_ai_config(settings)
-    welcome_text = (
-        f"[bold cyan]AI Chat Session[/bold cyan]\n"
-        f"[dim]Provider: {ai_config.provider} | Model: {ai_config.model}[/dim]\n"
-        f"[dim]Type 'exit', 'quit', 'bye' or press Ctrl+C to end session[/dim]"
-    )
+    import asyncio
 
-    console.print(Panel(welcome_text, border_style="blue", expand=False))
+    from app import __version__
+
+    # Illiana boot sequence
+    ai_config = get_ai_config(settings)
+
+    console.print()
+    console.print(f"[bold bright_magenta]Illiana[/bold bright_magenta] [dim]v{__version__}[/dim]")
+    console.print()
+
+    # Boot steps with brief delays for effect
+    console.print("  [dim]>[/dim] Initializing...", end="")
+    await asyncio.sleep(0.15)
+    console.print(" [green]OK[/green]")
+
+    console.print(f"  [dim]>[/dim] Connecting to [cyan]{ai_config.provider.value}[/cyan]...", end="")
+    await asyncio.sleep(0.2)
+    console.print(" [green]OK[/green]")
+
+    console.print(f"  [dim]>[/dim] Model: [cyan]{ai_config.model}[/cyan]")
+
+{% if cookiecutter.ai_rag == "yes" %}
+    rag_status = "[green]ON[/green]" if use_rag else "[dim]OFF[/dim]"
+    console.print(f"  [dim]>[/dim] RAG: {rag_status}")
+{% endif %}
+
+    # Fetch and display health status
+    console.print("  [dim]>[/dim] Health: ", end="")
+    try:
+        from app.services.system.health import get_system_status
+
+        status = await get_system_status()
+        health_pct = status.health_percentage
+        if status.overall_healthy:
+            console.print(f"[green]OK[/green] [dim]({health_pct:.0f}%)[/dim]")
+        else:
+            unhealthy_count = len(status.unhealthy_components)
+            console.print(f"[yellow]DEGRADED[/yellow] [dim]({health_pct:.0f}%, {unhealthy_count} issues)[/dim]")
+    except Exception:
+        console.print("[dim]N/A[/dim]")
+
+    await asyncio.sleep(0.1)
+    console.print()
+    console.print("  [bold green]Online[/bold green]")
+    console.print()
+    console.print("[dim]Type 'exit' to end session[/dim]")
     console.print()
 
     # Track conversation for context
@@ -661,6 +797,8 @@ async def _interactive_chat_session(
                 console.print("[dim]Please enter a message or 'exit' to quit.[/dim]")
                 continue
 
+            console.print()  # Blank line between You: and Illiana:
+
             # Disable streaming for PUBLIC provider
             use_streaming = True
             if ai_service.config.provider == AIProvider.PUBLIC:
@@ -673,6 +811,11 @@ async def _interactive_chat_session(
                         user_message,
                         current_conversation_id,
                         "cli-user",
+{% if cookiecutter.ai_rag == "yes" %}
+                        use_rag=use_rag,
+                        rag_collection=rag_collection,
+                        show_sources=show_sources,
+{% endif %}
                     )
                     if returned_conversation_id:
                         current_conversation_id = returned_conversation_id
@@ -697,6 +840,10 @@ async def _interactive_chat_session(
                             message=user_message,
                             conversation_id=current_conversation_id,
                             user_id="cli-user",
+{% if cookiecutter.ai_rag == "yes" %}
+                            use_rag=use_rag,
+                            rag_collection=rag_collection,
+{% endif %}
                         )
                     finally:
                         spinner_live.stop()
@@ -710,6 +857,22 @@ async def _interactive_chat_session(
                     render_ai_header(console, inline=True)
                     render_markdown_response(console, response.content)
 
+{% if cookiecutter.ai_rag == "yes" %}
+                    # Display source references if RAG was used
+                    if show_sources and response.metadata.get("rag_sources"):
+                        console.print()
+                        console.print("---", style="dim")
+                        console.print("[bold]Sources:[/bold]", style="cyan")
+                        for i, source in enumerate(response.metadata["rag_sources"], 1):
+                            file_name = source.get("file", "Unknown")
+                            chunk_idx = source.get("chunk_index", 0)
+                            score = source.get("score", 0.0)
+                            console.print(
+                                f"  [{i}] {file_name} (chunk {chunk_idx}) - score: {score:.2f}",
+                                style="dim",
+                            )
+
+{% endif %}
                     # Update conversation reference
                     current_conversation_id = response.metadata.get(
                         "conversation_id", current_conversation_id
@@ -735,6 +898,12 @@ async def _stream_chat_response(
     conversation_id: str | None,
     user_id: str,
     verbose: bool = False,
+{% if cookiecutter.ai_rag == "yes" %}
+    use_rag: bool = False,
+    rag_collection: str | None = None,
+    rag_top_k: int | None = None,
+    show_sources: bool = True,
+{% endif %}
 ) -> str | None:
     """
     Stream chat response with real-time markdown rendering.
@@ -752,6 +921,9 @@ async def _stream_chat_response(
     renderer = StreamingMarkdownRenderer(console)
     conversation_info = None
     response_time = None
+{% if cookiecutter.ai_rag == "yes" %}
+    rag_sources = None
+{% endif %}
 
     # Set up signal handler for graceful interruption
     interrupted = False
@@ -782,6 +954,11 @@ async def _stream_chat_response(
                     conversation_id=conversation_id,
                     user_id=user_id,
                     stream_delta=True,
+{% if cookiecutter.ai_rag == "yes" %}
+                    use_rag=use_rag,
+                    rag_collection=rag_collection,
+                    rag_top_k=rag_top_k,
+{% endif %}
                 ):
                     if interrupted:
                         spinner_live.stop()
@@ -805,13 +982,16 @@ async def _stream_chat_response(
                     if chunk.is_delta and chunk.content:
                         if not header_shown:
                             spinner_live.stop()
-                            console.print(": ", style="bright_blue", end="")
+                            console.print("Illiana: ", style="bright_magenta", end="")
                             header_shown = True
                         renderer.add_delta(chunk.content)
 
                     if chunk.is_final:
                         conversation_info = chunk.conversation_id
                         response_time = chunk.metadata.get("response_time_ms")
+{% if cookiecutter.ai_rag == "yes" %}
+                        rag_sources = chunk.metadata.get("rag_sources")
+{% endif %}
                         break
         except TimeoutError:
             spinner_live.stop()
@@ -825,6 +1005,22 @@ async def _stream_chat_response(
             renderer.finalize()
             console.print("\n")
 
+{% if cookiecutter.ai_rag == "yes" %}
+            # Display source references if RAG was used
+            if show_sources and rag_sources:
+                console.print("---", style="dim")
+                console.print("[bold]Sources:[/bold]", style="cyan")
+                for i, source in enumerate(rag_sources, 1):
+                    file_name = source.get("file", "Unknown")
+                    chunk_idx = source.get("chunk_index", 0)
+                    score = source.get("score", 0.0)
+                    console.print(
+                        f"  [{i}] {file_name} (chunk {chunk_idx}) - score: {score:.2f}",
+                        style="dim",
+                    )
+                console.print()
+
+{% endif %}
             if verbose and conversation_info:
                 conversation = ai_service.get_conversation(conversation_info)
                 if conversation:

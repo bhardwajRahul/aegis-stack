@@ -1,8 +1,9 @@
 """
 ChromaDB vector store integration for RAG service.
 
-Uses ChromaDB's built-in embeddings (all-MiniLM-L6-v2) for
-zero-configuration semantic search.
+Supports configurable embedding providers:
+- sentence-transformers (default): Local embeddings via SentenceTransformers
+- openai: OpenAI API embeddings
 """
 
 import asyncio
@@ -36,18 +37,25 @@ class VectorStoreManager:
     def __init__(
         self,
         persist_directory: str = "./data/chromadb",
-        embedding_model: str = "all-MiniLM-L6-v2",
+        embedding_provider: str = "sentence-transformers",
+        embedding_model: str = "BAAI/bge-small-en-v1.5",
+        openai_api_key: str | None = None,
     ):
         """
         Initialize vector store manager.
 
         Args:
             persist_directory: Directory for ChromaDB persistence
-            embedding_model: Embedding model name (ChromaDB built-in)
+            embedding_provider: Provider to use ('sentence-transformers' or 'openai')
+            embedding_model: Model name for the selected provider
+            openai_api_key: API key for OpenAI embeddings (required if provider is 'openai')
         """
         self.persist_directory = Path(persist_directory)
+        self.embedding_provider = embedding_provider
         self.embedding_model = embedding_model
+        self.openai_api_key = openai_api_key
         self._client: chromadb.ClientAPI | None = None
+        self._embedding_function: Any = None
 
     @property
     def client(self) -> chromadb.ClientAPI:
@@ -68,6 +76,45 @@ class VectorStoreManager:
             )
 
         return self._client
+
+    @property
+    def embedding_function(self) -> Any:
+        """Get embedding function based on configured provider (lazy initialization)."""
+        if self._embedding_function is None:
+            self._embedding_function = self._create_embedding_function()
+        return self._embedding_function
+
+    def _create_embedding_function(self) -> Any:
+        """Create embedding function based on configured provider."""
+        if self.embedding_provider == "openai":
+            if not self.openai_api_key:
+                raise VectorStoreError(
+                    "OpenAI API key required when using openai embedding provider. "
+                    "Set OPENAI_API_KEY in your environment."
+                )
+            from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+
+            logger.debug(
+                "vectorstore.embedding.openai",
+                model=self.embedding_model,
+            )
+            return OpenAIEmbeddingFunction(
+                api_key=self.openai_api_key,
+                model_name=self.embedding_model,
+            )
+        else:
+            # Default: sentence-transformers
+            from chromadb.utils.embedding_functions import (
+                SentenceTransformerEmbeddingFunction,
+            )
+
+            logger.debug(
+                "vectorstore.embedding.sentence_transformers",
+                model=self.embedding_model,
+            )
+            return SentenceTransformerEmbeddingFunction(
+                model_name=self.embedding_model,
+            )
 
     async def add_documents(
         self,
@@ -91,11 +138,12 @@ class VectorStoreManager:
         """
         start_time = asyncio.get_event_loop().time()
 
-        # Get or create collection
+        # Get or create collection with configured embedding function
         collection = await asyncio.to_thread(
             self.client.get_or_create_collection,
             name=collection_name,
             metadata={"hnsw:space": "cosine"},
+            embedding_function=self.embedding_function,
         )
 
         # Prepare documents for ChromaDB
@@ -159,6 +207,7 @@ class VectorStoreManager:
         collection_name: str,
         top_k: int = 5,
         filter_metadata: dict[str, Any] | None = None,
+        dedupe: bool = True,
     ) -> list[SearchResult]:
         """
         Search for relevant documents.
@@ -168,6 +217,7 @@ class VectorStoreManager:
             collection_name: Collection to search
             top_k: Number of results
             filter_metadata: Optional metadata filter
+            dedupe: Remove near-duplicate results (default: True)
 
         Returns:
             list[SearchResult]: Ranked results with scores
@@ -176,6 +226,7 @@ class VectorStoreManager:
             collection = await asyncio.to_thread(
                 self.client.get_collection,
                 name=collection_name,
+                embedding_function=self.embedding_function,
             )
         except (ValueError, NotFoundError):
             logger.warning(
@@ -189,11 +240,14 @@ class VectorStoreManager:
         if filter_metadata:
             where = self._build_where_clause(filter_metadata)
 
+        # Query for more results if deduping (to ensure enough unique results)
+        query_k = top_k * 3 if dedupe else top_k
+
         # Query collection
         results = await asyncio.to_thread(
             collection.query,
             query_texts=[query],
-            n_results=top_k,
+            n_results=query_k,
             where=where,
             include=["documents", "metadatas", "distances"],
         )
@@ -217,6 +271,10 @@ class VectorStoreManager:
                 )
                 search_results.append(result)
 
+        # Deduplicate by content fingerprint
+        if dedupe and search_results:
+            search_results = self._deduplicate_results(search_results, top_k)
+
         logger.debug(
             "vectorstore.search",
             collection=collection_name,
@@ -225,6 +283,43 @@ class VectorStoreManager:
         )
 
         return search_results
+
+    def _deduplicate_results(
+        self, results: list[SearchResult], top_k: int
+    ) -> list[SearchResult]:
+        """
+        Remove near-duplicate results, keeping highest scored.
+
+        Uses source file + start line as fingerprint. Chunks from the same
+        location are considered duplicates regardless of slight content differences.
+
+        Args:
+            results: Search results to deduplicate
+            top_k: Maximum results to return
+
+        Returns:
+            Deduplicated results sorted by score
+        """
+        seen_content: dict[str, SearchResult] = {}
+
+        for result in results:
+            # Use source file + start line as fingerprint
+            source = result.metadata.get("source", "")
+            start_line = result.metadata.get("start_line", 0)
+            fingerprint = f"{source}:{start_line}"
+
+            if fingerprint not in seen_content:
+                seen_content[fingerprint] = result
+            elif result.score > seen_content[fingerprint].score:
+                # Keep higher scored version
+                seen_content[fingerprint] = result
+
+        # Sort by score descending, re-rank, and limit to top_k
+        deduped = sorted(seen_content.values(), key=lambda r: r.score, reverse=True)
+        for i, result in enumerate(deduped):
+            result.rank = i + 1
+
+        return deduped[:top_k]
 
     async def delete_collection(self, collection_name: str) -> bool:
         """Delete a collection."""
@@ -252,6 +347,7 @@ class VectorStoreManager:
             collection = await asyncio.to_thread(
                 self.client.get_collection,
                 name=collection_name,
+                embedding_function=self.embedding_function,
             )
             count = await asyncio.to_thread(collection.count)
             return CollectionInfo(

@@ -82,6 +82,12 @@ def setup_logging() -> None:
     logging.getLogger("flet_fastapi").setLevel(logging.INFO)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
+    # Suppress RAG service logs (CLI uses progress bar instead)
+    logging.getLogger("app.services.rag").setLevel(logging.WARNING)
+
+    # Suppress ChromaDB telemetry errors (posthog.py line 61)
+    logging.getLogger("chromadb.telemetry").setLevel(logging.CRITICAL)
+
     log_format = "DEV" if settings.APP_ENV == "dev" else "JSON"
     logger.debug(
         "Logging setup complete",
