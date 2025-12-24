@@ -11,6 +11,7 @@ from typing import Annotated
 
 import typer
 from app.core.config import settings
+from app.core.log import suppress_logs
 from app.services.rag.service import RAGService
 from rich.console import Console
 from rich.panel import Panel
@@ -92,14 +93,17 @@ def index_documents(
     console.print()
 
     try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            TextColumn("[cyan]{task.fields[status]}"),
-            console=console,
-        ) as progress:
+        with (
+            suppress_logs(),
+            Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                TextColumn("[cyan]{task.fields[status]}"),
+                console=console,
+            ) as progress,
+        ):
             task = progress.add_task(
                 "Indexing...",
                 total=None,

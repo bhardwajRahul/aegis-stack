@@ -5,11 +5,54 @@ This module provides data structures for managing system health context injectio
 into AI chat conversations, giving Illiana awareness of system state.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from app.services.system.models import SystemStatus
 from pydantic import BaseModel, Field
+
+
+def _format_relative_time(iso_time_str: str) -> str:
+    """
+    Format ISO datetime string to human readable relative time.
+
+    Args:
+        iso_time_str: ISO 8601 formatted datetime string
+
+    Returns:
+        Human-readable relative time ("in 5m", "in 2h", etc.)
+    """
+    if not iso_time_str:
+        return ""
+
+    try:
+        if iso_time_str.endswith("Z"):
+            next_run = datetime.fromisoformat(iso_time_str.replace("Z", "+00:00"))
+        elif "+" in iso_time_str:
+            next_run = datetime.fromisoformat(iso_time_str)
+        else:
+            next_run = datetime.fromisoformat(iso_time_str).replace(tzinfo=UTC)
+
+        now = datetime.now(UTC)
+        if next_run.tzinfo is None:
+            next_run = next_run.replace(tzinfo=UTC)
+
+        delta = next_run - now
+        total_seconds = delta.total_seconds()
+
+        if total_seconds < 0:
+            return "past due"
+        elif total_seconds < 60:
+            return f"in {int(total_seconds)}s"
+        elif total_seconds < 3600:
+            return f"in {int(total_seconds / 60)}m"
+        elif total_seconds < 86400:
+            hours = total_seconds / 3600
+            return f"in {int(hours)}h" if hours >= 2 else f"in {hours:.1f}h"
+        else:
+            return f"in {int(total_seconds / 86400)}d"
+    except Exception:
+        return ""
 
 
 class HealthContext(BaseModel):
@@ -144,7 +187,12 @@ class HealthContext(BaseModel):
                 for task in upcoming[:3]:
                     name = task.get("name", task.get("job_id", "Unknown"))
                     schedule = task.get("schedule", "")
-                    task_strs.append(f"{name} ({schedule})")
+                    next_run = task.get("next_run", "")
+                    relative_time = _format_relative_time(next_run)
+                    if relative_time:
+                        task_strs.append(f"{name} ({schedule}, {relative_time})")
+                    else:
+                        task_strs.append(f"{name} ({schedule})")
                 lines.append(f"  Next: {', '.join(task_strs)}")
 
         # AI service status

@@ -73,6 +73,14 @@ except ImportError:
     # RAG not available, skip rag commands
     pass
 
+# Conditionally register llm command if ai service is available
+try:
+    llm_module = importlib.import_module("app.cli.llm")
+    app.add_typer(llm_module.app, name="llm")
+except ImportError:
+    # LLM ETL service not available, skip llm commands
+    pass
+
 
 def main() -> None:
     """Entry point for the CLI application."""

@@ -230,12 +230,12 @@ AI_MIGRATION = ServiceMigrationSpec(
                 ForeignKeySpec(["llm_id"], "large_language_model", ["id"]),
             ],
         ),
-        # LLM Usage - depends on large_language_model
+        # LLM Usage - uses model_id string (decoupled from catalog lifecycle)
         TableSpec(
             name="llm_usage",
             columns=[
                 ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
-                ColumnSpec("llm_id", "sa.Integer()", nullable=False),
+                ColumnSpec("model_id", "sa.String()", nullable=False),
                 ColumnSpec("user_id", "sa.String()", nullable=True),
                 ColumnSpec("timestamp", "sa.DateTime()", nullable=False),
                 ColumnSpec("input_tokens", "sa.Integer()", nullable=False),
@@ -246,12 +246,12 @@ AI_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec("action", "sa.String()", nullable=False),
             ],
             indexes=[
-                IndexSpec("ix_llm_usage_llm_id", ["llm_id"]),
+                IndexSpec("ix_llm_usage_model_id", ["model_id"]),
                 IndexSpec("ix_llm_usage_user_id", ["user_id"]),
                 IndexSpec("ix_llm_usage_timestamp", ["timestamp"]),
                 IndexSpec("ix_llm_usage_action", ["action"]),
             ],
-            foreign_keys=[ForeignKeySpec(["llm_id"], "large_language_model", ["id"])],
+            foreign_keys=[],
         ),
         # Conversation - no LLM dependencies
         TableSpec(

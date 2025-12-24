@@ -1,0 +1,553 @@
+"""Tests for LLM sync service."""
+{% if cookiecutter.ai_backend != "memory" %}
+
+from collections.abc import Generator
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from sqlalchemy import Engine
+from sqlmodel import Session, SQLModel, create_engine, select
+
+from app.services.ai.etl.clients.litellm_client import LiteLLMModel
+from app.services.ai.etl.clients.openrouter_client import OpenRouterModel
+from app.services.ai.etl.llm_sync_service import LLMSyncService, SyncResult
+from app.services.ai.models.llm import (
+    Direction,
+    LargeLanguageModel,
+    LLMDeployment,
+    LLMModality,
+    LLMPrice,
+    LLMVendor,
+    Modality,
+)
+
+
+@pytest.fixture
+def sync_db_engine() -> Generator[Engine, None, None]:
+    """Create an in-memory SQLite database engine for sync tests."""
+    engine = create_engine("sqlite:///:memory:", echo=False)
+    SQLModel.metadata.create_all(engine)
+    yield engine
+    SQLModel.metadata.drop_all(engine)
+    engine.dispose()
+
+
+@pytest.fixture
+def sync_db_session(sync_db_engine: Engine) -> Generator[Session, None, None]:
+    """Create a database session for sync tests."""
+    with Session(sync_db_engine) as session:
+        yield session
+        session.rollback()
+
+
+@pytest.fixture
+def mock_litellm_model() -> LiteLLMModel:
+    """Create a mock LiteLLM model for sync tests."""
+    return LiteLLMModel(
+        model_id="openai/gpt-4o",
+        provider="openai",
+        mode="chat",
+        max_tokens=128000,
+        max_input_tokens=128000,
+        max_output_tokens=16384,
+        input_cost_per_token=0.000005,
+        output_cost_per_token=0.000015,
+        supports_function_calling=True,
+        supports_parallel_function_calling=True,
+        supports_vision=True,
+        supports_audio_input=False,
+        supports_audio_output=False,
+        supports_reasoning=False,
+        supports_response_schema=True,
+        supports_system_messages=True,
+        supports_prompt_caching=True,
+        deprecation_date=None,
+    )
+
+
+@pytest.fixture
+def mock_openrouter_model() -> OpenRouterModel:
+    """Create a mock OpenRouter model for sync tests."""
+    return OpenRouterModel(
+        model_id="openai/gpt-4o",
+        name="GPT-4o",
+        description="OpenAI's most advanced model",
+        context_length=128000,
+        max_completion_tokens=16384,
+        input_modalities=["text", "image"],
+        output_modalities=["text"],
+        tokenizer="o200k_base",
+        input_cost_per_token=0.000005,
+        output_cost_per_token=0.000015,
+        cache_read_cost_per_token=0.0000025,
+        cache_write_cost_per_token=None,
+        is_moderated=True,
+    )
+
+
+class TestSyncResult:
+    """Tests for SyncResult dataclass."""
+
+    def test_total_synced_calculation(self) -> None:
+        """Test total_synced property calculation."""
+        result = SyncResult(
+            vendors_added=2,
+            vendors_updated=1,
+            models_added=5,
+            models_updated=3,
+        )
+
+        assert result.total_synced == 11
+
+    def test_default_values(self) -> None:
+        """Test default values are zeros."""
+        result = SyncResult()
+
+        assert result.vendors_added == 0
+        assert result.vendors_updated == 0
+        assert result.models_added == 0
+        assert result.models_updated == 0
+        assert result.deployments_synced == 0
+        assert result.prices_synced == 0
+        assert result.modalities_synced == 0
+        assert result.errors == []
+
+
+class TestLLMSyncServiceVendor:
+    """Tests for vendor sync operations."""
+
+    def test_upsert_vendor_creates_new(
+        self, sync_db_session: Session
+    ) -> None:
+        """Test creating a new vendor."""
+        service = LLMSyncService(sync_db_session)
+        result = SyncResult()
+
+        vendor = service._upsert_vendor("openai", result, dry_run=False)
+
+        assert vendor is not None
+        assert vendor.name == "openai"
+        assert vendor.description is not None
+        assert vendor.color == "#10A37F"  # OpenAI green
+        assert result.vendors_added == 1
+
+    def test_upsert_vendor_uses_cache(
+        self, sync_db_session: Session
+    ) -> None:
+        """Test that vendor lookup uses cache."""
+        service = LLMSyncService(sync_db_session)
+        result = SyncResult()
+
+        vendor1 = service._upsert_vendor("openai", result, dry_run=False)
+        vendor2 = service._upsert_vendor("openai", result, dry_run=False)
+
+        # Should return same instance from cache
+        assert vendor1 is vendor2
+        # Should only count as one addition
+        assert result.vendors_added == 1
+
+    def test_upsert_vendor_unknown(
+        self, sync_db_session: Session
+    ) -> None:
+        """Test creating vendor without predefined metadata."""
+        service = LLMSyncService(sync_db_session)
+        result = SyncResult()
+
+        vendor = service._upsert_vendor("newvendor", result, dry_run=False)
+
+        assert vendor is not None
+        assert vendor.name == "newvendor"
+        assert vendor.description == "Newvendor models"  # Generated
+        assert vendor.color == "#6B7280"  # Default gray
+
+    def test_upsert_vendor_dry_run(
+        self, sync_db_session: Session
+    ) -> None:
+        """Test that dry_run doesn't persist to database."""
+        service = LLMSyncService(sync_db_session)
+        result = SyncResult()
+
+        vendor = service._upsert_vendor("openai", result, dry_run=True)
+
+        assert vendor is not None
+        # Should still count
+        assert result.vendors_added == 1
+        # But not in database
+        sync_db_session.rollback()
+        db_vendor = sync_db_session.exec(
+            select(LLMVendor).where(LLMVendor.name == "openai")
+        ).first()
+        assert db_vendor is None
+
+
+class TestLLMSyncServiceModel:
+    """Tests for model sync operations."""
+
+    def test_sync_creates_model(
+        self,
+        sync_db_session: Session,
+        mock_litellm_model: LiteLLMModel,
+    ) -> None:
+        """Test that sync creates model in database."""
+        service = LLMSyncService(sync_db_session)
+
+        # Mock the API clients
+        with patch.object(
+            service.litellm_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_litellm, patch.object(
+            service.openrouter_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_openrouter:
+            mock_litellm.return_value = {"openai/gpt-4o": mock_litellm_model}
+            mock_openrouter.return_value = []
+
+            import asyncio
+            result = asyncio.get_event_loop().run_until_complete(
+                service.sync(mode_filter="chat", dry_run=False)
+            )
+
+        assert result.models_added == 1
+        assert result.vendors_added == 1
+
+        # Verify model in database
+        model = sync_db_session.exec(
+            select(LargeLanguageModel).where(
+                LargeLanguageModel.model_id == "openai/gpt-4o"
+            )
+        ).first()
+        assert model is not None
+        assert model.context_window == 128000
+
+    def test_sync_updates_existing_model(
+        self,
+        sync_db_session: Session,
+        mock_litellm_model: LiteLLMModel,
+    ) -> None:
+        """Test that sync updates existing model."""
+        # Create existing vendor and model
+        vendor = LLMVendor(
+            name="openai",
+            description="OpenAI",
+            color="#10A37F",
+            api_base="https://api.openai.com/v1",
+            auth_method="api-key",
+        )
+        sync_db_session.add(vendor)
+        sync_db_session.commit()
+
+        existing_model = LargeLanguageModel(
+            model_id="openai/gpt-4o",
+            title="Old Title",
+            description="Old description",
+            context_window=4096,  # Old value
+            streamable=True,
+            enabled=True,
+            color="#10A37F",
+            llm_vendor_id=vendor.id,
+        )
+        sync_db_session.add(existing_model)
+        sync_db_session.commit()
+
+        service = LLMSyncService(sync_db_session)
+
+        with patch.object(
+            service.litellm_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_litellm, patch.object(
+            service.openrouter_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_openrouter:
+            mock_litellm.return_value = {"openai/gpt-4o": mock_litellm_model}
+            mock_openrouter.return_value = []
+
+            import asyncio
+            result = asyncio.get_event_loop().run_until_complete(
+                service.sync(mode_filter="chat", dry_run=False)
+            )
+
+        assert result.models_updated == 1
+        assert result.models_added == 0
+
+        # Verify model was updated
+        sync_db_session.refresh(existing_model)
+        assert existing_model.context_window == 128000  # Updated
+
+
+class TestLLMSyncServiceDeployment:
+    """Tests for deployment sync operations."""
+
+    def test_sync_creates_deployment(
+        self,
+        sync_db_session: Session,
+        mock_litellm_model: LiteLLMModel,
+    ) -> None:
+        """Test that sync creates deployment record."""
+        service = LLMSyncService(sync_db_session)
+
+        with patch.object(
+            service.litellm_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_litellm, patch.object(
+            service.openrouter_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_openrouter:
+            mock_litellm.return_value = {"openai/gpt-4o": mock_litellm_model}
+            mock_openrouter.return_value = []
+
+            import asyncio
+            result = asyncio.get_event_loop().run_until_complete(
+                service.sync(mode_filter="chat", dry_run=False)
+            )
+
+        assert result.deployments_synced == 1
+
+        # Verify deployment in database
+        deployment = sync_db_session.exec(select(LLMDeployment)).first()
+        assert deployment is not None
+        assert deployment.function_calling is True
+        assert deployment.structured_output is True
+        assert deployment.output_max_tokens == 16384
+
+
+class TestLLMSyncServicePrice:
+    """Tests for price sync operations."""
+
+    def test_sync_creates_price(
+        self,
+        sync_db_session: Session,
+        mock_litellm_model: LiteLLMModel,
+    ) -> None:
+        """Test that sync creates price record."""
+        service = LLMSyncService(sync_db_session)
+
+        with patch.object(
+            service.litellm_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_litellm, patch.object(
+            service.openrouter_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_openrouter:
+            mock_litellm.return_value = {"openai/gpt-4o": mock_litellm_model}
+            mock_openrouter.return_value = []
+
+            import asyncio
+            result = asyncio.get_event_loop().run_until_complete(
+                service.sync(mode_filter="chat", dry_run=False)
+            )
+
+        assert result.prices_synced == 1
+
+        # Verify price in database
+        price = sync_db_session.exec(select(LLMPrice)).first()
+        assert price is not None
+        assert price.input_cost_per_token == 0.000005
+        assert price.output_cost_per_token == 0.000015
+
+
+class TestLLMSyncServiceModalities:
+    """Tests for modality sync operations."""
+
+    def test_sync_creates_modalities(
+        self,
+        sync_db_session: Session,
+        mock_litellm_model: LiteLLMModel,
+        mock_openrouter_model: OpenRouterModel,
+    ) -> None:
+        """Test that sync creates modality records."""
+        service = LLMSyncService(sync_db_session)
+
+        with patch.object(
+            service.litellm_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_litellm, patch.object(
+            service.openrouter_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_openrouter:
+            mock_litellm.return_value = {"openai/gpt-4o": mock_litellm_model}
+            mock_openrouter.return_value = [mock_openrouter_model]
+
+            import asyncio
+            result = asyncio.get_event_loop().run_until_complete(
+                service.sync(mode_filter="chat", dry_run=False)
+            )
+
+        # Should have text+image input, text output = 3 modalities
+        assert result.modalities_synced >= 2
+
+        # Verify modalities in database
+        modalities = sync_db_session.exec(select(LLMModality)).all()
+        assert len(modalities) >= 2
+
+        # Check we have input text
+        input_text = [
+            m for m in modalities
+            if m.direction == Direction.INPUT and m.modality == Modality.TEXT
+        ]
+        assert len(input_text) == 1
+
+
+class TestLLMSyncServiceDryRun:
+    """Tests for dry run mode."""
+
+    def test_sync_dry_run_no_database_changes(
+        self,
+        sync_db_session: Session,
+        mock_litellm_model: LiteLLMModel,
+    ) -> None:
+        """Test that dry_run=True doesn't persist changes."""
+        service = LLMSyncService(sync_db_session)
+
+        with patch.object(
+            service.litellm_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_litellm, patch.object(
+            service.openrouter_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_openrouter:
+            mock_litellm.return_value = {"openai/gpt-4o": mock_litellm_model}
+            mock_openrouter.return_value = []
+
+            import asyncio
+            result = asyncio.get_event_loop().run_until_complete(
+                service.sync(mode_filter="chat", dry_run=True)
+            )
+
+        # Result should show counts
+        assert result.models_added == 1
+        assert result.vendors_added == 1
+
+        # But database should be empty
+        sync_db_session.rollback()
+        vendors = sync_db_session.exec(select(LLMVendor)).all()
+        models = sync_db_session.exec(select(LargeLanguageModel)).all()
+        assert len(vendors) == 0
+        assert len(models) == 0
+
+
+class TestLLMSyncServiceModeFilter:
+    """Tests for mode filtering."""
+
+    def test_sync_filters_chat_models(
+        self, sync_db_session: Session
+    ) -> None:
+        """Test that mode_filter='chat' only syncs chat models."""
+        service = LLMSyncService(sync_db_session)
+
+        chat_model = LiteLLMModel(
+            model_id="openai/gpt-4o",
+            provider="openai",
+            mode="chat",
+            max_tokens=128000,
+            max_input_tokens=None,
+            max_output_tokens=16384,
+            input_cost_per_token=0.000005,
+            output_cost_per_token=0.000015,
+            supports_function_calling=True,
+            supports_parallel_function_calling=False,
+            supports_vision=False,
+            supports_audio_input=False,
+            supports_audio_output=False,
+            supports_reasoning=False,
+            supports_response_schema=False,
+            supports_system_messages=True,
+            supports_prompt_caching=False,
+            deprecation_date=None,
+        )
+        embedding_model = LiteLLMModel(
+            model_id="openai/text-embedding-3-small",
+            provider="openai",
+            mode="embedding",
+            max_tokens=8191,
+            max_input_tokens=None,
+            max_output_tokens=None,
+            input_cost_per_token=0.00000002,
+            output_cost_per_token=0.0,
+            supports_function_calling=False,
+            supports_parallel_function_calling=False,
+            supports_vision=False,
+            supports_audio_input=False,
+            supports_audio_output=False,
+            supports_reasoning=False,
+            supports_response_schema=False,
+            supports_system_messages=True,
+            supports_prompt_caching=False,
+            deprecation_date=None,
+        )
+
+        with patch.object(
+            service.litellm_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_litellm, patch.object(
+            service.openrouter_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_openrouter:
+            mock_litellm.return_value = {
+                "openai/gpt-4o": chat_model,
+                "openai/text-embedding-3-small": embedding_model,
+            }
+            mock_openrouter.return_value = []
+
+            import asyncio
+            result = asyncio.get_event_loop().run_until_complete(
+                service.sync(mode_filter="chat", dry_run=False)
+            )
+
+        # Only chat model should be synced
+        assert result.models_added == 1
+
+        model = sync_db_session.exec(select(LargeLanguageModel)).first()
+        assert model is not None
+        assert model.model_id == "openai/gpt-4o"
+
+
+class TestLLMSyncServiceErrorHandling:
+    """Tests for error handling."""
+
+    def test_sync_continues_on_litellm_error(
+        self, sync_db_session: Session, mock_openrouter_model: OpenRouterModel
+    ) -> None:
+        """Test that sync continues when LiteLLM fetch fails."""
+        service = LLMSyncService(sync_db_session)
+
+        with patch.object(
+            service.litellm_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_litellm, patch.object(
+            service.openrouter_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_openrouter:
+            mock_litellm.side_effect = Exception("LiteLLM API error")
+            mock_openrouter.return_value = [mock_openrouter_model]
+
+            import asyncio
+            result = asyncio.get_event_loop().run_until_complete(
+                service.sync(mode_filter="chat", dry_run=False)
+            )
+
+        # Should have error recorded
+        assert len(result.errors) == 1
+        assert "LiteLLM" in result.errors[0]
+
+    def test_sync_continues_on_openrouter_error(
+        self,
+        sync_db_session: Session,
+        mock_litellm_model: LiteLLMModel,
+    ) -> None:
+        """Test that sync continues when OpenRouter fetch fails."""
+        service = LLMSyncService(sync_db_session)
+
+        with patch.object(
+            service.litellm_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_litellm, patch.object(
+            service.openrouter_client, "fetch_models", new_callable=AsyncMock
+        ) as mock_openrouter:
+            mock_litellm.return_value = {"openai/gpt-4o": mock_litellm_model}
+            mock_openrouter.side_effect = Exception("OpenRouter API error")
+
+            import asyncio
+            result = asyncio.get_event_loop().run_until_complete(
+                service.sync(mode_filter="chat", dry_run=False)
+            )
+
+        # Should still sync models from LiteLLM
+        assert result.models_added == 1
+        # OpenRouter error should be logged but not in errors list
+        # (OpenRouter failure is non-fatal)
+{% else %}
+# ETL sync service tests require database backend (ai_backend != "memory")
+# These tests are skipped when using memory-only AI backend
+
+import pytest
+
+
+@pytest.mark.skip(reason="ETL sync service requires database backend")
+def test_sync_service_requires_database() -> None:
+    """Placeholder test - sync service requires database backend."""
+    pass
+{% endif %}

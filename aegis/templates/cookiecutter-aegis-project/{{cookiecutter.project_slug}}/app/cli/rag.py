@@ -15,6 +15,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from app.core.config import settings
+from app.core.log import suppress_logs
 from app.services.rag.service import RAGService
 
 app = typer.Typer(help="RAG service commands for document indexing and search")
@@ -86,13 +87,14 @@ def index_documents(
     console.print()
 
     try:
-        stats = asyncio.run(
-            rag_service.refresh_index(
-                path=Path(path),
-                collection_name=collection,
-                extensions=ext_list,
+        with suppress_logs():
+            stats = asyncio.run(
+                rag_service.refresh_index(
+                    path=Path(path),
+                    collection_name=collection,
+                    extensions=ext_list,
+                )
             )
-        )
 
         # Calculate total duration
         total_ms = stats.load_ms + stats.chunk_ms + stats.duration_ms

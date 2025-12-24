@@ -15,9 +15,10 @@ from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
 {% endif %}
 {% if cookiecutter.ai_backend != "memory" %}
 from sqlalchemy import Integer, func
-from sqlmodel import select
+from sqlmodel import Session, select
 
-from app.core.db import db_session
+from app.core.db import db_session, engine
+from .llm_catalog_context import get_llm_catalog_context
 from .models.llm import LargeLanguageModel, LLMPrice, LLMUsage, LLMVendor
 {% endif %}
 
@@ -43,6 +44,7 @@ from .prompts import build_system_prompt
 {% if cookiecutter.ai_rag == "yes" %}
 from app.services.rag.service import RAGService
 from .rag_context import RAGContext
+from .rag_stats_context import RAGStatsContext
 {% endif %}
 
 
@@ -143,16 +145,26 @@ class AIService:
             # Build usage context for self-awareness
             usage_context = self._build_usage_context()
 
+            # Build LLM catalog context
+            catalog_context = self._build_catalog_context()
+
+{% if cookiecutter.ai_rag == "yes" %}
+            # Build RAG stats context (always included when RAG enabled)
+            rag_stats_context = await self._build_rag_stats_context()
+
+{% endif %}
 {% if cookiecutter.ai_framework == "pydantic-ai" %}
             # Prepare agent and conversation context
             agent, conversation_context = self._prepare_agent_and_context(
                 conversation,
 {% if cookiecutter.ai_rag == "yes" %}
                 rag_context=rag_context,
+                rag_stats_context=rag_stats_context,
 {% endif %}
                 health_context=health_context,
                 health_warning=health_warning,
                 usage_context=usage_context,
+                catalog_context=catalog_context,
             )
 
             # Get AI response
@@ -169,9 +181,9 @@ class AIService:
             # Prepare LLM and messages with full context
             llm, messages = self._prepare_llm_and_messages(
 {% if cookiecutter.ai_rag == "yes" %}
-                conversation, rag_context, health_context, health_warning, usage_context
+                conversation, rag_context, rag_stats_context, health_context, health_warning, usage_context, catalog_context
 {% else %}
-                conversation, None, health_context, health_warning, usage_context
+                conversation, None, None, health_context, health_warning, usage_context, catalog_context
 {% endif %}
             )
 
@@ -281,24 +293,34 @@ class AIService:
             # Build usage context for self-awareness
             usage_context = self._build_usage_context()
 
+            # Build LLM catalog context
+            catalog_context = self._build_catalog_context()
+
+{% if cookiecutter.ai_rag == "yes" %}
+            # Build RAG stats context (always included when RAG enabled)
+            rag_stats_context = await self._build_rag_stats_context()
+
+{% endif %}
 {% if cookiecutter.ai_framework == "pydantic-ai" %}
             # Prepare agent and conversation context
             agent, conversation_context = self._prepare_agent_and_context(
                 conversation,
 {% if cookiecutter.ai_rag == "yes" %}
                 rag_context=rag_context,
+                rag_stats_context=rag_stats_context,
 {% endif %}
                 health_context=health_context,
                 health_warning=health_warning,
                 usage_context=usage_context,
+                catalog_context=catalog_context,
             )
 {% else %}
             # Prepare LLM and messages with full context
             llm, messages = self._prepare_llm_and_messages(
 {% if cookiecutter.ai_rag == "yes" %}
-                conversation, rag_context, health_context, health_warning, usage_context
+                conversation, rag_context, rag_stats_context, health_context, health_warning, usage_context, catalog_context
 {% else %}
-                conversation, None, health_context, health_warning, usage_context
+                conversation, None, None, health_context, health_warning, usage_context, catalog_context
 {% endif %}
             )
 {% endif %}
@@ -487,10 +509,12 @@ class AIService:
         conversation: Conversation,
 {% if cookiecutter.ai_rag == "yes" %}
         rag_context: RAGContext | None = None,
+        rag_stats_context: RAGStatsContext | None = None,
 {% endif %}
         health_context: HealthContext | None = None,
         health_warning: str | None = None,
         usage_context: UsageContext | None = None,
+        catalog_context: str | None = None,
     ) -> tuple[Any, str]:
         """
         Create agent for request and build conversation context.
@@ -499,10 +523,12 @@ class AIService:
             conversation: The conversation to prepare context from
 {% if cookiecutter.ai_rag == "yes" %}
             rag_context: Optional RAG context to inject into system prompt
+            rag_stats_context: Optional RAG stats context for collection awareness
 {% endif %}
             health_context: Optional health context to inject into system prompt
             health_warning: Optional warning if server is down
             usage_context: Optional usage context for self-awareness
+            catalog_context: Optional LLM catalog context for model awareness
 
         Returns:
             tuple[Any, str]: (agent instance, conversation context string)
@@ -512,6 +538,10 @@ class AIService:
 {% if cookiecutter.ai_rag == "yes" %}
         if rag_context and rag_context.results:
             formatted_rag = rag_context.format_for_prompt(include_metadata=True)
+
+        formatted_rag_stats = None
+        if rag_stats_context:
+            formatted_rag_stats = rag_stats_context.format_for_prompt()
 {% endif %}
 
         formatted_health = None
@@ -526,8 +556,12 @@ class AIService:
         system_prompt_override = build_system_prompt(
             self.settings,
             rag_context=formatted_rag,
+{% if cookiecutter.ai_rag == "yes" %}
+            rag_stats_context=formatted_rag_stats,
+{% endif %}
             health_context=formatted_health,
             usage_context=formatted_usage,
+            catalog_context=catalog_context,
         )
 
         # Add server-down warning if applicable
@@ -547,12 +581,15 @@ class AIService:
         conversation: Conversation,
 {% if cookiecutter.ai_rag == "yes" %}
         rag_context: RAGContext | None = None,
+        rag_stats_context: RAGStatsContext | None = None,
 {% else %}
         rag_context: Any | None = None,
+        rag_stats_context: Any | None = None,
 {% endif %}
         health_context: HealthContext | None = None,
         health_warning: str | None = None,
         usage_context: UsageContext | None = None,
+        catalog_context: str | None = None,
     ) -> tuple[Any, list]:
         """
         Create LLM instance and build message list for LangChain.
@@ -560,9 +597,11 @@ class AIService:
         Args:
             conversation: The conversation to prepare messages from
             rag_context: Optional RAG context with code search results
+            rag_stats_context: Optional RAG stats context for collection awareness
             health_context: Optional health context with system status
             health_warning: Optional warning if server is down
             usage_context: Optional usage context with AI stats
+            catalog_context: Optional LLM catalog context for model awareness
 
         Returns:
             tuple[Any, list]: (LLM instance, list of message tuples)
@@ -572,7 +611,7 @@ class AIService:
 
         # Build messages list for LangChain
         messages = self._build_langchain_messages(
-            conversation, rag_context, health_context, health_warning, usage_context
+            conversation, rag_context, rag_stats_context, health_context, health_warning, usage_context, catalog_context
         )
 
         return llm, messages
@@ -582,12 +621,15 @@ class AIService:
         conversation: Conversation,
 {% if cookiecutter.ai_rag == "yes" %}
         rag_context: RAGContext | None = None,
+        rag_stats_context: RAGStatsContext | None = None,
 {% else %}
         rag_context: Any | None = None,
+        rag_stats_context: Any | None = None,
 {% endif %}
         health_context: HealthContext | None = None,
         health_warning: str | None = None,
         usage_context: UsageContext | None = None,
+        catalog_context: str | None = None,
     ) -> list:
         """
         Build LangChain message list from conversation history.
@@ -595,23 +637,28 @@ class AIService:
         Args:
             conversation: The conversation with message history
             rag_context: Optional RAG context with code search results
+            rag_stats_context: Optional RAG stats context for collection awareness
             health_context: Optional health context with system status
             health_warning: Optional warning if server is down
             usage_context: Optional usage context with AI stats
+            catalog_context: Optional LLM catalog context for model awareness
 
         Returns:
             list: List of message tuples for LangChain
         """
         # Build dynamic system prompt with Illiana's persona
         rag_str = rag_context.format_for_prompt() if rag_context else None
+        rag_stats_str = rag_stats_context.format_for_prompt() if rag_stats_context else None
         health_str = health_context.format_for_prompt() if health_context else None
         usage_str = usage_context.format_for_prompt() if usage_context else None
 
         system_prompt = build_system_prompt(
             settings=self.settings,
             rag_context=rag_str,
+            rag_stats_context=rag_stats_str,
             health_context=health_str,
             usage_context=usage_str,
+            catalog_context=catalog_context,
         )
 
         # Add server-down warning if applicable
@@ -755,6 +802,43 @@ class AIService:
             results=filtered_results,
         )
 
+    async def _build_rag_stats_context(self) -> RAGStatsContext | None:
+        """
+        Build RAG stats context from RAG service status.
+
+        Gives Illiana awareness about indexed collections, document counts,
+        and RAG configuration.
+
+        Returns:
+            RAGStatsContext with current stats, or None if unavailable
+        """
+        try:
+            status = self.rag_service.get_service_status()
+            collections = await self.rag_service.list_collections()
+
+            collection_info = []
+            for name in collections:
+                stats = await self.rag_service.get_collection_stats(name)
+                if stats:
+                    collection_info.append({
+                        "name": name,
+                        "count": stats.get("count", 0),
+                    })
+
+            return RAGStatsContext(
+                enabled=status.get("enabled", False),
+                collection_count=len(collections),
+                collections=collection_info,
+                embedding_model=status.get("embedding_model"),
+                chunk_size=status.get("chunk_size"),
+                chunk_overlap=status.get("chunk_overlap"),
+                default_top_k=status.get("default_top_k"),
+                last_activity=status.get("last_activity"),
+            )
+        except Exception as e:
+            logger.debug(f"Failed to build RAG stats context: {e}")
+            return None
+
 {% endif %}
     async def _build_health_context(
         self,
@@ -871,6 +955,28 @@ class AIService:
         return None
 {% endif %}
 
+    def _build_catalog_context(self) -> str | None:
+        """
+        Build LLM catalog context from database.
+
+        Provides Illiana with awareness of available LLM models,
+        their pricing, and capabilities.
+
+        Returns:
+            Formatted catalog context string, or None if unavailable
+        """
+{% if cookiecutter.ai_backend != "memory" %}
+        try:
+            with Session(engine) as session:
+                return get_llm_catalog_context(session)
+        except Exception as e:
+            logger.debug(f"Failed to build catalog context: {e}")
+            return None
+{% else %}
+        # Catalog context requires database backend
+        return None
+{% endif %}
+
     def get_conversation(self, conversation_id: str) -> Conversation | None:
         """Get a conversation by ID."""
         return self.conversation_manager.get_conversation(conversation_id)
@@ -969,7 +1075,29 @@ class AIService:
                 llm = session.exec(stmt).first()
 
                 if not llm:
-                    logger.warning("LLM not found for usage tracking", model_id=model_name)
+                    # Record usage anyway with 0 cost for unknown models
+                    logger.warning(
+                        "LLM not found in catalog - usage recorded without cost",
+                        model_id=model_name,
+                    )
+                    llm_usage = LLMUsage(
+                        action=action,
+                        model_id=model_name,
+                        user_id=user_id,
+                        timestamp=datetime.now(UTC),
+                        input_tokens=usage.get("input_tokens", 0),
+                        output_tokens=usage.get("output_tokens", 0),
+                        total_cost=0.0,
+                        success=success,
+                        error_message=error_message,
+                    )
+                    session.add(llm_usage)
+                    logger.info(
+                        "Usage committed (unknown model)",
+                        model=model_name,
+                        tokens=usage,
+                        cost=0.0,
+                    )
                     return
 
                 # Get latest price for this LLM
@@ -992,7 +1120,7 @@ class AIService:
                 # Create usage record
                 llm_usage = LLMUsage(
                     action=action,
-                    llm_id=llm.id,
+                    model_id=llm.model_id,
                     user_id=user_id,
                     timestamp=datetime.now(UTC),
                     input_tokens=usage.get("input_tokens", 0),
@@ -1106,23 +1234,30 @@ class AIService:
         start_time: datetime | None,
         end_time: datetime | None,
     ) -> list[dict[str, Any]]:
-        """Get usage breakdown by model using SQL GROUP BY."""
+        """Get usage breakdown by model using SQL GROUP BY.
+
+        Uses LEFT JOIN to include orphan usage records (models not in catalog).
+        """
         stmt = (
             select(
-                LargeLanguageModel.model_id,
-                LargeLanguageModel.title,
-                LLMVendor.name.label("vendor"),
-                LLMVendor.color.label("vendor_color"),
+                LLMUsage.model_id,
+                func.coalesce(
+                    LargeLanguageModel.title, LLMUsage.model_id
+                ).label("title"),
+                func.coalesce(LLMVendor.name, "unknown").label("vendor"),
+                func.coalesce(LLMVendor.color, "#808080").label("vendor_color"),
                 func.count(LLMUsage.id).label("requests"),
                 func.coalesce(
                     func.sum(LLMUsage.input_tokens + LLMUsage.output_tokens), 0
                 ).label("tokens"),
                 func.coalesce(func.sum(LLMUsage.total_cost), 0.0).label("cost"),
             )
-            .join(LargeLanguageModel, LLMUsage.llm_id == LargeLanguageModel.id)
-            .join(LLMVendor, LargeLanguageModel.llm_vendor_id == LLMVendor.id)
+            .outerjoin(
+                LargeLanguageModel, LLMUsage.model_id == LargeLanguageModel.model_id
+            )
+            .outerjoin(LLMVendor, LargeLanguageModel.llm_vendor_id == LLMVendor.id)
             .group_by(
-                LargeLanguageModel.model_id,
+                LLMUsage.model_id,
                 LargeLanguageModel.title,
                 LLMVendor.name,
                 LLMVendor.color,
@@ -1162,17 +1297,24 @@ class AIService:
         end_time: datetime | None,
         limit: int,
     ) -> list[dict[str, Any]]:
-        """Get recent usage activity with model info."""
+        """Get recent usage activity with model info.
+
+        Uses LEFT JOIN to include orphan usage records (models not in catalog).
+        """
         stmt = (
             select(
                 LLMUsage.timestamp,
-                LargeLanguageModel.title.label("model"),
+                func.coalesce(
+                    LargeLanguageModel.title, LLMUsage.model_id
+                ).label("model"),
                 (LLMUsage.input_tokens + LLMUsage.output_tokens).label("tokens"),
                 LLMUsage.total_cost,
                 LLMUsage.success,
                 LLMUsage.action,
             )
-            .join(LargeLanguageModel, LLMUsage.llm_id == LargeLanguageModel.id)
+            .outerjoin(
+                LargeLanguageModel, LLMUsage.model_id == LargeLanguageModel.model_id
+            )
             .order_by(LLMUsage.timestamp.desc())
             .limit(limit)
         )

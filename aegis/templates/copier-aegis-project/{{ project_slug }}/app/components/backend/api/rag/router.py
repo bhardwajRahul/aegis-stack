@@ -262,7 +262,12 @@ async def rag_health() -> dict[str, Any]:
             "status": "healthy" if not validation_errors else "unhealthy",
             "enabled": status.get("enabled", False),
             "persist_directory": status.get("persist_directory"),
+            "embedding_provider": status.get("embedding_provider"),
             "embedding_model": status.get("embedding_model"),
+            "chunk_size": status.get("chunk_size"),
+            "chunk_overlap": status.get("chunk_overlap"),
+            "default_top_k": status.get("default_top_k"),
+            "last_activity": status.get("last_activity"),
             "collection_count": len(collections),
             "validation_errors": validation_errors,
         }

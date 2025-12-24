@@ -9,6 +9,8 @@ output for production environments.
 
 import logging
 import sys
+from collections.abc import Generator
+from contextlib import contextmanager
 
 import structlog
 from app.core.config import settings
@@ -96,3 +98,26 @@ def setup_logging() -> None:
         root_level=root_logger.level,
         effective_level=root_logger.getEffectiveLevel(),
     )
+
+
+@contextmanager
+def suppress_logs(level: int = logging.ERROR) -> Generator[None, None, None]:
+    """
+    Temporarily suppress logs during CLI operations.
+
+    Sets the root logger to the specified level to hide lower-priority logs
+    while preserving higher-priority logs for critical issues.
+
+    Args:
+        level: Minimum log level to show (default: ERROR)
+
+    Yields:
+        None
+    """
+    root_logger = logging.getLogger()
+    original_level = root_logger.level
+    try:
+        root_logger.setLevel(level)
+        yield
+    finally:
+        root_logger.setLevel(original_level)

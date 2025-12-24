@@ -19,6 +19,7 @@ from ..cards.card_utils import PROVIDER_COLORS
 from .ai_analytics_tab import AIAnalyticsTab
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
+from .rag_tab import RAGTab
 
 
 class OverviewSection(ft.Container):
@@ -302,6 +303,10 @@ class AIDetailDialog(BaseDetailPopup):
                 ft.Tab(
                     text="Analytics",
                     content=AIAnalyticsTab(metadata=metadata),
+                ),
+                ft.Tab(
+                    text="RAG",
+                    content=RAGTab(),
                 ),
             ],
             expand=True,

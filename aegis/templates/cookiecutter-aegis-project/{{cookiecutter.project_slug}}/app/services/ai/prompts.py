@@ -10,8 +10,10 @@ from typing import Any
 def build_system_prompt(
     settings: Any,
     rag_context: str | None = None,
+    rag_stats_context: str | None = None,
     health_context: str | None = None,
     usage_context: str | None = None,
+    catalog_context: str | None = None,
 ) -> str:
     """
     Build system prompt with project context.
@@ -19,8 +21,10 @@ def build_system_prompt(
     Args:
         settings: Application settings object
         rag_context: Optional formatted RAG context to include
+        rag_stats_context: Optional RAG stats context for collection awareness
         health_context: Optional formatted health context to include
         usage_context: Optional formatted usage statistics to include
+        catalog_context: Optional formatted LLM catalog context to include
 
     Returns:
         Complete system prompt for the AI assistant
@@ -74,6 +78,17 @@ Reference these code sections [1], [2], etc. in your answers:
         prompt += f"""
 ## My Activity (LIVE DATA)
 {usage_context}
+"""
+
+    if rag_stats_context:
+        prompt += f"""
+## RAG Knowledge Base (LIVE DATA)
+{rag_stats_context}
+"""
+
+    if catalog_context:
+        prompt += f"""
+## {catalog_context}
 """
 
     # Health context comes LAST so LLM weights it more heavily
