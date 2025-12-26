@@ -29,6 +29,7 @@ class OpenRouterModel:
     cache_read_cost_per_token: float | None
     cache_write_cost_per_token: float | None
     is_moderated: bool
+    created: int | None  # Unix timestamp of when model was added
 
 
 class OpenRouterClient:
@@ -107,6 +108,7 @@ class OpenRouterClient:
             cache_read_cost_per_token=cache_read,
             cache_write_cost_per_token=cache_write,
             is_moderated=is_moderated,
+            created=raw.get("created"),
         )
 
     def _parse_price(self, value: str | float | None) -> float | None:

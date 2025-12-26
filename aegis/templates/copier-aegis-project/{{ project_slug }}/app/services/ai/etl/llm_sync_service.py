@@ -340,6 +340,7 @@ class LLMSyncService:
                     self._update_if_changed(existing, "streamable", data.streamable),
                     self._update_if_changed(existing, "family", data.family),
                     self._update_if_changed(existing, "llm_vendor_id", vendor.id),
+                    self._update_if_changed(existing, "released_on", data.created_at),
                 ]
             )
 
@@ -361,6 +362,7 @@ class LLMSyncService:
                 color=VENDOR_METADATA.get(data.vendor, {}).get("color", "#6B7280"),
                 family=data.family,
                 llm_vendor_id=vendor.id,
+                released_on=data.created_at,
             )
 
             if not dry_run:
