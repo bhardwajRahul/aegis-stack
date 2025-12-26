@@ -34,7 +34,7 @@ class AIServiceConfig(BaseModel):
     timeout_seconds: float = Field(default=30.0, gt=0)
 
     # RAG-Chat integration settings (used when RAG is enabled)
-    rag_default_collection: str | None = None
+    rag_default_collection: str = "default"
     rag_top_k: int = Field(default=10, gt=0, le=50)
     rag_min_score: float = Field(default=0.1, ge=0.0, le=1.0)
 
@@ -50,7 +50,7 @@ class AIServiceConfig(BaseModel):
             timeout_seconds=getattr(settings, "AI_TIMEOUT_SECONDS", 30.0),
             # RAG-Chat integration settings
             rag_default_collection=getattr(
-                settings, "RAG_CHAT_DEFAULT_COLLECTION", None
+                settings, "RAG_CHAT_DEFAULT_COLLECTION", "default"
             ),
             rag_top_k=getattr(settings, "RAG_CHAT_TOP_K", 10),
             rag_min_score=getattr(settings, "RAG_CHAT_MIN_SCORE", 0.1),

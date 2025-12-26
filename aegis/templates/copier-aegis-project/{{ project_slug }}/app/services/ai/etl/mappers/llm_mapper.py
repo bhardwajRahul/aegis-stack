@@ -6,6 +6,7 @@ into a unified format for database insertion.
 """
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from app.core.log import logger
 from app.services.ai.etl.clients.litellm_client import LiteLLMModel
@@ -41,6 +42,7 @@ class MergedLLMData:
     mode: str = "chat"
     family: str | None = None
     deprecation_date: str | None = None
+    created_at: datetime | None = None  # When model was released/added
 
 
 # Vendor name normalization mapping
@@ -261,6 +263,12 @@ def merge_single_model(
         input_modalities = openrouter_model.input_modalities
         output_modalities = openrouter_model.output_modalities
         cache_read_cost = openrouter_model.cache_read_cost_per_token
+        # Convert Unix timestamp to datetime
+        created_at = (
+            datetime.fromtimestamp(openrouter_model.created, tz=UTC)
+            if openrouter_model.created
+            else None
+        )
     else:
         title = _generate_title(model_id)
         description = ""
@@ -268,6 +276,7 @@ def merge_single_model(
         max_output = litellm_model.max_output_tokens
         input_modalities, output_modalities = _modalities_from_litellm(litellm_model)
         cache_read_cost = None
+        created_at = None
 
     return MergedLLMData(
         model_id=model_id,
@@ -292,6 +301,7 @@ def merge_single_model(
         mode=litellm_model.mode,
         family=extract_family(model_id),
         deprecation_date=litellm_model.deprecation_date,
+        created_at=created_at,
     )
 
 

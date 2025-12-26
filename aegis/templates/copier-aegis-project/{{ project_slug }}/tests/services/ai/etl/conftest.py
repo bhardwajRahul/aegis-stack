@@ -18,6 +18,7 @@ def mock_openrouter_response() -> dict[str, Any]:
                 "name": "GPT-4o",
                 "description": "OpenAI's most advanced multimodal model",
                 "context_length": 128000,
+                "created": 1715558400,  # 2024-05-13 00:00:00 UTC
                 "pricing": {
                     "prompt": "0.000005",
                     "completion": "0.000015",
@@ -38,6 +39,7 @@ def mock_openrouter_response() -> dict[str, Any]:
                 "name": "Claude 3.5 Sonnet",
                 "description": "Anthropic's most intelligent model",
                 "context_length": 200000,
+                "created": 1718841600,  # 2024-06-20 00:00:00 UTC
                 "pricing": {
                     "prompt": "0.000003",
                     "completion": "0.000015",
@@ -142,6 +144,7 @@ def sample_openrouter_model() -> OpenRouterModel:
         cache_read_cost_per_token=0.0000025,
         cache_write_cost_per_token=None,
         is_moderated=True,
+        created=1715558400,  # 2024-05-13 00:00:00 UTC
     )
 
 

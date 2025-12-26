@@ -1,5 +1,7 @@
 """Tests for LLM data mapper and merge logic."""
 
+from datetime import UTC, datetime
+
 from app.services.ai.etl.clients.litellm_client import LiteLLMModel
 from app.services.ai.etl.clients.openrouter_client import (
     OpenRouterModel,
@@ -169,6 +171,8 @@ class TestMergeSingleModel:
         assert "image" in merged.input_modalities
         # Cache pricing from OpenRouter
         assert merged.cache_read_cost_per_token == 0.0000025
+        # Created timestamp from OpenRouter (1715558400 = 2024-05-13 00:00:00 UTC)
+        assert merged.created_at == datetime(2024, 5, 13, tzinfo=UTC)
 
     def test_merge_litellm_only(self, sample_litellm_model: LiteLLMModel) -> None:
         """Test merging with only LiteLLM data."""
@@ -183,6 +187,8 @@ class TestMergeSingleModel:
         assert merged.input_cost_per_token == 0.000005
         assert merged.supports_function_calling is True
         assert merged.supports_vision is True
+        # No created_at without OpenRouter
+        assert merged.created_at is None
 
     def test_merge_extracts_vendor(self, sample_litellm_model: LiteLLMModel) -> None:
         """Test that vendor is correctly extracted."""
