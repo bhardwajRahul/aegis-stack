@@ -4,9 +4,6 @@ AI service CLI commands.
 Command-line interface for AI service management and chat functionality.
 """
 
-import logging
-from contextlib import contextmanager
-
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -14,7 +11,7 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 from ..core.config import settings
-from ..core.log import setup_logging
+from ..core.log import setup_logging, suppress_logs
 from ..services.ai.config import get_ai_config
 
 # Initialize logging at module load
@@ -28,30 +25,6 @@ from ..services.ai.models import (
 
 app = typer.Typer(help="AI service management and chat commands")
 console = Console()
-
-
-@contextmanager
-def suppress_logs(level: int = logging.ERROR):
-    """
-    Context manager to temporarily suppress logs during interactive chat.
-
-    Sets the root logger to ERROR level to hide INFO/DEBUG/WARNING logs while
-    preserving ERROR logs for critical issues.
-
-    Args:
-        level: Minimum log level to show (default: ERROR)
-    """
-    # Get the root logger and remember original level
-    root_logger = logging.getLogger()
-    original_level = root_logger.level
-
-    try:
-        # Temporarily raise log level to suppress info/debug logs
-        root_logger.setLevel(level)
-        yield
-    finally:
-        # Restore original log level
-        root_logger.setLevel(original_level)
 
 
 @app.command()

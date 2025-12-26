@@ -50,14 +50,14 @@ class TestComponentStatusPropagation:
         status = ComponentStatus(
             name="test_component",
             status=ComponentStatusType.WARNING,
-            message="Has warnings but still healthy",
+            message="Has warnings",
             response_time_ms=100.0,
         )
 
         assert status.name == "test_component"
-        assert status.healthy is True
+        assert status.healthy is False  # WARNING is not healthy
         assert status.status == ComponentStatusType.WARNING
-        assert status.message == "Has warnings but still healthy"
+        assert status.message == "Has warnings"
 
     def test_component_status_defaults_to_healthy(self) -> None:
         """Test that ComponentStatus defaults to HEALTHY status."""
@@ -105,7 +105,7 @@ class TestComponentStatusPropagation:
             }
         )
 
-        assert parent_component.healthy is True
+        assert parent_component.healthy is False  # WARNING is not healthy
         assert parent_component.status == ComponentStatusType.WARNING
         assert len(parent_component.sub_components) == 2
         assert (
@@ -188,8 +188,8 @@ class TestSystemStatusWarningPropagation:
                 "aegis.components.healthy_service" in system_status.healthy_components
             )
             assert (
-                "aegis.components.warning_service" in system_status.healthy_components
-            )  # WARNING is considered healthy
+                "aegis.components.warning_service" in system_status.unhealthy_components
+            )  # WARNING is NOT considered healthy
             assert (
                 "aegis.components.unhealthy_service"
                 in system_status.unhealthy_components
@@ -224,13 +224,13 @@ class TestSystemStatusWarningPropagation:
 
 
     @pytest.mark.asyncio
-    async def test_system_status_with_only_warnings_stays_healthy(self) -> None:
-        """Test that system with only warnings remains overall healthy."""
+    async def test_system_status_with_only_warnings_is_not_healthy(self) -> None:
+        """Test that system with warnings is not considered overall healthy."""
 
         mock_warning_component = AsyncMock(return_value=ComponentStatus(
             name="warning_service",
             status=ComponentStatusType.WARNING,
-            message="Service has warnings but functional",
+            message="Service has warnings",
         ))
 
         mock_system_metrics = {
@@ -261,13 +261,13 @@ class TestSystemStatusWarningPropagation:
 
             system_status = await get_system_status()
 
-            # System should remain healthy since warnings don't affect overall health
-            assert system_status.overall_healthy is True
+            # System is not healthy because WARNING is not healthy
+            assert system_status.overall_healthy is False
 
-            # But aegis component should propagate warning status
+            # Aegis component should have warning status and not be healthy
             aegis_component = system_status.components["aegis"]
             assert aegis_component.status == ComponentStatusType.WARNING
-            assert aegis_component.healthy is True
+            assert aegis_component.healthy is False
 
 
 class TestWorkerHealthLogic:
@@ -321,6 +321,8 @@ class TestWorkerHealthLogic:
         """Test warning propagation from queue -> queues -> worker."""
 
         # Simulate the propagation logic used in worker health check
+        # Note: WARNING status means healthy=False, so queues with WARNING
+        # are not considered healthy
         def check_warning_propagation(
             sub_components: dict[str, ComponentStatus]
         ) -> ComponentStatusType:
@@ -334,14 +336,16 @@ class TestWorkerHealthLogic:
                 for queue in sub_components.values()
             )
 
-            if has_warnings and queues_healthy:
-                return ComponentStatusType.WARNING
-            elif queues_healthy:
+            if queues_healthy:
                 return ComponentStatusType.HEALTHY
+            elif has_warnings:
+                # Some have warnings (not healthy), but not UNHEALTHY
+                return ComponentStatusType.WARNING
             else:
                 return ComponentStatusType.UNHEALTHY
 
-        # Test case: Some queues have warnings, all are healthy
+        # Test case: Some queues have warnings - since WARNING is not healthy,
+        # the overall status should be WARNING (not all queues are healthy)
         sub_components = {
             "media": ComponentStatus(
                 name="media",
@@ -435,8 +439,8 @@ class TestComponentMetadata:
 
         status = ComponentStatus(
             name="test_component",
-            status=ComponentStatusType.WARNING,
-            message="Component with warning",
+            status=ComponentStatusType.HEALTHY,
+            message="Component is healthy",
             response_time_ms=123.45,
             metadata={"key": "value", "number": 42},
             sub_components={
@@ -453,9 +457,9 @@ class TestComponentMetadata:
 
         # Verify structure
         assert status_dict["name"] == "test_component"
-        assert status_dict["healthy"] is True
-        assert status_dict["status"] == "warning"
-        assert status_dict["message"] == "Component with warning"
+        assert status_dict["healthy"] is True  # HEALTHY status has healthy=True
+        assert status_dict["status"] == "healthy"
+        assert status_dict["message"] == "Component is healthy"
         assert status_dict["response_time_ms"] == 123.45
         assert status_dict["metadata"]["key"] == "value"
         assert "sub1" in status_dict["sub_components"]

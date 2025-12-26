@@ -16,6 +16,9 @@ from app.services.system.backup import backup_database_job
 {% elif cookiecutter.include_scheduler == "yes" and cookiecutter.include_database == "yes" %}
 from app.services.system.backup import backup_database_job
 {% endif %}
+{% if cookiecutter.include_ai == "yes" and cookiecutter.ai_backend != "memory" %}
+from app.services.ai.jobs import sync_llm_catalog_job
+{% endif %}
 
 from app.core.config import settings
 from app.core.log import logger
@@ -106,6 +109,44 @@ def create_scheduler() -> AsyncIOScheduler:
             max_instances=1,
             coalesce=True,
             replace_existing=True  # Safe to use since we check first
+        )
+    else:
+{% if cookiecutter.scheduler_backend != "memory" %}
+        msg = f"Job '{job_id}' exists in database, preserving current configuration"
+        logger.info(msg)
+{% else %}
+        logger.info(
+            f"Job '{job_id}' exists, preserving current configuration: "
+            f"{existing_job.trigger}"
+        )
+{% endif %}
+{% endif %}
+
+{% if cookiecutter.include_ai == "yes" and cookiecutter.ai_backend != "memory" %}
+    # LLM catalog sync job (runs every 6 hours)
+    job_id = "llm_sync"
+{% if cookiecutter.scheduler_backend != "memory" %}
+    job_exists = _job_exists_in_database(job_id)
+{% else %}
+    existing_job = scheduler.get_job(job_id)
+    job_exists = existing_job is not None
+{% endif %}
+
+    if not job_exists or force_update:
+        if job_exists and force_update:
+            logger.info(f"Force updating job '{job_id}' from code configuration")
+        else:
+            logger.info(f"Adding new job '{job_id}'")
+
+        scheduler.add_job(
+            sync_llm_catalog_job,
+            trigger="interval",
+            hours=6,
+            id=job_id,
+            name="LLM Catalog Sync",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
         )
     else:
 {% if cookiecutter.scheduler_backend != "memory" %}

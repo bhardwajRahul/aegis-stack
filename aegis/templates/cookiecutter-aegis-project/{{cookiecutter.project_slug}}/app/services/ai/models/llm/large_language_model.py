@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from .llm_deployment import LLMDeployment
     from .llm_modality import LLMModality
     from .llm_price import LLMPrice
-    from .llm_usage import LLMUsage
     from .llm_vendor import LLMVendor
 
 
@@ -47,7 +46,6 @@ class LargeLanguageModel(SQLModel, table=True):
     modalities: list["LLMModality"] = Relationship(back_populates="llm")
     llm_prices: list["LLMPrice"] = Relationship(back_populates="llm")
     deployments: list["LLMDeployment"] = Relationship(back_populates="llm")
-    usages: list["LLMUsage"] = Relationship(back_populates="llm")
 
     def __repr__(self) -> str:
         return f"<LargeLanguageModel title={self.title} model_id={self.model_id}>"
