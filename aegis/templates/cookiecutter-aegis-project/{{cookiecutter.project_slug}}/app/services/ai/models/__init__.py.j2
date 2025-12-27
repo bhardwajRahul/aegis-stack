@@ -183,14 +183,14 @@ PROVIDER_CAPABILITIES = {
         supports_streaming=True,
         supports_function_calling=True,
         supports_vision=True,
-        free_tier_available=True,
+        free_tier_available=False,
     ),
     AIProvider.GROQ: ProviderCapabilities(
         provider=AIProvider.GROQ,
         supports_streaming=True,
         supports_function_calling=False,
         supports_vision=False,
-        free_tier_available=True,  # Very generous free tier
+        free_tier_available=False,
     ),
     AIProvider.MISTRAL: ProviderCapabilities(
         provider=AIProvider.MISTRAL,
@@ -204,7 +204,7 @@ PROVIDER_CAPABILITIES = {
         supports_streaming=True,
         supports_function_calling=False,
         supports_vision=False,
-        free_tier_available=True,
+        free_tier_available=False,
     ),
     AIProvider.PUBLIC: ProviderCapabilities(
         provider=AIProvider.PUBLIC,

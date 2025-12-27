@@ -22,7 +22,7 @@ from .migration_generator import (
 )
 from .post_gen_tasks import cleanup_components, run_post_generation_tasks
 from .template_generator import TemplateGenerator
-from .verbosity import verbose_print
+from .verbosity import is_verbose, verbose_print
 
 
 def is_git_repo(path: Path) -> bool:
@@ -150,6 +150,7 @@ def generate_with_copier(
 
     # Generate project - Copier creates the project_slug directory automatically
     # NOTE: _tasks removed from copier.yml - we run them ourselves below
+    # Suppress Copier output unless --verbose flag is passed
     run_copy(
         template_source,
         output_dir,
@@ -157,6 +158,7 @@ def generate_with_copier(
         defaults=True,  # Use template defaults, overridden by our explicit data
         unsafe=False,  # No tasks in copier.yml anymore - we run them ourselves
         vcs_ref=resolved_ref,  # Use specified version if provided
+        quiet=not is_verbose(),  # Silent unless --verbose
     )
 
     # Copier creates the project in output_dir/project_slug
