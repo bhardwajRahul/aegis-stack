@@ -22,6 +22,7 @@ from ..services.ai.models import (
     get_free_providers,
     get_provider_capabilities,
 )
+from ..services.ai.providers import ProviderNotInstalledError
 
 app = typer.Typer(help="AI service management and chat commands")
 console = Console()
@@ -1111,6 +1112,13 @@ async def _interactive_chat_session(
                     current_conversation_id = response.metadata.get(
                         "conversation_id", current_conversation_id
                     )
+            except ProviderNotInstalledError as e:
+                # Clean display for missing provider
+                console.print()
+                console.print(f"[yellow]Provider not installed:[/yellow] {e.provider}")
+                console.print()
+                console.print(f"Run [green]'{e.cli_command}'[/green] to install it.")
+                console.print()
             except Exception as stream_error:
                 console.print(f"[red]Error: {stream_error}[/red]")
                 console.print(
@@ -1272,6 +1280,15 @@ async def _stream_chat_response(
                         console.print(
                             f"Response time: {response_time:.1f}ms", style="dim"
                         )
+
+    except ProviderNotInstalledError as e:
+        # Clean display for missing provider - no need to re-raise
+        console.print()
+        console.print(f"[yellow]Provider not installed:[/yellow] {e.provider}")
+        console.print()
+        console.print(f"Run [green]'{e.cli_command}'[/green] to install it.")
+        console.print()
+        return None
 
     except Exception as e:
         if not interrupted:

@@ -58,6 +58,15 @@ class ProviderError(Exception):
     pass
 
 
+class ProviderNotInstalledError(ProviderError):
+    """Raised when a provider's dependencies are not installed."""
+
+    def __init__(self, provider: str, cli_command: str):
+        self.provider = provider
+        self.cli_command = cli_command
+        super().__init__(f"{provider} provider is not installed")
+
+
 def get_agent(
     config: AIServiceConfig,
     settings: Any,
@@ -132,6 +141,17 @@ def get_agent(
         return agent
 
     except Exception as e:
+        error_str = str(e)
+        # Check for missing dependency error (pydantic-ai pattern)
+        if "Please install" in error_str and "to use the" in error_str:
+            # Raise specific exception - CLI will handle display (no logging here)
+            provider_name = config.provider.value.lower()
+            raise ProviderNotInstalledError(
+                provider=config.provider.value,
+                cli_command=f"{{ project_slug }} ai add-provider {provider_name}",
+            ) from e
+
+        # Other errors still log and raise normally
         error_msg = f"Failed to create agent for {config.provider}: {e}"
         logger.error(error_msg)
         raise ProviderError(error_msg) from e

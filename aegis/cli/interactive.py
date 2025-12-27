@@ -32,6 +32,9 @@ _ai_backend_selection: dict[str, str] = {}
 # Global variable to store AI RAG selection for template generation
 _ai_rag_selection: dict[str, bool] = {}
 
+# Global variable to store skip LLM sync selection for template generation
+_skip_llm_sync_selection: dict[str, bool] = {}
+
 
 def get_interactive_infrastructure_components() -> list[ComponentSpec]:
     """Get infrastructure components available for interactive selection."""
@@ -45,12 +48,12 @@ def get_interactive_infrastructure_components() -> list[ComponentSpec]:
     return sorted(infra_components, key=lambda x: x.name)
 
 
-def interactive_project_selection() -> tuple[list[str], str, list[str]]:
+def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
     """
     Interactive project selection with component and service options.
 
     Returns:
-        Tuple of (selected_components, scheduler_backend, selected_services)
+        Tuple of (selected_components, scheduler_backend, selected_services, skip_llm_sync)
     """
 
     Messages.print_section_header(Messages.SECTION_COMPONENT_SELECTION)
@@ -270,7 +273,10 @@ def interactive_project_selection() -> tuple[list[str], str, list[str]]:
         # Future service types can be added here as they become available
         # payment_services = get_services_by_type(ServiceType.PAYMENT)
 
-    return selected, scheduler_backend, selected_services
+    # Get skip_llm_sync from global selection (set during AI service config)
+    skip_llm_sync = get_skip_llm_sync_selection()
+
+    return selected, scheduler_backend, selected_services, skip_llm_sync
 
 
 def get_ai_provider_selection(service_name: str = "ai") -> list[str]:
@@ -349,6 +355,25 @@ def clear_ai_rag_selection() -> None:
     _ai_rag_selection.clear()
 
 
+def get_skip_llm_sync_selection(service_name: str = "ai") -> bool:
+    """
+    Get skip LLM sync selection from interactive session.
+
+    Args:
+        service_name: Name of the AI service (defaults to "ai")
+
+    Returns:
+        True if LLM sync should be skipped, False otherwise
+    """
+    return _skip_llm_sync_selection.get(service_name, False)
+
+
+def clear_skip_llm_sync_selection() -> None:
+    """Clear stored skip LLM sync selection (useful for testing)."""
+    global _skip_llm_sync_selection
+    _skip_llm_sync_selection.clear()
+
+
 def set_ai_service_config(
     service_name: str = "ai",
     framework: str | None = None,
@@ -381,6 +406,8 @@ def clear_all_ai_selections() -> None:
     clear_ai_provider_selection()
     clear_ai_framework_selection()
     clear_ai_backend_selection()
+    clear_ai_rag_selection()
+    clear_skip_llm_sync_selection()
 
 
 def interactive_ai_service_config(
@@ -426,6 +453,23 @@ def interactive_ai_service_config(
 
     backend = StorageBackends.SQLITE if use_sqlite else StorageBackends.MEMORY
     _ai_backend_selection[service_name] = backend
+
+    # LLM catalog sync prompt (only for SQLite backend)
+    if backend == StorageBackends.SQLITE:
+        typer.echo("\nLLM Catalog Sync:")
+        typer.echo("  Syncing fetches latest model data from OpenRouter/LiteLLM APIs")
+        typer.echo("  This requires network access and takes ~30-60 seconds")
+        skip_sync = not typer.confirm(
+            "  Sync LLM catalog during project generation?",
+            default=True,  # Default to sync
+        )
+        _skip_llm_sync_selection[service_name] = skip_sync
+        if not skip_sync:
+            typer.secho(
+                "  LLM catalog will be synced after project generation", fg="green"
+            )
+        else:
+            typer.echo("  LLM sync skipped - static fixture data will be available")
 
     # Provider selection
     typer.echo("\nAI Provider Selection:")

@@ -379,11 +379,18 @@ def main():
     # Complete project setup: dependencies, env file, migrations, formatting, seeding
     # Use shared post-generation tasks module (also used by Copier)
     python_version = "{{ cookiecutter.python_version }}"
+    project_slug = "{{ cookiecutter.project_slug }}"
+
+    # Check environment variable for --skip-llm-sync flag
+    skip_llm_sync = os.environ.get("AEGIS_SKIP_LLM_SYNC", "0") == "1"
+
     run_post_generation_tasks(
         Path(PROJECT_DIRECTORY),
         include_migrations=needs_migrations,
         python_version=python_version,
         seed_ai=ai_needs_seeding,
+        skip_llm_sync=skip_llm_sync,
+        project_slug=project_slug,
     )
 
 

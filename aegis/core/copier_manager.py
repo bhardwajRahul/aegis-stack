@@ -39,7 +39,10 @@ def is_git_repo(path: Path) -> bool:
 
 
 def generate_with_copier(
-    template_gen: TemplateGenerator, output_dir: Path, vcs_ref: str | None = None
+    template_gen: TemplateGenerator,
+    output_dir: Path,
+    vcs_ref: str | None = None,
+    skip_llm_sync: bool = False,
 ) -> Path:
     """
     Generate project using Copier template engine.
@@ -48,6 +51,7 @@ def generate_with_copier(
         template_gen: Template generator with project configuration
         output_dir: Directory to create the project in
         vcs_ref: Git reference (tag, branch, or commit) to generate from
+        skip_llm_sync: Whether to skip LLM catalog sync after generation
 
     Returns:
         Path to the generated project
@@ -198,6 +202,8 @@ def generate_with_copier(
         include_migrations=include_migrations,
         python_version=python_version,
         seed_ai=ai_needs_seeding,
+        skip_llm_sync=skip_llm_sync,
+        project_slug=cookiecutter_context["project_slug"],
     )
 
     # Initialize git repository for Copier updates

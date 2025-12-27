@@ -90,6 +90,11 @@ def init_command(
         "--to-version",
         help="Generate from specific template version (tag, commit, or branch)",
     ),
+    skip_llm_sync: bool = typer.Option(
+        False,
+        "--skip-llm-sync",
+        help="Skip LLM catalog sync after project generation (AI service only)",
+    ),
 ) -> None:
     """
     Initialize a new Aegis Stack project with battle-tested component combinations.
@@ -230,9 +235,15 @@ def init_command(
             )
 
     if interactive and not components and not services:
-        selected_components, scheduler_backend, interactive_services = (
-            interactive_project_selection()
-        )
+        (
+            selected_components,
+            scheduler_backend,
+            interactive_services,
+            interactive_skip_llm_sync,
+        ) = interactive_project_selection()
+        # Use interactive selection if user chose to skip (overrides CLI default)
+        if interactive_skip_llm_sync:
+            skip_llm_sync = True
 
         # Resolve dependencies for interactively selected components
         if selected_components:
@@ -391,10 +402,17 @@ def init_command(
             # Use Copier template engine
             from ..core.copier_manager import generate_with_copier
 
-            generate_with_copier(template_gen, base_output_dir, vcs_ref=to_version)
+            generate_with_copier(
+                template_gen,
+                base_output_dir,
+                vcs_ref=to_version,
+                skip_llm_sync=skip_llm_sync,
+            )
 
         else:
             # Use Cookiecutter template engine (fallback option)
+            import os
+
             from cookiecutter.main import cookiecutter
 
             # Get the template path
@@ -407,14 +425,22 @@ def init_command(
             # Use template generator for context
             extra_context = template_gen.get_template_context()
 
-            # Generate project with cookiecutter
-            cookiecutter(
-                str(template_path),
-                extra_context=extra_context,
-                output_dir=str(base_output_dir),
-                no_input=True,  # Don't prompt user, use our context
-                overwrite_if_exists=False,  # No longer needed since we remove directory first
-            )
+            # Set environment variable for post-gen hook to read
+            if skip_llm_sync:
+                os.environ["AEGIS_SKIP_LLM_SYNC"] = "1"
+
+            try:
+                # Generate project with cookiecutter
+                cookiecutter(
+                    str(template_path),
+                    extra_context=extra_context,
+                    output_dir=str(base_output_dir),
+                    no_input=True,  # Don't prompt user, use our context
+                    overwrite_if_exists=False,  # No longer needed since we remove directory first
+                )
+            finally:
+                # Clean up environment variable
+                os.environ.pop("AEGIS_SKIP_LLM_SYNC", None)
 
         # Note: Comprehensive setup output is now handled by the post-generation hook
         # which provides better status reporting and automated setup
