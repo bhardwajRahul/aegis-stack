@@ -80,7 +80,18 @@ class AIService:
         self.conversation_manager = ConversationManager()
 {% if cookiecutter.ai_rag == "yes" %}
         self._rag_service: RAGService | None = None
+{% endif %}
 
+    @property
+    def current_config(self) -> "AIConfig":
+        """Get fresh config for request-time values.
+
+        Use this instead of self.config when you need the current .env values
+        (e.g., after user runs 'use-provider' to switch providers).
+        """
+        return get_ai_config(self.settings)
+
+{% if cookiecutter.ai_rag == "yes" %}
     @property
     def rag_service(self) -> RAGService:
         """Lazy initialization of RAG service."""
@@ -125,8 +136,13 @@ class AIService:
             raise AIServiceError("AI service is disabled")
 
         try:
+            # Get fresh config for metadata (reflects current .env after use-provider)
+            current = self.current_config
+
             # Setup conversation and add user message
-            conversation = self._setup_conversation(message, conversation_id, user_id)
+            conversation = self._setup_conversation(
+                message, conversation_id, user_id, config=current
+            )
 
 {% if cookiecutter.ai_rag == "yes" %}
             # Build RAG context if enabled
@@ -269,8 +285,13 @@ class AIService:
             raise AIServiceError("AI service is disabled")
 
         try:
+            # Get fresh config for metadata (reflects current .env after use-provider)
+            current = self.current_config
+
             # Setup conversation and add user message
-            conversation = self._setup_conversation(message, conversation_id, user_id)
+            conversation = self._setup_conversation(
+                message, conversation_id, user_id, config=current
+            )
 
             # Create streaming conversation wrapper
             streaming_conv = StreamingConversation(conversation=conversation)
@@ -352,8 +373,8 @@ class AIService:
                         message_id=message_id,
                         conversation_id=conversation.id,
                         metadata={
-                            "provider": self.config.provider,
-                            "model": self.config.model,
+                            "provider": current.provider,
+                            "model": current.model,
                             "stream_delta": stream_delta,
                         },
                     )
@@ -438,8 +459,8 @@ class AIService:
 
             # Yield final streaming message
             final_metadata = {
-                "provider": self.config.provider,
-                "model": self.config.model,
+                "provider": current.provider,
+                "model": current.model,
                 "response_time_ms": response_time_ms,
                 "stream_complete": True,
             }
@@ -471,6 +492,7 @@ class AIService:
         message: str,
         conversation_id: str | None,
         user_id: str,
+        config: "AIConfig | None" = None,
     ) -> Conversation:
         """
         Get or create conversation and add user message.
@@ -479,6 +501,7 @@ class AIService:
             message: The user's message
             conversation_id: Optional conversation ID (creates new if None)
             user_id: User identifier for conversation ownership
+            config: Optional fresh config (uses self.config if not provided)
 
         Returns:
             Conversation: The conversation with user message added
@@ -486,6 +509,9 @@ class AIService:
         Raises:
             ConversationError: If conversation_id provided but not found
         """
+        # Use provided config or fall back to cached
+        cfg = config or self.config
+
         # Get or create conversation
         if conversation_id:
             conversation = self.conversation_manager.get_conversation(conversation_id)
@@ -493,8 +519,8 @@ class AIService:
                 raise ConversationError(f"Conversation {conversation_id} not found")
         else:
             conversation = self.conversation_manager.create_conversation(
-                provider=self.config.provider,
-                model=self.config.model,
+                provider=cfg.provider,
+                model=cfg.model,
                 user_id=user_id,
             )
 
@@ -1007,9 +1033,33 @@ class AIService:
         """Validate service configuration and return any issues."""
         errors = []
 
+        # Check provider dependencies first
+        dep_errors = self._validate_provider_dependencies()
+        errors.extend(dep_errors)
+
         # Check configuration
         config_errors = self.config.validate_configuration(self.settings)
         errors.extend(config_errors)
+
+        return errors
+
+    def _validate_provider_dependencies(self) -> list[str]:
+        """
+        Validate that required dependencies are installed for configured provider.
+
+        Returns:
+            list[str]: List of error messages if dependencies are missing
+        """
+        from .provider_management import check_provider_dependency_installed
+
+        errors = []
+        provider_value = self.config.provider.value
+
+        if not check_provider_dependency_installed(provider_value):
+            errors.append(
+                f"Missing dependency for {provider_value} provider. "
+                f"Run: {{ cookiecutter.project_slug }} ai add-provider {provider_value}"
+            )
 
         return errors
 

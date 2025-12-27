@@ -103,36 +103,49 @@ def status() -> None:
 
 @app.command()
 def providers() -> None:
-    """List all available AI providers."""
+    """List all available AI providers with installation status."""
+    from ..services.ai.provider_management import check_provider_dependency_installed
+
     ai_config = get_ai_config(settings)
     available = ai_config.get_available_providers(settings)
     free_providers = get_free_providers()
 
-    table = Table(title="AI Providers", width=75)
-    table.add_column("Provider", style="cyan", width=9)
-    table.add_column("Status", style="green", width=26, no_wrap=True)
+    table = Table(title="AI Providers", width=90)
+    table.add_column("Provider", style="cyan", width=10)
+    table.add_column("Installed", width=9)
+    table.add_column("API Key", width=8)
+    table.add_column("Status", style="green", width=22, no_wrap=True)
     table.add_column("Free", style="yellow", width=4)
     table.add_column("Features", style="blue", width=18)
 
     for provider in AIProvider:
         capabilities = get_provider_capabilities(provider)
+        is_installed = check_provider_dependency_installed(provider.value)
         is_available = provider in available
         is_current = provider == ai_config.provider
 
-        if is_available:
-            status = "Available"
+        # Determine API key status
+        if provider == AIProvider.PUBLIC:
+            has_api_key = True  # PUBLIC doesn't need one
+            api_key_display = "[dim]N/A[/dim]"
         else:
-            # Make status more informative about what's missing
-            if provider == AIProvider.PUBLIC:
-                status = "[FAIL] Error"  # Shouldn't happen for PUBLIC
-            else:
-                # Show abbreviated environment variable name
-                env_var = f"{provider.value.upper()}_API_KEY"
-                status = f"[red]Need {env_var}[/red]"
+            env_var = f"{provider.value.upper()}_API_KEY"
+            has_api_key = bool(getattr(settings, env_var, None))
+            api_key_display = "[green]Yes[/green]" if has_api_key else "[red]No[/red]"
 
+        # Determine status
         if is_current:
-            status += " (current)"
+            status = "[bold green]Current[/bold green]"
+        elif is_available:
+            status = "Ready"
+        elif is_installed and not has_api_key:
+            status = "[yellow]Need API key[/yellow]"
+        elif not is_installed:
+            status = "[red]Not installed[/red]"
+        else:
+            status = "[red]Error[/red]"
 
+        installed_display = "[green]Yes[/green]" if is_installed else "[red]No[/red]"
         free_tier = "Yes" if provider in free_providers else "No"
 
         features = []
@@ -145,12 +158,248 @@ def providers() -> None:
 
         table.add_row(
             provider.value,
+            installed_display,
+            api_key_display,
             status,
             free_tier,
             ", ".join(features) if features else "Basic",
         )
 
     console.print(table)
+    console.print()
+    console.print(
+        "[dim]Tip: Run '{{ project_slug }} ai add-provider <name>' "
+        "to install missing providers.[/dim]"
+    )
+
+
+@app.command("add-provider")
+def add_provider(
+    provider: str = typer.Argument(
+        ...,
+        help="Provider name (openai, anthropic, google, groq, mistral, cohere)",
+    ),
+    set_default: bool = typer.Option(
+        True,
+        "--set-default/--no-set-default",
+        help="Set as default provider after adding",
+    ),
+    skip_api_key: bool = typer.Option(
+        False,
+        "--skip-api-key",
+        help="Skip API key configuration",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Skip confirmation prompts",
+    ),
+) -> None:
+    """
+    Add a new AI provider to your project.
+
+    Installs required dependencies and optionally configures the API key.
+
+    Examples:
+        ai add-provider google           # Add Google with API key prompt
+        ai add-provider groq --skip-api-key  # Just install dependencies
+        ai add-provider anthropic -y     # Install without prompts
+    """
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+
+    from ..services.ai.provider_management import (
+        PROVIDER_API_KEY_URLS,
+        get_env_var_name,
+        get_existing_api_key,
+        get_missing_dependency,
+        get_valid_provider_names,
+        install_provider_dependency,
+        update_env_file,
+        validate_provider_name,
+    )
+
+    # Validate provider name
+    provider_enum = validate_provider_name(provider)
+    if not provider_enum:
+        valid_names = ", ".join(get_valid_provider_names())
+        console.print(f"[red]Invalid provider: {provider}[/red]")
+        console.print(f"[dim]Valid providers: {valid_names}[/dim]")
+        raise typer.Exit(1)
+
+    console.print()
+    console.print(f"[bold cyan]Adding {provider} provider...[/bold cyan]")
+    console.print()
+
+    # Check if dependency is installed
+    missing_dep = get_missing_dependency(provider)
+    if missing_dep:
+        console.print(f"  [dim]>[/dim] Checking dependencies...")
+        # Escape brackets for Rich (otherwise [google] is interpreted as style)
+        display_dep = missing_dep.replace("[", r"\[")
+        console.print(f"    [yellow]{display_dep} not installed[/yellow]")
+        console.print()
+
+        # Prompt for installation unless --yes
+        if not yes:
+            confirm = typer.confirm(f"Install {missing_dep}?", default=True)
+            if not confirm:
+                console.print("[yellow]Installation cancelled[/yellow]")
+                raise typer.Exit(0)
+
+        # Install with progress spinner
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+            progress.add_task(description="Installing...", total=None)
+            success, message = install_provider_dependency(provider)
+
+        if success:
+            console.print(f"  [green]✓[/green] {message}")
+        else:
+            console.print(f"  [red]✗[/red] {message}")
+            console.print()
+            console.print("[yellow]Try installing manually:[/yellow]")
+            console.print(f"  [cyan]uv add {missing_dep}[/cyan]")
+            console.print("  [dim]or[/dim]")
+            console.print(f"  [cyan]pip install {missing_dep}[/cyan]")
+            raise typer.Exit(1)
+    else:
+        console.print(f"  [green]✓[/green] Dependencies already installed")
+
+    # Handle API key configuration
+    if provider_enum != AIProvider.PUBLIC and not skip_api_key:
+        env_var_name = get_env_var_name(provider)
+        existing_key = get_existing_api_key(provider)
+
+        console.print()
+        if existing_key:
+            console.print(f"  [green]✓[/green] {env_var_name} already set")
+        else:
+            api_key_url = PROVIDER_API_KEY_URLS.get(provider.lower())
+            console.print(f"  [dim]>[/dim] Checking API key...")
+            console.print(f"    [yellow]No {env_var_name} found[/yellow]")
+            console.print()
+
+            if api_key_url:
+                console.print(f"  Get your API key at: [cyan]{api_key_url}[/cyan]")
+                console.print()
+
+            # Prompt for API key
+            try:
+                api_key = Prompt.ask(
+                    f"  Enter your {provider.upper()} API key (or press Enter to skip)",
+                    console=console,
+                    password=True,
+                    default="",
+                )
+            except (KeyboardInterrupt, EOFError):
+                console.print("\n[yellow]Skipped API key configuration[/yellow]")
+                api_key = ""
+
+            if api_key:
+                update_env_file({env_var_name: api_key})
+                console.print(f"  [green]✓[/green] {env_var_name} saved to .env")
+            else:
+                console.print(
+                    f"  [yellow]![/yellow] Remember to set {env_var_name} in .env"
+                )
+
+    # Set as default provider
+    if set_default:
+        update_env_file({"AI_PROVIDER": provider.lower()})
+        console.print()
+        console.print(f"  [green]✓[/green] AI_PROVIDER set to [cyan]{provider}[/cyan]")
+
+    # Success message
+    console.print()
+    console.print("[bold green]Provider added successfully![/bold green]")
+    console.print()
+    console.print(f"[dim]Test with: {{ project_slug }} ai chat \"Hello\"[/dim]")
+
+
+@app.command("use-provider")
+def use_provider(
+    provider: str = typer.Argument(
+        ...,
+        help="Provider name to switch to",
+    ),
+) -> None:
+    """
+    Switch to a different AI provider.
+
+    Validates that dependencies are installed and API key is configured.
+
+    Examples:
+        ai use-provider google    # Switch to Google
+        ai use-provider openai    # Switch to OpenAI
+        ai use-provider public    # Switch to free PUBLIC provider
+    """
+    from ..services.ai.provider_management import (
+        check_provider_dependency_installed,
+        get_env_var_name,
+        get_existing_api_key,
+        get_valid_provider_names,
+        update_env_file,
+        validate_provider_name,
+    )
+
+    # Validate provider name
+    provider_enum = validate_provider_name(provider)
+    if not provider_enum:
+        valid_names = ", ".join(get_valid_provider_names())
+        console.print(f"[red]Invalid provider: {provider}[/red]")
+        console.print(f"[dim]Valid providers: {valid_names}[/dim]")
+        raise typer.Exit(1)
+
+    console.print()
+    console.print(f"[bold cyan]Switching to {provider} provider...[/bold cyan]")
+    console.print()
+
+    # Check if dependency is installed
+    if not check_provider_dependency_installed(provider):
+        console.print(f"  [red]✗[/red] Dependencies not installed for {provider}")
+        console.print()
+        console.print("[yellow]Run this command first:[/yellow]")
+        console.print(
+            f"  [cyan]{{ project_slug }} ai add-provider {provider}[/cyan]"
+        )
+        raise typer.Exit(1)
+
+    console.print(f"  [green]✓[/green] Dependencies installed")
+
+    # Check API key (except for PUBLIC)
+    if provider_enum != AIProvider.PUBLIC:
+        env_var_name = get_env_var_name(provider)
+        existing_key = get_existing_api_key(provider)
+
+        if not existing_key:
+            console.print(f"  [yellow]![/yellow] No {env_var_name} configured")
+            console.print()
+            console.print("[yellow]Consider running:[/yellow]")
+            console.print(
+                f"  [cyan]{{ project_slug }} ai add-provider {provider}[/cyan]"
+            )
+            console.print("[dim]to configure your API key[/dim]")
+            console.print()
+
+            # Still allow switching, just warn
+            confirm = typer.confirm("Switch anyway?", default=False)
+            if not confirm:
+                raise typer.Exit(0)
+        else:
+            console.print(f"  [green]✓[/green] {env_var_name} configured")
+
+    # Update AI_PROVIDER in .env
+    update_env_file({"AI_PROVIDER": provider.lower()})
+
+    console.print()
+    console.print(f"[bold green]Switched to {provider}![/bold green]")
+    console.print()
+    console.print(f"[dim]Current provider: {provider}[/dim]")
 
 
 @app.command()
