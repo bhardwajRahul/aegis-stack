@@ -20,6 +20,7 @@ from aegis.core.project_map import render_project_map
 POST_GEN_TIMEOUT_INSTALL = 300  # 5 minutes for dependency installation
 POST_GEN_TIMEOUT_FORMAT = 60  # 1 minute for code formatting
 POST_GEN_TIMEOUT_MIGRATION = 30  # 30 seconds for database migration
+POST_GEN_TIMEOUT_LLM_SYNC = 90  # 90 seconds for LLM catalog sync
 POST_GEN_STDERR_MAX_LINES = 15  # Maximum stderr lines to display
 
 
@@ -928,11 +929,90 @@ def seed_llm_fixtures(project_path: Path, python_version: str | None = None) -> 
         return False
 
 
+def sync_llm_catalog(
+    project_path: Path, project_slug: str, python_version: str | None = None
+) -> bool:
+    """
+    Sync LLM catalog from OpenRouter and LiteLLM APIs.
+
+    This runs the `<project_slug> llm sync` CLI command in the generated project
+    to fetch live model data from public APIs. This provides up-to-date
+    model information including pricing, capabilities, and availability.
+
+    Args:
+        project_path: Path to the project directory
+        project_slug: Project slug name (used for CLI command)
+        python_version: Python version to use (e.g., "3.13") for uv run
+
+    Returns:
+        True if sync succeeded, False otherwise (non-critical)
+    """
+    try:
+        typer.secho("Syncing LLM catalog from external APIs...", fg=typer.colors.CYAN)
+
+        # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
+        env = os.environ.copy()
+        env.pop("VIRTUAL_ENV", None)
+
+        # Build command: uv run [--python X.Y] project-slug llm sync
+        cmd = ["uv", "run"]
+        if python_version:
+            cmd.extend(["--python", python_version])
+        cmd.extend([project_slug, "llm", "sync"])
+
+        result = subprocess.run(
+            cmd,
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            timeout=POST_GEN_TIMEOUT_LLM_SYNC,
+            env=env,
+        )
+
+        if result.returncode == 0:
+            typer.secho("LLM catalog synced successfully", fg=typer.colors.GREEN)
+            return True
+        else:
+            typer.secho(
+                "Warning: LLM catalog sync failed",
+                fg=typer.colors.YELLOW,
+            )
+            if result.stderr:
+                truncated = _truncate_stderr(result.stderr)
+                for line in truncated.split("\n"):
+                    typer.echo(f"   {line}")
+            typer.secho(
+                f"Run '{project_slug} llm sync' manually to populate the catalog",
+                dim=True,
+            )
+            return False
+
+    except subprocess.TimeoutExpired:
+        typer.secho(
+            "Warning: LLM catalog sync timeout",
+            fg=typer.colors.YELLOW,
+        )
+        typer.secho(
+            f"Run '{project_slug} llm sync' manually to populate the catalog",
+            dim=True,
+        )
+        return False
+    except Exception as e:
+        typer.secho(f"Warning: LLM catalog sync failed: {e}", fg=typer.colors.YELLOW)
+        typer.secho(
+            f"Run '{project_slug} llm sync' manually to populate the catalog",
+            dim=True,
+        )
+        return False
+
+
 def run_post_generation_tasks(
     project_path: Path,
     include_migrations: bool = False,
     python_version: str | None = None,
     seed_ai: bool = False,
+    skip_llm_sync: bool = False,
+    project_slug: str | None = None,
 ) -> bool:
     """
     Run all post-generation tasks for a project.
@@ -944,7 +1024,9 @@ def run_post_generation_tasks(
         project_path: Path to the generated/updated project
         include_migrations: Whether to run Alembic migrations (auth or AI with persistence)
         python_version: Python version to use (e.g., "3.13")
-        seed_ai: Whether to seed LLM fixtures (AI service with persistence backend)
+        seed_ai: Whether AI service with persistence backend is enabled
+        skip_llm_sync: Whether to skip LLM catalog sync (--skip-llm-sync flag)
+        project_slug: Project slug name (used for CLI commands, derived from path if not provided)
 
     Returns:
         True if all critical tasks succeeded
@@ -955,7 +1037,7 @@ def run_post_generation_tasks(
 
     Note:
         Dependency installation is critical - if it fails, the entire project
-        generation fails. Other tasks (env setup, migrations, formatting, seeding) are
+        generation fails. Other tasks (env setup, migrations, formatting, sync) are
         non-critical and won't cause hard failures.
     """
     typer.echo()
@@ -992,9 +1074,33 @@ def run_post_generation_tasks(
     # Task 3: Run migrations if needed (non-critical)
     run_migrations(project_path, include_migrations, python_version)
 
-    # Task 4: Seed LLM fixtures if AI service with persistence (non-critical)
+    # Task 4: Seed LLM fixtures and optionally sync from APIs (non-critical)
     if seed_ai:
-        seed_llm_fixtures(project_path, python_version)
+        # Derive project_slug from path if not provided
+        slug = project_slug or project_path.name
+
+        # Always seed static fixtures first as baseline data
+        fixtures_loaded = seed_llm_fixtures(project_path, python_version)
+
+        if skip_llm_sync:
+            typer.secho("LLM catalog sync skipped", fg=typer.colors.CYAN)
+            if fixtures_loaded:
+                typer.secho(
+                    "Static fixture data loaded (may be outdated)",
+                    dim=True,
+                )
+            typer.secho(
+                f"Run '{slug} llm sync' later to get latest model data",
+                dim=True,
+            )
+        else:
+            # Try to sync from live APIs for up-to-date data
+            sync_success = sync_llm_catalog(project_path, slug, python_version)
+            if not sync_success and fixtures_loaded:
+                typer.secho(
+                    "Static fixture data is available but may be outdated",
+                    dim=True,
+                )
 
     # Task 5: Format code (non-critical)
     format_code(project_path)

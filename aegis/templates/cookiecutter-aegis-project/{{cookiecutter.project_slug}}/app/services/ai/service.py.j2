@@ -34,9 +34,9 @@ from .models import (
     StreamingMessage,
 )
 {% if cookiecutter.ai_framework == "pydantic-ai" %}
-from .providers import get_agent
+from .providers import ProviderNotInstalledError, get_agent
 {% else %}
-from .providers import get_llm
+from .providers import ProviderNotInstalledError, get_llm
 {% endif %}
 from .health_context import HealthContext
 from .usage_context import UsageContext
@@ -482,6 +482,9 @@ class AIService:
             logger.error(error_msg)
             raise ProviderError(error_msg) from e
 {% endif %}
+        except ProviderNotInstalledError:
+            # Re-raise without wrapping - CLI will handle display
+            raise
         except Exception as e:
             error_msg = f"Streaming failed: {e}"
             logger.error(error_msg)

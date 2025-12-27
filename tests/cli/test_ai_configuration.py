@@ -46,7 +46,7 @@ class TestAIProviderSelection:
             True,  # Enable RAG? Yes (default)
         ]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         # Verify AI service was selected (now uses bracket syntax like ai[backend,framework,...])
         assert any(s.startswith("ai") for s in services)
@@ -78,7 +78,7 @@ class TestAIProviderSelection:
             True,  # Enable RAG? Yes (default)
         ]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         # Verify AI service was selected
         assert any(s.startswith("ai") for s in services)
@@ -111,7 +111,7 @@ class TestAIProviderSelection:
             True,  # Enable RAG? Yes (default)
         ]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         # Verify AI service was selected
         assert any(s.startswith("ai") for s in services)
@@ -135,7 +135,7 @@ class TestAIProviderSelection:
             False,  # AI service
         ]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         # Verify AI service was not selected
         assert "ai" not in services
@@ -169,6 +169,7 @@ class TestAIBackendSelection:
             True,  # AI service
             False,  # Use LangChain? No (use PydanticAI)
             True,  # Enable usage tracking with SQLite? Yes
+            True,  # Sync LLM catalog during project generation? Yes
             False,
             False,
             True,
@@ -178,7 +179,7 @@ class TestAIBackendSelection:
             True,  # Enable RAG? Yes (default)
         ]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         # Verify AI service was selected
         assert any(s.startswith("ai") for s in services)
@@ -205,6 +206,7 @@ class TestAIBackendSelection:
             True,  # AI service
             False,  # Use LangChain? No (use PydanticAI)
             True,  # Enable usage tracking with SQLite? Yes
+            True,  # Sync LLM catalog during project generation? Yes
             False,
             False,
             True,
@@ -214,7 +216,7 @@ class TestAIBackendSelection:
             True,  # Enable RAG? Yes (default)
         ]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         # Verify AI service was selected
         assert any(s.startswith("ai") for s in services)
@@ -249,7 +251,7 @@ class TestAIBackendSelection:
             True,  # Enable RAG? Yes (default)
         ]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         # Verify AI service was selected
         assert any(s.startswith("ai") for s in services)
@@ -406,7 +408,7 @@ class TestAIConfigurationEndToEnd:
         ]
 
         # Run interactive selection
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         # Verify service selection
         assert any(s.startswith("ai") for s in services)

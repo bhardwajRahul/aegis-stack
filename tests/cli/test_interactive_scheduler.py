@@ -29,7 +29,7 @@ class TestInteractiveSchedulerFlow:
             False,
         ]  # redis, worker, scheduler, persistence, continue with SQLite, auth, AI
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         # Should return scheduler[sqlite] and database with SQLite engine info
         assert "scheduler[sqlite]" in components
@@ -71,7 +71,7 @@ class TestInteractiveSchedulerFlow:
             False,
         ]  # redis, worker, scheduler, no persistence, database=no, no auth, no AI
 
-        components, scheduler_backend, _ = interactive_project_selection()
+        components, scheduler_backend, _, _ = interactive_project_selection()
 
         # Should only return scheduler, no database
         assert "scheduler" in components
@@ -91,7 +91,7 @@ class TestInteractiveSchedulerFlow:
             False,
         ]  # All components declined, no auth, no AI
 
-        components, scheduler_backend, _ = interactive_project_selection()
+        components, scheduler_backend, _, _ = interactive_project_selection()
 
         # Should return empty list (no infrastructure components)
         assert "scheduler" not in components
@@ -115,7 +115,7 @@ class TestInteractiveSchedulerFlow:
             False,
         ]  # redis, worker, scheduler, persistence, continue SQLite, no auth, no AI
 
-        components, scheduler_backend, _ = interactive_project_selection()
+        components, scheduler_backend, _, _ = interactive_project_selection()
 
         # Should have scheduler[sqlite] and database
         assert "scheduler[sqlite]" in components
@@ -142,7 +142,7 @@ class TestInteractiveSchedulerFlow:
             False,
         ]  # redis, worker, scheduler, persistence, decline SQLite, database=no, no auth, no AI
 
-        components, scheduler_backend, _ = interactive_project_selection()
+        components, scheduler_backend, _, _ = interactive_project_selection()
 
         # Should have scheduler but no database
         assert "scheduler" in components
@@ -164,7 +164,7 @@ class TestInteractiveSchedulerFlow:
             False,
         ]  # redis=no, worker=yes, scheduler=yes, persistence=yes, continue=yes, no auth, no AI
 
-        components, scheduler_backend, _ = interactive_project_selection()
+        components, scheduler_backend, _, _ = interactive_project_selection()
 
         # Should have redis (from worker), worker, scheduler[sqlite], database[sqlite]
         assert "redis" in components
@@ -180,7 +180,7 @@ class TestInteractiveSchedulerFlow:
         # Mock responses: redis=no, worker=no, scheduler=no, database=yes, no auth, no AI
         mock_confirm.side_effect = [False, False, False, True, False, False]
 
-        components, scheduler_backend, _ = interactive_project_selection()
+        components, scheduler_backend, _, _ = interactive_project_selection()
 
         # Should have just database (no engine suffix when not from scheduler)
         assert components == ["database"]

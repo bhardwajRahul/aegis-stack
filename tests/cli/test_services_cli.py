@@ -247,7 +247,7 @@ class TestInteractiveServiceSelection:
             # Simulate: no components selected, but yes auth service + yes to database confirmation + no AI service
             mock_confirm.side_effect = [False, False, False, False, True, True, False]
 
-            components, scheduler_backend, services = interactive_project_selection()
+            components, scheduler_backend, services, _ = interactive_project_selection()
 
             assert components == []  # No components selected
             assert scheduler_backend == "memory"  # Default
@@ -263,7 +263,7 @@ class TestInteractiveServiceSelection:
             # Simulate: no components, no services (decline auth, decline AI)
             mock_confirm.side_effect = [False, False, False, False, False, False]
 
-            components, scheduler_backend, services = interactive_project_selection()
+            components, scheduler_backend, services, _ = interactive_project_selection()
 
             assert components == []
             assert scheduler_backend == "memory"

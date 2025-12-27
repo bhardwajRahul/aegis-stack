@@ -22,7 +22,7 @@ class TestSchedulerPersistenceTracking:
         # Simulate: no redis, no worker, yes scheduler, yes persistence, yes sqlite, no auth, no AI
         mock_confirm.side_effect = [False, False, True, True, True, False, False]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         assert "scheduler[sqlite]" in components
         assert "database[sqlite]" in components
@@ -35,7 +35,7 @@ class TestSchedulerPersistenceTracking:
         # Simulate: no redis, no worker, yes scheduler, no persistence, no database, no auth, no AI
         mock_confirm.side_effect = [False, False, True, False, False, False, False]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         assert "scheduler" in components
         assert "database[sqlite]" not in components
@@ -57,7 +57,7 @@ class TestSchedulerPersistenceTracking:
             False,
         ]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         assert "scheduler" in components
         assert "database[sqlite]" not in components
@@ -70,7 +70,7 @@ class TestSchedulerPersistenceTracking:
         # Simulate: no redis, no worker, no scheduler, yes database, no auth, no AI
         mock_confirm.side_effect = [False, False, False, True, False, False]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         assert "scheduler" not in components
         assert "database" in components
@@ -85,7 +85,7 @@ class TestSchedulerPersistenceTracking:
         # Simulate: no redis, no worker, no scheduler, yes database, no auth, no AI
         mock_confirm.side_effect = [False, False, False, True, False, False]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         assert "scheduler" not in components
         assert "database" in components
@@ -98,7 +98,7 @@ class TestSchedulerPersistenceTracking:
         # Simulate: no redis, no worker, yes scheduler, no persistence, yes database, no auth, no AI
         mock_confirm.side_effect = [False, False, True, False, True, False, False]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         assert "scheduler" in components
         assert "database" in components
@@ -111,7 +111,7 @@ class TestSchedulerPersistenceTracking:
         # Simulate: yes redis, yes worker, yes scheduler, yes persistence, yes sqlite, no auth, no AI
         mock_confirm.side_effect = [True, True, True, True, True, False, False]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         assert "redis" in components
         assert "worker" in components
@@ -258,7 +258,7 @@ class TestSchedulerPersistenceLogic:
         # We can't easily test the echo output, but we can test the logic flow
         mock_confirm.side_effect = [False, False, True, True, True, False, False]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         # Verify the logic worked correctly
         assert scheduler_backend == "sqlite"
@@ -270,7 +270,7 @@ class TestSchedulerPersistenceLogic:
         with patch("typer.confirm") as mock_confirm:
             mock_confirm.side_effect = [False, False, True, True, True, False, False]
 
-            components, scheduler_backend, services = interactive_project_selection()
+            components, scheduler_backend, services, _ = interactive_project_selection()
 
             # Should have database with engine info when added by scheduler
             database_components = [c for c in components if c.startswith("database")]
