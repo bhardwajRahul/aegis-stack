@@ -12,6 +12,7 @@ from typing import Annotated
 import typer
 from app.core.config import settings
 from app.core.log import suppress_logs
+from app.services.rag.config import get_rag_config
 from app.services.rag.service import RAGService
 from rich.console import Console
 from rich.panel import Panel
@@ -30,7 +31,8 @@ console = Console()
 
 def get_rag_service() -> RAGService:
     """Get RAG service instance."""
-    return RAGService(settings)
+    config = get_rag_config(settings)
+    return RAGService(config)
 
 
 def format_duration(ms: float) -> str:
@@ -45,6 +47,76 @@ def format_duration(ms: float) -> str:
     hours = int(minutes // 60)
     remaining_minutes = minutes % 60
     return f"{hours}h {remaining_minutes}m"
+
+
+def _get_model_cache_path() -> Path:
+    """Get the path where embedding model would be cached."""
+    if settings.RAG_MODEL_CACHE_DIR:
+        return Path(settings.RAG_MODEL_CACHE_DIR)
+    # Default HuggingFace cache location
+    return Path.home() / ".cache" / "huggingface" / "hub"
+
+
+def _is_model_cached() -> bool:
+    """Check if the embedding model is already downloaded."""
+    model_name = settings.RAG_EMBEDDING_MODEL
+    cache_path = _get_model_cache_path()
+
+    # sentence-transformers caches models in hub/models--{org}--{model}
+    model_dir_name = f"models--{model_name.replace('/', '--')}"
+    model_path = cache_path / model_dir_name
+
+    # Check if model directory exists and has content
+    return model_path.exists() and any(model_path.iterdir())
+
+
+def _ensure_model_ready() -> None:
+    """Check if model/API is ready, download local model if needed."""
+    # OpenAI embeddings don't require local model
+    if settings.RAG_EMBEDDING_PROVIDER == "openai":
+        # Early validation: check API key is configured
+        api_key = getattr(settings, "OPENAI_API_KEY", None)
+        if not api_key:
+            console.print()
+            console.print("[red]OpenAI API key not configured.[/red]")
+            console.print(
+                "[dim]Set OPENAI_API_KEY environment variable to use OpenAI embeddings.[/dim]"
+            )
+            raise typer.Exit(code=1)
+        return
+
+    # sentence-transformers: check cache and download if needed
+    if _is_model_cached():
+        return
+
+    model_name = settings.RAG_EMBEDDING_MODEL
+    cache_dir = settings.RAG_MODEL_CACHE_DIR
+
+    console.print()
+    console.print("[yellow]Embedding model not found locally.[/yellow]")
+    console.print(f"[dim]Model: {model_name} (~400MB download)[/dim]")
+    console.print()
+
+    try:
+        from sentence_transformers import SentenceTransformer
+
+        console.print(
+            "[bold cyan]Downloading embedding model (first-time setup)...[/bold cyan]"
+        )
+        console.print()  # Blank line before tqdm progress bars
+
+        if cache_dir:
+            SentenceTransformer(model_name, cache_folder=cache_dir)
+        else:
+            SentenceTransformer(model_name)
+
+        console.print()  # Blank line after progress bars
+        console.print("[green]✓ Model downloaded successfully[/green]")
+        console.print()
+    except Exception as e:
+        console.print(f"[red]Failed to download model: {e}[/red]")
+        console.print("[dim]Try running: rag install-model[/dim]")
+        raise typer.Exit(code=1)
 
 
 @app.command("index")
@@ -77,6 +149,10 @@ def index_documents(
         # Index specific directory with extensions
         rag index ./app --collection code --extensions .py,.ts
     """
+    # Ensure embedding model is available (download if needed)
+    if settings.RAG_EMBEDDING_PROVIDER == "sentence-transformers":
+        _ensure_model_ready()
+
     rag_service = get_rag_service()
 
     # Parse extensions
@@ -195,6 +271,10 @@ def add_file(
         # Show the chunk IDs
         rag add app/services/auth.py -c my-code --show-ids
     """
+    # Ensure embedding model is available (download if needed)
+    if settings.RAG_EMBEDDING_PROVIDER == "sentence-transformers":
+        _ensure_model_ready()
+
     rag_service = get_rag_service()
 
     console.print(f"\n[bold blue]Adding:[/bold blue] {path}")
@@ -385,6 +465,10 @@ def search_documents(
         # Show full content
         rag search "database connection" -c code --content
     """
+    # Ensure embedding model is available (download if needed)
+    if settings.RAG_EMBEDDING_PROVIDER == "sentence-transformers":
+        _ensure_model_ready()
+
     rag_service = get_rag_service()
 
     console.print(f"\n[bold blue]Searching:[/bold blue] {query}")
@@ -531,11 +615,21 @@ def show_status() -> None:
         status = rag_service.get_service_status()
         collections = asyncio.run(rag_service.list_collections())
 
+        # Check if embedding model is installed
+        model_cached = _is_model_cached()
+        if model_cached:
+            model_status = "[green]Installed[/green]"
+        else:
+            model_status = (
+                "[yellow]Not installed[/yellow] [dim](run: rag install-model)[/dim]"
+            )
+
         # Create status panel
         status_lines = [
             f"[bold]Enabled:[/bold] {'Yes' if status.get('enabled') else 'No'}",
             f"[bold]Persist Directory:[/bold] {status.get('persist_directory')}",
             f"[bold]Embedding Model:[/bold] {status.get('embedding_model')}",
+            f"[bold]Model Status:[/bold] {model_status}",
             f"[bold]Chunk Size:[/bold] {status.get('chunk_size')}",
             f"[bold]Chunk Overlap:[/bold] {status.get('chunk_overlap')}",
             f"[bold]Default Top K:[/bold] {status.get('default_top_k')}",
@@ -559,4 +653,122 @@ def show_status() -> None:
 
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+
+@app.command("install-model")
+def install_model(
+    cache_dir: Annotated[
+        str | None,
+        typer.Option(
+            "--cache-dir",
+            "-d",
+            help="Directory to cache the model (default: system HuggingFace cache)",
+        ),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option(
+            "--model",
+            "-m",
+            help="Model name to download (default: from settings)",
+        ),
+    ] = None,
+) -> None:
+    """
+    Pre-download the embedding model for offline/air-gapped operation.
+
+    Downloads the sentence-transformers model to a local cache directory
+    so RAG operations work without network access.
+
+    Examples:
+        # Download to default location (system HuggingFace cache)
+        rag install-model
+
+        # Download to custom location
+        rag install-model --cache-dir /path/to/models
+
+        # Download a specific model
+        rag install-model --model sentence-transformers/all-MiniLM-L6-v2
+    """
+    # OpenAI embeddings don't require local model download
+    if settings.RAG_EMBEDDING_PROVIDER == "openai":
+        console.print(
+            "\n[yellow]OpenAI embeddings don't require local model downloads.[/yellow]"
+        )
+        console.print("[dim]Ensure OPENAI_API_KEY is set in your environment.[/dim]\n")
+        return
+
+    from sentence_transformers import SentenceTransformer
+
+    # Determine model name
+    model_name = model or settings.RAG_EMBEDDING_MODEL
+
+    # Determine cache directory (None = use system HuggingFace cache)
+    target_dir = cache_dir or settings.RAG_MODEL_CACHE_DIR
+
+    # Check if model is already cached before downloading
+    was_cached = _is_model_cached()
+
+    console.print(f"\n[bold blue]Model:[/bold blue] {model_name}")
+    if target_dir:
+        console.print(
+            f"[bold blue]Cache directory:[/bold blue] {Path(target_dir).resolve()}"
+        )
+    else:
+        console.print(
+            "[bold blue]Cache directory:[/bold blue] [dim](system HuggingFace cache)[/dim]"
+        )
+    console.print()
+
+    try:
+        # Create cache directory if specified
+        if target_dir:
+            target_path = Path(target_dir)
+            target_path.mkdir(parents=True, exist_ok=True)
+
+        # Download/load model with appropriate messaging
+        if was_cached:
+            console.print("[dim]Loading model from cache...[/dim]")
+        else:
+            console.print(f"[bold cyan]Downloading {model_name}...[/bold cyan]")
+            console.print()  # Blank line before tqdm progress bars
+
+        if target_dir:
+            _ = SentenceTransformer(model_name, cache_folder=str(target_path))
+        else:
+            _ = SentenceTransformer(model_name)
+
+        if not was_cached:
+            console.print()  # Blank line after progress bars
+
+        # Build result message
+        if was_cached:
+            status_msg = "[green]Model found in cache[/green]"
+            title = "Model Ready"
+        else:
+            status_msg = "[green]Model downloaded successfully[/green]"
+            title = "Model Installation Complete"
+
+        if target_dir:
+            location_msg = f"[bold]Location:[/bold] {Path(target_dir).resolve()}"
+            hint_msg = f"\n\n[dim]To use this cache, set RAG_MODEL_CACHE_DIR={target_dir}[/dim]"
+        else:
+            location_msg = (
+                "[bold]Location:[/bold] [dim](system HuggingFace cache)[/dim]"
+            )
+            hint_msg = ""
+
+        console.print(
+            Panel(
+                f"{status_msg}\n\n"
+                f"[bold]Model:[/bold] {model_name}\n"
+                f"{location_msg}{hint_msg}",
+                title=title,
+                border_style="green",
+            )
+        )
+
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] Failed to download model: {e}")
         raise typer.Exit(code=1)

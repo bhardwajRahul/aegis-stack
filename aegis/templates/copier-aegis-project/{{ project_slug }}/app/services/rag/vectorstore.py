@@ -41,6 +41,7 @@ class VectorStoreManager:
         embedding_provider: str = "sentence-transformers",
         embedding_model: str = "BAAI/bge-small-en-v1.5",
         openai_api_key: str | None = None,
+        model_cache_dir: str | None = None,
     ):
         """
         Initialize vector store manager.
@@ -50,11 +51,13 @@ class VectorStoreManager:
             embedding_provider: Provider to use ('sentence-transformers' or 'openai')
             embedding_model: Model name for the selected provider
             openai_api_key: API key for OpenAI embeddings (required if provider is 'openai')
+            model_cache_dir: Directory for model cache (None = system default)
         """
         self.persist_directory = Path(persist_directory)
         self.embedding_provider = embedding_provider
         self.embedding_model = embedding_model
         self.openai_api_key = openai_api_key
+        self.model_cache_dir = model_cache_dir
         self._client: chromadb.ClientAPI | None = None
         self._embedding_function: Any = None
 
@@ -112,7 +115,15 @@ class VectorStoreManager:
             logger.debug(
                 "vectorstore.embedding.sentence_transformers",
                 model=self.embedding_model,
+                cache_dir=self.model_cache_dir,
             )
+            # Pass cache_folder if specified (for local development)
+            # In Docker, SENTENCE_TRANSFORMERS_HOME env var handles this
+            if self.model_cache_dir:
+                return SentenceTransformerEmbeddingFunction(
+                    model_name=self.embedding_model,
+                    cache_folder=self.model_cache_dir,
+                )
             return SentenceTransformerEmbeddingFunction(
                 model_name=self.embedding_model,
             )

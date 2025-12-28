@@ -42,6 +42,7 @@ from .health_context import HealthContext
 from .usage_context import UsageContext
 from .prompts import build_system_prompt
 {% if cookiecutter.ai_rag == "yes" %}
+from app.services.rag.config import get_rag_config
 from app.services.rag.service import RAGService
 from .rag_context import RAGContext
 from .rag_stats_context import RAGStatsContext
@@ -96,7 +97,8 @@ class AIService:
     def rag_service(self) -> RAGService:
         """Lazy initialization of RAG service."""
         if self._rag_service is None:
-            self._rag_service = RAGService(self.settings)
+            config = get_rag_config(self.settings)
+            self._rag_service = RAGService(config)
         return self._rag_service
 {% endif %}
 

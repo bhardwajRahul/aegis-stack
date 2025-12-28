@@ -55,6 +55,11 @@ version:
   help: "Initial version"
   default: "0.1.0"
 
+aegis_version:
+  type: str
+  help: "Aegis Stack version (auto-injected)"
+  default: "0.0.0"
+
 python_version:
   type: str
   help: "Python version to use"

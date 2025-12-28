@@ -5,9 +5,12 @@ Configuration management for RAG service including chunking settings,
 vector store paths, and search parameters.
 """
 
-from typing import Any
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from app.core.config import Settings
 
 
 class RAGServiceConfig(BaseModel):
@@ -29,6 +32,14 @@ class RAGServiceConfig(BaseModel):
     embedding_model: str = Field(
         default="BAAI/bge-small-en-v1.5",
         description="Embedding model name for the selected provider",
+    )
+    model_cache_dir: str | None = Field(
+        default=None,
+        description="Directory for model cache (None = system default)",
+    )
+    openai_api_key: str | None = Field(
+        default=None,
+        description="OpenAI API key for embeddings (if using OpenAI provider)",
     )
     chunk_size: int = Field(
         default=2000,
@@ -54,22 +65,18 @@ class RAGServiceConfig(BaseModel):
     )
 
     @classmethod
-    def from_settings(cls, settings: Any) -> "RAGServiceConfig":
+    def from_settings(cls, settings: "Settings") -> "RAGServiceConfig":
         """Create configuration from main application settings."""
         return cls(
-            enabled=getattr(settings, "RAG_ENABLED", True),
-            persist_directory=getattr(
-                settings, "RAG_PERSIST_DIRECTORY", "./data/chromadb"
-            ),
-            embedding_provider=getattr(
-                settings, "RAG_EMBEDDING_PROVIDER", "sentence-transformers"
-            ),
-            embedding_model=getattr(
-                settings, "RAG_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5"
-            ),
-            chunk_size=getattr(settings, "RAG_CHUNK_SIZE", 2000),
-            chunk_overlap=getattr(settings, "RAG_CHUNK_OVERLAP", 400),
-            default_top_k=getattr(settings, "RAG_DEFAULT_TOP_K", 5),
+            enabled=settings.RAG_ENABLED,
+            persist_directory=settings.RAG_PERSIST_DIRECTORY,
+            embedding_provider=settings.RAG_EMBEDDING_PROVIDER,
+            embedding_model=settings.RAG_EMBEDDING_MODEL,
+            model_cache_dir=settings.RAG_MODEL_CACHE_DIR,
+            openai_api_key=settings.OPENAI_API_KEY,
+            chunk_size=settings.RAG_CHUNK_SIZE,
+            chunk_overlap=settings.RAG_CHUNK_OVERLAP,
+            default_top_k=settings.RAG_DEFAULT_TOP_K,
         )
 
     def validate_configuration(self) -> list[str]:
@@ -93,6 +100,6 @@ class RAGServiceConfig(BaseModel):
         return errors
 
 
-def get_rag_config(settings: Any) -> RAGServiceConfig:
+def get_rag_config(settings: "Settings") -> RAGServiceConfig:
     """Get RAG service configuration from application settings."""
     return RAGServiceConfig.from_settings(settings)

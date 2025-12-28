@@ -9,6 +9,7 @@ from typing import Any
 from app.core.config import settings
 from app.core.log import logger
 
+from .config import get_rag_config
 from .service import RAGService
 
 
@@ -24,7 +25,8 @@ async def check_rag_service_health() -> dict[str, Any]:
             - issues: Any validation issues
     """
     try:
-        service = RAGService(settings)
+        config = get_rag_config(settings)
+        service = RAGService(config)
 
         # Get service status
         status = service.get_service_status()

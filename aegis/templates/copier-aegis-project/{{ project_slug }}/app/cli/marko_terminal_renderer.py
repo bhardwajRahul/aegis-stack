@@ -316,12 +316,22 @@ class TerminalRenderer(Renderer):
         # First pass: render all cells and collect metadata
         rendered_rows = []
         for row in rows:
+            # Skip non-element children (strings from malformed parsing)
+            if not hasattr(row, "children"):
+                continue
             rendered_cells = []
             for cell in row.children:
+                # Skip non-element cells
+                if not hasattr(cell, "children"):
+                    continue
                 content = self.render_children(cell)
-                is_header = cell.header
+                is_header = getattr(cell, "header", False)
                 rendered_cells.append((content, is_header))
-            rendered_rows.append(rendered_cells)
+            if rendered_cells:
+                rendered_rows.append(rendered_cells)
+
+        if not rendered_rows:
+            return ""
 
         # Calculate column widths from rendered content
         col_widths = self._calculate_widths_from_rendered(rendered_rows)
@@ -480,6 +490,8 @@ class TerminalRenderer(Renderer):
             def fallback_render(element):
                 """Generic fallback - renders as plain text."""
                 if hasattr(element, "children"):
+                    if isinstance(element.children, str):
+                        return element.children
                     return self.render_children(element)
                 return str(element)
 

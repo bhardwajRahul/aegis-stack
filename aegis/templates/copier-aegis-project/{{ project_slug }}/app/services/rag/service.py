@@ -14,7 +14,7 @@ from typing import Any
 from app.core.log import logger
 
 from .chunking import DocumentChunker
-from .config import get_rag_config
+from .config import RAGServiceConfig
 from .ids import get_file_hash
 from .loaders import CodebaseLoader
 from .models import Document, FileIndexResult, IndexedFile, IndexStats, SearchResult
@@ -54,10 +54,12 @@ class RAGService:
 
     Example:
         ```python
+        from app.services.rag.config import get_rag_config
         from app.services.rag.service import RAGService
         from app.core.config import settings
 
-        rag = RAGService(settings)
+        config = get_rag_config(settings)
+        rag = RAGService(config)
 
         # Index codebase
         await rag.refresh_index("./app", "my-codebase")
@@ -69,10 +71,9 @@ class RAGService:
         ```
     """
 
-    def __init__(self, settings: Any):
+    def __init__(self, config: RAGServiceConfig):
         """Initialize RAG service with configuration."""
-        self.settings = settings
-        self.config = get_rag_config(settings)
+        self.config = config
         self.loader = CodebaseLoader()
         self.chunker = DocumentChunker(
             chunk_size=self.config.chunk_size,
@@ -82,7 +83,8 @@ class RAGService:
             persist_directory=self.config.persist_directory,
             embedding_provider=self.config.embedding_provider,
             embedding_model=self.config.embedding_model,
-            openai_api_key=settings.OPENAI_API_KEY,
+            openai_api_key=self.config.openai_api_key,
+            model_cache_dir=self.config.model_cache_dir,
         )
         self._last_activity: datetime | None = None
 
