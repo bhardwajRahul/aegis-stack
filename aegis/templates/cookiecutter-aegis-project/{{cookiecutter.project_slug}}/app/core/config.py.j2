@@ -159,6 +159,7 @@ class Settings(BaseSettings):
     RAG_PERSIST_DIRECTORY: str = "./data/chromadb"
     RAG_EMBEDDING_PROVIDER: str = "sentence-transformers"  # or "openai"
     RAG_EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"  # Better default
+    RAG_MODEL_CACHE_DIR: str | None = None  # None = system default, "./data/models" for local dev
     RAG_CHUNK_SIZE: int = 2000
     RAG_CHUNK_OVERLAP: int = 400
     RAG_DEFAULT_TOP_K: int = 5

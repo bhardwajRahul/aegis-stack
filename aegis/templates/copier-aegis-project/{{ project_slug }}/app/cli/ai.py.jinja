@@ -956,13 +956,13 @@ async def _interactive_chat_session(
     """Start an interactive chat session with continuous conversation."""
     import asyncio
 
-    from app import __version__
+    from app import __aegis_version__
 
     # Illiana boot sequence
     ai_config = get_ai_config(settings)
 
     console.print()
-    console.print(f"[bold bright_magenta]Illiana[/bold bright_magenta] [dim]v{__version__}[/dim]")
+    console.print(f"[bold bright_magenta]Illiana[/bold bright_magenta] [dim]v{__aegis_version__}[/dim]")
     console.print()
 
     # Boot steps with brief delays for effect
@@ -977,7 +977,23 @@ async def _interactive_chat_session(
     console.print(f"  [dim]>[/dim] Model: [cyan]{ai_config.model}[/cyan]")
 
 {% if ai_rag %}
-    rag_status = "[green]ON[/green]" if use_rag else "[dim]OFF[/dim]"
+    # Check RAG status - verify collections exist if RAG is enabled
+    if use_rag:
+        try:
+            from app.services.rag.config import get_rag_config
+            from app.services.rag.service import RAGService
+
+            rag_config = get_rag_config(settings)
+            rag_service = RAGService(rag_config)
+            collections = await rag_service.list_collections()
+            if collections:
+                rag_status = "[green]ON[/green]"
+            else:
+                rag_status = "[yellow]OFF[/yellow] [dim](no collections)[/dim]"
+        except Exception:
+            rag_status = "[yellow]OFF[/yellow] [dim](unavailable)[/dim]"
+    else:
+        rag_status = "[dim]OFF[/dim]"
     console.print(f"  [dim]>[/dim] RAG: {rag_status}")
 {% endif %}
 

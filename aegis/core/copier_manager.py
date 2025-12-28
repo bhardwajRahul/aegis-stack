@@ -89,6 +89,7 @@ def generate_with_copier(
         "github_username": cookiecutter_context.get("github_username", "your-username"),
         "version": cookiecutter_context.get("version", "0.1.0"),
         "python_version": python_version,
+        "aegis_version": cookiecutter_context.get("aegis_version", "0.0.0"),
         # Convert yes/no strings to booleans
         AnswerKeys.SCHEDULER: cookiecutter_context[AnswerKeys.SCHEDULER] == "yes",
         AnswerKeys.SCHEDULER_BACKEND: cookiecutter_context[

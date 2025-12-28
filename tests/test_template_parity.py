@@ -233,6 +233,7 @@ def generate_with_copier(
         "author_email": "your.email@example.com",
         "github_username": "your-username",
         "version": "0.1.0",
+        "aegis_version": cookiecutter_context.get("aegis_version", "0.0.0"),
         "python_version": "3.11",  # Use 3.11 to match Cookiecutter and ensure test compatibility
         "include_scheduler": cookiecutter_context["include_scheduler"] == "yes",
         "scheduler_backend": cookiecutter_context["scheduler_backend"],

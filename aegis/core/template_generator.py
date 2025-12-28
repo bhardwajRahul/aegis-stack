@@ -8,6 +8,7 @@ the template rendering process based on selected components.
 from pathlib import Path
 from typing import Any
 
+from .. import __version__ as aegis_version
 from ..config.defaults import DEFAULT_PYTHON_VERSION
 from ..constants import (
     AIFrameworks,
@@ -151,6 +152,7 @@ class TemplateGenerator:
             "project_name": self.project_name,
             "project_slug": self.project_slug,
             "python_version": self.python_version,
+            "aegis_version": aegis_version,
             # Component flags for template conditionals - cookiecutter needs yes/no
             AnswerKeys.REDIS: "yes"
             if ComponentNames.REDIS in self.components

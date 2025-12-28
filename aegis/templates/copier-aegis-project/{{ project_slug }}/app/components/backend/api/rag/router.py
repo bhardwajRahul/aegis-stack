@@ -8,6 +8,7 @@ search, and collection management.
 from typing import Any
 
 from app.core.config import settings
+from app.services.rag.config import get_rag_config
 from app.services.rag.service import (
     IndexingError,
     LoaderError,
@@ -20,7 +21,8 @@ from pydantic import BaseModel, Field
 router = APIRouter(prefix="/rag", tags=["rag"])
 
 # Initialize RAG service
-rag_service = RAGService(settings)
+_rag_config = get_rag_config(settings)
+rag_service = RAGService(_rag_config)
 
 
 # Request/Response models
