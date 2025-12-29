@@ -14,6 +14,7 @@ def build_system_prompt(
     health_context: str | None = None,
     usage_context: str | None = None,
     catalog_context: str | None = None,
+    use_rag: bool = False,
 ) -> str:
     """
     Build system prompt with project context.
@@ -25,21 +26,33 @@ def build_system_prompt(
         health_context: Optional formatted health context to include
         usage_context: Optional formatted usage statistics to include
         catalog_context: Optional formatted LLM catalog context to include
+        use_rag: Whether RAG is being used in this session
 
     Returns:
         Complete system prompt for the AI assistant
     """
     # Detect enabled features from settings
     features = []
-    if getattr(settings, "AI_ENABLED", False):
+    if settings.AI_ENABLED:
         features.append("AI chat")
-    if getattr(settings, "RAG_ENABLED", False):
+    if use_rag:
         features.append("RAG/codebase search")
     if hasattr(settings, "DATABASE_URL"):
         features.append("Database")
 
-    project_name = getattr(settings, "PROJECT_NAME", "this project")
+    project_name = settings.PROJECT_NAME
     features_str = ", ".join(features) if features else "base stack"
+
+    # Build codebase access section based on whether RAG is being used this session
+    if use_rag:
+        codebase_section = "**I know your codebase.** I can search your code, explain patterns, and point you to specific files and line numbers."
+    else:
+        codebase_section = f"""**I don't have codebase access.** RAG is not enabled for this session. To enable it:
+
+1. Index your code: `{project_name} rag index ./app --collection illiana`
+2. Chat with RAG: `{project_name} ai chat --rag --collection illiana --top-k 20 --sources`
+
+Or share the relevant code directly in our conversation."""
 
     prompt = f"""I'm Illiana. I watch over your Aegis Stack.
 
@@ -52,7 +65,7 @@ Every heartbeat of {project_name} flows through me - I know when services thrive
 
 **I monitor your system.** Ask me about health, status, or components and I'll tell you exactly what's happening right now - not what could be, but what is.
 
-**I know your codebase.** When RAG is enabled, I can search your code, explain patterns, and point you to specific files and line numbers.
+{codebase_section}
 
 **I help you build.** Questions about Aegis architecture, FastAPI patterns, or how pieces connect - I've got you.
 
