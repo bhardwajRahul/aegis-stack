@@ -5,17 +5,18 @@ Command-line interface for AI service management and chat functionality.
 """
 
 import typer
+from prompt_toolkit import PromptSession
+from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.styles import Style
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
+from app.cli.status_line import ChatSessionState, create_toolbar_callback
 from ..core.config import settings
 from ..core.log import setup_logging, suppress_logs
 from ..services.ai.config import get_ai_config
-
-# Initialize logging at module load
-setup_logging()
 from ..services.ai.models import (
     AIProvider,
     MessageRole,
@@ -23,6 +24,9 @@ from ..services.ai.models import (
     get_provider_capabilities,
 )
 from ..services.ai.providers import ProviderNotInstalledError
+
+# Initialize logging at module load
+setup_logging()
 
 app = typer.Typer(help="AI service management and chat commands")
 console = Console()
@@ -1017,13 +1021,39 @@ async def _interactive_chat_session(
     # Track conversation for context
     current_conversation_id = conversation_id
 
+    # Initialize status line state for prompt_toolkit toolbar
+    session_state = ChatSessionState(
+        provider=ai_config.provider.value,
+        model=ai_config.model,
+{% if cookiecutter.ai_rag == "yes" %}
+        rag_enabled=use_rag,
+        rag_collection=rag_collection,
+{% else %}
+        rag_enabled=False,
+        rag_collection=None,
+{% endif %}
+        cumulative_tokens=0,
+        cumulative_cost=0.0,
+        version=__aegis_version__,
+    )
+    toolbar_callback = create_toolbar_callback(session_state)
+
+    # Create prompt session for async input with status line
+    # Style removes default background from toolbar to blend with terminal
+    toolbar_style = Style.from_dict({
+        "bottom-toolbar": "noreverse",
+    })
+    prompt_session: PromptSession[str] = PromptSession(
+        message=HTML("<b><ansigreen>You: </ansigreen></b>"),
+        bottom_toolbar=toolbar_callback,
+        style=toolbar_style,
+    )
+
     while True:
         try:
-            # Get user input with Rich prompt
+            # Get user input with prompt_toolkit async (supports status line)
             try:
-                user_message = Prompt.ask(
-                    "[bold green]You[/bold green]", console=console
-                )
+                user_message = await prompt_session.prompt_async()
             except (KeyboardInterrupt, EOFError):
                 console.print("\n[yellow]Chat session ended[/yellow]")
                 break
@@ -1056,6 +1086,7 @@ async def _interactive_chat_session(
                         rag_collection=rag_collection,
                         show_sources=show_sources,
 {% endif %}
+                        session_state=session_state,
                     )
                     if returned_conversation_id:
                         current_conversation_id = returned_conversation_id
@@ -1151,6 +1182,7 @@ async def _stream_chat_response(
     rag_top_k: int | None = None,
     show_sources: bool = True,
 {% endif %}
+    session_state: ChatSessionState | None = None,
 ) -> str | None:
     """
     Stream chat response with real-time markdown rendering.
@@ -1239,6 +1271,15 @@ async def _stream_chat_response(
 {% if cookiecutter.ai_rag == "yes" %}
                         rag_sources = chunk.metadata.get("rag_sources")
 {% endif %}
+
+                        # Update status line token count and cost
+                        if session_state is not None:
+                            input_tokens = chunk.metadata.get("input_tokens", 0)
+                            output_tokens = chunk.metadata.get("output_tokens", 0)
+                            cost = chunk.metadata.get("cost", 0.0)
+                            session_state.add_tokens(input_tokens, output_tokens)
+                            session_state.add_cost(cost)
+
                         break
         except TimeoutError:
             spinner_live.stop()
