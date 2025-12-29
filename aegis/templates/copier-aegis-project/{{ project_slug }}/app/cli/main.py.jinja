@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import click
 import typer
 
-from app.cli import health
+from app.cli import docs, health
 
 if TYPE_CHECKING:
     pass
@@ -26,6 +26,7 @@ app = typer.Typer(
 
 # Register sub-commands
 app.add_typer(health.app, name="health")
+app.add_typer(docs.app, name="docs")
 
 # Conditionally register load-test command if worker components are available
 try:

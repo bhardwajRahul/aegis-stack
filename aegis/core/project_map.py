@@ -65,16 +65,17 @@ def _render_line(
     is_new = _is_highlighted(check, highlight)
     uses_marker = _get_uses_marker(check, uses)
 
+    # Pad name for consistent column width
+    padded_name = f"{name:<18}"
+
     # Build the line with consistent 18-char name column
     if is_new:
-        styled_name = typer.style(f"{name:<18}", fg=typer.colors.GREEN, bold=True)
-        new_marker = typer.style("← NEW", fg=typer.colors.GREEN)
-        typer.echo(f"{prefix}{styled_name}{new_marker}")
+        typer.secho(f"{prefix}{padded_name}← NEW", fg=typer.colors.GREEN, bold=True)
     elif uses_marker:
-        styled_marker = typer.style(f"← {uses_marker}", fg=typer.colors.CYAN)
-        typer.echo(f"{prefix}{name:<18}{styled_marker}")
+        typer.echo(f"{prefix}{padded_name}", nl=False)
+        typer.secho(f"← {uses_marker}", fg=typer.colors.CYAN)
     else:
-        typer.echo(f"{prefix}{name:<18}← {desc}")
+        typer.echo(f"{prefix}{padded_name}← {desc}")
 
 
 def render_project_map(
@@ -116,7 +117,7 @@ def render_project_map(
     typer.echo("├── app/")
 
     # components/
-    typer.echo("│   ├── components/        ← Components")
+    typer.echo("│   ├── components/       ← Components")
     _render_line("│   │   ├── ", "backend/", "FastAPI", highlight, uses, "backend")
 
     # Build component children
@@ -144,7 +145,7 @@ def render_project_map(
         service_children.append(("comms/", "Communications", "comms"))
 
     if service_children:
-        typer.echo("│   ├── services/          ← Business logic")
+        typer.echo("│   ├── services/         ← Business logic")
         for i, (name, desc, check_name) in enumerate(service_children):
             is_last = i == len(service_children) - 1
             prefix = "│   │   └── " if is_last else "│   │   ├── "
