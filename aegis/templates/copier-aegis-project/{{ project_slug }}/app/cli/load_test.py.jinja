@@ -8,7 +8,6 @@ with full parameter configuration and result analysis.
 import asyncio
 from enum import Enum
 import json
-import os
 import time
 from typing import Any
 
@@ -18,8 +17,6 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 import typer
-
-from app.core.config import settings
 
 from app.components.worker.constants import LoadTestTypes
 from app.core.config import get_load_test_queue
@@ -39,11 +36,6 @@ app = typer.Typer(
 )
 
 console = Console()
-
-# Force CLI to use local Redis URL (from REDIS_URL_LOCAL config)
-# This ensures CLI commands work when run locally outside Docker
-if settings.REDIS_URL_LOCAL:
-    os.environ["REDIS_URL"] = settings.REDIS_URL_LOCAL
 
 
 class QueueChoice(str, Enum):
