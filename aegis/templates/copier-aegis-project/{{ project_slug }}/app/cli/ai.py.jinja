@@ -111,13 +111,15 @@ def providers() -> None:
     available = ai_config.get_available_providers(settings)
     free_providers = get_free_providers()
 
-    table = Table(title="AI Providers", width=90)
+    table = Table(title="AI Providers", width=115)
     table.add_column("Provider", style="cyan", width=10)
     table.add_column("Installed", width=9)
     table.add_column("API Key", width=8)
-    table.add_column("Status", style="green", width=22, no_wrap=True)
+    table.add_column("Status", style="green", width=26, no_wrap=True)
     table.add_column("Free", style="yellow", width=4)
-    table.add_column("Features", style="blue", width=18)
+    table.add_column("Stream", width=6, justify="center")
+    table.add_column("Functions", width=9, justify="center")
+    table.add_column("Vision", width=6, justify="center")
 
     for provider in AIProvider:
         capabilities = get_provider_capabilities(provider)
@@ -136,7 +138,12 @@ def providers() -> None:
 
         # Determine status
         if is_current:
-            status = "[bold green]Current[/bold green]"
+            if not is_installed:
+                status = "[bold red]Current (Not installed)[/bold red]"
+            elif not has_api_key and provider != AIProvider.PUBLIC:
+                status = "[bold yellow]Current (Need API key)[/bold yellow]"
+            else:
+                status = "[bold green]Current[/bold green]"
         elif is_available:
             status = "Ready"
         elif is_installed and not has_api_key:
@@ -149,21 +156,15 @@ def providers() -> None:
         installed_display = "[green]Yes[/green]" if is_installed else "[red]No[/red]"
         free_tier = "Yes" if provider in free_providers else "No"
 
-        features = []
-        if capabilities.supports_streaming:
-            features.append("Stream")
-        if capabilities.supports_function_calling:
-            features.append("Functions")
-        if capabilities.supports_vision:
-            features.append("Vision")
-
         table.add_row(
             provider.value,
             installed_display,
             api_key_display,
             status,
             free_tier,
-            ", ".join(features) if features else "Basic",
+            "[green]Yes[/green]" if capabilities.supports_streaming else "[dim]No[/dim]",
+            "[green]Yes[/green]" if capabilities.supports_function_calling else "[dim]No[/dim]",
+            "[green]Yes[/green]" if capabilities.supports_vision else "[dim]No[/dim]",
         )
 
     console.print(table)
@@ -663,7 +664,7 @@ def usage(
     def get_success_color(rate: float) -> str:
         if rate >= 95:
             return "green"
-        elif rate >= 80:
+        elif rate >= 66.7:  # At least 2/3 success rate
             return "yellow"
         return "red"
 

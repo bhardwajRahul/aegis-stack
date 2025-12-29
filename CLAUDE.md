@@ -206,6 +206,22 @@ When working with Aegis Stack code:
 - Use `from None` to suppress chaining when appropriate
 - Log errors at appropriate levels
 
+**Database Queries (Avoid N+1):**
+- **NEVER** query inside a loop - this causes N+1 query problems
+- Batch-fetch related data using `WHERE id IN (...)` or JOINs
+- Use `selectinload()` or `joinedload()` for eager loading relationships
+- Example of what NOT to do:
+  ```python
+  # BAD: N+1 queries (1 query + N queries in loop)
+  for model in models:
+      price = session.exec(select(Price).where(Price.model_id == model.id)).first()
+
+  # GOOD: Batch fetch (2 queries total)
+  model_ids = [m.id for m in models]
+  prices = session.exec(select(Price).where(Price.model_id.in_(model_ids))).all()
+  price_map = {p.model_id: p for p in prices}
+  ```
+
 ### DRY Principle (Don't Repeat Yourself)
 **Always look for existing code being used in multiple places.** Before writing new code, heavily weigh towards creating a single function imported to other places rather than duplicating logic.
 

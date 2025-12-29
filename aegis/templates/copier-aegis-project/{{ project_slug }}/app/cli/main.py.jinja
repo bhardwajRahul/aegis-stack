@@ -4,7 +4,9 @@ Main CLI application entry point.
 Command-line interface for {{ project_slug }} management tasks.
 """
 
+import asyncio
 import importlib
+import inspect
 import sys
 from typing import TYPE_CHECKING
 
@@ -85,7 +87,10 @@ except ImportError:
 def main() -> None:
     """Entry point for the CLI application."""
     try:
-        app(standalone_mode=False)
+        result = app(standalone_mode=False)
+        # Handle async commands - standalone_mode=False returns coroutines unawaited
+        if inspect.iscoroutine(result):
+            asyncio.run(result)
     except click.exceptions.UsageError as e:
         # Show help automatically on usage errors instead of just "try --help"
         if e.ctx is not None:
@@ -96,6 +101,9 @@ def main() -> None:
     except click.exceptions.Abort:
         # User cancelled (e.g., Ctrl+C)
         sys.exit(1)
+    except click.exceptions.Exit as e:
+        # Normal exit requested (e.g., after showing error message)
+        sys.exit(e.exit_code)
     except SystemExit as e:
         # Re-raise system exits (normal exit codes)
         raise
