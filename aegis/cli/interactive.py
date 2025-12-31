@@ -5,6 +5,7 @@ This module contains interactive selection and prompting functions
 used by CLI commands.
 """
 
+import sys
 from pathlib import Path
 
 import typer
@@ -508,12 +509,23 @@ def interactive_ai_service_config(
     # Store provider selection in global context for template generation
     _ai_provider_selection[service_name] = providers
 
-    # RAG selection
+    # RAG selection with Python 3.14 compatibility check
     typer.echo("\nRAG (Retrieval-Augmented Generation):")
-    rag_enabled = typer.confirm(
-        "  Enable RAG for document indexing and semantic search?",
-        default=True,
-    )
+    if sys.version_info >= (3, 14):
+        typer.secho(
+            "  Warning: RAG requires Python <3.14 (chromadb/onnxruntime limitation)",
+            fg="yellow",
+        )
+        typer.echo("  Enabling RAG will generate a project requiring Python 3.11-3.13")
+        rag_enabled = typer.confirm(
+            "  Enable RAG despite Python 3.14 incompatibility?",
+            default=False,
+        )
+    else:
+        rag_enabled = typer.confirm(
+            "  Enable RAG for document indexing and semantic search?",
+            default=False,
+        )
     _ai_rag_selection[service_name] = rag_enabled
     if rag_enabled:
         typer.secho("  RAG enabled with ChromaDB vector store", fg="green")

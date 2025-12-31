@@ -88,7 +88,7 @@ def generate_with_copier(
         ),
         "github_username": cookiecutter_context.get("github_username", "your-username"),
         "version": cookiecutter_context.get("version", "0.1.0"),
-        "python_version": python_version,
+        "python_version": python_version,  # Uses override for RAG + Python 3.14
         "aegis_version": cookiecutter_context.get("aegis_version", "0.0.0"),
         # Convert yes/no strings to booleans
         AnswerKeys.SCHEDULER: cookiecutter_context[AnswerKeys.SCHEDULER] == "yes",
@@ -197,11 +197,10 @@ def generate_with_copier(
     # AI needs seeding when using persistence backend (same condition as migrations)
     ai_needs_seeding = ai_needs_migrations
 
-    # python_version was already determined earlier (with RAG override if needed)
     run_post_generation_tasks(
         project_path,
         include_migrations=include_migrations,
-        python_version=python_version,
+        python_version=copier_data["python_version"],
         seed_ai=ai_needs_seeding,
         skip_llm_sync=skip_llm_sync,
         project_slug=cookiecutter_context["project_slug"],
