@@ -1,0 +1,417 @@
+"""
+Slash command system for Illiana interactive chat.
+
+Provides in-session commands for managing the chat experience without
+leaving the interactive loop. Commands start with / and provide quick
+access to provider switching, conversation management, and configuration.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+
+if TYPE_CHECKING:
+    from app.services.ai.service import AIService
+    from app.cli.status_line import ChatSessionState
+
+
+@dataclass
+class CommandResult:
+    """Result of executing a slash command."""
+
+    success: bool
+    message: str | None = None
+    should_exit: bool = False
+    new_conversation_id: str | None = None
+    # For commands that need to update session state
+    update_provider: str | None = None
+    update_model: str | None = None
+    update_rag: bool | None = None
+    update_rag_collection: str | None = None
+
+
+@dataclass
+class SlashCommand:
+    """Definition of a slash command."""
+
+    name: str
+    description: str
+    usage: str
+    aliases: list[str] = field(default_factory=list)
+
+
+class SlashCommandHandler:
+    """
+    Handler for slash commands in interactive chat.
+
+    Provides command parsing, execution, and help display.
+    Reuses existing service methods rather than duplicating logic.
+    """
+
+    def __init__(
+        self,
+        ai_service: "AIService",
+        session_state: "ChatSessionState",
+        console: Console,
+        current_conversation_id: str | None = None,
+{% if cookiecutter.ai_rag == "yes" %}
+        rag_enabled: bool = False,
+        rag_collection: str | None = None,
+{% endif %}
+    ) -> None:
+        """Initialize slash command handler."""
+        self.ai_service = ai_service
+        self.session_state = session_state
+        self.console = console
+        self.current_conversation_id = current_conversation_id
+{% if cookiecutter.ai_rag == "yes" %}
+        self.rag_enabled = rag_enabled
+        self.rag_collection = rag_collection
+{% endif %}
+
+        # Define available commands (minimal set, no aliases)
+        self.commands: dict[str, SlashCommand] = {
+            "help": SlashCommand(
+                name="help",
+                description="Show available commands",
+                usage="/help",
+            ),
+            "clear": SlashCommand(
+                name="clear",
+                description="Clear the screen",
+                usage="/clear",
+            ),
+            "new": SlashCommand(
+                name="new",
+                description="Start a new conversation",
+                usage="/new",
+            ),
+            "model": SlashCommand(
+                name="model",
+                description="Switch AI model (auto-detects provider)",
+                usage="/model [name]",
+            ),
+            "status": SlashCommand(
+                name="status",
+                description="Show current configuration",
+                usage="/status",
+            ),
+{% if cookiecutter.ai_rag == "yes" %}
+            "rag": SlashCommand(
+                name="rag",
+                description="Manage RAG mode",
+                usage="/rag [off|<collection>]",
+            ),
+{% endif %}
+            "exit": SlashCommand(
+                name="exit",
+                description="Exit the chat session",
+                usage="/exit",
+            ),
+        }
+
+        # Build alias lookup
+        self._alias_map: dict[str, str] = {}
+        for cmd_name, cmd in self.commands.items():
+            for alias in cmd.aliases:
+                self._alias_map[alias] = cmd_name
+
+        # Cache for model completions (populated at startup)
+        self._model_cache: list[str] = []
+        # Cache for collection completions (populated at startup)
+        self._collection_cache: list[str] = []
+
+    def get_command_names(self) -> list[str]:
+        """Get all command names and aliases for autocomplete."""
+        names = list(self.commands.keys())
+        names.extend(self._alias_map.keys())
+        return sorted(names)
+
+    def get_model_completions(self) -> list[str]:
+        """Get cached model names for tab completion."""
+        return self._model_cache
+
+    def get_collection_completions(self) -> list[str]:
+        """Get cached collection names for tab completion."""
+        return self._collection_cache
+
+{% if cookiecutter.ai_backend != "memory" %}
+    async def load_model_cache(self) -> None:
+        """Pre-populate model cache for tab completion."""
+        from app.core.log import logger
+        from app.services.ai.llm_service import list_models
+        from app.services.ai.models import AIProvider
+        from app.services.ai.provider_management import (
+            check_provider_dependency_installed,
+            get_existing_api_key,
+        )
+
+        provider_to_vendor = {
+            "openai": "OpenAI",
+            "anthropic": "Anthropic",
+            "google": "Google",
+            "groq": "Groq",
+            "mistral": "Mistral",
+            "cohere": "Cohere",
+        }
+
+        configured_vendors = []
+        for provider in AIProvider:
+            if provider.value == "public":
+                continue
+            if not check_provider_dependency_installed(provider.value):
+                continue
+            if not get_existing_api_key(provider.value):
+                continue
+            vendor_name = provider_to_vendor.get(provider.value)
+            if vendor_name:
+                configured_vendors.append(vendor_name)
+
+        if not configured_vendors:
+            logger.debug("No configured vendors for model cache")
+            self.console.print(
+                "[dim]No API keys configured - /model tab completion disabled. "
+                "Set OPENAI_API_KEY or other provider keys.[/dim]"
+            )
+            return
+
+        try:
+            all_results = []
+            for vendor in configured_vendors:
+                results = await list_models(pattern=None, vendor=vendor, limit=100)
+                all_results.extend(results)
+            all_results.sort(key=lambda m: m.released_on or "", reverse=True)
+            self._model_cache = [m.model_id for m in all_results]
+            logger.debug(f"Model cache loaded: {len(self._model_cache)} models")
+        except Exception as e:
+            logger.warning(f"Failed to load model cache: {e}")
+
+    async def load_collection_cache(self) -> None:
+        """Pre-populate collection cache for tab completion."""
+        from app.core.config import settings
+        from app.core.log import logger
+        from app.services.rag.config import get_rag_config
+        from app.services.rag.service import RAGService
+
+        try:
+            rag_config = get_rag_config(settings)
+            rag_service = RAGService(rag_config)
+            self._collection_cache = await rag_service.list_collections()
+            count = len(self._collection_cache)
+            logger.debug(f"Collection cache loaded: {count} collections")
+        except Exception as e:
+            logger.warning(f"Failed to load collection cache: {e}")
+{% endif %}
+
+    def is_slash_command(self, text: str) -> bool:
+        """Check if input is a slash command."""
+        return text.strip().startswith("/")
+
+    def parse_input(self, text: str) -> tuple[str | None, list[str]]:
+        """Parse input to extract command and arguments."""
+        text = text.strip()
+        if not text.startswith("/"):
+            return None, []
+
+        parts = text[1:].split(maxsplit=1)
+        command = parts[0].lower() if parts else ""
+        args = parts[1].split() if len(parts) > 1 else []
+        return command, args
+
+    async def execute(self, text: str) -> CommandResult | None:
+        """Execute a slash command if input starts with /."""
+        command_name, args = self.parse_input(text)
+        if command_name is None:
+            return None  # Not a slash command
+
+        # Resolve alias to command name
+        if command_name in self._alias_map:
+            command_name = self._alias_map[command_name]
+
+        if command_name not in self.commands:
+            msg = f"Unknown command: /{command_name}. Type /help for commands."
+            return CommandResult(success=False, message=msg)
+
+        # Dispatch to handler method
+        handler_method = getattr(self, f"_cmd_{command_name}", None)
+        if handler_method is None:
+            return CommandResult(
+                success=False,
+                message=f"Command /{command_name} is not implemented.",
+            )
+
+        return await handler_method(args)
+
+    async def _cmd_help(self, args: list[str]) -> CommandResult:
+        """Show available commands."""
+        table = Table(
+            show_header=True,
+            header_style="bold cyan",
+            box=None,
+            padding=(0, 2),
+        )
+        table.add_column("Command", style="green")
+        table.add_column("Description")
+
+        for name, cmd in sorted(self.commands.items()):
+            table.add_row(f"/{name}", cmd.description)
+
+        self.console.print(Panel(table, title="Commands", border_style="dim"))
+        return CommandResult(success=True)
+
+    async def _cmd_clear(self, args: list[str]) -> CommandResult:
+        """Clear the screen."""
+        # Use appropriate clear command for the platform
+        os.system("cls" if os.name == "nt" else "clear")
+        return CommandResult(success=True)
+
+    async def _cmd_new(self, args: list[str]) -> CommandResult:
+        """Start a new conversation."""
+        self.current_conversation_id = None
+        return CommandResult(
+            success=True,
+            message="[green]Started new conversation[/green]",
+            new_conversation_id="new",  # Signal to reset
+        )
+
+    async def _cmd_model(self, args: list[str]) -> CommandResult:
+        """Switch AI model (auto-detects provider)."""
+        from app.services.ai.llm_service import set_active_model
+
+        # Show current if no args
+        if not args:
+            current = self.ai_service.config
+            content = Text()
+            content.append("Provider: ", style="dim")
+            content.append(f"{current.provider.value}\n", style="cyan")
+            content.append("Model: ", style="dim")
+            content.append(f"{current.model}\n", style="cyan")
+            content.append("Use /model <name> to switch", style="dim")
+            self.console.print(Panel(content, title="Current", border_style="dim"))
+            return CommandResult(success=True)
+
+        model = args[0]
+
+        # Use set_active_model which auto-detects provider from model
+        result = await set_active_model(model)
+
+        if not result.success:
+            # Model not in catalog - try with force
+            result = await set_active_model(model, force=True)
+
+        from dotenv import load_dotenv
+        load_dotenv(override=True)
+        self.ai_service.refresh_config()
+
+        # Build message
+        if result.provider_updated:
+            msg = f"[green]Switched to {result.vendor}/{model}[/green]"
+            return CommandResult(
+                success=True,
+                message=msg,
+                update_provider=result.vendor.lower() if result.vendor else None,
+                update_model=model,
+            )
+        else:
+            return CommandResult(
+                success=True,
+                message=f"[green]Switched to model: {model}[/green]",
+                update_model=model,
+            )
+
+    async def _cmd_status(self, args: list[str]) -> CommandResult:
+        """Show current configuration."""
+        current = self.ai_service.config
+{% if cookiecutter.ai_rag == "yes" %}
+        rag_status = "ON" if self.rag_enabled else "OFF"
+{% endif %}
+
+        content = Text()
+        content.append("Provider: ", style="dim")
+        content.append(f"{current.provider.value}\n", style="cyan")
+        content.append("Model: ", style="dim")
+        content.append(f"{current.model}\n", style="cyan")
+        content.append("Temperature: ", style="dim")
+        content.append(f"{current.temperature}\n")
+        content.append("Max Tokens: ", style="dim")
+        content.append(f"{current.max_tokens}")
+{% if cookiecutter.ai_rag == "yes" %}
+        content.append("\nRAG: ", style="dim")
+        content.append(rag_status, style="green" if self.rag_enabled else "dim")
+        if self.rag_collection:
+            content.append(f" ({self.rag_collection})", style="cyan")
+{% endif %}
+
+        self.console.print(Panel(content, title="Status", border_style="dim"))
+        return CommandResult(success=True)
+
+{% if cookiecutter.ai_rag == "yes" %}
+    async def _cmd_rag(self, args: list[str]) -> CommandResult:
+        """Manage RAG mode - show status, disable, or select collection."""
+        # Use cached collections for performance
+        collections = self._collection_cache
+
+        if not args:
+            # Show current status
+            content = Text()
+            content.append("Status: ", style="dim")
+            content.append("ON" if self.rag_enabled else "OFF",
+                          style="green" if self.rag_enabled else "dim")
+            if self.rag_collection:
+                content.append(f"\nCollection: ", style="dim")
+                content.append(self.rag_collection, style="cyan")
+            if collections:
+                content.append(f"\nAvailable: {', '.join(collections[:5])}", style="dim")
+                content.append("\nUse /rag off or /rag <collection>", style="dim")
+            else:
+                content.append("\nNo collections indexed yet", style="dim")
+                content.append("\nIndex documents: {{ cookiecutter.project_slug }} rag index <path>", style="dim")
+            self.console.print(Panel(content, title="RAG", border_style="dim"))
+            return CommandResult(success=True)
+
+        arg = args[0].lower()
+
+        if arg == "off":
+            self.rag_enabled = False
+            return CommandResult(
+                success=True,
+                message="[yellow]RAG disabled[/yellow]",
+                update_rag=False,
+            )
+
+        # Treat arg as collection name
+        if arg not in collections:
+            if collections:
+                avail = ", ".join(collections[:5])
+                msg = f"[red]Collection '{arg}' not found.[/red]\n"
+                msg += f"[dim]Available: {avail}[/dim]"
+            else:
+                msg = f"[red]Collection '{arg}' not found.[/red]\n"
+                msg += "[dim]No collections exist. Index documents first.[/dim]"
+            return CommandResult(success=False, message=msg)
+
+        self.rag_collection = arg
+        self.rag_enabled = True
+        return CommandResult(
+            success=True,
+            message=f"[green]RAG enabled with collection: {arg}[/green]",
+            update_rag=True,
+            update_rag_collection=arg,
+        )
+{% endif %}
+
+    async def _cmd_exit(self, args: list[str]) -> CommandResult:
+        """Exit the chat session."""
+        return CommandResult(
+            success=True,
+            message="[yellow]Goodbye![/yellow]",
+            should_exit=True,
+        )

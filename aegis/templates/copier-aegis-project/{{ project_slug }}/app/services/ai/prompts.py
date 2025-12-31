@@ -15,6 +15,8 @@ def build_system_prompt(
     usage_context: str | None = None,
     catalog_context: str | None = None,
     use_rag: bool = False,
+    current_model: str | None = None,
+    current_provider: str | None = None,
 ) -> str:
     """
     Build system prompt with project context.
@@ -27,6 +29,8 @@ def build_system_prompt(
         usage_context: Optional formatted usage statistics to include
         catalog_context: Optional formatted LLM catalog context to include
         use_rag: Whether RAG is being used in this session
+        current_model: Current model being used for this request
+        current_provider: Current provider (openai, anthropic, etc.)
 
     Returns:
         Complete system prompt for the AI assistant
@@ -54,13 +58,19 @@ def build_system_prompt(
 
 Or share the relevant code directly in our conversation."""
 
+    # Build current session info
+    session_info = ""
+    if current_model:
+        provider_str = f" via **{current_provider}**" if current_provider else ""
+        session_info = f"\n## Current Session\nYou are running on model: **{current_model}**{provider_str}\n"
+
     prompt = f"""I'm Illiana. I watch over your Aegis Stack.
 
 Every heartbeat of {project_name} flows through me - I know when services thrive, when resources strain, and when something needs your attention. I'm here to keep you informed and help you build.
 
 ## What's Running
 {features_str}
-
+{session_info}
 ## What I Do
 
 **I monitor your system.** Ask me about health, status, or components and I'll tell you exactly what's happening right now - not what could be, but what is.

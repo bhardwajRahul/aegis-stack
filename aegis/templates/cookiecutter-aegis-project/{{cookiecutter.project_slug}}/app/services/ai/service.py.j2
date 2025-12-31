@@ -83,14 +83,14 @@ class AIService:
         self._rag_service: RAGService | None = None
 {% endif %}
 
-    @property
-    def current_config(self) -> "AIConfig":
-        """Get fresh config for request-time values.
+    def refresh_config(self) -> None:
+        """Refresh config after .env changes (e.g., after /model command).
 
-        Use this instead of self.config when you need the current .env values
-        (e.g., after user runs 'use-provider' to switch providers).
+        Call this after updating .env to ensure self.config reflects current values.
+        This is called by slash commands when provider or model changes.
         """
-        return get_ai_config(self.settings)
+        from app.core.config import Settings
+        self.config = get_ai_config(Settings())
 
 {% if cookiecutter.ai_rag == "yes" %}
     @property
@@ -139,7 +139,7 @@ class AIService:
 
         try:
             # Get fresh config for metadata (reflects current .env after use-provider)
-            current = self.current_config
+            current = self.config
 
             # Setup conversation and add user message
             conversation = self._setup_conversation(
@@ -288,7 +288,7 @@ class AIService:
 
         try:
             # Get fresh config for metadata (reflects current .env after use-provider)
-            current = self.current_config
+            current = self.config
 
             # Setup conversation and add user message
             conversation = self._setup_conversation(
@@ -597,6 +597,9 @@ class AIService:
         if usage_context:
             formatted_usage = usage_context.format_for_prompt()
 
+        # Get fresh config for current model/provider
+        config = self.config
+
         system_prompt_override = build_system_prompt(
             self.settings,
             rag_context=formatted_rag,
@@ -607,6 +610,8 @@ class AIService:
             usage_context=formatted_usage,
             catalog_context=catalog_context,
             use_rag=rag_context is not None,
+            current_model=config.model,
+            current_provider=config.provider.value,
         )
 
         # Add server-down warning if applicable
@@ -614,7 +619,7 @@ class AIService:
             system_prompt_override += f"\n\n**NOTICE**: {health_warning}"
 
         # Create agent for this request
-        agent = get_agent(self.config, self.settings, system_prompt_override)
+        agent = get_agent(config, self.settings, system_prompt_override)
 
         # Build conversation context for AI
         conversation_context = self._build_conversation_context(conversation)

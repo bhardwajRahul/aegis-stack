@@ -34,6 +34,17 @@ class ChatSessionState:
         """Add cost from a chat exchange."""
         self.cumulative_cost += cost
 
+    def update_provider(self, provider: str, model: str) -> None:
+        """Update provider and model after a /model command."""
+        self.provider = provider
+        self.model = model
+
+    def toggle_rag(self, enabled: bool, collection: str | None = None) -> None:
+        """Toggle RAG mode on/off and optionally set collection."""
+        self.rag_enabled = enabled
+        if collection is not None:
+            self.rag_collection = collection
+
     def format_status_line(self) -> HTML:
         """Format the status line with HTML markup for prompt_toolkit."""
         term_width = shutil.get_terminal_size().columns
