@@ -85,13 +85,13 @@ jobs:
     
     - name: Test project creation with uvx aegis
       run: |
-        uvx --from . aegis init test-uvx-aegis --no-interactive --yes --force
+        uvx --from . aegis init test-uvx-aegis --to-version HEAD --no-interactive --yes --force
         test -d test-uvx-aegis
         test -f test-uvx-aegis/pyproject.toml
-    
+
     - name: Test project creation with uvx aegis-stack
       run: |
-        uvx --from . aegis-stack init test-uvx-aegis-stack --no-interactive --yes --force
+        uvx --from . aegis-stack init test-uvx-aegis-stack --to-version HEAD --no-interactive --yes --force
         test -d test-uvx-aegis-stack
         test -f test-uvx-aegis-stack/pyproject.toml
     

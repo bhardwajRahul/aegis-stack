@@ -4,7 +4,7 @@ requires-python = ">=3.11, <3.15"
 
 [[package]]
 name = "aegis-stack"
-version = "0.5.0rc2"
+version = "0.5.0rc3"
 source = { editable = "." }
 dependencies = [
     { name = "cookiecutter" },

@@ -288,29 +288,57 @@ def main():
         remove_file("app/cli/ai.py")
         remove_file("app/cli/ai_rendering.py")
         remove_file("app/cli/marko_terminal_renderer.py")
+        remove_file("app/cli/chat_completer.py")
+        remove_file("app/cli/slash_commands.py")
+        remove_file("app/cli/llm.py")
+        remove_file("app/cli/docs.py")
+        remove_file("app/cli/status_line.py")
+        remove_file("app/core/formatting.py")
         # Remove AI dashboard card and modal
         remove_file("app/components/frontend/dashboard/cards/ai_card.py")
         remove_file("app/components/frontend/dashboard/modals/ai_modal.py")
+        remove_file("app/components/frontend/dashboard/modals/ai_analytics_tab.py")
+        remove_file("app/components/frontend/dashboard/modals/rag_tab.py")
         # Remove AI-related tests if they exist
         remove_file("tests/api/test_ai_endpoints.py")
         remove_file("tests/services/test_conversation_persistence.py")
         remove_file("tests/cli/test_ai_rendering.py")
         remove_file("tests/cli/test_conversation_memory.py")
+        remove_file("tests/cli/test_chat_completer.py")
+        remove_file("tests/cli/test_docs.py")
+        remove_file("tests/cli/test_llm_cli.py")
+        remove_file("tests/cli/test_slash_commands.py")
+        remove_file("tests/cli/test_status_line.py")
+        remove_file("tests/components/frontend/test_ai_analytics_utils.py")
         # Remove AI test directory (contains test_service.py, test_health.py, etc.)
         remove_dir("tests/services/ai")
         # Remove AI conversation SQLModel tables (only exists for AI service)
         remove_file("app/models/conversation.py")
 
     # AI conversation persistence handling
-    # When AI backend is memory, remove SQLModel tables (not needed)
+    # When AI backend is memory, remove SQLModel tables and DB-related files
     if "{{ cookiecutter.ai_backend }}" == "memory":
         remove_file("app/models/conversation.py")
-        # Remove LLM tracking models (only needed with persistence)
-        remove_dir("app/services/ai/models/llm")
-        # Remove LLM fixtures (only needed with persistence)
-        remove_file("app/services/ai/fixtures/llm_fixtures.py")
-        # Remove usage tracking tests (only relevant with persistence)
+        # Remove LLM tracking models and related services
+        remove_dir("app/services/ai/models")
+        remove_dir("app/services/ai/etl")
+        remove_dir("app/services/ai/fixtures")
+        remove_file("app/services/ai/llm_catalog_context.py")
+        remove_file("app/services/ai/llm_service.py")
+        remove_file("app/services/ai/provider_management.py")
+        remove_file("app/services/ai/usage_context.py")
+        # Remove LLM CLI
+        remove_file("app/cli/llm.py")
+        # Remove analytics tab (needs DB for usage tracking)
+        remove_file("app/components/frontend/dashboard/modals/ai_analytics_tab.py")
+        # Remove related tests
+        remove_dir("tests/services/ai/etl")
+        remove_file("tests/cli/test_llm_cli.py")
+        remove_file("tests/components/frontend/test_ai_analytics_utils.py")
         remove_file("tests/services/ai/test_usage_tracking.py")
+        remove_file("tests/services/ai/test_llm_catalog_context.py")
+        remove_file("tests/services/ai/test_llm_service.py")
+        remove_file("tests/services/ai/test_provider_management.py")
 
     if "{{ cookiecutter.include_comms }}" != "yes":
         # Remove comms service files
@@ -333,9 +361,15 @@ def main():
         remove_dir("app/services/rag")
         # Remove RAG CLI
         remove_file("app/cli/rag.py")
+        # Remove RAG context files in AI service
+        remove_file("app/services/ai/rag_context.py")
+        remove_file("app/services/ai/rag_stats_context.py")
+        # Remove RAG dashboard tab
+        remove_file("app/components/frontend/dashboard/modals/rag_tab.py")
         # Remove RAG-related tests if they exist
         remove_file("tests/api/test_rag_endpoints.py")
         remove_dir("tests/services/rag")
+        remove_file("tests/services/ai/test_rag_stats_context.py")
 
     # Clean up empty docs/components directory if no components selected
     if (

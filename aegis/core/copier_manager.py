@@ -14,6 +14,8 @@ import yaml
 from copier import run_copy, run_update
 from packaging.version import Version
 
+from aegis import __version__
+
 from ..config.defaults import DEFAULT_PYTHON_VERSION, GITHUB_TEMPLATE_URL
 from ..constants import AnswerKeys
 from .migration_generator import (
@@ -135,30 +137,40 @@ def generate_with_copier(
 
     if is_git_repo(template_root):
         # Development mode: local git repository available
+        # Always use git+file:// URL so projects are updatable
+        template_source = f"git+file://{template_root}"
         if vcs_ref:
-            # Specific version requested - use git+file:// URL to access git history
-            # This is CRITICAL for aegis update to work properly
-            template_source = f"git+file://{template_root}"
+            # Specific version requested - resolve to git reference
             resolved_ref = resolve_version_to_ref(vcs_ref, template_root)
         else:
-            # No version specified - use direct file path for working directory
-            # This allows uncommitted template changes to be picked up during dev
-            template_source = str(
-                Path(__file__).parent.parent / "templates" / "copier-aegis-project"
-            )
-            resolved_ref = None
+            # No version specified - use HEAD so project has valid _commit
+            # This is CRITICAL for aegis update to work properly
+            resolved_ref = "HEAD"
     else:
         # Production mode: installed via pip/uvx (no .git directory)
-        # Use GitHub URL for template source with HEAD as default ref
+        # Use GitHub URL for template source with CLI version as default ref
+        # This ensures CLI v0.4.1 uses template v0.4.1, not HEAD
         template_source = GITHUB_TEMPLATE_URL
-        resolved_ref = vcs_ref if vcs_ref else "HEAD"
+        resolved_ref = vcs_ref if vcs_ref else f"v{__version__}"
 
-    # Generate project - Copier creates the project_slug directory automatically
+    # Store template version in answers for future reference
+    # This allows aegis update to show "v0.4.1" instead of commit hash
+    if resolved_ref and resolved_ref.startswith("v"):
+        # Version tag (e.g., "v0.4.1") -> strip 'v' prefix
+        copier_data["_template_version"] = resolved_ref[1:]
+    elif resolved_ref:
+        # Branch or commit hash - store as-is
+        copier_data["_template_version"] = resolved_ref
+    else:
+        # Dev mode with no specific version - use current CLI version
+        copier_data["_template_version"] = __version__
+
+    # Generate project - Copier creates output_dir/project_slug via {{ project_slug }}/ wrapper
     # NOTE: _tasks removed from copier.yml - we run them ourselves below
     # Suppress Copier output unless --verbose flag is passed
     run_copy(
         template_source,
-        output_dir,
+        output_dir,  # Copier creates project_slug subdirectory from template
         data=copier_data,
         defaults=True,  # Use template defaults, overridden by our explicit data
         unsafe=False,  # No tasks in copier.yml anymore - we run them ourselves
@@ -168,6 +180,17 @@ def generate_with_copier(
 
     # Copier creates the project in output_dir/project_slug
     project_path = output_dir / cookiecutter_context["project_slug"]
+
+    # Store template version in answers file for future reference
+    # Copier only writes fields defined in copier.yml, so we add this manually
+    # This allows 'aegis update' to show "v0.4.1" instead of commit hash
+    template_version = copier_data.get("_template_version")
+    if template_version:
+        answers_file = project_path / ".copier-answers.yml"
+        if answers_file.exists():
+            answers = yaml.safe_load(answers_file.read_text())
+            answers["_template_version"] = template_version
+            answers_file.write_text(yaml.safe_dump(answers, default_flow_style=False))
 
     # Clean up unwanted component files based on selection
     # This must happen BEFORE post-generation tasks (which run linting on the remaining files)

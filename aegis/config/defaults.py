@@ -96,3 +96,6 @@ SUPPORTED_PYTHON_VERSIONS = _generate_supported_versions(_min_version, _max_vers
 
 # GitHub URL for template source (used when installed via pip/uvx)
 GITHUB_TEMPLATE_URL = "gh:lbedner/aegis-stack"
+
+# GitHub repository URL (for commit links, documentation links, etc.)
+GITHUB_REPO_URL = "https://github.com/lbedner/aegis-stack"

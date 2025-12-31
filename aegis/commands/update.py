@@ -29,7 +29,8 @@ from ..core.copier_updater import (
     rollback_to_backup,
     validate_clean_git_tree,
 )
-from ..core.post_gen_tasks import run_post_generation_tasks
+from ..core.post_gen_tasks import cleanup_components, run_post_generation_tasks
+from ..core.template_cleanup import cleanup_nested_project_directory
 from ..core.version_compatibility import get_cli_version, get_project_template_version
 
 
@@ -336,15 +337,34 @@ def update_command(
             vcs_ref=target_ref,  # Use specified version
         )
 
-        # Load answers to determine what services need migrations
+        # Load answers for cleanup and post-generation tasks
         answers = load_copier_answers(target_path)
+
+        # Clean up nested directory if Copier created one
+        # This happens when new files are added between template versions
+        # because the template uses {{ project_slug }}/ wrapper
+        project_slug = answers.get("project_slug", "")
+
+        if project_slug:
+            moved_files = cleanup_nested_project_directory(target_path, project_slug)
+            if moved_files:
+                typer.echo(
+                    f"   Moved {len(moved_files)} new files from nested directory"
+                )
+
+                # CRITICAL: Clean up files that shouldn't exist based on component selection
+                # This mirrors what happens during 'aegis init' - the template includes all
+                # files and cleanup_components removes those not selected in answers
+                cleanup_components(target_path, answers)
+
+        # Run post-generation tasks
+        # Determine what services need migrations
         include_auth = answers.get(AnswerKeys.AUTH, False)
         include_ai = answers.get(AnswerKeys.AI, False)
         ai_backend = answers.get(AnswerKeys.AI_BACKEND, "memory")
         ai_needs_migrations = include_ai and ai_backend != "memory"
         include_migrations = include_auth or ai_needs_migrations
 
-        # Run post-generation tasks
         typer.echo("Running post-generation tasks...")
         tasks_success = run_post_generation_tasks(
             target_path, include_migrations=include_migrations

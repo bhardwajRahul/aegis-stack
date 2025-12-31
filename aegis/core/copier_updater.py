@@ -13,9 +13,11 @@ from copier import run_update
 from packaging.version import parse
 from pydantic import BaseModel, Field
 
+from aegis.config.defaults import GITHUB_REPO_URL
 from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
 from aegis.core.copier_manager import load_copier_answers
-from aegis.core.post_gen_tasks import run_post_generation_tasks
+from aegis.core.post_gen_tasks import cleanup_components, run_post_generation_tasks
+from aegis.core.template_cleanup import cleanup_nested_project_directory
 
 logger = logging.getLogger(__name__)
 
@@ -170,10 +172,25 @@ def update_with_copier_native(
             vcs_ref="HEAD",  # Use latest template version
         )
 
+        # Load answers for cleanup and post-generation tasks
+        answers = load_copier_answers(project_path)
+
+        # Clean up nested directory if Copier created one
+        # This happens when new files are added between template versions
+        # because the template uses {{ project_slug }}/ wrapper
+        project_slug = answers.get("project_slug", "")
+
+        if project_slug:
+            moved_files = cleanup_nested_project_directory(project_path, project_slug)
+            if moved_files:
+                # CRITICAL: Clean up files that shouldn't exist based on component selection
+                # This mirrors what happens during 'aegis init' - the template includes all
+                # files and cleanup_components removes those not selected in answers
+                cleanup_components(project_path, answers)
+
         # CRITICAL: Copy service-specific files for newly-added services
         # Copier can only re-render existing files - it cannot copy new directories
         # that were excluded during initial generation
-        answers = load_copier_answers(project_path)
 
         # Check for services in components_to_add (they start with 'include_')
         # Service names: auth, ai
@@ -479,14 +496,14 @@ def get_changelog(from_ref: str, to_ref: str, template_root: Path | None = None)
         template_root = get_template_root()
 
     try:
-        # Get commit log between refs
+        # Get commit log between refs (hash|message format for GitHub links)
         result = subprocess.run(
             [
                 "git",
                 "log",
                 "--oneline",
                 "--no-merges",
-                "--pretty=format:%s",
+                "--pretty=format:%h|%s",
                 f"{from_ref}..{to_ref}",
             ],
             cwd=template_root,
@@ -498,49 +515,63 @@ def get_changelog(from_ref: str, to_ref: str, template_root: Path | None = None)
         if not result.stdout.strip():
             return "No changes"
 
-        # Parse commits and categorize
-        commits = result.stdout.strip().split("\n")
-        features = []
-        fixes = []
-        breaking = []
-        other = []
+        # GitHub repository URL for commit links
+        github_url = GITHUB_REPO_URL
 
-        for commit in commits:
-            commit_lower = commit.lower()
-            if "breaking:" in commit_lower or "breaking change" in commit_lower:
-                breaking.append(commit)
-            elif commit.startswith("feat:") or commit.startswith("feature:"):
-                features.append(commit)
-            elif commit.startswith("fix:"):
-                fixes.append(commit)
+        # Parse commits and categorize
+        raw_commits = result.stdout.strip().split("\n")
+        features: list[tuple[str, str]] = []  # (hash, message)
+        fixes: list[tuple[str, str]] = []
+        breaking: list[tuple[str, str]] = []
+        other: list[tuple[str, str]] = []
+
+        for line in raw_commits:
+            if "|" in line:
+                commit_hash, message = line.split("|", 1)
             else:
-                other.append(commit)
+                commit_hash, message = "", line
+
+            message_lower = message.lower()
+            if "breaking:" in message_lower or "breaking change" in message_lower:
+                breaking.append((commit_hash, message))
+            elif message.startswith("feat:") or message.startswith("feature:"):
+                features.append((commit_hash, message))
+            elif message.startswith("fix:"):
+                fixes.append((commit_hash, message))
+            else:
+                other.append((commit_hash, message))
+
+        def format_commit(commit_hash: str, message: str) -> str:
+            """Format commit with GitHub link."""
+            if commit_hash:
+                return f"  • {message} ([{commit_hash}]({github_url}/commit/{commit_hash}))"
+            return f"  • {message}"
 
         # Format changelog
         lines = []
 
         if breaking:
             lines.append("Breaking Changes:")
-            for commit in breaking:
-                lines.append(f"  • {commit}")
+            for commit_hash, message in breaking:
+                lines.append(format_commit(commit_hash, message))
             lines.append("")
 
         if features:
             lines.append("New Features:")
-            for commit in features:
-                lines.append(f"  • {commit}")
+            for commit_hash, message in features:
+                lines.append(format_commit(commit_hash, message))
             lines.append("")
 
         if fixes:
             lines.append("Bug Fixes:")
-            for commit in fixes:
-                lines.append(f"  • {commit}")
+            for commit_hash, message in fixes:
+                lines.append(format_commit(commit_hash, message))
             lines.append("")
 
         if other:
             lines.append("Other Changes:")
-            for commit in other:
-                lines.append(f"  • {commit}")
+            for commit_hash, message in other:
+                lines.append(format_commit(commit_hash, message))
 
         return "\n".join(lines).strip()
 
