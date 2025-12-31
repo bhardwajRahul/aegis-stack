@@ -53,7 +53,7 @@ class ProviderConfig(BaseModel):
     base_url: str | None = None
     max_tokens: int = 1000
     temperature: float = 0.7
-    timeout_seconds: float = 30.0
+    timeout_seconds: float = 120.0
 
 
 class ConversationMessage(BaseModel):

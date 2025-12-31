@@ -4,15 +4,22 @@ AI service CLI commands.
 Command-line interface for AI service management and chat functionality.
 """
 
+import os
+import shutil
+
 import typer
 from prompt_toolkit import PromptSession
 from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.shortcuts import CompleteStyle
 from prompt_toolkit.styles import Style
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
+from app.cli.chat_completer import ChatCompleter
+from app.cli.slash_commands import SlashCommandHandler
 from app.cli.status_line import ChatSessionState, create_toolbar_callback
 from ..core.config import settings
 from ..core.log import setup_logging, suppress_logs
@@ -417,13 +424,16 @@ def chat(
     conversation_id: str | None = typer.Option(
         None, "--conversation-id", "-c", help="Continue existing conversation"
     ),
+    new: bool = typer.Option(
+        False, "--new", "-n", help="Start a fresh conversation (don't resume)"
+    ),
     user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show conversation metadata"
     ),
 {% if cookiecutter.ai_rag == "yes" %}
-    use_rag: bool = typer.Option(
-        False, "--rag/--no-rag", help="Enable RAG context from indexed codebase"
+    use_rag: bool | None = typer.Option(
+        None, "--rag/--no-rag", help="Enable RAG (auto-enables if collections exist)"
     ),
     collection: str | None = typer.Option(
         None, "--collection", help="RAG collection to search"
@@ -438,10 +448,13 @@ def chat(
 ) -> None:
     """Send a chat message or start interactive session.
 
+    By default, resumes the most recent conversation. Use --new for a fresh start.
+
     Examples:
-        ai chat "What is Python?"     - Send a single message
-        ai chat                       - Start interactive session
-        ai chat -c abc123 "Continue"  - Continue a conversation
+        ai chat "What is Python?"     - Send message (resumes last conversation)
+        ai chat                       - Interactive session (resumes last conversation)
+        ai chat --new                 - Start fresh conversation
+        ai chat -c abc123 "Continue"  - Continue a specific conversation
 {% if cookiecutter.ai_rag == "yes" %}
         ai chat --rag "How does auth work?" - Query with RAG context
         ai chat --rag -k 10 --collection my-codebase "Explain the API"
@@ -452,10 +465,49 @@ def chat(
     from app.services.ai.service import AIService
 
     async def run_chat() -> None:
+        nonlocal conversation_id
         try:
             with suppress_logs():
                 ai_service = AIService(settings)
 
+                # Resume most recent conversation by default
+                if not new and not conversation_id:
+                    convos = ai_service.list_conversations(user_id)
+                    if convos:
+                        conversation_id = convos[0].id
+                        typer.echo(
+                            f"Resuming conversation {conversation_id[:8]}... "
+                            "(use --new for fresh start)",
+                            err=True,
+                        )
+
+{% if cookiecutter.ai_rag == "yes" %}
+                # Auto-detect RAG if not explicitly set
+                rag_enabled = use_rag
+                rag_collection = collection
+                if use_rag is None:
+                    from app.services.rag.config import get_rag_config
+                    from app.services.rag.service import RAGService
+
+                    try:
+                        rag_config = get_rag_config(settings)
+                        rag_service = RAGService(rag_config)
+                        collections = await rag_service.list_collections()
+                        if collections:
+                            rag_enabled = True
+                            if not rag_collection:
+                                rag_collection = collections[0]
+                            typer.echo(
+                                f"RAG auto-enabled with collection '{rag_collection}' "
+                                "(use --no-rag to disable)",
+                                err=True,
+                            )
+                        else:
+                            rag_enabled = False
+                    except Exception:
+                        rag_enabled = False
+
+{% endif %}
                 if message:
                     # Single message mode
                     await _send_message(
@@ -466,8 +518,8 @@ def chat(
                         stream,
                         verbose,
 {% if cookiecutter.ai_rag == "yes" %}
-                        use_rag=use_rag,
-                        rag_collection=collection,
+                        use_rag=rag_enabled,
+                        rag_collection=rag_collection,
                         rag_top_k=top_k,
                         show_sources=show_sources,
 {% endif %}
@@ -478,8 +530,8 @@ def chat(
                         ai_service,
                         conversation_id,
 {% if cookiecutter.ai_rag == "yes" %}
-                        use_rag=use_rag,
-                        rag_collection=collection,
+                        use_rag=rag_enabled,
+                        rag_collection=rag_collection,
                         show_sources=show_sources,
 {% endif %}
                     )
@@ -1015,7 +1067,7 @@ async def _interactive_chat_session(
     console.print()
     console.print("  [bold green]Online[/bold green]")
     console.print()
-    console.print("[dim]Type 'exit' to end session[/dim]")
+    console.print("[dim]Type /help for commands • Esc then Enter to insert newline • 'exit' to quit[/dim]")
     console.print()
 
     # Track conversation for context
@@ -1038,16 +1090,70 @@ async def _interactive_chat_session(
     )
     toolbar_callback = create_toolbar_callback(session_state)
 
+    # Initialize slash command handler for in-session commands
+    command_handler = SlashCommandHandler(
+        ai_service=ai_service,
+        session_state=session_state,
+        console=console,
+        current_conversation_id=current_conversation_id,
+{% if cookiecutter.ai_rag == "yes" %}
+        rag_enabled=use_rag,
+        rag_collection=rag_collection,
+{% endif %}
+    )
+
+{% if cookiecutter.ai_backend != "memory" %}
+    # Pre-load model cache for tab completion
+    await command_handler.load_model_cache()
+    # Pre-load collection cache for /rag tab completion
+    await command_handler.load_collection_cache()
+
+{% endif %}
+    # Create completer for slash command autocomplete
+    chat_completer = ChatCompleter(command_handler)
+
+    # Create key bindings for common operations
+    key_bindings = KeyBindings()
+
+    @key_bindings.add("c-l")
+    def _clear_screen(event: object) -> None:
+        """Clear screen on Ctrl+L."""
+        os.system("cls" if os.name == "nt" else "clear")
+
+    @key_bindings.add("enter")
+    def _submit(event: object) -> None:
+        """Submit on Enter."""
+        event.current_buffer.validate_and_handle()
+
+    @key_bindings.add("escape", "enter")
+    def _newline(event: object) -> None:
+        """Insert newline on Escape+Enter (or Alt+Enter)."""
+        event.current_buffer.insert_text("\n")
+
     # Create prompt session for async input with status line
-    # Style removes default background from toolbar to blend with terminal
-    toolbar_style = Style.from_dict({
+    # Style: toolbar blends with terminal, completion menu has dark theme
+    prompt_style = Style.from_dict({
         "bottom-toolbar": "noreverse",
+        # Dark completion menu styling
+        "completion-menu": "bg:#1a1a1a",
+        "completion-menu.completion": "fg:#cccccc bg:#1a1a1a",
+        "completion-menu.completion.current": "fg:#ffffff bg:#0066cc bold",
+        "completion-menu.meta": "fg:#666666 bg:#1a1a1a",
+        "completion-menu.meta.completion.current": "fg:#ffffff bg:#0066cc",
     })
     prompt_session: PromptSession[str] = PromptSession(
         message=HTML("<b><ansigreen>You: </ansigreen></b>"),
         bottom_toolbar=toolbar_callback,
-        style=toolbar_style,
+        style=prompt_style,
+        completer=chat_completer,
+        key_bindings=key_bindings,
+        complete_style=CompleteStyle.COLUMN,  # Show single-column popup menu
+        multiline=True,  # Enable multi-line input (Esc+Enter or Alt+Enter for newline)
     )
+
+    # Divider before chat starts
+    terminal_width = shutil.get_terminal_size().columns
+    console.print("─" * terminal_width, style="dim")
 
     while True:
         try:
@@ -1058,13 +1164,42 @@ async def _interactive_chat_session(
                 console.print("\n[yellow]Chat session ended[/yellow]")
                 break
 
-            # Check for exit commands
+            # Handle slash commands first
+            if command_handler.is_slash_command(user_message):
+                result = await command_handler.execute(user_message)
+                if result:
+                    if result.message:
+                        style = "red" if not result.success else "dim"
+                        console.print(Panel(result.message, border_style=style))
+                    if result.should_exit:
+                        break
+                    if result.new_conversation_id == "new":
+                        current_conversation_id = None
+                        command_handler.current_conversation_id = None
+                    # Update session state if command changed settings
+                    if result.update_provider or result.update_model:
+                        session_state.update_provider(
+                            result.update_provider or session_state.provider,
+                            result.update_model or session_state.model,
+                        )
+{% if cookiecutter.ai_rag == "yes" %}
+                    if result.update_rag is not None:
+                        use_rag = result.update_rag
+                        session_state.toggle_rag(use_rag, result.update_rag_collection)
+                        command_handler.rag_enabled = use_rag
+                        if result.update_rag_collection:
+                            rag_collection = result.update_rag_collection
+                            command_handler.rag_collection = rag_collection
+{% endif %}
+                continue
+
+            # Check for exit commands (kept for backwards compatibility)
             if user_message.lower().strip() in ["exit", "quit", "bye", "q"]:
                 console.print("[yellow]Goodbye![/yellow]")
                 break
 
             if not user_message.strip():
-                console.print("[dim]Please enter a message or 'exit' to quit.[/dim]")
+                console.print("[dim]Please enter a message or type /help.[/dim]")
                 continue
 
             console.print()  # Blank line between You: and Illiana:
@@ -1090,6 +1225,9 @@ async def _interactive_chat_session(
                     )
                     if returned_conversation_id:
                         current_conversation_id = returned_conversation_id
+                        command_handler.current_conversation_id = (
+                            returned_conversation_id
+                        )
                 else:
                     # Show thinking spinner for non-streaming responses
                     from rich.live import Live
@@ -1148,6 +1286,7 @@ async def _interactive_chat_session(
                     current_conversation_id = response.metadata.get(
                         "conversation_id", current_conversation_id
                     )
+                    command_handler.current_conversation_id = current_conversation_id
             except ProviderNotInstalledError as e:
                 # Clean display for missing provider
                 console.print()
@@ -1283,15 +1422,28 @@ async def _stream_chat_response(
                         break
         except TimeoutError:
             spinner_live.stop()
-            console.print("\nError: Request timed out after 30 seconds", style="red")
+            console.print(
+                "\nError: Request timed out. Try a faster model or increase AI_TIMEOUT_SECONDS.",
+                style="red",
+            )
             return None
+        except RuntimeError as e:
+            # WORKAROUND: anyio/prompt_toolkit event loop incompatibility
+            # When PydanticAI's anyio-based streaming completes inside prompt_toolkit's
+            # asyncio loop, the cancel scope cleanup can raise RuntimeError. The
+            # response is already fully streamed at this point, so we ignore it.
+            # String matching is intentional - no specific exception type exists.
+            if "cancel scope" in str(e).lower():
+                pass  # Response streamed successfully, ignore cleanup error
+            else:
+                raise
         finally:
             if spinner_live.is_started:
                 spinner_live.stop()
 
         if not interrupted:
             renderer.finalize()
-            console.print("\n")
+            console.print()
 
 {% if cookiecutter.ai_rag == "yes" %}
             # Display source references if RAG was used
@@ -1331,9 +1483,13 @@ async def _stream_chat_response(
         return None
 
     except Exception as e:
-        if not interrupted:
+        # WORKAROUND: Same anyio/prompt_toolkit issue can bubble up here
+        # See inner handler comment for full explanation
+        if "cancel scope" in str(e).lower():
+            pass  # Response streamed successfully, ignore cleanup error
+        elif not interrupted:
             console.print(f"Streaming error: {e}", style="red")
-        raise
+            raise
 
     finally:
         signal.signal(signal.SIGINT, old_handler)

@@ -11,7 +11,7 @@ from app.services.ai.models.llm import (
     LLMPrice,
     LLMVendor,
 )
-from app.services.ai.provider_management import read_env_file, update_env_file
+from app.services.ai.provider_management import update_env_file
 from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, or_, select
@@ -262,19 +262,14 @@ async def set_active_model(model_id: str, force: bool = False) -> SetModelResult
 
             vendor_name = model.llm_vendor.name if model.llm_vendor else None
 
-    # Read current provider from .env
-    env_vars = read_env_file()
-    current_provider = env_vars.get("AI_PROVIDER", "public")
-
     # Prepare updates
     updates: dict[str, str] = {"AI_MODEL": model_id}
 
-    # If not using public provider and vendor differs, update provider too
-    if vendor_name and current_provider != "public":
+    # Always update provider based on model's vendor (auto-detect)
+    if vendor_name:
         vendor_lower = vendor_name.lower()
-        if current_provider.lower() != vendor_lower:
-            updates["AI_PROVIDER"] = vendor_lower
-            provider_updated = True
+        updates["AI_PROVIDER"] = vendor_lower
+        provider_updated = True
 
     # Apply updates
     update_env_file(updates)

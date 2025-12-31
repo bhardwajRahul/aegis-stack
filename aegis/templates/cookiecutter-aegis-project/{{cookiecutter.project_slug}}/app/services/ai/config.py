@@ -31,7 +31,7 @@ class AIServiceConfig(BaseModel):
     model: str = "gpt-3.5-turbo"  # Default to widely supported model
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1000, gt=0, le=8000)
-    timeout_seconds: float = Field(default=30.0, gt=0)
+    timeout_seconds: float = Field(default=120.0, gt=0)
 
     # RAG-Chat integration settings (used when RAG is enabled)
     rag_default_collection: str = "default"
@@ -47,7 +47,7 @@ class AIServiceConfig(BaseModel):
             model=getattr(settings, "AI_MODEL", "gpt-3.5-turbo"),
             temperature=getattr(settings, "AI_TEMPERATURE", 0.7),
             max_tokens=getattr(settings, "AI_MAX_TOKENS", 1000),
-            timeout_seconds=getattr(settings, "AI_TIMEOUT_SECONDS", 30.0),
+            timeout_seconds=getattr(settings, "AI_TIMEOUT_SECONDS", 120.0),
             # RAG-Chat integration settings
             rag_default_collection=getattr(
                 settings, "RAG_CHAT_DEFAULT_COLLECTION", "default"
