@@ -6,7 +6,7 @@
 # - Update support
 
 _min_copier_version: "9.0.0"
-_version: "0.5.0-rc1"
+_version: "0.5.0-rc2"
 
 # IMPORTANT: Template content is in subdirectory
 # This allows the template to be recognized as git-tracked (aegis-stack repo root has .git)
@@ -164,7 +164,7 @@ ai_with_persistence:
 ai_rag:
   type: bool
   help: "Enable RAG (Retrieval-Augmented Generation) for document indexing?"
-  default: true
+  default: false
   when: "{{ include_ai }}"
 
 include_comms:

@@ -245,12 +245,15 @@ def get_current_template_commit(project_path: Path) -> str | None:
         return None
 
 
-def get_available_versions(template_root: Path | None = None) -> list[str]:
+def get_available_versions(
+    template_root: Path | None = None, include_prereleases: bool = False
+) -> list[str]:
     """
     Get list of available template versions from git tags.
 
     Args:
         template_root: Path to template repository (default: auto-detect)
+        include_prereleases: Include pre-release versions (rc, alpha, beta, dev)
 
     Returns:
         List of version strings sorted by PEP 440 (newest first)
@@ -273,7 +276,10 @@ def get_available_versions(template_root: Path | None = None) -> list[str]:
             if tag.startswith("v"):
                 version_str = tag[1:]  # Remove 'v' prefix
                 try:
-                    parse(version_str)  # Validate version
+                    parsed = parse(version_str)  # Validate version
+                    # Skip pre-releases (rc, alpha, beta, dev) unless explicitly requested
+                    if not include_prereleases and parsed.is_prerelease:
+                        continue
                     versions.append(version_str)
                 except Exception:
                     continue
