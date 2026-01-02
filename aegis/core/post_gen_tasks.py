@@ -121,14 +121,24 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/cli/ai.py",
             "app/cli/ai_rendering.py",
             "app/cli/marko_terminal_renderer.py",
+            "app/cli/chat_completer.py",
+            "app/cli/slash_commands.py",
+            "app/cli/docs.py",
+            "app/cli/llm.py",
+            "app/cli/status_line.py",
+            "app/core/formatting.py",
             "app/models/conversation.py",
             "tests/services/test_conversation_persistence.py",
             "tests/cli/test_ai_rendering.py",
             "tests/cli/test_conversation_memory.py",
+            "tests/cli/test_chat_completer.py",
             "tests/services/ai",
             # Frontend dashboard files
             "app/components/frontend/dashboard/cards/ai_card.py",
             "app/components/frontend/dashboard/modals/ai_modal.py",
+            "app/components/frontend/dashboard/modals/ai_analytics_tab.py",
+            "app/components/frontend/dashboard/modals/rag_tab.py",
+            "tests/components/frontend/test_ai_analytics_utils.py",
         ],
         AnswerKeys.SERVICE_COMMS: [
             "app/components/backend/api/comms",
@@ -375,10 +385,21 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/cli/ai.py")
         remove_file(project_path, "app/cli/ai_rendering.py")
         remove_file(project_path, "app/cli/marko_terminal_renderer.py")
+        remove_file(project_path, "app/cli/chat_completer.py")
+        remove_file(project_path, "app/cli/slash_commands.py")
+        remove_file(project_path, "app/cli/llm.py")
+        remove_file(project_path, "app/cli/docs.py")
+        remove_file(project_path, "app/cli/status_line.py")
+        remove_file(project_path, "app/core/formatting.py")
         remove_file(project_path, "tests/api/test_ai_endpoints.py")
         remove_file(project_path, "tests/services/test_conversation_persistence.py")
         remove_file(project_path, "tests/cli/test_ai_rendering.py")
         remove_file(project_path, "tests/cli/test_conversation_memory.py")
+        remove_file(project_path, "tests/cli/test_chat_completer.py")
+        remove_file(project_path, "tests/cli/test_docs.py")
+        remove_file(project_path, "tests/cli/test_llm_cli.py")
+        remove_file(project_path, "tests/cli/test_slash_commands.py")
+        remove_file(project_path, "tests/cli/test_status_line.py")
         remove_dir(project_path, "tests/services/ai")
         remove_file(project_path, "app/components/frontend/dashboard/cards/ai_card.py")
         remove_file(
@@ -388,16 +409,35 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/models/conversation.py")
 
     # AI conversation persistence handling
-    # When AI backend is memory (or not specified), remove SQLModel tables
+    # When AI backend is memory (or not specified), remove database-related files
     ai_backend = context.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
     if ai_backend == StorageBackends.MEMORY:
         remove_file(project_path, "app/models/conversation.py")
-        # Remove LLM tracking models (only needed with persistence)
-        remove_dir(project_path, "app/services/ai/models/llm")
-        # Remove LLM fixtures (only needed with persistence)
-        remove_file(project_path, "app/services/ai/fixtures/llm_fixtures.py")
-        # Remove usage tracking tests (only relevant with persistence)
+        # Remove LLM tracking models and ETL (only needed with persistence)
+        remove_dir(project_path, "app/services/ai/models")
+        remove_dir(project_path, "app/services/ai/etl")
+        remove_dir(project_path, "app/services/ai/fixtures")
+        # Remove persistence-related contexts
+        remove_file(project_path, "app/services/ai/llm_catalog_context.py")
+        remove_file(project_path, "app/services/ai/llm_service.py")
+        remove_file(project_path, "app/services/ai/provider_management.py")
+        remove_file(project_path, "app/services/ai/usage_context.py")
+        # Remove persistence-related tests
+        remove_dir(project_path, "tests/services/ai/etl")
         remove_file(project_path, "tests/services/ai/test_usage_tracking.py")
+        remove_file(project_path, "tests/services/ai/test_llm_catalog_context.py")
+        remove_file(project_path, "tests/services/ai/test_llm_service.py")
+        remove_file(project_path, "tests/services/ai/test_provider_management.py")
+        # Remove LLM CLI (catalog management needs database)
+        remove_file(project_path, "app/cli/llm.py")
+        remove_file(project_path, "tests/cli/test_llm_cli.py")
+        # Remove analytics UI (needs database for usage tracking)
+        remove_file(
+            project_path, "app/components/frontend/dashboard/modals/ai_analytics_tab.py"
+        )
+        remove_file(
+            project_path, "tests/components/frontend/test_ai_analytics_utils.py"
+        )
 
     # Remove RAG service if not enabled
     if not is_enabled(AnswerKeys.AI_RAG):
@@ -405,6 +445,11 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_dir(project_path, "app/services/rag")
         remove_file(project_path, "app/cli/rag.py")
         remove_dir(project_path, "tests/services/rag")
+        # Remove RAG-related files within AI service
+        remove_file(project_path, "app/services/ai/rag_context.py")
+        remove_file(project_path, "app/services/ai/rag_stats_context.py")
+        remove_file(project_path, "tests/services/ai/test_rag_stats_context.py")
+        remove_file(project_path, "app/components/frontend/dashboard/modals/rag_tab.py")
 
     # Remove comms service if not selected
     if not is_enabled(AnswerKeys.COMMS):
@@ -1115,7 +1160,7 @@ def run_post_generation_tasks(
 
     typer.echo()
     typer.secho("Next steps:", fg=typer.colors.CYAN, bold=True)
-    typer.echo(f"   cd {project_path.name}")
+    typer.echo(f"   cd {project_path}")
     typer.echo("   make serve")
 
     return True

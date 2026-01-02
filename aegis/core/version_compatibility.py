@@ -13,6 +13,7 @@ import typer
 from packaging.version import Version, parse
 
 from aegis import __version__ as cli_version  # noqa: N813
+from aegis.core.copier_manager import load_copier_answers
 from aegis.core.copier_updater import (
     get_available_versions,
     get_commit_for_version,
@@ -44,8 +45,8 @@ def get_project_template_version(project_path: Path) -> str | None:
     """
     Get the template version used to generate the project.
 
-    This reads the _commit field from .copier-answers.yml and attempts
-    to find the corresponding version tag in the template repository.
+    First checks for _template_version field in .copier-answers.yml (explicit).
+    Falls back to matching _commit hash to version tags in template repository.
 
     Args:
         project_path: Path to the project directory
@@ -54,6 +55,13 @@ def get_project_template_version(project_path: Path) -> str | None:
         Version string if found, None if cannot determine
     """
     try:
+        # First, check for explicit _template_version in answers
+        # This is set by newer versions of aegis init
+        answers = load_copier_answers(project_path)
+        if answers and "_template_version" in answers:
+            return answers["_template_version"]
+
+        # Fall back to commit-based version detection
         # Get the commit hash used to generate the project
         commit_hash = get_current_template_commit(project_path)
         if not commit_hash:

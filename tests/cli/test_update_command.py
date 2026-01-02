@@ -138,7 +138,7 @@ class TestUpdateCommandGitValidation:
 
         # Should succeed and show early exit message
         assert result.success
-        assert "already at the target commit" in result.stdout.lower()
+        assert "already at the requested version" in result.stdout.lower()
 
 
 class TestUpdateCommandDryRun:
@@ -162,7 +162,7 @@ class TestUpdateCommandDryRun:
         # Should succeed and either show dry-run message or early exit message
         assert result.success
         # If early exit happened (already at target), that's valid too
-        is_early_exit = "already at the target commit" in result.stdout.lower()
+        is_early_exit = "already at the requested version" in result.stdout.lower()
         has_dry_run_msg = (
             "dry run" in result.stdout.lower() or "preview" in result.stdout.lower()
         )
@@ -258,7 +258,7 @@ class TestUpdateCommandChangelog:
         has_changelog = (
             "changelog" in result.stdout.lower() or "changes" in result.stdout.lower()
         )
-        is_early_exit = "already at the target commit" in result.stdout.lower()
+        is_early_exit = "already at the requested version" in result.stdout.lower()
         assert has_changelog or is_early_exit
 
 
