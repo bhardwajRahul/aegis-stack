@@ -62,7 +62,6 @@ class TestPythonVersionValidation:
         )
 
 
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
 class TestPythonVersionGeneration:
     """Test Python version in generated projects."""
 
@@ -71,14 +70,11 @@ class TestPythonVersionGeneration:
         self,
         temp_output_dir: Any,
         skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
     ) -> None:
         """Test that default Python version is 3.14."""
         result = run_aegis_init(
             project_name="test-default-python",
             output_dir=temp_output_dir,
-            engine=engine,
         )
 
         assert result.success, f"CLI command failed: {result.stderr}"
@@ -105,15 +101,12 @@ class TestPythonVersionGeneration:
         self,
         temp_output_dir: Any,
         skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
     ) -> None:
         """Test generating project with Python 3.11."""
         result = run_aegis_init(
             project_name="test-python-311",
             output_dir=temp_output_dir,
             python_version="3.11",
-            engine=engine,
         )
 
         assert result.success, f"CLI command failed: {result.stderr}"
@@ -139,15 +132,12 @@ class TestPythonVersionGeneration:
         self,
         temp_output_dir: Any,
         skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
     ) -> None:
         """Test generating project with Python 3.12."""
         result = run_aegis_init(
             project_name="test-python-312",
             output_dir=temp_output_dir,
             python_version="3.12",
-            engine=engine,
         )
 
         assert result.success, f"CLI command failed: {result.stderr}"
@@ -173,15 +163,12 @@ class TestPythonVersionGeneration:
         self,
         temp_output_dir: Any,
         skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
     ) -> None:
         """Test generating project with Python 3.13."""
         result = run_aegis_init(
             project_name="test-python-313",
             output_dir=temp_output_dir,
             python_version="3.13",
-            engine=engine,
         )
 
         assert result.success, f"CLI command failed: {result.stderr}"
@@ -207,15 +194,12 @@ class TestPythonVersionGeneration:
         self,
         temp_output_dir: Any,
         skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
     ) -> None:
         """Test generating project with Python 3.14."""
         result = run_aegis_init(
             project_name="test-python-314",
             output_dir=temp_output_dir,
             python_version="3.14",
-            engine=engine,
         )
 
         assert result.success, f"CLI command failed: {result.stderr}"
@@ -241,8 +225,6 @@ class TestPythonVersionGeneration:
         self,
         temp_output_dir: Any,
         skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
     ) -> None:
         """Test Python version with components selected."""
         result = run_aegis_init(
@@ -250,7 +232,6 @@ class TestPythonVersionGeneration:
             components=["scheduler", "worker"],
             output_dir=temp_output_dir,
             python_version="3.12",
-            engine=engine,
         )
 
         assert result.success, f"CLI command failed: {result.stderr}"

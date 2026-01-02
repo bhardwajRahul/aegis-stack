@@ -1,6 +1,23 @@
+import subprocess
 from typing import Any
 
 import pytest
+
+
+def pytest_configure(config: Any) -> None:
+    """Configure git for CI environments.
+
+    This ensures git user.name and user.email are set globally,
+    which is required for project generation tests that run git commit.
+    """
+    subprocess.run(
+        ["git", "config", "--global", "user.name", "Aegis Test"],
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "--global", "user.email", "test@aegis-stack.dev"],
+        capture_output=True,
+    )
 
 
 def pytest_addoption(parser: Any) -> None:
@@ -11,12 +28,6 @@ def pytest_addoption(parser: Any) -> None:
         default=False,
         help="run slow tests (CLI integration tests with project generation)",
     )
-    parser.addoption(
-        "--engine",
-        action="store",
-        default=None,
-        help="template engine to test (cookiecutter, copier, or both)",
-    )
 
 
 @pytest.fixture
@@ -25,16 +36,3 @@ def skip_slow_tests(request: Any) -> None:
     if request.config.getoption("--runslow"):
         return
     pytest.skip("need --runslow option to run")
-
-
-@pytest.fixture
-def skip_copier_tests(request: Any, engine: str) -> None:
-    """
-    Copier engine tests are now enabled (Ticket #128 resolved).
-
-    The conditional file exclusion is now handled by cleanup_components()
-    in post_gen_tasks.py, ensuring consistent behavior between Cookiecutter
-    and Copier template engines.
-    """
-    # Tests no longer skipped - Copier template is working
-    pass

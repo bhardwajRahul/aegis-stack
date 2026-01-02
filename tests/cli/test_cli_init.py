@@ -86,15 +86,12 @@ class TestCLIInit:
         self,
         temp_output_dir: Any,
         skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
     ) -> None:
         """Test that invalid component names are rejected."""
         result = run_aegis_init(
             project_name="test-invalid",
             components=["invalid_component"],
             output_dir=temp_output_dir,
-            engine=engine,
         )
 
         # Assert command failed
@@ -119,8 +116,6 @@ class TestCLIInit:
         self,
         temp_output_dir: Any,
         skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
     ) -> None:
         """Test that template variables are properly substituted."""
         project_name = "my-custom-project"
@@ -128,7 +123,6 @@ class TestCLIInit:
             project_name=project_name,
             components=["scheduler"],
             output_dir=temp_output_dir,
-            engine=engine,
         )
 
         assert result.success
@@ -151,15 +145,12 @@ class TestCLIInit:
         self,
         temp_output_dir: Any,
         skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
     ) -> None:
         """Test that generated project passes quality checks."""
         result = run_aegis_init(
             project_name="test-quality",
             components=["scheduler"],
             output_dir=temp_output_dir,
-            engine=engine,
         )
 
         assert result.success
@@ -475,8 +466,6 @@ class TestCLIInit:
         self,
         temp_output_dir: Any,
         skip_slow_tests: Any,
-        skip_copier_tests: Any,
-        engine: str,
     ) -> None:
         """Test generating a project with custom output directory using -o flag."""
         # Create a subdirectory to use as output location
@@ -488,7 +477,6 @@ class TestCLIInit:
             project_name="test-custom-output",
             components=[],
             output_dir=custom_output,
-            engine=engine,
         )
 
         # Assert command succeeded

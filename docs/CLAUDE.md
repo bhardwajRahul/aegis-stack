@@ -98,7 +98,7 @@ theme:
 graph TB
     subgraph "Aegis Stack CLI"
         CLI[CLI Commands]
-        Templates[Cookiecutter Templates]
+        Templates[Copier Templates]
     end
     
     subgraph "Generated Project"

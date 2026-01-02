@@ -58,14 +58,11 @@ def get_stack_validator(
     return result, result.project_path
 
 
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
 @pytest.mark.parametrize("combination", STACK_COMBINATIONS, ids=lambda x: x.name)
 @pytest.mark.slow
 def test_stack_dependency_installation(
     combination: StackCombination,
     get_generated_stack: Any,
-    skip_copier_tests: Any,
-    engine: str,
 ) -> None:
     """Test that each stack's dependencies can be installed successfully."""
     result, project_path = get_stack_validator(get_generated_stack, combination)
@@ -85,14 +82,11 @@ def test_stack_dependency_installation(
     )
 
 
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
 @pytest.mark.parametrize("combination", STACK_COMBINATIONS, ids=lambda x: x.name)
 @pytest.mark.slow
 def test_stack_cli_installation(
     combination: StackCombination,
     get_generated_stack: Any,
-    skip_copier_tests: Any,
-    engine: str,
 ) -> None:
     """Test that each stack's CLI script can be installed."""
     result, project_path = get_stack_validator(get_generated_stack, combination)
@@ -114,14 +108,11 @@ def test_stack_cli_installation(
     )
 
 
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
 @pytest.mark.parametrize("combination", STACK_COMBINATIONS, ids=lambda x: x.name)
 @pytest.mark.slow
 def test_stack_code_quality(
     combination: StackCombination,
     get_generated_stack: Any,
-    skip_copier_tests: Any,
-    engine: str,
 ) -> None:
     """Test that each stack passes code quality checks."""
     result, project_path = get_stack_validator(get_generated_stack, combination)
@@ -154,14 +145,11 @@ def test_stack_code_quality(
     )
 
 
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
 @pytest.mark.parametrize("combination", STACK_COMBINATIONS, ids=lambda x: x.name)
 @pytest.mark.slow
 def test_stack_cli_functionality(
     combination: StackCombination,
     get_generated_stack: Any,
-    skip_copier_tests: Any,
-    engine: str,
 ) -> None:
     """Test that each stack's CLI script is functional."""
     from .test_utils import run_project_command
@@ -195,14 +183,11 @@ def test_stack_cli_functionality(
     )
 
 
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
 @pytest.mark.parametrize("combination", STACK_COMBINATIONS, ids=lambda x: x.name)
 @pytest.mark.slow
 def test_stack_health_commands(
     combination: StackCombination,
     get_generated_stack: Any,
-    skip_copier_tests: Any,
-    engine: str,
 ) -> None:
     """Test that each stack's health commands are available."""
     from .test_utils import run_project_command

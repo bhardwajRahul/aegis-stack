@@ -20,9 +20,6 @@ CLI_TIMEOUT_QUICK = 10  # For fast help commands
 CLI_TIMEOUT_STANDARD = 60  # For normal commands
 CLI_TIMEOUT_LONG = 180  # For complex operations
 
-# Template Engine Configuration
-TEMPLATE_ENGINES = ["cookiecutter", "copier"]
-
 QUALITY_CHECK_TIMEOUTS = {
     "dependency_install": 180,
     "cli_install": 60,
@@ -302,7 +299,6 @@ def run_aegis_init(
     interactive: bool = False,
     force: bool = True,
     yes: bool = True,
-    engine: str = "copier",
     python_version: str | None = None,
 ) -> CLITestResult:
     """
@@ -315,7 +311,6 @@ def run_aegis_init(
         interactive: Whether to use interactive mode
         force: Whether to force overwrite
         yes: Whether to skip confirmation
-        engine: Template engine to use (cookiecutter or copier)
         python_version: Python version for generated project (e.g., "3.13")
 
     Returns:
@@ -335,9 +330,6 @@ def run_aegis_init(
         args.append("--force")
     if yes:
         args.append("--yes")
-    # Add engine flag (hidden flag for testing both engines)
-    if engine != "cookiecutter":
-        args.extend(["--engine", engine])
 
     result = run_aegis_command("init", *args)
 

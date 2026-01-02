@@ -149,18 +149,10 @@ def generated_stacks(
 
     This dramatically reduces test time by avoiding duplicate stack generation.
     Returns a dict mapping stack names to (combination, result) tuples.
-
-    Note: Always uses Cookiecutter engine for session-scoped generation.
-    Engine-parameterized tests will skip Copier tests via skip_copier_tests fixture.
     """
-    # Always use Cookiecutter for session-scoped fixture
-    engine = "cookiecutter"
-
     stacks = {}
 
-    print(
-        f"\n🏗️  Generating {len(STACK_COMBINATIONS)} stacks for session (engine={engine})..."
-    )
+    print(f"\nGenerating {len(STACK_COMBINATIONS)} stacks for session...")
 
     for combination in STACK_COMBINATIONS:
         print(f"   - Generating {combination.name} stack...")
@@ -169,7 +161,6 @@ def generated_stacks(
             combination.project_name,
             combination.components,
             session_temp_dir,
-            engine=engine,
         )
 
         if not result.success:
@@ -181,7 +172,7 @@ def generated_stacks(
 
         stacks[combination.name] = (combination, result)
 
-    print(f"✅ All {len(stacks)} stacks generated successfully!")
+    print(f"All {len(stacks)} stacks generated successfully!")
     return stacks
 
 
@@ -239,7 +230,7 @@ def generated_db_project(session_temp_dir: Path) -> CLITestResult:
     if not install_result.success:
         raise RuntimeError(f"Failed to install dependencies: {install_result.stderr}")
 
-    print("✅ Database project ready for runtime testing!")
+    print("Database project ready for runtime testing!")
     return result
 
 

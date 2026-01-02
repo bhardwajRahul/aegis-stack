@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 The architecture follows this pattern:
 - **CLI Tool** (`aegis-stack`): Installable via `pip install aegis-stack`
 - **Generated Projects**: Full-stack containerized applications created by the CLI
-- **Templates**: Cookiecutter templates that define generated project structure
+- **Templates**: Copier templates that define generated project structure
 
 ## Release Status: v0.1.0 (LIVE on PyPI!)
 
@@ -62,9 +62,9 @@ This project uses `uv` for dependency management and a `Makefile` for CLI develo
 
 **NEVER edit generated test projects directly!** Always follow this workflow:
 
-### ✅ Correct Template Development Process:
-1. **Edit template files only** in `aegis/templates/cookiecutter-aegis-project/{{cookiecutter.project_slug}}/`
-2. **Generate fresh test project**: `make test-template` or `aegis init test-project`  
+### Correct Template Development Process:
+1. **Edit template files only** in `aegis/templates/copier-aegis-project/{{ project_slug }}/`
+2. **Generate fresh test project**: `make test-template` or `aegis init test-project`
 3. **Run tests on generated project** to verify template changes work
 4. **If tests fail**: Fix the **template files** (step 1), then regenerate (step 2)
 5. **Delete test project** when done - it's just for validation
@@ -94,9 +94,9 @@ The main command for creating new Aegis Stack projects with customizable compone
 
 **Key files:**
 - `aegis/__main__.py` - Main CLI entry point and command definitions
-- `aegis/templates/cookiecutter-aegis-project/` - Cookiecutter template structure
-- `aegis/templates/cookiecutter-aegis-project/hooks/post_gen_project.py` - Template processing logic
-- `aegis/templates/cookiecutter-aegis-project/cookiecutter.json` - Template configuration
+- `aegis/templates/copier-aegis-project/` - Copier template structure
+- `copier.yml` - Template configuration (at repo root)
+- `aegis/core/copier_manager.py` - Template generation logic
 
 **Options:**
 - `--components COMPONENTS` - Comma-separated list of components (redis,worker,scheduler)
@@ -281,12 +281,12 @@ When working in `tests/` directory:
 - CLI integration testing approaches
 - Debugging test failures
 
-### 📋 Templates (`aegis/templates/CLAUDE.md`) 
+### Templates (`aegis/templates/CLAUDE.md`)
 When working in `aegis/templates/` directory:
-- Template development patterns and Cookiecutter usage
+- Template development patterns and Copier usage
 - Jinja2 template syntax and best practices
 - Component conditional logic
-- Post-generation hook patterns
+- Post-generation task patterns
 
 ### 📖 Documentation (`docs/CLAUDE.md`)
 When working in `docs/` directory:

@@ -79,12 +79,6 @@ def init_command(
         help="Directory to create the project in (default: current directory)",
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
-    engine: str = typer.Option(
-        "copier",
-        "--engine",
-        hidden=True,  # Internal testing flag, not shown in --help
-        help="Template engine (cookiecutter or copier) - for internal testing",
-    ),
     to_version: str | None = typer.Option(
         None,
         "--to-version",
@@ -116,16 +110,6 @@ def init_command(
     if python_version not in SUPPORTED_PYTHON_VERSIONS:
         typer.secho(
             f"Invalid Python version '{python_version}'. Must be one of: {', '.join(SUPPORTED_PYTHON_VERSIONS)}",
-            fg="red",
-            err=True,
-        )
-        raise typer.Exit(1)
-
-    # Validate engine parameter
-    valid_engines = ["cookiecutter", "copier"]
-    if engine not in valid_engines:
-        typer.secho(
-            f"Invalid engine '{engine}'. Must be one of: {', '.join(valid_engines)}",
             fg="red",
             err=True,
         )
@@ -393,62 +377,23 @@ def init_command(
 
         shutil.rmtree(project_path)
 
-    # Create project using selected template engine
+    # Create project using Copier template engine
     typer.echo()
     typer.secho(f"Creating project: {project_name}", fg=typer.colors.BLUE, bold=True)
 
     try:
-        if engine == "copier":
-            # Use Copier template engine
-            from ..core.copier_manager import generate_with_copier
+        from ..core.copier_manager import generate_with_copier
 
-            generate_with_copier(
-                template_gen,
-                base_output_dir,
-                vcs_ref=to_version,
-                skip_llm_sync=skip_llm_sync,
-            )
-
-        else:
-            # Use Cookiecutter template engine (fallback option)
-            import os
-
-            from cookiecutter.main import cookiecutter
-
-            # Get the template path
-            template_path = (
-                Path(__file__).parent.parent
-                / "templates"
-                / "cookiecutter-aegis-project"
-            )
-
-            # Use template generator for context
-            extra_context = template_gen.get_template_context()
-
-            # Set environment variable for post-gen hook to read
-            if skip_llm_sync:
-                os.environ["AEGIS_SKIP_LLM_SYNC"] = "1"
-
-            try:
-                # Generate project with cookiecutter
-                cookiecutter(
-                    str(template_path),
-                    extra_context=extra_context,
-                    output_dir=str(base_output_dir),
-                    no_input=True,  # Don't prompt user, use our context
-                    overwrite_if_exists=False,  # No longer needed since we remove directory first
-                )
-            finally:
-                # Clean up environment variable
-                os.environ.pop("AEGIS_SKIP_LLM_SYNC", None)
+        generate_with_copier(
+            template_gen,
+            base_output_dir,
+            vcs_ref=to_version,
+            skip_llm_sync=skip_llm_sync,
+        )
 
         # Note: Comprehensive setup output is now handled by the post-generation hook
         # which provides better status reporting and automated setup
 
-    except ImportError as e:
-        typer.secho(f"Error: {e}", fg="red", err=True)
-        typer.echo("   Required template engine not installed", err=True)
-        raise typer.Exit(1)
     except Exception as e:
         typer.secho(f"Error creating project: {e}", fg="red", err=True)
         raise typer.Exit(1)

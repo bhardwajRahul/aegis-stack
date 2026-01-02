@@ -233,8 +233,14 @@ def generate_with_copier(
     # Copier requires a git-tracked project to perform updates
 
     try:
-        # Configure git user in case CI environment doesn't have it set
-        # This is needed for commits to work in CI
+        subprocess.run(
+            ["git", "init"],
+            cwd=project_path,
+            check=True,
+            capture_output=True,
+        )
+        # Configure git user AFTER init (local config requires .git to exist)
+        # This is needed for commits to work in CI environments
         subprocess.run(
             ["git", "config", "user.name", "Aegis Stack"],
             cwd=project_path,
@@ -243,13 +249,6 @@ def generate_with_copier(
         subprocess.run(
             ["git", "config", "user.email", "noreply@aegis-stack.dev"],
             cwd=project_path,
-            capture_output=True,
-        )
-
-        subprocess.run(
-            ["git", "init"],
-            cwd=project_path,
-            check=True,
             capture_output=True,
         )
         subprocess.run(
