@@ -125,43 +125,20 @@ class TestUpdateIntegration:
         assert result.returncode == 0, f"Update failed: {result.stderr}"
         assert "✅" in result.stdout or "completed" in result.stdout.lower()
 
-    def test_downgrade_without_flag_fails(
+    def test_downgrade_fails(
         self, head_project: Path, template_path: Path, old_commit_hash: str
     ) -> None:
-        """Test that downgrade without --allow-downgrade fails."""
+        """Test that downgrade to older version fails (not supported by Copier)."""
         # head_project is already generated from HEAD (cached)
 
-        # Try to downgrade without flag (should fail)
+        # Try to downgrade (should fail - Copier doesn't support downgrades)
         result = run_update(
             head_project, template_path, "--to-version", old_commit_hash
         )
 
-        assert result.returncode != 0, "Expected downgrade to fail without flag"
+        assert result.returncode != 0, "Expected downgrade to fail"
         assert (
             "downgrade" in result.stderr.lower() or "downgrade" in result.stdout.lower()
-        )
-
-    def test_downgrade_with_flag_shows_warning(
-        self, head_project: Path, template_path: Path, old_commit_hash: str
-    ) -> None:
-        """Test that downgrade with --allow-downgrade shows warning."""
-        # head_project is already generated from HEAD (cached)
-
-        # Try to downgrade with flag
-        # NOTE: Copier itself may still block downgrades due to PEP 440 version checking
-        # This test verifies our downgrade detection works, even if Copier blocks it
-        result = run_update(
-            head_project,
-            template_path,
-            "--to-version",
-            old_commit_hash,
-            "--allow-downgrade",
-        )
-
-        # Should show warning about downgrade (whether it succeeds or not)
-        output = result.stdout + result.stderr
-        assert (
-            "warning" in output.lower() or "⚠️" in output or "downgrad" in output.lower()
         )
 
     def test_update_with_dirty_git_tree(
