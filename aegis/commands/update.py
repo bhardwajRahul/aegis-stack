@@ -63,11 +63,6 @@ def update_command(
         "-y",
         help="Skip confirmation prompt",
     ),
-    allow_downgrade: bool = typer.Option(
-        False,
-        "--allow-downgrade",
-        help="Allow updating to older template versions (use with caution)",
-    ),
 ) -> None:
     """
     Update project to a newer template version.
@@ -216,25 +211,19 @@ def update_command(
             typer.echo(f"   Target:  {target_commit[:8]}...")
             return
 
-        # Check for downgrade attempt
+        # Check for downgrade attempt (not supported by Copier)
         if target_commit and is_version_downgrade(
             current_commit, target_commit, template_root
         ):
-            if not allow_downgrade:
-                typer.echo("")
-                typer.secho("Downgrade detected", fg="red", err=True)
-                typer.echo(f"   Current: {current_commit[:8]}...", err=True)
-                typer.echo(f"   Target:  {target_commit[:8]}...", err=True)
-                typer.echo(
-                    "   Use --allow-downgrade to proceed (not recommended)", err=True
-                )
-                raise typer.Exit(1)
-
-            # Downgrade allowed - show warning
             typer.echo("")
-            typer.secho("WARNING: Downgrading to older template version", fg="yellow")
-            typer.echo(f"   Current: {current_commit[:8]}...")
-            typer.echo(f"   Target:  {target_commit[:8]}...")
+            typer.secho("Downgrade not supported", fg="red", err=True)
+            typer.echo(f"   Current: {current_commit[:8]}...", err=True)
+            typer.echo(f"   Target:  {target_commit[:8]}...", err=True)
+            typer.echo(
+                "   Copier does not support downgrading to older template versions.",
+                err=True,
+            )
+            raise typer.Exit(1)
 
     # Get and display changelog
     if current_commit:
@@ -400,16 +389,7 @@ def update_command(
 
     except Exception as e:
         typer.echo("")
-
-        # Check if this is a Copier downgrade error
-        error_msg = str(e)
-        if "downgrad" in error_msg.lower() and not allow_downgrade:
-            typer.secho(f"Update failed: {e}", fg="red", err=True)
-            typer.echo("")
-            typer.echo("This appears to be a downgrade.")
-            typer.echo("   Use --allow-downgrade to proceed (not recommended)")
-        else:
-            typer.secho(f"Update failed: {e}", fg="red", err=True)
+        typer.secho(f"Update failed: {e}", fg="red", err=True)
 
         # Offer rollback if backup exists
         if backup_tag:
