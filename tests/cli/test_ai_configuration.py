@@ -436,22 +436,17 @@ class TestAIConfigurationEndToEnd:
         assert context["ai_providers"] == "openai,google,groq"
         assert context["project_name"] == "test-ai-project"
 
-    def test_cookiecutter_json_structure(self) -> None:
-        """Test that cookiecutter.json has correct AI provider structure."""
-        import json
+    def test_copier_yaml_structure(self) -> None:
+        """Test that copier.yml has correct AI provider structure."""
         from pathlib import Path
 
-        # Load cookiecutter.json directly
-        cookiecutter_path = (
-            Path(__file__).parent.parent.parent
-            / "aegis"
-            / "templates"
-            / "cookiecutter-aegis-project"
-            / "cookiecutter.json"
-        )
+        import yaml
 
-        with open(cookiecutter_path) as f:
-            config = json.load(f)
+        # Load copier.yml directly
+        copier_path = Path(__file__).parent.parent.parent / "copier.yml"
+
+        with open(copier_path) as f:
+            config = yaml.safe_load(f)
 
         # Verify AI-related fields exist
         assert "include_ai" in config
@@ -460,5 +455,5 @@ class TestAIConfigurationEndToEnd:
 
         # Verify AI dependencies template uses provider variable
         ai_deps = config["_ai_deps"]
-        assert "{{ cookiecutter.ai_providers }}" in ai_deps
+        assert "ai_providers" in ai_deps
         assert "pydantic-ai-slim" in ai_deps

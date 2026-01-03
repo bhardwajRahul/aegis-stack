@@ -122,7 +122,7 @@ def validate_project_name(project_name: str) -> None:
 ## Template Generation Logic
 
 ### Template Generator (`template_generator.py`)
-The template generator converts component selections into cookiecutter context:
+The template generator converts component selections into Copier context:
 
 ```python
 class TemplateGenerator:
@@ -134,7 +134,7 @@ class TemplateGenerator:
         self.components = components
     
     def get_template_context(self) -> dict[str, Any]:
-        """Generate cookiecutter context from component selections."""
+        """Generate Copier context from component selections."""
         return {
             "project_name": self.project_name,
             "project_slug": self.project_slug,
@@ -143,10 +143,10 @@ class TemplateGenerator:
             "author_email": "dev@example.com",
             "version": "0.1.0",
             "python_version": "3.11",
-            "include_scheduler": "yes" if "scheduler" in self.components else "no",
-            "include_worker": "yes" if "worker" in self.components else "no",
-            "include_database": "yes" if "database" in self.components else "no",
-            "include_cache": "yes" if "cache" in self.components else "no",
+            "include_scheduler": "scheduler" in self.components,
+            "include_worker": "worker" in self.components,
+            "include_database": "database" in self.components,
+            "include_cache": "cache" in self.components,
         }
     
     def get_template_files(self) -> list[str]:
@@ -219,11 +219,11 @@ def init(
     
     # Confirm before proceeding
     if not yes and not typer.confirm("Create this project?"):
-        typer.echo("❌ Project creation cancelled")
+        typer.echo("Project creation cancelled")
         raise typer.Exit(0)
-    
-    # Create project using cookiecutter
-    create_project_with_cookiecutter(project_name, components, output_dir, force)
+
+    # Create project using Copier
+    create_project_with_copier(project_name, components, output_dir, force)
 ```
 
 ### Interactive Selection Patterns

@@ -171,13 +171,10 @@ STACK_COMBINATIONS = [
 ]
 
 
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
 @pytest.mark.parametrize("combination", STACK_COMBINATIONS, ids=lambda x: x.name)
 def test_stack_generation_matrix(
     combination: StackCombination,
     get_generated_stack: Any,
-    skip_copier_tests: Any,
-    engine: str,
 ) -> None:
     """Test generation of each valid stack combination."""
     # Get the pre-generated stack
@@ -200,13 +197,10 @@ def test_stack_generation_matrix(
     )
 
 
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
 @pytest.mark.parametrize("combination", STACK_COMBINATIONS, ids=lambda x: x.name)
 def test_stack_file_structure(
     combination: StackCombination,
     get_generated_stack: Any,
-    skip_copier_tests: Any,
-    engine: str,
 ) -> None:
     """Test that each stack has the correct file structure."""
     # Get the pre-generated stack
@@ -224,13 +218,10 @@ def test_stack_file_structure(
     )
 
 
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
 @pytest.mark.parametrize("combination", STACK_COMBINATIONS, ids=lambda x: x.name)
 def test_stack_docker_configuration(
     combination: StackCombination,
     get_generated_stack: Any,
-    skip_copier_tests: Any,
-    engine: str,
 ) -> None:
     """Test that each stack has correct Docker Compose configuration."""
     # Get the pre-generated stack
@@ -248,13 +239,10 @@ def test_stack_docker_configuration(
     )
 
 
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
 @pytest.mark.parametrize("combination", STACK_COMBINATIONS, ids=lambda x: x.name)
 def test_stack_dependencies(
     combination: StackCombination,
     get_generated_stack: Any,
-    skip_copier_tests: Any,
-    engine: str,
 ) -> None:
     """Test that each stack has correct Python dependencies."""
     # Get the pre-generated stack

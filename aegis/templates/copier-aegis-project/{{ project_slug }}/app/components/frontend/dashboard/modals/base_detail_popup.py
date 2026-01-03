@@ -58,8 +58,8 @@ class BaseDetailPopup(BasePopup):
             sections: List of section controls to display in modal body
             width: Modal width in pixels (default: 900)
             height: Modal height in pixels (default: 700)
-            scrollable: Whether to wrap sections in scrollable container (default: True).
-                        Set to False when using tabs that handle their own scrolling.
+            scrollable: Whether to wrap sections in scrollable container
+                        (default: True). Set to False for tabs with own scrolling.
         """
         self.component_data = component_data
         self.title_text = title_text

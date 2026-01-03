@@ -462,7 +462,6 @@ aegis update --force --yes
 
 **Important Notes:**
 
-- **Cookiecutter projects cannot use this command** - Copier only
 - **Always commit before updating**: `git add . && git commit -m "Pre-update checkpoint"`
 - **Test after updating**: Run `make check` to verify everything works
 - Use `--dry-run` first to preview changes
