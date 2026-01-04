@@ -201,15 +201,23 @@ def generate_with_copier(
     include_auth = copier_data.get(AnswerKeys.AUTH, False)
     include_ai = copier_data.get(AnswerKeys.AI, False)
     ai_backend = copier_data.get(AnswerKeys.AI_BACKEND, "memory")
-    ai_needs_migrations = include_ai and ai_backend != "memory"
-    include_migrations = include_auth or ai_needs_migrations
+
+    # Type narrowing: ensure booleans for include_auth and include_ai
+    is_auth_included: bool = include_auth is True
+    is_ai_included: bool = include_ai is True
+
+    # Type narrowing: ai_backend should always be a string, but narrow from Any
+    ai_backend_str: str = str(ai_backend) if ai_backend else "memory"
+
+    ai_needs_migrations = is_ai_included and ai_backend_str != "memory"
+    include_migrations = is_auth_included or ai_needs_migrations
 
     # Generate migrations for services that need them
     if include_migrations:
         context = {
-            "include_auth": include_auth,
-            "include_ai": include_ai,
-            "ai_backend": ai_backend,
+            "include_auth": is_auth_included,
+            "include_ai": is_ai_included,
+            "ai_backend": ai_backend_str,
         }
         services = get_services_needing_migrations(context)
         if services:
@@ -220,10 +228,16 @@ def generate_with_copier(
     # AI needs seeding when using persistence backend (same condition as migrations)
     ai_needs_seeding = ai_needs_migrations
 
+    # Type narrowing: python_version from copier_data can be Any, so narrow to str | None
+    python_version_value = copier_data.get("python_version")
+    python_version_str: str | None = (
+        python_version_value if isinstance(python_version_value, str) else None
+    )
+
     run_post_generation_tasks(
         project_path,
         include_migrations=include_migrations,
-        python_version=copier_data["python_version"],
+        python_version=python_version_str,
         seed_ai=ai_needs_seeding,
         skip_llm_sync=skip_llm_sync,
         project_slug=cookiecutter_context["project_slug"],
