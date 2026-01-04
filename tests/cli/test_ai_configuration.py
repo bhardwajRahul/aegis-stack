@@ -11,9 +11,11 @@ from unittest.mock import patch
 from aegis.cli.interactive import (
     clear_ai_backend_selection,
     clear_ai_provider_selection,
+    clear_database_engine_selection,
     get_ai_backend_selection,
     get_ai_provider_selection,
     interactive_project_selection,
+    set_database_engine_selection,
 )
 
 
@@ -153,81 +155,94 @@ class TestAIBackendSelection:
         """Clear selections before each test."""
         clear_ai_provider_selection()
         clear_ai_backend_selection()
+        clear_database_engine_selection()
 
     @patch("typer.confirm")
     def test_ai_backend_selection_sqlite_auto_adds_database(
         self, mock_confirm: Any
     ) -> None:
         """Test that selecting SQLite backend auto-adds database component."""
-        # Mock user responses: no components, yes AI service, yes SQLite
-        mock_confirm.side_effect = [
-            False,
-            False,
-            False,
-            False,  # redis, worker, scheduler, database
-            False,  # auth service
-            True,  # AI service
-            False,  # Use LangChain? No (use PydanticAI)
-            True,  # Enable usage tracking with SQLite? Yes
-            True,  # Sync LLM catalog during project generation? Yes
-            False,
-            False,
-            True,
-            True,
-            False,
-            False,  # Provider selection (Google, Groq recommended)
-            True,  # Enable RAG? Yes (default)
-        ]
+        # Pre-set database engine (avoids interactive questionary prompt)
+        set_database_engine_selection("sqlite")
 
-        components, scheduler_backend, services, _ = interactive_project_selection()
+        try:
+            # Mock user responses: no components, yes AI service, yes SQLite tracking
+            mock_confirm.side_effect = [
+                False,
+                False,
+                False,
+                False,  # redis, worker, scheduler, database
+                False,  # auth service
+                True,  # AI service
+                False,  # Use LangChain? No (use PydanticAI)
+                True,  # Enable usage tracking? Yes
+                True,  # Sync LLM catalog during project generation? Yes
+                False,
+                False,
+                True,
+                True,
+                False,
+                False,  # Provider selection (Google, Groq recommended)
+                True,  # Enable RAG? Yes (default)
+            ]
 
-        # Verify AI service was selected
-        assert any(s.startswith("ai") for s in services)
+            components, scheduler_backend, services, _ = interactive_project_selection()
 
-        # Verify database component was auto-added
-        assert any("database" in comp for comp in components)
+            # Verify AI service was selected
+            assert any(s.startswith("ai") for s in services)
 
-        # Verify backend selection is sqlite
-        backend = get_ai_backend_selection("ai")
-        assert backend == "sqlite"
+            # Verify database component was auto-added
+            assert any("database" in comp for comp in components)
+
+            # Verify backend selection is sqlite
+            backend = get_ai_backend_selection("ai")
+            assert backend == "sqlite"
+        finally:
+            clear_database_engine_selection()
 
     @patch("typer.confirm")
     def test_ai_backend_selection_sqlite_with_existing_database(
         self, mock_confirm: Any
     ) -> None:
         """Test SQLite backend with database already selected doesn't duplicate."""
-        # Mock user responses: yes database, yes AI service, yes SQLite
-        mock_confirm.side_effect = [
-            False,
-            False,
-            False,
-            True,  # redis, worker, scheduler, database (yes)
-            False,  # auth service
-            True,  # AI service
-            False,  # Use LangChain? No (use PydanticAI)
-            True,  # Enable usage tracking with SQLite? Yes
-            True,  # Sync LLM catalog during project generation? Yes
-            False,
-            False,
-            True,
-            True,
-            False,
-            False,  # Provider selection (Google, Groq recommended)
-            True,  # Enable RAG? Yes (default)
-        ]
+        # Pre-set database engine (avoids interactive questionary prompt)
+        set_database_engine_selection("sqlite")
 
-        components, scheduler_backend, services, _ = interactive_project_selection()
+        try:
+            # Mock user responses: yes database, yes AI service, yes SQLite tracking
+            mock_confirm.side_effect = [
+                False,
+                False,
+                False,
+                True,  # redis, worker, scheduler, database (yes)
+                False,  # auth service
+                True,  # AI service
+                False,  # Use LangChain? No (use PydanticAI)
+                True,  # Enable usage tracking? Yes
+                True,  # Sync LLM catalog during project generation? Yes
+                False,
+                False,
+                True,
+                True,
+                False,
+                False,  # Provider selection (Google, Groq recommended)
+                True,  # Enable RAG? Yes (default)
+            ]
 
-        # Verify AI service was selected
-        assert any(s.startswith("ai") for s in services)
+            components, scheduler_backend, services, _ = interactive_project_selection()
 
-        # Verify database appears only once (no duplicate)
-        database_count = sum(1 for comp in components if "database" in comp)
-        assert database_count == 1
+            # Verify AI service was selected
+            assert any(s.startswith("ai") for s in services)
 
-        # Verify backend selection is sqlite
-        backend = get_ai_backend_selection("ai")
-        assert backend == "sqlite"
+            # Verify database appears only once (no duplicate)
+            database_count = sum(1 for comp in components if "database" in comp)
+            assert database_count == 1
+
+            # Verify backend selection is sqlite
+            backend = get_ai_backend_selection("ai")
+            assert backend == "sqlite"
+        finally:
+            clear_database_engine_selection()
 
     @patch("typer.confirm")
     def test_ai_backend_selection_memory(self, mock_confirm: Any) -> None:

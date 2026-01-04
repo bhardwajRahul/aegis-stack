@@ -164,7 +164,7 @@ class TemplateGenerator:
             if any(c.startswith(ComponentNames.SCHEDULER) for c in self.components)
             else "no",
             AnswerKeys.DATABASE: "yes" if has_database else "no",
-            # Database engine selection
+            # Database engine selection (sqlite or postgres)
             "database_engine": self.database_engine or StorageBackends.SQLITE,
             # Scheduler backend selection
             AnswerKeys.SCHEDULER_BACKEND: self.scheduler_backend,
@@ -254,6 +254,13 @@ class TemplateGenerator:
                             deps.extend(["taskiq>=0.11.11", "taskiq-redis>=1.0.2"])
                         else:
                             deps.extend(spec.pyproject_deps)  # arq deps from spec
+                    # Handle database engine-specific dependencies
+                    elif base_name == ComponentNames.DATABASE:
+                        deps.extend(["sqlmodel>=0.0.14", "sqlalchemy>=2.0.0"])
+                        if self.database_engine == StorageBackends.POSTGRES:
+                            deps.extend(["asyncpg>=0.29.0", "psycopg2-binary>=2.9.9"])
+                        else:
+                            deps.append("aiosqlite>=0.19.0")
                     else:
                         deps.extend(spec.pyproject_deps)
 

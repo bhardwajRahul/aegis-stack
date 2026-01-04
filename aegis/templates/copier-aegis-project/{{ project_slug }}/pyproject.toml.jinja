@@ -44,7 +44,12 @@ dependencies = [
 {%- if include_database %}
     "sqlmodel>=0.0.14",
     "sqlalchemy>=2.0.0",
+{%- if database_engine == "postgres" %}
+    "asyncpg>=0.29.0",
+    "psycopg2-binary>=2.9.9",
+{%- else %}
     "aiosqlite>=0.19.0",
+{%- endif %}
     "greenlet>=1.1.0",
 {%- endif %}
 {%- if include_cache %}
@@ -52,11 +57,10 @@ dependencies = [
 {%- endif %}
 {%- if include_auth %}
     "python-jose[cryptography]==3.3.0",
-    "passlib[bcrypt]==1.7.4",
-    "bcrypt<5.0.0",  # Pin to 4.x due to passlib compatibility
+    "bcrypt>=4.0.0",
     "python-multipart==0.0.9",
 {%- endif %}
-{%- if include_auth or (include_ai and ai_backend == "sqlite") %}
+{%- if include_auth or (include_ai and ai_backend in ["sqlite", "postgres"]) %}
     "alembic==1.16.5",
 {%- endif %}
 {%- if include_ai %}

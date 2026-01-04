@@ -112,3 +112,66 @@ class TestDatabaseConfiguration:
         # Check that db.py does not exist
         db_file = project_path / "app" / "core" / "db.py"
         assert not db_file.exists()
+
+
+class TestPostgreSQLConfiguration:
+    """Test PostgreSQL database configuration generation."""
+
+    def test_postgres_config_has_correct_url(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Test that PostgreSQL config has correct DATABASE_URL format."""
+        project_path = project_factory("base_with_database_postgres")
+
+        config_file = project_path / "app" / "core" / "config.py"
+        config_content = config_file.read_text()
+
+        # Should have PostgreSQL URL, not SQLite
+        assert "postgresql://" in config_content
+        assert "sqlite:///" not in config_content
+        # Should NOT have DATABASE_CONNECT_ARGS (SQLite-specific)
+        assert "DATABASE_CONNECT_ARGS" not in config_content
+
+    def test_postgres_db_file_has_no_sqlite_specifics(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Test that db.py for PostgreSQL doesn't have SQLite-specific code."""
+        project_path = project_factory("base_with_database_postgres")
+
+        db_file = project_path / "app" / "core" / "db.py"
+        db_content = db_file.read_text()
+
+        # Should NOT have SQLite-specific code
+        assert "PRAGMA foreign_keys" not in db_content
+        assert "DATABASE_PATH" not in db_content
+        assert "aiosqlite" not in db_content
+        # Should have PostgreSQL references
+        assert "postgresql" in db_content.lower() or "asyncpg" in db_content.lower()
+
+    def test_postgres_docker_compose_has_service(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Test that docker-compose.yml has postgres service."""
+        project_path = project_factory("base_with_database_postgres")
+
+        compose_file = project_path / "docker-compose.yml"
+        compose_content = compose_file.read_text()
+
+        # Should have postgres service
+        assert "postgres:" in compose_content
+        assert "postgres:16-alpine" in compose_content
+        assert "postgres-data:" in compose_content
+        assert "pg_isready" in compose_content
+
+    def test_postgres_env_example_has_correct_url(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Test that .env.example has PostgreSQL connection string."""
+        project_path = project_factory("base_with_database_postgres")
+
+        env_file = project_path / ".env.example"
+        env_content = env_file.read_text()
+
+        # Should have PostgreSQL URL
+        assert "postgresql://" in env_content
+        assert "DATABASE_URL=" in env_content

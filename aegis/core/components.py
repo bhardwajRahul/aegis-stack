@@ -101,8 +101,9 @@ COMPONENTS: dict[str, ComponentSpec] = {
     "database": ComponentSpec(
         name="database",
         type=ComponentType.INFRASTRUCTURE,
-        description="SQLite database with SQLModel ORM",
-        pyproject_deps=["sqlmodel>=0.0.14", "sqlalchemy>=2.0.0", "aiosqlite>=0.19.0"],
+        description="Database with SQLModel ORM (SQLite or PostgreSQL)",
+        pyproject_deps=["sqlmodel>=0.0.14", "sqlalchemy>=2.0.0"],
+        # Note: async driver (aiosqlite or asyncpg) selected based on database_type in copier.yml
         template_files=["app/core/db.py"],
     ),
 }

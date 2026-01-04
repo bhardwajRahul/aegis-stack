@@ -136,7 +136,7 @@ class TestAuthServiceGeneration:
 
         # Core auth dependencies
         assert "python-jose[cryptography]==3.3.0" in pyproject_content
-        assert "passlib[bcrypt]==1.7.4" in pyproject_content
+        assert "bcrypt>=4.0.0" in pyproject_content
         assert "python-multipart==0.0.9" in pyproject_content
 
         # Database dependencies (auto-included)

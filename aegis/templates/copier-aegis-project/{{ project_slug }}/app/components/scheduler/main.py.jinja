@@ -56,7 +56,7 @@ def create_scheduler() -> AsyncIOScheduler:
     jobstore = SQLAlchemyJobStore(engine=engine, tablename='apscheduler_jobs')
     jobstores = {'default': jobstore}
     scheduler = AsyncIOScheduler(jobstores=jobstores)
-    logger.info("Scheduler using SQLite database for job persistence")
+    logger.info("Scheduler using {{ scheduler_backend }} database for job persistence")
 {% else %}
     # Use in-memory jobstore (default)
     scheduler = AsyncIOScheduler()

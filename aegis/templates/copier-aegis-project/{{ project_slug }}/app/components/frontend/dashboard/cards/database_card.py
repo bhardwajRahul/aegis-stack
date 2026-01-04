@@ -1,8 +1,9 @@
 """
-Stunning Database/SQLite Component Card
+Stunning Database Component Card
 
 Modern, visually striking card component that displays rich database metrics,
 connection statistics, query performance, and table information.
+Supports both SQLite and PostgreSQL backends.
 """
 
 import flet as ft
@@ -25,7 +26,9 @@ from .card_utils import (
 
 class DatabaseCard:
     """
-    A visually stunning, wide component card for displaying Database/SQLite metrics.
+    A visually stunning, wide component card for displaying Database metrics.
+
+    Supports both SQLite and PostgreSQL backends, auto-detecting from metadata.
 
     Features:
     - Modern Material Design 3 styling
@@ -102,11 +105,16 @@ class DatabaseCard:
         )
 
     def _create_technology_badge(self) -> ft.Container:
-        """Create the Database/SQLite technology badge section."""
+        """Create the Database technology badge section."""
         primary_color, _, _ = self._get_status_colors()
+        metadata = self.component_data.metadata or {}
+        implementation = metadata.get("implementation", "sqlite")
+
+        # Determine title based on implementation
+        title = "PostgreSQL" if implementation == "postgresql" else "SQLite"
 
         return TechBadge(
-            title="SQLite",
+            title=title,
             subtitle="SQL",
             badge_text="Database",
             badge_color=ft.Colors.INDIGO,
@@ -265,60 +273,102 @@ class DatabaseCard:
     def _create_performance_section(self) -> ft.Container:
         """Create the database performance and statistics section."""
         metadata = self.component_data.metadata or {}
+        implementation = metadata.get("implementation", "sqlite")
 
         # Get real database stats from metadata
-        db_stats = {}
+        db_stats: dict[str, str] = {}
 
-        # File size
-        if "file_size_human" in metadata:
-            db_stats["File Size"] = metadata["file_size_human"]
-        elif "file_size_bytes" in metadata:
-            # Format bytes if we have raw bytes but not human readable
-            size_bytes = metadata["file_size_bytes"]
-            if size_bytes == 0:
-                db_stats["File Size"] = "0 B"
-            elif size_bytes < 1024:
-                db_stats["File Size"] = f"{size_bytes} B"
-            elif size_bytes < 1024**2:
-                db_stats["File Size"] = f"{size_bytes / 1024:.1f} KB"
-            elif size_bytes < 1024**3:
-                db_stats["File Size"] = f"{size_bytes / (1024**2):.1f} MB"
-            else:
-                db_stats["File Size"] = f"{size_bytes / (1024**3):.1f} GB"
+        if implementation == "postgresql":
+            # PostgreSQL-specific stats
+            # Database size
+            if "database_size_human" in metadata:
+                db_stats["DB Size"] = metadata["database_size_human"]
 
-        # Database version
-        if "version" in metadata:
-            db_stats["SQLite Version"] = metadata["version"]
+            # PostgreSQL version (short form)
+            if "version_short" in metadata:
+                db_stats["Version"] = metadata["version_short"]
+            elif "version" in metadata:
+                # Extract version number from full version string
+                version = metadata["version"]
+                if isinstance(version, str) and "PostgreSQL" in version:
+                    parts = version.split()
+                    if len(parts) >= 2:
+                        db_stats["Version"] = parts[1]
+                    else:
+                        db_stats["Version"] = version[:20]
 
-        # Connection pool size
-        if "connection_pool_size" in metadata:
-            db_stats["Pool Size"] = str(metadata["connection_pool_size"])
+            # Active connections
+            if "active_connections" in metadata:
+                db_stats["Connections"] = str(metadata["active_connections"])
 
-        # Table count
-        table_count = metadata.get("table_count", 0)
-        if table_count > 0:
-            db_stats["Tables"] = str(table_count)
+            # Connection pool size
+            if "connection_pool_size" in metadata:
+                db_stats["Pool Size"] = str(metadata["connection_pool_size"])
 
-        # Journal mode
-        pragma_settings = metadata.get("pragma_settings", {})
-        if "journal_mode" in pragma_settings:
-            db_stats["Journal Mode"] = pragma_settings["journal_mode"].upper()
+            # Table count
+            table_count = metadata.get("table_count", 0)
+            if table_count > 0:
+                db_stats["Tables"] = str(table_count)
 
-        # WAL enabled
-        if metadata.get("wal_enabled"):
-            db_stats["WAL"] = "Enabled"
+            # PostgreSQL settings
+            pg_settings = metadata.get("pg_settings", {})
+            if "max_connections" in pg_settings:
+                db_stats["Max Conn"] = str(pg_settings["max_connections"])
+            if "shared_buffers" in pg_settings:
+                db_stats["Buffers"] = str(pg_settings["shared_buffers"])
 
-        # Foreign keys
-        if "foreign_keys" in pragma_settings:
-            db_stats["Foreign Keys"] = (
-                "On" if pragma_settings["foreign_keys"] else "Off"
-            )
+        else:
+            # SQLite-specific stats
+            # File size
+            if "file_size_human" in metadata:
+                db_stats["File Size"] = metadata["file_size_human"]
+            elif "file_size_bytes" in metadata:
+                # Format bytes if we have raw bytes but not human readable
+                size_bytes = metadata["file_size_bytes"]
+                if size_bytes == 0:
+                    db_stats["File Size"] = "0 B"
+                elif size_bytes < 1024:
+                    db_stats["File Size"] = f"{size_bytes} B"
+                elif size_bytes < 1024**2:
+                    db_stats["File Size"] = f"{size_bytes / 1024:.1f} KB"
+                elif size_bytes < 1024**3:
+                    db_stats["File Size"] = f"{size_bytes / (1024**2):.1f} MB"
+                else:
+                    db_stats["File Size"] = f"{size_bytes / (1024**3):.1f} GB"
+
+            # Database version
+            if "version" in metadata:
+                db_stats["SQLite Version"] = metadata["version"]
+
+            # Connection pool size
+            if "connection_pool_size" in metadata:
+                db_stats["Pool Size"] = str(metadata["connection_pool_size"])
+
+            # Table count
+            table_count = metadata.get("table_count", 0)
+            if table_count > 0:
+                db_stats["Tables"] = str(table_count)
+
+            # Journal mode
+            pragma_settings = metadata.get("pragma_settings", {})
+            if "journal_mode" in pragma_settings:
+                db_stats["Journal Mode"] = pragma_settings["journal_mode"].upper()
+
+            # WAL enabled
+            if metadata.get("wal_enabled"):
+                db_stats["WAL"] = "Enabled"
+
+            # Foreign keys
+            if "foreign_keys" in pragma_settings:
+                db_stats["Foreign Keys"] = (
+                    "On" if pragma_settings["foreign_keys"] else "Off"
+                )
 
         # If database not initialized, show different stats
         if self.component_data.status == ComponentStatusType.WARNING:
             db_stats = {
                 "Status": "Not Initialized",
-                "Action": "Create database file",
+                "Action": "Run migrations",
             }
 
         perf_content = [

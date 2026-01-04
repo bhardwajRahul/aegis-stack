@@ -1,81 +1,87 @@
 """
-Runtime tests for database functionality in generated projects.
+Runtime tests for SQLite database functionality in generated projects.
 
-These tests verify that the generated db.py module actually works correctly
-at runtime using proper fixture-based testing (ee-toolset pattern).
-No string-based test scripts!
+These tests verify that the generated db.py module works correctly with SQLite
+at runtime. Tests run inside the generated project using subprocess to avoid
+module caching issues.
+
+Run with: pytest tests/cli/test_database_runtime.py -v
 """
 
-from collections.abc import Generator
-from typing import Any
+import textwrap
 
 import pytest
 
+from .test_utils import CLITestResult, run_project_command
 
-class TestDatabaseRuntimeBehavior:
-    """Test that generated database code actually works at runtime."""
+# Mark all tests in this module as slow
+pytestmark = pytest.mark.slow
 
-    @pytest.fixture(scope="class")
-    def models(self, db_module: dict[str, Any]) -> dict[str, Any]:
-        """Create test model classes for this test class."""
-        create_models = db_module["create_test_models"]
-        result: dict[str, Any] = create_models()
-        return result
 
-    @pytest.fixture(autouse=True)
-    def setup_tables(
-        self, db_module: dict[str, Any], models: dict[str, Any]
-    ) -> Generator[None, None, None]:
-        """Create test tables before each test and clean up after."""
-        # Create data directory for database if it doesn't exist
-        import os
+def _run_db_test(
+    generated_db_project: CLITestResult, test_script: str, test_name: str
+) -> None:
+    """Run a test script inside the generated project."""
+    assert generated_db_project.project_path is not None
+    result = run_project_command(
+        ["uv", "run", "python", "-c", test_script],
+        generated_db_project.project_path,
+        step_name=test_name,
+        timeout=60,
+    )
+    if not result.success:
+        pytest.fail(
+            f"{test_name} failed:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}"
+        )
 
-        os.makedirs("data", exist_ok=True)
 
-        # Create all tables for our test models
-        engine = db_module["engine"]
-        sql_model = db_module["SQLModel"]
-        sql_model.metadata.create_all(engine)
+class TestSQLiteRuntimeBehavior:
+    """Test that generated SQLite database code works at runtime."""
 
-        # Run the test
-        yield
-
-        # Clean up after test - drop all tables to ensure clean state
-        # This ensures test isolation without breaking the database connection
-        sql_model.metadata.drop_all(engine)
-
-        # Recreate tables for next test (they'll be empty)
-        sql_model.metadata.create_all(engine)
-
-    @pytest.mark.slow
     def test_db_session_commits_on_success(
-        self, db_module: dict[str, Any], models: dict[str, Any]
+        self, generated_db_project: CLITestResult
     ) -> None:
         """
         Test that db_session context manager commits on success.
 
-        This verifies our actual implementation commits data when
+        Verifies SQLite implementation commits data when
         the context exits without error.
         """
-        db_session = db_module["db_session"]
-        test_user = models["TestUser"]
+        test_script = textwrap.dedent("""
+            import os
+            os.makedirs("data", exist_ok=True)
 
-        # Use our generated db_session context manager
-        with db_session() as session:
-            user = test_user(name="Alice", email="alice@example.com")
-            session.add(user)
-            # Should auto-commit when context exits
+            from app.core.db import db_session, engine
+            from sqlmodel import Field, SQLModel
 
-        # Verify in a new session that data was persisted
-        with db_session() as session:
-            result = session.query(test_user).filter_by(name="Alice").first()
-            assert result is not None
-            assert result.name == "Alice"
-            assert result.email == "alice@example.com"
+            class TestUser(SQLModel, table=True):
+                __tablename__ = "test_users_commit"
+                id: int | None = Field(default=None, primary_key=True)
+                name: str
+                email: str | None = None
 
-    @pytest.mark.slow
+            SQLModel.metadata.create_all(engine)
+
+            # Add user with auto-commit
+            with db_session() as session:
+                user = TestUser(name="Alice", email="alice@example.com")
+                session.add(user)
+
+            # Verify in new session
+            with db_session() as session:
+                result = session.query(TestUser).filter_by(name="Alice").first()
+                assert result is not None, "User should exist after commit"
+                assert result.name == "Alice"
+                assert result.email == "alice@example.com"
+
+            # Cleanup
+            SQLModel.metadata.drop_all(engine)
+            print("TEST PASSED")
+        """)
+        _run_db_test(generated_db_project, test_script, "db_session commits on success")
+
     def test_db_session_rollback_on_error(
-        self, db_module: dict[str, Any], models: dict[str, Any]
+        self, generated_db_project: CLITestResult
     ) -> None:
         """
         Test that db_session rolls back on exception.
@@ -83,27 +89,43 @@ class TestDatabaseRuntimeBehavior:
         Verifies that when an exception occurs within the context,
         the transaction is rolled back and data is NOT persisted.
         """
-        db_session = db_module["db_session"]
-        test_user = models["TestUser"]
+        test_script = textwrap.dedent("""
+            import os
+            os.makedirs("data", exist_ok=True)
 
-        # Attempt to add data but raise an exception
-        try:
+            from app.core.db import db_session, engine
+            from sqlmodel import Field, SQLModel
+
+            class TestUser(SQLModel, table=True):
+                __tablename__ = "test_users_rollback"
+                id: int | None = Field(default=None, primary_key=True)
+                name: str
+                email: str | None = None
+
+            SQLModel.metadata.create_all(engine)
+
+            # Attempt to add but raise exception
+            try:
+                with db_session() as session:
+                    user = TestUser(name="Bob", email="bob@example.com")
+                    session.add(user)
+                    raise ValueError("Intentional error to test rollback")
+            except ValueError:
+                pass
+
+            # Verify data was NOT committed
             with db_session() as session:
-                user = test_user(name="Bob", email="bob@example.com")
-                session.add(user)
-                # Force an exception - should trigger rollback
-                raise ValueError("Intentional error to test rollback")
-        except ValueError:
-            pass  # Expected exception
+                result = session.query(TestUser).filter_by(name="Bob").first()
+                assert result is None, "Data should have been rolled back"
 
-        # Verify the data was NOT committed (rolled back)
-        with db_session() as session:
-            result = session.query(test_user).filter_by(name="Bob").first()
-            assert result is None, "Data should have been rolled back"
+            # Cleanup
+            SQLModel.metadata.drop_all(engine)
+            print("TEST PASSED")
+        """)
+        _run_db_test(generated_db_project, test_script, "db_session rollback on error")
 
-    @pytest.mark.slow
     def test_autocommit_parameter_false(
-        self, db_module: dict[str, Any], models: dict[str, Any]
+        self, generated_db_project: CLITestResult
     ) -> None:
         """
         Test that autocommit=False prevents automatic commit.
@@ -111,69 +133,107 @@ class TestDatabaseRuntimeBehavior:
         When autocommit=False, changes should NOT be committed
         unless explicitly done.
         """
-        db_session = db_module["db_session"]
-        test_user = models["TestUser"]
+        test_script = textwrap.dedent("""
+            import os
+            os.makedirs("data", exist_ok=True)
 
-        # Use autocommit=False
-        with db_session(autocommit=False) as session:
-            user = test_user(name="Charlie", email="charlie@example.com")
-            session.add(user)
-            # Should NOT auto-commit
+            from app.core.db import db_session, engine
+            from sqlmodel import Field, SQLModel
 
-        # Verify data was NOT committed
-        with db_session() as session:
-            result = session.query(test_user).filter_by(name="Charlie").first()
-            assert result is None, "Data should not be committed with autocommit=False"
+            class TestUser(SQLModel, table=True):
+                __tablename__ = "test_users_autocommit"
+                id: int | None = Field(default=None, primary_key=True)
+                name: str
+                email: str | None = None
 
-        # Now test explicit commit with autocommit=False
-        with db_session(autocommit=False) as session:
-            user = test_user(name="David", email="david@example.com")
-            session.add(user)
-            session.commit()  # Explicit commit
+            SQLModel.metadata.create_all(engine)
 
-        # Verify explicit commit worked
-        with db_session() as session:
-            result = session.query(test_user).filter_by(name="David").first()
-            assert result is not None
-            assert result.name == "David"
+            # Use autocommit=False - should NOT persist
+            with db_session(autocommit=False) as session:
+                user = TestUser(name="Charlie", email="charlie@example.com")
+                session.add(user)
 
-    @pytest.mark.slow
-    def test_foreign_keys_enabled(
-        self, db_module: dict[str, Any], models: dict[str, Any]
-    ) -> None:
+            # Verify NOT committed
+            with db_session() as session:
+                result = session.query(TestUser).filter_by(name="Charlie").first()
+                assert result is None, "Data should not be committed with autocommit=False"
+
+            # Test explicit commit with autocommit=False
+            with db_session(autocommit=False) as session:
+                user = TestUser(name="David", email="david@example.com")
+                session.add(user)
+                session.commit()  # Explicit commit
+
+            # Verify explicit commit worked
+            with db_session() as session:
+                result = session.query(TestUser).filter_by(name="David").first()
+                assert result is not None, "Explicit commit should work"
+                assert result.name == "David"
+
+            # Cleanup
+            SQLModel.metadata.drop_all(engine)
+            print("TEST PASSED")
+        """)
+        _run_db_test(generated_db_project, test_script, "autocommit=False behavior")
+
+    def test_foreign_keys_enabled(self, generated_db_project: CLITestResult) -> None:
         """
         Test that foreign key constraints are enforced.
 
         Verifies that the PRAGMA foreign_keys=ON is working
         by attempting to violate a foreign key constraint.
         """
-        db_session = db_module["db_session"]
-        integrity_error = db_module["IntegrityError"]
-        parent_model = models["Parent"]
-        child_model = models["Child"]
+        test_script = textwrap.dedent("""
+            import os
+            os.makedirs("data", exist_ok=True)
 
-        # Create a parent record
-        with db_session() as session:
-            parent = parent_model(name="Parent1")
-            session.add(parent)
-            session.flush()  # Get the ID
-            parent_id = parent.id
+            from app.core.db import db_session, engine
+            from sqlmodel import Field, SQLModel
+            from sqlalchemy.exc import IntegrityError
 
-        # Try to create a child with valid parent_id - should work
-        with db_session() as session:
-            child = child_model(name="ValidChild", parent_id=parent_id)
-            session.add(child)
-            # Should succeed
+            class Parent(SQLModel, table=True):
+                __tablename__ = "parents_fk"
+                id: int | None = Field(default=None, primary_key=True)
+                name: str
 
-        # Try to create a child with invalid parent_id - should fail
-        with pytest.raises(integrity_error), db_session() as session:
-            invalid_child = child_model(name="InvalidChild", parent_id=99999)
-            session.add(invalid_child)
-            session.flush()  # Force constraint check
+            class Child(SQLModel, table=True):
+                __tablename__ = "children_fk"
+                id: int | None = Field(default=None, primary_key=True)
+                name: str
+                parent_id: int = Field(foreign_key="parents_fk.id")
 
-    @pytest.mark.slow
+            SQLModel.metadata.create_all(engine)
+
+            # Create a parent
+            with db_session() as session:
+                parent = Parent(name="Parent1")
+                session.add(parent)
+                session.flush()
+                parent_id = parent.id
+
+            # Valid child - should work
+            with db_session() as session:
+                child = Child(name="ValidChild", parent_id=parent_id)
+                session.add(child)
+
+            # Invalid child - should fail with IntegrityError
+            try:
+                with db_session() as session:
+                    invalid_child = Child(name="InvalidChild", parent_id=99999)
+                    session.add(invalid_child)
+                    session.flush()
+                assert False, "Should have raised IntegrityError"
+            except IntegrityError:
+                pass  # Expected
+
+            # Cleanup
+            SQLModel.metadata.drop_all(engine)
+            print("TEST PASSED")
+        """)
+        _run_db_test(generated_db_project, test_script, "foreign keys enabled")
+
     def test_multiple_operations_in_transaction(
-        self, db_module: dict[str, Any], models: dict[str, Any]
+        self, generated_db_project: CLITestResult
     ) -> None:
         """
         Test multiple operations within a single transaction.
@@ -181,53 +241,63 @@ class TestDatabaseRuntimeBehavior:
         Verifies that multiple operations are treated as a single
         transaction that can be committed or rolled back together.
         """
-        db_session = db_module["db_session"]
-        test_user = models["TestUser"]
+        test_script = textwrap.dedent("""
+            import os
+            os.makedirs("data", exist_ok=True)
 
-        # Multiple operations that should all commit together
-        with db_session() as session:
-            user1 = test_user(name="User1", email="user1@example.com")
-            user2 = test_user(name="User2", email="user2@example.com")
-            user3 = test_user(name="User3", email="user3@example.com")
+            from app.core.db import db_session, engine
+            from sqlmodel import Field, SQLModel
 
-            session.add_all([user1, user2, user3])
-            # All should commit together
+            class TestUser(SQLModel, table=True):
+                __tablename__ = "test_users_multi"
+                id: int | None = Field(default=None, primary_key=True)
+                name: str
+                email: str | None = None
 
-        # Verify all were committed
-        with db_session() as session:
-            count = (
-                session.query(test_user)
-                .filter(test_user.name.in_(["User1", "User2", "User3"]))
-                .count()
-            )
-            assert count == 3, "All three users should be committed"
+            SQLModel.metadata.create_all(engine)
 
-        # Test rollback of multiple operations
-        try:
+            # Multiple adds that should all commit together
             with db_session() as session:
-                user4 = test_user(name="User4", email="user4@example.com")
-                user5 = test_user(name="User5", email="user5@example.com")
+                user1 = TestUser(name="User1", email="user1@example.com")
+                user2 = TestUser(name="User2", email="user2@example.com")
+                user3 = TestUser(name="User3", email="user3@example.com")
+                session.add_all([user1, user2, user3])
 
-                session.add_all([user4, user5])
-                session.flush()  # Ensure they're in the transaction
+            # Verify all committed
+            with db_session() as session:
+                count = session.query(TestUser).filter(
+                    TestUser.name.in_(["User1", "User2", "User3"])
+                ).count()
+                assert count == 3, f"Expected 3 users, got {count}"
 
-                # Now cause an error
-                raise RuntimeError("Rollback all operations")
-        except RuntimeError:
-            pass
+            # Test rollback of multiple operations
+            try:
+                with db_session() as session:
+                    user4 = TestUser(name="User4", email="user4@example.com")
+                    user5 = TestUser(name="User5", email="user5@example.com")
+                    session.add_all([user4, user5])
+                    session.flush()
+                    raise RuntimeError("Rollback all operations")
+            except RuntimeError:
+                pass
 
-        # Verify none were committed
-        with db_session() as session:
-            count = (
-                session.query(test_user)
-                .filter(test_user.name.in_(["User4", "User5"]))
-                .count()
-            )
-            assert count == 0, "Both users should be rolled back"
+            # Verify none were committed
+            with db_session() as session:
+                count = session.query(TestUser).filter(
+                    TestUser.name.in_(["User4", "User5"])
+                ).count()
+                assert count == 0, "Users should be rolled back"
 
-    @pytest.mark.slow
+            # Cleanup
+            SQLModel.metadata.drop_all(engine)
+            print("TEST PASSED")
+        """)
+        _run_db_test(
+            generated_db_project, test_script, "multiple operations in transaction"
+        )
+
     def test_db_session_closes_properly(
-        self, db_module: dict[str, Any], models: dict[str, Any]
+        self, generated_db_project: CLITestResult
     ) -> None:
         """
         Test that db_session properly closes the session.
@@ -235,29 +305,42 @@ class TestDatabaseRuntimeBehavior:
         Verifies that the context manager cleans up resources
         properly in both success and error cases.
         """
-        db_session = db_module["db_session"]
-        test_user = models["TestUser"]
+        test_script = textwrap.dedent("""
+            import os
+            os.makedirs("data", exist_ok=True)
 
-        # Test successful close
-        with db_session() as session:
-            user = test_user(name="CloseTest", email="close@test.com")
-            session.add(user)
+            from app.core.db import db_session, engine
+            from sqlmodel import Field, SQLModel
 
-        # Session should be closed now
-        # (Can't directly test if closed, but we can verify no leak)
+            class TestUser(SQLModel, table=True):
+                __tablename__ = "test_users_close"
+                id: int | None = Field(default=None, primary_key=True)
+                name: str
+                email: str | None = None
 
-        # Test close even with error
-        try:
+            SQLModel.metadata.create_all(engine)
+
+            # Test successful close
             with db_session() as session:
-                user = test_user(name="ErrorClose", email="error@test.com")
+                user = TestUser(name="CloseTest", email="close@test.com")
                 session.add(user)
-                raise Exception("Test error")
-        except Exception:
-            pass
 
-        # Both sessions should be properly closed
-        # The fact that we can create new sessions proves cleanup worked
-        with db_session() as session:
-            # If previous sessions weren't closed, this might fail
-            result = session.query(test_user).count()
-            assert result >= 0  # Just verify query works
+            # Test close even with error
+            try:
+                with db_session() as session:
+                    user = TestUser(name="ErrorClose", email="error@test.com")
+                    session.add(user)
+                    raise Exception("Test error")
+            except Exception:
+                pass
+
+            # Verify we can still create new sessions (cleanup worked)
+            with db_session() as session:
+                result = session.query(TestUser).count()
+                assert result >= 0
+
+            # Cleanup
+            SQLModel.metadata.drop_all(engine)
+            print("TEST PASSED")
+        """)
+        _run_db_test(generated_db_project, test_script, "db_session closes properly")

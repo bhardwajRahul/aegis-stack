@@ -8,6 +8,7 @@ used by CLI commands.
 import sys
 from pathlib import Path
 
+import questionary
 import typer
 
 from ..constants import (
@@ -35,6 +36,81 @@ _ai_rag_selection: dict[str, bool] = {}
 
 # Global variable to store skip LLM sync selection for template generation
 _skip_llm_sync_selection: dict[str, bool] = {}
+
+# Global variable to store database engine selection for template generation
+_database_engine_selection: str | None = None
+
+
+def select_database_engine(context: str = "Database") -> str:
+    """
+    Interactive database engine selection using arrow keys.
+
+    Remembers the selection so subsequent calls return the same value
+    without prompting again.
+
+    Args:
+        context: Description of what the database is for (e.g., "Scheduler", "AI")
+
+    Returns:
+        Selected database engine (sqlite or postgres)
+    """
+    global _database_engine_selection
+
+    # If already selected, reuse that choice
+    if _database_engine_selection is not None:
+        typer.secho(
+            f"  Using previously selected database: {_database_engine_selection.upper()}",
+            fg="green",
+        )
+        return _database_engine_selection
+
+    typer.echo(f"\n{context} Database Engine:")
+
+    choices = [
+        questionary.Choice(
+            title="SQLite - Simple, file-based (good for development)",
+            value=StorageBackends.SQLITE,
+        ),
+        questionary.Choice(
+            title="PostgreSQL - Production-ready, multi-container support",
+            value=StorageBackends.POSTGRES,
+        ),
+    ]
+
+    result = questionary.select(
+        "Select database engine:",
+        choices=choices,
+        default=StorageBackends.SQLITE,
+    ).ask()
+
+    # Handle Ctrl+C or escape
+    if result is None:
+        raise typer.Abort()
+
+    _database_engine_selection = result
+    return result
+
+
+def get_database_engine_selection() -> str | None:
+    """Get the current database engine selection."""
+    return _database_engine_selection
+
+
+def clear_database_engine_selection() -> None:
+    """Clear stored database engine selection (useful for testing)."""
+    global _database_engine_selection
+    _database_engine_selection = None
+
+
+def set_database_engine_selection(engine: str | None) -> None:
+    """
+    Pre-set database engine selection (for testing or CLI args).
+
+    Args:
+        engine: Database engine (sqlite, postgres) or None to clear
+    """
+    global _database_engine_selection
+    _database_engine_selection = engine
 
 
 def get_interactive_infrastructure_components() -> list[ComponentSpec]:
@@ -111,42 +187,29 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
                     "(Enables job history, recovery after restarts)"
                 )
                 if typer.confirm(persistence_prompt):
-                    # Database engine selection (SQLite only for now)
-                    typer.echo("\nDatabase Engine:")
-                    typer.echo("  SQLite will be configured for job persistence")
-                    typer.echo("  (PostgreSQL support coming in future releases)")
+                    # Database engine selection with arrow keys
+                    database_engine = select_database_engine(context="Scheduler")
 
-                    # Show SQLite limitations
-                    typer.secho("\nSQLite Limitations:", fg="yellow")
-                    typer.echo(
-                        "  • Multi-container API access works in development only "
-                        "(shared volumes)"
-                    )
-                    typer.echo("  • Production deployment will be single-container")
-                    typer.echo(
-                        "  • Use PostgreSQL for full production multi-container support"
-                    )
-
-                    if typer.confirm("  Continue with SQLite?", default=True):
-                        database_engine = StorageBackends.SQLITE
-                        selected.append(ComponentNames.DATABASE)
-                        database_added_by_scheduler = True
-                        # Mark scheduler backend as sqlite
-                        scheduler_backend = StorageBackends.SQLITE
-                        typer.secho(
-                            "Scheduler + SQLite database configured", fg="green"
-                        )
-
-                        # Show bonus backup job message only when database is added
-                        typer.echo("\nBonus: Adding database backup job")
-                        typer.secho(
-                            "Scheduled daily database backup job included "
-                            "(runs at 2 AM)",
-                            fg="green",
+                    if database_engine == StorageBackends.POSTGRES:
+                        selected.append(
+                            f"{ComponentNames.DATABASE}[{StorageBackends.POSTGRES}]"
                         )
                     else:
-                        typer.echo("Scheduler persistence cancelled")
-                        # Don't add database if user declines SQLite
+                        selected.append(ComponentNames.DATABASE)
+
+                    database_added_by_scheduler = True
+                    scheduler_backend = database_engine
+                    typer.secho(
+                        f"Scheduler + {database_engine.upper()} database configured",
+                        fg="green",
+                    )
+
+                    # Show bonus backup job message only when database is added
+                    typer.echo("\nBonus: Adding database backup job")
+                    typer.secho(
+                        "Scheduled daily database backup job included (runs at 2 AM)",
+                        fg="green",
+                    )
 
                 typer.echo()  # Extra spacing after scheduler section
         elif component_name == ComponentNames.DATABASE:
@@ -243,8 +306,8 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
                         interactive_ai_service_config(service_name)
                     )
 
-                    # Handle database auto-add for SQLite backend
-                    if backend == StorageBackends.SQLITE:
+                    # Handle database auto-add for database backends
+                    if backend in (StorageBackends.SQLITE, StorageBackends.POSTGRES):
                         database_already_selected = any(
                             ComponentNames.DATABASE in comp for comp in selected
                         )
@@ -255,11 +318,10 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
                                 fg="green",
                             )
                         else:
-                            selected.append(
-                                f"{ComponentNames.DATABASE}[{StorageBackends.SQLITE}]"
-                            )
+                            selected.append(f"{ComponentNames.DATABASE}[{backend}]")
                             typer.secho(
-                                "  Database added for usage tracking", fg="green"
+                                f"  Database ({backend}) added for usage tracking",
+                                fg="green",
                             )
 
                     # Build AI service string with bracket syntax for TemplateGenerator
@@ -409,6 +471,7 @@ def clear_all_ai_selections() -> None:
     clear_ai_backend_selection()
     clear_ai_rag_selection()
     clear_skip_llm_sync_selection()
+    clear_database_engine_selection()
 
 
 def interactive_ai_service_config(
@@ -447,16 +510,21 @@ def interactive_ai_service_config(
 
     # AI Backend Selection
     typer.echo("\nLLM Usage Tracking:")
-    use_sqlite = typer.confirm(
-        "  Enable usage tracking with SQLite? (token counts, costs)",
+    enable_tracking = typer.confirm(
+        "  Enable usage tracking? (token counts, costs, conversation history)",
         default=False,
     )
 
-    backend = StorageBackends.SQLITE if use_sqlite else StorageBackends.MEMORY
+    if enable_tracking:
+        # Database engine selection with arrow keys (reuses previous selection)
+        backend = select_database_engine(context="AI Usage Tracking")
+    else:
+        backend = StorageBackends.MEMORY
+
     _ai_backend_selection[service_name] = backend
 
-    # LLM catalog sync prompt (only for SQLite backend)
-    if backend == StorageBackends.SQLITE:
+    # LLM catalog sync prompt (only for database backends)
+    if backend in (StorageBackends.SQLITE, StorageBackends.POSTGRES):
         typer.echo("\nLLM Catalog Sync:")
         typer.echo("  Syncing fetches latest model data from OpenRouter/LiteLLM APIs")
         typer.echo("  This requires network access and takes ~30-60 seconds")
