@@ -166,7 +166,7 @@ def add_service_command(
 
     # Handle AI service interactive configuration
     # We need to check if AI service is being added and prompt for configuration
-    ai_config: dict[str, str | list[str]] = {}
+    ai_config: dict[str, str | list[str] | bool] = {}
     for i, service in enumerate(services_to_add):
         base_service = service_base_map[service]
         if base_service == AnswerKeys.SERVICE_AI:
@@ -346,8 +346,11 @@ def add_service_command(
                 # This ensures alembic is included when sqlite backend is selected
                 backend = ai_config.get("backend", StorageBackends.MEMORY)
                 framework = ai_config.get("framework", "pydantic-ai")
-                service_data[AnswerKeys.AI_BACKEND] = backend
-                service_data[AnswerKeys.AI_FRAMEWORK] = framework
+                # Ensure backend and framework are strings (not lists from ai_config)
+                if isinstance(backend, str):
+                    service_data[AnswerKeys.AI_BACKEND] = backend
+                if isinstance(framework, str):
+                    service_data[AnswerKeys.AI_FRAMEWORK] = framework
 
             # Add the service (services are added like components)
             # Use base_service for file lookup, not the full variant name
