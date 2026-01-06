@@ -312,8 +312,11 @@ class IndexRow(ft.Container):
         unique_text = "UNIQUE" if unique else "NON-UNIQUE"
         unique_color = Theme.Colors.SUCCESS if unique else ft.Colors.ON_SURFACE_VARIANT
 
-        # Format column names (columns is a list of strings, not dicts)
-        column_names = ", ".join(columns) if columns else ""
+        # Handle both SQLite (list of dicts with name key) and PostgreSQL (list of strings)
+        if columns and isinstance(columns[0], dict):
+            column_names = ", ".join(col.get("name", "") for col in columns)
+        else:
+            column_names = ", ".join(columns) if columns else ""
 
         self.content = ft.Row(
             [

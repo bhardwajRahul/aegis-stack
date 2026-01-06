@@ -363,6 +363,15 @@ class ProviderError(Exception):
     pass
 
 
+class ProviderNotInstalledError(ProviderError):
+    """Raised when a provider's dependencies are not installed."""
+
+    def __init__(self, provider: str, cli_command: str):
+        self.provider = provider
+        self.cli_command = cli_command
+        super().__init__(f"{provider} provider is not installed")
+
+
 def get_llm(config: AIServiceConfig, settings: Any):
     """
     Create a LangChain chat model for the configured provider.
