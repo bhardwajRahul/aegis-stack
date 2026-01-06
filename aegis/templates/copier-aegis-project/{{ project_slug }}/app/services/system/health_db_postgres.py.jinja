@@ -1,0 +1,400 @@
+"""
+PostgreSQL database health check for {{ project_name }}.
+
+Provides comprehensive health checking for PostgreSQL databases including
+connection testing, version info, database size, connection counts, and
+server settings.
+"""
+{% if include_database and database_engine == "postgres" %}
+import os
+from pathlib import Path
+import re
+from typing import Any
+
+from app.core.config import settings
+from app.core.log import logger
+from app.services.system.health import format_bytes
+from app.services.system.models import ComponentStatus, ComponentStatusType
+
+
+async def check_database_health() -> ComponentStatus:
+    """
+    Check PostgreSQL database connectivity and basic functionality.
+
+    Returns:
+        ComponentStatus indicating database health
+    """
+    try:
+        from app.core.db import db_session
+        from sqlalchemy import text
+
+        # Use effective URL which handles Docker vs local hostname translation
+        db_url = settings.database_url_effective
+
+        # Test database connection with simple query and collect enhanced metadata
+        enhanced_metadata: dict[str, Any] = {
+            "implementation": "postgresql",
+            "url": db_url,
+            "database_exists": True,
+            "engine_echo": settings.DATABASE_ENGINE_ECHO,
+        }
+
+        # Test database connection and collect PostgreSQL-specific info
+        with db_session(autocommit=False) as session:
+            # Execute a simple query to test connectivity
+            session.execute(text("SELECT 1"))
+
+            # Get PostgreSQL version
+            try:
+                result = session.execute(text("SELECT version()")).fetchone()
+                if result:
+                    enhanced_metadata["version"] = result[0]
+                    # Extract just the version number for display
+                    version_parts = result[0].split()
+                    if len(version_parts) >= 2:
+                        enhanced_metadata["version_short"] = version_parts[1]
+            except Exception:
+                logger.debug("Failed to get PostgreSQL version", exc_info=True)
+
+            # Get database size
+            try:
+                result = session.execute(
+                    text("SELECT pg_database_size(current_database())")
+                ).fetchone()
+                if result:
+                    db_size = result[0]
+                    enhanced_metadata["database_size_bytes"] = db_size
+                    enhanced_metadata["database_size_human"] = format_bytes(db_size)
+            except Exception:
+                logger.debug("Failed to get database size", exc_info=True)
+
+            # Get active connection count
+            try:
+                result = session.execute(
+                    text(
+                        "SELECT count(*) FROM pg_stat_activity "
+                        "WHERE datname = current_database()"
+                    )
+                ).fetchone()
+                if result:
+                    enhanced_metadata["active_connections"] = result[0]
+            except Exception:
+                logger.debug("Failed to get connection count", exc_info=True)
+
+            # Get connection pool information
+            try:
+                from app.core.db import engine
+                if hasattr(engine.pool, 'size'):
+                    enhanced_metadata["connection_pool_size"] = engine.pool.size()
+                if hasattr(engine.pool, 'checkedin'):
+                    enhanced_metadata["pool_checked_in"] = engine.pool.checkedin()
+                if hasattr(engine.pool, 'checkedout'):
+                    enhanced_metadata["pool_checked_out"] = engine.pool.checkedout()
+            except Exception:
+                logger.debug("Failed to get pool information", exc_info=True)
+
+            # Get PostgreSQL settings
+            try:
+                pg_settings: dict[str, Any] = {}
+
+                result = session.execute(text("SHOW max_connections")).fetchone()
+                if result:
+                    pg_settings["max_connections"] = result[0]
+
+                result = session.execute(text("SHOW shared_buffers")).fetchone()
+                if result:
+                    pg_settings["shared_buffers"] = result[0]
+
+                result = session.execute(text("SHOW work_mem")).fetchone()
+                if result:
+                    pg_settings["work_mem"] = result[0]
+
+                result = session.execute(text("SHOW effective_cache_size")).fetchone()
+                if result:
+                    pg_settings["effective_cache_size"] = result[0]
+
+                result = session.execute(text("SHOW maintenance_work_mem")).fetchone()
+                if result:
+                    pg_settings["maintenance_work_mem"] = result[0]
+
+                result = session.execute(text("SHOW wal_level")).fetchone()
+                if result:
+                    pg_settings["wal_level"] = result[0]
+
+                enhanced_metadata["pg_settings"] = pg_settings
+
+            except Exception:
+                logger.debug("Failed to collect PostgreSQL settings", exc_info=True)
+
+            # Collect table information using SQLAlchemy inspector
+            table_info: list[dict[str, Any]] = []
+            try:
+                from sqlalchemy import inspect
+                inspector = inspect(session.bind)
+                if inspector is not None:
+                    table_names = inspector.get_table_names()
+
+                    for table_name in table_names:
+                        try:
+                            from sqlalchemy import quoted_name
+                            quoted_table = quoted_name(table_name, quote=True)
+                            count_result = session.execute(
+                                text(f"SELECT COUNT(*) FROM {quoted_table}")
+                            ).fetchone()
+                            row_count = count_result[0] if count_result else 0
+
+                            table_info.append({
+                                "name": table_name,
+                                "rows": row_count
+                            })
+                        except Exception as e:
+                            logger.debug(
+                                f"Failed to count rows for table {table_name}: {e}"
+                            )
+                            table_info.append({
+                                "name": table_name,
+                                "rows": 0
+                            })
+
+                    enhanced_metadata["tables"] = table_info
+                    enhanced_metadata["table_count"] = len(table_names)
+
+            except Exception:
+                logger.debug("Failed to collect table information", exc_info=True)
+                enhanced_metadata["tables"] = []
+                enhanced_metadata["table_count"] = 0
+
+            # Collect table schema details using SQLAlchemy inspector
+            if table_info:
+                try:
+                    from sqlalchemy import inspect
+                    inspector = inspect(session.bind)
+                    table_schemas: list[dict[str, Any]] = []
+                    total_indexes = 0
+                    total_foreign_keys = 0
+
+                    for table in table_info:
+                        table_name = table["name"]
+                        schema_info: dict[str, Any] = {
+                            "name": table_name, "rows": table["rows"]
+                        }
+
+                        try:
+                            columns = inspector.get_columns(table_name)
+                            schema_info["columns"] = [
+                                {
+                                    "name": col["name"],
+                                    "type": str(col["type"]),
+                                    "nullable": col.get("nullable", True),
+                                    "default": str(col.get("default", "")),
+                                }
+                                for col in columns
+                            ]
+                        except Exception:
+                            schema_info["columns"] = []
+
+                        try:
+                            indexes = inspector.get_indexes(table_name)
+                            schema_info["indexes"] = [
+                                {
+                                    "name": idx["name"],
+                                    "unique": idx.get("unique", False),
+                                    "columns": idx.get("column_names", []),
+                                }
+                                for idx in indexes
+                            ]
+                            total_indexes += len(indexes)
+                        except Exception:
+                            schema_info["indexes"] = []
+
+                        try:
+                            fks = inspector.get_foreign_keys(table_name)
+                            schema_info["foreign_keys"] = [
+                                {
+                                    "name": fk.get("name"),
+                                    "referred_table": fk.get("referred_table"),
+                                    "constrained_columns": fk.get(
+                                        "constrained_columns", []
+                                    ),
+                                    "referred_columns": fk.get("referred_columns", []),
+                                }
+                                for fk in fks
+                            ]
+                            total_foreign_keys += len(fks)
+                        except Exception:
+                            schema_info["foreign_keys"] = []
+
+                        table_schemas.append(schema_info)
+
+                    enhanced_metadata["table_schemas"] = table_schemas
+                    enhanced_metadata["total_indexes"] = total_indexes
+                    enhanced_metadata["total_foreign_keys"] = total_foreign_keys
+
+                    if table_info:
+                        total_rows = sum(t["rows"] for t in table_info)
+                        largest_table = max(table_info, key=lambda t: t["rows"])
+                        enhanced_metadata["total_rows"] = total_rows
+                        enhanced_metadata["largest_table"] = largest_table
+
+                except Exception:
+                    logger.debug(
+                        "Failed to collect table schema details", exc_info=True
+                    )
+
+            # Collect migration history from Alembic
+            try:
+                migrations: list[dict[str, Any]] = []
+
+                result = session.execute(
+                    text(
+                        "SELECT EXISTS ("
+                        "SELECT FROM information_schema.tables "
+                        "WHERE table_name = 'alembic_version'"
+                        ")"
+                    )
+                ).fetchone()
+
+                if result and result[0]:
+                    version_result = session.execute(
+                        text("SELECT version_num FROM alembic_version")
+                    ).fetchone()
+                    current_version = version_result[0] if version_result else None
+                    enhanced_metadata["current_migration"] = current_version
+
+                    alembic_versions_path = Path("alembic/versions")
+                    if alembic_versions_path.exists():
+                        migration_files = alembic_versions_path.glob("*.py")
+                        for migration_file in sorted(migration_files):
+                            if migration_file.name == "__init__.py":
+                                continue
+
+                            try:
+                                with open(migration_file) as f:
+                                    content = f.read()
+
+                                revision_id = migration_file.stem.split("_")[0]
+                                description = "No description"
+                                down_revision = None
+                                create_date = None
+
+                                doc_pat = r'"""(.+?)"""'
+                                doc_match = re.search(doc_pat, content, re.DOTALL)
+                                if doc_match:
+                                    description = doc_match.group(1).strip()
+
+                                rev_pat = r'revision\s*=\s*[\'"](.+?)[\'"]'
+                                revision_match = re.search(rev_pat, content)
+                                if revision_match:
+                                    revision_id = revision_match.group(1)
+
+                                down_pat = r'down_revision\s*=\s*[\'"](.+?)[\'"]'
+                                down_match = re.search(down_pat, content)
+                                if down_match:
+                                    down_revision = down_match.group(1)
+
+                                date_pat = r'create_date\s*=\s*.+?datetime\((.+?)\)'
+                                date_match = re.search(date_pat, content)
+                                if date_match:
+                                    create_date = date_match.group(0)
+
+                                file_mtime = os.path.getmtime(migration_file)
+
+                                migrations.append({
+                                    "revision": revision_id,
+                                    "down_revision": down_revision,
+                                    "description": description,
+                                    "file_mtime": file_mtime,
+                                    "create_date": create_date,
+                                    "is_current": revision_id == current_version,
+                                })
+
+                            except Exception as e:
+                                logger.debug(
+                                    f"Failed to parse migration {migration_file}: {e}"
+                                )
+
+                    enhanced_metadata["migrations"] = migrations
+                    enhanced_metadata["migration_count"] = len(migrations)
+                else:
+                    enhanced_metadata["current_migration"] = None
+                    enhanced_metadata["migrations"] = []
+                    enhanced_metadata["migration_count"] = 0
+
+            except Exception:
+                logger.debug("Failed to collect migration history", exc_info=True)
+                enhanced_metadata["migrations"] = []
+                enhanced_metadata["migration_count"] = 0
+
+        return ComponentStatus(
+            name="database",
+            status=ComponentStatusType.HEALTHY,
+            message="Database connection successful",
+            response_time_ms=None,
+            metadata=enhanced_metadata,
+        )
+
+    except ImportError:
+        return ComponentStatus(
+            name="database",
+            status=ComponentStatusType.UNHEALTHY,
+            message="Database module not available",
+            response_time_ms=None,
+            metadata={
+                "implementation": "postgresql",
+                "error": "Database module not imported or configured",
+            },
+        )
+    except Exception as e:
+        error_str = str(e).lower()
+        if "connection refused" in error_str:
+            return ComponentStatus(
+                name="database",
+                status=ComponentStatusType.UNHEALTHY,
+                message="PostgreSQL server not reachable",
+                response_time_ms=None,
+                metadata={
+                    "implementation": "postgresql",
+                    "url": settings.database_url_effective,
+                    "error": str(e),
+                    "recommendation": "Ensure PostgreSQL server is running",
+                },
+            )
+        if "authentication failed" in error_str or "password" in error_str:
+            return ComponentStatus(
+                name="database",
+                status=ComponentStatusType.UNHEALTHY,
+                message="PostgreSQL authentication failed",
+                response_time_ms=None,
+                metadata={
+                    "implementation": "postgresql",
+                    "url": settings.database_url_effective,
+                    "error": str(e),
+                    "recommendation": "Check database credentials",
+                },
+            )
+        if "does not exist" in error_str:
+            return ComponentStatus(
+                name="database",
+                status=ComponentStatusType.WARNING,
+                message="PostgreSQL database does not exist",
+                response_time_ms=None,
+                metadata={
+                    "implementation": "postgresql",
+                    "url": settings.database_url_effective,
+                    "error": str(e),
+                    "recommendation": "Create the database or check DATABASE_URL",
+                },
+            )
+
+        return ComponentStatus(
+            name="database",
+            status=ComponentStatusType.UNHEALTHY,
+            message=f"Database connection failed: {str(e)}",
+            response_time_ms=None,
+            metadata={
+                "implementation": "postgresql",
+                "url": settings.database_url_effective,
+                "error": str(e),
+            },
+        )
+{% endif %}

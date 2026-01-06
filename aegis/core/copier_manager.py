@@ -17,7 +17,7 @@ from packaging.version import Version
 from aegis import __version__
 
 from ..config.defaults import DEFAULT_PYTHON_VERSION, GITHUB_TEMPLATE_URL
-from ..constants import AnswerKeys
+from ..constants import AnswerKeys, StorageBackends
 from .migration_generator import (
     generate_migrations_for_services,
     get_services_needing_migrations,
@@ -107,6 +107,9 @@ def generate_with_copier(
         ),
         AnswerKeys.REDIS: cookiecutter_context[AnswerKeys.REDIS] == "yes",
         AnswerKeys.DATABASE: cookiecutter_context[AnswerKeys.DATABASE] == "yes",
+        AnswerKeys.DATABASE_ENGINE: cookiecutter_context.get(
+            AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE
+        ),
         AnswerKeys.CACHE: False,  # Default to no
         AnswerKeys.AUTH: cookiecutter_context.get(AnswerKeys.AUTH, "no") == "yes",
         AnswerKeys.AI: cookiecutter_context.get(AnswerKeys.AI, "no") == "yes",
@@ -118,7 +121,7 @@ def generate_with_copier(
             AnswerKeys.AI_PROVIDERS, "openai"
         ),
         AnswerKeys.AI_BACKEND: cookiecutter_context.get(
-            AnswerKeys.AI_BACKEND, "memory"
+            AnswerKeys.AI_BACKEND, StorageBackends.MEMORY
         ),
         AnswerKeys.AI_WITH_PERSISTENCE: cookiecutter_context.get(
             AnswerKeys.AI_WITH_PERSISTENCE, "no"
@@ -128,8 +131,7 @@ def generate_with_copier(
     }
 
     # Detect dev vs production mode for template sourcing
-    # - Development (no vcs_ref): Use direct file path for working directory changes
-    # - Development (with vcs_ref): Use git+file:// URL to access specific version
+    # - Development: Use git+file:// URL to access local git repo at HEAD
     # - Production (pip/uvx install): Use GitHub URL (no local git repo)
     from .copier_updater import get_template_root, resolve_version_to_ref
 
@@ -155,15 +157,12 @@ def generate_with_copier(
 
     # Store template version in answers for future reference
     # This allows aegis update to show "v0.4.1" instead of commit hash
-    if resolved_ref and resolved_ref.startswith("v"):
+    if resolved_ref.startswith("v"):
         # Version tag (e.g., "v0.4.1") -> strip 'v' prefix
         copier_data["_template_version"] = resolved_ref[1:]
-    elif resolved_ref:
+    else:
         # Branch or commit hash - store as-is
         copier_data["_template_version"] = resolved_ref
-    else:
-        # Dev mode with no specific version - use current CLI version
-        copier_data["_template_version"] = __version__
 
     # Generate project - Copier creates output_dir/project_slug via {{ project_slug }}/ wrapper
     # NOTE: _tasks removed from copier.yml - we run them ourselves below
@@ -200,20 +199,27 @@ def generate_with_copier(
     # This ensures consistent behavior with Cookiecutter
     include_auth = copier_data.get(AnswerKeys.AUTH, False)
     include_ai = copier_data.get(AnswerKeys.AI, False)
-    ai_backend = copier_data.get(AnswerKeys.AI_BACKEND, "memory")
+    ai_backend = copier_data.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
+    database_engine = copier_data.get(
+        AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE
+    )
 
     # Type narrowing: ensure booleans for include_auth and include_ai
     is_auth_included: bool = include_auth is True
     is_ai_included: bool = include_ai is True
 
     # Type narrowing: ai_backend should always be a string, but narrow from Any
-    ai_backend_str: str = str(ai_backend) if ai_backend else "memory"
+    ai_backend_str: str = str(ai_backend) if ai_backend else StorageBackends.MEMORY
 
-    ai_needs_migrations = is_ai_included and ai_backend_str != "memory"
-    include_migrations = is_auth_included or ai_needs_migrations
+    ai_needs_migrations = is_ai_included and ai_backend_str != StorageBackends.MEMORY
+    needs_migration_files = is_auth_included or ai_needs_migrations
+    # Only run migrations automatically for SQLite (file-based, no server needed)
+    # PostgreSQL requires a running server, so skip auto-migration
+    is_sqlite = database_engine == StorageBackends.SQLITE
+    run_migrations = needs_migration_files and is_sqlite
 
-    # Generate migrations for services that need them
-    if include_migrations:
+    # Generate migrations for services that need them (always, regardless of engine)
+    if needs_migration_files:
         context = {
             "include_auth": is_auth_included,
             "include_ai": is_ai_included,
@@ -225,8 +231,8 @@ def generate_with_copier(
             for migration_path in generated:
                 print(f"Generated migration: {migration_path.name}")
 
-    # AI needs seeding when using persistence backend (same condition as migrations)
-    ai_needs_seeding = ai_needs_migrations
+    # AI needs seeding when using persistence backend AND sqlite (postgres needs running server)
+    ai_needs_seeding = ai_needs_migrations and is_sqlite
 
     # Type narrowing: python_version from copier_data can be Any, so narrow to str | None
     python_version_value = copier_data.get("python_version")
@@ -234,12 +240,15 @@ def generate_with_copier(
         python_version_value if isinstance(python_version_value, str) else None
     )
 
+    # Skip LLM sync for postgres (requires running database server)
+    should_skip_llm_sync = skip_llm_sync or not is_sqlite
+
     run_post_generation_tasks(
         project_path,
-        include_migrations=include_migrations,
+        include_migrations=run_migrations,
         python_version=python_version_str,
         seed_ai=ai_needs_seeding,
-        skip_llm_sync=skip_llm_sync,
+        skip_llm_sync=should_skip_llm_sync,
         project_slug=cookiecutter_context["project_slug"],
     )
 

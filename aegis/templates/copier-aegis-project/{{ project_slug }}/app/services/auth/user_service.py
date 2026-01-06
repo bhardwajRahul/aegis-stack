@@ -25,7 +25,7 @@ class UserService:
             full_name=user_data.full_name,
             hashed_password=hashed_password,
             is_active=user_data.is_active,
-            created_at=datetime.now(UTC),
+            created_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         # Save to database
@@ -55,7 +55,7 @@ class UserService:
             if hasattr(user, field):
                 setattr(user, field, value)
 
-        user.updated_at = datetime.now(UTC)
+        user.updated_at = datetime.now(UTC).replace(tzinfo=None)
         self.db.add(user)
         await self.db.commit()
         await self.db.refresh(user)

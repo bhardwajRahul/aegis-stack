@@ -3,7 +3,7 @@ AI service bracket syntax parser.
 
 Parses ai[framework, backend, providers...] syntax where values are detected by type:
 - Frameworks: pydantic-ai, langchain
-- Backends: memory, sqlite
+- Backends: memory, sqlite, postgres
 - Providers: public, openai, anthropic, google, groq, mistral, cohere
 
 Order doesn't matter. Defaults: pydantic-ai, memory, public
@@ -26,7 +26,7 @@ class AIServiceConfig:
 
 # Valid values for detection (using constants)
 FRAMEWORKS = set(AIFrameworks.ALL)
-BACKENDS = {StorageBackends.MEMORY, StorageBackends.SQLITE}
+BACKENDS = {StorageBackends.MEMORY, StorageBackends.SQLITE, StorageBackends.POSTGRES}
 PROVIDERS = AIProviders.ALL
 FEATURES = {"rag"}  # Feature flags (e.g., rag for RAG support)
 

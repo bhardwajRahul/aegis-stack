@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code when working with code in this repository.
 
+## ⚠️ CRITICAL: No Git Operations
+
+**DO NOT perform git operations unless explicitly requested.** This includes:
+- No `git add`, `git commit`, or `git push` commands
+- No `git status`, `git diff`, or `git log` for preparation purposes
+- No creating pull requests
+- No staging files
+
+**Wait for explicit user approval before ANY git operations.**
+
+---
+
 ## Project Architecture
 
 **Aegis Stack is a modular platform for building and evolving production-ready Python applications.**
@@ -74,6 +86,15 @@ Use the Language Server (Pyright) for code navigation instead of grep/glob:
 - Semantic understanding - knows actual references, not text matches
 - Type-aware - hover shows full type signatures
 
+## Test Project Location
+
+**When prototyping, check `my-app/` under the aegis-stack root first.**
+
+The user often has a test project at `/Users/leonardbedner/Workspace/house_bedner/aegis-stack/my-app/` for iterating on changes before backporting to templates. When making fixes:
+1. Look in `my-app/` first for the generated project code
+2. Test changes there
+3. Backport working changes to templates in `aegis/templates/`
+
 ## Template Development Workflow
 
 ### Two Approaches
@@ -119,12 +140,6 @@ Components create emergent capabilities when combined:
 3. **Agent-ready architecture** - Predictable, testable, extendable
 
 ## Coding Standards
-
-### Git and Version Control
-**DO NOT perform git operations unless explicitly requested.** This includes:
-- No `git add`, `git commit`, or `git push` commands
-- No creating pull requests
-- Wait for explicit user approval before committing changes
 
 ### Python Style Guidelines
 

@@ -250,9 +250,9 @@ class TestAIServiceParserErrors:
     def test_unknown_value_raises_error(self) -> None:
         """Unknown value should raise ValueError with helpful message."""
         with pytest.raises(ValueError) as exc_info:
-            parse_ai_service_config("ai[postgres]")
+            parse_ai_service_config("ai[invalid]")
         error_msg = str(exc_info.value)
-        assert "Unknown value 'postgres'" in error_msg or "postgres" in error_msg
+        assert "Unknown value 'invalid'" in error_msg or "invalid" in error_msg
 
     def test_multiple_frameworks_raises_error(self) -> None:
         """Can't specify both frameworks."""

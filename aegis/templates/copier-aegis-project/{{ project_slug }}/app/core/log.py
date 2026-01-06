@@ -19,16 +19,23 @@ from structlog.types import Processor
 # A global logger instance for easy access throughout the application
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
+# Guard to prevent duplicate handler registration
+_logging_configured = False
+
 
 def setup_logging() -> None:
     """
     Configures logging for the entire application.
 
-    This function sets up structlog with processors for structured logging.
-    It routes all standard library logging through structlog to ensure
-    consistent log formats. The output format is determined by the APP_ENV
-    setting (dev-friendly console format or production-ready JSON format).
+    This function is idempotent - safe to call multiple times.
+    Only the first call has any effect. It sets up structlog with processors
+    for structured logging and routes all standard library logging through
+    structlog to ensure consistent log formats.
     """
+    global _logging_configured
+    if _logging_configured:
+        return
+    _logging_configured = True
     # Type hint for the list of processors
     shared_processors: list[Processor] = [
         structlog.stdlib.add_logger_name,
@@ -69,6 +76,9 @@ def setup_logging() -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
     root_logger = logging.getLogger()
+
+    # Clear existing handlers to prevent duplicates (e.g., after Alembic reconfigures logging)
+    root_logger.handlers.clear()
 
     # CRITICAL: Set log level BEFORE adding handler
     # This ensures all loggers (including import-time loggers) respect the level

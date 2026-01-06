@@ -26,10 +26,18 @@ services:
       - webserver
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
-{%- if include_redis %}
+{%- if include_redis or database_engine == "postgres" %}
     depends_on:
+{%- if include_redis %}
       redis:
         condition: service_healthy
+{%- endif %}
+{%- if database_engine == "postgres" %}
+      postgres:
+        condition: service_healthy
+{%- endif %}
+{%- endif %}
+{%- if include_redis %}
     environment:
       # Docker container marker and Redis connection for health checks
       - DOCKER_CONTAINER=1
@@ -193,6 +201,39 @@ services:
       - dev
 {%- endif %}
 
+{%- if database_engine == "postgres" %}
+  # POSTGRESQL SERVICE
+
+  postgres:
+    image: postgres:16-alpine
+    hostname: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: {{ project_slug }}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    profiles:
+      - dev
+{%- endif %}
+
   # TEST PROFILE
 
   test_runner:
@@ -206,3 +247,6 @@ services:
 
 volumes:
   aegis-data:
+{%- if database_engine == "postgres" %}
+  postgres-data:
+{%- endif %}

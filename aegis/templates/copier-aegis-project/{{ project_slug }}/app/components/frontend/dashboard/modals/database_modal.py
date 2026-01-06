@@ -2,7 +2,8 @@
 Database Detail Modal
 
 Displays comprehensive database information including migration history,
-table schemas, indexes, foreign keys, and PRAGMA settings.
+table schemas, indexes, foreign keys, and database-specific settings.
+Supports both SQLite (PRAGMA settings) and PostgreSQL (pg_settings).
 """
 
 from datetime import datetime
@@ -66,20 +67,37 @@ class OverviewSection(ft.Container):
         """
         super().__init__()
         metadata = database_component.metadata or {}
+        implementation = metadata.get("implementation", "sqlite")
 
         # Extract metrics
         table_count = metadata.get("table_count", 0)
         total_rows = metadata.get("total_rows", 0)
-        file_size_human = metadata.get("file_size_human", "0 B")
-        version = metadata.get("version", "Unknown")
+
+        if implementation == "postgresql":
+            # PostgreSQL-specific metrics
+            db_size = metadata.get("database_size_human", "Unknown")
+            version = metadata.get("version_short", "Unknown")
+            if version == "Unknown" and "version" in metadata:
+                # Extract from full version string
+                full_version = metadata["version"]
+                if isinstance(full_version, str) and "PostgreSQL" in full_version:
+                    parts = full_version.split()
+                    if len(parts) >= 2:
+                        version = parts[1]
+            version_label = "PostgreSQL"
+        else:
+            # SQLite-specific metrics
+            db_size = metadata.get("file_size_human", "0 B")
+            version = metadata.get("version", "Unknown")
+            version_label = "SQLite Version"
 
         # Create metric cards
         metrics_row = ft.Row(
             [
                 MetricCard("Total Tables", str(table_count), Theme.Colors.INFO),
                 MetricCard("Total Rows", f"{total_rows:,}", Theme.Colors.SUCCESS),
-                MetricCard("Database Size", file_size_human, Theme.Colors.INFO),
-                MetricCard("SQLite Version", version, Theme.Colors.SUCCESS),
+                MetricCard("Database Size", db_size, Theme.Colors.INFO),
+                MetricCard(version_label, version, Theme.Colors.SUCCESS),
             ],
             alignment=ft.MainAxisAlignment.SPACE_AROUND,
         )
@@ -294,8 +312,8 @@ class IndexRow(ft.Container):
         unique_text = "UNIQUE" if unique else "NON-UNIQUE"
         unique_color = Theme.Colors.SUCCESS if unique else ft.Colors.ON_SURFACE_VARIANT
 
-        # Format column names
-        column_names = ", ".join(col.get("name", "") for col in columns)
+        # Format column names (columns is a list of strings, not dicts)
+        column_names = ", ".join(columns) if columns else ""
 
         self.content = ft.Row(
             [
@@ -930,6 +948,147 @@ class PragmaSettingsSection(ft.Container):
         self.padding = Theme.Spacing.MD
 
 
+class PostgresSettingsSection(ft.Container):
+    """PostgreSQL settings section with server configuration."""
+
+    def __init__(self, database_component: ComponentStatus, page: ft.Page) -> None:
+        """
+        Initialize PostgreSQL settings section.
+
+        Args:
+            database_component: ComponentStatus containing database data
+        """
+        super().__init__()
+        metadata = database_component.metadata or {}
+        pg_settings = metadata.get("pg_settings", {})
+
+        # Create header
+        header = H3Text("PostgreSQL Settings")
+
+        # Create settings rows
+        settings_rows = []
+
+        # Connection settings
+        connection_rows = []
+        if "max_connections" in pg_settings:
+            connection_rows.append(
+                PragmaSettingRow(
+                    "max_connections",
+                    pg_settings["max_connections"],
+                    "Maximum number of concurrent connections to the database.",
+                )
+            )
+
+        active_connections = metadata.get("active_connections", 0)
+        connection_rows.append(
+            PragmaSettingRow(
+                "active_connections",
+                active_connections,
+                "Current number of active connections to this database.",
+            )
+        )
+
+        if connection_rows:
+            settings_rows.append(
+                ft.Column(
+                    [
+                        PrimaryText("Connections"),
+                        ft.Column(connection_rows, spacing=0),
+                    ],
+                    spacing=Theme.Spacing.SM,
+                )
+            )
+
+        # Memory settings
+        memory_rows = []
+        if "shared_buffers" in pg_settings:
+            memory_rows.append(
+                PragmaSettingRow(
+                    "shared_buffers",
+                    pg_settings["shared_buffers"],
+                    "Amount of memory for shared memory buffers.",
+                )
+            )
+
+        if "work_mem" in pg_settings:
+            memory_rows.append(
+                PragmaSettingRow(
+                    "work_mem",
+                    pg_settings["work_mem"],
+                    "Memory used for internal sort operations and hash tables.",
+                )
+            )
+
+        if "effective_cache_size" in pg_settings:
+            memory_rows.append(
+                PragmaSettingRow(
+                    "effective_cache_size",
+                    pg_settings["effective_cache_size"],
+                    "Planner's estimate of available disk cache.",
+                )
+            )
+
+        if "maintenance_work_mem" in pg_settings:
+            memory_rows.append(
+                PragmaSettingRow(
+                    "maintenance_work_mem",
+                    pg_settings["maintenance_work_mem"],
+                    "Memory for maintenance operations (VACUUM, CREATE INDEX).",
+                )
+            )
+
+        if memory_rows:
+            settings_rows.append(
+                ft.Column(
+                    [
+                        PrimaryText("Memory"),
+                        ft.Column(memory_rows, spacing=0),
+                    ],
+                    spacing=Theme.Spacing.SM,
+                )
+            )
+
+        # WAL settings
+        wal_rows = []
+        if "wal_level" in pg_settings:
+            wal_rows.append(
+                PragmaSettingRow(
+                    "wal_level",
+                    pg_settings["wal_level"],
+                    "Level of information written to the WAL.",
+                )
+            )
+
+        if wal_rows:
+            settings_rows.append(
+                ft.Column(
+                    [
+                        PrimaryText("Write-Ahead Log"),
+                        ft.Column(wal_rows, spacing=0),
+                    ],
+                    spacing=Theme.Spacing.SM,
+                )
+            )
+
+        if not settings_rows:
+            settings_rows.append(
+                ft.Container(
+                    content=SecondaryText("No PostgreSQL settings available"),
+                    padding=ft.padding.all(Theme.Spacing.MD),
+                    alignment=ft.alignment.center,
+                )
+            )
+
+        self.content = ft.Column(
+            [
+                header,
+                ft.Column(settings_rows, spacing=Theme.Spacing.MD),
+            ],
+            spacing=Theme.Spacing.SM,
+        )
+        self.padding = Theme.Spacing.MD
+
+
 class StatisticsSection(ft.Container):
     """Database infrastructure statistics section."""
 
@@ -1030,6 +1189,15 @@ class DatabaseDetailDialog(BaseDetailPopup):
         Args:
             database_component: ComponentStatus containing database health and metrics
         """
+        metadata = database_component.metadata or {}
+        implementation = metadata.get("implementation", "sqlite")
+
+        # Choose the appropriate settings section based on implementation
+        if implementation == "postgresql":
+            settings_section = PostgresSettingsSection(database_component, page)
+        else:
+            settings_section = PragmaSettingsSection(database_component, page)
+
         # Build sections
         sections = [
             OverviewSection(database_component, page),
@@ -1043,7 +1211,7 @@ class DatabaseDetailDialog(BaseDetailPopup):
                 height=ModalLayout.SECTION_DIVIDER_HEIGHT,
                 color=ft.Colors.OUTLINE_VARIANT,
             ),
-            PragmaSettingsSection(database_component, page),
+            settings_section,
             ft.Divider(
                 height=ModalLayout.SECTION_DIVIDER_HEIGHT,
                 color=ft.Colors.OUTLINE_VARIANT,

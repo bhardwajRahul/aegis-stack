@@ -3,14 +3,9 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import bcrypt
 from app.core.config import settings
 from jose import JWTError, jwt
-from passlib.context import CryptContext
-
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto",
-)
 
 
 def _truncate_password(password: str) -> str:
@@ -53,10 +48,12 @@ def verify_token(token: str) -> dict[str, Any] | None:
 
 
 def get_password_hash(password: str) -> str:
-    """Hash a password."""
-    return pwd_context.hash(_truncate_password(password))
+    """Hash a password using bcrypt."""
+    truncated = _truncate_password(password)
+    return bcrypt.hashpw(truncated.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
-    return pwd_context.verify(_truncate_password(plain_password), hashed_password)
+    truncated = _truncate_password(plain_password)
+    return bcrypt.checkpw(truncated.encode("utf-8"), hashed_password.encode("utf-8"))

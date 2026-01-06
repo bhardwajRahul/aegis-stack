@@ -134,3 +134,6 @@ data/
 
 # Demos
 demos/recordings
+
+# Claude Stuff
+.claude/settings.json

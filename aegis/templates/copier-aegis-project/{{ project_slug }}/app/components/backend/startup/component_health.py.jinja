@@ -389,8 +389,8 @@ async def startup_hook() -> None:
     {%- endif %}
 
     {%- if include_database %}
-    # Register database health check (SQLite connectivity and basic operations)
-    from app.services.system.health import check_database_health
+    # Register database health check
+    from app.services.system.health_db import check_database_health
     register_health_check("database", check_database_health)
     logger.info("Database component health check registered")
     {% endif %}

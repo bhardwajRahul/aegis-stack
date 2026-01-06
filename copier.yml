@@ -97,8 +97,18 @@ worker_backend:
 
 include_database:
   type: bool
-  help: "Include SQLModel database with SQLite?"
+  help: "Include SQLModel database?"
   default: false
+
+database_engine:
+  type: str
+  help: "Database engine"
+  default: "sqlite"
+  choices:
+    - "sqlite"
+    - "postgres"
+  # NOTE: No `when` clause - we need this value saved even when include_database=false
+  # so that templates can conditionally render based on engine type
 
 include_cache:
   type: bool
@@ -112,6 +122,7 @@ scheduler_backend:
   choices:
     - "memory"
     - "sqlite"
+    - "postgres"
   when: "{{ include_scheduler }}"
 
 scheduler_with_persistence:
@@ -153,12 +164,13 @@ ai_backend:
   choices:
     - "memory"
     - "sqlite"
+    - "postgres"
   when: "{{ include_ai }}"
 
 ai_with_persistence:
   type: bool
   help: "Enable AI conversation persistence?"
-  default: "{{ ai_backend == 'sqlite' }}"
+  default: "{{ ai_backend in ['sqlite', 'postgres'] }}"
   when: "{{ include_ai }}"
 
 ai_rag:
@@ -180,7 +192,7 @@ _include_migrations: "{{ include_auth }}"
 _scheduler_deps: "{% if include_scheduler %}apscheduler>=3.10.0{% endif %}"
 _redis_deps: "{% if include_redis %}redis>=5.0.0{% endif %}"
 _worker_deps: "{% if include_worker %}arq>=0.25.0{% endif %}"
-_database_deps: "{% if include_database %}sqlmodel>=0.0.14,sqlalchemy>=2.0.0,aiosqlite>=0.19.0{% endif %}"
+_database_deps: "{% if include_database %}sqlmodel>=0.0.14,sqlalchemy>=2.0.0{% if database_engine == 'sqlite' %},aiosqlite>=0.19.0{% endif %}{% if database_engine == 'postgres' %},asyncpg>=0.29.0,psycopg2-binary>=2.9.9{% endif %}{% endif %}"
 _cache_deps: "{% if include_cache %}redis[hiredis]>=5.0.0{% endif %}"
 
 # Service-specific dependencies (computed)

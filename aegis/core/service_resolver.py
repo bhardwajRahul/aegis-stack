@@ -7,7 +7,7 @@ to their required components and validating service-to-component compatibility.
 
 from ..constants import AnswerKeys, ComponentNames, StorageBackends
 from .ai_service_parser import is_ai_service_with_options, parse_ai_service_config
-from .component_utils import extract_base_service_name
+from .component_utils import extract_base_component_name, extract_base_service_name
 from .dependency_resolver import DependencyResolver
 from .services import SERVICES, get_service_dependencies
 
@@ -98,7 +98,11 @@ class ServiceResolver:
             ):
                 try:
                     ai_config = parse_ai_service_config(service)
-                    valid_backends = [StorageBackends.MEMORY, StorageBackends.SQLITE]
+                    valid_backends = [
+                        StorageBackends.MEMORY,
+                        StorageBackends.SQLITE,
+                        StorageBackends.POSTGRES,
+                    ]
                     if ai_config.backend not in valid_backends:
                         errors.append(
                             f"Invalid backend '{ai_config.backend}' for AI service. "
@@ -183,13 +187,15 @@ class ServiceResolver:
         errors.extend(service_errors)
 
         # Then check component dependencies
+        # Extract base names to handle bracket syntax (e.g., database[postgres] satisfies "database")
+        base_available = {extract_base_component_name(c) for c in available_components}
         for service_name in selected_services:
             if service_name not in SERVICES:
                 continue  # Already reported in service validation
 
             service_deps = get_service_dependencies(service_name)
             for required_comp in service_deps:
-                if required_comp not in available_components:
+                if required_comp not in base_available:
                     errors.append(
                         f"Service '{service_name}' requires component '{required_comp}'"
                     )

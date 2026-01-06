@@ -123,7 +123,6 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/cli/marko_terminal_renderer.py",
             "app/cli/chat_completer.py",
             "app/cli/slash_commands.py",
-            "app/cli/docs.py",
             "app/cli/llm.py",
             "app/cli/status_line.py",
             "app/core/formatting.py",
@@ -388,7 +387,6 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/cli/chat_completer.py")
         remove_file(project_path, "app/cli/slash_commands.py")
         remove_file(project_path, "app/cli/llm.py")
-        remove_file(project_path, "app/cli/docs.py")
         remove_file(project_path, "app/cli/status_line.py")
         remove_file(project_path, "app/core/formatting.py")
         remove_file(project_path, "tests/api/test_ai_endpoints.py")
@@ -396,7 +394,6 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/cli/test_ai_rendering.py")
         remove_file(project_path, "tests/cli/test_conversation_memory.py")
         remove_file(project_path, "tests/cli/test_chat_completer.py")
-        remove_file(project_path, "tests/cli/test_docs.py")
         remove_file(project_path, "tests/cli/test_llm_cli.py")
         remove_file(project_path, "tests/cli/test_slash_commands.py")
         remove_file(project_path, "tests/cli/test_status_line.py")

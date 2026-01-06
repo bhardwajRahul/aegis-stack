@@ -2,19 +2,26 @@
 """
 Database configuration and session management.
 
-This module provides SQLite database connectivity using SQLModel and SQLAlchemy.
-Includes proper session management with transaction handling and foreign key support.
+This module provides {% if database_engine == "postgres" %}PostgreSQL{% else %}SQLite{% endif %} database connectivity using SQLModel and SQLAlchemy.
+Includes proper session management with transaction handling{% if database_engine == "sqlite" %} and foreign key support{% endif %}.
 """
 
 from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager
+{% if database_engine == "sqlite" %}
 from pathlib import Path
+{% endif %}
 from typing import Any
+{% if database_engine == "sqlite" %}
 from urllib.parse import urlparse
+{% endif %}
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine{% if database_engine == "sqlite" %}, event{% endif %}
+
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+{% if database_engine == "sqlite" %}
 from sqlalchemy.pool import NullPool
+{% endif %}
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -22,7 +29,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.config import settings
 from app.core.log import logger
 
-
+{% if database_engine == "sqlite" %}
 # Extract database file path from URL for backup operations
 def _extract_database_path(database_url: str) -> str:
     """Extract the file path from a SQLite database URL."""
@@ -43,7 +50,9 @@ def _extract_database_path(database_url: str) -> str:
         raise ValueError(f"Unsupported database URL scheme: {parsed.scheme}")
 
 DATABASE_PATH = _extract_database_path(settings.DATABASE_URL)
+{% endif %}
 
+{% if database_engine == "sqlite" %}
 # Create SQLite engine with proper configuration (sync)
 # NullPool disables connection pooling - each query gets a fresh connection
 # This ensures the server sees changes made by external processes (e.g., CLI)
@@ -53,32 +62,35 @@ engine = create_engine(
     echo=settings.DATABASE_ENGINE_ECHO,
     poolclass=NullPool,
 )
+{% else %}
+# Create PostgreSQL engine with proper configuration (sync)
+engine = create_engine(
+    settings.database_url_effective,
+    echo=settings.DATABASE_ENGINE_ECHO,
+)
+{% endif %}
 
 # Create async engine for non-blocking operations
 def _get_async_database_url(database_url: str) -> str:
     """Convert sync database URL to async version."""
+{% if database_engine == "sqlite" %}
     if database_url.startswith("sqlite:///"):
         return database_url.replace("sqlite:///", "sqlite+aiosqlite:///")
     elif database_url.startswith("sqlite://"):
         return database_url.replace("sqlite://", "sqlite+aiosqlite://")
-    elif database_url.startswith("postgresql://"):
+{% else %}
+    if database_url.startswith("postgresql://"):
         return database_url.replace("postgresql://", "postgresql+asyncpg://")
-    elif database_url.startswith("mysql://"):
-        return database_url.replace("mysql://", "mysql+aiomysql://")
-    else:
-        # For future database types, return as-is and let SQLAlchemy handle it
-        return database_url
+{% endif %}
+    # For other database types, return as-is and let SQLAlchemy handle it
+    return database_url
 
+{% if database_engine == "sqlite" %}
 async_engine = create_async_engine(
     _get_async_database_url(settings.DATABASE_URL),
     echo=settings.DATABASE_ENGINE_ECHO,
     poolclass=NullPool,
-    # Only add connect_args for SQLite
-    connect_args=(
-        settings.DATABASE_CONNECT_ARGS
-        if "sqlite" in settings.DATABASE_URL
-        else {}
-    ),
+    connect_args=settings.DATABASE_CONNECT_ARGS,
 )
 
 
@@ -89,6 +101,12 @@ def set_sqlite_pragma(dbapi_connection: Any, connection_record: Any) -> None:
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
+{% else %}
+async_engine = create_async_engine(
+    _get_async_database_url(settings.database_url_effective),
+    echo=settings.DATABASE_ENGINE_ECHO,
+)
+{% endif %}
 
 
 # Configure session factory with SQLModel Session (sync)
@@ -156,13 +174,21 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
 
 def init_database() -> None:
     """
-    Initialize the database by creating tables and ensuring directory structure.
+    Initialize the database{% if database_engine == "sqlite" %} by creating tables and ensuring directory structure{% else %} (no-op for postgres - use migrations){% endif %}.
+{% if database_engine == "sqlite" %}
 
     This function:
     1. Creates the database directory if it doesn't exist
     2. Creates all tables defined by SQLModel models
     3. Logs the initialization status
+{% else %}
+
+    For PostgreSQL, this is a no-op. Use Alembic migrations to create/modify tables.
+    This function exists for SQLite compatibility where CLI commands need tables
+    to exist without running migrations.
+{% endif %}
     """
+{% if database_engine == "sqlite" %}
     try:
         # Ensure database directory exists
         db_path = Path(DATABASE_PATH)
@@ -179,3 +205,8 @@ def init_database() -> None:
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
         raise
+{% else %}
+    # PostgreSQL uses Alembic migrations - create_all() would conflict
+    # This no-op exists so code calling init_database() still works
+    pass
+{% endif %}

@@ -95,15 +95,6 @@ class Settings(BaseSettings):
                 return urlunparse(parsed._replace(netloc=netloc))
 
         return self.REDIS_URL
-
-    @property 
-    def is_docker(self) -> bool:
-        """Detect if running inside Docker container."""
-        import os
-        return (
-            os.path.exists("/.dockerenv") or 
-            bool(os.getenv("DOCKER_CONTAINER"))
-        )
 {% endif %}
 
 {% if include_worker %}
@@ -125,10 +116,43 @@ class Settings(BaseSettings):
 {% endif %}
 
 {% if include_database %}
-    # Database settings (SQLite)
+    # Database settings
+{% if database_engine == "postgres" %}
+    DATABASE_URL: str = "postgresql://postgres:postgres@postgres:5432/{{ project_slug }}"
+    DATABASE_URL_LOCAL: str | None = None  # Override for local CLI usage
+    DATABASE_ENGINE_ECHO: bool = False
+
+    @property
+    def database_url_effective(self) -> str:
+        """Get effective database URL, preferring local override when not in Docker."""
+        # If explicitly overridden for local use
+        if self.DATABASE_URL_LOCAL and not self.is_docker:
+            return self.DATABASE_URL_LOCAL
+
+        # Auto-translate Docker hostname to localhost when running outside Docker
+        if not self.is_docker:
+            from urllib.parse import urlparse, urlunparse
+
+            parsed = urlparse(self.DATABASE_URL)
+            # Only translate the default Docker service hostname "postgres"
+            if parsed.hostname == "postgres":
+                # Reconstruct URL with localhost, preserving auth, port, path, etc.
+                netloc = "localhost"
+                if parsed.username:
+                    if parsed.password:
+                        netloc = f"{parsed.username}:{parsed.password}@localhost"
+                    else:
+                        netloc = f"{parsed.username}@localhost"
+                if parsed.port:
+                    netloc = f"{netloc}:{parsed.port}"
+                return urlunparse(parsed._replace(netloc=netloc))
+
+        return self.DATABASE_URL
+{% else %}
     DATABASE_URL: str = "sqlite:///./data/app.db"
     DATABASE_ENGINE_ECHO: bool = False
     DATABASE_CONNECT_ARGS: dict[str, Any] = {"check_same_thread": False}
+{% endif %}
 {% endif %}
 
 {% if include_ai %}
@@ -183,6 +207,17 @@ class Settings(BaseSettings):
     RAG_CHUNK_OVERLAP: int = 400
     RAG_DEFAULT_TOP_K: int = 5
     RAG_CHAT_TOP_K: int = 10  # Number of chunks for AI chat context
+{% endif %}
+
+{% if include_redis or database_engine == "postgres" %}
+    @property
+    def is_docker(self) -> bool:
+        """Detect if running inside Docker container."""
+        import os
+        return (
+            os.path.exists("/.dockerenv") or
+            bool(os.getenv("DOCKER_CONTAINER"))
+        )
 {% endif %}
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
