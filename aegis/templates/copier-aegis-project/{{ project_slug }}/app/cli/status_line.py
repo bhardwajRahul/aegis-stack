@@ -22,6 +22,7 @@ class ChatSessionState:
     model: str = ""
     rag_enabled: bool = False
     rag_collection: str | None = None
+    show_sources: bool = False
     cumulative_tokens: int = 0
     cumulative_cost: float = 0.0
     version: str = ""
@@ -45,6 +46,10 @@ class ChatSessionState:
         if collection is not None:
             self.rag_collection = collection
 
+    def toggle_sources(self, enabled: bool) -> None:
+        """Toggle source reference display on/off."""
+        self.show_sources = enabled
+
     def format_status_line(self) -> HTML:
         """Format the status line with HTML markup for prompt_toolkit."""
         term_width = shutil.get_terminal_size().columns
@@ -62,6 +67,8 @@ class ChatSessionState:
         else:
             rag_str = "RAG: OFF"
 
+        sources_str = "SRC: ON" if self.show_sources else "SRC: OFF"
+
         tokens_str = f"{self.cumulative_tokens:,} tokens"
         cost_str = f"${self.cumulative_cost:.4f}"
         version_str = f"v{self.version}"
@@ -75,6 +82,9 @@ class ChatSessionState:
             f"<style fg='ansigreen'>{rag_str}</style>"
             if self.rag_enabled
             else f"<style fg='ansibrightblack'>{rag_str}</style>",
+            f"<style fg='ansimagenta'>{sources_str}</style>"
+            if self.show_sources
+            else f"<style fg='ansibrightblack'>{sources_str}</style>",
             f"<style fg='ansiyellow'>{tokens_str}</style>",
             f"<style fg='ansigreen'>{cost_str}</style>",
             f"<style fg='ansibrightblack'>{version_str}</style>",

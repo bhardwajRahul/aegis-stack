@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import shutil
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
@@ -21,6 +22,21 @@ from rich.text import Text
 if TYPE_CHECKING:
     from app.services.ai.service import AIService
     from app.cli.status_line import ChatSessionState
+
+
+class SlashCommandName(StrEnum):
+    """Slash command identifiers."""
+
+    HELP = "help"
+    CLEAR = "clear"
+    NEW = "new"
+    MODEL = "model"
+    STATUS = "status"
+{% if ai_rag %}
+    RAG = "rag"
+    SOURCES = "sources"
+{% endif %}
+    EXIT = "exit"
 
 
 @dataclass
@@ -36,6 +52,7 @@ class CommandResult:
     update_model: str | None = None
     update_rag: bool | None = None
     update_rag_collection: str | None = None
+    update_show_sources: bool | None = None
 
 
 @dataclass
@@ -65,6 +82,7 @@ class SlashCommandHandler:
 {% if ai_rag %}
         rag_enabled: bool = False,
         rag_collection: str | None = None,
+        show_sources: bool = False,
 {% endif %}
     ) -> None:
         """Initialize slash command handler."""
@@ -75,44 +93,50 @@ class SlashCommandHandler:
 {% if ai_rag %}
         self.rag_enabled = rag_enabled
         self.rag_collection = rag_collection
+        self.show_sources = show_sources
 {% endif %}
 
         # Define available commands (minimal set, no aliases)
-        self.commands: dict[str, SlashCommand] = {
-            "help": SlashCommand(
-                name="help",
+        self.commands: dict[SlashCommandName, SlashCommand] = {
+            SlashCommandName.HELP: SlashCommand(
+                name=SlashCommandName.HELP,
                 description="Show available commands",
                 usage="/help",
             ),
-            "clear": SlashCommand(
-                name="clear",
+            SlashCommandName.CLEAR: SlashCommand(
+                name=SlashCommandName.CLEAR,
                 description="Clear the screen",
                 usage="/clear",
             ),
-            "new": SlashCommand(
-                name="new",
+            SlashCommandName.NEW: SlashCommand(
+                name=SlashCommandName.NEW,
                 description="Start a new conversation",
                 usage="/new",
             ),
-            "model": SlashCommand(
-                name="model",
+            SlashCommandName.MODEL: SlashCommand(
+                name=SlashCommandName.MODEL,
                 description="Switch AI model (auto-detects provider)",
                 usage="/model [name]",
             ),
-            "status": SlashCommand(
-                name="status",
+            SlashCommandName.STATUS: SlashCommand(
+                name=SlashCommandName.STATUS,
                 description="Show current configuration",
                 usage="/status",
             ),
 {% if ai_rag %}
-            "rag": SlashCommand(
-                name="rag",
+            SlashCommandName.RAG: SlashCommand(
+                name=SlashCommandName.RAG,
                 description="Manage RAG mode",
                 usage="/rag [off|<collection>]",
             ),
+            SlashCommandName.SOURCES: SlashCommand(
+                name=SlashCommandName.SOURCES,
+                description="Toggle source references in output",
+                usage="/sources [enable|disable]",
+            ),
 {% endif %}
-            "exit": SlashCommand(
-                name="exit",
+            SlashCommandName.EXIT: SlashCommand(
+                name=SlashCommandName.EXIT,
                 description="Exit the chat session",
                 usage="/exit",
             ),
@@ -406,6 +430,49 @@ class SlashCommandHandler:
             update_rag=True,
             update_rag_collection=arg,
         )
+
+    async def _cmd_sources(self, args: list[str]) -> CommandResult:
+        """Toggle source references display in output."""
+        # Sources require RAG to be enabled
+        if not self.rag_enabled:
+            return CommandResult(
+                success=False,
+                message="[red]Sources require RAG to be enabled.[/red]\n"
+                "[dim]Enable RAG first with /rag <collection>[/dim]",
+            )
+
+        if not args:
+            # Toggle current state
+            self.show_sources = not self.show_sources
+            status = "enabled" if self.show_sources else "disabled"
+            color = "green" if self.show_sources else "yellow"
+            return CommandResult(
+                success=True,
+                message=f"[{color}]Source references {status}[/{color}]",
+                update_show_sources=self.show_sources,
+            )
+
+        arg = args[0].lower()
+        if arg in ("on", "enable"):
+            self.show_sources = True
+            return CommandResult(
+                success=True,
+                message="[green]Source references enabled[/green]",
+                update_show_sources=True,
+            )
+        elif arg in ("off", "disable"):
+            self.show_sources = False
+            return CommandResult(
+                success=True,
+                message="[yellow]Source references disabled[/yellow]",
+                update_show_sources=False,
+            )
+        else:
+            return CommandResult(
+                success=False,
+                message=f"[red]Unknown option: {arg}[/red]\n"
+                "[dim]Usage: /sources [enable|disable][/dim]",
+            )
 {% endif %}
 
     async def _cmd_exit(self, args: list[str]) -> CommandResult:

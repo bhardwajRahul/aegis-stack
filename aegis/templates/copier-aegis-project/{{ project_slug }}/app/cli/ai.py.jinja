@@ -1086,9 +1086,11 @@ async def _interactive_chat_session(
 {% if ai_rag %}
         rag_enabled=use_rag,
         rag_collection=rag_collection,
+        show_sources=show_sources,
 {% else %}
         rag_enabled=False,
         rag_collection=None,
+        show_sources=False,
 {% endif %}
         cumulative_tokens=0,
         cumulative_cost=0.0,
@@ -1105,6 +1107,7 @@ async def _interactive_chat_session(
 {% if ai_rag %}
         rag_enabled=use_rag,
         rag_collection=rag_collection,
+        show_sources=show_sources,
 {% endif %}
     )
 
@@ -1196,6 +1199,10 @@ async def _interactive_chat_session(
                         if result.update_rag_collection:
                             rag_collection = result.update_rag_collection
                             command_handler.rag_collection = rag_collection
+                    if result.update_show_sources is not None:
+                        show_sources = result.update_show_sources
+                        session_state.toggle_sources(show_sources)
+                        command_handler.show_sources = show_sources
 {% endif %}
                 continue
 
