@@ -19,7 +19,15 @@ from ..cards.card_utils import PROVIDER_COLORS
 from .ai_analytics_tab import AIAnalyticsTab
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
-from .rag_tab import RAGTab
+
+# RAG tab is optional - only present when RAG service is enabled
+try:
+    from .rag_tab import RAGTab
+
+    _HAS_RAG = True
+except ImportError:
+    RAGTab = None  # type: ignore[misc, assignment]
+    _HAS_RAG = False
 
 
 class OverviewSection(ft.Container):
@@ -291,24 +299,21 @@ class AIDetailDialog(BaseDetailPopup):
         """
         metadata = component_data.metadata or {}
 
+        # Build tabs list
+        tabs_list = [
+            ft.Tab(text="Overview", content=OverviewTab(component_data)),
+            ft.Tab(text="Analytics", content=AIAnalyticsTab(metadata=metadata)),
+        ]
+
+        # Add RAG tab only if RAG service is enabled
+        if _HAS_RAG and RAGTab is not None:
+            tabs_list.append(ft.Tab(text="RAG", content=RAGTab()))
+
         # Create tabbed interface
         tabs = ft.Tabs(
             selected_index=0,
             animation_duration=200,
-            tabs=[
-                ft.Tab(
-                    text="Overview",
-                    content=OverviewTab(component_data),
-                ),
-                ft.Tab(
-                    text="Analytics",
-                    content=AIAnalyticsTab(metadata=metadata),
-                ),
-                ft.Tab(
-                    text="RAG",
-                    content=RAGTab(),
-                ),
-            ],
+            tabs=tabs_list,
             expand=True,
         )
 
