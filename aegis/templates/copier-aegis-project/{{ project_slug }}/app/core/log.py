@@ -77,7 +77,7 @@ def setup_logging() -> None:
     handler.setFormatter(formatter)
     root_logger = logging.getLogger()
 
-    # Clear existing handlers to prevent duplicates (e.g., after Alembic reconfigures logging)
+    # Clear existing handlers to prevent duplicates (e.g., Alembic reconfigures)
     root_logger.handlers.clear()
 
     # CRITICAL: Set log level BEFORE adding handler

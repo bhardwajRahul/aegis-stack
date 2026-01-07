@@ -85,6 +85,22 @@ class CollectionInfoResponse(BaseModel):
     metadata: dict[str, Any]
 
 
+class IndexedFileResponse(BaseModel):
+    """Response model for indexed file information."""
+
+    source: str
+    chunks: int
+
+
+class CollectionFilesResponse(BaseModel):
+    """Response model for collection files list."""
+
+    collection_name: str
+    files: list[IndexedFileResponse]
+    total_files: int
+    total_chunks: int
+
+
 @router.post("/index", response_model=IndexResponse)
 async def index_documents(request: IndexRequest) -> IndexResponse:
     """
@@ -216,6 +232,49 @@ async def get_collection_info(collection_name: str) -> CollectionInfoResponse:
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to get collection info: {e}"
+        )
+
+
+@router.get(
+    "/collections/{collection_name}/files", response_model=CollectionFilesResponse
+)
+async def get_collection_files(collection_name: str) -> CollectionFilesResponse:
+    """
+    Get list of files indexed in a collection.
+
+    Args:
+        collection_name: Name of the collection
+
+    Returns:
+        List of files with chunk counts
+
+    Raises:
+        HTTPException: If collection not found
+    """
+    try:
+        # Check collection exists first
+        stats = await rag_service.get_collection_stats(collection_name)
+        if not stats:
+            raise HTTPException(
+                status_code=404, detail=f"Collection '{collection_name}' not found"
+            )
+
+        files = await rag_service.list_files(collection_name)
+        total_chunks = sum(f.chunks for f in files)
+
+        return CollectionFilesResponse(
+            collection_name=collection_name,
+            files=[
+                IndexedFileResponse(source=f.source, chunks=f.chunks) for f in files
+            ],
+            total_files=len(files),
+            total_chunks=total_chunks,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get collection files: {e}"
         )
 
 

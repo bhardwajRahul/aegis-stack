@@ -25,6 +25,8 @@ dependencies = [
     "prompt_toolkit>=3.0.0",
     # HTTP client for CLI API calls
     "httpx==0.28.1",
+    # Security fix for GHSA-38jv-5279-wg99
+    "urllib3>=2.6.3",
     # System monitoring
     "psutil==7.0.0",
 {%- if include_scheduler %}

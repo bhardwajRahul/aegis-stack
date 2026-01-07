@@ -5,6 +5,7 @@ Displays RAG service status and configuration, matching the output of
 the `my-app rag status` CLI command.
 """
 
+from collections.abc import Callable
 from typing import Any
 
 import flet as ft
@@ -34,17 +35,184 @@ def _format_timestamp(timestamp: str | None) -> str:
     return timestamp
 
 
-class RAGCollectionsTableSection(ft.Container):
-    """Collections table showing collection names and document counts."""
+class IndexedFileRow(ft.Container):
+    """Single row showing an indexed file with chunk count."""
 
-    def __init__(self, collections: list[dict[str, Any]]) -> None:
+    def __init__(self, source: str, chunks: int) -> None:
+        super().__init__()
+
+        # Extract just the filename for display, full path on hover
+        filename = source.split("/")[-1] if "/" in source else source
+
+        self.content = ft.Row(
+            [
+                ft.Container(
+                    ft.Icon(ft.Icons.DESCRIPTION_OUTLINED, size=14),
+                    width=24,
+                ),
+                ft.Container(
+                    BodyText(filename, tooltip=source),
+                    expand=True,
+                ),
+                ft.Container(
+                    SecondaryText(f"{chunks} chunks"),
+                    width=80,
+                ),
+            ],
+            spacing=Theme.Spacing.SM,
+        )
+        self.padding = ft.padding.symmetric(
+            vertical=Theme.Spacing.XS,
+            horizontal=Theme.Spacing.SM,
+        )
+
+
+class CollectionRowCard(ft.Container):
+    """Expandable card for a collection showing files on click."""
+
+    def __init__(
+        self,
+        collection: dict[str, Any],
+        on_load_files: Callable[[str], None],
+    ) -> None:
+        super().__init__()
+
+        self.collection_name = collection.get("name", "Unknown")
+        self.doc_count = collection.get("count", 0)
+        self.on_load_files = on_load_files
+
+        self.is_expanded = False
+        self.files_loaded = False
+        self.files: list[dict[str, Any]] = []
+
+        # Expand/collapse icon
+        self._icon = ft.Icon(ft.Icons.ARROW_RIGHT, size=16)
+
+        # Loading indicator for files
+        self._loading_indicator = ft.Container(
+            content=ft.Row(
+                [
+                    ft.ProgressRing(width=16, height=16, stroke_width=2),
+                    SecondaryText("Loading files..."),
+                ],
+                spacing=Theme.Spacing.SM,
+            ),
+            visible=False,
+            padding=ft.padding.only(left=Theme.Spacing.LG),
+        )
+
+        # Files container (populated when expanded)
+        self._files_container = ft.Container(
+            visible=False,
+            padding=ft.padding.only(left=Theme.Spacing.LG, top=Theme.Spacing.SM),
+        )
+
+        # Header row (clickable)
+        self.header = ft.GestureDetector(
+            content=ft.Container(
+                content=ft.Row(
+                    [
+                        self._icon,
+                        ft.Container(
+                            BodyText(self.collection_name),
+                            expand=True,
+                        ),
+                        ft.Container(
+                            SecondaryText(str(self.doc_count)),
+                            width=100,
+                        ),
+                    ],
+                    spacing=Theme.Spacing.SM,
+                ),
+                padding=ft.padding.symmetric(
+                    vertical=Theme.Spacing.SM,
+                    horizontal=Theme.Spacing.SM,
+                ),
+            ),
+            on_tap=self._toggle_expand,
+            mouse_cursor=ft.MouseCursor.CLICK,
+        )
+
+        self.content = ft.Column(
+            [
+                self.header,
+                self._loading_indicator,
+                self._files_container,
+            ],
+            spacing=0,
+        )
+
+    def _toggle_expand(self, e: ft.ControlEvent) -> None:
+        """Toggle file list expansion."""
+        self.is_expanded = not self.is_expanded
+
+        # Update icon
+        self._icon.name = (
+            ft.Icons.ARROW_DROP_DOWN if self.is_expanded else ft.Icons.ARROW_RIGHT
+        )
+
+        if self.is_expanded and not self.files_loaded:
+            # Show loading, trigger file load
+            self._loading_indicator.visible = True
+            self.on_load_files(self.collection_name)
+        else:
+            # Just toggle visibility
+            self._files_container.visible = self.is_expanded
+
+        self.update()
+
+    def set_files(self, files: list[dict[str, Any]]) -> None:
+        """Update the files list after loading."""
+        self.files = files
+        self.files_loaded = True
+        self._loading_indicator.visible = False
+
+        if not files:
+            self._files_container.content = ft.Container(
+                content=SecondaryText("No files indexed"),
+                padding=Theme.Spacing.SM,
+            )
+        else:
+            file_rows = [IndexedFileRow(f["source"], f["chunks"]) for f in files]
+            self._files_container.content = ft.Column(
+                file_rows,
+                spacing=0,
+            )
+
+        self._files_container.visible = self.is_expanded
+        self.update()
+
+    def set_error(self, message: str) -> None:
+        """Show error state for file loading."""
+        self.files_loaded = True
+        self._loading_indicator.visible = False
+        self._files_container.content = ft.Container(
+            content=SecondaryText(f"Error: {message}"),
+            padding=Theme.Spacing.SM,
+        )
+        self._files_container.visible = self.is_expanded
+        self.update()
+
+
+class RAGCollectionsTableSection(ft.Container):
+    """Collections table with expandable rows showing file details."""
+
+    def __init__(
+        self,
+        collections: list[dict[str, Any]],
+        page: ft.Page,
+    ) -> None:
         """
         Initialize collections table section.
 
         Args:
             collections: List of collection info dicts with name and count
+            page: Flet page for async operations
         """
         super().__init__()
+
+        self.page = page
+        self._collection_cards: dict[str, CollectionRowCard] = {}
 
         if not collections:
             self.content = ft.Column(
@@ -59,36 +227,32 @@ class RAGCollectionsTableSection(ft.Container):
             # Table header
             header = ft.Row(
                 [
+                    ft.Container(width=24),  # Icon space
                     ft.Container(LabelText("Collection"), expand=True),
                     ft.Container(LabelText("Documents"), width=100),
                 ],
                 spacing=Theme.Spacing.SM,
             )
 
-            # Table rows
-            rows: list[ft.Control] = [header]
+            # Create expandable row cards
+            rows: list[ft.Control] = []
             for collection in collections:
-                row = ft.Row(
-                    [
-                        ft.Container(
-                            BodyText(collection.get("name", "Unknown")),
-                            expand=True,
-                        ),
-                        ft.Container(
-                            BodyText(str(collection.get("count", 0))),
-                            width=100,
-                        ),
-                    ],
-                    spacing=Theme.Spacing.SM,
+                card = CollectionRowCard(
+                    collection=collection,
+                    on_load_files=self._load_files_for_collection,
                 )
-                rows.append(row)
+                self._collection_cards[collection.get("name", "")] = card
+                rows.append(card)
 
             self.content = ft.Column(
                 [
                     H3Text("Collections"),
                     ft.Container(height=Theme.Spacing.SM),
                     ft.Container(
-                        content=ft.Column(rows, spacing=Theme.Spacing.XS),
+                        content=ft.Column(
+                            [header] + rows,
+                            spacing=Theme.Spacing.XS,
+                        ),
                         bgcolor=ft.Colors.SURFACE,
                         border_radius=Theme.Components.CARD_RADIUS,
                         border=ft.border.all(1, ft.Colors.OUTLINE),
@@ -98,6 +262,36 @@ class RAGCollectionsTableSection(ft.Container):
                 spacing=0,
             )
         self.padding = Theme.Spacing.MD
+
+    def _load_files_for_collection(self, collection_name: str) -> None:
+        """Trigger async file loading for a collection."""
+        self.page.run_task(self._fetch_files, collection_name)
+
+    async def _fetch_files(self, collection_name: str) -> None:
+        """Fetch files for a collection from the API."""
+        card = self._collection_cards.get(collection_name)
+        if not card:
+            return
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"http://localhost:{settings.PORT}/api/v1/rag/collections/{collection_name}/files",
+                    timeout=10.0,
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    card.set_files(data.get("files", []))
+                else:
+                    card.set_error(f"API returned {response.status_code}")
+
+        except httpx.TimeoutException:
+            card.set_error("Request timed out")
+        except httpx.ConnectError:
+            card.set_error("Could not connect to API")
+        except Exception as e:
+            card.set_error(str(e))
 
 
 class RAGConfigSection(ft.Container):
@@ -198,6 +392,235 @@ class RAGSettingsSection(ft.Container):
 
         self.content = ft.Column(rows, spacing=Theme.Spacing.SM)
         self.padding = Theme.Spacing.MD
+
+
+class SearchResultCard(ft.Container):
+    """Display a single search result."""
+
+    def __init__(self, result: dict[str, Any], rank: int) -> None:
+        super().__init__()
+
+        content = result.get("content", "")
+        metadata = result.get("metadata", {})
+        score = result.get("score", 0.0)
+        source = metadata.get("source", "Unknown")
+
+        # Truncate content for display
+        max_content_len = 200
+        display_content = (
+            content[:max_content_len] + "..."
+            if len(content) > max_content_len
+            else content
+        )
+
+        # Extract filename from source
+        filename = source.split("/")[-1] if "/" in source else source
+
+        # Score color based on relevance
+        score_pct = int(score * 100)
+        score_color = (
+            Theme.Colors.SUCCESS
+            if score_pct >= 70
+            else Theme.Colors.WARNING
+            if score_pct >= 40
+            else Theme.Colors.ERROR
+        )
+
+        self.content = ft.Container(
+            content=ft.Column(
+                [
+                    # Header: rank, source, score
+                    ft.Row(
+                        [
+                            LabelText(f"#{rank}"),
+                            ft.Container(
+                                SecondaryText(filename, tooltip=source),
+                                expand=True,
+                            ),
+                            Tag(text=f"{score_pct}%", color=score_color),
+                        ],
+                        spacing=Theme.Spacing.SM,
+                    ),
+                    # Content preview
+                    ft.Container(
+                        content=BodyText(display_content),
+                        padding=ft.padding.only(top=Theme.Spacing.XS),
+                    ),
+                ],
+                spacing=Theme.Spacing.XS,
+            ),
+            padding=Theme.Spacing.SM,
+            bgcolor=ft.Colors.SURFACE,
+            border_radius=Theme.Components.CARD_RADIUS,
+            border=ft.border.all(1, ft.Colors.OUTLINE),
+        )
+
+
+class SearchPreviewSection(ft.Container):
+    """Search preview panel for testing semantic search."""
+
+    def __init__(self, collections: list[str], page: ft.Page) -> None:
+        super().__init__()
+
+        self.page = page
+        self.collections = collections
+
+        # Search input
+        self._search_input = ft.TextField(
+            hint_text="Enter search query...",
+            expand=True,
+            border_radius=Theme.Components.INPUT_RADIUS,
+            on_submit=self._on_search_submit,
+        )
+
+        # Collection dropdown
+        self._collection_dropdown = ft.Dropdown(
+            options=[ft.dropdown.Option(c) for c in collections],
+            value=collections[0] if collections else None,
+            width=200,
+            border_radius=Theme.Components.INPUT_RADIUS,
+        )
+
+        # Search button
+        self._search_button = ft.ElevatedButton(
+            text="Search",
+            icon=ft.Icons.SEARCH,
+            on_click=self._on_search_click,
+        )
+
+        # Results container
+        self._results_container = ft.Column(
+            [],
+            spacing=Theme.Spacing.SM,
+        )
+
+        # Status text
+        self._status_text = ft.Container(
+            content=SecondaryText("Enter a query to search"),
+            visible=True,
+        )
+
+        # Loading indicator
+        self._loading = ft.Container(
+            content=ft.Row(
+                [
+                    ft.ProgressRing(width=20, height=20, stroke_width=2),
+                    SecondaryText("Searching..."),
+                ],
+                spacing=Theme.Spacing.SM,
+            ),
+            visible=False,
+        )
+
+        # Build layout
+        search_row = ft.Row(
+            [
+                self._search_input,
+                self._collection_dropdown,
+                self._search_button,
+            ],
+            spacing=Theme.Spacing.SM,
+        )
+
+        self.content = ft.Column(
+            [
+                H3Text("Search Preview"),
+                ft.Container(height=Theme.Spacing.SM),
+                search_row,
+                ft.Container(height=Theme.Spacing.SM),
+                self._loading,
+                self._status_text,
+                self._results_container,
+            ],
+            spacing=0,
+        )
+        self.padding = Theme.Spacing.MD
+
+    def _on_search_submit(self, e: ft.ControlEvent) -> None:
+        """Handle Enter key in search field."""
+        self._do_search()
+
+    def _on_search_click(self, e: ft.ControlEvent) -> None:
+        """Handle search button click."""
+        self._do_search()
+
+    def _do_search(self) -> None:
+        """Trigger the search."""
+        query = self._search_input.value
+        collection = self._collection_dropdown.value
+
+        if not query or not query.strip():
+            self._show_status("Please enter a search query")
+            return
+
+        if not collection:
+            self._show_status("Please select a collection")
+            return
+
+        self.page.run_task(self._execute_search, query.strip(), collection)
+
+    def _show_status(self, message: str) -> None:
+        """Show a status message."""
+        self._status_text.content = SecondaryText(message)
+        self._status_text.visible = True
+        self._results_container.controls = []
+        self.update()
+
+    def _show_loading(self) -> None:
+        """Show loading state."""
+        self._loading.visible = True
+        self._status_text.visible = False
+        self._results_container.controls = []
+        self.update()
+
+    async def _execute_search(self, query: str, collection: str) -> None:
+        """Execute semantic search via API."""
+        self._show_loading()
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"http://localhost:{settings.PORT}/api/v1/rag/search",
+                    json={
+                        "query": query,
+                        "collection_name": collection,
+                        "top_k": 5,
+                    },
+                    timeout=30.0,
+                )
+
+                self._loading.visible = False
+
+                if response.status_code == 200:
+                    data = response.json()
+                    results = data.get("results", [])
+
+                    if not results:
+                        self._show_status("No results found")
+                    else:
+                        self._display_results(results)
+                else:
+                    self._show_status(f"Search failed: {response.status_code}")
+
+        except httpx.TimeoutException:
+            self._loading.visible = False
+            self._show_status("Search timed out")
+        except httpx.ConnectError:
+            self._loading.visible = False
+            self._show_status("Could not connect to API")
+        except Exception as e:
+            self._loading.visible = False
+            self._show_status(f"Error: {str(e)}")
+
+    def _display_results(self, results: list[dict[str, Any]]) -> None:
+        """Display search results."""
+        self._status_text.visible = False
+        result_cards = [
+            SearchResultCard(result, result.get("rank", i + 1))
+            for i, result in enumerate(results)
+        ]
+        self._results_container.controls = result_cards
+        self.update()
 
 
 class RAGTab(ft.Container):
@@ -309,14 +732,33 @@ class RAGTab(ft.Container):
             alignment=ft.MainAxisAlignment.END,
         )
 
-        self._content_column.controls = [
+        # Extract collection names for search dropdown
+        collection_names = [c.get("name", "") for c in collections if c.get("name")]
+
+        sections: list[ft.Control] = [
             refresh_row,
-            RAGCollectionsTableSection(collections),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-            RAGConfigSection(data),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-            RAGSettingsSection(data),
+            RAGCollectionsTableSection(collections, self.page),
         ]
+
+        # Add search preview if there are collections
+        if collection_names:
+            sections.extend(
+                [
+                    ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
+                    SearchPreviewSection(collection_names, self.page),
+                ]
+            )
+
+        sections.extend(
+            [
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
+                RAGConfigSection(data),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
+                RAGSettingsSection(data),
+            ]
+        )
+
+        self._content_column.controls = sections
         self._content_column.scroll = ft.ScrollMode.AUTO
         self._content_column.spacing = 0
         self.update()
