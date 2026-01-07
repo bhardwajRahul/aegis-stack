@@ -93,6 +93,23 @@ class ChatCompleter(Completer):
                     )
             return
 
+        # Complete options after "/sources "
+        if text.startswith("/sources "):
+            arg_part = text[9:]  # After "/sources "
+            options = [
+                ("enable", "Show source references"),
+                ("disable", "Hide source references"),
+            ]
+            for opt, desc in options:
+                if opt.startswith(arg_part.lower()):
+                    yield Completion(
+                        opt,
+                        start_position=-len(arg_part),
+                        display=opt,
+                        display_meta=desc,
+                    )
+            return
+
         # Get the command part being typed (after the /)
         command_part = text[1:].lower()
 
