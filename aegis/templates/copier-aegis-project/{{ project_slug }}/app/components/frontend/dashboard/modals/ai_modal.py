@@ -29,6 +29,15 @@ except ImportError:
     RAGTab = None  # type: ignore[misc, assignment]
     _HAS_RAG = False
 
+# LLM Catalog tab import
+try:
+    from .llm_catalog_tab import LLMCatalogTab
+
+    _HAS_LLM_CATALOG = True
+except ImportError:
+    LLMCatalogTab = None  # type: ignore[misc, assignment]
+    _HAS_LLM_CATALOG = False
+
 
 class OverviewSection(ft.Container):
     """Overview section showing key AI service metrics."""
@@ -302,8 +311,12 @@ class AIDetailDialog(BaseDetailPopup):
         # Build tabs list
         tabs_list = [
             ft.Tab(text="Overview", content=OverviewTab(component_data)),
-            ft.Tab(text="Analytics", content=AIAnalyticsTab(metadata=metadata)),
+            ft.Tab(text="Token Usage", content=AIAnalyticsTab(metadata=metadata)),
         ]
+
+        # Add LLM Catalog tab
+        if _HAS_LLM_CATALOG and LLMCatalogTab is not None:
+            tabs_list.append(ft.Tab(text="Catalog", content=LLMCatalogTab()))
 
         # Add RAG tab only if RAG service is enabled
         if _HAS_RAG and RAGTab is not None:
@@ -318,10 +331,13 @@ class AIDetailDialog(BaseDetailPopup):
         )
 
         # Initialize base popup with tabs (non-scrollable - tabs handle their own scrolling)
+        # Use larger dimensions for AI modal to accommodate multiple tabs
         super().__init__(
             page=page,
             component_data=component_data,
             title_text="AI Service",
             sections=[tabs],
             scrollable=False,
+            width=1100,
+            height=800,
         )

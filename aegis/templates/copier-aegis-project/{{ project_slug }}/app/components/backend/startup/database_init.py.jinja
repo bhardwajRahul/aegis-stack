@@ -17,6 +17,64 @@ from app.models.user import User  # noqa: F401
 {% endif %}
 
 
+def _check_and_fix_stale_revision() -> None:
+    """
+    Detect and fix stale alembic_version entries.
+
+    This handles the case where project is regenerated with -f flag:
+    - Database has old revision ID in alembic_version
+    - New migration files have different revision IDs
+    - Alembic can't find the old revision and fails
+
+    Fix: If revision doesn't exist in scripts, clear alembic_version
+    and stamp to head (tables already exist, just need version sync).
+    """
+    try:
+        from alembic import command
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+        from sqlmodel import text
+
+        from app.core.db import db_session
+
+        alembic_cfg = Config("alembic/alembic.ini")
+        script = ScriptDirectory.from_config(alembic_cfg)
+
+        # Get all known revision IDs from migration files
+        known_revisions = {rev.revision for rev in script.walk_revisions()}
+
+        # Check current database revision
+        with db_session(autocommit=False) as session:
+            try:
+                result = session.exec(
+                    text("SELECT version_num FROM alembic_version")
+                )
+                db_revisions = [row[0] for row in result.fetchall()]
+            except Exception:
+                # Table doesn't exist or other error - let migrations handle it
+                return
+
+        # Check if any DB revision is stale (not in migration files)
+        stale_revisions = [r for r in db_revisions if r not in known_revisions]
+
+        if stale_revisions:
+            logger.warning(
+                f"Detected stale revisions: {stale_revisions}. "
+                "This happens after project regeneration. Auto-recovering..."
+            )
+            # Clear alembic_version and stamp to head
+            with db_session(autocommit=True) as session:
+                session.exec(text("DELETE FROM alembic_version"))
+
+            # Stamp to head (marks DB as up-to-date without running migrations)
+            command.stamp(alembic_cfg, "head")
+            logger.info("Recovery complete: stamped database to head revision")
+
+    except Exception as e:
+        logger.debug(f"Stale revision check skipped: {e}")
+        # Don't fail - let normal migration flow handle errors
+
+
 def _run_migrations() -> bool:
     """
     Run Alembic migrations programmatically.
@@ -25,8 +83,11 @@ def _run_migrations() -> bool:
         True if migrations ran successfully, False otherwise.
     """
     try:
-        from alembic.config import Config
         from alembic import command
+        from alembic.config import Config
+
+        # Check for stale revisions first (handles -f regeneration)
+        _check_and_fix_stale_revision()
 
         alembic_cfg = Config("alembic/alembic.ini")
         command.upgrade(alembic_cfg, "head")
