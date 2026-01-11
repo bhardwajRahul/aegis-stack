@@ -6,6 +6,7 @@ Copier's git-aware update mechanism.
 """
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -360,6 +361,19 @@ def update_command(
         tasks_success = run_post_generation_tasks(
             target_path, include_migrations=include_migrations
         )
+
+        # Update __aegis_version__ directly (Copier doesn't re-render unchanged files)
+        init_file = target_path / "app" / "__init__.py"
+        if init_file.exists():
+            content = init_file.read_text()
+            updated_content = re.sub(
+                r'__aegis_version__\s*=\s*(["\'])[^"\']*\1',
+                f'__aegis_version__ = "{aegis_version}"',
+                content,
+            )
+            if updated_content != content:
+                init_file.write_text(updated_content)
+                typer.echo(f"   Updated __aegis_version__ to {aegis_version}")
 
         # Show update result
         typer.echo("")

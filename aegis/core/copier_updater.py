@@ -480,6 +480,131 @@ def validate_clean_git_tree(project_path: Path) -> tuple[bool, str]:
         return False, f"Error checking git status: {e}"
 
 
+def _format_commits_as_changelog(
+    commits: list[tuple[str, str]], github_url: str
+) -> str:
+    """
+    Format a list of (hash, message) commits as a categorized changelog.
+
+    Args:
+        commits: List of (commit_hash, message) tuples
+        github_url: Base GitHub URL for commit links
+
+    Returns:
+        Formatted changelog string
+    """
+    if not commits:
+        return "No changes"
+
+    features: list[tuple[str, str]] = []
+    fixes: list[tuple[str, str]] = []
+    breaking: list[tuple[str, str]] = []
+    other: list[tuple[str, str]] = []
+
+    for commit_hash, message in commits:
+        message_lower = message.lower()
+        if "breaking:" in message_lower or "breaking change" in message_lower:
+            breaking.append((commit_hash, message))
+        elif message.startswith("feat:") or message.startswith("feature:"):
+            features.append((commit_hash, message))
+        elif message.startswith("fix:"):
+            fixes.append((commit_hash, message))
+        else:
+            other.append((commit_hash, message))
+
+    def format_commit(commit_hash: str, message: str) -> str:
+        """Format commit with GitHub link."""
+        if commit_hash:
+            return f"  • {message} ([{commit_hash}]({github_url}/commit/{commit_hash}))"
+        return f"  • {message}"
+
+    lines = []
+
+    if breaking:
+        lines.append("Breaking Changes:")
+        for commit_hash, message in breaking:
+            lines.append(format_commit(commit_hash, message))
+        lines.append("")
+
+    if features:
+        lines.append("New Features:")
+        for commit_hash, message in features:
+            lines.append(format_commit(commit_hash, message))
+        lines.append("")
+
+    if fixes:
+        lines.append("Bug Fixes:")
+        for commit_hash, message in fixes:
+            lines.append(format_commit(commit_hash, message))
+        lines.append("")
+
+    if other:
+        lines.append("Other Changes:")
+        for commit_hash, message in other:
+            lines.append(format_commit(commit_hash, message))
+
+    return "\n".join(lines).strip()
+
+
+def _get_changelog_from_github(from_ref: str, to_ref: str) -> str:
+    """
+    Fetch changelog from GitHub Compare API when not in a git repo.
+
+    Used when running from installed package (pip/uvx) instead of git checkout.
+
+    Args:
+        from_ref: Starting git reference (commit hash)
+        to_ref: Ending git reference (commit, tag, or "HEAD")
+
+    Returns:
+        Formatted changelog string or error message with fallback link
+    """
+    import json
+    import urllib.request
+    from urllib.parse import urlparse
+
+    github_url = GITHUB_REPO_URL
+
+    # Extract owner/repo from GITHUB_REPO_URL (e.g., "lbedner/aegis-stack")
+    parsed = urlparse(github_url)
+    repo_path = parsed.path.strip("/")  # "lbedner/aegis-stack"
+
+    # Normalize refs (HEAD -> main for API)
+    base = from_ref
+    head = "main" if to_ref == "HEAD" else to_ref
+
+    api_url = f"https://api.github.com/repos/{repo_path}/compare/{base}...{head}"
+
+    try:
+        req = urllib.request.Request(
+            api_url,
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "aegis-stack-cli",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode())
+
+        api_commits = data.get("commits", [])
+        if not api_commits:
+            return "No changes"
+
+        # Extract (hash, message) tuples from API response
+        commits = [
+            (c["sha"][:7], c["commit"]["message"].split("\n")[0]) for c in api_commits
+        ]
+
+        return _format_commits_as_changelog(commits, github_url)
+
+    except Exception as e:
+        # Fallback to compare link
+        return (
+            f"Changelog not available: {e}\n"
+            f"View changes: {github_url}/compare/{from_ref}...main"
+        )
+
+
 def get_changelog(from_ref: str, to_ref: str, template_root: Path | None = None) -> str:
     """
     Get changelog between two git references.
@@ -494,6 +619,10 @@ def get_changelog(from_ref: str, to_ref: str, template_root: Path | None = None)
     """
     if template_root is None:
         template_root = get_template_root()
+
+    # Check if we're in a git repository (not installed package mode)
+    if not (template_root / ".git").exists():
+        return _get_changelog_from_github(from_ref, to_ref)
 
     try:
         # Get commit log between refs (hash|message format for GitHub links)
@@ -515,65 +644,17 @@ def get_changelog(from_ref: str, to_ref: str, template_root: Path | None = None)
         if not result.stdout.strip():
             return "No changes"
 
-        # GitHub repository URL for commit links
-        github_url = GITHUB_REPO_URL
-
-        # Parse commits and categorize
+        # Parse commits from git output
         raw_commits = result.stdout.strip().split("\n")
-        features: list[tuple[str, str]] = []  # (hash, message)
-        fixes: list[tuple[str, str]] = []
-        breaking: list[tuple[str, str]] = []
-        other: list[tuple[str, str]] = []
-
+        commits = []
         for line in raw_commits:
             if "|" in line:
                 commit_hash, message = line.split("|", 1)
             else:
                 commit_hash, message = "", line
+            commits.append((commit_hash, message))
 
-            message_lower = message.lower()
-            if "breaking:" in message_lower or "breaking change" in message_lower:
-                breaking.append((commit_hash, message))
-            elif message.startswith("feat:") or message.startswith("feature:"):
-                features.append((commit_hash, message))
-            elif message.startswith("fix:"):
-                fixes.append((commit_hash, message))
-            else:
-                other.append((commit_hash, message))
-
-        def format_commit(commit_hash: str, message: str) -> str:
-            """Format commit with GitHub link."""
-            if commit_hash:
-                return f"  • {message} ([{commit_hash}]({github_url}/commit/{commit_hash}))"
-            return f"  • {message}"
-
-        # Format changelog
-        lines = []
-
-        if breaking:
-            lines.append("Breaking Changes:")
-            for commit_hash, message in breaking:
-                lines.append(format_commit(commit_hash, message))
-            lines.append("")
-
-        if features:
-            lines.append("New Features:")
-            for commit_hash, message in features:
-                lines.append(format_commit(commit_hash, message))
-            lines.append("")
-
-        if fixes:
-            lines.append("Bug Fixes:")
-            for commit_hash, message in fixes:
-                lines.append(format_commit(commit_hash, message))
-            lines.append("")
-
-        if other:
-            lines.append("Other Changes:")
-            for commit_hash, message in other:
-                lines.append(format_commit(commit_hash, message))
-
-        return "\n".join(lines).strip()
+        return _format_commits_as_changelog(commits, GITHUB_REPO_URL)
 
     except Exception as e:
         return f"Error generating changelog: {e}"
