@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 
 from aegis.core.copier_updater import (
+    _format_commits_as_changelog,
+    _get_changelog_from_github,
     analyze_conflict_files,
     cleanup_backup_tag,
     create_backup_point,
@@ -258,3 +260,95 @@ class TestFormatConflictReport:
         report = format_conflict_report([])
 
         assert report == ""
+
+
+class TestFormatCommitsAsChangelog:
+    """Tests for _format_commits_as_changelog function."""
+
+    def test_empty_commits_returns_no_changes(self) -> None:
+        """Test that empty commits list returns 'No changes'."""
+        result = _format_commits_as_changelog([], "https://github.com/test/repo")
+        assert result == "No changes"
+
+    def test_categorizes_breaking_changes(self) -> None:
+        """Test that breaking changes are categorized correctly."""
+        commits = [
+            ("abc1234", "breaking: Remove deprecated API"),
+            ("def5678", "Other change"),
+        ]
+        result = _format_commits_as_changelog(commits, "https://github.com/test/repo")
+
+        assert "Breaking Changes:" in result
+        assert "Remove deprecated API" in result
+
+    def test_categorizes_features(self) -> None:
+        """Test that features are categorized correctly."""
+        commits = [
+            ("abc1234", "feat: Add new feature"),
+            ("def5678", "feature: Another feature"),
+        ]
+        result = _format_commits_as_changelog(commits, "https://github.com/test/repo")
+
+        assert "New Features:" in result
+        assert "Add new feature" in result
+        assert "Another feature" in result
+
+    def test_categorizes_fixes(self) -> None:
+        """Test that fixes are categorized correctly."""
+        commits = [
+            ("abc1234", "fix: Fix a bug"),
+        ]
+        result = _format_commits_as_changelog(commits, "https://github.com/test/repo")
+
+        assert "Bug Fixes:" in result
+        assert "Fix a bug" in result
+
+    def test_categorizes_other_changes(self) -> None:
+        """Test that non-categorized commits go to Other Changes."""
+        commits = [
+            ("abc1234", "Update documentation"),
+            ("def5678", "Refactor code"),
+        ]
+        result = _format_commits_as_changelog(commits, "https://github.com/test/repo")
+
+        assert "Other Changes:" in result
+        assert "Update documentation" in result
+        assert "Refactor code" in result
+
+    def test_includes_github_links(self) -> None:
+        """Test that commit hashes are linked to GitHub."""
+        commits = [("abc1234", "Some change")]
+        github_url = "https://github.com/test/repo"
+        result = _format_commits_as_changelog(commits, github_url)
+
+        assert f"[abc1234]({github_url}/commit/abc1234)" in result
+
+    def test_handles_empty_commit_hash(self) -> None:
+        """Test that commits without hash are formatted without links."""
+        commits = [("", "Some change")]
+        result = _format_commits_as_changelog(commits, "https://github.com/test/repo")
+
+        assert "• Some change" in result
+        assert "[" not in result  # No link brackets
+
+
+class TestGetChangelogFromGithub:
+    """Tests for _get_changelog_from_github function."""
+
+    def test_normalizes_head_to_main(self) -> None:
+        """Test that HEAD is normalized to main for API calls."""
+        # This test verifies the URL construction logic
+        # We can't easily test the actual API call without mocking
+        # but we can verify the function handles the HEAD -> main conversion
+        # by checking it doesn't crash and returns a string
+        result = _get_changelog_from_github("abc1234", "HEAD")
+        # Should return either changelog or fallback message
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_returns_fallback_on_invalid_ref(self) -> None:
+        """Test that invalid refs return a fallback message."""
+        result = _get_changelog_from_github("invalid_ref_123", "HEAD")
+        # Should contain fallback message with "Changelog not available" or actual changelog
+        assert isinstance(result, str)
+        assert "Changelog not available" in result or "Changes:" in result

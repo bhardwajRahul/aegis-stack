@@ -367,7 +367,7 @@ def update_command(
         if init_file.exists():
             content = init_file.read_text()
             updated_content = re.sub(
-                r'__aegis_version__\s*=\s*["\'][^"\']*["\']',
+                r'__aegis_version__\s*=\s*(["\'])[^"\']*\1',
                 f'__aegis_version__ = "{aegis_version}"',
                 content,
             )

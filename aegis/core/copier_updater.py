@@ -561,16 +561,19 @@ def _get_changelog_from_github(from_ref: str, to_ref: str) -> str:
     """
     import json
     import urllib.request
+    from urllib.parse import urlparse
 
     github_url = GITHUB_REPO_URL
+
+    # Extract owner/repo from GITHUB_REPO_URL (e.g., "lbedner/aegis-stack")
+    parsed = urlparse(github_url)
+    repo_path = parsed.path.strip("/")  # "lbedner/aegis-stack"
 
     # Normalize refs (HEAD -> main for API)
     base = from_ref
     head = "main" if to_ref == "HEAD" else to_ref
 
-    api_url = (
-        f"https://api.github.com/repos/lbedner/aegis-stack/compare/{base}...{head}"
-    )
+    api_url = f"https://api.github.com/repos/{repo_path}/compare/{base}...{head}"
 
     try:
         req = urllib.request.Request(
