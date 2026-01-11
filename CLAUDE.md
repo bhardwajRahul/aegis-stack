@@ -32,7 +32,7 @@ Each generated project includes:
 
 ## Installation
 
-**Current Version**: v0.5.0
+**Current Version**: v0.5.1-rc1
 
 ```bash
 pip install aegis-stack
