@@ -11,6 +11,7 @@ from pathlib import Path
 
 import typer
 
+from .. import __version__ as aegis_version
 from ..constants import AnswerKeys
 from ..core.copier_manager import is_copier_project, load_copier_answers
 from ..core.copier_updater import (
@@ -319,6 +320,7 @@ def update_command(
         # This is critical for Copier's git tracking detection to work correctly
         run_update(
             dst_path=str(target_path),
+            data={"aegis_version": aegis_version},  # Update to current CLI version
             defaults=True,  # Use existing answers as defaults
             overwrite=True,  # Allow overwriting files
             conflict="rej",  # Create .rej files for conflicts
