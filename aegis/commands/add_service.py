@@ -261,7 +261,7 @@ def add_service_command(
 
     # Confirm before proceeding
     typer.echo()
-    if not yes and not typer.confirm("Add these services?"):
+    if not yes and not typer.confirm("Add these services?", default=True):
         typer.secho("Operation cancelled", fg="red")
         raise typer.Exit(0)
 

@@ -251,7 +251,7 @@ def update_command(
     # Confirmation
     if not yes:
         typer.echo("")
-        if not typer.confirm("Apply this update?"):
+        if not typer.confirm("Apply this update?", default=True):
             typer.secho("Update cancelled", fg="red")
             raise typer.Exit(0)
 
@@ -410,7 +410,7 @@ def update_command(
         # Offer rollback if backup exists
         if backup_tag:
             typer.echo("")
-            if yes or typer.confirm("Rollback to previous state?"):
+            if yes or typer.confirm("Rollback to previous state?", default=True):
                 success, message = rollback_to_backup(target_path, backup_tag)
                 if success:
                     typer.secho(message, fg="green")

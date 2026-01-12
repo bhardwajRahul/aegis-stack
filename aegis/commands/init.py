@@ -365,7 +365,7 @@ def init_command(
 
     # Confirm before proceeding
     typer.echo()
-    if not yes and not typer.confirm("Create this project?"):
+    if not yes and not typer.confirm("Create this project?", default=True):
         typer.secho("Project creation cancelled", fg="red")
         raise typer.Exit(0)
 
