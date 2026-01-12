@@ -256,7 +256,7 @@ def add_command(
 
     # Confirm before proceeding
     typer.echo()
-    if not yes and not typer.confirm("Add these components?"):
+    if not yes and not typer.confirm("Add these components?", default=True):
         typer.secho("Operation cancelled", fg="red")
         raise typer.Exit(0)
 

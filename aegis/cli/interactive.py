@@ -165,19 +165,19 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
             if ComponentNames.REDIS in selected:
                 # Redis already selected, simple worker prompt
                 prompt = f"  Add {component_spec.description.lower()}?"
-                if typer.confirm(prompt):
+                if typer.confirm(prompt, default=True):
                     selected.append(ComponentNames.WORKER)
             else:
                 # Redis not selected, offer to add both
                 prompt = (
                     f"  Add {component_spec.description.lower()}? (will auto-add Redis)"
                 )
-                if typer.confirm(prompt):
+                if typer.confirm(prompt, default=True):
                     selected.extend([ComponentNames.REDIS, ComponentNames.WORKER])
         elif component_name == ComponentNames.SCHEDULER:
             # Enhanced scheduler selection with persistence and database options
             prompt = f"  Add {component_spec.description}?"
-            if typer.confirm(prompt):
+            if typer.confirm(prompt, default=True):
                 selected.append(ComponentNames.SCHEDULER)
 
                 # Follow-up: persistence question
@@ -186,7 +186,7 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
                     "  Do you want to persist scheduled jobs? "
                     "(Enables job history, recovery after restarts)"
                 )
-                if typer.confirm(persistence_prompt):
+                if typer.confirm(persistence_prompt, default=True):
                     # Database engine selection with arrow keys
                     database_engine = select_database_engine(context="Scheduler")
 
@@ -219,7 +219,7 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
 
             # Standard database prompt (when not added by scheduler)
             prompt = f"  Add {component_spec.description}?"
-            if typer.confirm(prompt):
+            if typer.confirm(prompt, default=True):
                 selected.append(ComponentNames.DATABASE)
 
                 # Show bonus backup job message when database added with scheduler
@@ -232,7 +232,7 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
         else:
             # Standard prompt for other components
             prompt = f"  Add {component_spec.description}?"
-            if typer.confirm(prompt):
+            if typer.confirm(prompt, default=True):
                 selected.append(component_name)
 
     # Update selected list with engine info for display
@@ -267,7 +267,7 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
             typer.echo("Authentication Services:")
             for service_name, service_spec in auth_services.items():
                 prompt = f"  Add {service_spec.description.lower()}?"
-                if typer.confirm(prompt):
+                if typer.confirm(prompt, default=True):
                     # Auth service requires database - provide explicit confirmation
                     typer.echo("\nDatabase Required:")
                     typer.echo("  Authentication requires a database for user storage")
@@ -299,7 +299,7 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
             typer.echo("\nAI & Machine Learning Services:")
             for service_name, service_spec in ai_services.items():
                 prompt = f"  Add {service_spec.description.lower()}?"
-                if typer.confirm(prompt):
+                if typer.confirm(prompt, default=True):
                     # AI service requires backend (always available) - no dependency issues
                     # Use the reusable AI configuration function
                     backend, framework, providers, rag_enabled = (
@@ -498,13 +498,11 @@ def interactive_ai_service_config(
     # Framework selection
     typer.echo("\nAI Framework Selection:")
     typer.echo("  Choose your AI framework:")
-    typer.echo("    1. PydanticAI - Type-safe, Pythonic AI framework (default)")
+    typer.echo("    1. PydanticAI - Type-safe, Pythonic AI framework (recommended)")
     typer.echo("    2. LangChain - Popular framework with extensive integrations")
 
-    use_langchain = typer.confirm(
-        "  Use LangChain instead of PydanticAI?", default=False
-    )
-    framework = AIFrameworks.LANGCHAIN if use_langchain else AIFrameworks.PYDANTIC_AI
+    use_pydanticai = typer.confirm("  Use PydanticAI? (recommended)", default=True)
+    framework = AIFrameworks.PYDANTIC_AI if use_pydanticai else AIFrameworks.LANGCHAIN
     _ai_framework_selection[service_name] = framework
     typer.secho(f"  Selected framework: {framework}", fg="green")
 
@@ -512,7 +510,7 @@ def interactive_ai_service_config(
     typer.echo("\nLLM Usage Tracking:")
     enable_tracking = typer.confirm(
         "  Enable usage tracking? (token counts, costs, conversation history)",
-        default=False,
+        default=True,
     )
 
     if enable_tracking:
@@ -558,7 +556,7 @@ def interactive_ai_service_config(
         recommend_text = " (Recommended)" if recommended else ""
         if typer.confirm(
             f"    ☐ {name} - {description} ({pricing}){recommend_text}?",
-            default=recommended,
+            default=True,
         ):
             providers.append(provider_id)
 
@@ -587,12 +585,12 @@ def interactive_ai_service_config(
         typer.echo("  Enabling RAG will generate a project requiring Python 3.11-3.13")
         rag_enabled = typer.confirm(
             "  Enable RAG despite Python 3.14 incompatibility?",
-            default=False,
+            default=True,
         )
     else:
         rag_enabled = typer.confirm(
             "  Enable RAG for document indexing and semantic search?",
-            default=False,
+            default=True,
         )
     _ai_rag_selection[service_name] = rag_enabled
     if rag_enabled:
@@ -669,19 +667,19 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
             ):
                 # Redis already available
                 prompt = f"  Add {component_spec.description.lower()}?"
-                if typer.confirm(prompt):
+                if typer.confirm(prompt, default=True):
                     selected.append(ComponentNames.WORKER)
             else:
                 # Need to add redis too
                 prompt = (
                     f"  Add {component_spec.description.lower()}? (will auto-add Redis)"
                 )
-                if typer.confirm(prompt):
+                if typer.confirm(prompt, default=True):
                     selected.extend([ComponentNames.REDIS, ComponentNames.WORKER])
 
         elif component_name == ComponentNames.SCHEDULER:
             prompt = f"  Add {component_spec.description}?"
-            if typer.confirm(prompt):
+            if typer.confirm(prompt, default=True):
                 selected.append(ComponentNames.SCHEDULER)
 
                 # Check if database is available or will be added
@@ -693,7 +691,9 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
                 if database_available:
                     # Database already available - offer persistence
                     typer.echo("\nScheduler Persistence:")
-                    if typer.confirm("  Enable job persistence with SQLite?"):
+                    if typer.confirm(
+                        "  Enable job persistence with SQLite?", default=True
+                    ):
                         scheduler_backend = StorageBackends.SQLITE
                         typer.secho(
                             "  Scheduler will use SQLite for job persistence",
@@ -707,7 +707,9 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
                     # Ask if they plan to add database
                     typer.echo("\nScheduler Persistence:")
                     typer.echo("  Job persistence requires SQLite database component")
-                    if typer.confirm("  Add database component for job persistence?"):
+                    if typer.confirm(
+                        "  Add database component for job persistence?", default=True
+                    ):
                         selected.append(ComponentNames.DATABASE)
                         scheduler_backend = StorageBackends.SQLITE
                         typer.secho(
@@ -723,13 +725,13 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
             # Only offer if not already added by worker
             if ComponentNames.REDIS not in selected:
                 prompt = f"  Add {component_spec.description}?"
-                if typer.confirm(prompt):
+                if typer.confirm(prompt, default=True):
                     selected.append(ComponentNames.REDIS)
 
         else:
             # Standard prompt for other components
             prompt = f"  Add {component_spec.description}?"
-            if typer.confirm(prompt):
+            if typer.confirm(prompt, default=True):
                 selected.append(component_name)
 
     return selected, scheduler_backend
@@ -867,7 +869,7 @@ def interactive_service_selection(project_path: Path) -> list[str]:
                 requirement_text = ""
 
             prompt = f"  Add {service_spec.description.lower()}{requirement_text}?"
-            if typer.confirm(prompt):
+            if typer.confirm(prompt, default=True):
                 selected_services.append(service_name)
 
                 if missing_components:
@@ -898,7 +900,7 @@ def interactive_service_selection(project_path: Path) -> list[str]:
                 requirement_text = ""
 
             prompt = f"  Add {service_spec.description.lower()}{requirement_text}?"
-            if typer.confirm(prompt):
+            if typer.confirm(prompt, default=True):
                 selected_services.append(service_name)
 
                 if missing_components:
@@ -928,7 +930,7 @@ def interactive_service_selection(project_path: Path) -> list[str]:
             )
 
             prompt = f"  Add {service_spec.description.lower()}{requirement_text}?"
-            if typer.confirm(prompt):
+            if typer.confirm(prompt, default=True):
                 selected_services.append(service_name)
 
                 if missing_components:
