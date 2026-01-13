@@ -119,6 +119,15 @@ Template files are the source of truth. Any changes you want to persist across f
 
 **Remember**: Generated projects are for validation/prototyping. Templates are what ships.
 
+### Important: Template Changes Require Git Commit
+
+**Copier uses `git+file://` in development mode**, which means it reads templates from the **committed git state**, not the working tree. After modifying template files:
+
+1. **Ask the user to commit** the template changes (Claude should NOT commit per the git policy above)
+2. Then regenerate test projects to verify the changes
+
+Without committing, `aegis init` will use the old template content even though the files appear modified locally.
+
 ## Design Principles
 
 ### Core Philosophy
