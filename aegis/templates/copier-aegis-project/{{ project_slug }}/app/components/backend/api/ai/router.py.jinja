@@ -78,7 +78,8 @@ class RecentActivity(BaseModel):
 
     timestamp: str
     model: str
-    tokens: int
+    input_tokens: int
+    output_tokens: int
     cost: float
     success: bool
     action: str

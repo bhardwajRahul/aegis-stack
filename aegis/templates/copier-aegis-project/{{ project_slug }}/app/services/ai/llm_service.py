@@ -129,6 +129,11 @@ async def list_models(
         if not include_disabled:
             stmt = stmt.where(LargeLanguageModel.enabled == True)  # noqa: E712
 
+        # Sort by release date (newest first), nulls last
+        stmt = stmt.order_by(
+            LargeLanguageModel.released_on.desc().nulls_last(),
+            LargeLanguageModel.model_id,
+        )
         stmt = stmt.limit(limit)
 
         result = await session.exec(stmt)

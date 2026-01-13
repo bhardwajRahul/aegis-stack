@@ -13,14 +13,14 @@ import httpx
 from app.components.frontend.controls import (
     BodyText,
     H3Text,
-    LabelText,
     SecondaryText,
     Tag,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.components.frontend.theme import DarkColorPalette
 from app.core.config import settings
 
-from .modal_sections import EmptyStatePlaceholder
+from .modal_sections import EmptyStatePlaceholder, MetricCard
 
 
 def _format_timestamp(timestamp: str | None) -> str:
@@ -86,7 +86,9 @@ class CollectionRowCard(ft.Container):
         self.files: list[dict[str, Any]] = []
 
         # Expand/collapse icon
-        self._icon = ft.Icon(ft.Icons.ARROW_RIGHT, size=16)
+        self._icon = ft.Icon(
+            ft.Icons.ARROW_RIGHT, size=16, color=DarkColorPalette.ACCENT
+        )
 
         # Loading indicator for files
         self._loading_indicator = ft.Container(
@@ -98,13 +100,13 @@ class CollectionRowCard(ft.Container):
                 spacing=Theme.Spacing.SM,
             ),
             visible=False,
-            padding=ft.padding.only(left=Theme.Spacing.LG),
+            padding=ft.padding.only(left=40, top=Theme.Spacing.SM),
         )
 
         # Files container (populated when expanded)
         self._files_container = ft.Container(
             visible=False,
-            padding=ft.padding.only(left=Theme.Spacing.LG, top=Theme.Spacing.SM),
+            padding=ft.padding.only(left=40, top=Theme.Spacing.SM),
         )
 
         # Header row (clickable)
@@ -112,21 +114,27 @@ class CollectionRowCard(ft.Container):
             content=ft.Container(
                 content=ft.Row(
                     [
-                        self._icon,
+                        ft.Container(self._icon, width=24),
                         ft.Container(
-                            BodyText(self.collection_name),
+                            ft.Text(
+                                self.collection_name,
+                                size=13,
+                                weight=ft.FontWeight.W_500,
+                            ),
                             expand=True,
                         ),
                         ft.Container(
-                            SecondaryText(str(self.doc_count)),
+                            SecondaryText(str(self.doc_count), size=13),
                             width=100,
+                            alignment=ft.alignment.center_right,
                         ),
                     ],
-                    spacing=Theme.Spacing.SM,
+                    spacing=Theme.Spacing.MD,
                 ),
-                padding=ft.padding.symmetric(
-                    vertical=Theme.Spacing.SM,
-                    horizontal=Theme.Spacing.SM,
+                bgcolor=DarkColorPalette.BG_PRIMARY,
+                padding=ft.padding.symmetric(horizontal=Theme.Spacing.MD, vertical=10),
+                border=ft.border.only(
+                    bottom=ft.BorderSide(1, DarkColorPalette.BORDER_PRIMARY)
                 ),
             ),
             on_tap=self._toggle_expand,
@@ -174,9 +182,10 @@ class CollectionRowCard(ft.Container):
             )
         else:
             file_rows = [IndexedFileRow(f["source"], f["chunks"]) for f in files]
-            self._files_container.content = ft.Column(
-                file_rows,
+            self._files_container.content = ft.ListView(
+                controls=file_rows,
                 spacing=0,
+                height=200,
             )
 
         self._files_container.visible = self.is_expanded
@@ -224,14 +233,24 @@ class RAGCollectionsTableSection(ft.Container):
                 spacing=0,
             )
         else:
-            # Table header
-            header = ft.Row(
-                [
-                    ft.Container(width=24),  # Icon space
-                    ft.Container(LabelText("Collection"), expand=True),
-                    ft.Container(LabelText("Documents"), width=100),
-                ],
-                spacing=Theme.Spacing.SM,
+            # Table header with muted text
+            header = ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Container(width=24),  # Icon space
+                        ft.Container(SecondaryText("Collection", size=12), expand=True),
+                        ft.Container(
+                            SecondaryText("Documents", size=12),
+                            width=100,
+                            alignment=ft.alignment.center_right,
+                        ),
+                    ],
+                    spacing=Theme.Spacing.MD,
+                ),
+                padding=ft.padding.symmetric(horizontal=Theme.Spacing.MD, vertical=12),
+                border=ft.border.only(
+                    bottom=ft.BorderSide(1, DarkColorPalette.BORDER_PRIMARY)
+                ),
             )
 
             # Create expandable row cards
@@ -244,20 +263,19 @@ class RAGCollectionsTableSection(ft.Container):
                 self._collection_cards[collection.get("name", "")] = card
                 rows.append(card)
 
+            # Table container with dark background
+            table = ft.Container(
+                content=ft.Column([header, *rows], spacing=0),
+                bgcolor=DarkColorPalette.BG_SECONDARY,
+                border_radius=Theme.Components.CARD_RADIUS,
+                border=ft.border.all(1, DarkColorPalette.BORDER_PRIMARY),
+            )
+
             self.content = ft.Column(
                 [
                     H3Text("Collections"),
                     ft.Container(height=Theme.Spacing.SM),
-                    ft.Container(
-                        content=ft.Column(
-                            [header] + rows,
-                            spacing=Theme.Spacing.XS,
-                        ),
-                        bgcolor=ft.Colors.SURFACE,
-                        border_radius=Theme.Components.CARD_RADIUS,
-                        border=ft.border.all(1, ft.Colors.OUTLINE),
-                        padding=Theme.Spacing.MD,
-                    ),
+                    table,
                 ],
                 spacing=0,
             )
@@ -294,6 +312,33 @@ class RAGCollectionsTableSection(ft.Container):
             card.set_error(str(e))
 
 
+class RAGStatsSection(ft.Container):
+    """Stats section showing RAG chunking and search parameters as metric cards."""
+
+    def __init__(self, data: dict[str, Any]) -> None:
+        """
+        Initialize stats section.
+
+        Args:
+            data: RAG health data from API
+        """
+        super().__init__()
+
+        chunk_size = data.get("chunk_size", 0)
+        chunk_overlap = data.get("chunk_overlap", 0)
+        default_top_k = data.get("default_top_k", 0)
+
+        self.content = ft.Row(
+            [
+                MetricCard("Chunk Size", str(chunk_size), Theme.Colors.PRIMARY),
+                MetricCard("Chunk Overlap", str(chunk_overlap), Theme.Colors.INFO),
+                MetricCard("Default Top K", str(default_top_k), Theme.Colors.SUCCESS),
+            ],
+            spacing=Theme.Spacing.MD,
+        )
+        self.padding = Theme.Spacing.MD
+
+
 class RAGConfigSection(ft.Container):
     """Configuration section showing RAG service settings."""
 
@@ -306,65 +351,13 @@ class RAGConfigSection(ft.Container):
         """
         super().__init__()
 
-        enabled = data.get("enabled", False)
-        status = data.get("status", "unknown")
         embedding_provider = data.get("embedding_provider", "Unknown")
         embedding_model = data.get("embedding_model", "Unknown")
-
-        # Status color
-        status_color = (
-            Theme.Colors.SUCCESS if status == "healthy" else Theme.Colors.ERROR
-        )
-
-        def config_row(label: str, value: str | ft.Control) -> ft.Row:
-            """Create a configuration row with label and value."""
-            value_control = value if isinstance(value, ft.Control) else BodyText(value)
-            return ft.Row(
-                [
-                    SecondaryText(
-                        f"{label}:",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        width=150,
-                    ),
-                    value_control,
-                ],
-                spacing=Theme.Spacing.MD,
-            )
-
-        self.content = ft.Column(
-            [
-                H3Text("Configuration"),
-                ft.Container(height=Theme.Spacing.SM),
-                config_row("Status", Tag(text=status.upper(), color=status_color)),
-                config_row("Enabled", "Yes" if enabled else "No"),
-                config_row("Provider", embedding_provider),
-                config_row("Model", embedding_model),
-            ],
-            spacing=Theme.Spacing.SM,
-        )
-        self.padding = Theme.Spacing.MD
-
-
-class RAGSettingsSection(ft.Container):
-    """Settings section showing RAG chunking and search parameters."""
-
-    def __init__(self, data: dict[str, Any]) -> None:
-        """
-        Initialize settings section.
-
-        Args:
-            data: RAG health data from API
-        """
-        super().__init__()
-
-        chunk_size = data.get("chunk_size", "Unknown")
-        chunk_overlap = data.get("chunk_overlap", "Unknown")
-        default_top_k = data.get("default_top_k", "Unknown")
-        persist_directory = data.get("persist_directory", "Unknown")
+        vectorstore_uri = data.get("persist_directory", "Unknown")
         last_activity = data.get("last_activity")
 
-        def setting_row(label: str, value: str) -> ft.Row:
-            """Create a setting row with label and value."""
+        def config_row(label: str, value: str) -> ft.Row:
+            """Create a configuration row with label and value."""
             return ft.Row(
                 [
                     SecondaryText(
@@ -372,25 +365,21 @@ class RAGSettingsSection(ft.Container):
                         weight=Theme.Typography.WEIGHT_SEMIBOLD,
                         width=150,
                     ),
-                    BodyText(str(value)),
+                    BodyText(value),
                 ],
                 spacing=Theme.Spacing.MD,
             )
 
         rows = [
-            H3Text("Settings"),
-            ft.Container(height=Theme.Spacing.SM),
-            setting_row("Chunk Size", str(chunk_size)),
-            setting_row("Chunk Overlap", str(chunk_overlap)),
-            setting_row("Default Top K", str(default_top_k)),
-            setting_row("Persist Directory", str(persist_directory)),
+            config_row("Provider", embedding_provider),
+            config_row("Embedding Model", embedding_model),
+            config_row("Vectorstore URI", str(vectorstore_uri)),
         ]
 
-        # Only show last activity if there is activity
         if last_activity:
-            rows.append(setting_row("Last Activity", _format_timestamp(last_activity)))
+            rows.append(config_row("Last Activity", _format_timestamp(last_activity)))
 
-        self.content = ft.Column(rows, spacing=Theme.Spacing.SM)
+        self.content = ft.Column(rows, spacing=Theme.Spacing.XS)
         self.padding = Theme.Spacing.MD
 
 
@@ -405,8 +394,15 @@ class SearchResultCard(ft.Container):
         score = result.get("score", 0.0)
         source = metadata.get("source", "Unknown")
 
+        # Extract chunk metadata
+        chunk_index = metadata.get("chunk_index", 0)
+        total_chunks = metadata.get("total_chunks", 1)
+        chunk_size = metadata.get("chunk_size", len(content))
+        start_line = metadata.get("start_line")
+        end_line = metadata.get("end_line")
+
         # Truncate content for display
-        max_content_len = 200
+        max_content_len = 150
         display_content = (
             content[:max_content_len] + "..."
             if len(content) > max_content_len
@@ -426,34 +422,51 @@ class SearchResultCard(ft.Container):
             else Theme.Colors.ERROR
         )
 
-        self.content = ft.Container(
-            content=ft.Column(
-                [
-                    # Header: rank, source, score
-                    ft.Row(
-                        [
-                            LabelText(f"#{rank}"),
-                            ft.Container(
-                                SecondaryText(filename, tooltip=source),
-                                expand=True,
-                            ),
-                            Tag(text=f"{score_pct}%", color=score_color),
-                        ],
-                        spacing=Theme.Spacing.SM,
-                    ),
-                    # Content preview
-                    ft.Container(
-                        content=BodyText(display_content),
-                        padding=ft.padding.only(top=Theme.Spacing.XS),
-                    ),
-                ],
-                spacing=Theme.Spacing.XS,
+        # Build info items for header
+        info_items: list[ft.Control] = [
+            ft.Text(f"#{rank}", size=12, weight=ft.FontWeight.W_600),
+            ft.Container(
+                SecondaryText(filename, tooltip=source, size=12),
+                expand=True,
+            ),
+        ]
+
+        # Add chunk position (e.g., "2/5")
+        info_items.append(SecondaryText(f"{chunk_index + 1}/{total_chunks}", size=10))
+
+        # Add line range if available
+        if start_line and end_line:
+            info_items.append(SecondaryText(f"L{start_line}-{end_line}", size=10))
+
+        # Add chunk size
+        info_items.append(SecondaryText(f"{chunk_size} chars", size=10))
+
+        # Add score tag
+        info_items.append(Tag(text=f"{score_pct}%", color=score_color))
+
+        # Header row with table-like styling
+        header = ft.Container(
+            content=ft.Row(info_items, spacing=Theme.Spacing.SM),
+            bgcolor=DarkColorPalette.BG_PRIMARY,
+            padding=ft.padding.symmetric(horizontal=Theme.Spacing.SM, vertical=8),
+            border=ft.border.only(
+                bottom=ft.BorderSide(1, DarkColorPalette.BORDER_PRIMARY)
+            ),
+        )
+
+        # Content preview with smaller text
+        content_section = ft.Container(
+            content=ft.Text(
+                display_content, size=11, color=ft.Colors.ON_SURFACE_VARIANT
             ),
             padding=Theme.Spacing.SM,
-            bgcolor=ft.Colors.SURFACE,
-            border_radius=Theme.Components.CARD_RADIUS,
-            border=ft.border.all(1, ft.Colors.OUTLINE),
         )
+
+        self.content = ft.Column([header, content_section], spacing=0)
+        self.bgcolor = DarkColorPalette.BG_SECONDARY
+        self.border_radius = Theme.Components.CARD_RADIUS
+        self.border = ft.border.all(1, DarkColorPalette.BORDER_PRIMARY)
+        self.expand = True
 
 
 class SearchPreviewSection(ft.Container):
@@ -470,21 +483,37 @@ class SearchPreviewSection(ft.Container):
             hint_text="Enter search query...",
             expand=True,
             border_radius=Theme.Components.INPUT_RADIUS,
+            bgcolor=DarkColorPalette.BG_PRIMARY,
+            border_color=DarkColorPalette.BORDER_PRIMARY,
+            focused_border_color=DarkColorPalette.ACCENT,
+            cursor_color=DarkColorPalette.ACCENT,
+            text_size=13,
             on_submit=self._on_search_submit,
         )
 
         # Collection dropdown
         self._collection_dropdown = ft.Dropdown(
+            label="Collection",
             options=[ft.dropdown.Option(c) for c in collections],
             value=collections[0] if collections else None,
             width=200,
             border_radius=Theme.Components.INPUT_RADIUS,
+            bgcolor=DarkColorPalette.BG_PRIMARY,
+            border_color=DarkColorPalette.BORDER_PRIMARY,
+            focused_border_color=DarkColorPalette.ACCENT,
+            text_size=13,
         )
 
         # Search button
-        self._search_button = ft.ElevatedButton(
+        self._search_button = ft.OutlinedButton(
             text="Search",
             icon=ft.Icons.SEARCH,
+            icon_color=ft.Colors.ON_SURFACE_VARIANT,
+            style=ft.ButtonStyle(
+                color=ft.Colors.ON_SURFACE_VARIANT,
+                side=ft.BorderSide(1, ft.Colors.ON_SURFACE_VARIANT),
+                shape=ft.RoundedRectangleBorder(radius=Theme.Components.INPUT_RADIUS),
+            ),
             on_click=self._on_search_click,
         )
 
@@ -613,13 +642,21 @@ class SearchPreviewSection(ft.Container):
             self._show_status(f"Error: {str(e)}")
 
     def _display_results(self, results: list[dict[str, Any]]) -> None:
-        """Display search results."""
+        """Display search results in 2-column grid."""
         self._status_text.visible = False
-        result_cards = [
+
+        # Create cards and arrange in rows of 2
+        cards = [
             SearchResultCard(result, result.get("rank", i + 1))
             for i, result in enumerate(results)
         ]
-        self._results_container.controls = result_cards
+
+        rows: list[ft.Control] = []
+        for i in range(0, len(cards), 2):
+            row_cards = cards[i : i + 2]
+            rows.append(ft.Row(row_cards, spacing=Theme.Spacing.MD))
+
+        self._results_container.controls = rows
         self.update()
 
 
@@ -724,7 +761,7 @@ class RAGTab(ft.Container):
                 ft.Container(expand=True),  # Spacer
                 ft.IconButton(
                     icon=ft.Icons.REFRESH,
-                    icon_color=Theme.Colors.PRIMARY,
+                    icon_color=ft.Colors.ON_SURFACE_VARIANT,
                     tooltip="Refresh RAG status",
                     on_click=self._on_refresh_click,
                 ),
@@ -737,26 +774,14 @@ class RAGTab(ft.Container):
 
         sections: list[ft.Control] = [
             refresh_row,
+            RAGStatsSection(data),
+            RAGConfigSection(data),
             RAGCollectionsTableSection(collections, self.page),
         ]
 
         # Add search preview if there are collections
         if collection_names:
-            sections.extend(
-                [
-                    ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-                    SearchPreviewSection(collection_names, self.page),
-                ]
-            )
-
-        sections.extend(
-            [
-                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-                RAGConfigSection(data),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-                RAGSettingsSection(data),
-            ]
-        )
+            sections.append(SearchPreviewSection(collection_names, self.page))
 
         self._content_column.controls = sections
         self._content_column.scroll = ft.ScrollMode.AUTO

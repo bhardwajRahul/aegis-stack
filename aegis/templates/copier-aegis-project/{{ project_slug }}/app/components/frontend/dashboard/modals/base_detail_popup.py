@@ -88,13 +88,20 @@ class BaseDetailPopup(BasePopup):
             controls=[
                 # Title with status badge
                 self._create_title(),
-                ft.Divider(height=1),
                 # Sections (scrollable or not based on parameter)
                 sections_container,
                 # Actions
                 ft.Container(
                     content=ft.Row(
-                        [ft.TextButton("Close", on_click=self._handle_close_click)],
+                        [
+                            ft.TextButton(
+                                "Close",
+                                on_click=self._handle_close_click,
+                                style=ft.ButtonStyle(
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                            )
+                        ],
                         alignment=ft.MainAxisAlignment.END,
                     ),
                     padding=ft.padding.only(top=10),

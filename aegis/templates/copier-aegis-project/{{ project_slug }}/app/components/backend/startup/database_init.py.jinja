@@ -17,6 +17,62 @@ from app.models.user import User  # noqa: F401
 {% endif %}
 
 
+def _check_and_stamp_existing_tables() -> None:
+    """
+    Detect when tables for a pending migration already exist.
+
+    This handles the case where:
+    - Project regenerated with -f flag
+    - Docker volume persisted with old tables
+    - alembic_version is valid but behind (e.g., at 001 when 002 tables exist)
+
+    Fix: If signature table for a migration exists, stamp it as complete.
+    """
+    try:
+        from alembic import command
+        from alembic.config import Config
+        from alembic.runtime.migration import MigrationContext
+        from alembic.script import ScriptDirectory
+        from sqlalchemy import inspect
+
+        from app.core.db import db_session
+
+        alembic_cfg = Config("alembic/alembic.ini")
+        script = ScriptDirectory.from_config(alembic_cfg)
+
+        # Get existing tables and current revision
+        with db_session(autocommit=False) as session:
+            inspector = inspect(session.connection())
+            existing_tables = set(inspector.get_table_names())
+
+            context = MigrationContext.configure(session.connection())
+            current_rev = context.get_current_revision()
+
+        # Signature table for each migration (first table created by that migration)
+        signature_tables = {
+            "001": "user",        # auth migration
+            "002": "llm_vendor",  # ai migration
+        }
+
+        # Walk revisions and stamp any with pre-existing tables
+        for rev in script.walk_revisions():
+            # Skip if already applied
+            if current_rev and rev.revision <= current_rev:
+                continue
+
+            sig_table = signature_tables.get(rev.revision)
+            if sig_table and sig_table in existing_tables:
+                logger.warning(
+                    f"Migration {rev.revision} tables already exist. "
+                    "Stamping as complete (Docker volume likely persisted)..."
+                )
+                command.stamp(alembic_cfg, rev.revision)
+                logger.info(f"Stamped migration {rev.revision}")
+
+    except Exception as e:
+        logger.debug(f"Existing tables check skipped: {e}")
+
+
 def _check_and_fix_stale_revision() -> None:
     """
     Detect and fix stale alembic_version entries.
@@ -88,6 +144,9 @@ def _run_migrations() -> bool:
 
         # Check for stale revisions first (handles -f regeneration)
         _check_and_fix_stale_revision()
+
+        # Check for pre-existing tables (handles persisted Docker volumes)
+        _check_and_stamp_existing_tables()
 
         alembic_cfg = Config("alembic/alembic.ini")
         command.upgrade(alembic_cfg, "head")

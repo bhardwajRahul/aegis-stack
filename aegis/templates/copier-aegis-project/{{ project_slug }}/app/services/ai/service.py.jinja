@@ -1438,16 +1438,12 @@ class AIService:
         stmt = (
             select(
                 LLMUsage.timestamp,
-                func.coalesce(
-                    LargeLanguageModel.title, LLMUsage.model_id
-                ).label("model"),
-                (LLMUsage.input_tokens + LLMUsage.output_tokens).label("tokens"),
+                LLMUsage.model_id,
+                LLMUsage.input_tokens,
+                LLMUsage.output_tokens,
                 LLMUsage.total_cost,
                 LLMUsage.success,
                 LLMUsage.action,
-            )
-            .outerjoin(
-                LargeLanguageModel, LLMUsage.model_id == LargeLanguageModel.model_id
             )
             .order_by(LLMUsage.timestamp.desc())
             .limit(limit)
@@ -1459,8 +1455,9 @@ class AIService:
         return [
             {
                 "timestamp": r.timestamp.isoformat(),
-                "model": r.model,
-                "tokens": r.tokens,
+                "model": r.model_id,
+                "input_tokens": r.input_tokens,
+                "output_tokens": r.output_tokens,
                 "cost": float(r.total_cost),
                 "success": r.success,
                 "action": r.action,

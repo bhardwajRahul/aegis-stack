@@ -1,30 +1,48 @@
 """
 LLM Catalog Tab Component
 
-Displays LLM catalog information including model stats, vendor breakdown,
-and searchable model list.
+Displays LLM catalog information including model stats, featured models
+from Big 3 vendors, and searchable model list.
 """
 
 import asyncio
+import re
 from typing import Any
 
 import flet as ft
 import httpx
 from app.components.frontend.controls import (
-    BodyText,
     H3Text,
-    LabelText,
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.components.frontend.theme import DarkColorPalette
 from app.core.config import settings
 from app.core.formatting import format_number
 
-from .modal_sections import EmptyStatePlaceholder, MetricCard
+from .modal_sections import EmptyStatePlaceholder, MetricCard, SectionHeader
+
+# Featured vendors (2 per row)
+# Note: These must match vendor names from OpenRouter exactly
+FEATURED_VENDORS = ["openai", "anthropic", "google", "xai", "deepseek", "groq"]
+MODELS_PER_VENDOR = 5
+
+# Pattern to extract YYYYMMDD dates from model IDs
+_DATE_PATTERN = re.compile(r"(\d{8})(?:\D|$)")
+
+# Vendor display names and colors
+VENDOR_DISPLAY = {
+    "openai": {"name": "OpenAI", "color": "#10A37F"},
+    "anthropic": {"name": "Anthropic", "color": "#D4A574"},
+    "google": {"name": "Google", "color": "#4285F4"},
+    "xai": {"name": "Grok", "color": "#1DA1F2"},
+    "deepseek": {"name": "DeepSeek", "color": "#5B6EE1"},
+    "groq": {"name": "Groq", "color": "#F55036"},
+}
 
 
 class CatalogStatsSection(ft.Container):
-    """Hero stats section showing catalog overview metrics."""
+    """Stats section showing catalog overview metrics."""
 
     def __init__(self, stats: dict[str, Any]) -> None:
         super().__init__()
@@ -34,90 +52,226 @@ class CatalogStatsSection(ft.Container):
         deployment_count = stats.get("deployment_count", 0)
         price_count = stats.get("price_count", 0)
 
-        self.content = ft.Column(
+        self.content = ft.Row(
             [
-                H3Text("Catalog Overview"),
-                ft.Container(height=Theme.Spacing.SM),
-                ft.Row(
-                    [
-                        MetricCard("Vendors", str(vendor_count), Theme.Colors.PRIMARY),
-                        MetricCard(
-                            "Models", format_number(model_count), ft.Colors.PURPLE
-                        ),
-                        MetricCard(
-                            "Deployments",
-                            format_number(deployment_count),
-                            ft.Colors.CYAN,
-                        ),
-                        MetricCard(
-                            "Prices", format_number(price_count), Theme.Colors.SUCCESS
-                        ),
-                    ],
-                    spacing=Theme.Spacing.MD,
+                MetricCard("Vendors", str(vendor_count), Theme.Colors.PRIMARY),
+                MetricCard("Models", format_number(model_count), ft.Colors.PURPLE),
+                MetricCard(
+                    "Deployments", format_number(deployment_count), ft.Colors.CYAN
                 ),
+                MetricCard("Prices", format_number(price_count), Theme.Colors.SUCCESS),
             ],
-            spacing=0,
+            spacing=Theme.Spacing.MD,
         )
         self.padding = Theme.Spacing.MD
 
 
-class VendorsSection(ft.Container):
-    """Vendors table with model counts."""
+def _extract_model_date(model: dict[str, Any]) -> int:
+    """Extract date for sorting (newer = higher).
 
-    def __init__(self, vendors: list[dict[str, Any]]) -> None:
+    Uses released_on field from API if available, otherwise
+    falls back to extracting YYYYMMDD from model_id.
+    """
+    # First try released_on field (e.g., "2024-08-06")
+    released_on = model.get("released_on")
+    if released_on:
+        try:
+            # Convert "2024-08-06" to 20240806
+            return int(released_on.replace("-", ""))
+        except (ValueError, AttributeError):
+            pass
+
+    # Fallback: extract YYYYMMDD from model_id
+    model_id = model.get("model_id", "")
+    match = _DATE_PATTERN.search(model_id)
+    if match:
+        try:
+            return int(match.group(1))
+        except ValueError:
+            pass
+    return 0
+
+
+def _is_alias_model(model_id: str) -> bool:
+    """Check if model is an alias (ends with -latest or :latest)."""
+    return model_id.endswith("-latest") or model_id.endswith(":latest")
+
+
+def _format_price(price: float | None) -> str:
+    """Format price per million tokens."""
+    if price is None:
+        return "-"
+    return f"${price:.2f}"
+
+
+def _format_context(ctx: int) -> str:
+    """Format context window size."""
+    if ctx >= 1_000_000:
+        return f"{ctx // 1_000_000}M"
+    elif ctx >= 1_000:
+        return f"{ctx // 1_000}K"
+    return str(ctx)
+
+
+class FeaturedModelsSection(ft.Container):
+    """Featured models from Big 3 vendors (OpenAI, Anthropic, Google)."""
+
+    def __init__(self, featured_models: dict[str, list[dict[str, Any]]]) -> None:
+        """
+        Initialize featured models section.
+
+        Args:
+            featured_models: Dict mapping vendor name to list of model dicts
+        """
         super().__init__()
 
-        if not vendors:
+        if not any(featured_models.values()):
             self.content = ft.Column(
                 [
-                    H3Text("Vendors"),
+                    SectionHeader("Featured Models"),
                     ft.Container(height=Theme.Spacing.SM),
                     EmptyStatePlaceholder(
-                        "No vendors found. Run 'llm sync' to populate."
+                        "No models found. Run 'llm sync' to populate."
                     ),
                 ],
                 spacing=0,
             )
         else:
-            header = ft.Row(
-                [
-                    ft.Container(LabelText("Vendor"), expand=True),
-                    ft.Container(LabelText("Models"), width=80),
-                ],
-                spacing=Theme.Spacing.SM,
-            )
+            vendor_sections = []
 
-            rows: list[ft.Control] = [header]
-            for vendor in vendors[:15]:  # Show top 15
-                rows.append(
-                    ft.Row(
+            for vendor_key in FEATURED_VENDORS:
+                models = featured_models.get(vendor_key, [])
+                if not models:
+                    continue
+
+                # Filter out aliases and sort by date (newest first)
+                filtered = [
+                    m for m in models if not _is_alias_model(m.get("model_id", ""))
+                ]
+                sorted_models = sorted(
+                    filtered,
+                    key=_extract_model_date,
+                    reverse=True,
+                )[:MODELS_PER_VENDOR]
+
+                if not sorted_models:
+                    continue
+
+                vendor_info = VENDOR_DISPLAY.get(
+                    vendor_key,
+                    {"name": vendor_key.title(), "color": Theme.Colors.PRIMARY},
+                )
+
+                # Vendor header with column labels
+                vendor_header = ft.Container(
+                    content=ft.Row(
                         [
                             ft.Container(
-                                BodyText(vendor.get("name", "Unknown")), expand=True
+                                width=4,
+                                height=20,
+                                bgcolor=vendor_info["color"],
+                                border_radius=2,
+                            ),
+                            ft.Text(
+                                vendor_info["name"],
+                                size=14,
+                                weight=ft.FontWeight.W_600,
+                                expand=True,
                             ),
                             ft.Container(
-                                SecondaryText(str(vendor.get("model_count", 0))),
-                                width=80,
+                                SecondaryText("Context", size=11),
+                                width=50,
+                                alignment=ft.alignment.center_right,
+                            ),
+                            ft.Container(
+                                SecondaryText("In $/M", size=11),
+                                width=60,
+                                alignment=ft.alignment.center_right,
+                            ),
+                            ft.Container(
+                                SecondaryText("Out $/M", size=11),
+                                width=60,
+                                alignment=ft.alignment.center_right,
                             ),
                         ],
                         spacing=Theme.Spacing.SM,
-                    )
+                    ),
+                    padding=ft.padding.symmetric(
+                        horizontal=Theme.Spacing.MD, vertical=8
+                    ),
+                    bgcolor=DarkColorPalette.BG_SECONDARY,
+                    border=ft.border.only(
+                        bottom=ft.BorderSide(1, DarkColorPalette.BORDER_PRIMARY)
+                    ),
                 )
+
+                # Model rows
+                model_rows = []
+                for model in sorted_models:
+                    model_id = model.get("model_id", "")
+                    context = model.get("context_window", 0)
+                    input_price = model.get("input_price")
+                    output_price = model.get("output_price")
+
+                    row = ft.Container(
+                        content=ft.Row(
+                            [
+                                ft.Container(
+                                    ft.Text(
+                                        model_id,
+                                        size=12,
+                                        weight=ft.FontWeight.W_500,
+                                        overflow=ft.TextOverflow.ELLIPSIS,
+                                    ),
+                                    expand=True,
+                                    tooltip=model_id,
+                                ),
+                                ft.Container(
+                                    SecondaryText(_format_context(context), size=12),
+                                    width=50,
+                                    alignment=ft.alignment.center_right,
+                                ),
+                                ft.Container(
+                                    SecondaryText(_format_price(input_price), size=12),
+                                    width=60,
+                                    alignment=ft.alignment.center_right,
+                                ),
+                                ft.Container(
+                                    SecondaryText(_format_price(output_price), size=12),
+                                    width=60,
+                                    alignment=ft.alignment.center_right,
+                                ),
+                            ],
+                            spacing=Theme.Spacing.SM,
+                        ),
+                        bgcolor=DarkColorPalette.BG_PRIMARY,
+                        padding=ft.padding.symmetric(
+                            horizontal=Theme.Spacing.MD, vertical=6
+                        ),
+                    )
+                    model_rows.append(row)
+
+                # Combine vendor header and models
+                vendor_section = ft.Container(
+                    content=ft.Column([vendor_header, *model_rows], spacing=0),
+                    border_radius=Theme.Components.CARD_RADIUS,
+                    border=ft.border.all(1, DarkColorPalette.BORDER_PRIMARY),
+                    clip_behavior=ft.ClipBehavior.HARD_EDGE,
+                    expand=True,
+                )
+                vendor_sections.append(vendor_section)
+
+            # Arrange in rows of 2
+            rows = []
+            for i in range(0, len(vendor_sections), 2):
+                row_items = vendor_sections[i : i + 2]
+                rows.append(ft.Row(row_items, spacing=Theme.Spacing.MD))
 
             self.content = ft.Column(
                 [
-                    H3Text("Top Vendors"),
+                    SectionHeader("Featured Models"),
                     ft.Container(height=Theme.Spacing.SM),
-                    ft.Container(
-                        content=ft.Column(
-                            rows, spacing=Theme.Spacing.XS, scroll=ft.ScrollMode.AUTO
-                        ),
-                        bgcolor=ft.Colors.SURFACE,
-                        border_radius=Theme.Components.CARD_RADIUS,
-                        border=ft.border.all(1, ft.Colors.OUTLINE),
-                        padding=Theme.Spacing.MD,
-                        height=250,
-                    ),
+                    ft.Column(rows, spacing=Theme.Spacing.MD),
                 ],
                 spacing=0,
             )
@@ -141,6 +295,8 @@ class ModelSearchSection(ft.Container):
             hint_text="Search models by name...",
             expand=True,
             border_radius=Theme.Components.INPUT_RADIUS,
+            border_color=ft.Colors.OUTLINE,
+            text_size=13,
             on_submit=self._on_search,
         )
 
@@ -149,10 +305,13 @@ class ModelSearchSection(ft.Container):
         for v in vendors:
             vendor_options.append(ft.dropdown.Option(v))
         self._vendor_dropdown = ft.Dropdown(
+            label="Vendor",
             options=vendor_options,
             value="",
             width=150,
             border_radius=Theme.Components.INPUT_RADIUS,
+            border_color=ft.Colors.OUTLINE,
+            text_size=13,
         )
 
         # Modality dropdown
@@ -160,16 +319,25 @@ class ModelSearchSection(ft.Container):
         for m in modalities:
             modality_options.append(ft.dropdown.Option(m))
         self._modality_dropdown = ft.Dropdown(
+            label="Modality",
             options=modality_options,
             value="",
             width=150,
             border_radius=Theme.Components.INPUT_RADIUS,
+            border_color=ft.Colors.OUTLINE,
+            text_size=13,
         )
 
         # Search button
-        self._search_button = ft.ElevatedButton(
+        self._search_button = ft.OutlinedButton(
             text="Search",
             icon=ft.Icons.SEARCH,
+            icon_color=ft.Colors.ON_SURFACE_VARIANT,
+            style=ft.ButtonStyle(
+                color=ft.Colors.ON_SURFACE_VARIANT,
+                side=ft.BorderSide(1, ft.Colors.ON_SURFACE_VARIANT),
+                shape=ft.RoundedRectangleBorder(radius=Theme.Components.INPUT_RADIUS),
+            ),
             on_click=self._on_search_click,
         )
 
@@ -207,7 +375,7 @@ class ModelSearchSection(ft.Container):
 
         self.content = ft.Column(
             [
-                H3Text("Model Search"),
+                SectionHeader("Model Search"),
                 ft.Container(height=Theme.Spacing.SM),
                 search_row,
                 ft.Container(height=Theme.Spacing.SM),
@@ -290,64 +458,95 @@ class ModelSearchSection(ft.Container):
 
     def _display_results(self, models: list[dict[str, Any]]) -> None:
         # Table header
-        header = ft.Row(
-            [
-                ft.Container(LabelText("Model"), width=250),
-                ft.Container(LabelText("Vendor"), width=100),
-                ft.Container(LabelText("Context"), width=80),
-                ft.Container(LabelText("Input $/1M"), width=80),
-                ft.Container(LabelText("Output $/1M"), width=80),
-            ],
-            spacing=Theme.Spacing.SM,
+        header = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Container(SecondaryText("Model", size=12), expand=True),
+                    ft.Container(SecondaryText("Vendor", size=12), width=100),
+                    ft.Container(
+                        SecondaryText("Context", size=12),
+                        width=70,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    ft.Container(
+                        SecondaryText("In $/M", size=12),
+                        width=70,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    ft.Container(
+                        SecondaryText("Out $/M", size=12),
+                        width=70,
+                        alignment=ft.alignment.center_right,
+                    ),
+                ],
+                spacing=Theme.Spacing.MD,
+            ),
+            padding=ft.padding.symmetric(horizontal=Theme.Spacing.MD, vertical=10),
+            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
         )
 
-        rows: list[ft.Control] = [header]
+        # Model rows
+        rows: list[ft.Control] = []
         for model in models:
             input_price = model.get("input_price")
             output_price = model.get("output_price")
             model_id = model.get("model_id", "")
-            rows.append(
-                ft.Row(
+            vendor = model.get("vendor", "")
+            context = model.get("context_window", 0)
+
+            row = ft.Container(
+                content=ft.Row(
                     [
                         ft.Container(
-                            BodyText(model_id, tooltip=model_id),
-                            width=250,
-                        ),
-                        ft.Container(SecondaryText(model.get("vendor", "")), width=100),
-                        ft.Container(
-                            SecondaryText(f"{model.get('context_window', 0):,}"),
-                            width=80,
-                        ),
-                        ft.Container(
-                            SecondaryText(
-                                f"${input_price:.2f}" if input_price else "-"
+                            ft.Text(
+                                model_id,
+                                size=12,
+                                weight=ft.FontWeight.W_500,
+                                overflow=ft.TextOverflow.ELLIPSIS,
                             ),
-                            width=80,
+                            expand=True,
+                            tooltip=model_id,
                         ),
                         ft.Container(
-                            SecondaryText(
-                                f"${output_price:.2f}" if output_price else "-"
-                            ),
-                            width=80,
+                            SecondaryText(vendor, size=12),
+                            width=100,
+                        ),
+                        ft.Container(
+                            SecondaryText(_format_context(context), size=12),
+                            width=70,
+                            alignment=ft.alignment.center_right,
+                        ),
+                        ft.Container(
+                            SecondaryText(_format_price(input_price), size=12),
+                            width=70,
+                            alignment=ft.alignment.center_right,
+                        ),
+                        ft.Container(
+                            SecondaryText(_format_price(output_price), size=12),
+                            width=70,
+                            alignment=ft.alignment.center_right,
                         ),
                     ],
-                    spacing=Theme.Spacing.SM,
-                )
+                    spacing=Theme.Spacing.MD,
+                ),
+                padding=ft.padding.symmetric(horizontal=Theme.Spacing.MD, vertical=8),
+                border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
             )
+            rows.append(row)
+
+        # Table container
+        table = ft.Container(
+            content=ft.Column(
+                [header, ft.ListView(controls=rows, spacing=0, height=250)],
+                spacing=0,
+            ),
+            bgcolor=ft.Colors.SURFACE,
+            border_radius=Theme.Components.CARD_RADIUS,
+            border=ft.border.all(1, ft.Colors.OUTLINE),
+        )
 
         self._status_text.visible = False
-        self._results_container.controls = [
-            ft.Container(
-                content=ft.Column(
-                    rows, spacing=Theme.Spacing.XS, scroll=ft.ScrollMode.AUTO
-                ),
-                bgcolor=ft.Colors.SURFACE,
-                border_radius=Theme.Components.CARD_RADIUS,
-                border=ft.border.all(1, ft.Colors.OUTLINE),
-                padding=Theme.Spacing.MD,
-                height=300,
-            )
-        ]
+        self._results_container.controls = [table]
         self.update()
 
 
@@ -388,7 +587,7 @@ class LLMCatalogTab(ft.Container):
         """Fetch all data from API and update UI."""
         try:
             async with httpx.AsyncClient() as client:
-                # Fetch all data in parallel
+                # Fetch stats, vendors, modalities, and featured vendor models in parallel
                 stats_task = client.get(
                     f"http://localhost:{settings.PORT}/api/v1/llm/status",
                     timeout=10.0,
@@ -402,14 +601,28 @@ class LLMCatalogTab(ft.Container):
                     timeout=10.0,
                 )
 
+                # Fetch models for featured vendors
+                featured_tasks = [
+                    client.get(
+                        f"http://localhost:{settings.PORT}/api/v1/llm/models",
+                        params={"vendor": vendor, "limit": 15},
+                        timeout=10.0,
+                    )
+                    for vendor in FEATURED_VENDORS
+                ]
+
                 results = await asyncio.gather(
                     stats_task,
                     vendors_task,
                     modalities_task,
+                    *featured_tasks,
                     return_exceptions=True,
                 )
 
-                stats_resp, vendors_resp, modalities_resp = results
+                stats_resp = results[0]
+                vendors_resp = results[1]
+                modalities_resp = results[2]
+                featured_responses = results[3:]
 
                 # Process responses
                 stats = (
@@ -431,7 +644,16 @@ class LLMCatalogTab(ft.Container):
                     else []
                 )
 
-                self._render_content(stats, vendors, modalities)
+                # Build featured models dict
+                featured_models: dict[str, list[dict[str, Any]]] = {}
+                for i, vendor in enumerate(FEATURED_VENDORS):
+                    resp = featured_responses[i]
+                    if not isinstance(resp, Exception) and resp.status_code == 200:
+                        featured_models[vendor] = resp.json()
+                    else:
+                        featured_models[vendor] = []
+
+                self._render_content(stats, vendors, modalities, featured_models)
 
         except httpx.TimeoutException:
             self._render_error("Request timed out")
@@ -445,6 +667,7 @@ class LLMCatalogTab(ft.Container):
         stats: dict[str, Any],
         vendors: list[dict[str, Any]],
         modalities: list[dict[str, Any]],
+        featured_models: dict[str, list[dict[str, Any]]],
     ) -> None:
         """Render the content sections with loaded data."""
         # Extract vendor/modality names for dropdowns
@@ -457,7 +680,7 @@ class LLMCatalogTab(ft.Container):
                 ft.Container(expand=True),
                 ft.IconButton(
                     icon=ft.Icons.REFRESH,
-                    icon_color=Theme.Colors.PRIMARY,
+                    icon_color=ft.Colors.ON_SURFACE_VARIANT,
                     tooltip="Refresh catalog",
                     on_click=self._on_refresh_click,
                 ),
@@ -468,10 +691,9 @@ class LLMCatalogTab(ft.Container):
         self._content_column.controls = [
             refresh_row,
             CatalogStatsSection(stats),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-            VendorsSection(vendors),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
             ModelSearchSection(vendor_names, modality_names, self.page),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            FeaturedModelsSection(featured_models),
         ]
         self._content_column.scroll = ft.ScrollMode.AUTO
         self._content_column.spacing = 0

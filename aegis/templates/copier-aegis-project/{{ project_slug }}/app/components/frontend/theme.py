@@ -13,21 +13,32 @@ from app.components.frontend.styles import FontConfig
 
 @dataclass(frozen=True)
 class DarkColorPalette:
-    """Dark mode color palette for modern, sleek UI."""
+    """Dark mode color palette - official design system colors."""
 
-    BG_PRIMARY: str = "#000000"  # Pure black
-    BG_SECONDARY: str = "#1A1A1A"
-    BG_SELECTED: str = "#2E2E2E"
-    BG_HOVER: str = "#2A2A2A"
-    TEXT_PRIMARY_DEFAULT: str = "#E5E5E5"
-    TEXT_SECONDARY_DEFAULT: str = "#B0B0B0"
-    ACCENT: str = "#1A73E8"
-    ACCENT_SUCCESS: str = "#52D869"
-    ACCENT_STOP: str = "#E94E77"
-    ERROR: str = "#FF6B6B"
-    BORDER_PRIMARY: str = "#444444"
-    DISABLED_COLOR: str = "#7F7F7F"
-    FOCUS_COLOR: str = "#FF6347"
+    # Core colors
+    BG_PRIMARY: str = "#090B0D"  # Main page background
+    BG_SECONDARY: str = "#111418"  # Card backgrounds
+    BG_SELECTED: str = "#212530"  # Secondary/selected states
+    BG_HOVER: str = "#1A1D24"  # Muted/hover backgrounds
+
+    # Text colors
+    TEXT_PRIMARY_DEFAULT: str = "#EEF1F4"  # Main text (foreground)
+    TEXT_SECONDARY_DEFAULT: str = "#7E8A9A"  # Muted/placeholder text
+
+    # Brand colors
+    ACCENT: str = "#17CCBF"  # Primary teal/cyan
+    ACCENT_SECONDARY: str = "#248F87"  # Darker teal (secondary accent)
+
+    # Semantic colors
+    ACCENT_SUCCESS: str = "#22C55E"  # Success green
+    ACCENT_WARNING: str = "#F5A623"  # Warning orange/amber
+    ACCENT_STOP: str = "#E23E3E"  # Destructive/error red
+    ERROR: str = "#E23E3E"  # Alias for destructive
+
+    # UI elements
+    BORDER_PRIMARY: str = "#272C36"  # Borders, dividers
+    DISABLED_COLOR: str = "#7E8A9A"  # Same as muted text
+    FOCUS_COLOR: str = "#17CCBF"  # Teal focus
 
 
 @dataclass(frozen=True)
@@ -414,16 +425,16 @@ class ThemeManager:
     """
 
     class Colors:
-        """Color palette - optimized for dark mode with vibrant accents."""
+        """Color palette - official design system colors."""
 
-        # Primary Brand (Teal/Cyan - high-tech cyberpunk feel)
-        PRIMARY = ft.Colors.TEAL_400
-        PRIMARY_DARK = ft.Colors.TEAL_600
-        PRIMARY_LIGHT = ft.Colors.TEAL_200
+        # Primary Brand (Teal/Cyan - official)
+        PRIMARY = "#17CCBF"  # Primary teal/cyan
+        PRIMARY_DARK = "#248F87"  # Darker teal (secondary accent)
+        PRIMARY_LIGHT = "#5eead4"  # Lighter teal
 
         # Accent (Vibrant highlights for CTAs and emphasis)
-        ACCENT = ft.Colors.CYAN_400
-        ACCENT_GLOW = ft.Colors.CYAN_300
+        ACCENT = "#17CCBF"  # Same as primary
+        ACCENT_GLOW = "#17CCBF"  # Teal glow
 
         # Status Colors (Semantic feedback)
         SUCCESS = ft.Colors.GREEN_400
