@@ -262,11 +262,70 @@ def get_current_template_commit(project_path: Path) -> str | None:
         return None
 
 
+def _get_versions_from_github(include_prereleases: bool = False) -> list[str]:
+    """
+    Fetch available versions from GitHub API when not in a git repo.
+
+    Used when running from installed package (pip/uvx) instead of git checkout.
+
+    Args:
+        include_prereleases: Include pre-release versions (rc, alpha, beta, dev)
+
+    Returns:
+        List of version strings sorted by PEP 440 (newest first)
+    """
+    import json
+    import urllib.request
+    from urllib.parse import urlparse
+
+    github_url = GITHUB_REPO_URL
+
+    # Extract owner/repo from GITHUB_REPO_URL (e.g., "lbedner/aegis-stack")
+    parsed = urlparse(github_url)
+    repo_path = parsed.path.strip("/")  # "lbedner/aegis-stack"
+
+    api_url = f"https://api.github.com/repos/{repo_path}/tags?per_page=100"
+
+    try:
+        req = urllib.request.Request(
+            api_url,
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "aegis-stack-cli",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode())
+
+        # Parse tags from API response
+        versions = []
+        for tag_info in data:
+            tag_name = tag_info.get("name", "")
+            if tag_name.startswith("v"):
+                version_str = tag_name[1:]  # Remove 'v' prefix
+                try:
+                    parsed_ver = parse(version_str)
+                    if not include_prereleases and parsed_ver.is_prerelease:
+                        continue
+                    versions.append(version_str)
+                except Exception:
+                    continue
+
+        # Sort by PEP 440 (newest first)
+        versions.sort(key=parse, reverse=True)
+        return versions
+
+    except Exception:
+        return []
+
+
 def get_available_versions(
     template_root: Path | None = None, include_prereleases: bool = False
 ) -> list[str]:
     """
     Get list of available template versions from git tags.
+
+    Falls back to GitHub API when not in a git repository (installed package mode).
 
     Args:
         template_root: Path to template repository (default: auto-detect)
@@ -277,6 +336,11 @@ def get_available_versions(
     """
     if template_root is None:
         template_root = get_template_root()
+
+    # Check if we're in a git repository
+    if not (template_root / ".git").exists():
+        # Fall back to GitHub API (installed package mode)
+        return _get_versions_from_github(include_prereleases)
 
     try:
         result = subprocess.run(
@@ -293,20 +357,21 @@ def get_available_versions(
             if tag.startswith("v"):
                 version_str = tag[1:]  # Remove 'v' prefix
                 try:
-                    parsed = parse(version_str)  # Validate version
+                    parsed_ver = parse(version_str)  # Validate version
                     # Skip pre-releases (rc, alpha, beta, dev) unless explicitly requested
-                    if not include_prereleases and parsed.is_prerelease:
+                    if not include_prereleases and parsed_ver.is_prerelease:
                         continue
                     versions.append(version_str)
                 except Exception:
                     continue
 
         # Sort by PEP 440 (newest first)
-        versions.sort(key=lambda v: parse(v), reverse=True)
+        versions.sort(key=parse, reverse=True)
         return versions
 
     except Exception:
-        return []
+        # Fall back to GitHub API on any git error
+        return _get_versions_from_github(include_prereleases)
 
 
 def get_latest_version(template_root: Path | None = None) -> str | None:
