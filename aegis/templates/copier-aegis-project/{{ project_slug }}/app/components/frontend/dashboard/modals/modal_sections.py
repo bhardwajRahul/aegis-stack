@@ -67,9 +67,9 @@ class InfoCard(ft.Container):
             spacing=0,
         )
         self.padding = Theme.Spacing.MD
-        self.bgcolor = DarkColorPalette.BG_SECONDARY
+        self.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
         self.border_radius = Theme.Components.CARD_RADIUS
-        self.border = ft.border.all(0.5, DarkColorPalette.BORDER_PRIMARY)
+        self.border = ft.border.all(0.5, ft.Colors.OUTLINE)
         self.expand = True
 
 
@@ -117,9 +117,9 @@ class MetricCard(ft.Container):
             spacing=Theme.Spacing.XS,
         )
         self.padding = Theme.Spacing.MD
-        self.bgcolor = DarkColorPalette.BG_SECONDARY
+        self.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
         self.border_radius = Theme.Components.CARD_RADIUS
-        self.border = ft.border.all(0.5, DarkColorPalette.BORDER_PRIMARY)
+        self.border = ft.border.all(0.5, ft.Colors.OUTLINE)
         self.expand = True
 
 
@@ -272,9 +272,11 @@ class EmptyStatePlaceholder(ft.Container):
             spacing=Theme.Spacing.MD,
         )
         self.padding = Theme.Spacing.XL
-        self.bgcolor = DarkColorPalette.BG_SECONDARY  # Elevated surface for contrast
+        self.bgcolor = (
+            ft.Colors.SURFACE_CONTAINER_HIGHEST
+        )  # Elevated surface for contrast
         self.border_radius = Theme.Components.CARD_RADIUS
-        self.border = ft.border.all(1, DarkColorPalette.BORDER_PRIMARY)
+        self.border = ft.border.all(1, ft.Colors.OUTLINE)
 
 
 # Color palette for pie chart segments (distinct, visually appealing colors)
@@ -419,8 +421,8 @@ class PieChartCard(ft.Container):
 
     def _setup_card_style(self) -> None:
         """Apply consistent card styling."""
-        self.bgcolor = DarkColorPalette.BG_SECONDARY
-        self.border = ft.border.all(0.5, DarkColorPalette.BORDER_PRIMARY)
+        self.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
+        self.border = ft.border.all(0.5, ft.Colors.OUTLINE)
         self.border_radius = Theme.Components.CARD_RADIUS
         self.padding = Theme.Spacing.LG
         self.height = 220
