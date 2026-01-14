@@ -17,7 +17,6 @@ from app.components.frontend.controls import (
     Tag,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.components.frontend.theme import DarkColorPalette
 from app.core.config import settings
 
 from .modal_sections import EmptyStatePlaceholder, MetricCard
@@ -86,9 +85,7 @@ class CollectionRowCard(ft.Container):
         self.files: list[dict[str, Any]] = []
 
         # Expand/collapse icon
-        self._icon = ft.Icon(
-            ft.Icons.ARROW_RIGHT, size=16, color=DarkColorPalette.ACCENT
-        )
+        self._icon = ft.Icon(ft.Icons.ARROW_RIGHT, size=16, color=ft.Colors.PRIMARY)
 
         # Loading indicator for files
         self._loading_indicator = ft.Container(
@@ -131,11 +128,9 @@ class CollectionRowCard(ft.Container):
                     ],
                     spacing=Theme.Spacing.MD,
                 ),
-                bgcolor=DarkColorPalette.BG_PRIMARY,
+                bgcolor=ft.Colors.SURFACE,
                 padding=ft.padding.symmetric(horizontal=Theme.Spacing.MD, vertical=10),
-                border=ft.border.only(
-                    bottom=ft.BorderSide(1, DarkColorPalette.BORDER_PRIMARY)
-                ),
+                border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
             ),
             on_tap=self._toggle_expand,
             mouse_cursor=ft.MouseCursor.CLICK,
@@ -248,9 +243,7 @@ class RAGCollectionsTableSection(ft.Container):
                     spacing=Theme.Spacing.MD,
                 ),
                 padding=ft.padding.symmetric(horizontal=Theme.Spacing.MD, vertical=12),
-                border=ft.border.only(
-                    bottom=ft.BorderSide(1, DarkColorPalette.BORDER_PRIMARY)
-                ),
+                border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
             )
 
             # Create expandable row cards
@@ -266,9 +259,9 @@ class RAGCollectionsTableSection(ft.Container):
             # Table container with dark background
             table = ft.Container(
                 content=ft.Column([header, *rows], spacing=0),
-                bgcolor=DarkColorPalette.BG_SECONDARY,
+                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
                 border_radius=Theme.Components.CARD_RADIUS,
-                border=ft.border.all(1, DarkColorPalette.BORDER_PRIMARY),
+                border=ft.border.all(1, ft.Colors.OUTLINE),
             )
 
             self.content = ft.Column(
@@ -447,11 +440,9 @@ class SearchResultCard(ft.Container):
         # Header row with table-like styling
         header = ft.Container(
             content=ft.Row(info_items, spacing=Theme.Spacing.SM),
-            bgcolor=DarkColorPalette.BG_PRIMARY,
+            bgcolor=ft.Colors.SURFACE,
             padding=ft.padding.symmetric(horizontal=Theme.Spacing.SM, vertical=8),
-            border=ft.border.only(
-                bottom=ft.BorderSide(1, DarkColorPalette.BORDER_PRIMARY)
-            ),
+            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
         )
 
         # Content preview with smaller text
@@ -463,9 +454,9 @@ class SearchResultCard(ft.Container):
         )
 
         self.content = ft.Column([header, content_section], spacing=0)
-        self.bgcolor = DarkColorPalette.BG_SECONDARY
+        self.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
         self.border_radius = Theme.Components.CARD_RADIUS
-        self.border = ft.border.all(1, DarkColorPalette.BORDER_PRIMARY)
+        self.border = ft.border.all(1, ft.Colors.OUTLINE)
         self.expand = True
 
 
@@ -483,10 +474,10 @@ class SearchPreviewSection(ft.Container):
             hint_text="Enter search query...",
             expand=True,
             border_radius=Theme.Components.INPUT_RADIUS,
-            bgcolor=DarkColorPalette.BG_PRIMARY,
-            border_color=DarkColorPalette.BORDER_PRIMARY,
-            focused_border_color=DarkColorPalette.ACCENT,
-            cursor_color=DarkColorPalette.ACCENT,
+            bgcolor=ft.Colors.SURFACE,
+            border_color=ft.Colors.OUTLINE,
+            focused_border_color=ft.Colors.PRIMARY,
+            cursor_color=ft.Colors.PRIMARY,
             text_size=13,
             on_submit=self._on_search_submit,
         )
@@ -498,9 +489,9 @@ class SearchPreviewSection(ft.Container):
             value=collections[0] if collections else None,
             width=200,
             border_radius=Theme.Components.INPUT_RADIUS,
-            bgcolor=DarkColorPalette.BG_PRIMARY,
-            border_color=DarkColorPalette.BORDER_PRIMARY,
-            focused_border_color=DarkColorPalette.ACCENT,
+            bgcolor=ft.Colors.SURFACE,
+            border_color=ft.Colors.OUTLINE,
+            focused_border_color=ft.Colors.PRIMARY,
             text_size=13,
         )
 

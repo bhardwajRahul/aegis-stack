@@ -184,7 +184,7 @@ class AegisTheme:
             on_background=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
             surface=DarkColorPalette.BG_PRIMARY,
             on_surface=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            surface_variant=DarkColorPalette.BG_HOVER,
+            surface_variant=DarkColorPalette.BG_SECONDARY,
             on_surface_variant=DarkColorPalette.TEXT_SECONDARY_DEFAULT,
             # Outline colors
             outline=DarkColorPalette.BORDER_PRIMARY,

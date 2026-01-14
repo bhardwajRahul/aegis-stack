@@ -8,7 +8,6 @@ conversation statistics, usage metrics, and analytics.
 import flet as ft
 from app.components.frontend.controls import SecondaryText, Tag
 from app.components.frontend.theme import AegisTheme as Theme
-from app.components.frontend.theme import DarkColorPalette
 from app.services.system.models import ComponentStatus
 
 from ..cards.card_utils import PROVIDER_COLORS
@@ -141,9 +140,9 @@ class ServiceInfoSection(ft.Container):
             spacing=Theme.Spacing.XS,
         )
         self.padding = Theme.Spacing.MD
-        self.bgcolor = DarkColorPalette.BG_SECONDARY
+        self.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
         self.border_radius = Theme.Components.CARD_RADIUS
-        self.border = ft.border.all(0.5, DarkColorPalette.BORDER_PRIMARY)
+        self.border = ft.border.all(0.5, ft.Colors.OUTLINE)
 
 
 class OverviewTab(ft.Container):

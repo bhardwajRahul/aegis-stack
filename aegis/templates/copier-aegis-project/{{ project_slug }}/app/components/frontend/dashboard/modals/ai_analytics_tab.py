@@ -292,9 +292,7 @@ class RecentActivitySection(ft.Container):
                     spacing=Theme.Spacing.MD,
                 ),
                 padding=ft.padding.symmetric(horizontal=Theme.Spacing.MD, vertical=12),
-                border=ft.border.only(
-                    bottom=ft.BorderSide(1, DarkColorPalette.BORDER_PRIMARY)
-                ),
+                border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
             )
 
             # Table rows
@@ -365,22 +363,20 @@ class RecentActivitySection(ft.Container):
                         ],
                         spacing=Theme.Spacing.MD,
                     ),
-                    bgcolor=DarkColorPalette.BG_PRIMARY,
+                    bgcolor=ft.Colors.SURFACE,
                     padding=ft.padding.symmetric(
                         horizontal=Theme.Spacing.MD, vertical=10
                     ),
-                    border=ft.border.only(
-                        bottom=ft.BorderSide(1, DarkColorPalette.BORDER_PRIMARY)
-                    ),
+                    border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
                 )
                 data_rows.append(row)
 
             # Table container with dark background
             table = ft.Container(
                 content=ft.Column([header, *data_rows], spacing=0),
-                bgcolor=DarkColorPalette.BG_SECONDARY,
+                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
                 border_radius=Theme.Components.CARD_RADIUS,
-                border=ft.border.all(1, DarkColorPalette.BORDER_PRIMARY),
+                border=ft.border.all(1, ft.Colors.OUTLINE),
             )
 
             self.content = ft.Column(

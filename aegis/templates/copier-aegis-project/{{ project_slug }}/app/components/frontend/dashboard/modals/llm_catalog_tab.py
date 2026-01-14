@@ -16,7 +16,6 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.components.frontend.theme import DarkColorPalette
 from app.core.config import settings
 from app.core.formatting import format_number
 
@@ -199,10 +198,8 @@ class FeaturedModelsSection(ft.Container):
                     padding=ft.padding.symmetric(
                         horizontal=Theme.Spacing.MD, vertical=8
                     ),
-                    bgcolor=DarkColorPalette.BG_SECONDARY,
-                    border=ft.border.only(
-                        bottom=ft.BorderSide(1, DarkColorPalette.BORDER_PRIMARY)
-                    ),
+                    bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                    border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
                 )
 
                 # Model rows
@@ -244,7 +241,7 @@ class FeaturedModelsSection(ft.Container):
                             ],
                             spacing=Theme.Spacing.SM,
                         ),
-                        bgcolor=DarkColorPalette.BG_PRIMARY,
+                        bgcolor=ft.Colors.SURFACE,
                         padding=ft.padding.symmetric(
                             horizontal=Theme.Spacing.MD, vertical=6
                         ),
@@ -255,7 +252,7 @@ class FeaturedModelsSection(ft.Container):
                 vendor_section = ft.Container(
                     content=ft.Column([vendor_header, *model_rows], spacing=0),
                     border_radius=Theme.Components.CARD_RADIUS,
-                    border=ft.border.all(1, DarkColorPalette.BORDER_PRIMARY),
+                    border=ft.border.all(1, ft.Colors.OUTLINE),
                     clip_behavior=ft.ClipBehavior.HARD_EDGE,
                     expand=True,
                 )
