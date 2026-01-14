@@ -6,13 +6,9 @@ conversation statistics, usage metrics, and analytics.
 """
 
 import flet as ft
-from app.components.frontend.controls import (
-    BodyText,
-    H3Text,
-    SecondaryText,
-    Tag,
-)
+from app.components.frontend.controls import SecondaryText, Tag
 from app.components.frontend.theme import AegisTheme as Theme
+from app.components.frontend.theme import DarkColorPalette
 from app.services.system.models import ComponentStatus
 
 from ..cards.card_utils import PROVIDER_COLORS
@@ -62,28 +58,20 @@ class OverviewSection(ft.Container):
                     str(total_conversations),
                     Theme.Colors.PRIMARY,
                 ),
-                MetricCard(
-                    "Total Messages",
-                    str(total_messages),
-                    Theme.Colors.INFO,
-                ),
-                MetricCard(
-                    "Unique Users",
-                    str(unique_users),
-                    Theme.Colors.SUCCESS,
-                ),
+                MetricCard("Total Messages", str(total_messages), Theme.Colors.INFO),
+                MetricCard("Unique Users", str(unique_users), Theme.Colors.SUCCESS),
             ],
             spacing=Theme.Spacing.MD,
         )
         self.padding = Theme.Spacing.MD
 
 
-class ConfigurationSection(ft.Container):
-    """Configuration section showing provider and model details."""
+class ServiceInfoSection(ft.Container):
+    """Compact service info section with inline layout."""
 
     def __init__(self, metadata: dict) -> None:
         """
-        Initialize configuration section.
+        Initialize service info section.
 
         Args:
             metadata: Component metadata containing provider config
@@ -92,177 +80,70 @@ class ConfigurationSection(ft.Container):
 
         provider = metadata.get("provider", "Unknown")
         model = metadata.get("model", "Unknown")
-        enabled = metadata.get("enabled", False)
-        config_valid = metadata.get("configuration_valid", False)
-        streaming_supported = metadata.get("provider_supports_streaming", False)
+        engine = metadata.get("engine", "Unknown")
+        streaming = metadata.get("provider_supports_streaming", False)
         free_tier = metadata.get("provider_free_tier", False)
 
-        # Provider color
         provider_color = PROVIDER_COLORS.get(
             provider.lower(), ft.Colors.ON_SURFACE_VARIANT
         )
 
-        # Build configuration rows
-        config_rows = []
-
-        # Provider row with badges
-        provider_badges = [
-            Tag(text=provider.upper(), color=provider_color),
-        ]
-
+        # Provider row
+        provider_tags = [Tag(text=provider.upper(), color=provider_color)]
         if free_tier:
-            provider_badges.append(
-                Tag(text="FREE TIER", color=Theme.Colors.SUCCESS),
-            )
+            provider_tags.append(Tag(text="FREE TIER", color=Theme.Colors.SUCCESS))
 
-        config_rows.append(
-            ft.Row(
-                [
-                    SecondaryText(
-                        "Provider:",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        width=150,
-                    ),
-                    ft.Row(provider_badges, spacing=Theme.Spacing.SM),
-                ],
-                spacing=Theme.Spacing.MD,
-            )
+        provider_row = ft.Row(
+            [
+                SecondaryText(
+                    "Provider", weight=Theme.Typography.WEIGHT_SEMIBOLD, width=80
+                ),
+                ft.Row(provider_tags, spacing=4),
+            ],
+            spacing=Theme.Spacing.SM,
         )
 
-        # Model row (full name, no truncation)
-        config_rows.append(
-            ft.Row(
-                [
-                    SecondaryText(
-                        "Model:",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        width=150,
-                    ),
-                    Tag(text=model, color=Theme.Colors.INFO),
-                ],
-                spacing=Theme.Spacing.MD,
-            )
+        # Model row
+        model_row = ft.Row(
+            [
+                SecondaryText(
+                    "Model", weight=Theme.Typography.WEIGHT_SEMIBOLD, width=80
+                ),
+                Tag(text=model, color=Theme.Colors.INFO),
+            ],
+            spacing=Theme.Spacing.SM,
         )
 
-        # Status row
-        status_text = "Enabled" if enabled else "Disabled"
-        config_rows.append(
-            ft.Row(
-                [
-                    SecondaryText(
-                        "Status:",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        width=150,
-                    ),
-                    BodyText(status_text),
-                ],
-                spacing=Theme.Spacing.MD,
-            )
+        # Engine row
+        engine_row = ft.Row(
+            [
+                SecondaryText(
+                    "Engine", weight=Theme.Typography.WEIGHT_SEMIBOLD, width=80
+                ),
+                SecondaryText(engine),
+            ],
+            spacing=Theme.Spacing.SM,
         )
 
-        # Streaming support row
-        streaming_text = "Supported" if streaming_supported else "Not Supported"
-        config_rows.append(
-            ft.Row(
-                [
-                    SecondaryText(
-                        "Streaming:",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        width=150,
-                    ),
-                    BodyText(streaming_text),
-                ],
-                spacing=Theme.Spacing.MD,
-            )
-        )
-
-        # Configuration validation row
-        validation_text = "Valid" if config_valid else "Invalid"
-        config_rows.append(
-            ft.Row(
-                [
-                    SecondaryText(
-                        "Configuration:",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        width=150,
-                    ),
-                    BodyText(validation_text),
-                ],
-                spacing=Theme.Spacing.MD,
-            )
+        # Streaming row
+        streaming_row = ft.Row(
+            [
+                SecondaryText(
+                    "Streaming", weight=Theme.Typography.WEIGHT_SEMIBOLD, width=80
+                ),
+                SecondaryText("Enabled" if streaming else "Disabled"),
+            ],
+            spacing=Theme.Spacing.SM,
         )
 
         self.content = ft.Column(
-            [
-                H3Text("Configuration"),
-                ft.Container(height=Theme.Spacing.SM),
-                ft.Column(config_rows, spacing=Theme.Spacing.SM),
-            ],
-            spacing=0,
-        )
-        self.padding = Theme.Spacing.MD
-
-
-class StatisticsSection(ft.Container):
-    """Statistics section showing detailed metrics and technical information."""
-
-    def __init__(self, component_data: ComponentStatus) -> None:
-        """
-        Initialize statistics section.
-
-        Args:
-            component_data: Complete component status information
-        """
-        super().__init__()
-
-        status = component_data.status
-        message = component_data.message
-        response_time = component_data.response_time_ms or 0
-        metadata = component_data.metadata or {}
-
-        # Conversation statistics
-        total_conversations = metadata.get("total_conversations", 0)
-        total_messages = metadata.get("total_messages", 0)
-        unique_users = metadata.get("unique_users", 0)
-        avg_messages = metadata.get("avg_messages_per_conversation", 0.0)
-
-        # Configuration
-        engine = metadata.get("engine", "Unknown")
-        validation_errors_count = metadata.get("validation_errors_count", 0)
-
-        def stat_row(label: str, value: str) -> ft.Row:
-            """Create a statistics row with label and value."""
-            return ft.Row(
-                [
-                    SecondaryText(
-                        f"{label}:",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        width=200,
-                    ),
-                    BodyText(value),
-                ],
-                spacing=Theme.Spacing.MD,
-            )
-
-        self.content = ft.Column(
-            [
-                H3Text("Statistics"),
-                ft.Container(height=Theme.Spacing.SM),
-                stat_row("Component Status", status.value.upper()),
-                stat_row("Health Message", message),
-                stat_row("Response Time", f"{response_time:.2f}ms"),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-                stat_row("Total Conversations", str(total_conversations)),
-                stat_row("Total Messages", str(total_messages)),
-                stat_row("Unique Users", str(unique_users)),
-                stat_row("Avg Messages/Conv", f"{avg_messages:.1f}"),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-                stat_row("Engine", engine),
-                stat_row("Validation Errors", str(validation_errors_count)),
-            ],
+            [provider_row, model_row, engine_row, streaming_row],
             spacing=Theme.Spacing.XS,
         )
         self.padding = Theme.Spacing.MD
+        self.bgcolor = DarkColorPalette.BG_SECONDARY
+        self.border_radius = Theme.Components.CARD_RADIUS
+        self.border = ft.border.all(0.5, DarkColorPalette.BORDER_PRIMARY)
 
 
 class OverviewTab(ft.Container):
@@ -282,11 +163,14 @@ class OverviewTab(ft.Container):
         self.content = ft.Column(
             [
                 OverviewSection(metadata),
-                ConfigurationSection(metadata),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-                StatisticsSection(component_data),
+                ft.Container(
+                    content=ServiceInfoSection(metadata),
+                    padding=ft.padding.only(
+                        left=Theme.Spacing.MD, right=Theme.Spacing.MD
+                    ),
+                ),
             ],
-            spacing=0,
+            spacing=Theme.Spacing.SM,
             scroll=ft.ScrollMode.AUTO,
         )
 
@@ -328,6 +212,9 @@ class AIDetailDialog(BaseDetailPopup):
             animation_duration=200,
             tabs=tabs_list,
             expand=True,
+            label_color=ft.Colors.ON_SURFACE,
+            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
+            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
         # Initialize base popup with tabs (non-scrollable - tabs handle their own scrolling)

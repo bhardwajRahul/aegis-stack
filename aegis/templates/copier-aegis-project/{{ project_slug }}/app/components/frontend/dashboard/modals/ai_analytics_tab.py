@@ -5,22 +5,56 @@ Displays LLM usage statistics including token counts, costs, model breakdown,
 and recent activity. Fetches real data from the /ai/usage/stats API endpoint.
 """
 
+from datetime import UTC, datetime
 from typing import Any
 
 import flet as ft
 import httpx
 from app.components.frontend.controls import (
     H3Text,
-    LabelText,
     SecondaryText,
     Tag,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.components.frontend.theme import DarkColorPalette
 from app.core.config import settings
 from app.core.formatting import format_cost, format_number
 
-from ..cards.card_utils import PROVIDER_COLORS, create_progress_indicator
-from .modal_sections import EmptyStatePlaceholder, MetricCard
+from .modal_sections import EmptyStatePlaceholder, MetricCard, PieChartCard
+
+
+def _format_relative_time(timestamp_str: str) -> str:
+    """Convert ISO timestamp to relative time (e.g., '2 minutes ago')."""
+    try:
+        # Parse ISO format timestamp
+        if "T" in timestamp_str:
+            dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+        else:
+            return timestamp_str
+
+        # Make timezone-aware if naive
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+
+        now = datetime.now(UTC)
+        diff = now - dt
+
+        seconds = int(diff.total_seconds())
+        if seconds < 0:
+            return "just now"
+        elif seconds < 60:
+            return f"{seconds} seconds ago" if seconds != 1 else "1 second ago"
+        elif seconds < 3600:
+            minutes = seconds // 60
+            return f"{minutes} minutes ago" if minutes != 1 else "1 minute ago"
+        elif seconds < 86400:
+            hours = seconds // 3600
+            return f"{hours} hours ago" if hours != 1 else "1 hour ago"
+        else:
+            days = seconds // 86400
+            return f"{days} days ago" if days != 1 else "1 day ago"
+    except (ValueError, AttributeError):
+        return timestamp_str
 
 
 def _get_success_rate_color(rate: float) -> str:
@@ -59,16 +93,13 @@ def _transform_api_response(api_data: dict[str, Any]) -> dict[str, Any]:
     # Transform recent activity
     recent = []
     for r in api_data.get("recent_activity", []):
-        # Extract time from timestamp (e.g., "2024-01-01T12:34:56" -> "12:34:56")
-        timestamp = r.get("timestamp", "")
-        time_part = timestamp.split("T")[-1][:8] if "T" in timestamp else timestamp
-
         recent.append(
             {
-                "time": time_part,
+                "timestamp": r.get("timestamp", ""),
                 "model": r.get("model", "Unknown"),
                 "action": r.get("action", ""),
-                "tokens": r.get("tokens", 0),
+                "input_tokens": r.get("input_tokens", 0),
+                "output_tokens": r.get("output_tokens", 0),
                 "cost": r.get("cost", 0.0),
                 "success": r.get("success", True),
             }
@@ -105,8 +136,6 @@ class HeroStatsSection(ft.Container):
 
         self.content = ft.Column(
             [
-                H3Text("Usage Overview"),
-                ft.Container(height=Theme.Spacing.SM),
                 ft.Row(
                     [
                         MetricCard(
@@ -138,99 +167,60 @@ class HeroStatsSection(ft.Container):
         self.padding = Theme.Spacing.MD
 
 
-class TokenBreakdownSection(ft.Container):
-    """Token breakdown section showing input vs output distribution."""
+def _create_token_breakdown_card(stats: dict[str, Any]) -> PieChartCard:
+    """Create token breakdown pie chart card."""
+    input_tokens = stats.get("input_tokens", 0)
+    output_tokens = stats.get("output_tokens", 0)
+    total = input_tokens + output_tokens
 
-    def __init__(self, stats: dict[str, Any]) -> None:
-        """
-        Initialize token breakdown section.
+    if total == 0:
+        return PieChartCard("Token Breakdown", [])
 
-        Args:
-            stats: Dictionary with token statistics
-        """
-        super().__init__()
+    input_pct = input_tokens / total * 100
+    output_pct = output_tokens / total * 100
 
-        input_tokens = stats.get("input_tokens", 0)
-        output_tokens = stats.get("output_tokens", 0)
-        total = input_tokens + output_tokens
+    return PieChartCard(
+        title="Token Breakdown",
+        sections=[
+            {
+                "value": input_tokens,
+                "color": DarkColorPalette.ACCENT,
+                "label": f"Input Tokens ({input_pct:.1f}%)",
+            },
+            {
+                "value": output_tokens,
+                "color": ft.Colors.PURPLE_200,
+                "label": f"Output Tokens ({output_pct:.1f}%)",
+            },
+        ],
+    )
 
-        input_pct = (input_tokens / total * 100) if total > 0 else 0
-        output_pct = (output_tokens / total * 100) if total > 0 else 0
 
-        self.content = ft.Column(
-            [
-                H3Text("Token Breakdown"),
-                ft.Container(height=Theme.Spacing.SM),
-                create_progress_indicator(
-                    label="Input Tokens",
-                    value=input_pct,
-                    details=f"{format_number(input_tokens)} tokens ({input_pct:.0f}%)",
-                    color=ft.Colors.PURPLE,
-                ),
-                ft.Container(height=Theme.Spacing.SM),
-                create_progress_indicator(
-                    label="Output Tokens",
-                    value=output_pct,
-                    details=f"{format_number(output_tokens)} tokens ({output_pct:.0f}%)",
-                    color=ft.Colors.PURPLE_200,
-                ),
-            ],
-            spacing=0,
+def _create_model_usage_card(stats: dict[str, Any]) -> PieChartCard:
+    """Create model usage pie chart card."""
+    models = stats.get("models", [])
+
+    if not models:
+        return PieChartCard("Model Usage", [])
+
+    sections = []
+    for model in models:
+        pct = float(model.get("pct", 0))
+        name = model.get("name", "Unknown")
+
+        # Don't pass color - let PieChartCard auto-assign from palette
+        sections.append(
+            {
+                "value": pct,
+                "label": f"{name} ({pct:.1f}%)",
+            }
         )
-        self.padding = Theme.Spacing.MD
 
-
-class ModelUsageSection(ft.Container):
-    """Model usage section showing breakdown by model."""
-
-    def __init__(self, stats: dict[str, Any]) -> None:
-        """
-        Initialize model usage section.
-
-        Args:
-            stats: Dictionary with model usage data
-        """
-        super().__init__()
-
-        models = stats.get("models", [])
-
-        if not models:
-            self.content = ft.Column(
-                [
-                    H3Text("Model Usage"),
-                    ft.Container(height=Theme.Spacing.SM),
-                    EmptyStatePlaceholder("No model usage data available"),
-                ],
-                spacing=0,
-            )
-        else:
-            model_rows = []
-            for model in models:
-                vendor = model.get("vendor", "unknown")
-                color = PROVIDER_COLORS.get(vendor, ft.Colors.GREY)
-                model_rows.append(
-                    create_progress_indicator(
-                        label=model.get("name", "Unknown"),
-                        value=float(model.get("pct", 0)),
-                        details=f"{model.get('requests', 0)} req • {format_cost(model.get('cost', 0))}",
-                        color=color,
-                    )
-                )
-                model_rows.append(ft.Container(height=Theme.Spacing.XS))
-
-            self.content = ft.Column(
-                [
-                    H3Text("Model Usage"),
-                    ft.Container(height=Theme.Spacing.SM),
-                    *model_rows,
-                ],
-                spacing=0,
-            )
-        self.padding = Theme.Spacing.MD
+    return PieChartCard(title="Model Usage", sections=sections)
 
 
 class RecentActivitySection(ft.Container):
-    """Recent activity section showing last N requests."""
+    """Recent activity section showing last N requests in a table."""
 
     def __init__(self, stats: dict[str, Any]) -> None:
         """
@@ -253,68 +243,151 @@ class RecentActivitySection(ft.Container):
                 spacing=0,
             )
         else:
-            # Table header
-            header = ft.Row(
-                [
-                    ft.Container(LabelText("Time"), width=80),
-                    ft.Container(LabelText("Model"), width=120),
-                    ft.Container(LabelText("Action"), width=100),
-                    ft.Container(LabelText("Tokens"), width=80),
-                    ft.Container(LabelText("Cost"), width=100),
-                    ft.Container(LabelText("Status"), width=60),
-                ],
-                spacing=Theme.Spacing.SM,
+            # Column widths
+            col_time = 120
+            col_model = 140
+            col_action = 180
+            col_input = 80
+            col_output = 80
+            col_cost = 90
+            col_status = 80
+
+            # Table header with muted text
+            header = ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Container(
+                            SecondaryText("Time", size=12),
+                            width=col_time,
+                        ),
+                        ft.Container(
+                            SecondaryText("Model", size=12),
+                            width=col_model,
+                        ),
+                        ft.Container(
+                            SecondaryText("Action", size=12),
+                            width=col_action,
+                        ),
+                        ft.Container(
+                            SecondaryText("Input", size=12),
+                            width=col_input,
+                            alignment=ft.alignment.center_right,
+                        ),
+                        ft.Container(
+                            SecondaryText("Output", size=12),
+                            width=col_output,
+                            alignment=ft.alignment.center_right,
+                        ),
+                        ft.Container(
+                            SecondaryText("Cost", size=12),
+                            width=col_cost,
+                            alignment=ft.alignment.center_right,
+                        ),
+                        ft.Container(
+                            SecondaryText("Status", size=12),
+                            width=col_status,
+                            alignment=ft.alignment.center_right,
+                        ),
+                    ],
+                    spacing=Theme.Spacing.MD,
+                ),
+                padding=ft.padding.symmetric(horizontal=Theme.Spacing.MD, vertical=12),
+                border=ft.border.only(
+                    bottom=ft.BorderSide(1, DarkColorPalette.BORDER_PRIMARY)
+                ),
             )
 
             # Table rows
-            rows = [header]
+            data_rows = []
             for activity in recent:
                 success = activity.get("success", True)
-                status_text = "OK" if success else "FAIL"
+                status_text = "Success" if success else "Failed"
                 status_color = Theme.Colors.SUCCESS if success else Theme.Colors.ERROR
 
-                row = ft.Row(
-                    [
-                        ft.Container(
-                            SecondaryText(activity.get("time", "")),
-                            width=80,
-                        ),
-                        ft.Container(
-                            SecondaryText(activity.get("model", "")),
-                            width=120,
-                        ),
-                        ft.Container(
-                            SecondaryText(activity.get("action", "")),
-                            width=100,
-                        ),
-                        ft.Container(
-                            SecondaryText(format_number(activity.get("tokens", 0))),
-                            width=80,
-                        ),
-                        ft.Container(
-                            SecondaryText(format_cost(activity.get("cost", 0))),
-                            width=100,
-                        ),
-                        ft.Container(
-                            Tag(text=status_text, color=status_color),
-                            width=60,
-                        ),
-                    ],
-                    spacing=Theme.Spacing.SM,
+                # Get input/output tokens
+                input_tokens = activity.get("input_tokens", 0)
+                output_tokens = activity.get("output_tokens", 0)
+
+                # Format relative time
+                relative_time = _format_relative_time(activity.get("timestamp", ""))
+
+                row = ft.Container(
+                    content=ft.Row(
+                        [
+                            ft.Container(
+                                SecondaryText(relative_time, size=13),
+                                width=col_time,
+                            ),
+                            ft.Container(
+                                ft.Text(
+                                    activity.get("model", ""),
+                                    size=13,
+                                    weight=ft.FontWeight.W_500,
+                                ),
+                                width=col_model,
+                            ),
+                            ft.Container(
+                                SecondaryText(activity.get("action", ""), size=13),
+                                width=col_action,
+                            ),
+                            ft.Container(
+                                ft.Text(
+                                    format_number(input_tokens),
+                                    size=13,
+                                    text_align=ft.TextAlign.RIGHT,
+                                ),
+                                width=col_input,
+                                alignment=ft.alignment.center_right,
+                            ),
+                            ft.Container(
+                                ft.Text(
+                                    format_number(output_tokens),
+                                    size=13,
+                                    text_align=ft.TextAlign.RIGHT,
+                                ),
+                                width=col_output,
+                                alignment=ft.alignment.center_right,
+                            ),
+                            ft.Container(
+                                ft.Text(
+                                    format_cost(activity.get("cost", 0)),
+                                    size=13,
+                                    text_align=ft.TextAlign.RIGHT,
+                                ),
+                                width=col_cost,
+                                alignment=ft.alignment.center_right,
+                            ),
+                            ft.Container(
+                                Tag(text=status_text, color=status_color),
+                                width=col_status,
+                                alignment=ft.alignment.center_right,
+                            ),
+                        ],
+                        spacing=Theme.Spacing.MD,
+                    ),
+                    bgcolor=DarkColorPalette.BG_PRIMARY,
+                    padding=ft.padding.symmetric(
+                        horizontal=Theme.Spacing.MD, vertical=10
+                    ),
+                    border=ft.border.only(
+                        bottom=ft.BorderSide(1, DarkColorPalette.BORDER_PRIMARY)
+                    ),
                 )
-                rows.append(row)
+                data_rows.append(row)
+
+            # Table container with dark background
+            table = ft.Container(
+                content=ft.Column([header, *data_rows], spacing=0),
+                bgcolor=DarkColorPalette.BG_SECONDARY,
+                border_radius=Theme.Components.CARD_RADIUS,
+                border=ft.border.all(1, DarkColorPalette.BORDER_PRIMARY),
+            )
 
             self.content = ft.Column(
                 [
                     H3Text("Recent Activity"),
                     ft.Container(height=Theme.Spacing.SM),
-                    ft.Container(
-                        content=ft.Column(rows, spacing=Theme.Spacing.XS),
-                        bgcolor=ft.Colors.SURFACE,
-                        border_radius=Theme.Components.CARD_RADIUS,
-                        border=ft.border.all(1, ft.Colors.OUTLINE),
-                        padding=Theme.Spacing.MD,
-                    ),
+                    table,
                 ],
                 spacing=0,
             )
@@ -400,7 +473,7 @@ class AIAnalyticsTab(ft.Container):
                 ft.Container(expand=True),  # Spacer
                 ft.IconButton(
                     icon=ft.Icons.REFRESH,
-                    icon_color=Theme.Colors.PRIMARY,
+                    icon_color=ft.Colors.ON_SURFACE_VARIANT,
                     tooltip="Refresh analytics",
                     on_click=self._on_refresh_click,
                 ),
@@ -408,14 +481,20 @@ class AIAnalyticsTab(ft.Container):
             alignment=ft.MainAxisAlignment.END,
         )
 
+        # Pie charts side by side (PieChartCard includes card styling)
+        charts_row = ft.Row(
+            [
+                _create_token_breakdown_card(stats),
+                _create_model_usage_card(stats),
+            ],
+            spacing=Theme.Spacing.MD,
+        )
+
         self._content_column.controls = [
             refresh_row,
             HeroStatsSection(stats),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-            TokenBreakdownSection(stats),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-            ModelUsageSection(stats),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
+            ft.Container(height=Theme.Spacing.LG),  # Spacing between card rows
+            charts_row,
             RecentActivitySection(stats),
         ]
         self._content_column.scroll = ft.ScrollMode.AUTO
