@@ -16,6 +16,8 @@ from aegis.core.copier_updater import (
     cleanup_backup_tag,
     create_backup_point,
     format_conflict_report,
+    get_available_versions,
+    get_latest_version,
     rollback_to_backup,
 )
 
@@ -352,3 +354,150 @@ class TestGetChangelogFromGithub:
         # Should contain fallback message with "Changelog not available" or actual changelog
         assert isinstance(result, str)
         assert "Changelog not available" in result or "Changes:" in result
+
+
+@pytest.fixture
+def git_repo_with_tags(tmp_path: Path) -> Path:
+    """Initialize a git repository with version tags (including prereleases)."""
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+
+    # Create a copier.yml to make it a valid template root
+    (tmp_path / "copier.yml").write_text("_subdirectory: templates\n")
+
+    # Create initial commit and tags
+    (tmp_path / "test.txt").write_text("v0.1.0")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "v0.1.0"], cwd=tmp_path, capture_output=True, check=True
+    )
+    subprocess.run(
+        ["git", "tag", "v0.1.0"], cwd=tmp_path, capture_output=True, check=True
+    )
+
+    # Add more commits and tags
+    (tmp_path / "test.txt").write_text("v0.2.0")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "v0.2.0"], cwd=tmp_path, capture_output=True, check=True
+    )
+    subprocess.run(
+        ["git", "tag", "v0.2.0"], cwd=tmp_path, capture_output=True, check=True
+    )
+
+    # Add a prerelease tag
+    (tmp_path / "test.txt").write_text("v0.3.0rc1")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "v0.3.0rc1"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "tag", "v0.3.0rc1"], cwd=tmp_path, capture_output=True, check=True
+    )
+
+    # Add another prerelease
+    (tmp_path / "test.txt").write_text("v0.3.0-alpha.1")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "v0.3.0-alpha.1"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "tag", "v0.3.0-alpha.1"], cwd=tmp_path, capture_output=True, check=True
+    )
+
+    return tmp_path
+
+
+class TestGetAvailableVersions:
+    """Tests for get_available_versions function."""
+
+    def test_returns_versions_sorted_newest_first(
+        self, git_repo_with_tags: Path
+    ) -> None:
+        """Test that versions are returned sorted newest first."""
+        versions = get_available_versions(git_repo_with_tags)
+
+        # Should get 0.2.0 and 0.1.0 (no prereleases by default)
+        assert len(versions) == 2
+        assert versions[0] == "0.2.0"  # Newest first
+        assert versions[1] == "0.1.0"
+
+    def test_excludes_prereleases_by_default(self, git_repo_with_tags: Path) -> None:
+        """Test that prereleases are excluded by default."""
+        versions = get_available_versions(git_repo_with_tags)
+
+        # Should NOT contain rc or alpha versions
+        assert "0.3.0rc1" not in versions
+        assert "0.3.0-alpha.1" not in versions
+
+    def test_includes_prereleases_when_requested(
+        self, git_repo_with_tags: Path
+    ) -> None:
+        """Test that prereleases are included when include_prereleases=True."""
+        versions = get_available_versions(git_repo_with_tags, include_prereleases=True)
+
+        # Should contain all versions including prereleases
+        assert "0.3.0rc1" in versions
+        assert "0.3.0-alpha.1" in versions
+        assert "0.2.0" in versions
+        assert "0.1.0" in versions
+
+    def test_returns_empty_for_no_tags(self, git_repo: Path) -> None:
+        """Test that empty list is returned when no version tags exist."""
+        # Create copier.yml to make it a valid template root
+        (git_repo / "copier.yml").write_text("_subdirectory: templates\n")
+        subprocess.run(["git", "add", "."], cwd=git_repo, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "Add copier.yml"],
+            cwd=git_repo,
+            capture_output=True,
+        )
+
+        versions = get_available_versions(git_repo)
+
+        assert versions == []
+
+
+class TestGetLatestVersion:
+    """Tests for get_latest_version function."""
+
+    def test_returns_latest_non_prerelease_version(
+        self, git_repo_with_tags: Path
+    ) -> None:
+        """Test that latest version is 0.2.0, not a prerelease."""
+        latest = get_latest_version(git_repo_with_tags)
+
+        # Should be 0.2.0, NOT 0.3.0rc1 or 0.3.0-alpha.1
+        assert latest == "0.2.0"
+
+    def test_returns_none_for_no_versions(self, git_repo: Path) -> None:
+        """Test that None is returned when no version tags exist."""
+        # Create copier.yml to make it a valid template root
+        (git_repo / "copier.yml").write_text("_subdirectory: templates\n")
+        subprocess.run(["git", "add", "."], cwd=git_repo, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "Add copier.yml"],
+            cwd=git_repo,
+            capture_output=True,
+        )
+
+        latest = get_latest_version(git_repo)
+
+        assert latest is None
