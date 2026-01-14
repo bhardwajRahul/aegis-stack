@@ -347,31 +347,6 @@ def resolve_ref_to_commit(ref: str, repo_path: Path) -> str | None:
         return None
 
 
-def count_commits_between(from_ref: str, to_ref: str, repo_path: Path) -> int:
-    """
-    Count commits between two git references.
-
-    Args:
-        from_ref: Starting git reference (older commit)
-        to_ref: Ending git reference (newer commit)
-        repo_path: Path to git repository
-
-    Returns:
-        Number of commits between refs, or 0 if unable to count
-    """
-    try:
-        result = subprocess.run(
-            ["git", "rev-list", "--count", f"{from_ref}..{to_ref}"],
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return int(result.stdout.strip())
-    except (subprocess.CalledProcessError, ValueError):
-        return 0
-
-
 def resolve_version_to_ref(
     version: str | None, template_root: Path | None = None
 ) -> str:
