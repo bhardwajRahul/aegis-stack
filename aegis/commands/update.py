@@ -31,7 +31,10 @@ from ..core.copier_updater import (
     validate_clean_git_tree,
 )
 from ..core.post_gen_tasks import cleanup_components, run_post_generation_tasks
-from ..core.template_cleanup import cleanup_nested_project_directory
+from ..core.template_cleanup import (
+    cleanup_nested_project_directory,
+    sync_template_changes,
+)
 from ..core.version_compatibility import get_cli_version, get_project_template_version
 
 
@@ -334,6 +337,16 @@ def update_command(
                 # This mirrors what happens during 'aegis init' - the template includes all
                 # files and cleanup_components removes those not selected in answers
                 cleanup_components(target_path, answers)
+
+        # Sync template changes that Copier's git apply may have missed
+        # This handles the case where the {{ project_slug }}/ directory is excluded
+        # from git apply because it only contains ignored files
+        template_src = answers.get("_src_path", "gh:lbedner/aegis-stack")
+        synced_files = sync_template_changes(
+            target_path, answers, template_src, target_ref
+        )
+        if synced_files:
+            typer.echo(f"   Synced {len(synced_files)} template changes")
 
         # Run post-generation tasks
         # Determine what services need migrations
