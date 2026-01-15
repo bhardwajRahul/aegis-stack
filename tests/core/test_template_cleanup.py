@@ -8,7 +8,11 @@ nested directory structures created during Copier template updates.
 from pathlib import Path
 from unittest.mock import patch
 
-from aegis.core.template_cleanup import cleanup_nested_project_directory
+from aegis.core.template_cleanup import (
+    _should_skip_sync,
+    cleanup_nested_project_directory,
+    sync_template_changes,
+)
 
 
 class TestCleanupNestedProjectDirectory:
@@ -346,3 +350,185 @@ class TestEndToEndNestedCleanup:
         assert (tmp_path / "app" / "services" / "ai" / "agent.py").exists(), (
             "AI agent.py should be kept"
         )
+
+
+class TestShouldSkipSync:
+    """Test _should_skip_sync helper function."""
+
+    def test_skips_copier_answers(self) -> None:
+        """Test that .copier-answers.yml is skipped."""
+        assert _should_skip_sync(".copier-answers.yml") is True
+
+    def test_skips_env_file(self) -> None:
+        """Test that .env is skipped."""
+        assert _should_skip_sync(".env") is True
+
+    def test_skips_python_version(self) -> None:
+        """Test that .python-version is skipped."""
+        assert _should_skip_sync(".python-version") is True
+
+    def test_skips_venv_directory(self) -> None:
+        """Test that .venv/ files are skipped."""
+        assert _should_skip_sync(".venv/lib/python3.11/site-packages/foo.py") is True
+
+    def test_skips_pycache(self) -> None:
+        """Test that __pycache__/ files are skipped."""
+        assert _should_skip_sync("__pycache__/module.cpython-311.pyc") is True
+        assert _should_skip_sync("app/__pycache__/foo.pyc") is True
+
+    def test_skips_pyc_files(self) -> None:
+        """Test that .pyc files are skipped."""
+        assert _should_skip_sync("module.pyc") is True
+        assert _should_skip_sync("app/services/ai/agent.pyc") is True
+
+    def test_does_not_skip_regular_files(self) -> None:
+        """Test that regular Python files are not skipped."""
+        assert _should_skip_sync("app/__init__.py") is False
+        assert _should_skip_sync("app/services/ai/agent.py") is False
+        assert _should_skip_sync("pyproject.toml") is False
+        assert _should_skip_sync("app/components/frontend/theme.py") is False
+
+
+class TestSyncTemplateChanges:
+    """Test sync_template_changes function."""
+
+    def test_empty_project_slug_returns_empty(self, tmp_path: Path) -> None:
+        """Test that empty list is returned when project_slug is empty."""
+        answers: dict[str, str] = {"project_slug": ""}
+        result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
+        assert result == []
+
+    def test_syncs_differing_files(self, tmp_path: Path) -> None:
+        """Test that files differing from template are synced."""
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        # Create project file with old content
+        project_file = tmp_path / "app" / "config.py"
+        project_file.parent.mkdir(parents=True)
+        project_file.write_text("# old config")
+
+        def mock_run_copy(
+            src_path: str,
+            dst_path: str,
+            data: dict,
+            defaults: bool,
+            overwrite: bool,
+            unsafe: bool,
+            vcs_ref: str,
+            quiet: bool,
+        ) -> None:
+            """Mock run_copy to create rendered template."""
+            rendered_dir = Path(dst_path) / project_slug / "app"
+            rendered_dir.mkdir(parents=True)
+            (rendered_dir / "config.py").write_text("# new config from template")
+
+        with patch("copier.run_copy", side_effect=mock_run_copy):
+            result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
+
+        # File should be synced
+        assert "app/config.py" in result
+        assert project_file.read_text() == "# new config from template"
+
+    def test_skips_identical_files(self, tmp_path: Path) -> None:
+        """Test that identical files are not synced."""
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        # Create project file with same content as template
+        project_file = tmp_path / "app" / "config.py"
+        project_file.parent.mkdir(parents=True)
+        project_file.write_text("# same content")
+
+        def mock_run_copy(
+            src_path: str,
+            dst_path: str,
+            data: dict,
+            defaults: bool,
+            overwrite: bool,
+            unsafe: bool,
+            vcs_ref: str,
+            quiet: bool,
+        ) -> None:
+            """Mock run_copy to create rendered template with same content."""
+            rendered_dir = Path(dst_path) / project_slug / "app"
+            rendered_dir.mkdir(parents=True)
+            (rendered_dir / "config.py").write_text("# same content")
+
+        with patch("copier.run_copy", side_effect=mock_run_copy):
+            result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
+
+        # File should NOT be synced (identical)
+        assert result == []
+
+    def test_skips_nonexistent_project_files(self, tmp_path: Path) -> None:
+        """Test that new files in template are skipped (handled by cleanup_nested)."""
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        # Don't create project file - it doesn't exist
+
+        def mock_run_copy(
+            src_path: str,
+            dst_path: str,
+            data: dict,
+            defaults: bool,
+            overwrite: bool,
+            unsafe: bool,
+            vcs_ref: str,
+            quiet: bool,
+        ) -> None:
+            """Mock run_copy to create new file in template."""
+            rendered_dir = Path(dst_path) / project_slug / "app"
+            rendered_dir.mkdir(parents=True)
+            (rendered_dir / "new_file.py").write_text("# new file")
+
+        with patch("copier.run_copy", side_effect=mock_run_copy):
+            result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
+
+        # New file should NOT be synced (doesn't exist in project)
+        assert result == []
+        assert not (tmp_path / "app" / "new_file.py").exists()
+
+    def test_skips_files_matching_skip_patterns(self, tmp_path: Path) -> None:
+        """Test that files matching skip patterns are not synced."""
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        # Create .env file in project
+        env_file = tmp_path / ".env"
+        env_file.write_text("SECRET=old_value")
+
+        def mock_run_copy(
+            src_path: str,
+            dst_path: str,
+            data: dict,
+            defaults: bool,
+            overwrite: bool,
+            unsafe: bool,
+            vcs_ref: str,
+            quiet: bool,
+        ) -> None:
+            """Mock run_copy to create .env in template."""
+            rendered_dir = Path(dst_path) / project_slug
+            rendered_dir.mkdir(parents=True)
+            (rendered_dir / ".env").write_text("SECRET=new_value")
+
+        with patch("copier.run_copy", side_effect=mock_run_copy):
+            result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
+
+        # .env should NOT be synced (in skip list)
+        assert result == []
+        assert env_file.read_text() == "SECRET=old_value"
+
+    def test_handles_render_failure(self, tmp_path: Path) -> None:
+        """Test that render failure returns empty list."""
+        answers = {"project_slug": "my-project"}
+
+        with patch(
+            "copier.run_copy",
+            side_effect=Exception("Render failed"),
+        ):
+            result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
+
+        assert result == []
