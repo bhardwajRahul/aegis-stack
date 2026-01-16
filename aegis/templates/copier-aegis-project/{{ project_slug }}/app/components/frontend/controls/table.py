@@ -9,6 +9,8 @@ from typing import Any
 
 import flet as ft
 
+from ..theme import AegisTheme as Theme
+
 
 class TableHeaderText(ft.Text):  # type: ignore[misc]
     """
@@ -22,7 +24,7 @@ class TableHeaderText(ft.Text):  # type: ignore[misc]
         # Set defaults that can be overridden
         defaults = {
             "weight": ft.FontWeight.W_500,
-            "size": 12,
+            "size": Theme.Typography.BODY_SMALL,
             "color": ft.Colors.GREY_600,
         }
         defaults.update(kwargs)
@@ -44,7 +46,7 @@ class TableCellText(ft.Text):  # type: ignore[misc]
     def __init__(self, text: str, **kwargs: Any) -> None:
         # Set defaults that can be overridden
         defaults = {
-            "size": 11,
+            "size": Theme.Typography.BODY,
             "color": ft.Colors.ON_SURFACE,
         }
         defaults.update(kwargs)
@@ -67,7 +69,7 @@ class TableNameText(ft.Text):  # type: ignore[misc]
         # Set defaults that can be overridden
         defaults = {
             "weight": ft.FontWeight.W_400,
-            "size": 11,
+            "size": Theme.Typography.BODY,
             "color": ft.Colors.ON_SURFACE,
         }
         defaults.update(kwargs)

@@ -125,7 +125,7 @@ class BaseDetailPopup(BasePopup):
             content=content_container,
             width=width,
             height=height,
-            border=ft.border.all(1, self._get_status_color()),
+            border=ft.border.all(1, ft.Colors.OUTLINE),
             border_radius=Theme.Components.CARD_RADIUS,
             bgcolor=ft.Colors.SURFACE,
             shadow=ft.BoxShadow(
