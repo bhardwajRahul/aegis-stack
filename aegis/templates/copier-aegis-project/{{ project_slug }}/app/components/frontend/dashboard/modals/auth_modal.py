@@ -2,8 +2,10 @@
 Auth Service Detail Modal
 
 Displays comprehensive auth service information including security configuration,
-user statistics, and JWT settings.
+user statistics, JWT settings, and user management.
 """
+
+from typing import Any
 
 import flet as ft
 from app.components.frontend.controls import (
@@ -15,6 +17,7 @@ from app.components.frontend.controls import (
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
+from .auth_users_tab import AuthUsersTab
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
 
@@ -22,26 +25,19 @@ from .modal_sections import MetricCard
 class OverviewSection(ft.Container):
     """Overview section showing key auth service metrics."""
 
-    def __init__(self, metadata: dict) -> None:
+    def __init__(self, component_data: ComponentStatus) -> None:
         """
         Initialize overview section.
 
         Args:
-            metadata: Component metadata containing auth statistics
+            component_data: Complete component status information
         """
         super().__init__()
 
+        metadata = component_data.metadata or {}
         user_count_display = metadata.get("user_count_display", "0")
-        security_level = metadata.get("security_level", "basic")
         token_expiry_display = metadata.get("token_expiry_display", "Unknown")
-
-        # Security level color mapping
-        security_colors = {
-            "high": Theme.Colors.SUCCESS,
-            "standard": Theme.Colors.INFO,
-            "basic": Theme.Colors.WARNING,
-        }
-        security_color = security_colors.get(security_level, Theme.Colors.WARNING)
+        response_time = component_data.response_time_ms or 0
 
         self.content = ft.Row(
             [
@@ -51,9 +47,9 @@ class OverviewSection(ft.Container):
                     Theme.Colors.PRIMARY,
                 ),
                 MetricCard(
-                    "Security Level",
-                    security_level.title(),
-                    security_color,
+                    "Response Time",
+                    f"{response_time:.0f}ms",
+                    Theme.Colors.INFO,
                 ),
                 MetricCard(
                     "Token Expiry",
@@ -69,7 +65,7 @@ class OverviewSection(ft.Container):
 class ConfigurationSection(ft.Container):
     """Configuration section showing JWT and security settings."""
 
-    def __init__(self, metadata: dict) -> None:
+    def __init__(self, metadata: dict[str, Any]) -> None:
         """
         Initialize configuration section.
 
@@ -82,7 +78,6 @@ class ConfigurationSection(ft.Container):
         secret_key_configured = metadata.get("secret_key_configured", False)
         secret_key_length = metadata.get("secret_key_length", 0)
         database_available = metadata.get("database_available", False)
-        token_expiry_display = metadata.get("token_expiry_display", "Unknown")
 
         # Secret key strength assessment
         if secret_key_length >= 64:
@@ -164,21 +159,6 @@ class ConfigurationSection(ft.Container):
             )
         )
 
-        # Token Expiry row
-        config_rows.append(
-            ft.Row(
-                [
-                    SecondaryText(
-                        "Token Expiry:",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        width=200,
-                    ),
-                    BodyText(token_expiry_display),
-                ],
-                spacing=Theme.Spacing.MD,
-            )
-        )
-
         self.content = ft.Column(
             [
                 H3Text("Configuration"),
@@ -193,7 +173,7 @@ class ConfigurationSection(ft.Container):
 class SecuritySection(ft.Container):
     """Security section showing security analysis and recommendations."""
 
-    def __init__(self, metadata: dict) -> None:
+    def __init__(self, metadata: dict[str, Any]) -> None:
         """
         Initialize security section.
 
@@ -326,12 +306,35 @@ class StatisticsSection(ft.Container):
         self.padding = Theme.Spacing.MD
 
 
+class OverviewTab(ft.Container):
+    """Overview tab combining existing config and security sections."""
+
+    def __init__(self, component_data: ComponentStatus) -> None:
+        super().__init__()
+
+        metadata = component_data.metadata or {}
+
+        self.content = ft.Column(
+            [
+                OverviewSection(component_data),
+                ConfigurationSection(metadata),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
+                SecuritySection(metadata),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
+                StatisticsSection(component_data),
+            ],
+            spacing=0,
+            scroll=ft.ScrollMode.AUTO,
+        )
+        self.expand = True
+
+
 class AuthDetailDialog(BaseDetailPopup):
     """
-    Auth service detail popup dialog.
+    Auth service detail popup dialog with tabbed interface.
 
     Displays comprehensive auth service information including security configuration,
-    user statistics, and JWT settings.
+    user statistics, JWT settings, and user management.
     """
 
     def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
@@ -340,23 +343,32 @@ class AuthDetailDialog(BaseDetailPopup):
 
         Args:
             component_data: ComponentStatus containing component health and metrics
+            page: Flet page instance
         """
-        metadata = component_data.metadata or {}
+        metadata: dict[str, Any] = component_data.metadata or {}
 
-        # Build sections
-        sections = [
-            OverviewSection(metadata),
-            ConfigurationSection(metadata),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-            SecuritySection(metadata),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-            StatisticsSection(component_data),
+        # Build tabs list
+        tabs_list = [
+            ft.Tab(text="Overview", content=OverviewTab(component_data)),
+            ft.Tab(text="Users", content=AuthUsersTab(metadata=metadata)),
         ]
 
-        # Initialize base popup with custom sections
+        # Create tabbed interface
+        tabs = ft.Tabs(
+            selected_index=0,
+            animation_duration=200,
+            tabs=tabs_list,
+            expand=True,
+            label_color=ft.Colors.ON_SURFACE,
+            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
+            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
+        )
+
+        # Initialize base popup with tabs (non-scrollable - tabs handle their own scrolling)
         super().__init__(
             page=page,
             component_data=component_data,
             title_text="Auth Service",
-            sections=sections,
+            sections=[tabs],
+            scrollable=False,
         )

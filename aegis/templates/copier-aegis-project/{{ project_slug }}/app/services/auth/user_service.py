@@ -66,6 +66,19 @@ class UserService:
         """Deactivate a user account asynchronously."""
         return await self.update_user(user_id, is_active=False)
 
+    async def activate_user(self, user_id: int) -> User | None:
+        """Activate a user account asynchronously."""
+        return await self.update_user(user_id, is_active=True)
+
+    async def delete_user(self, user_id: int) -> bool:
+        """Permanently delete a user from the system."""
+        user = await self.get_user_by_id(user_id)
+        if not user:
+            return False
+        await self.db.delete(user)
+        await self.db.commit()
+        return True
+
     async def list_users(self) -> list[User]:
         """List all users in the system asynchronously."""
         statement = select(User).order_by(User.created_at.desc())

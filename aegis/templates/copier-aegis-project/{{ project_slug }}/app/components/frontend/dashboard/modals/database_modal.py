@@ -103,7 +103,7 @@ def _build_migration_expanded_content(
         bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
         border_radius=ft.border_radius.all(8),
     )
-    code_theme = "monokai" if is_dark_mode else "atom-one-light"
+    code_theme = "ir-black" if is_dark_mode else "atom-one-light"
 
     return ft.Column(
         [

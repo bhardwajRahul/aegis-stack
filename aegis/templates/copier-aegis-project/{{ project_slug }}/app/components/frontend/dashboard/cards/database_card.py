@@ -21,6 +21,7 @@ from app.services.system.models import ComponentStatus, ComponentStatusType
 from .card_container import CardContainer
 from .card_utils import (
     create_responsive_3_section_layout,
+    get_status_colors,
 )
 
 
@@ -47,24 +48,6 @@ class DatabaseCard:
         """
         self.component_data = component_data
         self._card_container: ft.Container | None = None
-
-    def _get_status_colors(self) -> tuple[str, str, str]:
-        """
-        Get status-aware colors for the card.
-
-        Returns:
-            Tuple of (primary_color, background_color, border_color)
-        """
-        status = self.component_data.status
-
-        if status == ComponentStatusType.HEALTHY:
-            return (ft.Colors.GREEN, ft.Colors.SURFACE, ft.Colors.GREEN)
-        elif status == ComponentStatusType.INFO:
-            return (ft.Colors.BLUE, ft.Colors.SURFACE, ft.Colors.BLUE)
-        elif status == ComponentStatusType.WARNING:
-            return (ft.Colors.ORANGE, ft.Colors.SURFACE, ft.Colors.ORANGE)
-        else:  # UNHEALTHY
-            return (ft.Colors.RED, ft.Colors.SURFACE, ft.Colors.RED)
 
     def _create_table_row(self, table_name: str, row_count: int) -> ft.Container:
         """Create a single table row with metrics (consistent with worker card)."""
@@ -106,7 +89,7 @@ class DatabaseCard:
 
     def _create_technology_badge(self) -> ft.Container:
         """Create the Database technology badge section."""
-        primary_color, _, _ = self._get_status_colors()
+        primary_color, _, _ = get_status_colors(self.component_data)
         metadata = self.component_data.metadata or {}
         implementation = metadata.get("implementation", "sqlite")
 
@@ -116,8 +99,6 @@ class DatabaseCard:
         return TechBadge(
             title=title,
             subtitle="SQL",
-            badge_text="Database",
-            badge_color=ft.Colors.INDIGO,
             primary_color=primary_color,
             width=160,
         )
@@ -396,7 +377,7 @@ class DatabaseCard:
                         SecondaryText("Status:"),
                         LabelText(
                             self.component_data.status.value.title(),
-                            color=self._get_status_colors()[0],
+                            color=get_status_colors(self.component_data)[0],
                         ),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -412,7 +393,9 @@ class DatabaseCard:
 
     def build(self) -> ft.Container:
         """Build and return the complete Database card with responsive layout."""
-        primary_color, background_color, border_color = self._get_status_colors()
+        primary_color, background_color, border_color = get_status_colors(
+            self.component_data
+        )
 
         # Use shared responsive 3-section layout prioritizing middle section
         content = create_responsive_3_section_layout(

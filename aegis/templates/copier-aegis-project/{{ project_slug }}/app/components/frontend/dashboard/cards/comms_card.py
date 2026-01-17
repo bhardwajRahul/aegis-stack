@@ -61,8 +61,6 @@ class CommsCard:
         return TechBadge(
             title="Resend + Twilio",
             subtitle="Communications",
-            badge_text="Comms",
-            badge_color=ft.Colors.PINK,
             primary_color=primary_color,
         )
 

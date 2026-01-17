@@ -63,8 +63,6 @@ class SchedulerCard:
         return TechBadge(
             title="APScheduler",
             subtitle="Task Scheduling",
-            badge_text="Jobs",
-            badge_color=ft.Colors.TEAL,
             primary_color=primary_color,
             width=160,
         )

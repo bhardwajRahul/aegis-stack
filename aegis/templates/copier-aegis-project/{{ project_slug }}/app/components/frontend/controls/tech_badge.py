@@ -25,9 +25,9 @@ class TechBadge(ft.Container):
         self,
         title: str,
         subtitle: str,
-        badge_text: str,
-        badge_color: str,
-        primary_color: str,
+        badge_text: str | None = None,
+        badge_color: str = ft.Colors.AMBER,
+        primary_color: str = ft.Colors.GREEN,
         width: int | None = 200,
     ) -> None:
         """
@@ -36,21 +36,27 @@ class TechBadge(ft.Container):
         Args:
             title: Main technology title (e.g., "FastAPI", "Worker")
             subtitle: Technology subtitle (e.g., "Backend API", "arq + Redis")
-            badge_text: Badge label text (e.g., "API", "QUEUES")
+            badge_text: Badge label text (e.g., "API", "QUEUES"). If None, no badge shown.
             badge_color: Border color for the tag
             primary_color: Status color (for potential future use)
             width: Width of the badge container (default 160px)
         """
+        controls: list[ft.Control] = [
+            H3Text(title),
+            SecondaryText(subtitle),
+        ]
+
+        if badge_text:
+            controls.append(
+                ft.Container(
+                    content=Tag(text=badge_text, color=badge_color),
+                    margin=ft.margin.only(top=4),
+                )
+            )
+
         super().__init__(
             content=ft.Column(
-                [
-                    H3Text(title),
-                    SecondaryText(subtitle),
-                    ft.Container(
-                        content=Tag(text=badge_text, color=badge_color),
-                        margin=ft.margin.only(top=4),
-                    ),
-                ],
+                controls,
                 alignment=ft.MainAxisAlignment.CENTER,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 spacing=4,

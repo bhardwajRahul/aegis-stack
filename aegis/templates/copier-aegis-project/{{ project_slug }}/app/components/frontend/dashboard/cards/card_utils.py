@@ -36,7 +36,7 @@ def get_status_colors(component_data: ComponentStatus) -> tuple[str, str, str]:
     status = component_data.status
 
     if status == ComponentStatusType.HEALTHY:
-        return (ft.Colors.GREEN, ft.Colors.SURFACE, ft.Colors.GREEN)
+        return (ft.Colors.GREEN, ft.Colors.SURFACE, ft.Colors.OUTLINE)
     elif status == ComponentStatusType.INFO:
         return (ft.Colors.BLUE, ft.Colors.SURFACE, ft.Colors.BLUE)
     elif status == ComponentStatusType.WARNING:

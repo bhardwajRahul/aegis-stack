@@ -6,7 +6,7 @@ and conversation metrics in a clean 2-column layout.
 """
 
 import flet as ft
-from app.components.frontend.controls import LabelText, PrimaryText, ServiceCard
+from app.components.frontend.controls import PrimaryText, SecondaryText, ServiceCard
 from app.components.frontend.controls.tech_badge import TechBadge
 from app.services.system.models import ComponentStatus
 
@@ -75,7 +75,7 @@ class AICard:
         return ft.Container(
             content=ft.Column(
                 [
-                    LabelText(label),
+                    SecondaryText(label),
                     ft.Container(height=8),  # Spacing
                     PrimaryText(value),
                 ],
@@ -108,8 +108,6 @@ class AICard:
         return TechBadge(
             title=engine_display,
             subtitle="AI Framework",
-            badge_text="AI",
-            badge_color=ft.Colors.CYAN,
             primary_color=primary_color,
         )
 

@@ -1,5 +1,6 @@
 """Frontend UI controls for styled components."""
 
+from .buttons import ConfirmDialog
 from .data_table import DataTable, DataTableColumn
 from .expandable_data_table import ExpandableDataTable, ExpandableRow
 from .service_card import ServiceCard
@@ -59,4 +60,6 @@ __all__ = [
     "TechBadge",
     # Card layout controls
     "ServiceCard",
+    # Dialog controls
+    "ConfirmDialog",
 ]

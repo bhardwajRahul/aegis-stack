@@ -10,6 +10,7 @@ from dataclasses import asdict
 
 import flet as ft
 from app.components.frontend import styles
+from app.components.frontend.controls.text import BodyText, H3Text
 
 
 class BaseElevatedButton(ft.ElevatedButton):
@@ -238,3 +239,88 @@ class IconDeleteButton(BaseIconButton):
             disabled=disabled,
             **kwargs,
         )
+
+
+class ConfirmDialog(ft.AlertDialog):
+    """
+    Reusable confirmation dialog with consistent styling.
+
+    Features:
+    - Theme-aware styling
+    - Cancel and Confirm buttons
+    - Optional destructive mode (red confirm button)
+    - Async callback support
+    """
+
+    def __init__(
+        self,
+        page: ft.Page,
+        title: str,
+        message: str,
+        confirm_text: str = "Confirm",
+        cancel_text: str = "Cancel",
+        on_confirm: Callable | None = None,
+        destructive: bool = False,
+    ) -> None:
+        """
+        Initialize confirmation dialog.
+
+        Args:
+            page: Flet page instance
+            title: Dialog title
+            message: Dialog message/content
+            confirm_text: Text for confirm button
+            cancel_text: Text for cancel button
+            on_confirm: Callback when confirmed (can be sync or async)
+            destructive: If True, confirm button is styled as destructive (red)
+        """
+        self._page = page
+        self._on_confirm = on_confirm
+
+        # Confirm button style
+        confirm_style = None
+        if destructive:
+            confirm_style = ft.ButtonStyle(
+                bgcolor=ft.Colors.ERROR,
+                color=ft.Colors.ON_ERROR,
+            )
+
+        super().__init__(
+            modal=True,
+            title=H3Text(title),
+            content=BodyText(message),
+            actions=[
+                ft.TextButton(cancel_text, on_click=self._close),
+                ft.FilledButton(
+                    confirm_text,
+                    on_click=self._confirm,
+                    style=confirm_style,
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+        )
+
+    def _close(self, e: ft.ControlEvent) -> None:
+        """Close the dialog."""
+        self.open = False
+        self._page.update()
+
+    def _confirm(self, e: ft.ControlEvent) -> None:
+        """Handle confirm action."""
+        self.open = False
+        self._page.update()
+        if self._on_confirm:
+            import asyncio
+            import inspect
+
+            if inspect.iscoroutinefunction(self._on_confirm):
+                self._page.run_task(self._on_confirm)
+            else:
+                result = self._on_confirm()
+                if asyncio.iscoroutine(result):
+                    self._page.run_task(lambda: result)
+
+    def show(self) -> None:
+        """Show the dialog."""
+        self._page.open(self)

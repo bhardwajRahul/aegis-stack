@@ -14,11 +14,12 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.controls.tech_badge import TechBadge
-from app.services.system.models import ComponentStatus, ComponentStatusType
+from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer
 from .card_utils import (
     create_responsive_3_section_layout,
+    get_status_colors,
 )
 
 
@@ -44,24 +45,6 @@ class RedisCard:
         """
         self.component_data = component_data
         self._card_container: ft.Container | None = None
-
-    def _get_status_colors(self) -> tuple[str, str, str]:
-        """
-        Get status-aware colors for the card.
-
-        Returns:
-            Tuple of (primary_color, background_color, border_color)
-        """
-        status = self.component_data.status
-
-        if status == ComponentStatusType.HEALTHY:
-            return (ft.Colors.GREEN, ft.Colors.SURFACE, ft.Colors.GREEN)
-        elif status == ComponentStatusType.INFO:
-            return (ft.Colors.BLUE, ft.Colors.SURFACE, ft.Colors.BLUE)
-        elif status == ComponentStatusType.WARNING:
-            return (ft.Colors.ORANGE, ft.Colors.SURFACE, ft.Colors.ORANGE)
-        else:  # UNHEALTHY
-            return (ft.Colors.RED, ft.Colors.SURFACE, ft.Colors.RED)
 
     def _create_metric_gauge(
         self, label: str, value: float, unit: str, color: str
@@ -108,13 +91,11 @@ class RedisCard:
 
     def _create_technology_badge(self) -> ft.Container:
         """Create the Redis technology badge section."""
-        primary_color, _, _ = self._get_status_colors()
+        primary_color, _, _ = get_status_colors(self.component_data)
 
         return TechBadge(
             title="Redis",
             subtitle="Cache + Pub/Sub",
-            badge_text="Cache",
-            badge_color=ft.Colors.RED,
             primary_color=primary_color,
             width=160,
         )
@@ -254,7 +235,7 @@ class RedisCard:
                         SecondaryText("Status:"),
                         LabelText(
                             self.component_data.status.value.title(),
-                            color=self._get_status_colors()[0],
+                            color=get_status_colors(self.component_data)[0],
                         ),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -281,7 +262,9 @@ class RedisCard:
 
     def build(self) -> ft.Container:
         """Build and return the complete Redis card with responsive layout."""
-        primary_color, background_color, border_color = self._get_status_colors()
+        primary_color, background_color, border_color = get_status_colors(
+            self.component_data
+        )
 
         # Use shared responsive 3-section layout prioritizing middle section
         content = create_responsive_3_section_layout(

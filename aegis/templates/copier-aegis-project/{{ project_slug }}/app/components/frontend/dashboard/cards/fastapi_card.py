@@ -50,10 +50,7 @@ class FastAPICard:
         return TechBadge(
             title="FastAPI",
             subtitle="Web Framework",
-            badge_text="Backend",
-            badge_color=ft.Colors.GREEN,
             primary_color=primary_color,
-            width=None,  # Let flex handle the width
         )
 
     def _create_metrics_section(self) -> ft.Container:

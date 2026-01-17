@@ -10,7 +10,9 @@ from typing import Any
 
 import flet as ft
 from app.components.frontend.controls.tech_badge import TechBadge
-from app.services.system.models import ComponentStatus, ComponentStatusType
+from app.services.system.models import ComponentStatus
+
+from .card_utils import get_status_colors
 
 
 class BaseCard(ABC):
@@ -41,24 +43,12 @@ class BaseCard(ABC):
         Returns:
             Tuple of (primary_color, background_color, border_color)
         """
-        status = self.component_data.status
-
-        if status == ComponentStatusType.HEALTHY:
-            return (ft.Colors.GREEN, ft.Colors.SURFACE, ft.Colors.GREEN)
-        elif status == ComponentStatusType.INFO:
-            return (ft.Colors.BLUE, ft.Colors.SURFACE, ft.Colors.BLUE)
-        elif status == ComponentStatusType.WARNING:
-            return (ft.Colors.ORANGE, ft.Colors.SURFACE, ft.Colors.ORANGE)
-        else:  # UNHEALTHY
-            return (ft.Colors.RED, ft.Colors.SURFACE, ft.Colors.RED)
+        return get_status_colors(self.component_data)
 
     def _create_technology_badge(
         self,
         title: str,
         subtitle: str,
-        badge_text: str,
-        icon: str,
-        badge_color: str,
         width: int = 160,
     ) -> ft.Container:
         """
@@ -67,9 +57,6 @@ class BaseCard(ABC):
         Args:
             title: Main technology title (e.g., "FastAPI", "Worker")
             subtitle: Technology subtitle (e.g., "Backend API", "arq + Redis")
-            badge_text: Badge label text (e.g., "ACTIVE", "QUEUES")
-            icon: Emoji icon for the technology
-            badge_color: Border color for the badge
             width: Width of the badge container
 
         Returns:
@@ -80,8 +67,6 @@ class BaseCard(ABC):
         return TechBadge(
             title=title,
             subtitle=subtitle,
-            badge_text=badge_text,
-            badge_color=badge_color,
             primary_color=primary_color,
             width=width,
         )
@@ -130,7 +115,7 @@ class BaseCard(ABC):
         Get technology-specific information for the badge.
 
         Returns:
-            Dictionary with keys: title, subtitle, badge_text, icon, badge_color
+            Dictionary with keys: title, subtitle
         """
         pass
 
@@ -190,9 +175,6 @@ class BaseCard(ABC):
             content=self._create_technology_badge(
                 title=tech_info["title"],
                 subtitle=tech_info["subtitle"],
-                badge_text=tech_info["badge_text"],
-                icon=tech_info["icon"],
-                badge_color=tech_info["badge_color"],
                 width=widths["left"],
             ),
             width=widths["left"],
