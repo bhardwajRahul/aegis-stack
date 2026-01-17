@@ -12,6 +12,8 @@ from typing import Any
 import flet as ft
 import httpx
 from app.components.frontend.controls import (
+    DataTable,
+    DataTableColumn,
     H3Text,
     SecondaryText,
 )
@@ -454,92 +456,47 @@ class ModelSearchSection(ft.Container):
             self._show_status(f"Error: {e!s}")
 
     def _display_results(self, models: list[dict[str, Any]]) -> None:
-        # Table header
-        header = ft.Container(
-            content=ft.Row(
-                [
-                    ft.Container(SecondaryText("Model", size=12), expand=True),
-                    ft.Container(SecondaryText("Vendor", size=12), width=100),
-                    ft.Container(
-                        SecondaryText("Context", size=12),
-                        width=70,
-                        alignment=ft.alignment.center_right,
-                    ),
-                    ft.Container(
-                        SecondaryText("In $/M", size=12),
-                        width=70,
-                        alignment=ft.alignment.center_right,
-                    ),
-                    ft.Container(
-                        SecondaryText("Out $/M", size=12),
-                        width=70,
-                        alignment=ft.alignment.center_right,
-                    ),
-                ],
-                spacing=Theme.Spacing.MD,
-            ),
-            padding=ft.padding.symmetric(horizontal=Theme.Spacing.MD, vertical=10),
-            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
-        )
+        # Define columns
+        columns = [
+            DataTableColumn("Model"),  # expands
+            DataTableColumn("Vendor", width=100),
+            DataTableColumn("Context", width=70, alignment="right"),
+            DataTableColumn("In $/M", width=70, alignment="right"),
+            DataTableColumn("Out $/M", width=70, alignment="right"),
+        ]
 
-        # Model rows
-        rows: list[ft.Control] = []
+        # Build row data
+        rows: list[list[ft.Control]] = []
         for model in models:
-            input_price = model.get("input_price")
-            output_price = model.get("output_price")
             model_id = model.get("model_id", "")
             vendor = model.get("vendor", "")
             context = model.get("context_window", 0)
+            input_price = model.get("input_price")
+            output_price = model.get("output_price")
 
-            row = ft.Container(
-                content=ft.Row(
-                    [
-                        ft.Container(
-                            ft.Text(
-                                model_id,
-                                size=12,
-                                weight=ft.FontWeight.W_500,
-                                overflow=ft.TextOverflow.ELLIPSIS,
-                            ),
-                            expand=True,
-                            tooltip=model_id,
-                        ),
-                        ft.Container(
-                            SecondaryText(vendor, size=12),
-                            width=100,
-                        ),
-                        ft.Container(
-                            SecondaryText(_format_context(context), size=12),
-                            width=70,
-                            alignment=ft.alignment.center_right,
-                        ),
-                        ft.Container(
-                            SecondaryText(_format_price(input_price), size=12),
-                            width=70,
-                            alignment=ft.alignment.center_right,
-                        ),
-                        ft.Container(
-                            SecondaryText(_format_price(output_price), size=12),
-                            width=70,
-                            alignment=ft.alignment.center_right,
-                        ),
-                    ],
-                    spacing=Theme.Spacing.MD,
-                ),
-                padding=ft.padding.symmetric(horizontal=Theme.Spacing.MD, vertical=8),
-                border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
+            rows.append(
+                [
+                    ft.Text(
+                        model_id,
+                        size=12,
+                        weight=ft.FontWeight.W_500,
+                        overflow=ft.TextOverflow.ELLIPSIS,
+                        tooltip=model_id,
+                    ),
+                    SecondaryText(vendor, size=12),
+                    SecondaryText(_format_context(context), size=12),
+                    SecondaryText(_format_price(input_price), size=12),
+                    SecondaryText(_format_price(output_price), size=12),
+                ]
             )
-            rows.append(row)
 
-        # Table container
-        table = ft.Container(
-            content=ft.Column(
-                [header, ft.ListView(controls=rows, spacing=0, height=250)],
-                spacing=0,
-            ),
-            bgcolor=ft.Colors.SURFACE,
-            border_radius=Theme.Components.CARD_RADIUS,
-            border=ft.border.all(1, ft.Colors.OUTLINE),
+        # Build table with scrolling
+        table = DataTable(
+            columns=columns,
+            rows=rows,
+            row_padding=8,
+            scroll_height=250,
+            empty_message="No models found",
         )
 
         self._status_text.visible = False
@@ -584,7 +541,7 @@ class LLMCatalogTab(ft.Container):
         """Fetch all data from API and update UI."""
         try:
             async with httpx.AsyncClient() as client:
-                # Fetch stats, vendors, modalities, and featured vendor models in parallel
+                # Fetch stats, vendors, modalities, featured vendor models in parallel
                 stats_task = client.get(
                     f"http://localhost:{settings.PORT}/api/v1/llm/status",
                     timeout=10.0,

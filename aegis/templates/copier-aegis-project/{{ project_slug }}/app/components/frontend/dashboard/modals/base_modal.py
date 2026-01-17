@@ -67,7 +67,7 @@ class BaseDetailDialog(ft.AlertDialog):
             ),
             width=width,
             height=height,
-            border=ft.border.all(1, self._get_status_color()),  # Status-colored border
+            border=ft.border.all(1, ft.Colors.OUTLINE),  # Neutral border
             border_radius=Theme.Components.CARD_RADIUS,  # Rounded corners like cards
         )
 

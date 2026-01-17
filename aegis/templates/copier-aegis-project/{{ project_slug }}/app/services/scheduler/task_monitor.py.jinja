@@ -86,11 +86,15 @@ class TaskHealthMonitor:
             
             for task in tasks:
                 if task.next_run_time and task.status == "active":
+                    # Try to get docstring from function reference
+                    description = self._get_docstring_from_func_ref(task.function)
                     upcoming_tasks.append(UpcomingTask(
                         job_id=task.job_id,
                         name=task.name,
                         next_run=task.next_run_time.isoformat(),
-                        schedule=task.schedule
+                        schedule=task.schedule,
+                        function=task.function,
+                        description=description,
                     ))
             
             # Sort by next run time and take top 5
@@ -128,11 +132,17 @@ class TaskHealthMonitor:
             active_jobs.sort(key=lambda x: x.next_run_time)
             
             for job in active_jobs[:5]:
+                # Get function info
+                func_path = self._get_function_path(job)
+                func_doc = self._get_function_docstring(job)
+
                 upcoming_tasks.append(UpcomingTask(
                     job_id=job.id,
                     name=job.name or job.id,
                     next_run=job.next_run_time.isoformat(),
-                    schedule=self._format_trigger_simple(job.trigger)
+                    schedule=self._format_trigger_simple(job.trigger),
+                    function=func_path,
+                    description=func_doc,
                 ))
             
             return SchedulerHealthMetadata(
@@ -187,3 +197,62 @@ class TaskHealthMonitor:
                 return f"Once at {trigger.run_date.strftime('%Y-%m-%d %H:%M')}"
         
         return trigger_type.replace("Trigger", "")
+
+    def _get_function_path(self, job: Any) -> str:
+        """Get the function path from an APScheduler job."""
+        try:
+            if hasattr(job, "func_ref") and job.func_ref:
+                return job.func_ref
+            if hasattr(job, "func") and job.func:
+                func = job.func
+                module = getattr(func, "__module__", "")
+                name = getattr(func, "__qualname__", getattr(func, "__name__", "unknown"))
+                if module:
+                    return f"{module}.{name}"
+                return name
+        except Exception:
+            pass
+        return "unknown"
+
+    def _get_function_docstring(self, job: Any) -> str | None:
+        """Get the function docstring from an APScheduler job."""
+        try:
+            if hasattr(job, "func") and job.func:
+                doc = getattr(job.func, "__doc__", None)
+                if doc:
+                    # Get first line of docstring, cleaned up
+                    first_line = doc.strip().split("\n")[0].strip()
+                    return first_line if first_line else None
+        except Exception:
+            pass
+        return None
+
+    def _get_docstring_from_func_ref(self, func_ref: str) -> str | None:
+        """Get docstring by importing the function from its reference string.
+
+        Args:
+            func_ref: Function reference like 'module:function' or 'module.function'
+
+        Returns:
+            First line of docstring, or None if not found
+        """
+        import importlib
+
+        try:
+            # Handle APScheduler format 'module:function'
+            if ":" in func_ref:
+                module_path, func_name = func_ref.rsplit(":", 1)
+            elif "." in func_ref:
+                module_path, func_name = func_ref.rsplit(".", 1)
+            else:
+                return None
+
+            module = importlib.import_module(module_path)
+            func = getattr(module, func_name, None)
+
+            if func and func.__doc__:
+                first_line = func.__doc__.strip().split("\n")[0].strip()
+                return first_line if first_line else None
+        except Exception:
+            pass
+        return None

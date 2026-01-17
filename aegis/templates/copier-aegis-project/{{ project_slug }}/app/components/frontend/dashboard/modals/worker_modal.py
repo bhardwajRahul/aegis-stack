@@ -2,21 +2,23 @@
 Worker Detail Modal
 
 Displays comprehensive worker component information using component composition.
-Each section is a self-contained Flet control that can be reused and tested independently.
+Each section is a self-contained Flet control that can be reused and tested.
 """
 
 import flet as ft
 from app.components.frontend.controls import (
     BodyText,
-    H3Text,
+    DataTableColumn,
+    ExpandableDataTable,
+    ExpandableRow,
     PrimaryText,
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.components.worker.registry import get_queue_metadata
 from app.services.system.models import ComponentStatus
 
 from .base_detail_popup import BaseDetailPopup
-from .modal_constants import ModalLayout
 from .modal_sections import MetricCard
 
 # Worker health status thresholds
@@ -34,127 +36,164 @@ COL_WIDTH_FAILED = 80
 COL_WIDTH_SUCCESS_RATE = 100
 COL_WIDTH_STATUS = 80
 
-# Statistics section layout
-STAT_LABEL_WIDTH = 200  # Label column width
 
-# Display formatting
-MAX_REDIS_URL_DISPLAY_LENGTH = 50
+def _build_queue_expanded_content(queue_name: str) -> ft.Control:
+    """Build expanded content showing registered functions for a queue.
 
+    Args:
+        queue_name: Name of the queue (e.g., 'system', 'load_test')
 
-class QueueHealthRow(ft.Container):
-    """Single queue health status display."""
+    Returns:
+        Column with queue description and registered functions
+    """
+    try:
+        metadata = get_queue_metadata(queue_name)
+        description = metadata.get("description", "")
+        functions = metadata.get("functions", [])
+        max_jobs = metadata.get("max_jobs", 10)
+        timeout = metadata.get("timeout", 300)
+    except Exception:
+        description = f"Queue: {queue_name}"
+        functions = []
+        max_jobs = 10
+        timeout = 300
 
-    def __init__(self, queue_component: ComponentStatus, page: ft.Page) -> None:
-        """
-        Initialize queue health row.
+    content: list[ft.Control] = []
 
-        Args:
-            queue_component: ComponentStatus for a single queue
-        """
-        super().__init__()
-
-        queue_name = queue_component.name
-        metadata = queue_component.metadata or {}
-        worker_alive = metadata.get("worker_alive", False)
-        queued_jobs = metadata.get("queued_jobs", 0)
-        jobs_ongoing = metadata.get("jobs_ongoing", 0)
-        jobs_completed = metadata.get("jobs_completed", 0)
-        jobs_failed = metadata.get("jobs_failed", 0)
-        failure_rate = metadata.get("failure_rate_percent", 0.0)
-        has_job_history = (jobs_completed + jobs_failed) > 0
-
-        # Determine status icon and color (matching card behavior)
-        message = queue_component.message or ""
-        if not worker_alive:
-            if "no functions" in message.lower():
-                status_icon = "⚪"  # No tasks defined
-                status_color = ft.Colors.GREY_600
-                status_text = "No Tasks"
-            else:
-                status_icon = "🔴"  # Offline - problem
-                status_color = Theme.Colors.ERROR
-                status_text = "Offline"
-        elif failure_rate > FAILURE_RATE_CRITICAL_THRESHOLD:
-            status_icon = "🔴"  # Failing
-            status_color = Theme.Colors.ERROR
-            status_text = "Failing"
-        elif failure_rate > FAILURE_RATE_WARNING_THRESHOLD:
-            status_icon = "🟠"  # Degraded
-            status_color = Theme.Colors.WARNING
-            status_text = "Degraded"
-        elif jobs_ongoing > 0:
-            status_icon = "🔵"  # Active - processing
-            status_color = Theme.Colors.INFO
-            status_text = "Active"
-        else:
-            status_icon = "🟢"  # Healthy
-            status_color = Theme.Colors.SUCCESS
-            status_text = "Online"
-
-        # Success rate display with color coding
-        # Show N/A when no jobs have been processed yet
-        success_rate: float | None = (
-            (100 - failure_rate) if (worker_alive and has_job_history) else None
+    # Description on top with italic styling
+    if description:
+        content.append(
+            ft.Text(
+                description,
+                size=Theme.Typography.BODY,
+                italic=True,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+            )
         )
-        if success_rate is None:
-            rate_color = ft.Colors.ON_SURFACE_VARIANT
-        elif success_rate >= SUCCESS_RATE_HEALTHY_THRESHOLD:
-            rate_color = Theme.Colors.SUCCESS
-        elif success_rate >= SUCCESS_RATE_WARNING_THRESHOLD:
-            rate_color = Theme.Colors.WARNING
-        else:
-            rate_color = Theme.Colors.ERROR
+        content.append(ft.Container(height=Theme.Spacing.SM))
 
-        self.content = ft.Row(
+    # Registered functions
+    if functions:
+        # Tasks header
+        content.append(SecondaryText("Tasks:", size=Theme.Typography.BODY_SMALL))
+        # Each task on its own line with bullet
+        for func in functions:
+            content.append(
+                ft.Container(
+                    content=SecondaryText(
+                        f"  • {func}",
+                        size=Theme.Typography.BODY_SMALL,
+                    ),
+                    padding=ft.padding.only(left=Theme.Spacing.SM),
+                )
+            )
+    else:
+        content.append(
+            SecondaryText("No tasks registered", size=Theme.Typography.BODY_SMALL)
+        )
+
+    # Config info
+    content.append(
+        ft.Row(
             [
-                ft.Container(
-                    content=ft.Text(status_icon, size=16),
-                    width=COL_WIDTH_STATUS_ICON,
-                ),
-                ft.Container(
-                    content=PrimaryText(queue_name, size=Theme.Typography.BODY),
-                    expand=2,
-                ),
-                ft.Container(
-                    content=BodyText(str(queued_jobs), text_align=ft.TextAlign.CENTER),
-                    width=COL_WIDTH_QUEUED,
-                ),
-                ft.Container(
-                    content=BodyText(str(jobs_ongoing), text_align=ft.TextAlign.CENTER),
-                    width=COL_WIDTH_PROCESSING,
-                ),
-                ft.Container(
-                    content=BodyText(
-                        str(jobs_completed), text_align=ft.TextAlign.CENTER
-                    ),
-                    width=COL_WIDTH_COMPLETED,
-                ),
-                ft.Container(
-                    content=BodyText(str(jobs_failed), text_align=ft.TextAlign.CENTER),
-                    width=COL_WIDTH_FAILED,
-                ),
-                ft.Container(
-                    content=SecondaryText(
-                        f"{success_rate:.1f}%" if success_rate is not None else "N/A",
-                        color=rate_color,
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    width=COL_WIDTH_SUCCESS_RATE,
-                ),
-                ft.Container(
-                    content=SecondaryText(
-                        status_text,
-                        color=status_color,
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    width=COL_WIDTH_STATUS,
+                SecondaryText(
+                    f"max_jobs={max_jobs}, timeout={timeout}s",
+                    size=Theme.Typography.BODY_SMALL,
                 ),
             ],
             spacing=Theme.Spacing.SM,
         )
-        self.padding = ft.padding.symmetric(vertical=Theme.Spacing.XS)
+    )
+
+    return ft.Column(content, spacing=0)
+
+
+def _build_queue_health_row(queue_component: ComponentStatus) -> ExpandableRow:
+    """Build row cells for a single queue health status.
+
+    Args:
+        queue_component: ComponentStatus for a single queue
+
+    Returns:
+        List of controls for each column in the row
+    """
+    queue_name = queue_component.name
+    metadata = queue_component.metadata or {}
+    worker_alive = metadata.get("worker_alive", False)
+    queued_jobs = metadata.get("queued_jobs", 0)
+    jobs_ongoing = metadata.get("jobs_ongoing", 0)
+    jobs_completed = metadata.get("jobs_completed", 0)
+    jobs_failed = metadata.get("jobs_failed", 0)
+    failure_rate = metadata.get("failure_rate_percent", 0.0)
+    has_job_history = (jobs_completed + jobs_failed) > 0
+
+    # Determine status icon and color (matching card behavior)
+    message = queue_component.message or ""
+    if not worker_alive:
+        if "no functions" in message.lower():
+            status_icon = "⚪"  # No tasks defined
+            status_color = ft.Colors.GREY_600
+            status_text = "No Tasks"
+        else:
+            status_icon = "🔴"  # Offline - problem
+            status_color = Theme.Colors.ERROR
+            status_text = "Offline"
+    elif failure_rate > FAILURE_RATE_CRITICAL_THRESHOLD:
+        status_icon = "🔴"  # Failing
+        status_color = Theme.Colors.ERROR
+        status_text = "Failing"
+    elif failure_rate > FAILURE_RATE_WARNING_THRESHOLD:
+        status_icon = "🟠"  # Degraded
+        status_color = Theme.Colors.WARNING
+        status_text = "Degraded"
+    elif jobs_ongoing > 0:
+        status_icon = "🔵"  # Active - processing
+        status_color = Theme.Colors.INFO
+        status_text = "Active"
+    else:
+        status_icon = "🟢"  # Healthy
+        status_color = Theme.Colors.SUCCESS
+        status_text = "Online"
+
+    # Success rate display with color coding
+    # Show N/A when no jobs have been processed yet
+    success_rate: float | None = (
+        (100 - failure_rate) if (worker_alive and has_job_history) else None
+    )
+    if success_rate is None:
+        rate_color = ft.Colors.ON_SURFACE_VARIANT
+    elif success_rate >= SUCCESS_RATE_HEALTHY_THRESHOLD:
+        rate_color = Theme.Colors.SUCCESS
+    elif success_rate >= SUCCESS_RATE_WARNING_THRESHOLD:
+        rate_color = Theme.Colors.WARNING
+    else:
+        rate_color = Theme.Colors.ERROR
+
+    cells = [
+        ft.Text(status_icon, size=16),
+        PrimaryText(queue_name, size=Theme.Typography.BODY),
+        BodyText(str(queued_jobs), text_align=ft.TextAlign.CENTER),
+        BodyText(str(jobs_ongoing), text_align=ft.TextAlign.CENTER),
+        BodyText(str(jobs_completed), text_align=ft.TextAlign.CENTER),
+        BodyText(str(jobs_failed), text_align=ft.TextAlign.CENTER),
+        SecondaryText(
+            f"{success_rate:.1f}%" if success_rate is not None else "N/A",
+            color=rate_color,
+            weight=Theme.Typography.WEIGHT_SEMIBOLD,
+            text_align=ft.TextAlign.CENTER,
+        ),
+        SecondaryText(
+            status_text,
+            color=status_color,
+            weight=Theme.Typography.WEIGHT_SEMIBOLD,
+            text_align=ft.TextAlign.CENTER,
+        ),
+    ]
+
+    return ExpandableRow(
+        cells=cells,
+        expanded_content=_build_queue_expanded_content(queue_name),
+    )
 
 
 class OverviewSection(ft.Container):
@@ -181,6 +220,12 @@ class OverviewSection(ft.Container):
 
         active_workers = metadata.get("active_workers", 0)
         total_ongoing = metadata.get("total_ongoing", 0)
+        total_queued = metadata.get("total_queued", 0)
+        total_completed = metadata.get("total_completed", 0)
+        total_failed = metadata.get("total_failed", 0)
+
+        # Color for failed jobs - red if any failures
+        failed_color = Theme.Colors.ERROR if total_failed > 0 else Theme.Colors.SUCCESS
 
         self.content = ft.Row(
             [
@@ -195,9 +240,24 @@ class OverviewSection(ft.Container):
                     Theme.Colors.SUCCESS,
                 ),
                 MetricCard(
-                    "Jobs Processing",
+                    "Processing",
                     str(total_ongoing),
                     Theme.Colors.INFO,
+                ),
+                MetricCard(
+                    "Queued",
+                    str(total_queued),
+                    Theme.Colors.WARNING,
+                ),
+                MetricCard(
+                    "Completed",
+                    str(total_completed),
+                    Theme.Colors.SUCCESS,
+                ),
+                MetricCard(
+                    "Failed",
+                    str(total_failed),
+                    failed_color,
                 ),
             ],
             spacing=Theme.Spacing.MD,
@@ -223,147 +283,85 @@ class QueueHealthSection(ft.Container):
         if queues_component and queues_component.sub_components:
             queue_components = list(queues_component.sub_components.values())
 
-        # Column headers
-        header_row = ft.Row(
-            [
-                ft.Container(width=COL_WIDTH_STATUS_ICON),  # Status icon column
-                ft.Container(
-                    content=SecondaryText(
-                        "Queue Name", weight=Theme.Typography.WEIGHT_SEMIBOLD
-                    ),
-                    expand=2,
-                ),
-                ft.Container(
-                    content=SecondaryText(
-                        "Queued",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    width=COL_WIDTH_QUEUED,
-                ),
-                ft.Container(
-                    content=SecondaryText(
-                        "Processing",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    width=COL_WIDTH_PROCESSING,
-                ),
-                ft.Container(
-                    content=SecondaryText(
-                        "Completed",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    width=COL_WIDTH_COMPLETED,
-                ),
-                ft.Container(
-                    content=SecondaryText(
-                        "Failed",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    width=COL_WIDTH_FAILED,
-                ),
-                ft.Container(
-                    content=SecondaryText(
-                        "Success Rate",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    width=COL_WIDTH_SUCCESS_RATE,
-                ),
-                ft.Container(
-                    content=SecondaryText(
-                        "Status",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    width=COL_WIDTH_STATUS,
-                ),
-            ],
-            spacing=Theme.Spacing.SM,
+        # Define columns
+        columns = [
+            DataTableColumn("", width=COL_WIDTH_STATUS_ICON),  # Status icon
+            DataTableColumn("Queue Name"),  # expands
+            DataTableColumn("Queued", width=COL_WIDTH_QUEUED, alignment="center"),
+            DataTableColumn(
+                "Processing", width=COL_WIDTH_PROCESSING, alignment="center"
+            ),
+            DataTableColumn("Completed", width=COL_WIDTH_COMPLETED, alignment="center"),
+            DataTableColumn("Failed", width=COL_WIDTH_FAILED, alignment="center"),
+            DataTableColumn(
+                "Success Rate", width=COL_WIDTH_SUCCESS_RATE, alignment="center"
+            ),
+            DataTableColumn("Status", width=COL_WIDTH_STATUS, alignment="center"),
+        ]
+
+        # Build row data
+        rows = [_build_queue_health_row(queue) for queue in queue_components]
+
+        # Build table
+        table = ExpandableDataTable(
+            columns=columns,
+            rows=rows,
+            row_padding=6,
+            empty_message="No queues configured",
         )
 
-        # Queue rows
-        queue_rows = [QueueHealthRow(queue, page) for queue in queue_components]
-
-        self.content = ft.Column(
-            [
-                H3Text("Queue Status"),
-                ft.Container(height=Theme.Spacing.SM),
-                header_row,
-                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
-                ft.Column(
-                    queue_rows if queue_rows else [BodyText("No queues configured")],
-                    spacing=0,
-                ),
-            ],
-            spacing=0,
-        )
+        self.content = table
 
 
-class StatisticsSection(ft.Container):
-    """Statistics section showing worker infrastructure information."""
+class BrokerSection(ft.Container):
+    """Visual broker connection diagram showing Redis as the message broker."""
 
     def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         """
-        Initialize statistics section.
+        Initialize broker section.
 
         Args:
-            component_data: Worker ComponentStatus with full health information
+            component_data: Worker ComponentStatus with Redis URL in metadata
         """
         super().__init__()
-        self.padding = Theme.Spacing.MD
 
-        status = component_data.status
-        message = component_data.message
-        response_time = component_data.response_time_ms or 0
         metadata = component_data.metadata or {}
+        redis_url = metadata.get("redis_url", "redis://localhost:6379")
 
-        total_queued = metadata.get("total_queued", 0)
-        total_completed = metadata.get("total_completed", 0)
-        total_failed = metadata.get("total_failed", 0)
-        total_retried = metadata.get("total_retried", 0)
-        overall_failure_rate = metadata.get("overall_failure_rate_percent", 0.0)
-        redis_url = metadata.get("redis_url", "Not configured")
+        # Parse URL for display (just host:port)
+        display_url = redis_url.replace("redis://", "")
 
-        # Truncate Redis URL for display
-        if len(redis_url) > MAX_REDIS_URL_DISPLAY_LENGTH:
-            redis_url = redis_url[: MAX_REDIS_URL_DISPLAY_LENGTH - 3] + "..."
+        # Arrow pointing down from table to broker
+        arrow = ft.Container(
+            content=ft.Text("▼", size=24, color=ft.Colors.OUTLINE),
+            alignment=ft.alignment.center,
+        )
 
-        def stat_row(label: str, value: str) -> ft.Row:
-            """Create a statistics row with label and value."""
-            return ft.Row(
+        # Redis broker box
+        broker_box = ft.Container(
+            content=ft.Column(
                 [
-                    SecondaryText(
-                        f"{label}:",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        width=STAT_LABEL_WIDTH,
-                    ),
-                    BodyText(value),
+                    ft.Text("Redis", size=16, weight=ft.FontWeight.W_600),
+                    SecondaryText("Message Broker", size=12),
+                    ft.Container(height=4),
+                    BodyText(display_url, size=11),
                 ],
-                spacing=Theme.Spacing.MD,
-            )
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=2,
+            ),
+            padding=ft.padding.all(16),
+            border=ft.border.all(1, ft.Colors.OUTLINE),
+            border_radius=12,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            width=160,
+        )
 
         self.content = ft.Column(
-            [
-                H3Text("Worker Information"),
-                ft.Container(height=Theme.Spacing.SM),
-                stat_row("Component Status", status.value.upper()),
-                stat_row("Health Message", message),
-                stat_row("Response Time", f"{response_time}ms"),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-                stat_row("Total Queued", str(total_queued)),
-                stat_row("Total Completed", str(total_completed)),
-                stat_row("Total Failed", str(total_failed)),
-                stat_row("Total Retried", str(total_retried)),
-                stat_row("Overall Failure Rate", f"{overall_failure_rate:.1f}%"),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-                stat_row("Redis URL", redis_url),
-            ],
-            spacing=Theme.Spacing.XS,
+            [arrow, broker_box],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=8,
         )
+        self.padding = Theme.Spacing.MD
 
 
 class WorkerDetailDialog(BaseDetailPopup):
@@ -371,7 +369,7 @@ class WorkerDetailDialog(BaseDetailPopup):
     Worker component detail popup dialog.
 
     Displays comprehensive worker information including queue health,
-    job statistics, and infrastructure details.
+    job statistics, and broker connection diagram.
     """
 
     def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
@@ -385,11 +383,7 @@ class WorkerDetailDialog(BaseDetailPopup):
         sections = [
             OverviewSection(component_data, page),
             QueueHealthSection(component_data, page),
-            ft.Divider(
-                height=ModalLayout.SECTION_DIVIDER_HEIGHT,
-                color=ft.Colors.OUTLINE_VARIANT,
-            ),
-            StatisticsSection(component_data, page),
+            BrokerSection(component_data, page),
         ]
 
         # Initialize base popup with custom sections

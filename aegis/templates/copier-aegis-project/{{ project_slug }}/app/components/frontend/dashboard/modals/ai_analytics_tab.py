@@ -11,6 +11,8 @@ from typing import Any
 import flet as ft
 import httpx
 from app.components.frontend.controls import (
+    DataTable,
+    DataTableColumn,
     H3Text,
     SecondaryText,
     Tag,
@@ -20,7 +22,7 @@ from app.components.frontend.theme import DarkColorPalette
 from app.core.config import settings
 from app.core.formatting import format_cost, format_number
 
-from .modal_sections import EmptyStatePlaceholder, MetricCard, PieChartCard
+from .modal_sections import MetricCard, PieChartCard
 
 
 def _format_relative_time(timestamp_str: str) -> str:
@@ -233,160 +235,54 @@ class RecentActivitySection(ft.Container):
 
         recent = stats.get("recent", [])
 
-        if not recent:
-            self.content = ft.Column(
+        # Define columns with styling
+        columns = [
+            DataTableColumn("Time", width=120, style="secondary"),
+            DataTableColumn("Model", width=140, style="primary"),
+            DataTableColumn("Action", width=180, style="secondary"),
+            DataTableColumn("Input", width=80, alignment="right", style="body"),
+            DataTableColumn("Output", width=80, alignment="right", style="body"),
+            DataTableColumn("Cost", width=90, alignment="right", style="body"),
+            DataTableColumn("Status", width=80, alignment="right", style=None),
+        ]
+
+        # Build row data - strings auto-styled, Tag passed through
+        rows: list[list[Any]] = []
+        for activity in recent:
+            success = activity.get("success", True)
+            status_text = "Success" if success else "Failed"
+            status_color = Theme.Colors.SUCCESS if success else Theme.Colors.ERROR
+            input_tokens = activity.get("input_tokens", 0)
+            output_tokens = activity.get("output_tokens", 0)
+            relative_time = _format_relative_time(activity.get("timestamp", ""))
+
+            rows.append(
                 [
-                    H3Text("Recent Activity"),
-                    ft.Container(height=Theme.Spacing.SM),
-                    EmptyStatePlaceholder("No recent activity"),
-                ],
-                spacing=0,
-            )
-        else:
-            # Column widths
-            col_time = 120
-            col_model = 140
-            col_action = 180
-            col_input = 80
-            col_output = 80
-            col_cost = 90
-            col_status = 80
-
-            # Table header with muted text
-            header = ft.Container(
-                content=ft.Row(
-                    [
-                        ft.Container(
-                            SecondaryText("Time", size=12),
-                            width=col_time,
-                        ),
-                        ft.Container(
-                            SecondaryText("Model", size=12),
-                            width=col_model,
-                        ),
-                        ft.Container(
-                            SecondaryText("Action", size=12),
-                            width=col_action,
-                        ),
-                        ft.Container(
-                            SecondaryText("Input", size=12),
-                            width=col_input,
-                            alignment=ft.alignment.center_right,
-                        ),
-                        ft.Container(
-                            SecondaryText("Output", size=12),
-                            width=col_output,
-                            alignment=ft.alignment.center_right,
-                        ),
-                        ft.Container(
-                            SecondaryText("Cost", size=12),
-                            width=col_cost,
-                            alignment=ft.alignment.center_right,
-                        ),
-                        ft.Container(
-                            SecondaryText("Status", size=12),
-                            width=col_status,
-                            alignment=ft.alignment.center_right,
-                        ),
-                    ],
-                    spacing=Theme.Spacing.MD,
-                ),
-                padding=ft.padding.symmetric(horizontal=Theme.Spacing.MD, vertical=12),
-                border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
+                    relative_time,
+                    activity.get("model", ""),
+                    activity.get("action", ""),
+                    format_number(input_tokens),
+                    format_number(output_tokens),
+                    format_cost(activity.get("cost", 0)),
+                    Tag(text=status_text, color=status_color),
+                ]
             )
 
-            # Table rows
-            data_rows = []
-            for activity in recent:
-                success = activity.get("success", True)
-                status_text = "Success" if success else "Failed"
-                status_color = Theme.Colors.SUCCESS if success else Theme.Colors.ERROR
+        # Build table
+        table = DataTable(
+            columns=columns,
+            rows=rows,
+            empty_message="No recent activity",
+        )
 
-                # Get input/output tokens
-                input_tokens = activity.get("input_tokens", 0)
-                output_tokens = activity.get("output_tokens", 0)
-
-                # Format relative time
-                relative_time = _format_relative_time(activity.get("timestamp", ""))
-
-                row = ft.Container(
-                    content=ft.Row(
-                        [
-                            ft.Container(
-                                SecondaryText(relative_time, size=13),
-                                width=col_time,
-                            ),
-                            ft.Container(
-                                ft.Text(
-                                    activity.get("model", ""),
-                                    size=13,
-                                    weight=ft.FontWeight.W_500,
-                                ),
-                                width=col_model,
-                            ),
-                            ft.Container(
-                                SecondaryText(activity.get("action", ""), size=13),
-                                width=col_action,
-                            ),
-                            ft.Container(
-                                ft.Text(
-                                    format_number(input_tokens),
-                                    size=13,
-                                    text_align=ft.TextAlign.RIGHT,
-                                ),
-                                width=col_input,
-                                alignment=ft.alignment.center_right,
-                            ),
-                            ft.Container(
-                                ft.Text(
-                                    format_number(output_tokens),
-                                    size=13,
-                                    text_align=ft.TextAlign.RIGHT,
-                                ),
-                                width=col_output,
-                                alignment=ft.alignment.center_right,
-                            ),
-                            ft.Container(
-                                ft.Text(
-                                    format_cost(activity.get("cost", 0)),
-                                    size=13,
-                                    text_align=ft.TextAlign.RIGHT,
-                                ),
-                                width=col_cost,
-                                alignment=ft.alignment.center_right,
-                            ),
-                            ft.Container(
-                                Tag(text=status_text, color=status_color),
-                                width=col_status,
-                                alignment=ft.alignment.center_right,
-                            ),
-                        ],
-                        spacing=Theme.Spacing.MD,
-                    ),
-                    bgcolor=ft.Colors.SURFACE,
-                    padding=ft.padding.symmetric(
-                        horizontal=Theme.Spacing.MD, vertical=10
-                    ),
-                    border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
-                )
-                data_rows.append(row)
-
-            # Table container with dark background
-            table = ft.Container(
-                content=ft.Column([header, *data_rows], spacing=0),
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-                border_radius=Theme.Components.CARD_RADIUS,
-                border=ft.border.all(1, ft.Colors.OUTLINE),
-            )
-
-            self.content = ft.Column(
-                [
-                    H3Text("Recent Activity"),
-                    ft.Container(height=Theme.Spacing.SM),
-                    table,
-                ],
-                spacing=0,
-            )
+        self.content = ft.Column(
+            [
+                H3Text("Recent Activity"),
+                ft.Container(height=Theme.Spacing.SM),
+                table,
+            ],
+            spacing=0,
+        )
         self.padding = Theme.Spacing.MD
 
 

@@ -1,5 +1,7 @@
 """Frontend UI controls for styled components."""
 
+from .data_table import DataTable, DataTableColumn
+from .expandable_data_table import ExpandableDataTable, ExpandableRow
 from .service_card import ServiceCard
 from .table import (
     TableCellText,
@@ -45,6 +47,10 @@ __all__ = [
     "WarningText",
     "ErrorText",
     # Table controls
+    "DataTable",
+    "DataTableColumn",
+    "ExpandableDataTable",
+    "ExpandableRow",
     "TableHeaderText",
     "TableCellText",
     "TableNameText",

@@ -181,12 +181,17 @@ async def check_database_health() -> ComponentStatus:
 
                         try:
                             columns = inspector.get_columns(table_name)
+                            # Get primary key columns
+                            pk_constraint = inspector.get_pk_constraint(table_name)
+                            pk_columns = set(pk_constraint.get("constrained_columns", []))
+
                             schema_info["columns"] = [
                                 {
                                     "name": col["name"],
                                     "type": str(col["type"]),
                                     "nullable": col.get("nullable", True),
                                     "default": str(col.get("default", "")),
+                                    "primary_key": col["name"] in pk_columns,
                                 }
                                 for col in columns
                             ]
@@ -306,6 +311,8 @@ async def check_database_health() -> ComponentStatus:
                                     "file_mtime": file_mtime,
                                     "create_date": create_date,
                                     "is_current": revision_id == current_version,
+                                    "file_path": str(migration_file),
+                                    "content": content,
                                 })
 
                             except Exception as e:

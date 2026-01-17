@@ -7,18 +7,42 @@ Each section is self-contained and can be reused and tested independently.
 
 import flet as ft
 from app.components.frontend.controls import (
-    BodyText,
-    H3Text,
-    PrimaryText,
+    DataTable,
+    DataTableColumn,
+    ExpandableDataTable,
+    ExpandableRow,
     SecondaryText,
+    TableCellText,
+    TableNameText,
+    Tag,
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
 from ..cards.card_utils import format_next_run_time, format_schedule_human_readable
 from .base_detail_popup import BaseDetailPopup
-from .modal_constants import ModalLayout
 from .modal_sections import MetricCard
+
+
+class MiniMetricCard(ft.Container):
+    """Compact metric card for use in expanded row content."""
+
+    def __init__(self, label: str, value: str, color: str) -> None:
+        super().__init__()
+
+        self.content = ft.Column(
+            [
+                SecondaryText(label, size=10),
+                ft.Text(value, size=16, weight=ft.FontWeight.W_600, color=color),
+            ],
+            spacing=2,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+        self.padding = ft.padding.symmetric(horizontal=12, vertical=8)
+        self.bgcolor = ft.Colors.SURFACE
+        self.border_radius = 6
+        self.border = ft.border.all(0.5, ft.Colors.OUTLINE)
+        self.expand = True
 
 
 class OverviewSection(ft.Container):
@@ -61,80 +85,304 @@ class OverviewSection(ft.Container):
         self.padding = Theme.Spacing.MD
 
 
-class JobItem(ft.Container):
-    """Individual scheduled job item display."""
+def _get_mock_job_stats(job_id: str) -> dict:
+    """Get mock statistics for a job (placeholder until milestone 21).
 
-    def __init__(self, task: dict) -> None:
-        """
-        Initialize job item.
+    Args:
+        job_id: Job identifier
 
-        Args:
-            task: Task dictionary with name, next_run, schedule
-        """
-        super().__init__()
+    Returns:
+        Mock statistics dict
+    """
+    # Mock data - will be replaced with real API calls
+    return {
+        "success_rate": 98.5,
+        "total_runs": 142,
+        "avg_duration_ms": 1200,
+        "last_run": "2m ago",
+        "last_status": "success",
+    }
 
-        job_name = task.get("name", task.get("id", "Unknown"))
-        next_run = task.get("next_run", "")
-        schedule = task.get("schedule", "Unknown schedule")
 
-        next_run_display = format_next_run_time(next_run)
-        schedule_display = format_schedule_human_readable(schedule)
+def _get_mock_recent_executions(job_id: str) -> list[dict]:
+    """Get mock recent executions for a job (placeholder until milestone 21).
 
-        self.content = ft.Column(
+    Args:
+        job_id: Job identifier
+
+    Returns:
+        Mock executions list
+    """
+    # Mock data - will be replaced with real API calls
+    return [
+        {"time": "2m ago", "duration": "1.1s", "status": "success", "error": None},
+        {"time": "1d 2h ago", "duration": "1.3s", "status": "success", "error": None},
+        {
+            "time": "2d 2h ago",
+            "duration": "0.8s",
+            "status": "failed",
+            "error": "Connection timeout",
+        },
+    ]
+
+
+def _format_duration(ms: int) -> str:
+    """Format milliseconds to human readable duration."""
+    if ms < 1000:
+        return f"{ms}ms"
+    elif ms < 60000:
+        return f"{ms / 1000:.1f}s"
+    else:
+        return f"{ms / 60000:.1f}m"
+
+
+def _build_job_expanded_content(task: dict) -> ft.Control:
+    """Build expanded content for a scheduled job.
+
+    Args:
+        task: Task dictionary with job details
+
+    Returns:
+        Column with job info, stats, history, and action buttons
+    """
+    function = task.get("function", "Unknown")
+    description = task.get("description")
+    job_id = task.get("id", task.get("job_id", "Unknown"))
+    status = task.get("status", "active")
+
+    # Get mock data (will be replaced with API calls)
+    stats = _get_mock_job_stats(job_id)
+    recent = _get_mock_recent_executions(job_id)
+
+    content: list[ft.Control] = []
+
+    # === Section 1: Job Info ===
+    if description:
+        content.append(
+            ft.Text(
+                description,
+                size=Theme.Typography.BODY,
+                italic=True,
+                color=ft.Colors.ON_SURFACE_VARIANT,
+            )
+        )
+
+    content.append(
+        SecondaryText(f"Function: {function}", size=Theme.Typography.BODY_SMALL)
+    )
+    content.append(ft.Container(height=Theme.Spacing.MD))
+
+    # === Work in Progress Notice ===
+    wip_notice = ft.Container(
+        content=ft.Row(
             [
-                PrimaryText(
-                    job_name,
-                    size=Theme.Typography.BODY_LARGE,
-                    weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                ),
-                ft.Row(
-                    [
-                        SecondaryText(
-                            f"Next run: {next_run_display}",
-                            size=Theme.Typography.BODY_SMALL,
-                        ),
-                        SecondaryText("|", size=Theme.Typography.BODY_SMALL),
-                        SecondaryText(
-                            schedule_display,
-                            size=Theme.Typography.BODY_SMALL,
-                        ),
-                    ],
-                    spacing=Theme.Spacing.SM,
+                ft.Icon(ft.Icons.CONSTRUCTION, size=16, color=ft.Colors.ORANGE_900),
+                ft.Text(
+                    "Work in progress - data below is placeholder, not real execution history",
+                    size=12,
+                    color=ft.Colors.ORANGE_900,
                 ),
             ],
-            spacing=Theme.Spacing.XS,
+            spacing=8,
+        ),
+        bgcolor=ft.Colors.ORANGE_100,
+        padding=ft.padding.symmetric(horizontal=12, vertical=8),
+        border_radius=6,
+    )
+    content.append(wip_notice)
+    content.append(ft.Container(height=Theme.Spacing.MD))
+
+    # === Section 2: Stats Row ===
+    success_rate = stats["success_rate"]
+    rate_color = (
+        Theme.Colors.SUCCESS
+        if success_rate >= 95
+        else Theme.Colors.WARNING
+        if success_rate >= 80
+        else Theme.Colors.ERROR
+    )
+
+    stats_row = ft.Row(
+        [
+            MiniMetricCard("Success Rate", f"{success_rate:.1f}%", rate_color),
+            MiniMetricCard("Total Runs", str(stats["total_runs"]), Theme.Colors.INFO),
+            MiniMetricCard(
+                "Avg Duration",
+                _format_duration(stats["avg_duration_ms"]),
+                ft.Colors.PURPLE_200,
+            ),
+            MiniMetricCard(
+                "Last Run",
+                stats["last_run"],
+                Theme.Colors.SUCCESS
+                if stats["last_status"] == "success"
+                else Theme.Colors.ERROR,
+            ),
+        ],
+        spacing=Theme.Spacing.SM,
+    )
+    content.append(stats_row)
+    content.append(ft.Container(height=Theme.Spacing.MD))
+
+    # === Section 3: Recent Executions ===
+    content.append(SecondaryText("Recent Executions", size=Theme.Typography.BODY_SMALL))
+    content.append(ft.Container(height=Theme.Spacing.XS))
+
+    # Build execution rows
+    exec_columns = [
+        DataTableColumn("Time", width=100, style="secondary"),
+        DataTableColumn("Duration", width=70, alignment="right", style="body"),
+        DataTableColumn("Status", style=None),  # passthrough for Tag
+    ]
+
+    exec_rows = []
+    for ex in recent:
+        is_success = ex["status"] == "success"
+        if is_success:
+            status_tag = Tag(text="Success", color=Theme.Colors.SUCCESS)
+        else:
+            error_text = ex.get("error", "Failed")
+            # Truncate long errors
+            if len(error_text) > 25:
+                error_text = error_text[:22] + "..."
+            status_tag = ft.Row(
+                [
+                    Tag(text="Failed", color=Theme.Colors.ERROR),
+                    SecondaryText(error_text, size=10),
+                ],
+                spacing=4,
+            )
+
+        exec_rows.append([ex["time"], ex["duration"], status_tag])
+
+    exec_table = DataTable(
+        columns=exec_columns,
+        rows=exec_rows,
+        row_padding=4,
+        empty_message="No execution history",
+        show_header_border=True,
+        show_row_borders=False,
+    )
+    content.append(exec_table)
+    content.append(ft.Container(height=Theme.Spacing.MD))
+
+    # === Section 4: Action Buttons ===
+    is_active = status == "active"
+    pause_resume_text = "Pause" if is_active else "Resume"
+    pause_resume_icon = (
+        ft.Icons.PAUSE_CIRCLE_OUTLINE if is_active else ft.Icons.PLAY_CIRCLE_OUTLINE
+    )
+
+    actions_row = ft.Row(
+        [
+            ft.Container(expand=True),  # Spacer to push buttons right
+            ft.OutlinedButton(
+                text="Trigger Now",
+                icon=ft.Icons.PLAY_ARROW,
+                on_click=lambda e: _on_trigger_click(e, job_id),
+            ),
+            ft.OutlinedButton(
+                text=pause_resume_text,
+                icon=pause_resume_icon,
+                on_click=lambda e: _on_pause_toggle_click(e, job_id, is_active),
+            ),
+        ],
+        spacing=Theme.Spacing.SM,
+    )
+    content.append(actions_row)
+
+    return ft.Column(content, spacing=0)
+
+
+def _on_trigger_click(e: ft.ControlEvent, job_id: str) -> None:
+    """Handle trigger button click - shows confirmation dialog.
+
+    Args:
+        e: Click event
+        job_id: Job to trigger
+    """
+    page = e.page
+    if not page:
+        return
+
+    def close_dialog(e: ft.ControlEvent) -> None:
+        dialog.open = False
+        page.update()
+
+    def confirm_trigger(e: ft.ControlEvent) -> None:
+        dialog.open = False
+        page.update()
+        # TODO: Call API to trigger job when milestone 21 is complete
+        page.open(
+            ft.SnackBar(content=ft.Text(f"Triggered job: {job_id} (not implemented)"))
         )
-        self.padding = Theme.Spacing.MD
-        self.bgcolor = ft.Colors.SURFACE
-        self.border_radius = Theme.Components.CARD_RADIUS
-        self.border = ft.border.all(1, ft.Colors.OUTLINE)
+
+    dialog = ft.AlertDialog(
+        modal=True,
+        title=ft.Text("Trigger Job"),
+        content=ft.Text(f"Run '{job_id}' now?"),
+        actions=[
+            ft.TextButton("Cancel", on_click=close_dialog),
+            ft.FilledButton("Run", on_click=confirm_trigger),
+        ],
+        actions_alignment=ft.MainAxisAlignment.END,
+    )
+    page.open(dialog)
 
 
-class EmptyJobsPlaceholder(ft.Container):
-    """Placeholder display when no jobs are scheduled."""
+def _on_pause_toggle_click(e: ft.ControlEvent, job_id: str, is_active: bool) -> None:
+    """Handle pause/resume button click.
 
-    def __init__(self) -> None:
-        """Initialize empty jobs placeholder."""
-        super().__init__()
+    Args:
+        e: Click event
+        job_id: Job to pause/resume
+        is_active: Current active state
+    """
+    page = e.page
+    if not page:
+        return
 
-        self.content = ft.Row(
-            [
-                SecondaryText(
-                    "No scheduled jobs",
-                    size=Theme.Typography.BODY_LARGE,
-                ),
-            ],
-            alignment=ft.MainAxisAlignment.CENTER,
-            spacing=Theme.Spacing.MD,
-        )
-        self.padding = Theme.Spacing.XL
-        self.bgcolor = ft.Colors.SURFACE
-        self.border_radius = Theme.Components.CARD_RADIUS
-        self.border = ft.border.all(1, ft.Colors.OUTLINE)
+    action = "Paused" if is_active else "Resumed"
+    # TODO: Call API to pause/resume job when milestone 21 is complete
+    page.open(ft.SnackBar(content=ft.Text(f"{action} job: {job_id} (not implemented)")))
+
+
+def _build_job_row(task: dict) -> ExpandableRow:
+    """Build expandable row for a scheduled job.
+
+    Args:
+        task: Task dictionary with name, next_run, schedule, status
+
+    Returns:
+        ExpandableRow with cells and expanded content
+    """
+    job_name = task.get("name", task.get("id", "Unknown"))
+    next_run = task.get("next_run", "")
+    schedule = task.get("schedule", "Unknown schedule")
+    status = task.get("status", "active")
+
+    next_run_display = format_next_run_time(next_run)
+    schedule_display = format_schedule_human_readable(schedule)
+
+    # Status icon and text
+    status_icon = "🟢" if status == "active" else "🟠"
+    status_text = "Active" if status == "active" else "Paused"
+
+    cells = [
+        TableNameText(f"{status_icon} {job_name}"),
+        TableCellText(next_run_display),
+        TableCellText(schedule_display),
+        TableCellText(status_text),
+    ]
+
+    return ExpandableRow(
+        cells=cells,
+        expanded_content=_build_job_expanded_content(task),
+    )
 
 
 class JobsSection(ft.Container):
-    """Scheduled jobs list section."""
+    """Scheduled jobs list section using ExpandableDataTable."""
 
     def __init__(self, metadata: dict) -> None:
         """
@@ -147,66 +395,23 @@ class JobsSection(ft.Container):
 
         upcoming_tasks = metadata.get("upcoming_tasks", [])
 
-        if not upcoming_tasks:
-            jobs_content = EmptyJobsPlaceholder()
-        else:
-            job_items = [JobItem(task) for task in upcoming_tasks]
-            jobs_content = ft.Column(job_items, spacing=Theme.Spacing.SM)
+        # Define columns
+        columns = [
+            DataTableColumn("Job Name"),  # expands
+            DataTableColumn("Next Run", width=150),
+            DataTableColumn("Schedule", width=200),
+            DataTableColumn("Status", width=70),
+        ]
 
-        self.content = ft.Column(
-            [
-                H3Text("Scheduled Jobs"),
-                ft.Container(height=Theme.Spacing.SM),
-                jobs_content,
-            ],
-            spacing=0,
-        )
-        self.padding = Theme.Spacing.MD
+        # Build expandable rows
+        rows = [_build_job_row(task) for task in upcoming_tasks]
 
-
-class StatisticsSection(ft.Container):
-    """Component statistics and information section."""
-
-    def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
-        """
-        Initialize statistics section.
-
-        Args:
-            component_data: Complete component status information
-        """
-        super().__init__()
-
-        stats = {
-            "Component Status": component_data.status.value.title(),
-            "Health Message": component_data.message,
-            "Response Time": f"{component_data.response_time_ms:.2f}ms"
-            if component_data.response_time_ms
-            else "N/A",
-        }
-
-        stats_rows = []
-        for label, value in stats.items():
-            stats_rows.append(
-                ft.Row(
-                    [
-                        SecondaryText(
-                            f"{label}:",
-                            weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                            width=150,
-                        ),
-                        BodyText(value),
-                    ],
-                    spacing=Theme.Spacing.MD,
-                )
-            )
-
-        self.content = ft.Column(
-            [
-                H3Text("Component Information"),
-                ft.Container(height=Theme.Spacing.SM),
-                ft.Column(stats_rows, spacing=Theme.Spacing.SM),
-            ],
-            spacing=0,
+        # Build table
+        self.content = ExpandableDataTable(
+            columns=columns,
+            rows=rows,
+            row_padding=6,
+            empty_message="No scheduled jobs",
         )
         self.padding = Theme.Spacing.MD
 
@@ -232,11 +437,6 @@ class SchedulerDetailDialog(BaseDetailPopup):
         sections = [
             OverviewSection(metadata),
             JobsSection(metadata),
-            ft.Divider(
-                height=ModalLayout.SECTION_DIVIDER_HEIGHT,
-                color=ft.Colors.OUTLINE_VARIANT,
-            ),
-            StatisticsSection(component_data, page),
         ]
 
         # Initialize base popup with custom sections
