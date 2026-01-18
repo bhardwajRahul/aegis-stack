@@ -6,8 +6,7 @@ Shows auth-specific metrics with a clean, functional layout.
 """
 
 import flet as ft
-from app.components.frontend.controls import LabelText, PrimaryText, ServiceCard
-from app.components.frontend.controls.tech_badge import TechBadge
+from app.components.frontend.controls import H3Text, PrimaryText, SecondaryText, Tag
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer
@@ -22,7 +21,7 @@ class AuthCard:
 
     Features:
     - Real authentication metrics from health checks
-    - Clean 2-column layout
+    - Title and health status header
     - Highlighted metric containers
     - Responsive design
     """
@@ -32,107 +31,72 @@ class AuthCard:
         self.component_data = component_data
         self.metadata = component_data.metadata or {}
 
-    def _create_metric_container(
-        self, label: str, value: str, color: str = ft.Colors.BLUE
-    ) -> ft.Container:
-        """Create a properly sized metric container."""
+    def _create_metric_container(self, label: str, value: str) -> ft.Container:
+        """Create a properly sized metric container with neutral gray background."""
         return ft.Container(
             content=ft.Column(
                 [
-                    LabelText(label),
-                    ft.Container(height=8),  # More spacing
+                    SecondaryText(label),
+                    ft.Container(height=8),
                     PrimaryText(value),
                 ],
                 spacing=0,
                 horizontal_alignment=ft.CrossAxisAlignment.START,
             ),
-            padding=ft.padding.all(16),  # More padding
-            bgcolor=ft.Colors.with_opacity(0.08, color),
+            padding=ft.padding.all(16),
+            bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.GREY),
             border_radius=8,
-            border=ft.border.all(1, ft.Colors.with_opacity(0.15, color)),
-            height=80,  # Taller containers
+            border=ft.border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.GREY)),
+            height=80,
             expand=True,
         )
 
-    def _create_technology_badge(self) -> ft.Container:
-        """Create technology badge for authentication service."""
+    def _create_health_tag(self) -> ft.Container:
+        """Create health status tag."""
+        status = self.component_data.status.value
         primary_color, _, _ = get_status_colors(self.component_data)
+        return Tag(text=status.upper(), color=primary_color)
 
-        return TechBadge(
-            title="JWT",
-            subtitle="Authentication",
-            badge_text="Auth",
-            badge_color=ft.Colors.AMBER,
-            primary_color=primary_color,
+    def _create_header_row(self) -> ft.Container:
+        """Create header row with title on left and health tag on right."""
+        return ft.Container(
+            content=ft.Row(
+                [
+                    H3Text("Auth Service"),
+                    self._create_health_tag(),
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            padding=ft.padding.only(bottom=16),
         )
 
     def _create_metrics_section(self) -> ft.Container:
         """Create the metrics section with a clean grid layout."""
         # Get real data from metadata
         user_count_display = self.metadata.get("user_count_display", "0")
-        response_time = self.component_data.response_time_ms
-        database_available = self.metadata.get("database_available", False)
         jwt_algorithm = self.metadata.get("jwt_algorithm", "HS256")
         token_expiry_display = self.metadata.get("token_expiry_display", "30 min")
-        security_level = self.metadata.get("security_level", "standard")
 
-        # Color code security level
-        security_color = {
-            "high": ft.Colors.GREEN,
-            "standard": ft.Colors.BLUE,
-            "basic": ft.Colors.ORANGE,
-        }.get(security_level, ft.Colors.GREY)
-
-        # Create metrics grid (3 rows x 2 columns)
         return ft.Container(
             content=ft.Column(
                 [
-                    # Row 1: User count and Response time
+                    # Row 1: Total Users (full width)
                     ft.Row(
                         [
                             self._create_metric_container(
-                                "Total Users", user_count_display, ft.Colors.PURPLE
-                            ),
-                            self._create_metric_container(
-                                "Response Time",
-                                f"{response_time:.1f}ms" if response_time else "N/A",
-                                (
-                                    ft.Colors.GREEN
-                                    if response_time and response_time < 100
-                                    else ft.Colors.ORANGE
-                                ),
-                            ),
+                                "Total Users", user_count_display
+                            )
                         ],
                         expand=True,
                     ),
-                    ft.Container(height=12),  # Vertical spacing
-                    # Row 2: JWT Algorithm and Token Expiry
+                    ft.Container(height=12),
+                    # Row 2: Algorithm and Token Expiry
                     ft.Row(
                         [
+                            self._create_metric_container("Algorithm", jwt_algorithm),
                             self._create_metric_container(
-                                "Algorithm", jwt_algorithm, ft.Colors.BLUE
-                            ),
-                            self._create_metric_container(
-                                "Token Expiry", token_expiry_display, ft.Colors.GREEN
-                            ),
-                        ],
-                        expand=True,
-                    ),
-                    ft.Container(height=12),  # Vertical spacing
-                    # Row 3: Security Level and Database
-                    ft.Row(
-                        [
-                            self._create_metric_container(
-                                "Level", security_level.title(), security_color
-                            ),
-                            self._create_metric_container(
-                                "Database",
-                                "Available" if database_available else "Unavailable",
-                                (
-                                    ft.Colors.GREEN
-                                    if database_available
-                                    else ft.Colors.RED
-                                ),
+                                "Token Expiry", token_expiry_display
                             ),
                         ],
                         expand=True,
@@ -141,7 +105,20 @@ class AuthCard:
                 spacing=0,
             ),
             expand=True,
+        )
+
+    def _create_card_content(self) -> ft.Container:
+        """Create the full card content with header and metrics."""
+        return ft.Container(
+            content=ft.Column(
+                [
+                    self._create_header_row(),
+                    self._create_metrics_section(),
+                ],
+                spacing=0,
+            ),
             padding=ft.padding.all(16),
+            expand=True,
         )
 
     def build(self) -> ft.Container:
@@ -149,14 +126,8 @@ class AuthCard:
         # Get colors based on component status
         _, _, border_color = get_status_colors(self.component_data)
 
-        # Use ServiceCard for consistent service card layout
-        content = ServiceCard(
-            left_content=self._create_technology_badge(),
-            right_content=self._create_metrics_section(),
-        )
-
         return CardContainer(
-            content=content,
+            content=self._create_card_content(),
             border_color=border_color,
             component_data=self.component_data,
             component_name="auth",

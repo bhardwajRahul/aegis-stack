@@ -47,8 +47,6 @@ class FletCard:
         return TechBadge(
             title="Flet",
             subtitle="Python UI",
-            badge_text="Frontend",
-            badge_color=ft.Colors.PURPLE,
             primary_color=primary_color,
             width=160,
         )

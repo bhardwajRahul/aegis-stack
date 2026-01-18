@@ -20,11 +20,13 @@ class Tag(ft.Container):
             border=ft.border.all(1, color),
             border_radius=ft.border_radius.all(5),
             padding=ft.Padding(7.5, 2.5, 7.5, 2.5),
+            alignment=ft.alignment.center,
             content=ft.Text(
                 text,
                 weight=ft.FontWeight.W_700,
                 color=color,
                 font_family=FontConfig.FAMILY_PRIMARY,
                 size=FontConfig.SIZE_TERTIARY,
+                text_align=ft.TextAlign.CENTER,
             ),
         )

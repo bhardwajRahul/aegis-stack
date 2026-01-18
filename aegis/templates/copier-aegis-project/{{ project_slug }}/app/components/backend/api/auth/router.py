@@ -58,7 +58,108 @@ async def login(
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_async_db),
-):
+) -> UserResponse:
     """Get current authenticated user."""
     user = await get_current_user_from_token(token, db)
     return UserResponse.model_validate(user)
+
+
+@router.get("/users", response_model=list[UserResponse])
+async def list_users(
+    db: AsyncSession = Depends(get_async_db),
+) -> list[UserResponse]:
+    """List all users."""
+    user_service = UserService(db)
+    users = await user_service.list_users()
+    return [UserResponse.model_validate(user) for user in users]
+
+
+@router.get("/users/{user_id}", response_model=UserResponse)
+async def get_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_async_db),
+) -> UserResponse:
+    """Get a specific user by ID."""
+    user_service = UserService(db)
+    user = await user_service.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return UserResponse.model_validate(user)
+
+
+@router.patch("/users/{user_id}", response_model=UserResponse)
+async def update_user(
+    user_id: int,
+    full_name: str | None = None,
+    db: AsyncSession = Depends(get_async_db),
+) -> UserResponse:
+    """Update a user's profile."""
+    user_service = UserService(db)
+
+    updates: dict[str, str] = {}
+    if full_name is not None:
+        updates["full_name"] = full_name
+
+    if not updates:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields to update",
+        )
+
+    user = await user_service.update_user(user_id, **updates)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return UserResponse.model_validate(user)
+
+
+@router.patch("/users/{user_id}/deactivate", response_model=UserResponse)
+async def deactivate_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_async_db),
+) -> UserResponse:
+    """Deactivate a user account."""
+    user_service = UserService(db)
+    user = await user_service.deactivate_user(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return UserResponse.model_validate(user)
+
+
+@router.patch("/users/{user_id}/activate", response_model=UserResponse)
+async def activate_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_async_db),
+) -> UserResponse:
+    """Activate a user account."""
+    user_service = UserService(db)
+    user = await user_service.activate_user(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return UserResponse.model_validate(user)
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_async_db),
+) -> None:
+    """Permanently delete a user."""
+    user_service = UserService(db)
+    success = await user_service.delete_user(user_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )

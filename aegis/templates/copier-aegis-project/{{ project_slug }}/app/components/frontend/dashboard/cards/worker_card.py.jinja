@@ -177,7 +177,7 @@ class WorkerCard:
                 # No workers running - truly unhealthy
                 return (ft.Colors.RED, ft.Colors.SURFACE, ft.Colors.RED)
         elif status == ComponentStatusType.HEALTHY:
-            return (ft.Colors.GREEN, ft.Colors.SURFACE, ft.Colors.GREEN)
+            return (ft.Colors.GREEN, ft.Colors.SURFACE, ft.Colors.OUTLINE)
         elif status == ComponentStatusType.INFO:
             return (ft.Colors.BLUE, ft.Colors.SURFACE, ft.Colors.BLUE)
         elif status == ComponentStatusType.WARNING:
@@ -269,8 +269,6 @@ class WorkerCard:
             title="arq",
             subtitle="Async Job Queue",
 {% endif %}
-            badge_text="Worker",
-            badge_color=ft.Colors.PURPLE,
             primary_color=primary_color,
         )
 
