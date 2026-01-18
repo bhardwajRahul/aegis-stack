@@ -47,6 +47,11 @@ async def check_ai_service_health() -> ComponentStatus:
         # Get conversation statistics
         conversation_stats = ai_service.conversation_manager.get_stats()
 
+{% if ai_backend != "memory" %}
+        # Get usage statistics (includes total cost) - only with database backend
+        usage_stats = ai_service.get_usage_stats()
+{% endif %}
+
         # Collect comprehensive metadata using FRESH config for provider/model
         metadata = {
             "service_type": "ai",
@@ -67,9 +72,14 @@ async def check_ai_service_health() -> ComponentStatus:
 {% if ai_backend == "memory" %}
             "persistence": "memory",
             "storage": "in-memory (conversations lost on restart)",
+            "usage_tracking_available": False,
 {% else %}
             "persistence": "sqlite",
             "storage": "database (conversations persist across restarts)",
+            # Usage tracking (requires database)
+            "total_cost": usage_stats.get("total_cost", 0.0),
+            "total_tokens": usage_stats.get("total_tokens", 0),
+            "usage_tracking_available": True,
 {% endif %}
         }
 
