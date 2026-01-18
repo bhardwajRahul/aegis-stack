@@ -58,15 +58,21 @@ class AuthCard:
         return Tag(text=status.upper(), color=primary_color)
 
     def _create_header_row(self) -> ft.Container:
-        """Create header row with title on left and health tag on right."""
+        """Create header row with title/subtitle on left and health tag on right."""
         return ft.Container(
             content=ft.Row(
                 [
-                    H3Text("Auth Service"),
+                    ft.Column(
+                        [
+                            H3Text("Auth Service"),
+                            SecondaryText("JWT Authentication"),
+                        ],
+                        spacing=2,
+                    ),
                     self._create_health_tag(),
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                vertical_alignment=ft.CrossAxisAlignment.START,
             ),
             padding=ft.padding.only(bottom=16),
         )
