@@ -5,17 +5,29 @@ Automatically detects available components and registers their health checks
 with the system health service using Python's import system.
 """
 
+import importlib
+from pathlib import Path
+from typing import Any
+
+from app.components.backend.main import get_configured_app
 from app.core.log import logger
+from app.services.backend.middleware_inspector import (
+    MiddlewareMetadata,
+    get_fastapi_middleware_metadata,
+)
+from app.services.backend.route_inspector import (
+    RouteMetadata,
+    get_fastapi_route_metadata,
+)
 from app.services.system.health import register_health_check
 from app.services.system.models import ComponentStatus, ComponentStatusType
-from app.components.backend.main import get_configured_app
-from app.services.backend.route_inspector import get_fastapi_route_metadata, RouteMetadata
-from app.services.backend.middleware_inspector import get_fastapi_middleware_metadata, MiddlewareMetadata
 
 # Cache for route metadata - initialized once at startup
 _cached_route_metadata: RouteMetadata | None = None
-# Cache for middleware metadata - initialized once at startup  
+# Cache for middleware metadata - initialized once at startup
 _cached_middleware_metadata: MiddlewareMetadata | None = None
+# Cache for lifecycle metadata - initialized once at startup
+_cached_lifecycle_metadata: dict[str, Any] | None = None
 
 
 def _initialize_route_metadata_cache() -> None:
@@ -57,6 +69,82 @@ def _initialize_route_metadata_cache() -> None:
         logger.error(f"Failed to initialize route and middleware metadata cache: {e}")
 
 
+def _discover_lifecycle_hooks() -> dict[str, Any]:
+    """
+    Discover startup and shutdown hooks from the backend directories.
+
+    Returns a dict with startup_hooks and shutdown_hooks lists,
+    each containing hook info with name and description.
+    """
+    backend_dir = Path(__file__).parent.parent
+
+    def get_hooks_from_dir(hook_dir: Path) -> list[dict[str, str]]:
+        """Get hook info from a directory by importing modules and reading docstrings."""
+        hooks = []
+        if not hook_dir.exists():
+            return hooks
+
+        for hook_file in sorted(hook_dir.glob("*.py")):
+            if hook_file.name.startswith("_"):
+                continue
+
+            module_name = f"app.components.backend.{hook_dir.name}.{hook_file.stem}"
+            try:
+                module = importlib.import_module(module_name)
+                # Check if it has a startup_hook or shutdown_hook function
+                hook_func = getattr(module, "startup_hook", None) or getattr(
+                    module, "shutdown_hook", None
+                )
+                if hook_func:
+                    # Get description from function docstring (full text)
+                    doc = hook_func.__doc__ or ""
+                    description = doc.strip() if doc else f"{hook_file.stem} hook"
+
+                    hooks.append({
+                        "name": hook_file.stem,
+                        "description": description,
+                        "module": module_name,
+                    })
+            except Exception as e:
+                logger.debug(f"Could not load hook module {module_name}: {e}")
+                # Still include it as discovered
+                hooks.append({
+                    "name": hook_file.stem,
+                    "description": f"{hook_file.stem} hook",
+                    "module": module_name,
+                })
+
+        return hooks
+
+    startup_hooks = get_hooks_from_dir(backend_dir / "startup")
+    shutdown_hooks = get_hooks_from_dir(backend_dir / "shutdown")
+
+    return {
+        "startup_hooks": startup_hooks,
+        "shutdown_hooks": shutdown_hooks,
+    }
+
+
+def _initialize_lifecycle_metadata_cache() -> None:
+    """Initialize lifecycle metadata cache."""
+    global _cached_lifecycle_metadata
+
+    if _cached_lifecycle_metadata is not None:
+        return
+
+    try:
+        _cached_lifecycle_metadata = _discover_lifecycle_hooks()
+        startup_count = len(_cached_lifecycle_metadata.get("startup_hooks", []))
+        shutdown_count = len(_cached_lifecycle_metadata.get("shutdown_hooks", []))
+        logger.info(
+            f"Lifecycle metadata cached: {startup_count} startup hooks, "
+            f"{shutdown_count} shutdown hooks"
+        )
+    except Exception as e:
+        logger.error(f"Failed to initialize lifecycle metadata cache: {e}")
+        _cached_lifecycle_metadata = {"startup_hooks": [], "shutdown_hooks": []}
+
+
 async def _backend_component_health() -> ComponentStatus:
     """
     FastAPI backend health check with route and middleware introspection.
@@ -66,7 +154,7 @@ async def _backend_component_health() -> ComponentStatus:
     Includes comprehensive route and middleware metadata for dashboard display.
     """
     import os
-    global _cached_route_metadata, _cached_middleware_metadata
+    global _cached_route_metadata, _cached_middleware_metadata, _cached_lifecycle_metadata
 
     # Check if we're in test environment
     if os.getenv("PYTEST_CURRENT_TEST") or "pytest" in os.getenv("_", ""):
@@ -189,7 +277,17 @@ async def _backend_component_health() -> ComponentStatus:
             message_parts.append(f"({method_summary})")
         
         message = f"FastAPI backend active: {', '.join(message_parts)}"
-        
+
+        # Initialize lifecycle cache if not already done
+        if _cached_lifecycle_metadata is None:
+            _initialize_lifecycle_metadata_cache()
+
+        # Build lifecycle metadata (default to empty if still None)
+        lifecycle_data = _cached_lifecycle_metadata or {
+            "startup_hooks": [],
+            "shutdown_hooks": [],
+        }
+
         return ComponentStatus(
             name="backend",
             status=ComponentStatusType.HEALTHY,
@@ -203,6 +301,7 @@ async def _backend_component_health() -> ComponentStatus:
                 "check_method": "internal_execution",
                 **route_metadata.model_dump_for_metadata(),
                 **middleware_metadata.model_dump_for_metadata(),
+                "lifecycle": lifecycle_data,
             },
         )
     except Exception as e:
@@ -354,15 +453,14 @@ async def startup_hook() -> None:
     """
     logger.info("Registering component health checks...")
 
-    # Initialize route metadata cache once at startup
+    # Initialize caches once at startup
     _initialize_route_metadata_cache()
+    _initialize_lifecycle_metadata_cache()
 
-    # Always register core components
+    # Register backend component (includes system metrics - CPU, Memory, Disk)
+    # Note: Frontend (Flet) is integrated into the Server card, no separate check needed
     register_health_check("backend", _backend_component_health)
     logger.info("Backend component health check registered")
-
-    register_health_check("frontend", _frontend_component_health)
-    logger.info("Frontend component health check registered")
 
     {%- if include_scheduler %}
     # Register scheduler component health check

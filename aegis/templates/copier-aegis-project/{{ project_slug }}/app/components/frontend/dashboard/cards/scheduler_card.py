@@ -1,265 +1,297 @@
 """
-Stunning Scheduler Component Card
+Scheduler Card
 
-Modern, visually striking card component that displays scheduled jobs,
-job statistics, and scheduling information using shared utility functions.
+Modern card component for displaying APScheduler job status.
+Table layout matching the worker card pattern.
 """
 
+import contextlib
+from datetime import datetime
+
 import flet as ft
-from app.components.frontend.controls import PrimaryText
-from app.components.frontend.controls.tech_badge import TechBadge
+from app.components.frontend.controls import SecondaryText
+from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer
 from .card_utils import (
-    create_responsive_3_section_layout,
-    create_stats_row,
-    format_next_run_time,
-    format_schedule_human_readable,
+    create_header_row,
     get_status_colors,
 )
 
 
+def simplify_schedule(schedule: str) -> str:
+    """Simplify verbose schedule strings for display.
+
+    Converts verbose cron strings like "Cron: hour=2, minute=0, second=0"
+    to simpler formats like "Daily 2:00 AM".
+    """
+    if not schedule:
+        return "—"
+
+    # Already simple formats pass through
+    if schedule.startswith("Every "):
+        return schedule
+
+    # Handle verbose cron format: "Cron: hour=2, minute=0, second=0"
+    if schedule.startswith("Cron:"):
+        parts = schedule.replace("Cron:", "").strip()
+        params: dict[str, int] = {}
+        for part in parts.split(","):
+            part = part.strip()
+            if "=" in part:
+                key, value = part.split("=", 1)
+                with contextlib.suppress(ValueError):
+                    params[key.strip()] = int(value.strip())
+
+        hour = params.get("hour")
+        minute = params.get("minute", 0)
+
+        if hour is not None:
+            # Format as time
+            period = "AM" if hour < 12 else "PM"
+            display_hour = hour if hour <= 12 else hour - 12
+            if display_hour == 0:
+                display_hour = 12
+            return f"Daily {display_hour}:{minute:02d} {period}"
+
+    # Truncate long schedules
+    if len(schedule) > 15:
+        return schedule[:12] + "..."
+
+    return schedule
+
+
+def format_relative_future_time(iso_str: str) -> str:
+    """Convert ISO datetime string to relative future time.
+
+    Args:
+        iso_str: ISO format datetime string
+
+    Returns:
+        Human-readable relative time like "in 2h", "in 30m"
+    """
+    try:
+        # Parse ISO datetime string
+        if "T" in iso_str:
+            dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+            # Make naive for comparison if needed
+            if dt.tzinfo is not None:
+                dt = dt.replace(tzinfo=None)
+        else:
+            dt = datetime.fromisoformat(iso_str)
+
+        now = datetime.now()
+        diff = dt - now
+
+        seconds = diff.total_seconds()
+        if seconds < 0:
+            return "now"
+        elif seconds < 60:
+            return f"in {int(seconds)}s"
+        elif seconds < 3600:
+            mins = int(seconds / 60)
+            return f"in {mins}m"
+        elif seconds < 86400:
+            hours = seconds / 3600
+            if hours == int(hours):
+                return f"in {int(hours)}h"
+            else:
+                # Show hours and minutes for more precision
+                h = int(hours)
+                m = int((seconds % 3600) / 60)
+                if m > 0:
+                    return f"in {h}h {m}m"
+                return f"in {h}h"
+        else:
+            days = int(seconds / 86400)
+            return f"in {days}d"
+    except Exception:
+        return "—"
+
+
 class SchedulerCard:
     """
-    Visually stunning, wide component card for displaying Scheduler/APScheduler metrics.
+    A clean scheduler card showing scheduled jobs in a table.
 
     Features:
-    - Modern Material Design 3 styling
-    - Three-section layout (badge, jobs, stats)
-    - Scheduled job indicators with next run times
-    - Job statistics and scheduler status
-    - Status-aware coloring and hover effects
-    - 800px width for optimal content spacing
+    - Table layout with header and job rows (matching worker card)
+    - Jobs sorted by next run time (soonest first)
+    - Relative time display for next run
+    - Active/Paused job counts
+    - Responsive design
     """
 
     def __init__(self, component_data: ComponentStatus) -> None:
-        """
-        Initialize the Scheduler card with component data.
-
-        Args:
-            component_data: ComponentStatus containing scheduler health and metrics
-        """
+        """Initialize with scheduler data from health check."""
         self.component_data = component_data
-        self._card_container: ft.Container | None = None
+        self.metadata = component_data.metadata or {}
 
-    def _handle_job_hover_simple(self, e: ft.ControlEvent) -> None:
-        """Simple hover handler that works with event source."""
-        container = e.control
-        buttons = container.content.controls[0].controls[2]  # Access the buttons row
+    def _create_job_table(self) -> ft.Container:
+        """Create the job status table."""
+        upcoming_tasks = self.metadata.get("upcoming_tasks", [])
 
-        if e.data == "true":  # Mouse enter
-            container.border = ft.border.all(1, ft.Colors.GREY_400)
-            buttons.opacity = 1.0
-        else:  # Mouse leave
-            container.border = ft.border.all(1, ft.Colors.TRANSPARENT)
-            buttons.opacity = 0.0
-        container.update()
-
-    def _create_technology_badge(self) -> ft.Container:
-        """Create the Scheduler technology badge section."""
-        primary_color, _, _ = get_status_colors(self.component_data)
-
-        return TechBadge(
-            title="APScheduler",
-            subtitle="Task Scheduling",
-            primary_color=primary_color,
-            width=160,
+        # Table header
+        header_style = ft.TextStyle(
+            size=11,
+            weight=ft.FontWeight.W_600,
+            color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
-    def _create_jobs_section(self) -> ft.Container:
-        """Create the scheduled jobs section with job list."""
-        # Get real scheduled jobs from component metadata
-        upcoming_tasks = []
-        if (
-            self.component_data.metadata
-            and "upcoming_tasks" in self.component_data.metadata
-        ):
-            upcoming_tasks = self.component_data.metadata["upcoming_tasks"]
-
-        job_list_items = []
-        for task in upcoming_tasks:
-            # Format next run time
-            next_run_display = format_next_run_time(task.get("next_run", ""))
-            schedule = task.get("schedule", "Unknown schedule")
-
-            job_list_items.append(
-                ft.Container(
-                    content=ft.Column(
-                        [
-                            ft.Row(
-                                [
-                                    ft.Icon(
-                                        ft.Icons.SCHEDULE, size=16, color=ft.Colors.GREY
-                                    ),
-                                    ft.Text(
-                                        task.get("name", task.get("id", "Unknown")),
-                                        size=15,
-                                        weight=ft.FontWeight.W_500,
-                                        color=ft.Colors.ON_SURFACE,
-                                        expand=True,
-                                    ),
-                                    ft.Row(
-                                        [
-                                            ft.IconButton(
-                                                icon=ft.Icons.PAUSE_CIRCLE_OUTLINE,
-                                                icon_size=16,
-                                                icon_color=ft.Colors.GREY,
-                                                tooltip="Pause job",
-                                                on_click=lambda _: None,
-                                                style=ft.ButtonStyle(
-                                                    padding=ft.padding.all(2),
-                                                ),
-                                            ),
-                                            ft.IconButton(
-                                                icon=ft.Icons.DELETE_OUTLINE,
-                                                icon_size=16,
-                                                icon_color=ft.Colors.GREY,
-                                                tooltip="Delete job",
-                                                on_click=lambda _: None,
-                                                style=ft.ButtonStyle(
-                                                    padding=ft.padding.all(2),
-                                                ),
-                                            ),
-                                        ],
-                                        spacing=0,
-                                        opacity=0.0,  # Hidden by default
-                                    ),
-                                ],
-                                spacing=8,
-                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                            ),
-                            ft.Row(
-                                [
-                                    ft.Text(
-                                        next_run_display,
-                                        size=12,
-                                    ),
-                                    ft.Text("|", size=12),
-                                    ft.Text(
-                                        format_schedule_human_readable(schedule),
-                                        size=12,
-                                    ),
-                                ],
-                                spacing=6,
-                            ),
-                        ],
-                        spacing=6,
+        header_row = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Container(width=16),  # Icon column
+                    ft.Container(
+                        content=ft.Text("Job", style=header_style),
+                        expand=True,
                     ),
-                    padding=ft.padding.symmetric(vertical=2, horizontal=8),
-                    border=ft.border.all(1, ft.Colors.TRANSPARENT),
-                    border_radius=8,
-                    on_hover=self._handle_job_hover_simple,
-                )
-            )
+                    ft.Container(
+                        content=ft.Text("Schedule", style=header_style),
+                        width=100,
+                        alignment=ft.alignment.center_right,
+                    ),
+                    ft.Container(
+                        content=ft.Text("Next Run", style=header_style),
+                        width=70,
+                        alignment=ft.alignment.center_right,
+                    ),
+                ],
+                spacing=4,
+            ),
+            padding=ft.padding.only(bottom=8),
+            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
+        )
 
-        # Add placeholder if no jobs
-        if not job_list_items:
-            job_list_items.append(
-                ft.Container(
+        # Build job rows
+        rows = []
+        cell_style = ft.TextStyle(size=12, color=ft.Colors.ON_SURFACE)
+
+        if upcoming_tasks:
+            for task in upcoming_tasks:
+                # Handle both dict and object formats
+                if isinstance(task, dict):
+                    name = task.get("name", task.get("id", "Unknown"))
+                    schedule = task.get("schedule", "Unknown")
+                    next_run = task.get("next_run", "")
+                else:
+                    name = getattr(task, "name", "Unknown")
+                    schedule = getattr(task, "schedule", "Unknown")
+                    next_run = getattr(task, "next_run", "")
+
+                # Format schedule and next run time
+                schedule_display = simplify_schedule(schedule)
+                next_run_display = format_relative_future_time(next_run)
+
+                # Active jobs have green status
+                status_icon = "🟢"
+
+                row = ft.Container(
                     content=ft.Row(
                         [
-                            ft.Icon(
-                                ft.Icons.SCHEDULE_OUTLINED,
-                                size=20,
+                            ft.Container(
+                                content=ft.Text(status_icon, size=12),
+                                width=16,
                             ),
-                            ft.Text("No active jobs"),
+                            ft.Container(
+                                content=ft.Text(name, style=cell_style),
+                                expand=True,
+                            ),
+                            ft.Container(
+                                content=ft.Text(
+                                    schedule_display,
+                                    style=ft.TextStyle(
+                                        size=12,
+                                        color=ft.Colors.ON_SURFACE_VARIANT,
+                                    ),
+                                ),
+                                width=100,
+                                alignment=ft.alignment.center_right,
+                            ),
+                            ft.Container(
+                                content=ft.Text(
+                                    next_run_display,
+                                    style=ft.TextStyle(
+                                        size=12,
+                                        color=Theme.Colors.TEXT_SECONDARY,
+                                    ),
+                                ),
+                                width=70,
+                                alignment=ft.alignment.center_right,
+                            ),
                         ],
-                        spacing=8,
-                        alignment=ft.MainAxisAlignment.CENTER,
+                        spacing=4,
                     ),
-                    padding=ft.padding.all(20),
-                    bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.GREY),
-                    border_radius=12,
+                    padding=ft.padding.symmetric(vertical=6),
+                )
+                rows.append(row)
+        else:
+            # No jobs placeholder
+            rows.append(
+                ft.Container(
+                    content=ft.Text(
+                        "No scheduled jobs",
+                        size=12,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                        italic=True,
+                    ),
+                    padding=ft.padding.symmetric(vertical=12),
                 )
             )
-
-        return ft.Container(
-            content=ft.Container(
-                content=ft.Column(
-                    job_list_items,
-                    spacing=2,
-                    scroll=ft.ScrollMode.AUTO,
-                ),
-                height=250,  # Fixed height to force scrolling
-                padding=ft.padding.all(
-                    0
-                ),  # Remove any default padding from inner container
-            ),
-            width=400,  # Section width
-            padding=ft.padding.only(left=12, right=12, bottom=12, top=0),
-            alignment=ft.alignment.top_left,
-        )
-
-    def _create_stats_section(self) -> ft.Container:
-        """Create the scheduler statistics section."""
-        # Get real scheduler stats from component metadata
-        metadata = self.component_data.metadata or {}
-
-        total_tasks = str(metadata.get("total_tasks", 0))
-        active_tasks = str(metadata.get("active_tasks", 0))
-        paused_tasks = str(metadata.get("paused_tasks", 0))
-
-        # Get next job info
-        upcoming_tasks = metadata.get("upcoming_tasks", [])
-        next_job = "None"
-        if upcoming_tasks:
-            next_job = format_next_run_time(upcoming_tasks[0].get("next_run", ""))
-
-        scheduler_stats = {
-            "Total Tasks": total_tasks,
-            "Active Tasks": active_tasks,
-            "Paused Tasks": paused_tasks,
-            "Next Task": next_job,
-        }
-
-        stats_content = [
-            PrimaryText("Task Statistics"),
-            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
-        ]
-
-        # Add all stats using the utility function
-        for stat_name, stat_value in scheduler_stats.items():
-            stats_content.append(create_stats_row(stat_name, stat_value))
-
-        # Add scheduler status
-        stats_content.extend(
-            [
-                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
-                create_stats_row(
-                    "Status",
-                    self.component_data.status.value.title(),
-                    get_status_colors(self.component_data)[0],
-                ),
-            ]
-        )
 
         return ft.Container(
             content=ft.Column(
-                stats_content,
+                [header_row] + rows,
+                spacing=0,
+            ),
+            bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.GREY),
+            border_radius=8,
+            border=ft.border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.GREY)),
+            padding=ft.padding.all(12),
+        )
+
+    def _create_stats_row(self) -> ft.Container:
+        """Create the stats summary row."""
+        active_tasks = self.metadata.get("active_tasks", 0)
+        paused_tasks = self.metadata.get("paused_tasks", 0)
+
+        return ft.Container(
+            content=ft.Row(
+                [
+                    SecondaryText(f"Active: {active_tasks}", size=11),
+                    SecondaryText("|", size=11),
+                    SecondaryText(f"Paused: {paused_tasks}", size=11),
+                ],
                 spacing=8,
-                alignment=ft.MainAxisAlignment.START,
+            ),
+            padding=ft.padding.only(top=12),
+        )
+
+    def _create_card_content(self) -> ft.Container:
+        """Create the full card content with header, job table, and stats."""
+        return ft.Container(
+            content=ft.Column(
+                [
+                    create_header_row(
+                        "Scheduler",
+                        "APScheduler",
+                        self.component_data,
+                    ),
+                    self._create_job_table(),
+                    self._create_stats_row(),
+                ],
+                spacing=0,
             ),
             padding=ft.padding.all(16),
-            width=240,  # Stats section width
-            alignment=ft.alignment.top_left,
+            expand=True,
         )
 
     def build(self) -> ft.Container:
-        """Build and return the complete Scheduler card with responsive layout."""
-        primary_color, background_color, border_color = get_status_colors(
-            self.component_data
-        )
-
-        # Use shared responsive 3-section layout prioritizing middle section
-        content = create_responsive_3_section_layout(
-            left_content=self._create_technology_badge(),
-            middle_content=self._create_jobs_section(),
-            right_content=self._create_stats_section(),
-        )
+        """Build and return the complete scheduler card."""
+        _, _, border_color = get_status_colors(self.component_data)
 
         return CardContainer(
-            content=content,
+            content=self._create_card_content(),
             border_color=border_color,
             component_data=self.component_data,
             component_name="scheduler",

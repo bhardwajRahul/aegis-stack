@@ -17,6 +17,7 @@ from app.components.frontend.controls import (
 from app.components.frontend.theme import AegisTheme as Theme
 from app.components.worker.registry import get_queue_metadata
 from app.services.system.models import ComponentStatus
+from app.services.system.ui import get_component_label
 
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
@@ -44,7 +45,7 @@ def _build_queue_expanded_content(queue_name: str) -> ft.Control:
         queue_name: Name of the queue (e.g., 'system', 'load_test')
 
     Returns:
-        Column with queue description and registered functions
+        Column with queue description and registered functions in table format
     """
     try:
         metadata = get_queue_metadata(queue_name)
@@ -72,40 +73,90 @@ def _build_queue_expanded_content(queue_name: str) -> ft.Control:
         )
         content.append(ft.Container(height=Theme.Spacing.SM))
 
-    # Registered functions
+    # Registered functions in a mini table
     if functions:
-        # Tasks header
-        content.append(SecondaryText("Tasks:", size=Theme.Typography.BODY_SMALL))
-        # Each task on its own line with bullet
-        for func in functions:
-            content.append(
-                ft.Container(
-                    content=SecondaryText(
-                        f"  • {func}",
-                        size=Theme.Typography.BODY_SMALL,
+        # Table header
+        header_style = ft.TextStyle(
+            size=11,
+            weight=ft.FontWeight.W_600,
+            color=ft.Colors.ON_SURFACE_VARIANT,
+        )
+        task_header = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Container(
+                        content=ft.Text("Task", style=header_style),
+                        expand=True,
                     ),
-                    padding=ft.padding.only(left=Theme.Spacing.SM),
-                )
+                    ft.Container(
+                        content=ft.Text("Status", style=header_style),
+                        width=70,
+                        alignment=ft.alignment.center_right,
+                    ),
+                ],
+                spacing=8,
+            ),
+            padding=ft.padding.only(bottom=6),
+            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
+        )
+
+        # Task rows
+        task_rows = [task_header]
+        cell_style = ft.TextStyle(size=12, color=ft.Colors.ON_SURFACE)
+
+        for func in functions:
+            task_row = ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Container(
+                            content=ft.Text(func, style=cell_style),
+                            expand=True,
+                        ),
+                        ft.Container(
+                            content=ft.Text(
+                                "Registered",
+                                size=10,
+                                color=Theme.Colors.SUCCESS,
+                                weight=ft.FontWeight.W_500,
+                            ),
+                            width=70,
+                            alignment=ft.alignment.center_right,
+                        ),
+                    ],
+                    spacing=8,
+                ),
+                padding=ft.padding.symmetric(vertical=4),
             )
+            task_rows.append(task_row)
+
+        # Wrap in a styled container
+        tasks_table = ft.Container(
+            content=ft.Column(task_rows, spacing=0),
+            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
+            border_radius=6,
+            border=ft.border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
+            padding=ft.padding.all(10),
+        )
+        content.append(tasks_table)
     else:
         content.append(
             SecondaryText("No tasks registered", size=Theme.Typography.BODY_SMALL)
         )
 
-    # Config info
+    # Config info row
+    content.append(ft.Container(height=Theme.Spacing.SM))
     content.append(
         ft.Row(
             [
-                SecondaryText(
-                    f"max_jobs={max_jobs}, timeout={timeout}s",
-                    size=Theme.Typography.BODY_SMALL,
-                ),
+                SecondaryText(f"Concurrency: {max_jobs}", size=11),
+                SecondaryText("|", size=11),
+                SecondaryText(f"Timeout: {timeout}s", size=11),
             ],
-            spacing=Theme.Spacing.SM,
+            spacing=8,
         )
     )
 
-    return ft.Column(content, spacing=0)
+    return ft.Column(content, spacing=4)
 
 
 def _build_queue_health_row(queue_component: ComponentStatus) -> ExpandableRow:
@@ -386,10 +437,22 @@ class WorkerDetailDialog(BaseDetailPopup):
             BrokerSection(component_data, page),
         ]
 
+        # Compute status detail (e.g., "2/3 queues online")
+        status_detail = self._compute_status_detail(component_data)
+
         # Initialize base popup with custom sections
         super().__init__(
             page=page,
             component_data=component_data,
             title_text="Worker",
+            subtitle_text=get_component_label("worker"),
             sections=sections,
+            status_detail=status_detail,
         )
+
+    @staticmethod
+    def _compute_status_detail(component_data: ComponentStatus) -> str | None:
+        """Get status detail - only for non-healthy states, using health check message."""
+        from app.components.frontend.dashboard.cards.card_utils import get_status_detail
+
+        return get_status_detail(component_data)

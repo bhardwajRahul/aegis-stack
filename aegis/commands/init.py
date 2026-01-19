@@ -89,6 +89,11 @@ def init_command(
         "--skip-llm-sync",
         help="Skip LLM catalog sync after project generation (AI service only)",
     ),
+    dev: bool = typer.Option(
+        False,
+        "--dev",
+        help="Dev mode: read templates from working tree (uncommitted changes)",
+    ),
 ) -> None:
     """
     Initialize a new Aegis Stack project with battle-tested component combinations.
@@ -389,6 +394,7 @@ def init_command(
             base_output_dir,
             vcs_ref=to_version,
             skip_llm_sync=skip_llm_sync,
+            dev_mode=dev,
         )
 
         # Note: Comprehensive setup output is now handled by the post-generation hook

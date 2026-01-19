@@ -45,6 +45,7 @@ def generate_with_copier(
     output_dir: Path,
     vcs_ref: str | None = None,
     skip_llm_sync: bool = False,
+    dev_mode: bool = False,
 ) -> Path:
     """
     Generate project using Copier template engine.
@@ -131,13 +132,19 @@ def generate_with_copier(
     }
 
     # Detect dev vs production mode for template sourcing
+    # - Dev mode (--dev flag): Use plain file path to read from working tree
     # - Development: Use git+file:// URL to access local git repo at HEAD
     # - Production (pip/uvx install): Use GitHub URL (no local git repo)
     from .copier_updater import get_template_root, resolve_version_to_ref
 
     template_root = get_template_root()
 
-    if is_git_repo(template_root):
+    if dev_mode:
+        # Dev mode: read directly from working tree (uncommitted changes)
+        # WARNING: Projects generated in dev mode cannot be updated with aegis update
+        template_source = str(template_root)
+        resolved_ref = None  # No version pinning in dev mode
+    elif is_git_repo(template_root):
         # Development mode: local git repository available
         # Always use git+file:// URL so projects are updatable
         template_source = f"git+file://{template_root}"
@@ -157,7 +164,10 @@ def generate_with_copier(
 
     # Store template version in answers for future reference
     # This allows aegis update to show "v0.4.1" instead of commit hash
-    if resolved_ref.startswith("v"):
+    if resolved_ref is None:
+        # Dev mode - no version tracking
+        copier_data["_template_version"] = "dev"
+    elif resolved_ref.startswith("v"):
         # Version tag (e.g., "v0.4.1") -> strip 'v' prefix
         copier_data["_template_version"] = resolved_ref[1:]
     else:

@@ -165,7 +165,7 @@ async def startup_database_init() -> None:
     1. {% if database_engine == "sqlite" %}Ensure database directory exists{% else %}Verify database connectivity{% endif %}
     2. Run Alembic migrations (idempotent - safe to run multiple times)
     3. Verify database schema is ready
-    {% if include_ai and database_engine == "postgres" %}4. Sync LLM catalog (postgres only - SQLite syncs during generation){% endif %}
+    {% if include_ai and database_engine == "postgres" %}4. Sync LLM catalog (AI service, postgres only){% endif %}
     """
     try:
 {% if database_engine == "sqlite" %}

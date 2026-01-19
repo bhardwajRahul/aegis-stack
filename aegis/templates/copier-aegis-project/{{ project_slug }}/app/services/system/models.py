@@ -47,8 +47,7 @@ class ComponentStatus(BaseModel):
         """
         Component is healthy only if status is HEALTHY.
 
-        WARNING, INFO, and UNHEALTHY statuses are not considered healthy.
-        This ensures health counts accurately reflect only fully healthy components.
+        INFO, WARNING, and UNHEALTHY are not considered healthy for counting.
         """
         return self.status == ComponentStatusType.HEALTHY
 
