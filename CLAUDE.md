@@ -32,7 +32,7 @@ Each generated project includes:
 
 ## Installation
 
-**Current Version**: v0.5.3-rc2
+**Current Version**: v0.5.3-rc3
 
 ```bash
 pip install aegis-stack
@@ -82,7 +82,7 @@ cd test-upgrade-project
 uvx --index-url https://test.pypi.org/simple/ \
     --extra-index-url https://pypi.org/simple/ \
     --index-strategy unsafe-best-match \
-    aegis-stack@0.5.3-rc2 update
+    aegis-stack@0.5.3-rc3 update
 ```
 
 **Key uvx flags:**
