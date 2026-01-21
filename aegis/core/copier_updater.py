@@ -442,16 +442,9 @@ def resolve_version_to_ref(
     # Check if it looks like a version number (add 'v' prefix)
     try:
         parse(version)
-        # Valid version number - check if tag exists
-        tag_name = f"v{version}"
-        result = subprocess.run(
-            ["git", "rev-parse", "--verify", f"refs/tags/{tag_name}"],
-            cwd=template_root,
-            capture_output=True,
-            check=False,
-        )
-        if result.returncode == 0:
-            return tag_name
+        # Valid version number - always use v-prefixed tag format
+        # (git verification may fail when installed via pip/uvx, but tag format is consistent)
+        return f"v{version}"
     except Exception:
         pass
 
