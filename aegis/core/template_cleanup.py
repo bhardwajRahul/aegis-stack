@@ -120,7 +120,7 @@ def sync_template_changes(
         project_path: Path to project root
         answers: Copier answers dict (from .copier-answers.yml)
         template_src: Template source (e.g., "gh:user/repo")
-        vcs_ref: Git ref for template version (e.g., "v0.5.2-rc4")
+        vcs_ref: Git ref for template version (e.g., "v0.5.3-rc1")
 
     Returns:
         List of relative file paths that were updated

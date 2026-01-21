@@ -611,144 +611,6 @@ class SettingsTab(ft.Container):
 
 
 # =============================================================================
-# Connections Tab
-# =============================================================================
-
-
-class ConnectionsTab(ft.Container):
-    """Connections tab showing database pool and Redis connection info."""
-
-    def __init__(
-        self,
-        database_component: ComponentStatus,
-        redis_component: ComponentStatus | None,
-        page: ft.Page,
-    ) -> None:
-        super().__init__()
-        self.page = page
-        db_metadata = database_component.metadata or {}
-        implementation = db_metadata.get("implementation", "sqlite")
-
-        sections: list[ft.Control] = []
-
-        # Database connection pool section
-        db_rows = self._build_db_connection_rows(db_metadata, implementation)
-        if db_rows:
-            db_table = DataTable(
-                columns=[
-                    DataTableColumn("Property"),
-                    DataTableColumn("Value", width=200),
-                ],
-                rows=db_rows,
-                row_padding=6,
-                empty_message="No connection info available",
-            )
-            sections.append(self._create_section("Database Pool", db_table))
-
-        # Redis section
-        if redis_component:
-            redis_rows = self._build_redis_rows(redis_component)
-            if redis_rows:
-                redis_table = DataTable(
-                    columns=[
-                        DataTableColumn("Property"),
-                        DataTableColumn("Value", width=200),
-                    ],
-                    rows=redis_rows,
-                    row_padding=6,
-                    empty_message="No Redis info available",
-                )
-                sections.append(ft.Container(height=Theme.Spacing.LG))
-                sections.append(self._create_section("Redis", redis_table))
-
-        self.content = ft.Column(sections, scroll=ft.ScrollMode.AUTO)
-        self.padding = ft.padding.all(Theme.Spacing.MD)
-        self.expand = True
-
-    def _create_section(self, title: str, content: ft.Control) -> ft.Column:
-        """Create a labeled section."""
-        return ft.Column(
-            [
-                ft.Text(title, size=14, weight=ft.FontWeight.W_500),
-                ft.Container(height=Theme.Spacing.SM),
-                content,
-            ],
-            spacing=0,
-        )
-
-    def _build_db_connection_rows(
-        self, metadata: dict, implementation: str
-    ) -> list[list[ft.Control]]:
-        """Build rows for database connection info."""
-        rows: list[list[ft.Control]] = []
-
-        pool_size = metadata.get("connection_pool_size", 0)
-        rows.append([TableNameText("Pool Size"), TableCellText(str(pool_size))])
-
-        if implementation == "postgresql":
-            pg_settings = metadata.get("pg_settings", {})
-            active = metadata.get("active_connections", 0)
-            max_conn = pg_settings.get("max_connections", "Unknown")
-
-            rows.append(
-                [TableNameText("Active Connections"), TableCellText(str(active))]
-            )
-            rows.append(
-                [TableNameText("Max Connections"), TableCellText(str(max_conn))]
-            )
-
-        return rows
-
-    def _build_redis_rows(
-        self, redis_component: ComponentStatus
-    ) -> list[list[ft.Control]]:
-        """Build rows for Redis connection info."""
-        rows: list[list[ft.Control]] = []
-        metadata = redis_component.metadata or {}
-
-        # Connection info
-        host = metadata.get("host", "localhost")
-        port = metadata.get("port", 6379)
-        rows.append([TableNameText("Host"), TableCellText(f"{host}:{port}")])
-
-        # Version
-        version = metadata.get("version", "Unknown")
-        if version != "Unknown":
-            rows.append([TableNameText("Version"), TableCellText(version)])
-
-        # Memory
-        used_memory = metadata.get("used_memory_human", metadata.get("used_memory"))
-        if used_memory:
-            rows.append([TableNameText("Used Memory"), TableCellText(str(used_memory))])
-
-        max_memory = metadata.get("maxmemory_human", metadata.get("maxmemory"))
-        if max_memory and max_memory != "0":
-            rows.append([TableNameText("Max Memory"), TableCellText(str(max_memory))])
-
-        # Clients
-        connected_clients = metadata.get("connected_clients")
-        if connected_clients is not None:
-            rows.append(
-                [
-                    TableNameText("Connected Clients"),
-                    TableCellText(str(connected_clients)),
-                ]
-            )
-
-        # Keys
-        total_keys = metadata.get("total_keys", metadata.get("db0", {}).get("keys"))
-        if total_keys is not None:
-            rows.append([TableNameText("Total Keys"), TableCellText(f"{total_keys:,}")])
-
-        # Uptime
-        uptime_days = metadata.get("uptime_in_days")
-        if uptime_days is not None:
-            rows.append([TableNameText("Uptime"), TableCellText(f"{uptime_days} days")])
-
-        return rows
-
-
-# =============================================================================
 # Main Dialog
 # =============================================================================
 
@@ -760,7 +622,6 @@ class DatabaseDetailDialog(BaseDetailPopup):
         self,
         database_component: ComponentStatus,
         page: ft.Page,
-        redis_component: ComponentStatus | None = None,
     ) -> None:
         metadata = database_component.metadata or {}
         implementation = metadata.get("implementation", "sqlite")
@@ -787,10 +648,6 @@ class DatabaseDetailDialog(BaseDetailPopup):
                 ft.Tab(text="Schema", content=SchemaTab(database_component, page)),
                 ft.Tab(
                     text="Migrations", content=MigrationsTab(database_component, page)
-                ),
-                ft.Tab(
-                    text="Connections",
-                    content=ConnectionsTab(database_component, redis_component, page),
                 ),
                 ft.Tab(text="Settings", content=SettingsTab(database_component, page)),
             ],
