@@ -67,11 +67,11 @@ class FastAPIMiddlewareInspector:
             # FastAPI stores middleware as Middleware(cls, **kwargs) objects
             middleware_cls = middleware_item.cls
             middleware_kwargs = (
-                middleware_item.kwargs 
-                if hasattr(middleware_item, 'kwargs') 
+                middleware_item.kwargs
+                if hasattr(middleware_item, 'kwargs')
                 else {}
             )
-            
+
             middleware_type = middleware_cls.__name__
             middleware_module = middleware_cls.__module__
 
@@ -82,13 +82,19 @@ class FastAPIMiddlewareInspector:
             is_security = self._is_security_middleware(
                 middleware_type, middleware_module
             )
-            
+
+            # Extract docstring (full text)
+            description = None
+            if middleware_cls.__doc__:
+                description = middleware_cls.__doc__.strip()
+
             return MiddlewareInfo(
                 type=middleware_type,
                 module=middleware_module,
                 order=order,
                 config=config,
                 is_security=is_security,
+                description=description,
             )
         except Exception as e:
             logger.warning(

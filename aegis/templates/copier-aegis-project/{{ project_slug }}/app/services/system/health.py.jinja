@@ -19,6 +19,7 @@ import psutil
 from app.core.config import settings
 from app.core.log import logger
 
+from . import activity
 from .alerts import send_critical_alert, send_health_alert
 from .models import ComponentStatus, ComponentStatusType, SystemStatus
 
@@ -27,6 +28,13 @@ _health_checks: dict[str, Callable[[], Awaitable[ComponentStatus]]] = {}
 
 # Global registry for service health checks
 _service_health_checks: dict[str, Callable[[], Awaitable[ComponentStatus]]] = {}
+
+# Track previous status per component for activity events
+_previous_status: dict[str, ComponentStatusType] = {}
+
+# System metrics that shouldn't create separate activity events
+# (they're sub-components of backend)
+SYSTEM_METRICS = {"cpu", "memory", "disk"}
 
 
 def format_bytes(size: int) -> str:
@@ -91,6 +99,8 @@ def register_health_check(
     """
     _health_checks[name] = check_fn
     logger.info(f"Registered custom health check: {name}")
+    # Note: Activity event is emitted by _run_health_check on first check
+    # with the actual status (not hardcoded "success")
 
 
 def register_service_health_check(
@@ -105,6 +115,8 @@ def register_service_health_check(
     """
     _service_health_checks[name] = check_fn
     logger.info(f"Registered service health check: {name}")
+    # Note: Activity event is emitted by _run_health_check on first check
+    # with the actual status (not hardcoded "success")
 
 
 async def get_system_status() -> SystemStatus:
@@ -429,7 +441,7 @@ async def _run_health_check_with_cache(
 async def _run_health_check(
     name: str, check_fn: Callable[[], Awaitable[ComponentStatus]]
 ) -> ComponentStatus:
-    """Run a single health check with timing."""
+    """Run a single health check with timing and status change tracking."""
     start_time = datetime.now(UTC)
     try:
         result = await check_fn()
@@ -438,6 +450,45 @@ async def _run_health_check(
 
         if isinstance(result, ComponentStatus):
             result.response_time_ms = response_time
+
+            # Track status changes and emit activity events
+            current_status = result.status
+            previous_status = _previous_status.get(name)
+
+            # Skip activity events for system metrics (sub-components of backend)
+            if name not in SYSTEM_METRICS:
+                # Log on FIRST check (previous is None) OR status change
+                if previous_status is None or previous_status != current_status:
+                    event_status = (
+                        "success" if current_status == ComponentStatusType.HEALTHY
+                        else "error" if current_status == ComponentStatusType.UNHEALTHY
+                        else "info" if current_status == ComponentStatusType.INFO
+                        else "warning"
+                    )
+                    display_name = name.replace("_", " ").title()
+                    details = result.message if result.message else None
+
+                    if previous_status is None:
+                        # First health check - use startup message with actual status
+                        activity.add_event(
+                            component=name,
+                            event_type="startup",
+                            message=f"{display_name} initialized",
+                            status=event_status,
+                            details=details,
+                        )
+                    else:
+                        # Status change
+                        activity.add_event(
+                            component=name,
+                            event_type="status_change",
+                            message=f"{display_name}: {previous_status.value} → {current_status.value}",
+                            status=event_status,
+                            details=details,
+                        )
+
+            _previous_status[name] = current_status
+
             return result
         else:
             return ComponentStatus(
@@ -1232,8 +1283,8 @@ async def check_worker_health() -> ComponentStatus:
                     queue_status = ComponentStatusType.INFO
                     status_parts = ["configured - no functions defined"]
                 elif not worker_alive:
-                    # Worker offline is informational, not an error
-                    queue_status = ComponentStatusType.INFO
+                    # Worker offline with functions defined - this is a warning
+                    queue_status = ComponentStatusType.WARNING
                 elif failure_rate > 25:  # Unhealthy threshold at 25%
                     queue_status = ComponentStatusType.UNHEALTHY
                 elif failure_rate > 10:  # Warning threshold at 10%

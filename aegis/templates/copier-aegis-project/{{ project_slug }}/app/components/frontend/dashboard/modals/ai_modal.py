@@ -10,7 +10,7 @@ from app.components.frontend.controls import SecondaryText, Tag
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
-from ..cards.card_utils import PROVIDER_COLORS
+from ..cards.card_utils import PROVIDER_COLORS, get_status_detail
 from .ai_analytics_tab import AIAnalyticsTab
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
@@ -79,16 +79,23 @@ class ServiceInfoSection(ft.Container):
 
         provider = metadata.get("provider", "Unknown")
         model = metadata.get("model", "Unknown")
-        engine = metadata.get("engine", "Unknown")
         streaming = metadata.get("provider_supports_streaming", False)
         free_tier = metadata.get("provider_free_tier", False)
+
+        # Display name mapping for providers
+        provider_display_names = {
+            "public": "LLM7.io",
+        }
+        provider_display = provider_display_names.get(
+            provider.lower(), provider.upper()
+        )
 
         provider_color = PROVIDER_COLORS.get(
             provider.lower(), ft.Colors.ON_SURFACE_VARIANT
         )
 
         # Provider row
-        provider_tags = [Tag(text=provider.upper(), color=provider_color)]
+        provider_tags = [Tag(text=provider_display, color=provider_color)]
         if free_tier:
             provider_tags.append(Tag(text="FREE TIER", color=Theme.Colors.SUCCESS))
 
@@ -113,17 +120,6 @@ class ServiceInfoSection(ft.Container):
             spacing=Theme.Spacing.SM,
         )
 
-        # Engine row
-        engine_row = ft.Row(
-            [
-                SecondaryText(
-                    "Engine", weight=Theme.Typography.WEIGHT_SEMIBOLD, width=80
-                ),
-                SecondaryText(engine),
-            ],
-            spacing=Theme.Spacing.SM,
-        )
-
         # Streaming row
         streaming_row = ft.Row(
             [
@@ -136,7 +132,7 @@ class ServiceInfoSection(ft.Container):
         )
 
         self.content = ft.Column(
-            [provider_row, model_row, engine_row, streaming_row],
+            [provider_row, model_row, streaming_row],
             spacing=Theme.Spacing.XS,
         )
         self.padding = Theme.Spacing.MD
@@ -191,6 +187,16 @@ class AIDetailDialog(BaseDetailPopup):
         """
         metadata = component_data.metadata or {}
 
+        # Get engine for subtitle
+        engine = metadata.get("engine", "AI Engine")
+        engine_display_map = {
+            "pydantic-ai": "Pydantic AI",
+            "langchain": "LangChain",
+        }
+        subtitle = engine_display_map.get(
+            engine, engine.replace("-", " ").title() if engine else "AI Engine"
+        )
+
         # Build tabs list
         tabs_list = [
             ft.Tab(text="Overview", content=OverviewTab(component_data)),
@@ -222,8 +228,10 @@ class AIDetailDialog(BaseDetailPopup):
             page=page,
             component_data=component_data,
             title_text="AI Service",
+            subtitle_text=subtitle,
             sections=[tabs],
             scrollable=False,
             width=1100,
             height=800,
+            status_detail=get_status_detail(component_data),
         )

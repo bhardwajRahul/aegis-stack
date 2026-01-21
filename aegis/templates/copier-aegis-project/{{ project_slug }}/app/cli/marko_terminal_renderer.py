@@ -93,7 +93,7 @@ class TerminalRenderer(Renderer):
 
             try:
                 lexer = get_lexer_by_name(lang, stripall=True)
-                formatter = Terminal256Formatter(style="monokai")
+                formatter = Terminal256Formatter(style="ir-black")
                 highlighted = highlight(code, lexer, formatter)
 
                 # Process each line: add indentation only

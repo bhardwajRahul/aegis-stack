@@ -77,6 +77,7 @@ class DataTableHeader(ft.Container):
         self.padding = ft.padding.symmetric(
             horizontal=Theme.Spacing.MD, vertical=padding + 2
         )
+        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE)
         self.border = (
             ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE))
             if show_border
@@ -161,6 +162,7 @@ class DataTable(ft.Container):
         show_header_border: bool = True,
         show_row_borders: bool = True,
         row_bgcolors: list[str | None] | None = None,
+        expand: bool = False,
     ) -> None:
         """
         Initialize DataTable.
@@ -174,6 +176,7 @@ class DataTable(ft.Container):
             show_header_border: Show bottom border on header (default: True)
             show_row_borders: Show bottom border on each row (default: True)
             row_bgcolors: Optional list of background colors per row
+            expand: If True, table expands to fill available space with scroll
         """
         super().__init__()
 
@@ -206,16 +209,27 @@ class DataTable(ft.Container):
                 )
 
             if scroll_height:
+                # Fixed height scrolling
                 data_content = ft.ListView(
                     controls=data_rows,
                     spacing=0,
                     height=scroll_height,
                 )
+            elif expand:
+                # Expand to fill available space with scrolling
+                data_content = ft.ListView(
+                    controls=data_rows,
+                    spacing=0,
+                    expand=True,
+                )
             else:
+                # No scrolling, auto-height
                 data_content = ft.Column(data_rows, spacing=0)
 
         # Compose table
-        self.content = ft.Column([header, data_content], spacing=0)
-        self.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
+        self.content = ft.Column([header, data_content], spacing=0, expand=expand)
+        self.bgcolor = ft.Colors.SURFACE
         self.border_radius = Theme.Components.CARD_RADIUS
         self.border = ft.border.all(1, ft.Colors.OUTLINE)
+        if expand:
+            self.expand = True

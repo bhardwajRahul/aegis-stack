@@ -15,6 +15,7 @@ from app.components.frontend.controls import (
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
+from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
 
@@ -336,5 +337,7 @@ class FrontendDetailDialog(BaseDetailPopup):
             page=page,
             component_data=component_data,
             title_text="Frontend",
+            subtitle_text="Flet",
             sections=sections,
+            status_detail=get_status_detail(component_data),
         )

@@ -1159,5 +1159,6 @@ def run_post_generation_tasks(
     typer.secho("Next steps:", fg=typer.colors.CYAN, bold=True)
     typer.echo(f"   cd {project_path}")
     typer.echo("   make serve")
+    typer.echo("   Open Overseer: http://localhost:8000/dashboard/")
 
     return True

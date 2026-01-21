@@ -10,35 +10,33 @@ from flet import PageDisconnectedException
 from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
-from .controls.text import TitleText
+from .dashboard.activity_feed import ActivityFeed
 from .dashboard.cards import (
-    FastAPICard,
-    FletCard,
 {% if include_ai %}
     AICard,
 {% endif %}
 {% if include_auth %}
     AuthCard,
-    ServicesCard,
 {% endif %}
 {% if include_comms %}
     CommsCard,
 {% endif %}
-{% if include_database %}
     DatabaseCard,
-{% endif %}
 {% if include_redis %}
     RedisCard,
 {% endif %}
 {% if include_scheduler %}
     SchedulerCard,
 {% endif %}
+    ServerCard,
+    ServicesCard,
 {% if include_worker %}
     WorkerCard,
 {% endif %}
 )
 from .dashboard.cards.card_utils import create_health_status_indicator
-from .theme import ThemeManager
+from .dashboard.status_overview import StatusOverviewPanel
+from .theme import AegisTheme as Theme, ThemeManager
 
 # Constants for health system grouping
 COMPONENTS_GROUP_KEY = "components"
@@ -68,6 +66,8 @@ class SystemDashboard:
         # Direct component references - no more brittle indexing!
         self._health_indicator_container: ft.Container | None = None
         self._cards_container: ft.Container | None = None
+        self._status_overview_panel: StatusOverviewPanel | None = None
+        self._activity_feed: ActivityFeed | None = None
         self._theme_manager: ThemeManager | None = None
         self._logo_image: ft.Image | None = None
         self._page: ft.Page | None = None
@@ -76,6 +76,8 @@ class SystemDashboard:
         self,
         health_indicator_container: ft.Container,
         cards_container: ft.Container,
+        status_overview_panel: StatusOverviewPanel,
+        activity_feed: ActivityFeed,
         theme_manager: ThemeManager,
         logo_image: ft.Image,
         page: ft.Page,
@@ -83,6 +85,8 @@ class SystemDashboard:
         """Initialize dashboard with component references."""
         self._health_indicator_container = health_indicator_container
         self._cards_container = cards_container
+        self._status_overview_panel = status_overview_panel
+        self._activity_feed = activity_feed
         self._theme_manager = theme_manager
         self._logo_image = logo_image
         self._page = page
@@ -127,7 +131,12 @@ class SystemDashboard:
             logger.debug(f"Page connection check failed, assuming disconnected: {e}")
             return False
 
-    async def update_health_status(self, healthy_count: int, total_count: int) -> None:
+    async def update_health_status(
+        self,
+        healthy_count: int,
+        total_count: int,
+        worst_status: ComponentStatusType | None = None,
+    ) -> None:
         """Safely update health status indicator."""
         if not self._is_page_connected():
             logger.debug("Page disconnected, skipping health status update")
@@ -139,12 +148,10 @@ class SystemDashboard:
 
         try:
             new_health_indicator = create_health_status_indicator(
-                healthy_count, total_count
+                healthy_count, total_count, worst_status
             )
             self._health_indicator_container.content = new_health_indicator
-            # Check connection again before updating container
-            if self._is_page_connected():
-                self._health_indicator_container.update()
+            # Note: No .update() call here - batched with page.update() in refresh_dashboard
         except PageDisconnectedException:
             logger.debug("Page disconnected during health status update")
             return
@@ -179,24 +186,22 @@ class SystemDashboard:
             # Create cards for all available components with responsive sizing
             for component_name, component_data in components.items():
                 card = card_creator_fn(component_name, component_data)
+
+                # Skip empty cards (e.g., frontend merged into ServerCard)
+                if not card.content:
+                    continue
+
                 if (
                     isinstance(card.content, ft.Text)
                     and "Unknown component" in card.content.value
                 ):
                     continue  # Skip unknown components
 
-                # Set responsive column sizing based on card type
-                if component_name.startswith("service_"):
-                    # Service cards: 1/3 width (4 = 33% = 3 columns)
-                    card.col = {"xs": 12, "sm": 6, "md": 4, "lg": 4, "xl": 4}
-                else:
-                    # Component cards: 1/2 width (6 = 50% = 2 columns)
-                    card.col = {"xs": 12, "sm": 12, "md": 6, "lg": 6, "xl": 6}
+                # All cards use uniform 1/3 width (3-column grid)
+                card.col = {"xs": 12, "sm": 6, "md": 4, "lg": 4, "xl": 4}
                 self._cards_container.content.controls.append(card)
 
-            # Check connection again before updating container
-            if self._is_page_connected():
-                self._cards_container.update()
+            # Note: No .update() call here - batched with page.update() in refresh_dashboard
         except PageDisconnectedException:
             logger.debug("Page disconnected during component cards update")
             return
@@ -207,6 +212,40 @@ class SystemDashboard:
                 extra={
                     "error_type": type(e).__name__,
                     "function": "update_component_cards",
+                    "component_count": len(components),
+                }
+            )
+
+    async def update_status_overview(
+        self, components: dict[str, ComponentStatus]
+    ) -> None:
+        """Safely update the status overview panel and activity feed."""
+        if not self._is_page_connected():
+            logger.debug("Page disconnected, skipping status overview update")
+            return
+
+        if not self._status_overview_panel:
+            logger.debug("Status overview panel not initialized")
+            return
+
+        try:
+            self._status_overview_panel.update_components(components)
+
+            # Also refresh the activity feed
+            if self._activity_feed:
+                self._activity_feed.refresh()
+
+            # Note: No .update() calls here - batched with page.update() in refresh_dashboard
+        except PageDisconnectedException:
+            logger.debug("Page disconnected during status overview update")
+            return
+        except Exception as e:
+            logger.error(
+                f"Failed to update status overview: {e}",
+                exc_info=True,
+                extra={
+                    "error_type": type(e).__name__,
+                    "function": "update_status_overview",
                     "component_count": len(components),
                 }
             )
@@ -270,9 +309,9 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
     async def flet_main(page: ft.Page) -> None:
         page.title = "Aegis Stack - System Dashboard"
         page.padding = ft.padding.only(
-            left=20, right=20, top=20, bottom=20
-        )  # Proper left padding
-        page.scroll = ft.ScrollMode.AUTO
+            left=12, right=12, top=12, bottom=12
+        )  # Compact padding
+        # No page scroll - content scrolls below fixed header
 
         # Simple theme setup
         theme_manager = ThemeManager(page)
@@ -297,7 +336,17 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             icon=ft.Icons.DARK_MODE,
             tooltip="Switch to Dark Mode",
             icon_size=24,
+            icon_color=Theme.Colors.TEXT_SECONDARY,
         )
+
+        # View toggle button - switch between Cards and Stack+Activity views
+        view_toggle_button = ft.IconButton(
+            icon=ft.Icons.VIEW_LIST,
+            tooltip="Switch to Cards View",
+            icon_size=24,
+            icon_color=Theme.Colors.TEXT_SECONDARY,
+        )
+        is_cards_view = False  # Track current view state (default to stack view)
 
         async def update_logo() -> None:
             """Update logo based on current theme."""
@@ -378,6 +427,8 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                     ft.Row(
                         [
                             health_indicator_container,  # Health status
+                            # View toggle
+                            ft.Container(content=view_toggle_button, padding=10),
                             # Theme toggle
                             ft.Container(content=theme_button, padding=10),
                         ],
@@ -386,10 +437,35 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
             ),
-            margin=ft.margin.only(bottom=20),
+            margin=ft.margin.only(bottom=8),
             padding=ft.padding.only(left=0, right=0),  # Remove any default padding
         )
-        # Responsive grid container - force 2 columns always
+        # Status overview panel - compact view of all components
+        status_overview_panel = StatusOverviewPanel()
+
+        # Activity feed panel - expands to fill available space
+        activity_feed = ActivityFeed()
+
+        # Stack view: Status overview + Activity feed (50/50 split)
+        # Activity feed expands to fill remaining vertical space
+        top_row = ft.ResponsiveRow(
+            controls=[
+                ft.Container(
+                    content=status_overview_panel,
+                    col={"xs": 12, "sm": 12, "md": 6, "lg": 6, "xl": 6},
+                ),
+                ft.Container(
+                    content=activity_feed,
+                    col={"xs": 12, "sm": 12, "md": 6, "lg": 6, "xl": 6},
+                    expand=True,
+                ),
+            ],
+            spacing=20,
+            run_spacing=20,
+            expand=True,
+        )
+
+        # Responsive grid container for cards
         component_cards_container = ft.Container(
             content=ft.ResponsiveRow(
                 controls=[],  # Will be populated with cards
@@ -399,6 +475,54 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             alignment=ft.alignment.center,
         )
 
+        # Assign to the view containers (defined earlier for toggle_view access)
+        # Cards view has its own scroll for when there are many cards
+        cards_view_container = ft.Column(
+            controls=[component_cards_container],
+            scroll=ft.ScrollMode.AUTO,
+            visible=False,
+            expand=True,
+        )
+
+        stack_view_container = ft.Container(
+            content=top_row,
+            visible=True,
+            expand=True,
+        )
+
+        # View toggle handler (defined after containers exist)
+        async def toggle_view(_: Any) -> None:
+            """Toggle between Cards view and Stack+Activity view."""
+            nonlocal is_cards_view
+            try:
+                is_cards_view = not is_cards_view
+
+                if is_cards_view:
+                    view_toggle_button.icon = ft.Icons.GRID_VIEW
+                    view_toggle_button.tooltip = "Switch to Stack View"
+                    cards_view_container.visible = True
+                    stack_view_container.visible = False
+                else:
+                    view_toggle_button.icon = ft.Icons.VIEW_LIST
+                    view_toggle_button.tooltip = "Switch to Cards View"
+                    cards_view_container.visible = False
+                    stack_view_container.visible = True
+
+                page.update()
+            except PageDisconnectedException:
+                logger.debug("Page disconnected during view toggle")
+            except Exception as e:
+                logger.error(
+                    f"View toggle failed: {e}",
+                    exc_info=True,
+                    extra={
+                        "error_type": type(e).__name__,
+                        "function": "toggle_view"
+                    }
+                )
+
+        view_toggle_button.on_click = toggle_view
+
         # Create SystemDashboard with safe component references
         dashboard = SystemDashboard()
 
@@ -406,23 +530,29 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
         dashboard.initialize_components(
             health_indicator_container=health_indicator_container,
             cards_container=component_cards_container,
+            status_overview_panel=status_overview_panel,
+            activity_feed=activity_feed,
             theme_manager=theme_manager,
             logo_image=logo_image,
             page=page,
         )
 
         # Add everything to page with modern layout
+        # Header stays fixed, content below scrolls when zoomed in
         page.add(
             header,
             ft.Container(
                 content=ft.Column(
                     [
-                        component_cards_container,
+                        cards_view_container,  # Cards view (visible by default)
+                        stack_view_container,  # Stack + Activity view (hidden by default)
                     ],
                     spacing=20,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    scroll=ft.ScrollMode.AUTO,  # Content scrolls, header stays fixed
                 ),
                 alignment=ft.alignment.top_center,
+                expand=True,
             ),
         )
 
@@ -437,47 +567,42 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
 
                 # Map component names to their stunning card classes
                 if component_name == "backend":
-                    return FastAPICard(component_data).build()
+                    return ServerCard(component_data).build()
                 elif component_name == "frontend":
-                    return FletCard(component_data).build()
-{%- if include_worker %}
+                    # Frontend is merged into ServerCard, return empty
+                    return ft.Container()
+{% if include_worker %}
                 elif component_name == "worker":
                     return WorkerCard(component_data).build()
-{%- endif %}
-{%- if include_redis %}
+{% endif %}
+{% if include_redis %}
                 elif component_name == "cache":
                     return RedisCard(component_data).build()
-{%- endif %}
-{%- if include_database %}
+{% endif %}
                 elif component_name == "database":
                     return DatabaseCard(component_data).build()
-{%- endif %}
-{%- if include_scheduler %}
+{% if include_scheduler %}
                 elif component_name == "scheduler":
                     return SchedulerCard(component_data).build()
-{%- endif %}
-{%- if include_auth %}
+{% endif %}
                 elif component_name == "services":
                     return ServicesCard(component_data).build()
-{%- endif %}
                 # Service cards - specific checks BEFORE generic fallback
-{%- if include_ai %}
+{% if include_ai %}
                 elif component_name == "service_ai":
                     return AICard(component_data).build()
-{%- endif %}
-{%- if include_auth %}
+{% endif %}
+{% if include_auth %}
                 elif component_name == "service_auth":
                     return AuthCard(component_data).build()
-{%- endif %}
-{%- if include_comms %}
+{% endif %}
+{% if include_comms %}
                 elif component_name == "service_comms":
                     return CommsCard(component_data).build()
-{%- endif %}
-{%- if include_auth %}
+{% endif %}
                 elif component_name.startswith("service_"):
                     # For other services, use generic ServicesCard for now
                     return ServicesCard(component_data).build()
-{%- endif %}
                 else:
                     # Fallback for unknown components - should not happen in practice
                     logger.warning(f"Unknown component type: {component_name}")
@@ -604,10 +729,26 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 total_components = len(components)
                 healthy_components = len([c for c in components.values() if c.healthy])
 
-                # Update health status and component cards using safe dashboard methods
+                # Determine worst status for color coding
+                # Priority: UNHEALTHY > WARNING > INFO > HEALTHY
+                worst_status = ComponentStatusType.HEALTHY
+                for c in components.values():
+                    if c.status == ComponentStatusType.UNHEALTHY:
+                        worst_status = ComponentStatusType.UNHEALTHY
+                        break
+                    elif c.status == ComponentStatusType.WARNING:
+                        worst_status = ComponentStatusType.WARNING
+                    elif c.status == ComponentStatusType.INFO and worst_status not in (
+                        ComponentStatusType.WARNING,
+                        ComponentStatusType.UNHEALTHY,
+                    ):
+                        worst_status = ComponentStatusType.INFO
+
+                # Update health status, status overview, and component cards
                 await dashboard.update_health_status(
-                    healthy_components, total_components
+                    healthy_components, total_components, worst_status
                 )
+                await dashboard.update_status_overview(components)
                 await dashboard.update_component_cards(
                     components, create_component_card
                 )
@@ -638,6 +779,11 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 )
                 # Show error indicator using safe dashboard method
                 await dashboard.show_error_status()
+
+        # Register refresh function on page.data for access by any component
+        if page.data is None:
+            page.data = {}
+        page.data["refresh_dashboard"] = refresh_dashboard
 
         async def auto_refresh() -> None:
             """Simple auto-refresh loop that stops when page disconnects."""

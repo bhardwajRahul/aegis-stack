@@ -56,8 +56,9 @@ async def check_comms_service_health() -> ComponentStatus:
             if not settings.TWILIO_PHONE_NUMBER:
                 missing_twilio.append("TWILIO_PHONE_NUMBER")
             if missing_twilio:
+                missing_str = ", ".join(missing_twilio)
                 config_warnings.append(
-                    f"SMS/Voice (Twilio) not configured - missing: {', '.join(missing_twilio)}"
+                    f"SMS/Voice (Twilio) not configured - missing: {missing_str}"
                 )
 
         # Determine overall status
@@ -71,7 +72,8 @@ async def check_comms_service_health() -> ComponentStatus:
             message = f"Comms service errors: {'; '.join(config_errors)}"
         elif config_warnings and providers_configured < 3:
             status = ComponentStatusType.INFO
-            message = f"Comms service partially configured ({providers_configured}/3 channels)"
+            channels = f"{providers_configured}/3"
+            message = f"Comms service partially configured ({channels} channels)"
         else:
             status = ComponentStatusType.HEALTHY
             message = "Communications service fully configured"
@@ -106,6 +108,21 @@ async def check_comms_service_health() -> ComponentStatus:
                 "backend": "required",
                 "worker": "optional",  # For async message sending
             },
+            # Email (Resend) detailed config
+            "resend_api_key_configured": bool(settings.RESEND_API_KEY),
+            "resend_from_email": settings.RESEND_FROM_EMAIL or "Not configured",
+            # Twilio detailed config
+            "twilio_account_sid_configured": bool(settings.TWILIO_ACCOUNT_SID),
+            "twilio_account_sid_preview": (
+                f"...{settings.TWILIO_ACCOUNT_SID[-4:]}"
+                if settings.TWILIO_ACCOUNT_SID
+                else "Not configured"
+            ),
+            "twilio_auth_token_configured": bool(settings.TWILIO_AUTH_TOKEN),
+            "twilio_phone_number": settings.TWILIO_PHONE_NUMBER or "Not configured",
+            "twilio_messaging_service_configured": bool(
+                settings.TWILIO_MESSAGING_SERVICE_SID
+            ),
         }
 
         # Add configuration issues to metadata if any

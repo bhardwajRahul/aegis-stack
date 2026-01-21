@@ -13,6 +13,7 @@ from app.components.frontend.controls.data_table import (
     get_alignment,
     style_cell,
 )
+from app.components.frontend.controls.expand_arrow import ExpandArrow
 from app.components.frontend.controls.text import SecondaryText
 from app.components.frontend.theme import AegisTheme as Theme
 
@@ -69,16 +70,12 @@ class ExpandableTableRow(ft.Container):
     ) -> None:
         super().__init__()
 
-        # Arrow icon
-        arrow_icon = ft.Icon(
-            ft.Icons.ARROW_DROP_DOWN if is_expanded else ft.Icons.ARROW_RIGHT,
-            size=24,
-            color=ft.Colors.OUTLINE,
-        )
+        # Arrow using reusable control
+        expand_arrow = ExpandArrow(expanded=is_expanded)
 
         # Build cells: arrow + data cells
         cells: list[ft.Control] = [
-            ft.Container(content=arrow_icon, width=EXPAND_ICON_WIDTH)
+            ft.Container(content=expand_arrow, width=EXPAND_ICON_WIDTH)
         ]
         for i, value in enumerate(row.cells):
             col = columns[i] if i < len(columns) else DataTableColumn("")

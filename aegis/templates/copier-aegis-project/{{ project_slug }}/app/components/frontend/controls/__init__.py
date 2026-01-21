@@ -2,14 +2,16 @@
 
 from .buttons import ConfirmDialog
 from .data_table import DataTable, DataTableColumn
+from .expand_arrow import ExpandArrow
 from .expandable_data_table import ExpandableDataTable, ExpandableRow
+from .form_fields import FormActionButtons, FormSecretField, FormTextField
 from .service_card import ServiceCard
 from .table import (
     TableCellText,
     TableHeaderText,
     TableNameText,
 )
-from .tag import Tag
+from .tag import StatusTag, Tag
 from .tech_badge import TechBadge
 from .text import (
     AccentText,
@@ -57,9 +59,16 @@ __all__ = [
     "TableNameText",
     # Badge/Tag controls
     "Tag",
+    "StatusTag",
     "TechBadge",
     # Card layout controls
     "ServiceCard",
     # Dialog controls
     "ConfirmDialog",
+    # Arrow controls
+    "ExpandArrow",
+    # Form controls
+    "FormTextField",
+    "FormSecretField",
+    "FormActionButtons",
 ]

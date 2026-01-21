@@ -46,7 +46,11 @@ def get_component_label(component_name: str) -> str:
         "backend": "FastAPI",
         "frontend": "Flet",
         "cache": "Redis",
-        "worker": "arq",
+        {%- if include_worker %}
+        "worker": "{{ worker_backend }}",
+        {%- endif %}
+        {%- if include_scheduler %}
         "scheduler": "APScheduler",
+        {%- endif %}
     }
     return mapping.get(component_name, component_name.title())

@@ -337,6 +337,8 @@ async def check_database_health() -> ComponentStatus:
                                         "file_mtime": file_mtime,
                                         "create_date": create_date,
                                         "is_current": revision_id == current_version,
+                                        "content": content,
+                                        "file_path": str(migration_file),
                                     })
 
                                 except Exception as e:

@@ -17,6 +17,7 @@ from app.components.frontend.controls import (
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
+from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
 
@@ -40,9 +41,6 @@ COL_WIDTH_SLOWLOG_CMD = 400
 # Statistics section layout
 STAT_LABEL_WIDTH = 200
 
-# URL display formatting
-MAX_REDIS_URL_DISPLAY_LENGTH = 50
-
 
 class OverviewSection(ft.Container):
     """Overview section showing key Redis metrics."""
@@ -62,6 +60,13 @@ class OverviewSection(ft.Container):
         total_keys = metadata.get("total_keys", 0)
         connected_clients = metadata.get("connected_clients", 0)
         hit_rate = metadata.get("hit_rate_percent", 0.0)
+
+        # Format uptime
+        uptime_seconds = metadata.get("uptime_in_seconds", 0)
+        days = uptime_seconds // 86400
+        hours = (uptime_seconds % 86400) // 3600
+        minutes = (uptime_seconds % 3600) // 60
+        uptime_str = f"{days}d {hours}h {minutes}m"
 
         # Determine hit rate color
         if hit_rate >= 90:
@@ -88,6 +93,11 @@ class OverviewSection(ft.Container):
                     f"{hit_rate:.1f}%",
                     hit_rate_color,
                 ),
+                MetricCard(
+                    "Server Uptime",
+                    uptime_str,
+                    Theme.Colors.INFO,
+                ),
             ],
             spacing=Theme.Spacing.MD,
         )
@@ -107,6 +117,7 @@ class PerformanceSection(ft.Container):
         self.padding = Theme.Spacing.MD
 
         metadata = redis_component.metadata or {}
+        response_time = redis_component.response_time_ms or 0
 
         # Memory metrics
         used_memory_human = metadata.get("used_memory_human", "0B")
@@ -138,6 +149,7 @@ class PerformanceSection(ft.Container):
             [
                 H3Text("Performance Metrics"),
                 ft.Container(height=Theme.Spacing.SM),
+                metric_row("Response Time", f"{response_time}ms"),
                 metric_row("Memory Usage", f"{used_memory_human} / {maxmemory_human}"),
                 metric_row("Memory Fragmentation", f"{mem_fragmentation:.2f}"),
                 metric_row("Operations/Sec", str(ops_per_sec)),
@@ -257,21 +269,33 @@ class SlowQueriesSection(ft.Container):
         # Query rows
         query_rows = [SlowQueryRow(entry) for entry in sorted_entries]
 
-        self.content = ft.Column(
-            [
-                H3Text("Slow Query Log"),
-                ft.Container(height=Theme.Spacing.SM),
-                header_row,
-                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
-                ft.Column(
-                    query_rows
-                    if query_rows
-                    else [BodyText("No slow queries recorded")],
-                    spacing=0,
+        if query_rows:
+            self.content = ft.Column(
+                [
+                    header_row,
+                    ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                    ft.Column(query_rows, spacing=0),
+                ],
+                spacing=0,
+            )
+        else:
+            self.content = ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Icon(
+                            ft.Icons.SPEED,
+                            size=48,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                        SecondaryText("No slow queries recorded"),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=Theme.Spacing.SM,
                 ),
-            ],
-            spacing=0,
-        )
+                alignment=ft.alignment.center,
+                expand=True,
+            )
+            self.expand = True
 
 
 class ClientConnectionRow(ft.Container):
@@ -410,43 +434,77 @@ class ActiveConnectionsSection(ft.Container):
         )
 
 
-class StatisticsSection(ft.Container):
-    """Statistics section showing Redis infrastructure information."""
+# =============================================================================
+# Tab Containers
+# =============================================================================
+
+
+class OverviewTab(ft.Container):
+    """Overview tab combining metrics and performance."""
 
     def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
-        """
-        Initialize statistics section.
-
-        Args:
-            component_data: Redis ComponentStatus with full health information
-        """
         super().__init__()
-        self.padding = Theme.Spacing.MD
+        self.content = ft.Column(
+            [
+                OverviewSection(component_data, page),
+                PerformanceSection(component_data, page),
+            ],
+            scroll=ft.ScrollMode.AUTO,
+        )
+        self.padding = ft.padding.all(Theme.Spacing.SM)
+        self.expand = True
 
-        status = component_data.status
-        message = component_data.message
-        response_time = component_data.response_time_ms or 0
+
+class SlowQueriesTab(ft.Container):
+    """Slow queries tab."""
+
+    def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
+        super().__init__()
+        metadata = component_data.metadata or {}
+        slowlog_entries = metadata.get("slowlog_entries", [])
+
+        if slowlog_entries:
+            self.content = ft.Column(
+                [SlowQueriesSection(component_data, page)],
+                scroll=ft.ScrollMode.AUTO,
+            )
+            self.padding = ft.padding.all(Theme.Spacing.SM)
+        else:
+            self.content = ft.Column(
+                [
+                    ft.Icon(
+                        ft.Icons.SPEED,
+                        size=48,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
+                    ),
+                    SecondaryText("No slow queries recorded"),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=Theme.Spacing.SM,
+                expand=True,
+            )
+        self.expand = True
+
+
+class ConnectionsTab(ft.Container):
+    """Connections tab showing active client connections and connection info."""
+
+    def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
+        super().__init__()
+        self.page = page
         metadata = component_data.metadata or {}
 
-        version = metadata.get("version", "unknown")
-        uptime_seconds = metadata.get("uptime_in_seconds", 0)
-        total_commands = metadata.get("total_commands_processed", 0)
-        total_connections = metadata.get("total_connections_received", 0)
-        used_memory_peak = metadata.get("used_memory_peak_human", "unknown")
+        # Connection info section
         redis_url = metadata.get("url", "Not configured")
+        host = metadata.get("host", "localhost")
+        port = metadata.get("port", 6379)
+        connected_clients = metadata.get("connected_clients", 0)
+        total_connections = metadata.get("total_connections_received", 0)
+        blocked_clients = metadata.get("blocked_clients", 0)
 
-        # Format uptime
-        days = uptime_seconds // 86400
-        hours = (uptime_seconds % 86400) // 3600
-        minutes = (uptime_seconds % 3600) // 60
-        uptime_str = f"{days}d {hours}h {minutes}m"
-
-        # Truncate Redis URL for display
-        if len(redis_url) > MAX_REDIS_URL_DISPLAY_LENGTH:
-            redis_url = redis_url[: MAX_REDIS_URL_DISPLAY_LENGTH - 3] + "..."
-
-        def stat_row(label: str, value: str) -> ft.Row:
-            """Create a statistics row with label and value."""
+        def info_row(label: str, value: str) -> ft.Row:
+            """Create an info row."""
             return ft.Row(
                 [
                     SecondaryText(
@@ -459,24 +517,34 @@ class StatisticsSection(ft.Container):
                 spacing=Theme.Spacing.MD,
             )
 
-        self.content = ft.Column(
+        connection_info = ft.Column(
             [
-                H3Text("Redis Information"),
+                H3Text("Connection Info"),
                 ft.Container(height=Theme.Spacing.SM),
-                stat_row("Component Status", status.value.upper()),
-                stat_row("Health Message", message),
-                stat_row("Response Time", f"{response_time}ms"),
+                info_row("Host", f"{host}:{port}"),
+                info_row("URL", redis_url),
                 ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-                stat_row("Redis Version", version),
-                stat_row("Server Uptime", uptime_str),
-                stat_row("Total Commands", str(total_commands)),
-                stat_row("Total Connections", str(total_connections)),
-                stat_row("Peak Memory", used_memory_peak),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-                stat_row("Redis URL", redis_url),
+                info_row("Connected Clients", str(connected_clients)),
+                info_row("Blocked Clients", str(blocked_clients)),
+                info_row("Total Connections", str(total_connections)),
             ],
             spacing=Theme.Spacing.XS,
         )
+
+        self.content = ft.Column(
+            [
+                ft.Container(content=connection_info, padding=Theme.Spacing.MD),
+                ActiveConnectionsSection(component_data, page),
+            ],
+            scroll=ft.ScrollMode.AUTO,
+        )
+        self.padding = ft.padding.all(Theme.Spacing.SM)
+        self.expand = True
+
+
+# =============================================================================
+# Main Dialog
+# =============================================================================
 
 
 class RedisDetailDialog(BaseDetailPopup):
@@ -494,22 +562,38 @@ class RedisDetailDialog(BaseDetailPopup):
         Args:
             component_data: ComponentStatus containing component health and metrics
         """
-        # Build sections
-        sections = [
-            OverviewSection(component_data, page),
-            PerformanceSection(component_data, page),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-            SlowQueriesSection(component_data, page),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-            ActiveConnectionsSection(component_data, page),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-            StatisticsSection(component_data, page),
-        ]
+        metadata = component_data.metadata or {}
+        version = metadata.get("version", "")
+        subtitle = f"Redis {version}" if version else "Redis"
 
-        # Initialize base popup with custom sections
+        # Build tabs
+        tabs = ft.Tabs(
+            selected_index=0,
+            animation_duration=200,
+            tabs=[
+                ft.Tab(text="Overview", content=OverviewTab(component_data, page)),
+                ft.Tab(
+                    text="Slow Queries", content=SlowQueriesTab(component_data, page)
+                ),
+                ft.Tab(
+                    text="Connections", content=ConnectionsTab(component_data, page)
+                ),
+            ],
+            expand=True,
+            label_color=ft.Colors.ON_SURFACE,
+            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
+            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
+        )
+
+        # Initialize base popup with tabs
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text="Redis",
-            sections=sections,
+            title_text="Cache",
+            subtitle_text=subtitle,
+            sections=[tabs],
+            scrollable=False,
+            width=900,
+            height=650,
+            status_detail=get_status_detail(component_data),
         )

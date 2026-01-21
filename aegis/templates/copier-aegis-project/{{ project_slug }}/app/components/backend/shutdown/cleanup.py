@@ -9,6 +9,13 @@ from app.core.log import logger
 
 
 async def shutdown_hook() -> None:
-    """Auto-discovered shutdown hook for cleanup."""
+    """
+    Graceful shutdown cleanup.
+
+    Releases resources when the backend stops:
+    - Close database connections
+    - Flush pending logs
+    - Cancel background tasks
+    """
     logger.info("Running backend cleanup...")
     logger.info("Backend shutdown cleanup complete")

@@ -6,11 +6,12 @@ and conversation metrics with a clean layout.
 """
 
 import flet as ft
-from app.components.frontend.controls import H3Text, PrimaryText, SecondaryText, Tag
+from app.components.frontend.controls import PrimaryText, SecondaryText
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer
 from .card_utils import (
+    create_header_row,
     get_status_colors,
 )
 
@@ -80,12 +81,6 @@ class AICard:
             expand=True,
         )
 
-    def _create_health_tag(self) -> ft.Container:
-        """Create health status tag."""
-        status = self.component_data.status.value
-        primary_color, _, _ = get_status_colors(self.component_data)
-        return Tag(text=status.upper(), color=primary_color)
-
     def _get_engine_display(self) -> str:
         """Get formatted engine name for display."""
         engine = self.metadata.get("engine", "AI Engine")
@@ -95,26 +90,6 @@ class AICard:
         }
         return engine_display_map.get(
             engine, engine.replace("-", " ").title() if engine else "AI Engine"
-        )
-
-    def _create_header_row(self) -> ft.Container:
-        """Create header row with title/subtitle on left and health tag on right."""
-        return ft.Container(
-            content=ft.Row(
-                [
-                    ft.Column(
-                        [
-                            H3Text("AI Service"),
-                            SecondaryText(self._get_engine_display()),
-                        ],
-                        spacing=2,
-                    ),
-                    self._create_health_tag(),
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                vertical_alignment=ft.CrossAxisAlignment.START,
-            ),
-            padding=ft.padding.only(bottom=16),
         )
 
     def _format_cost(self, cost: float) -> str:
@@ -133,7 +108,10 @@ class AICard:
         total_cost = self.metadata.get("total_cost", 0.0)
 
         # Format values for display
-        provider_display = provider.title()
+        provider_display_names = {"public": "LLM7.io"}
+        provider_display = provider_display_names.get(
+            provider.lower(), provider.title()
+        )
         model_display = self._truncate_model_name(model)
         conversations_display = str(total_conversations)
         cost_display = self._format_cost(total_cost)
@@ -182,7 +160,11 @@ class AICard:
         return ft.Container(
             content=ft.Column(
                 [
-                    self._create_header_row(),
+                    create_header_row(
+                        "AI Service",
+                        self._get_engine_display(),
+                        self.component_data,
+                    ),
                     self._create_metrics_section(),
                 ],
                 spacing=0,

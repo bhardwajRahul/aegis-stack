@@ -77,7 +77,8 @@ class CollectionRowCard(ft.Container):
         super().__init__()
 
         self.collection_name = collection.get("name", "Unknown")
-        self.doc_count = collection.get("count", 0)
+        self.doc_count = collection.get("doc_count", 0)
+        self.chunk_count = collection.get("chunk_count", collection.get("count", 0))
         self.on_load_files = on_load_files
 
         self.is_expanded = False
@@ -122,7 +123,12 @@ class CollectionRowCard(ft.Container):
                         ),
                         ft.Container(
                             SecondaryText(str(self.doc_count), size=13),
-                            width=100,
+                            width=60,
+                            alignment=ft.alignment.center_right,
+                        ),
+                        ft.Container(
+                            SecondaryText(str(self.chunk_count), size=13),
+                            width=70,
                             alignment=ft.alignment.center_right,
                         ),
                     ],
@@ -235,8 +241,13 @@ class RAGCollectionsTableSection(ft.Container):
                         ft.Container(width=24),  # Icon space
                         ft.Container(SecondaryText("Collection", size=12), expand=True),
                         ft.Container(
-                            SecondaryText("Documents", size=12),
-                            width=100,
+                            SecondaryText("Docs", size=12),
+                            width=60,
+                            alignment=ft.alignment.center_right,
+                        ),
+                        ft.Container(
+                            SecondaryText("Chunks", size=12),
+                            width=70,
                             alignment=ft.alignment.center_right,
                         ),
                     ],
@@ -259,7 +270,7 @@ class RAGCollectionsTableSection(ft.Container):
             # Table container with dark background
             table = ft.Container(
                 content=ft.Column([header, *rows], spacing=0),
-                bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                bgcolor=ft.Colors.SURFACE,
                 border_radius=Theme.Components.CARD_RADIUS,
                 border=ft.border.all(1, ft.Colors.OUTLINE),
             )
@@ -454,7 +465,7 @@ class SearchResultCard(ft.Container):
         )
 
         self.content = ft.Column([header, content_section], spacing=0)
-        self.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
+        self.bgcolor = ft.Colors.SURFACE
         self.border_radius = Theme.Components.CARD_RADIUS
         self.border = ft.border.all(1, ft.Colors.OUTLINE)
         self.expand = True
@@ -725,13 +736,18 @@ class RAGTab(ft.Container):
                                 collections.append(
                                     {
                                         "name": detail.get("name", name),
-                                        "count": detail.get("count", 0),
+                                        "doc_count": detail.get("doc_count", 0),
+                                        "chunk_count": detail.get("count", 0),
                                     }
                                 )
                             else:
-                                collections.append({"name": name, "count": "?"})
+                                collections.append(
+                                    {"name": name, "doc_count": "?", "chunk_count": "?"}
+                                )
                         except Exception:
-                            collections.append({"name": name, "count": "?"})
+                            collections.append(
+                                {"name": name, "doc_count": "?", "chunk_count": "?"}
+                            )
 
                 self._render_status(health_data, collections)
 

@@ -17,6 +17,7 @@ from app.components.frontend.controls import (
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
+from ..cards.card_utils import get_status_detail
 from .auth_users_tab import AuthUsersTab
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
@@ -37,7 +38,7 @@ class OverviewSection(ft.Container):
         metadata = component_data.metadata or {}
         user_count_display = metadata.get("user_count_display", "0")
         token_expiry_display = metadata.get("token_expiry_display", "Unknown")
-        response_time = component_data.response_time_ms or 0
+        jwt_algorithm = metadata.get("jwt_algorithm", "Unknown")
 
         self.content = ft.Row(
             [
@@ -47,8 +48,8 @@ class OverviewSection(ft.Container):
                     Theme.Colors.PRIMARY,
                 ),
                 MetricCard(
-                    "Response Time",
-                    f"{response_time:.0f}ms",
+                    "JWT Algorithm",
+                    jwt_algorithm,
                     Theme.Colors.INFO,
                 ),
                 MetricCard(
@@ -63,7 +64,7 @@ class OverviewSection(ft.Container):
 
 
 class ConfigurationSection(ft.Container):
-    """Configuration section showing JWT and security settings."""
+    """Configuration section showing security settings."""
 
     def __init__(self, metadata: dict[str, Any]) -> None:
         """
@@ -74,10 +75,8 @@ class ConfigurationSection(ft.Container):
         """
         super().__init__()
 
-        jwt_algorithm = metadata.get("jwt_algorithm", "Unknown")
         secret_key_configured = metadata.get("secret_key_configured", False)
         secret_key_length = metadata.get("secret_key_length", 0)
-        database_available = metadata.get("database_available", False)
 
         # Secret key strength assessment
         if secret_key_length >= 64:
@@ -92,21 +91,6 @@ class ConfigurationSection(ft.Container):
 
         # Build configuration rows
         config_rows = []
-
-        # JWT Algorithm row with badge
-        config_rows.append(
-            ft.Row(
-                [
-                    SecondaryText(
-                        "JWT Algorithm:",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        width=200,
-                    ),
-                    Tag(text=jwt_algorithm, color=Theme.Colors.INFO),
-                ],
-                spacing=Theme.Spacing.MD,
-            )
-        )
 
         # Secret Key Status row
         secret_key_status = "Configured" if secret_key_configured else "Not Configured"
@@ -142,22 +126,6 @@ class ConfigurationSection(ft.Container):
                     spacing=Theme.Spacing.MD,
                 )
             )
-
-        # Database Status row
-        database_status = "Available" if database_available else "Unavailable"
-        config_rows.append(
-            ft.Row(
-                [
-                    SecondaryText(
-                        "Database:",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        width=200,
-                    ),
-                    BodyText(database_status),
-                ],
-                spacing=Theme.Spacing.MD,
-            )
-        )
 
         self.content = ft.Column(
             [
@@ -254,58 +222,6 @@ class SecuritySection(ft.Container):
         self.padding = Theme.Spacing.MD
 
 
-class StatisticsSection(ft.Container):
-    """Statistics section showing detailed metrics and technical information."""
-
-    def __init__(self, component_data: ComponentStatus) -> None:
-        """
-        Initialize statistics section.
-
-        Args:
-            component_data: Complete component status information
-        """
-        super().__init__()
-
-        status = component_data.status
-        message = component_data.message
-        response_time = component_data.response_time_ms or 0
-        metadata = component_data.metadata or {}
-
-        # Dependencies
-        dependencies = metadata.get("dependencies", {})
-        backend_dep = dependencies.get("backend", "Unknown")
-        database_dep = dependencies.get("database", "Unknown")
-
-        def stat_row(label: str, value: str) -> ft.Row:
-            """Create a statistics row with label and value."""
-            return ft.Row(
-                [
-                    SecondaryText(
-                        f"{label}:",
-                        weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                        width=200,
-                    ),
-                    BodyText(value),
-                ],
-                spacing=Theme.Spacing.MD,
-            )
-
-        self.content = ft.Column(
-            [
-                H3Text("Statistics"),
-                ft.Container(height=Theme.Spacing.SM),
-                stat_row("Component Status", status.value.upper()),
-                stat_row("Health Message", message),
-                stat_row("Response Time", f"{response_time:.2f}ms"),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-                stat_row("Backend Dependency", backend_dep),
-                stat_row("Database Dependency", database_dep),
-            ],
-            spacing=Theme.Spacing.XS,
-        )
-        self.padding = Theme.Spacing.MD
-
-
 class OverviewTab(ft.Container):
     """Overview tab combining existing config and security sections."""
 
@@ -320,8 +236,6 @@ class OverviewTab(ft.Container):
                 ConfigurationSection(metadata),
                 ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                 SecuritySection(metadata),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
-                StatisticsSection(component_data),
             ],
             spacing=0,
             scroll=ft.ScrollMode.AUTO,
@@ -369,6 +283,8 @@ class AuthDetailDialog(BaseDetailPopup):
             page=page,
             component_data=component_data,
             title_text="Auth Service",
+            subtitle_text="JWT Authentication",
             sections=[tabs],
             scrollable=False,
+            status_detail=get_status_detail(component_data),
         )

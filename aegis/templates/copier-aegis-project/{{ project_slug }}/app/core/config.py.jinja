@@ -222,8 +222,32 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
+    def reload(self) -> None:
+        """
+        Reload settings from .env file in place.
+
+        Updates all field values from a fresh Settings instance,
+        allowing configuration changes to take effect without restart.
+        """
+        # Create a fresh Settings instance that reads from .env
+        new_settings = Settings()
+
+        # Update all field values in place
+        for field_name in self.model_fields:
+            setattr(self, field_name, getattr(new_settings, field_name))
+
 
 settings = Settings()
+
+
+def reload_settings() -> None:
+    """
+    Reload the global settings instance from .env file.
+
+    Call this after modifying the .env file to pick up changes
+    without restarting the application.
+    """
+    settings.reload()
 
 
 {% if include_worker %}

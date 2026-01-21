@@ -96,7 +96,7 @@ class AegisTheme:
         SUCCESS = DarkColorPalette.ACCENT_SUCCESS  # #52D869
         ERROR = DarkColorPalette.ERROR  # #FF6B6B
         WARNING = ft.Colors.AMBER_400
-        INFO = DarkColorPalette.ACCENT
+        INFO = ft.Colors.BLUE
 
         # Borders from ee-toolset
         BORDER_SUBTLE = DarkColorPalette.BORDER_PRIMARY
@@ -440,7 +440,7 @@ class ThemeManager:
         SUCCESS = ft.Colors.GREEN_400
         WARNING = ft.Colors.AMBER_400
         ERROR = ft.Colors.RED_400
-        INFO = ft.Colors.BLUE_400
+        INFO = ft.Colors.BLUE
 
         # Surface Levels (Semantic - auto-adapt to light/dark mode)
         SURFACE_0 = ft.Colors.SURFACE  # Base background

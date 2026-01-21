@@ -1,280 +1,119 @@
 """
-Stunning Redis/Cache Component Card
+Redis Card
 
-Modern, visually striking card component that displays real Redis metrics
-from Redis INFO command, including memory usage, cache hit rates, operations
-per second, connection statistics, and comprehensive performance data.
+Modern card component for displaying Redis cache status.
+Top-down layout matching the service card pattern.
 """
 
 import flet as ft
-from app.components.frontend.controls import (
-    LabelText,
-    MetricText,
-    PrimaryText,
-    SecondaryText,
-)
-from app.components.frontend.controls.tech_badge import TechBadge
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer
 from .card_utils import (
-    create_responsive_3_section_layout,
+    create_header_row,
+    create_metric_container,
     get_status_colors,
 )
 
 
 class RedisCard:
     """
-    A visually stunning, wide component card for displaying real Redis metrics.
+    A clean Redis card with key cache metrics.
 
     Features:
-    - Modern Material Design 3 styling with circular gauge indicators
-    - Three-section layout (badge, real-time metrics, performance stats)
-    - Real Redis INFO command data: hit rates, memory usage, ops/sec
-    - Comprehensive statistics: uptime, keys, connections, evictions
-    - Health-aware coloring based on cache performance thresholds
-    - Graceful fallback for unavailable metrics
+    - Top-down layout with header and metrics
+    - Hit Ratio, Memory, Ops/sec display
+    - Neutral gray metric containers
+    - Responsive design
     """
 
     def __init__(self, component_data: ComponentStatus) -> None:
-        """
-        Initialize the Redis card with component data.
-
-        Args:
-            component_data: ComponentStatus containing Redis health and metrics
-        """
+        """Initialize with Redis data from health check."""
         self.component_data = component_data
-        self._card_container: ft.Container | None = None
+        self.metadata = component_data.metadata or {}
 
-    def _create_metric_gauge(
-        self, label: str, value: float, unit: str, color: str
-    ) -> ft.Container:
-        """Create a circular gauge-style metric indicator."""
-        # Format value appropriately based on size
-        if value >= 1000:
-            formatted_value = f"{value / 1000:.1f}k"
-        elif value >= 1000000:
-            formatted_value = f"{value / 1000000:.1f}M"
-        else:
-            formatted_value = (
-                f"{value:.1f}" if isinstance(value, float) else str(int(value))
-            )
+    def _get_hit_ratio_display(self) -> str:
+        """Get formatted hit ratio for display."""
+        hit_rate = self.metadata.get("hit_rate_percent", 0)
+        return f"{hit_rate:.1f}%"
 
-        return ft.Container(
-            content=ft.Column(
-                [
-                    LabelText(label),
-                    ft.Container(
-                        content=ft.Column(
-                            [
-                                MetricText(formatted_value),
-                                LabelText(unit),
-                            ],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                            spacing=0,
-                        ),
-                        width=60,
-                        height=60,
-                        bgcolor=ft.Colors.with_opacity(0.1, color),
-                        border=ft.border.all(2, color),
-                        border_radius=30,
-                        padding=ft.padding.all(4),
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=4,
-            ),
-            padding=ft.padding.all(8),
-        )
-
-    def _create_technology_badge(self) -> ft.Container:
-        """Create the Redis technology badge section."""
-        primary_color, _, _ = get_status_colors(self.component_data)
-
-        return TechBadge(
-            title="Redis",
-            subtitle="Cache + Pub/Sub",
-            primary_color=primary_color,
-            width=160,
-        )
-
-    def _create_metrics_section(self) -> ft.Container:
-        """Create the Redis metrics section with memory and connection stats."""
-        # Extract real Redis metrics from component metadata
-        metadata = self.component_data.metadata or {}
-
-        # Calculate hit rate with proper color coding
-        hit_rate = metadata.get("hit_rate_percent", 0)
-        hit_rate_color = (
-            ft.Colors.GREEN
-            if hit_rate >= 90
-            else ft.Colors.ORANGE
-            if hit_rate >= 70
-            else ft.Colors.RED
-        )
-
-        # Calculate memory usage percentage if maxmemory is set
-        used_memory = metadata.get("used_memory", 0)
-        max_memory = metadata.get("maxmemory", 0)
+    def _get_memory_display(self) -> str:
+        """Get formatted memory usage for display."""
+        used_memory = self.metadata.get("used_memory", 0)
+        max_memory = self.metadata.get("maxmemory", 0)
 
         if max_memory > 0:
             memory_percent = (used_memory / max_memory) * 100
-            memory_value = memory_percent
-            memory_unit = "%"
-            # Set color based on memory usage percentage
-            if memory_percent >= 90:
-                memory_color = ft.Colors.RED
-            elif memory_percent >= 70:
-                memory_color = ft.Colors.ORANGE
-            else:
-                memory_color = ft.Colors.BLUE
+            return f"{memory_percent:.1f}%"
         else:
-            # Show absolute memory usage in MB
-            memory_value = used_memory / (1024 * 1024) if used_memory > 0 else 0
-            memory_unit = "MB"
-            memory_color = ft.Colors.BLUE
+            # Show absolute memory in MB
+            memory_mb = used_memory / (1024 * 1024) if used_memory > 0 else 0
+            if memory_mb >= 1:
+                return f"{memory_mb:.1f} MB"
+            else:
+                memory_kb = used_memory / 1024 if used_memory > 0 else 0
+                return f"{memory_kb:.0f} KB"
 
-        # Get operations per second
-        ops_per_sec = metadata.get("instantaneous_ops_per_sec", 0)
+    def _get_ops_display(self) -> str:
+        """Get formatted ops/sec for display."""
+        ops_per_sec = self.metadata.get("instantaneous_ops_per_sec", 0)
+        if ops_per_sec >= 1000:
+            return f"{ops_per_sec / 1000:.1f}k"
+        return str(int(ops_per_sec))
 
-        redis_metrics = {
-            "hit_ratio": {
-                "value": hit_rate,
-                "unit": "%",
-                "color": hit_rate_color,
-            },
-            "memory": {
-                "value": memory_value,
-                "unit": memory_unit,
-                "color": memory_color,
-            },
-            "ops_sec": {
-                "value": ops_per_sec,
-                "unit": "/sec",
-                "color": ft.Colors.PURPLE,
-            },
-        }
+    def _create_metrics_section(self) -> ft.Container:
+        """Create the metrics section with a clean grid layout."""
+        hit_ratio = self._get_hit_ratio_display()
+        memory = self._get_memory_display()
+        ops = self._get_ops_display()
 
-        metrics_controls = []
-        for metric_key, data in redis_metrics.items():
-            label = metric_key.replace("_", " ").replace("ops sec", "Ops").title()
-            metrics_controls.append(
-                self._create_metric_gauge(
-                    label,
-                    data["value"],
-                    data["unit"],
-                    data["color"],
-                )
-            )
-
-        return ft.Column(
-            [
-                PrimaryText("Cache Metrics"),
-                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
-                ft.Row(
-                    metrics_controls, spacing=15, alignment=ft.MainAxisAlignment.CENTER
-                ),
-            ],
-            spacing=8,
-        )
-
-    def _create_performance_section(self) -> ft.Container:
-        """Create the Redis performance and statistics section."""
-
-        # Extract real Redis performance stats from metadata
-        metadata = self.component_data.metadata or {}
-
-        # Format uptime from seconds to human readable
-        uptime_seconds = metadata.get("uptime_in_seconds", 0)
-        uptime_days = uptime_seconds // 86400
-        uptime_hours = (uptime_seconds % 86400) // 3600
-        uptime_str = (
-            f"{uptime_days}d {uptime_hours}h" if uptime_days > 0 else f"{uptime_hours}h"
-        )
-
-        # Format numbers with commas
-        def format_number(num: int | float) -> str:
-            if isinstance(num, float):
-                return f"{num:,.1f}"
-            return f"{num:,}"
-
-        performance_stats = {
-            "Uptime": uptime_str,
-            "Commands/sec": format_number(metadata.get("instantaneous_ops_per_sec", 0)),
-            "Total Keys": format_number(metadata.get("total_keys", 0)),
-            "Memory Peak": metadata.get("used_memory_peak_human", "unknown"),
-            "Connected Clients": format_number(metadata.get("connected_clients", 0)),
-            "Evicted Keys": format_number(metadata.get("evicted_keys", 0)),
-            "Fragmentation": f"{metadata.get('mem_fragmentation_ratio', 1.0):.2f}",
-        }
-
-        perf_content = [
-            PrimaryText("Performance"),
-            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
-        ]
-
-        for stat_name, stat_value in performance_stats.items():
-            perf_content.append(
-                ft.Row(
-                    [
-                        SecondaryText(f"{stat_name}:"),
-                        LabelText(stat_value),
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                )
-            )
-
-        # Add status info
-        perf_content.extend(
-            [
-                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
-                ft.Row(
-                    [
-                        SecondaryText("Status:"),
-                        LabelText(
-                            self.component_data.status.value.title(),
-                            color=get_status_colors(self.component_data)[0],
-                        ),
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                ),
-            ]
-        )
-
-        # Wrap in a scrollable container to handle overflow
         return ft.Container(
             content=ft.Column(
                 [
-                    ft.Container(
-                        content=ft.Column(
-                            perf_content,
-                            spacing=6,
-                            scroll=ft.ScrollMode.AUTO,
-                        ),
-                        height=240,  # Increased height to show more stats
-                    )
-                ]
+                    # Row 1: Hit Ratio (full width)
+                    ft.Row(
+                        [create_metric_container("Hit Ratio", hit_ratio)],
+                        expand=True,
+                    ),
+                    ft.Container(height=12),
+                    # Row 2: Memory and Ops/sec
+                    ft.Row(
+                        [
+                            create_metric_container("Memory", memory),
+                            create_metric_container("Ops/sec", ops),
+                        ],
+                        expand=True,
+                    ),
+                ],
+                spacing=0,
             ),
-            padding=ft.padding.only(right=4),  # Add padding for scrollbar space
+            expand=True,
+        )
+
+    def _create_card_content(self) -> ft.Container:
+        """Create the full card content with header and metrics."""
+        return ft.Container(
+            content=ft.Column(
+                [
+                    create_header_row(
+                        "Cache",
+                        "Redis",
+                        self.component_data,
+                    ),
+                    self._create_metrics_section(),
+                ],
+                spacing=0,
+            ),
+            padding=ft.padding.all(16),
+            expand=True,
         )
 
     def build(self) -> ft.Container:
-        """Build and return the complete Redis card with responsive layout."""
-        primary_color, background_color, border_color = get_status_colors(
-            self.component_data
-        )
-
-        # Use shared responsive 3-section layout prioritizing middle section
-        content = create_responsive_3_section_layout(
-            left_content=self._create_technology_badge(),
-            middle_content=self._create_metrics_section(),
-            right_content=self._create_performance_section(),
-        )
+        """Build and return the complete Redis card."""
+        _, _, border_color = get_status_colors(self.component_data)
 
         return CardContainer(
-            content=content,
+            content=self._create_card_content(),
             border_color=border_color,
             component_data=self.component_data,
             component_name="redis",

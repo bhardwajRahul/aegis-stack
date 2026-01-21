@@ -6,11 +6,12 @@ Shows auth-specific metrics with a clean, functional layout.
 """
 
 import flet as ft
-from app.components.frontend.controls import H3Text, PrimaryText, SecondaryText, Tag
+from app.components.frontend.controls import PrimaryText, SecondaryText
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer
 from .card_utils import (
+    create_header_row,
     get_status_colors,
 )
 
@@ -49,32 +50,6 @@ class AuthCard:
             border=ft.border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.GREY)),
             height=80,
             expand=True,
-        )
-
-    def _create_health_tag(self) -> ft.Container:
-        """Create health status tag."""
-        status = self.component_data.status.value
-        primary_color, _, _ = get_status_colors(self.component_data)
-        return Tag(text=status.upper(), color=primary_color)
-
-    def _create_header_row(self) -> ft.Container:
-        """Create header row with title/subtitle on left and health tag on right."""
-        return ft.Container(
-            content=ft.Row(
-                [
-                    ft.Column(
-                        [
-                            H3Text("Auth Service"),
-                            SecondaryText("JWT Authentication"),
-                        ],
-                        spacing=2,
-                    ),
-                    self._create_health_tag(),
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                vertical_alignment=ft.CrossAxisAlignment.START,
-            ),
-            padding=ft.padding.only(bottom=16),
         )
 
     def _create_metrics_section(self) -> ft.Container:
@@ -118,7 +93,11 @@ class AuthCard:
         return ft.Container(
             content=ft.Column(
                 [
-                    self._create_header_row(),
+                    create_header_row(
+                        "Auth Service",
+                        "JWT Authentication",
+                        self.component_data,
+                    ),
                     self._create_metrics_section(),
                 ],
                 spacing=0,

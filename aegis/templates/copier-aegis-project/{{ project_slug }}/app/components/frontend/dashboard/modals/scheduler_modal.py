@@ -7,19 +7,21 @@ Each section is self-contained and can be reused and tested independently.
 
 import flet as ft
 from app.components.frontend.controls import (
-    DataTable,
     DataTableColumn,
     ExpandableDataTable,
     ExpandableRow,
     SecondaryText,
     TableCellText,
     TableNameText,
-    Tag,
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
-from ..cards.card_utils import format_next_run_time, format_schedule_human_readable
+from ..cards.card_utils import (
+    format_next_run_time,
+    format_schedule_human_readable,
+    get_status_detail,
+)
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
 
@@ -147,12 +149,13 @@ def _build_job_expanded_content(task: dict) -> ft.Control:
     """
     function = task.get("function", "Unknown")
     description = task.get("description")
-    job_id = task.get("id", task.get("job_id", "Unknown"))
-    status = task.get("status", "active")
+    # Hidden for now - will be used when action buttons are enabled
+    # job_id = task.get("id", task.get("job_id", "Unknown"))
+    # status = task.get("status", "active")
 
-    # Get mock data (will be replaced with API calls)
-    stats = _get_mock_job_stats(job_id)
-    recent = _get_mock_recent_executions(job_id)
+    # Get mock data (will be replaced with API calls) - hidden for now
+    # stats = _get_mock_job_stats(job_id)
+    # recent = _get_mock_recent_executions(job_id)
 
     content: list[ft.Control] = []
 
@@ -172,124 +175,124 @@ def _build_job_expanded_content(task: dict) -> ft.Control:
     )
     content.append(ft.Container(height=Theme.Spacing.MD))
 
-    # === Work in Progress Notice ===
-    wip_notice = ft.Container(
-        content=ft.Row(
-            [
-                ft.Icon(ft.Icons.CONSTRUCTION, size=16, color=ft.Colors.ORANGE_900),
-                ft.Text(
-                    "Work in progress - data below is placeholder, not real execution history",
-                    size=12,
-                    color=ft.Colors.ORANGE_900,
-                ),
-            ],
-            spacing=8,
-        ),
-        bgcolor=ft.Colors.ORANGE_100,
-        padding=ft.padding.symmetric(horizontal=12, vertical=8),
-        border_radius=6,
-    )
-    content.append(wip_notice)
-    content.append(ft.Container(height=Theme.Spacing.MD))
+    # === Work in Progress Notice (hidden for now) ===
+    # wip_notice = ft.Container(
+    #     content=ft.Row(
+    #         [
+    #             ft.Icon(ft.Icons.CONSTRUCTION, size=16, color=ft.Colors.ORANGE_900),
+    #             ft.Text(
+    #                 "Work in progress - data below is placeholder, not real execution history",
+    #                 size=12,
+    #                 color=ft.Colors.ORANGE_900,
+    #             ),
+    #         ],
+    #         spacing=8,
+    #     ),
+    #     bgcolor=ft.Colors.ORANGE_100,
+    #     padding=ft.padding.symmetric(horizontal=12, vertical=8),
+    #     border_radius=6,
+    # )
+    # content.append(wip_notice)
+    # content.append(ft.Container(height=Theme.Spacing.MD))
 
-    # === Section 2: Stats Row ===
-    success_rate = stats["success_rate"]
-    rate_color = (
-        Theme.Colors.SUCCESS
-        if success_rate >= 95
-        else Theme.Colors.WARNING
-        if success_rate >= 80
-        else Theme.Colors.ERROR
-    )
+    # === Section 2: Stats Row (hidden for now) ===
+    # success_rate = stats["success_rate"]
+    # rate_color = (
+    #     Theme.Colors.SUCCESS
+    #     if success_rate >= 95
+    #     else Theme.Colors.WARNING
+    #     if success_rate >= 80
+    #     else Theme.Colors.ERROR
+    # )
+    #
+    # stats_row = ft.Row(
+    #     [
+    #         MiniMetricCard("Success Rate", f"{success_rate:.1f}%", rate_color),
+    #         MiniMetricCard("Total Runs", str(stats["total_runs"]), Theme.Colors.INFO),
+    #         MiniMetricCard(
+    #             "Avg Duration",
+    #             _format_duration(stats["avg_duration_ms"]),
+    #             ft.Colors.PURPLE_200,
+    #         ),
+    #         MiniMetricCard(
+    #             "Last Run",
+    #             stats["last_run"],
+    #             Theme.Colors.SUCCESS
+    #             if stats["last_status"] == "success"
+    #             else Theme.Colors.ERROR,
+    #         ),
+    #     ],
+    #     spacing=Theme.Spacing.SM,
+    # )
+    # content.append(stats_row)
+    # content.append(ft.Container(height=Theme.Spacing.MD))
 
-    stats_row = ft.Row(
-        [
-            MiniMetricCard("Success Rate", f"{success_rate:.1f}%", rate_color),
-            MiniMetricCard("Total Runs", str(stats["total_runs"]), Theme.Colors.INFO),
-            MiniMetricCard(
-                "Avg Duration",
-                _format_duration(stats["avg_duration_ms"]),
-                ft.Colors.PURPLE_200,
-            ),
-            MiniMetricCard(
-                "Last Run",
-                stats["last_run"],
-                Theme.Colors.SUCCESS
-                if stats["last_status"] == "success"
-                else Theme.Colors.ERROR,
-            ),
-        ],
-        spacing=Theme.Spacing.SM,
-    )
-    content.append(stats_row)
-    content.append(ft.Container(height=Theme.Spacing.MD))
+    # === Section 3: Recent Executions (hidden for now) ===
+    # content.append(SecondaryText("Recent Executions", size=Theme.Typography.BODY_SMALL))
+    # content.append(ft.Container(height=Theme.Spacing.XS))
+    #
+    # # Build execution rows
+    # exec_columns = [
+    #     DataTableColumn("Time", width=100, style="secondary"),
+    #     DataTableColumn("Duration", width=70, alignment="right", style="body"),
+    #     DataTableColumn("Status", style=None),  # passthrough for Tag
+    # ]
+    #
+    # exec_rows = []
+    # for ex in recent:
+    #     is_success = ex["status"] == "success"
+    #     if is_success:
+    #         status_tag = Tag(text="Success", color=Theme.Colors.SUCCESS)
+    #     else:
+    #         error_text = ex.get("error", "Failed")
+    #         # Truncate long errors
+    #         if len(error_text) > 25:
+    #             error_text = error_text[:22] + "..."
+    #         status_tag = ft.Row(
+    #             [
+    #                 Tag(text="Failed", color=Theme.Colors.ERROR),
+    #                 SecondaryText(error_text, size=10),
+    #             ],
+    #             spacing=4,
+    #         )
+    #
+    #     exec_rows.append([ex["time"], ex["duration"], status_tag])
+    #
+    # exec_table = DataTable(
+    #     columns=exec_columns,
+    #     rows=exec_rows,
+    #     row_padding=4,
+    #     empty_message="No execution history",
+    #     show_header_border=True,
+    #     show_row_borders=False,
+    # )
+    # content.append(exec_table)
+    # content.append(ft.Container(height=Theme.Spacing.MD))
 
-    # === Section 3: Recent Executions ===
-    content.append(SecondaryText("Recent Executions", size=Theme.Typography.BODY_SMALL))
-    content.append(ft.Container(height=Theme.Spacing.XS))
-
-    # Build execution rows
-    exec_columns = [
-        DataTableColumn("Time", width=100, style="secondary"),
-        DataTableColumn("Duration", width=70, alignment="right", style="body"),
-        DataTableColumn("Status", style=None),  # passthrough for Tag
-    ]
-
-    exec_rows = []
-    for ex in recent:
-        is_success = ex["status"] == "success"
-        if is_success:
-            status_tag = Tag(text="Success", color=Theme.Colors.SUCCESS)
-        else:
-            error_text = ex.get("error", "Failed")
-            # Truncate long errors
-            if len(error_text) > 25:
-                error_text = error_text[:22] + "..."
-            status_tag = ft.Row(
-                [
-                    Tag(text="Failed", color=Theme.Colors.ERROR),
-                    SecondaryText(error_text, size=10),
-                ],
-                spacing=4,
-            )
-
-        exec_rows.append([ex["time"], ex["duration"], status_tag])
-
-    exec_table = DataTable(
-        columns=exec_columns,
-        rows=exec_rows,
-        row_padding=4,
-        empty_message="No execution history",
-        show_header_border=True,
-        show_row_borders=False,
-    )
-    content.append(exec_table)
-    content.append(ft.Container(height=Theme.Spacing.MD))
-
-    # === Section 4: Action Buttons ===
-    is_active = status == "active"
-    pause_resume_text = "Pause" if is_active else "Resume"
-    pause_resume_icon = (
-        ft.Icons.PAUSE_CIRCLE_OUTLINE if is_active else ft.Icons.PLAY_CIRCLE_OUTLINE
-    )
-
-    actions_row = ft.Row(
-        [
-            ft.Container(expand=True),  # Spacer to push buttons right
-            ft.OutlinedButton(
-                text="Trigger Now",
-                icon=ft.Icons.PLAY_ARROW,
-                on_click=lambda e: _on_trigger_click(e, job_id),
-            ),
-            ft.OutlinedButton(
-                text=pause_resume_text,
-                icon=pause_resume_icon,
-                on_click=lambda e: _on_pause_toggle_click(e, job_id, is_active),
-            ),
-        ],
-        spacing=Theme.Spacing.SM,
-    )
-    content.append(actions_row)
+    # === Section 4: Action Buttons (hidden for now) ===
+    # is_active = status == "active"
+    # pause_resume_text = "Pause" if is_active else "Resume"
+    # pause_resume_icon = (
+    #     ft.Icons.PAUSE_CIRCLE_OUTLINE if is_active else ft.Icons.PLAY_CIRCLE_OUTLINE
+    # )
+    #
+    # actions_row = ft.Row(
+    #     [
+    #         ft.Container(expand=True),  # Spacer to push buttons right
+    #         ft.OutlinedButton(
+    #             text="Trigger Now",
+    #             icon=ft.Icons.PLAY_ARROW,
+    #             on_click=lambda e: _on_trigger_click(e, job_id),
+    #         ),
+    #         ft.OutlinedButton(
+    #             text=pause_resume_text,
+    #             icon=pause_resume_icon,
+    #             on_click=lambda e: _on_pause_toggle_click(e, job_id, is_active),
+    #         ),
+    #     ],
+    #     spacing=Theme.Spacing.SM,
+    # )
+    # content.append(actions_row)
 
     return ft.Column(content, spacing=0)
 
@@ -444,5 +447,7 @@ class SchedulerDetailDialog(BaseDetailPopup):
             page=page,
             component_data=component_data,
             title_text="Scheduler",
+            subtitle_text="APScheduler",
             sections=sections,
+            status_detail=get_status_detail(component_data),
         )
