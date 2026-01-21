@@ -176,17 +176,14 @@ class TestUpdateCommandDryRun:
 class TestUpdateCommandVersionResolution:
     """Tests for version resolution logic."""
 
-    @patch("aegis.commands.update.get_latest_version")
     @patch("aegis.commands.update.resolve_version_to_ref")
     def test_update_to_latest_default(
         self,
         mock_resolve: MagicMock,
-        mock_get_latest: MagicMock,
         project_factory: "ProjectFactory",
     ) -> None:
-        """Test that update defaults to latest version."""
-        # Setup mocks
-        mock_get_latest.return_value = "0.2.0"
+        """Test that update defaults to CLI version."""
+        # Setup mock - resolve_version_to_ref is called with CLI version
         mock_resolve.return_value = "v0.2.0"
 
         # Use cached base project
@@ -810,17 +807,14 @@ class TestUpdateCommandVersionInfo:
         # Should show version information
         assert "version" in output or "template" in output
 
-    @patch("aegis.commands.update.get_latest_version")
     @patch("aegis.commands.update.get_current_template_commit")
     def test_update_shows_cli_version(
         self,
         mock_get_commit: MagicMock,
-        mock_latest: MagicMock,
         project_factory: "ProjectFactory",
     ) -> None:
         """Test that update shows CLI version information."""
         mock_get_commit.return_value = "abc123"
-        mock_latest.return_value = "0.2.0"
 
         project_path = project_factory("base")
 

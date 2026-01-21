@@ -22,7 +22,6 @@ from ..core.copier_updater import (
     format_conflict_report,
     get_changelog,
     get_current_template_commit,
-    get_latest_version,
     get_template_root,
     is_version_downgrade,
     resolve_ref_to_commit,
@@ -158,14 +157,12 @@ def update_command(
         target_ref = resolve_version_to_ref(to_version, template_root)
         target_version_display = to_version
     else:
-        # Default to latest release version (not HEAD, not prereleases)
-        # Prereleases (rc, alpha, beta) are only picked up via explicit --to-version
-        latest = get_latest_version(template_root)
-        if latest:
-            target_ref = f"v{latest}"
-            target_version_display = f"{latest} (latest release)"
+        # Default to CLI version - templates should match the installed CLI
+        target_ref = resolve_version_to_ref(cli_version, template_root)
+        if target_ref:
+            target_version_display = f"{cli_version} (current CLI)"
         else:
-            # Fallback to HEAD only if no versions found
+            # Fallback to HEAD if CLI version tag doesn't exist
             target_ref = "HEAD"
             head_commit = resolve_ref_to_commit("HEAD", template_root)
             if head_commit:

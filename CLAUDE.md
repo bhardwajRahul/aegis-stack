@@ -32,7 +32,7 @@ Each generated project includes:
 
 ## Installation
 
-**Current Version**: v0.5.3-rc1
+**Current Version**: v0.5.3-rc2
 
 ```bash
 pip install aegis-stack
@@ -66,6 +66,29 @@ This project uses `uv` for dependency management and a `Makefile` for CLI develo
 - `make clean-test-projects` - Remove generated test projects
 
 **Template testing is critical** - always run `make test-template` after modifying templates to ensure generated projects work correctly.
+
+### TestPyPI Release Testing
+Test upgrade paths using TestPyPI before publishing to PyPI:
+
+```bash
+# 1. Install old version from TestPyPI and create project
+uvx --index-url https://test.pypi.org/simple/ \
+    --extra-index-url https://pypi.org/simple/ \
+    --index-strategy unsafe-best-match \
+    aegis-stack@0.5.2 init test-upgrade-project
+
+# 2. Install new RC version and test update
+cd test-upgrade-project
+uvx --index-url https://test.pypi.org/simple/ \
+    --extra-index-url https://pypi.org/simple/ \
+    --index-strategy unsafe-best-match \
+    aegis-stack@0.5.3-rc2 update
+```
+
+**Key uvx flags:**
+- `--index-url` - Primary source: TestPyPI
+- `--extra-index-url` - Fallback: PyPI (for dependencies not on TestPyPI)
+- `--index-strategy unsafe-best-match` - Allows mixing packages from different indexes
 
 ## Code Navigation (LSP-First)
 
