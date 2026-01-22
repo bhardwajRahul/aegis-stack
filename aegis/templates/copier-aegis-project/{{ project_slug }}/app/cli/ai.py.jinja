@@ -35,6 +35,19 @@ from ..services.ai.providers import ProviderNotInstalledError
 # Initialize logging at module load
 setup_logging()
 
+# Provider display name aliases
+PROVIDER_DISPLAY_NAMES: dict[str, str] = {
+    "public": "LLM7.io",
+    "unknown": "LLM7.io",
+}
+
+
+def get_provider_display_name(provider: AIProvider | str) -> str:
+    """Get display name for a provider, with aliases for branding."""
+    value = provider.value if isinstance(provider, AIProvider) else provider
+    return PROVIDER_DISPLAY_NAMES.get(value, value)
+
+
 app = typer.Typer(help="AI service management and chat commands")
 console = Console()
 
@@ -58,7 +71,7 @@ def status() -> None:
         + typer.style(status_text, fg=status_color)
     )
     typer.echo(
-        typer.style("Provider: ", fg=typer.colors.CYAN) + ai_config.provider.value
+        typer.style("Provider: ", fg=typer.colors.CYAN) + get_provider_display_name(ai_config.provider)
     )
     typer.echo(typer.style("Model: ", fg=typer.colors.CYAN) + str(ai_config.model))
     typer.echo(
@@ -168,7 +181,7 @@ def providers() -> None:
         free_tier = "Yes" if provider in free_providers else "No"
 
         table.add_row(
-            provider.value,
+            get_provider_display_name(provider),
             installed_display,
             api_key_display,
             status,
@@ -532,6 +545,7 @@ def chat(
 {% if ai_rag %}
                         use_rag=rag_enabled,
                         rag_collection=rag_collection,
+                        rag_top_k=top_k,
                         show_sources=show_sources,
 {% endif %}
                     )
@@ -618,7 +632,7 @@ def history(
     typer.echo(f"Conversation: {conversation_id}")
     if conversation.title:
         typer.echo(f"Title: {conversation.title}")
-    typer.echo(f"Provider: {conversation.provider.value}")
+    typer.echo(f"Provider: {get_provider_display_name(conversation.provider)}")
     typer.echo(f"Messages: {conversation.get_message_count()}")
     typer.echo("")
 
@@ -701,7 +715,8 @@ def usage(
     class RecentActivity(BaseModel):
         timestamp: str
         model: str
-        tokens: int
+        input_tokens: int
+        output_tokens: int
         cost: float
         success: bool
         action: str
@@ -732,8 +747,14 @@ def usage(
             "groq": "yellow",
             "mistral": "cyan",
             "cohere": "bright_red",
+            "public": "bright_cyan",
+            "llm7.io": "bright_cyan",
         }
         return colors.get(vendor.lower(), fallback)
+
+    def get_vendor_display_name(vendor: str) -> str:
+        """Get display name for a vendor, with aliases for branding."""
+        return PROVIDER_DISPLAY_NAMES.get(vendor.lower(), vendor)
 
     # Display functions
     def display_summary_panel(stats: UsageStatsResponse) -> None:
@@ -791,9 +812,10 @@ def usage(
         table.add_column("Share", justify="right")
         for model in stats.models:
             vendor_color = get_vendor_color(model.vendor, model.vendor_color)
+            vendor_display = get_vendor_display_name(model.vendor)
             table.add_row(
                 model.model_title,
-                f"[{vendor_color}]{model.vendor}[/{vendor_color}]",
+                f"[{vendor_color}]{vendor_display}[/{vendor_color}]",
                 format_number(model.requests),
                 format_number(model.tokens),
                 format_cost(model.cost),
@@ -820,11 +842,12 @@ def usage(
             except ValueError:
                 time_str = activity.timestamp[:8]
             status = "[green]OK[/green]" if activity.success else "[red]FAIL[/red]"
+            total_tokens = activity.input_tokens + activity.output_tokens
             table.add_row(
                 time_str,
                 activity.model,
                 activity.action,
-                format_number(activity.tokens),
+                format_number(total_tokens),
                 format_cost(activity.cost),
                 status,
             )
@@ -1007,6 +1030,7 @@ async def _interactive_chat_session(
 {% if ai_rag %}
     use_rag: bool = False,
     rag_collection: str | None = None,
+    rag_top_k: int | None = None,
     show_sources: bool = False,
 {% endif %}
 ) -> None:
@@ -1027,8 +1051,10 @@ async def _interactive_chat_session(
     await asyncio.sleep(0.15)
     console.print(" [green]OK[/green]")
 
-    console.print(f"  [dim]>[/dim] Connecting to [cyan]{ai_config.provider.value}[/cyan]...", end="")
-    await asyncio.sleep(0.2)
+    console.print(f"  [dim]>[/dim] Connecting to [cyan]{get_provider_display_name(ai_config.provider)}[/cyan]...", end="")
+    # Warm up the agent (lazy imports, model initialization)
+    from app.services.ai.providers import get_agent
+    _ = get_agent(ai_config, settings)
     console.print(" [green]OK[/green]")
 
     console.print(f"  [dim]>[/dim] Model: [cyan]{ai_config.model}[/cyan]")
@@ -1090,7 +1116,7 @@ async def _interactive_chat_session(
 
     # Initialize status line state for prompt_toolkit toolbar
     session_state = ChatSessionState(
-        provider=ai_config.provider.value,
+        provider=get_provider_display_name(ai_config.provider),
         model=ai_config.model,
 {% if ai_rag %}
         rag_enabled=use_rag,
@@ -1241,6 +1267,7 @@ async def _interactive_chat_session(
 {% if ai_rag %}
                         use_rag=use_rag,
                         rag_collection=rag_collection,
+                        rag_top_k=rag_top_k,
                         show_sources=show_sources,
 {% endif %}
                         session_state=session_state,
@@ -1274,6 +1301,7 @@ async def _interactive_chat_session(
 {% if ai_rag %}
                             use_rag=use_rag,
                             rag_collection=rag_collection,
+                            rag_top_k=rag_top_k,
 {% endif %}
                         )
                     finally:

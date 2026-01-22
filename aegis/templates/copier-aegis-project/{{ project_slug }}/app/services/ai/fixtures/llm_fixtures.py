@@ -3,10 +3,10 @@
 Contains seed data for LLM vendors, models, deployments, and pricing (Dec 2024 rates).
 
 Architecture:
-- LLMVendor: API providers (OpenAI, Anthropic, public/LLM7.io, etc.)
+- LLMVendor: API providers (OpenAI, Anthropic, LLM7.io, etc.)
 - LargeLanguageModel: Unique models (gpt-4o-mini exists ONCE, owned by OpenAI)
-- LLMDeployment: Which vendors offer which models (public deploys gpt-4o-mini via proxy)
-- LLMPrice: Per vendor-model pricing (OpenAI charges $0.15, public charges $0.00)
+- LLMDeployment: Which vendors offer which models (LLM7.io deploys gpt-4o-mini via proxy)
+- LLMPrice: Per vendor-model pricing (OpenAI charges $0.15, LLM7.io charges $0.00)
 """
 
 from datetime import UTC, datetime
@@ -69,9 +69,9 @@ VENDORS: list[dict[str, Any]] = [
         "auth_method": "api-key",
     },
     {
-        "name": "public",
-        "description": "Public free endpoints via LLM7.io (no API key required)",
-        "color": "#6B7280",
+        "name": "LLM7.io",
+        "description": "Free public endpoints via LLM7.io (no API key required)",
+        "color": "#00D4AA",
         "api_base": "https://api.llm7.io/v1",
         "auth_method": "none",
     },
@@ -294,8 +294,8 @@ MODELS: dict[str, list[dict[str, Any]]] = {
             "family": "command",
         },
     ],
-    # Public vendor's "auto" model - represents dynamic model selection via LLM7.io
-    "public": [
+    # LLM7.io's "auto" model - represents dynamic model selection
+    "LLM7.io": [
         {
             "model_id": "auto",
             "title": "Auto (LLM7.io)",
@@ -418,8 +418,8 @@ DEPLOYMENTS: dict[str, list[dict[str, Any]]] = {
         {"model_id": "command-r", "speed": 75, "intelligence": 75, "reasoning": 72},
         {"model_id": "command-light", "speed": 90, "intelligence": 55, "reasoning": 50},
     ],
-    # Public deploys models via LLM7.io proxy (free but slower, no streaming)
-    "public": [
+    # LLM7.io deploys models via proxy (free but slower, no streaming)
+    "LLM7.io": [
         {"model_id": "gpt-4o-mini", "speed": 40, "intelligence": 75, "reasoning": 70},
         {"model_id": "auto", "speed": 40, "intelligence": 75, "reasoning": 70},
     ],
@@ -457,9 +457,9 @@ PRICES: dict[tuple[str, str], dict[str, float]] = {
     ("cohere", "command-r-plus"): {"input": 2.50, "output": 10.00},
     ("cohere", "command-r"): {"input": 0.15, "output": 0.60},
     ("cohere", "command-light"): {"input": 0.03, "output": 0.06},
-    # Public pricing (free via LLM7.io)
-    ("public", "gpt-4o-mini"): {"input": 0.00, "output": 0.00},
-    ("public", "auto"): {"input": 0.00, "output": 0.00},
+    # LLM7.io pricing (free)
+    ("LLM7.io", "gpt-4o-mini"): {"input": 0.00, "output": 0.00},
+    ("LLM7.io", "auto"): {"input": 0.00, "output": 0.00},
 }
 
 

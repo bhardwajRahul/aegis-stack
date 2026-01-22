@@ -54,7 +54,7 @@ class RAGServiceConfig(BaseModel):
         description="Overlap between chunks in characters",
     )
     default_top_k: int = Field(
-        default=5,
+        default=15,
         gt=0,
         le=50,
         description="Default number of search results",
