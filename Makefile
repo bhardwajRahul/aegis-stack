@@ -137,18 +137,20 @@ help: ## Show this help message
 
 gif: ## Convert MP4 to high-quality GIF (usage: make gif INPUT=recording.mp4)
 ifndef INPUT
-	@echo "Usage: make gif INPUT=path/to/video.mp4 [OUTPUT=output.gif] [FPS=15] [WIDTH=1200]"
+	@echo "Usage: make gif INPUT=path/to/video.mp4 [OUTPUT=output.gif] [FPS=15] [WIDTH=1200] [START=0] [END=10]"
 	@echo ""
 	@echo "Options:"
 	@echo "  INPUT   - Required. Path to input MP4 file"
 	@echo "  OUTPUT  - Optional. Output GIF path (default: same name as input with .gif)"
 	@echo "  FPS     - Optional. Frames per second (default: 15, max 30)"
 	@echo "  WIDTH   - Optional. Output width in pixels (default: 1200)"
+	@echo "  START   - Optional. Start time in seconds (default: beginning)"
+	@echo "  END     - Optional. End time in seconds (default: end of video)"
 	@exit 1
 endif
 	@echo "🎬 Converting $(INPUT) to GIF..."
 	@mkdir -p .gif-frames
-	@ffmpeg -i "$(INPUT)" -vf "fps=$(or $(FPS),15),scale=$(or $(WIDTH),1200):-1:flags=lanczos" -y .gif-frames/frame_%04d.png
+	@ffmpeg $(if $(START),-ss $(START)) -i "$(INPUT)" $(if $(END),-to $(END)) -vf "fps=$(or $(FPS),15),scale=$(or $(WIDTH),1200):-1:flags=lanczos" -y .gif-frames/frame_%04d.png
 	@gifski -o "$(or $(OUTPUT),$(basename $(INPUT)).gif)" --fps $(or $(FPS),15) --quality 90 .gif-frames/*.png
 	@rm -rf .gif-frames
 	@echo "✅ Created: $(or $(OUTPUT),$(basename $(INPUT)).gif)"

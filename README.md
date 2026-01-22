@@ -20,7 +20,7 @@ No time for health checks, proper testing, or clean architecture. Just enough ti
 
 ![Aegis Stack Quick Start Demo](docs/images/aegis-demo.gif)
 
-Aegis Stack is a CLI that scaffolds modular Python applications — start with an API, add Auth, Scheduler, Workers, or AI services when you need them.
+Aegis Stack is a system for creating and evolving modular Python applications over time, built on tools you already know.
 
 ## Prerequisites
 
@@ -44,6 +44,42 @@ cd my-api && uv sync && cp .env.example .env && make serve
 ```
 
 **Installation alternatives:** See the [Installation Guide](https://lbedner.github.io/aegis-stack/installation/) for `uv tool install`, `pip install`, and development setup.
+
+## Overseer - Built-In System Visibility
+
+![Overseer](docs/images/overseer-demo.gif)
+
+**[Overseer](https://lbedner.github.io/aegis-stack/overseer/)** is the built-in system dashboard that ships with every Aegis Stack project.
+
+It provides a live view of what your application is doing at runtime - across core components (Backend, Database, Workers, Scheduler) and services (Auth, AI, Comms) - through a web UI.
+
+Overseer goes beyond simple health checks. You can inspect worker queues, scheduled jobs, database state, and AI usage, all in one place, without wiring up external tools.
+
+No Datadog. No New Relic. No vendor lock-in.
+
+Just a clear view of your system, included from day one.
+
+## CLI - First-Class System Interface
+
+![CLI Demo](docs/images/cli-demo.gif)
+
+The Aegis CLI is a first-class interface to your running system.
+
+It goes beyond simple health checks, exposing rich, component-specific commands for inspecting and understanding your application from the terminal.
+
+Query worker queues, scheduler activity, database state, AI usage, and service configuration, all without leaving the CLI.
+
+The same system intelligence that powers Overseer and Illiana is available here, optimized for terminal workflows.
+
+## Illiana - Optional System Operator
+
+![Illiana Demo](docs/images/illiana-demo.gif)
+
+When the AI service is enabled, Aegis exposes an additional interface: **Illiana**.
+
+Illiana is a conversational interface that answers questions about your running system using live telemetry and optional RAG over your codebase.
+
+She is not required to use Aegis Stack, and nothing in the system depends on her being present. When enabled, she becomes another way, alongside the CLI and Overseer, to understand what your application is doing and why.
 
 ## Your Stack Grows With You
 
@@ -75,36 +111,21 @@ aegis update
 
 Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your Stack](https://lbedner.github.io/aegis-stack/evolving-your-stack/)** for the complete guide.
 
-## See It In Action
-
-### Overseer - Built-In Health Monitoring
-
-![Overseer](docs/images/overseer-demo.gif)
-
-**[Overseer](https://lbedner.github.io/aegis-stack/overseer/)** is the read-only health monitoring dashboard built into every Aegis Stack project. It provides real-time visibility into all your components (Backend, Database, Worker, Scheduler) and services (Auth, AI, Comms) through a web UI and CLI commands.
-
-No Datadog. No New Relic. No vendor lock-in. Just centralized monitoring you own from day one.
-
-### CLI Health Monitoring
-
-![CLI Health Check](docs/images/cli_health_check.png)
-
-Rich terminal output showing detailed component status, health metrics, and system diagnostics.
-
 ## Available Components & Services
 
 **Components** (infrastructure)
 
-- **Core** - API + Frontend (always included)
-- **Database** - ORM with health monitoring
-- **Scheduler** - Background tasks, cron jobs
-- **Worker** - Async task queues
+- **Core** → FastAPI + Pydantic V2 + Uvicorn
+- **Database** → Postgres / SQLite
+- **Cache/Queue** → Redis
+- **Scheduler** → APScheduler
+- **Worker** → Arq / Taskiq
 
 **Services** (business logic)
 
-- **Auth** - User authentication & JWT
-- **AI** - Multi-provider AI chat
-- **Comms** - Email, SMS, voice calls
+- **Auth** → JWT authentication
+- **AI** → PydanticAI / LangChain
+- **Comms** → Resend + Twilio
 
 [Components Docs →](https://lbedner.github.io/aegis-stack/components/) | [Services Docs →](https://lbedner.github.io/aegis-stack/services/)
 
@@ -121,6 +142,6 @@ Rich terminal output showing detailed component status, health metrics, and syst
 
 No reinventing the wheel. Just the tools you already know, pre-configured and ready to compose.
 
-Aegis Stack respects your expertise. We maintain existing standards - FastAPI for APIs, SQLModel for databases, arq for workers. No custom abstractions or proprietary patterns to learn. Pick your components, get a production-ready foundation, and build your way.
+Aegis Stack respects your expertise. No custom abstractions or proprietary patterns to learn. Pick your components, get a production-ready foundation, and build your way.
 
-The tool gets out of your way so you can get started.
+Aegis gets out of your way so you can get started.

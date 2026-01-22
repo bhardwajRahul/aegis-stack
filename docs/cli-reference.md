@@ -508,7 +508,7 @@ arq my_project.components.worker.WorkerSettings  # Start worker
 arq --watch my_project.components.worker.WorkerSettings  # Auto-reload
 ```
 
-**→ [Complete Worker CLI Reference](components/worker/cli.md)**
+**→ [Complete Worker CLI Reference](components/worker/index.md#arq-cli-commands)**
 
 ### Service CLIs
 

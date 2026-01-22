@@ -22,6 +22,10 @@ IMAGE_PATH_MAPPINGS = {
     "![CLI Health Check](docs/images/cli_health_check.png)": "![CLI Health Check](images/cli_health_check.png)",
     # Overseer Dashboard
     "![Overseer](docs/images/overseer-demo.gif)": "![Overseer](images/overseer-demo.gif)",
+    # CLI Demo
+    "![CLI Demo](docs/images/cli-demo.gif)": "![CLI Demo](images/cli-demo.gif)",
+    # Illiana Demo
+    "![Illiana Demo](docs/images/illiana-demo.gif)": "![Illiana Demo](images/illiana-demo.gif)",
     # Dashboard - single dark image -> dual light/dark
     "![System Health Dashboard](docs/images/dashboard-dark.png)": (
         "![System Health Dashboard](images/dashboard-light.png#only-light)\n"
