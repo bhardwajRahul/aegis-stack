@@ -34,6 +34,7 @@ class AIProvider(str, Enum):
     GROQ = "groq"
     MISTRAL = "mistral"
     COHERE = "cohere"
+    OLLAMA = "ollama"  # Local LLM inference via Ollama
     PUBLIC = "public"  # Free public endpoints (no API key required)
 
 
@@ -205,6 +206,13 @@ PROVIDER_CAPABILITIES = {
         supports_function_calling=False,
         supports_vision=False,
         free_tier_available=False,
+    ),
+    AIProvider.OLLAMA: ProviderCapabilities(
+        provider=AIProvider.OLLAMA,
+        supports_streaming=True,
+        supports_function_calling=False,
+        supports_vision=False,
+        free_tier_available=True,  # Local models, no API key required
     ),
     AIProvider.PUBLIC: ProviderCapabilities(
         provider=AIProvider.PUBLIC,

@@ -66,6 +66,7 @@ class AIServiceConfig(BaseModel):
             AIProvider.GROQ: getattr(settings, "GROQ_API_KEY", None),
             AIProvider.MISTRAL: getattr(settings, "MISTRAL_API_KEY", None),
             AIProvider.COHERE: getattr(settings, "COHERE_API_KEY", None),
+            AIProvider.OLLAMA: None,  # Local provider, no API key required
             AIProvider.PUBLIC: None,  # No API key required for public endpoints
         }
 
@@ -94,10 +95,11 @@ class AIServiceConfig(BaseModel):
         if not capabilities:
             errors.append(f"Unsupported provider: {self.provider}")
 
-        # Check API key requirement (only PUBLIC provider requires no API key)
+        # Check API key requirement (LOCAL providers don't need API keys)
+        local_providers = {AIProvider.PUBLIC, AIProvider.OLLAMA}
         provider_config = self.get_provider_config(settings)
 
-        if self.provider != AIProvider.PUBLIC and not provider_config.api_key:
+        if self.provider not in local_providers and not provider_config.api_key:
             errors.append(
                 f"Missing API key for {self.provider} provider. "
                 f"Set {self.provider.upper()}_API_KEY environment variable."

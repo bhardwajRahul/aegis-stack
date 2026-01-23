@@ -14,6 +14,7 @@ from ..constants import (
     AIFrameworks,
     AnswerKeys,
     ComponentNames,
+    OllamaMode,
     StorageBackends,
     WorkerBackends,
 )
@@ -213,6 +214,8 @@ class TemplateGenerator:
             AnswerKeys.AI_PROVIDERS: self._get_ai_providers_string(),
             # AI RAG (Retrieval-Augmented Generation) selection
             AnswerKeys.AI_RAG: "yes" if self.ai_rag else "no",
+            # Ollama deployment mode (host, docker, or none)
+            AnswerKeys.OLLAMA_MODE: self._get_ollama_mode(),
             # Dependency lists for templates
             "selected_components": selected_only,  # Original selection for context
             "docker_services": self._get_docker_services(),
@@ -351,6 +354,26 @@ class TemplateGenerator:
         from ..cli.interactive import get_ai_framework_selection
 
         return get_ai_framework_selection("ai")
+
+    def _get_ollama_mode(self) -> str:
+        """
+        Get Ollama deployment mode selection (host, docker, or none).
+
+        Returns:
+            Ollama mode string
+        """
+        # Check if AI service is selected (handle bracket syntax)
+        has_ai = any(
+            extract_base_service_name(s) == AnswerKeys.SERVICE_AI
+            for s in self.selected_services
+        )
+        if not has_ai:
+            return OllamaMode.NONE  # Default when AI not selected
+
+        # Import here to avoid circular imports
+        from ..cli.interactive import get_ollama_mode_selection
+
+        return get_ollama_mode_selection("ai")
 
     def _get_ai_framework_deps(self) -> list[str]:
         """

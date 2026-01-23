@@ -197,13 +197,21 @@ class DocumentChunker:
                     valid_chunks.append((chunk_text, start_line, end_line))
 
             for i, (chunk_text, start_line, end_line) in enumerate(valid_chunks):
+                # Prepend filename to content for better searchability
+                # This ensures the filename gets embedded and is searchable
+                file_name = doc.metadata.get("file_name", "")
+                if file_name:
+                    content_with_context = f"File: {file_name}\n\n{chunk_text}"
+                else:
+                    content_with_context = chunk_text
+
                 chunk = Document(
-                    content=chunk_text,
+                    content=content_with_context,
                     metadata={
                         **doc.metadata,
                         "chunk_index": i,
                         "total_chunks": len(valid_chunks),
-                        "chunk_size": len(chunk_text),
+                        "chunk_size": len(content_with_context),
                         "start_line": start_line,
                         "end_line": end_line,
                     },

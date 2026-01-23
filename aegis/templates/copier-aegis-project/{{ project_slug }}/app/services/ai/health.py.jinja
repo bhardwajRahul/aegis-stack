@@ -8,6 +8,9 @@ API connectivity, and service-specific metrics.
 from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
+# Default Ollama URL for auto-discovery (local development)
+OLLAMA_LOCAL_DISCOVERY_URL = "http://localhost:11434"
+
 
 async def check_ai_service_health() -> ComponentStatus:
     """
@@ -98,7 +101,7 @@ async def check_ai_service_health() -> ComponentStatus:
 
         # Add provider-specific info using fresh config
         if current_config.enabled:
-            from .models import get_free_providers, get_provider_capabilities
+            from .models import AIProvider, get_free_providers, get_provider_capabilities
 
             provider_caps = get_provider_capabilities(current_config.provider)
             free_providers = get_free_providers()
@@ -109,6 +112,70 @@ async def check_ai_service_health() -> ComponentStatus:
                     "provider_free_tier": current_config.provider in free_providers,
                 }
             )
+
+            # Add Ollama-specific health info when using Ollama provider
+            if current_config.provider == AIProvider.OLLAMA:
+                try:
+                    from app.services.ai.ollama import OllamaClient
+
+                    # Get Ollama base URL from settings (uses effective URL for Docker/local auto-detection)
+                    ollama_url = settings.ollama_base_url_effective
+
+                    ollama_client = OllamaClient(base_url=ollama_url)
+                    ollama_status = await ollama_client.get_server_status()
+
+                    metadata["ollama_available"] = ollama_status.available
+                    metadata["ollama_base_url"] = ollama_url
+
+                    if ollama_status.available:
+                        metadata["ollama_running_models"] = [
+                            {
+                                "name": m.name,
+                                "vram_gb": round(m.size_vram_gb, 2),
+                                "warm": m.is_warm,
+                            }
+                            for m in ollama_status.running_models
+                        ]
+                        metadata["ollama_installed_models_count"] = ollama_status.installed_models_count
+                        metadata["ollama_total_vram_gb"] = round(ollama_status.total_vram_gb, 2)
+
+                        # Update status based on Ollama health
+                        if ollama_status.running_models:
+                            # Show primary model info in message
+                            primary_model = ollama_status.running_models[0]
+                            message = f"Ollama ready - {primary_model.name} • {round(primary_model.size_vram_gb, 1)}GB VRAM • warm"
+                    else:
+                        # Ollama not available - warn but don't fail
+                        status = ComponentStatusType.WARNING
+                        message = "AI service configured for Ollama but server not reachable"
+                except Exception as e:
+                    logger.warning(f"Failed to get Ollama status: {e}")
+                    metadata["ollama_error"] = str(e)
+            else:
+                # Auto-discovery: Check if Ollama is running locally even when not configured
+                # This enables Illiana/Overseer to suggest "I detect Ollama - want to save on API costs?"
+                try:
+                    import httpx
+
+                    discovery_url = f"{OLLAMA_LOCAL_DISCOVERY_URL}/api/tags"
+                    async with httpx.AsyncClient(timeout=2.0) as client:
+                        response = await client.get(discovery_url)
+                        if response.status_code == 200:
+                            data = response.json()
+                            models = data.get("models", [])
+                            metadata["ollama_detected"] = True
+                            metadata["ollama_detected_url"] = OLLAMA_LOCAL_DISCOVERY_URL
+                            metadata["ollama_detected_models_count"] = len(models)
+                            if models:
+                                # Show first 3 model names as preview
+                                model_names = [m.get("name", "unknown") for m in models[:3]]
+                                metadata["ollama_detected_models_preview"] = model_names
+                            logger.debug(
+                                f"Ollama auto-discovered at {OLLAMA_LOCAL_DISCOVERY_URL} with {len(models)} models"
+                            )
+                except Exception:
+                    # Ollama not running locally - that's fine, just skip
+                    metadata["ollama_detected"] = False
 
         return ComponentStatus(
             name="ai",

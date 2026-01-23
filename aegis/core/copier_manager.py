@@ -129,6 +129,9 @@ def generate_with_copier(
         )
         == "yes",
         AnswerKeys.AI_RAG: cookiecutter_context.get(AnswerKeys.AI_RAG, "no") == "yes",
+        AnswerKeys.OLLAMA_MODE: cookiecutter_context.get(
+            AnswerKeys.OLLAMA_MODE, "none"
+        ),
     }
 
     # Detect dev vs production mode for template sourcing

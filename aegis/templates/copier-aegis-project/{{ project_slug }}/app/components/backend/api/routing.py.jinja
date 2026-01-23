@@ -12,7 +12,9 @@ from app.components.backend.api.auth.router import router as auth_router
 {%- endif %}
 {%- if include_ai %}
 from app.components.backend.api.ai.router import router as ai_router
+{%- if ai_backend != "memory" %}
 from app.components.backend.api.llm.router import router as llm_router
+{%- endif %}
 {%- endif %}
 {%- if include_comms %}
 from app.components.backend.api.comms.router import router as comms_router
@@ -36,7 +38,9 @@ def include_routers(app: FastAPI) -> None:
     {%- endif %}
     {%- if include_ai %}
     app.include_router(ai_router)
+    {%- if ai_backend != "memory" %}
     app.include_router(llm_router, prefix="/api/v1")
+    {%- endif %}
     {%- endif %}
     {%- if include_comms %}
     app.include_router(comms_router, prefix="/api/v1")

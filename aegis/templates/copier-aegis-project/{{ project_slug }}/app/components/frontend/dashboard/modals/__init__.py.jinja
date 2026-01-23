@@ -19,6 +19,9 @@ from .comms_modal import CommsDetailDialog
 from .database_modal import DatabaseDetailDialog
 {%- endif %}
 from .frontend_modal import FrontendDetailDialog
+{%- if ollama_mode != "none" %}
+from .ollama_modal import OllamaDetailDialog
+{%- endif %}
 {%- if include_redis %}
 from .redis_modal import RedisDetailDialog
 {%- endif %}
@@ -44,6 +47,9 @@ __all__ = [
     "DatabaseDetailDialog",
     {%- endif %}
     "FrontendDetailDialog",
+    {%- if ollama_mode != "none" %}
+    "OllamaDetailDialog",
+    {%- endif %}
     {%- if include_redis %}
     "RedisDetailDialog",
     {%- endif %}

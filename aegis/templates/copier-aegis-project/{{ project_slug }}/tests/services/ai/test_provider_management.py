@@ -220,20 +220,21 @@ class TestProviderApiKeyUrls:
 
     def test_all_paid_providers_have_urls(self) -> None:
         """All paid providers should have API key URLs."""
-        # PUBLIC doesn't need an API key
+        # PUBLIC and OLLAMA don't need API keys
+        no_api_key_providers = {AIProvider.PUBLIC, AIProvider.OLLAMA}
         for provider in AIProvider:
-            if provider != AIProvider.PUBLIC:
+            if provider not in no_api_key_providers:
                 url = get_provider_api_key_url(provider.value)
                 assert url is not None, f"Provider {provider.value} missing API key URL"
                 assert url.startswith("https://"), (
                     f"URL for {provider.value} should be HTTPS"
                 )
 
-    def test_public_has_no_url(self) -> None:
-        """PUBLIC provider doesn't need API key URL."""
-        # PUBLIC provider shouldn't have an API key URL
-        url = PROVIDER_API_KEY_URLS.get("public")
-        assert url is None, "PUBLIC provider shouldn't have API key URL"
+    def test_local_providers_have_no_url(self) -> None:
+        """LOCAL providers (PUBLIC, OLLAMA) don't need API key URLs."""
+        # These providers don't require API keys
+        assert PROVIDER_API_KEY_URLS.get("public") is None
+        assert PROVIDER_API_KEY_URLS.get("ollama") is None
 
 
 class TestValidateProviderName:

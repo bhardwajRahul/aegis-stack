@@ -11,9 +11,17 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
 from ..cards.card_utils import PROVIDER_COLORS, get_status_detail
-from .ai_analytics_tab import AIAnalyticsTab
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
+
+# Analytics tab is optional - only present when using database backend (not memory)
+try:
+    from .ai_analytics_tab import AIAnalyticsTab
+
+    _HAS_ANALYTICS = True
+except ImportError:
+    AIAnalyticsTab = None  # type: ignore[misc, assignment]
+    _HAS_ANALYTICS = False
 
 # RAG tab is optional - only present when RAG service is enabled
 try:
@@ -24,7 +32,7 @@ except ImportError:
     RAGTab = None  # type: ignore[misc, assignment]
     _HAS_RAG = False
 
-# LLM Catalog tab import
+# Cloud Catalog tab - only present when using database backend (not memory)
 try:
     from .llm_catalog_tab import LLMCatalogTab
 
@@ -200,12 +208,17 @@ class AIDetailDialog(BaseDetailPopup):
         # Build tabs list
         tabs_list = [
             ft.Tab(text="Overview", content=OverviewTab(component_data)),
-            ft.Tab(text="Token Usage", content=AIAnalyticsTab(metadata=metadata)),
         ]
 
-        # Add LLM Catalog tab
+        # Add Token Usage tab only if analytics is available (requires database backend)
+        if _HAS_ANALYTICS and AIAnalyticsTab is not None:
+            tabs_list.append(
+                ft.Tab(text="Token Usage", content=AIAnalyticsTab(metadata=metadata))
+            )
+
+        # Add Cloud Catalog tab
         if _HAS_LLM_CATALOG and LLMCatalogTab is not None:
-            tabs_list.append(ft.Tab(text="Catalog", content=LLMCatalogTab()))
+            tabs_list.append(ft.Tab(text="Cloud Catalog", content=LLMCatalogTab()))
 
         # Add RAG tab only if RAG service is enabled
         if _HAS_RAG and RAGTab is not None:

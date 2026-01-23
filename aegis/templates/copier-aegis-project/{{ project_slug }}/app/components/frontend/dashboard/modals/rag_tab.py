@@ -677,16 +677,17 @@ class RAGTab(ft.Container):
         self._content_column = ft.Column(
             [
                 ft.Container(
-                    content=ft.ProgressRing(width=32, height=32),
-                    alignment=ft.alignment.center,
+                    content=ft.Column(
+                        [
+                            ft.ProgressBar(),
+                            SecondaryText("Loading RAG status..."),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=Theme.Spacing.MD,
+                    ),
                     padding=Theme.Spacing.XL,
                 ),
-                ft.Container(
-                    content=SecondaryText("Loading RAG status..."),
-                    alignment=ft.alignment.center,
-                ),
             ],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=Theme.Spacing.MD,
         )
 
@@ -824,16 +825,17 @@ class RAGTab(ft.Container):
         # Show loading state
         self._content_column.controls = [
             ft.Container(
-                content=ft.ProgressRing(width=32, height=32),
-                alignment=ft.alignment.center,
+                content=ft.Column(
+                    [
+                        ft.ProgressBar(),
+                        SecondaryText("Refreshing..."),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=Theme.Spacing.MD,
+                ),
                 padding=Theme.Spacing.XL,
             ),
-            ft.Container(
-                content=SecondaryText("Refreshing..."),
-                alignment=ft.alignment.center,
-            ),
         ]
-        self._content_column.horizontal_alignment = ft.CrossAxisAlignment.CENTER
         self._content_column.spacing = Theme.Spacing.MD
         self.update()
 

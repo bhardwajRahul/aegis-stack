@@ -1,3 +1,4 @@
+{%- if ai_backend != "memory" -%}
 """
 LLM Catalog Tab Component
 
@@ -518,16 +519,17 @@ class LLMCatalogTab(ft.Container):
         self._content_column = ft.Column(
             [
                 ft.Container(
-                    content=ft.ProgressRing(width=32, height=32),
-                    alignment=ft.alignment.center,
+                    content=ft.Column(
+                        [
+                            ft.ProgressBar(),
+                            SecondaryText("Loading LLM catalog..."),
+                        ],
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=Theme.Spacing.MD,
+                    ),
                     padding=Theme.Spacing.XL,
                 ),
-                ft.Container(
-                    content=SecondaryText("Loading LLM catalog..."),
-                    alignment=ft.alignment.center,
-                ),
             ],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=Theme.Spacing.MD,
         )
 
@@ -680,17 +682,21 @@ class LLMCatalogTab(ft.Container):
         # Show loading state
         self._content_column.controls = [
             ft.Container(
-                content=ft.ProgressRing(width=32, height=32),
-                alignment=ft.alignment.center,
+                content=ft.Column(
+                    [
+                        ft.ProgressBar(),
+                        SecondaryText("Refreshing..."),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=Theme.Spacing.MD,
+                ),
                 padding=Theme.Spacing.XL,
             ),
-            ft.Container(
-                content=SecondaryText("Refreshing..."),
-                alignment=ft.alignment.center,
-            ),
         ]
-        self._content_column.horizontal_alignment = ft.CrossAxisAlignment.CENTER
         self._content_column.spacing = Theme.Spacing.MD
         self.update()
 
         await self._load_data()
+{%- else -%}
+# Cloud Catalog not available in memory mode
+{%- endif %}

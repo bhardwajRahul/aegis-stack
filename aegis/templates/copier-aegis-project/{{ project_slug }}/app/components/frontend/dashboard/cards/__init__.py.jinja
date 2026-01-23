@@ -8,7 +8,12 @@ from .auth_card import AuthCard
 {% if include_comms %}
 from .comms_card import CommsCard
 {% endif %}
+{% if include_database %}
 from .database_card import DatabaseCard
+{% endif %}
+{% if ollama_mode != "none" %}
+from .ollama_card import OllamaCard
+{% endif %}
 {% if include_redis %}
 from .redis_card import RedisCard
 {% endif %}
@@ -16,7 +21,9 @@ from .redis_card import RedisCard
 from .scheduler_card import SchedulerCard
 {% endif %}
 from .server_card import ServerCard
+{% if include_auth or include_ai or include_comms %}
 from .services_card import ServicesCard
+{% endif %}
 {% if include_worker %}
 from .worker_card import WorkerCard
 {% endif %}
@@ -29,11 +36,18 @@ __all__ = [
 {% if include_auth %}
     "AuthCard",
 {% endif %}
+{% if include_auth or include_ai or include_comms %}
     "ServicesCard",
+{% endif %}
 {% if include_comms %}
     "CommsCard",
 {% endif %}
+{% if include_database %}
     "DatabaseCard",
+{% endif %}
+{% if ollama_mode != "none" %}
+    "OllamaCard",
+{% endif %}
 {% if include_redis %}
     "RedisCard",
 {% endif %}

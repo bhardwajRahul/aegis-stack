@@ -57,9 +57,10 @@ class AIProviders:
     GROQ = "groq"
     MISTRAL = "mistral"
     COHERE = "cohere"
+    OLLAMA = "ollama"
 
     # All valid providers (used for validation)
-    ALL = {PUBLIC, OPENAI, ANTHROPIC, GOOGLE, GROQ, MISTRAL, COHERE}
+    ALL = {PUBLIC, OPENAI, ANTHROPIC, GOOGLE, GROQ, MISTRAL, COHERE, OLLAMA}
 
     # Default providers for bracket syntax (non-interactive)
     DEFAULT = [PUBLIC]
@@ -75,7 +76,22 @@ class AIProviders:
         (GROQ, "Groq", "Fast inference", "Free tier", True),
         (MISTRAL, "Mistral", "Open models", "Mostly paid", False),
         (COHERE, "Cohere", "Enterprise focus", "Limited free", False),
+        (OLLAMA, "Ollama", "Local inference", "Free (local)", True),
     ]
+
+
+class OllamaMode:
+    """Ollama deployment mode options."""
+
+    HOST = "host"  # Connect to Ollama running on host machine
+    DOCKER = "docker"  # Run Ollama in Docker container
+    NONE = "none"  # No Ollama (using cloud provider)
+
+    ALL = [HOST, DOCKER, NONE]
+
+    # Default URLs for each mode
+    HOST_URL = "http://host.docker.internal:11434"  # For Mac/Windows Docker
+    DOCKER_URL = "http://ollama:11434"  # For Docker service
 
 
 class AnswerKeys:
@@ -108,6 +124,7 @@ class AnswerKeys:
     AI_BACKEND = "ai_backend"
     AI_WITH_PERSISTENCE = "ai_with_persistence"
     AI_RAG = "ai_rag"
+    OLLAMA_MODE = "ollama_mode"
     PROJECT_SLUG = "project_slug"
     SRC_PATH = "_src_path"
 
