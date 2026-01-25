@@ -72,10 +72,18 @@ services:
     <<: *app
     command:
       - scheduler
-{%- if include_redis %}
+{%- if include_redis or scheduler_backend == 'postgres' %}
     depends_on:
+{%- if include_redis %}
       redis:
         condition: service_healthy
+{%- endif %}
+{%- if scheduler_backend == 'postgres' %}
+      webserver:
+        condition: service_healthy
+{%- endif %}
+{%- endif %}
+{%- if include_redis %}
     environment:
       # Docker container marker and Redis connection for health checks
       - DOCKER_CONTAINER=1
