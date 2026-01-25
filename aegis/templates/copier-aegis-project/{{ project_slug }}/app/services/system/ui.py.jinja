@@ -43,8 +43,11 @@ def get_status_color_name(status: ComponentStatusType) -> str:
 def get_component_label(component_name: str) -> str:
     """Map component keys to user-facing labels (brand or friendly name)."""
     mapping = {
-        "backend": "FastAPI",
+        "backend": "FastAPI + Flet",
         "frontend": "Flet",
+        {%- if include_database %}
+        "database": "PostgreSQL",
+        {%- endif %}
         "cache": "Redis",
         {%- if include_worker %}
         "worker": "{{ worker_backend }}",
@@ -52,5 +55,17 @@ def get_component_label(component_name: str) -> str:
         {%- if include_scheduler %}
         "scheduler": "APScheduler",
         {%- endif %}
+        {%- if include_ollama %}
+        "ollama": "Ollama",
+        {%- endif %}
+        {%- if include_ai_service %}
+        "service_ai": "LLM Provider",
+        {%- endif %}
+        {%- if include_auth %}
+        "service_auth": "JWT Auth",
+        {%- endif %}
+        {%- if include_comms %}
+        "service_comms": "Resend + Twilio",
+        {%- endif %}
     }
-    return mapping.get(component_name, component_name.title())
+    return mapping.get(component_name, component_name.replace("_", " ").title())

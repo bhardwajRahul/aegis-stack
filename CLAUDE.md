@@ -120,6 +120,14 @@ The user often has a test project at `/Users/leonardbedner/Workspace/house_bedne
 
 ## Template Development Workflow
 
+### ⚠️ CRITICAL: Always Backport Immediately
+
+**When editing code in `my-app/` or any generated project, ALWAYS backport changes to templates immediately.**
+
+- Edit both `my-app/` AND templates in the same session
+- Copy fixed files: `cp my-app/path/to/file.py "aegis/templates/copier-aegis-project/{{ project_slug }}/path/to/file.py"`
+- Never leave changes only in `my-app/` - they will be lost on next `aegis init`
+
 ### Two Approaches
 
 **1. Template-First** (for known changes)
@@ -133,7 +141,7 @@ Edit templates directly, then generate to verify:
 Get it working in a real project, then backport:
 1. Generate a test project: `aegis init test-project`
 2. Make changes in the generated project until it works
-3. **Backport** working changes to template files
+3. **Backport immediately** - copy working changes to template files
 4. Regenerate fresh to verify templates are correct
 5. Clean up test project
 

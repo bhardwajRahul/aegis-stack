@@ -42,6 +42,7 @@ from .dashboard.cards import (
 {% endif %}
 )
 from .dashboard.cards.card_utils import create_health_status_indicator
+from .dashboard.diagram import DiagramView
 from .dashboard.status_overview import StatusOverviewPanel
 from .theme import AegisTheme as Theme, ThemeManager
 
@@ -75,6 +76,7 @@ class SystemDashboard:
         self._cards_container: ft.Container | None = None
         self._status_overview_panel: StatusOverviewPanel | None = None
         self._activity_feed: ActivityFeed | None = None
+        self._diagram_view: DiagramView | None = None
         self._theme_manager: ThemeManager | None = None
         self._logo_image: ft.Image | None = None
         self._page: ft.Page | None = None
@@ -85,6 +87,7 @@ class SystemDashboard:
         cards_container: ft.Container,
         status_overview_panel: StatusOverviewPanel,
         activity_feed: ActivityFeed,
+        diagram_view: DiagramView,
         theme_manager: ThemeManager,
         logo_image: ft.Image,
         page: ft.Page,
@@ -94,6 +97,7 @@ class SystemDashboard:
         self._cards_container = cards_container
         self._status_overview_panel = status_overview_panel
         self._activity_feed = activity_feed
+        self._diagram_view = diagram_view
         self._theme_manager = theme_manager
         self._logo_image = logo_image
         self._page = page
@@ -257,6 +261,35 @@ class SystemDashboard:
                 }
             )
 
+    async def update_diagram_view(
+        self, components: dict[str, ComponentStatus]
+    ) -> None:
+        """Safely update the diagram view."""
+        if not self._is_page_connected():
+            logger.debug("Page disconnected, skipping diagram view update")
+            return
+
+        if not self._diagram_view:
+            logger.debug("Diagram view not initialized")
+            return
+
+        try:
+            self._diagram_view.update_components(components)
+            # Note: No .update() calls here - batched with page.update() in refresh_dashboard
+        except PageDisconnectedException:
+            logger.debug("Page disconnected during diagram view update")
+            return
+        except Exception as e:
+            logger.error(
+                f"Failed to update diagram view: {e}",
+                exc_info=True,
+                extra={
+                    "error_type": type(e).__name__,
+                    "function": "update_diagram_view",
+                    "component_count": len(components),
+                }
+            )
+
     async def show_error_status(self) -> None:
         """Safely show error status in health indicator."""
         if not self._is_page_connected():
@@ -346,14 +379,15 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             icon_color=Theme.Colors.TEXT_SECONDARY,
         )
 
-        # View toggle button - switch between Cards and Stack+Activity views
+        # View toggle button - cycle between Stack, Cards, and Diagram views
         view_toggle_button = ft.IconButton(
             icon=ft.Icons.VIEW_LIST,
             tooltip="Switch to Cards View",
             icon_size=24,
             icon_color=Theme.Colors.TEXT_SECONDARY,
         )
-        is_cards_view = False  # Track current view state (default to stack view)
+        # View state: 0=stack, 1=cards, 2=diagram
+        current_view = 0
 
         async def update_logo() -> None:
             """Update logo based on current theme."""
@@ -497,23 +531,42 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             expand=True,
         )
 
+        # Diagram view for architecture visualization
+        diagram_view = DiagramView()
+        diagram_view_container = ft.Container(
+            content=diagram_view,
+            visible=False,
+            expand=True,
+            alignment=ft.alignment.center,
+        )
+
         # View toggle handler (defined after containers exist)
         async def toggle_view(_: Any) -> None:
-            """Toggle between Cards view and Stack+Activity view."""
-            nonlocal is_cards_view
+            """Cycle through Stack, Cards, and Diagram views."""
+            nonlocal current_view
             try:
-                is_cards_view = not is_cards_view
+                # Cycle: 0 (stack) -> 1 (cards) -> 2 (diagram) -> 0 (stack)
+                current_view = (current_view + 1) % 3
 
-                if is_cards_view:
-                    view_toggle_button.icon = ft.Icons.GRID_VIEW
-                    view_toggle_button.tooltip = "Switch to Stack View"
-                    cards_view_container.visible = True
-                    stack_view_container.visible = False
-                else:
+                # Update visibility and button state
+                if current_view == 0:  # Stack view
                     view_toggle_button.icon = ft.Icons.VIEW_LIST
                     view_toggle_button.tooltip = "Switch to Cards View"
-                    cards_view_container.visible = False
                     stack_view_container.visible = True
+                    cards_view_container.visible = False
+                    diagram_view_container.visible = False
+                elif current_view == 1:  # Cards view
+                    view_toggle_button.icon = ft.Icons.GRID_VIEW
+                    view_toggle_button.tooltip = "Switch to Diagram View"
+                    stack_view_container.visible = False
+                    cards_view_container.visible = True
+                    diagram_view_container.visible = False
+                else:  # Diagram view (current_view == 2)
+                    view_toggle_button.icon = ft.Icons.ACCOUNT_TREE
+                    view_toggle_button.tooltip = "Switch to Stack View"
+                    stack_view_container.visible = False
+                    cards_view_container.visible = False
+                    diagram_view_container.visible = True
 
                 page.update()
             except PageDisconnectedException:
@@ -539,6 +592,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             cards_container=component_cards_container,
             status_overview_panel=status_overview_panel,
             activity_feed=activity_feed,
+            diagram_view=diagram_view,
             theme_manager=theme_manager,
             logo_image=logo_image,
             page=page,
@@ -551,8 +605,9 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             ft.Container(
                 content=ft.Column(
                     [
-                        cards_view_container,  # Cards view (visible by default)
-                        stack_view_container,  # Stack + Activity view (hidden by default)
+                        stack_view_container,   # Stack + Activity view (default)
+                        cards_view_container,   # Cards view
+                        diagram_view_container, # Diagram view
                     ],
                     spacing=20,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -761,11 +816,12 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                     ):
                         worst_status = ComponentStatusType.INFO
 
-                # Update health status, status overview, and component cards
+                # Update health status, status overview, diagram, and component cards
                 await dashboard.update_health_status(
                     healthy_components, total_components, worst_status
                 )
                 await dashboard.update_status_overview(components)
+                await dashboard.update_diagram_view(components)
                 await dashboard.update_component_cards(
                     components, create_component_card
                 )

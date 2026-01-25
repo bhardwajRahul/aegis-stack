@@ -12,6 +12,7 @@ from app.services.system.models import ComponentStatus
 from .card_container import CardContainer
 from .card_utils import (
     create_header_row,
+    get_ai_engine_display,
     get_status_colors,
 )
 
@@ -79,17 +80,6 @@ class AICard:
             border=ft.border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.GREY)),
             height=80,
             expand=True,
-        )
-
-    def _get_engine_display(self) -> str:
-        """Get formatted engine name for display."""
-        engine = self.metadata.get("engine", "AI Engine")
-        engine_display_map = {
-            "pydantic-ai": "Pydantic AI",
-            "langchain": "LangChain",
-        }
-        return engine_display_map.get(
-            engine, engine.replace("-", " ").title() if engine else "AI Engine"
         )
 
     def _format_cost(self, cost: float) -> str:
@@ -162,7 +152,7 @@ class AICard:
                 [
                     create_header_row(
                         "AI Service",
-                        self._get_engine_display(),
+                        get_ai_engine_display(self.metadata),
                         self.component_data,
                     ),
                     self._create_metrics_section(),

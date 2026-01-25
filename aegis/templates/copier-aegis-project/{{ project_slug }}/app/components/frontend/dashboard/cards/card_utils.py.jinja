@@ -72,6 +72,29 @@ def get_status_color(status: str) -> str:
     }
     return status_colors.get(status.lower(), Theme.Colors.SUCCESS)
 
+{%- if include_ai_service %}
+
+
+def get_ai_engine_display(metadata: dict) -> str:
+    """
+    Get formatted AI engine name for display.
+
+    Args:
+        metadata: Component metadata dict containing 'engine' key
+
+    Returns:
+        Formatted engine name (e.g., "Pydantic AI", "LangChain")
+    """
+    engine = metadata.get("engine", "AI Engine")
+    engine_display_map = {
+        "pydantic-ai": "Pydantic AI",
+        "langchain": "LangChain",
+    }
+    return engine_display_map.get(
+        engine, engine.replace("-", " ").title() if engine else "AI Engine"
+    )
+{%- endif %}
+
 
 def create_metric_container(label: str, value: str) -> ft.Container:
     """
