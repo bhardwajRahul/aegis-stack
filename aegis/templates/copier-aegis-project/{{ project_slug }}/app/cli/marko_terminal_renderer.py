@@ -468,6 +468,40 @@ class TerminalRenderer(Renderer):
         url = element.dest if hasattr(element, "dest") else str(element.children)
         return f"\033[36m{url}\033[0m"  # Cyan color
 
+    def render_inline_html(self, element) -> str:
+        """
+        Render inline HTML elements.
+
+        Required for GFM extension compatibility - the @render_dispatch decorator
+        needs a fallback method in the MRO when the renderer is not HTMLRenderer.
+
+        Args:
+            element: InlineHTML element
+
+        Returns:
+            The HTML content as plain text (dimmed)
+        """
+        content = element.children if isinstance(element.children, str) else ""
+        return f"\033[2m{content}\033[0m"  # Dim style for HTML
+
+    def render_html_block(self, element) -> str:
+        """
+        Render HTML block elements.
+
+        Required for GFM extension compatibility - the @render_dispatch decorator
+        needs a fallback method in the MRO when the renderer is not HTMLRenderer.
+
+        Args:
+            element: HTMLBlock element
+
+        Returns:
+            The HTML content as plain text (dimmed)
+        """
+        content = getattr(element, "body", "") or getattr(element, "children", "")
+        if not isinstance(content, str):
+            content = str(content)
+        return f"\033[2m{content}\033[0m\n"  # Dim style for HTML blocks
+
     def __getattr__(self, name: str):
         """
         Fallback for any missing render methods.
