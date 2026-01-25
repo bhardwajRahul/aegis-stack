@@ -75,14 +75,14 @@ Test upgrade paths using TestPyPI before publishing to PyPI:
 uvx --index-url https://test.pypi.org/simple/ \
     --extra-index-url https://pypi.org/simple/ \
     --index-strategy unsafe-best-match \
-    aegis-stack@0.5.2 init test-upgrade-project
+    aegis-stack@0.5.3 init test-upgrade-project --no-interactive -y
 
 # 2. Install new RC version and test update
 cd test-upgrade-project
 uvx --index-url https://test.pypi.org/simple/ \
     --extra-index-url https://pypi.org/simple/ \
     --index-strategy unsafe-best-match \
-    aegis-stack@0.5.3 update
+    aegis-stack@0.5.4rc1 update -y
 ```
 
 **Key uvx flags:**
