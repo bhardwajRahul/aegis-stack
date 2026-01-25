@@ -26,6 +26,13 @@ from app.core.log import logger
 
 from .config import get_ai_config
 from .conversation import ConversationManager
+from .voice import (
+    AudioInput,
+    STTProvider,
+    STTService,
+    TranscriptionResult,
+    VoiceChatResponse,
+)
 from .models import (
     Conversation,
     ConversationMessage,
@@ -125,6 +132,7 @@ class AIService:
         self.settings = settings
         self.config = get_ai_config(settings)
         self.conversation_manager = ConversationManager()
+        self._stt_service: STTService | None = None
 {% if ai_rag %}
         self._rag_service: RAGService | None = None
 {% endif %}
@@ -147,6 +155,138 @@ class AIService:
             self._rag_service = RAGService(config)
         return self._rag_service
 {% endif %}
+
+    @property
+    def stt(self) -> STTService:
+        """Lazy initialization of STT service."""
+        if self._stt_service is None:
+            self._stt_service = STTService(self.settings)
+        return self._stt_service
+
+    async def voice_chat(
+        self,
+        audio: AudioInput,
+        conversation_id: str | None = None,
+        user_id: str = "default",
+        voice_mode: bool = False,
+{% if ai_rag %}
+        use_rag: bool = False,
+        rag_collection: str | None = None,
+        rag_top_k: int | None = None,
+{% endif %}
+    ) -> VoiceChatResponse:
+        """
+        Process voice input: transcribe → chat → return response.
+
+        This method implements the voice pipeline:
+        1. STT - Transcribe audio to text using configured provider
+        2. Agent - Pass transcription to AI chat for processing
+        3. Response - Return both full and voice-optimized responses
+
+        Args:
+            audio: AudioInput containing raw audio bytes and metadata
+            conversation_id: Optional conversation ID (creates new if None)
+            user_id: User identifier for conversation ownership
+            voice_mode: When True, summarize response for spoken output
+{% if ai_rag %}
+            use_rag: Enable RAG context injection from indexed codebase
+            rag_collection: Collection to search (uses config default if None)
+            rag_top_k: Number of results to retrieve (uses config default if None)
+{% endif %}
+
+        Returns:
+            VoiceChatResponse: Contains transcription, full response, and
+            voice-optimized response (summarized if voice_mode=True)
+
+        Raises:
+            AIServiceError: If service is disabled or transcription/chat fails
+            ProviderError: If AI provider fails
+        """
+        if not self.config.enabled:
+            raise AIServiceError("AI service is disabled")
+
+        try:
+            # 1. Transcribe audio to text
+            logger.info(
+                "voice_chat.transcribe_start",
+                audio_size=len(audio.content),
+                format=audio.format.value,
+            )
+            transcription = await self.stt.transcribe(audio)
+            logger.info(
+                "voice_chat.transcribe_complete",
+                text_length=len(transcription.text),
+                language=transcription.language,
+            )
+
+            # 2. Pass transcription to chat
+            response = await self.chat(
+                message=transcription.text,
+                conversation_id=conversation_id,
+                user_id=user_id,
+{% if ai_rag %}
+                use_rag=use_rag,
+                rag_collection=rag_collection,
+                rag_top_k=rag_top_k,
+{% endif %}
+            )
+
+            # 3. Get the full response content
+            full_response = response.content
+
+            # 4. Optionally summarize for voice output
+            voice_response = full_response
+            if voice_mode and len(full_response) > 200:
+                # Only summarize longer responses
+                voice_response = await self._summarize_for_voice(full_response)
+
+            return VoiceChatResponse(
+                transcription=transcription,
+                full_response=full_response,
+                voice_response=voice_response,
+                conversation_id=response.metadata.get("conversation_id"),
+            )
+
+        except Exception as e:
+            error_msg = f"Voice chat processing failed: {e}"
+            logger.error(error_msg)
+            raise AIServiceError(error_msg) from e
+
+    async def _summarize_for_voice(self, text: str) -> str:
+        """
+        Summarize a response for spoken output.
+
+        Creates a concise, conversational version of the response
+        that's natural to speak aloud.
+
+        Args:
+            text: The full response text to summarize
+
+        Returns:
+            A voice-optimized summary (2-3 sentences)
+        """
+        summary_prompt = (
+            "Summarize the following response for spoken output. "
+            "Keep it concise (2-3 sentences max), conversational, and natural to speak aloud. "
+            "Remove technical formatting, lists, code blocks, and markdown. "
+            "Focus on the key information:\n\n"
+            f"{text}"
+        )
+
+        # Use a temporary conversation for summarization
+        # Don't save to history as this is an internal operation
+        try:
+            # Create a lightweight chat call for summarization
+            result = await self.chat(
+                message=summary_prompt,
+                conversation_id=None,  # New conversation
+                user_id="system_voice_summarize",
+            )
+            return result.content
+        except Exception as e:
+            logger.warning(f"Voice summarization failed, using truncated original: {e}")
+            # Fallback: return first 200 chars
+            return text[:200] + "..." if len(text) > 200 else text
 
     async def chat(
         self,

@@ -66,6 +66,8 @@ dependencies = [
     "alembic==1.16.5",
 {%- endif %}
 {%- if include_ai %}
+    # File uploads for voice/STT endpoints
+    "python-multipart==0.0.9",
 {%- if ai_framework == "pydantic-ai" %}
 {# Map provider names to pydantic-ai-slim extras (OpenAI-compatible providers -> openai) #}
 {%- set pydantic_extras = ai_providers | replace("public", "openai") | replace("openrouter", "openai") | replace("ollama", "openai") %}

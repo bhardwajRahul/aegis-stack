@@ -20,9 +20,15 @@ from app.services.ai.service import (
     ConversationError,
     ProviderError,
 )
-from fastapi import APIRouter, HTTPException
+from app.services.ai.voice import (
+    AudioFormat,
+    AudioInput,
+    TranscriptionResult,
+    VoiceChatResponse,
+)
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -411,3 +417,248 @@ async def get_usage_stats(
             status_code=500, detail="Failed to get usage stats"
         ) from e
 {% endif %}
+
+
+# Voice/STT Request/Response models
+class TranscriptionSegmentResponse(BaseModel):
+    """A segment of transcribed audio with timing."""
+
+    text: str
+    start: float
+    end: float
+    confidence: float | None = None
+
+
+class TranscriptionResponse(BaseModel):
+    """Response model for transcription results."""
+
+    text: str
+    language: str | None = None
+    duration_seconds: float | None = None
+    confidence: float | None = None
+    provider: str
+    segments: list[TranscriptionSegmentResponse] | None = None
+
+
+class VoiceChatApiResponse(BaseModel):
+    """Response model for voice chat endpoint."""
+
+    transcription: TranscriptionResponse
+    full_response: str
+    voice_response: str
+    conversation_id: str | None = None
+
+
+@router.post("/voice-chat", response_model=VoiceChatApiResponse)
+async def voice_chat(
+    audio: UploadFile = File(..., description="Audio file to transcribe"),
+    conversation_id: str | None = Query(None, description="Continue existing conversation"),
+    voice_mode: bool = Query(False, description="Summarize response for spoken output"),
+    user_id: str = Query("api-user", description="User identifier"),
+) -> VoiceChatApiResponse:
+    """
+    Process voice input: transcribe → chat → return response.
+
+    This endpoint implements the full voice pipeline:
+    1. **STT** - Transcribe uploaded audio to text
+    2. **Agent** - Pass transcription to AI chat for processing
+    3. **Response** - Return both full and voice-optimized responses
+
+    Supported audio formats: wav, mp3, m4a, webm, ogg, flac, mp4
+
+    Args:
+        audio: Audio file upload (multipart/form-data)
+        conversation_id: Optional conversation ID to continue
+        voice_mode: When True, summarize response for spoken output
+        user_id: User identifier for conversation ownership
+
+    Returns:
+        VoiceChatApiResponse containing:
+        - transcription: What the user said (with timing if available)
+        - full_response: Complete AI response
+        - voice_response: Voice-optimized response (summarized if voice_mode=True)
+        - conversation_id: For continuing the conversation
+
+    Raises:
+        HTTPException: 400 if audio format not supported
+        HTTPException: 503 if AI/STT service error
+    """
+    try:
+        # Determine audio format from filename
+        if audio.filename:
+            ext = audio.filename.rsplit(".", 1)[-1].lower()
+        else:
+            ext = "wav"  # Default
+
+        try:
+            audio_format = AudioFormat(ext)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported audio format: {ext}. "
+                f"Supported: {', '.join(f.value for f in AudioFormat)}",
+            )
+
+        # Read audio content
+        audio_content = await audio.read()
+
+        if len(audio_content) == 0:
+            raise HTTPException(status_code=400, detail="Empty audio file")
+
+        # Create AudioInput
+        audio_input = AudioInput(
+            content=audio_content,
+            format=audio_format,
+        )
+
+        # Process voice chat
+        result = await ai_service.voice_chat(
+            audio=audio_input,
+            conversation_id=conversation_id,
+            user_id=user_id,
+            voice_mode=voice_mode,
+        )
+
+        # Convert to API response
+        transcription_segments = None
+        if result.transcription.segments:
+            transcription_segments = [
+                TranscriptionSegmentResponse(
+                    text=seg.text,
+                    start=seg.start,
+                    end=seg.end,
+                    confidence=seg.confidence,
+                )
+                for seg in result.transcription.segments
+            ]
+
+        return VoiceChatApiResponse(
+            transcription=TranscriptionResponse(
+                text=result.transcription.text,
+                language=result.transcription.language,
+                duration_seconds=result.transcription.duration_seconds,
+                confidence=result.transcription.confidence,
+                provider=result.transcription.provider.value,
+                segments=transcription_segments,
+            ),
+            full_response=result.full_response,
+            voice_response=result.voice_response,
+            conversation_id=result.conversation_id,
+        )
+
+    except HTTPException:
+        raise
+    except AIServiceError as e:
+        raise HTTPException(status_code=503, detail=f"AI service error: {e}")
+    except ProviderError as e:
+        raise HTTPException(status_code=502, detail=f"AI provider error: {e}")
+    except Exception as e:
+        logger.exception("Voice chat failed")
+        raise HTTPException(status_code=500, detail=f"Voice chat failed: {e}")
+
+
+@router.post("/transcribe", response_model=TranscriptionResponse)
+async def transcribe_audio(
+    audio: UploadFile = File(..., description="Audio file to transcribe"),
+    language: str | None = Query(None, description="ISO 639-1 language code (e.g., 'en')"),
+) -> TranscriptionResponse:
+    """
+    Transcribe audio to text without chat processing.
+
+    Use this endpoint when you only need speech-to-text transcription
+    without AI chat response.
+
+    Supported audio formats: wav, mp3, m4a, webm, ogg, flac, mp4
+
+    Args:
+        audio: Audio file upload (multipart/form-data)
+        language: Optional language hint (auto-detected if not provided)
+
+    Returns:
+        TranscriptionResponse with transcribed text and metadata
+
+    Raises:
+        HTTPException: 400 if audio format not supported
+        HTTPException: 503 if STT service error
+    """
+    try:
+        # Determine audio format from filename
+        if audio.filename:
+            ext = audio.filename.rsplit(".", 1)[-1].lower()
+        else:
+            ext = "wav"
+
+        try:
+            audio_format = AudioFormat(ext)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported audio format: {ext}. "
+                f"Supported: {', '.join(f.value for f in AudioFormat)}",
+            )
+
+        # Read audio content
+        audio_content = await audio.read()
+
+        if len(audio_content) == 0:
+            raise HTTPException(status_code=400, detail="Empty audio file")
+
+        # Create AudioInput
+        audio_input = AudioInput(
+            content=audio_content,
+            format=audio_format,
+            language=language,
+        )
+
+        # Transcribe
+        result = await ai_service.stt.transcribe(audio_input)
+
+        # Convert to API response
+        segments = None
+        if result.segments:
+            segments = [
+                TranscriptionSegmentResponse(
+                    text=seg.text,
+                    start=seg.start,
+                    end=seg.end,
+                    confidence=seg.confidence,
+                )
+                for seg in result.segments
+            ]
+
+        return TranscriptionResponse(
+            text=result.text,
+            language=result.language,
+            duration_seconds=result.duration_seconds,
+            confidence=result.confidence,
+            provider=result.provider.value,
+            segments=segments,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Transcription failed")
+        raise HTTPException(status_code=503, detail=f"Transcription failed: {e}")
+
+
+@router.get("/stt/status")
+async def stt_status() -> dict[str, Any]:
+    """
+    Get STT (Speech-to-Text) service status.
+
+    Returns current STT configuration and availability.
+    """
+    try:
+        status = ai_service.stt.get_status()
+        return {
+            "service": "stt",
+            "status": "available",
+            **status,
+        }
+    except Exception as e:
+        return {
+            "service": "stt",
+            "status": "error",
+            "error": str(e),
+        }
