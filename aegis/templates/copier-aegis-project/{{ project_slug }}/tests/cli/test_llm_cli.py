@@ -1,8 +1,9 @@
 """Tests for LLM catalog CLI commands."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from app.cli.main import app
+from app.services.ai.etl.llm_sync_service import SyncResult
 from app.services.ai.llm_service import ModalityListResult, VendorListResult
 from typer.testing import CliRunner
 
@@ -109,6 +110,154 @@ class TestLLMSyncCommand:
         assert "--mode" in result.output
         assert "--dry-run" in result.output
         assert "--refresh" in result.output
+
+    def test_sync_source_flag_in_help(self) -> None:
+        """Test that --source flag appears in help text."""
+        result = runner.invoke(app, ["llm", "sync", "--help"])
+        assert result.exit_code == 0
+        assert "--source" in result.output
+        assert "cloud" in result.output
+        assert "ollama" in result.output
+
+    @patch("app.cli.llm.sync_llm_catalog")
+    @patch("app.cli.llm.Session")
+    @patch("app.cli.llm.engine")
+    def test_sync_source_ollama(
+        self,
+        mock_engine: MagicMock,
+        mock_session_class: MagicMock,
+        mock_sync: MagicMock,
+    ) -> None:
+        """Test that --source=ollama passes correct parameter."""
+        # Setup mocks
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=None)
+        mock_session_class.return_value = mock_session
+
+        mock_sync.return_value = SyncResult(
+            vendors_added=1,
+            models_added=2,
+        )
+
+        result = runner.invoke(app, ["llm", "sync", "--source=ollama"])
+
+        assert result.exit_code == 0
+        # Verify sync was called with source="ollama"
+        mock_sync.assert_called_once()
+        call_kwargs = mock_sync.call_args
+        # asyncio.run wraps the coroutine, so check the positional/keyword args
+        assert call_kwargs[1].get("source") == "ollama"
+
+    @patch("app.cli.llm.sync_llm_catalog")
+    @patch("app.cli.llm.Session")
+    @patch("app.cli.llm.engine")
+    def test_sync_source_cloud(
+        self,
+        mock_engine: MagicMock,
+        mock_session_class: MagicMock,
+        mock_sync: MagicMock,
+    ) -> None:
+        """Test that --source=cloud passes correct parameter."""
+        # Setup mocks
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=None)
+        mock_session_class.return_value = mock_session
+
+        mock_sync.return_value = SyncResult(
+            vendors_added=5,
+            models_added=100,
+        )
+
+        result = runner.invoke(app, ["llm", "sync", "--source=cloud"])
+
+        assert result.exit_code == 0
+        mock_sync.assert_called_once()
+        call_kwargs = mock_sync.call_args
+        assert call_kwargs[1].get("source") == "cloud"
+
+    @patch("app.cli.llm.sync_llm_catalog")
+    @patch("app.cli.llm.Session")
+    @patch("app.cli.llm.engine")
+    def test_sync_source_all(
+        self,
+        mock_engine: MagicMock,
+        mock_session_class: MagicMock,
+        mock_sync: MagicMock,
+    ) -> None:
+        """Test that --source=all passes correct parameter."""
+        # Setup mocks
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=None)
+        mock_session_class.return_value = mock_session
+
+        mock_sync.return_value = SyncResult(
+            vendors_added=6,
+            models_added=102,
+        )
+
+        result = runner.invoke(app, ["llm", "sync", "--source=all"])
+
+        assert result.exit_code == 0
+        mock_sync.assert_called_once()
+        call_kwargs = mock_sync.call_args
+        assert call_kwargs[1].get("source") == "all"
+
+    @patch("app.cli.llm.sync_llm_catalog")
+    @patch("app.cli.llm.Session")
+    @patch("app.cli.llm.engine")
+    def test_sync_default_source_is_cloud(
+        self,
+        mock_engine: MagicMock,
+        mock_session_class: MagicMock,
+        mock_sync: MagicMock,
+    ) -> None:
+        """Test that default source is 'cloud' when not specified."""
+        # Setup mocks
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=None)
+        mock_session_class.return_value = mock_session
+
+        mock_sync.return_value = SyncResult()
+
+        result = runner.invoke(app, ["llm", "sync"])
+
+        assert result.exit_code == 0
+        mock_sync.assert_called_once()
+        call_kwargs = mock_sync.call_args
+        # Default should be "cloud"
+        assert call_kwargs[1].get("source") == "cloud"
+
+    @patch("app.cli.llm.sync_llm_catalog")
+    @patch("app.cli.llm.Session")
+    @patch("app.cli.llm.engine")
+    def test_sync_source_short_flag(
+        self,
+        mock_engine: MagicMock,
+        mock_session_class: MagicMock,
+        mock_sync: MagicMock,
+    ) -> None:
+        """Test that -s short flag works for source."""
+        # Setup mocks
+        mock_session = MagicMock()
+        mock_session.__enter__ = MagicMock(return_value=mock_session)
+        mock_session.__exit__ = MagicMock(return_value=None)
+        mock_session_class.return_value = mock_session
+
+        mock_sync.return_value = SyncResult(
+            vendors_added=1,
+            models_added=2,
+        )
+
+        result = runner.invoke(app, ["llm", "sync", "-s", "ollama"])
+
+        assert result.exit_code == 0
+        mock_sync.assert_called_once()
+        call_kwargs = mock_sync.call_args
+        assert call_kwargs[1].get("source") == "ollama"
 
 
 class TestLLMListCommand:

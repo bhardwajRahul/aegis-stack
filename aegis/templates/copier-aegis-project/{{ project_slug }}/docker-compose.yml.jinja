@@ -26,7 +26,7 @@ services:
       - webserver
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
-{%- if include_redis or database_engine == "postgres" %}
+{%- if include_redis or database_engine == "postgres" or ollama_mode == "docker" %}
     depends_on:
 {%- if include_redis %}
       redis:
@@ -34,6 +34,10 @@ services:
 {%- endif %}
 {%- if database_engine == "postgres" %}
       postgres:
+        condition: service_healthy
+{%- endif %}
+{%- if ollama_mode == "docker" %}
+      ollama:
         condition: service_healthy
 {%- endif %}
 {%- endif %}
@@ -234,6 +238,36 @@ services:
       - dev
 {%- endif %}
 
+{%- if ollama_mode == "docker" %}
+  # OLLAMA SERVICE (Local LLM Inference)
+
+  ollama:
+    image: ollama/ollama:latest
+    hostname: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '2.0'
+    profiles:
+      - dev
+      - prod
+{%- endif %}
+
   # TEST PROFILE
 
   test_runner:
@@ -249,4 +283,7 @@ volumes:
   aegis-data:
 {%- if database_engine == "postgres" %}
   postgres-data:
+{%- endif %}
+{%- if ollama_mode == "docker" %}
+  ollama-data:
 {%- endif %}

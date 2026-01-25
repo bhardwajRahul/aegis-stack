@@ -69,16 +69,21 @@ class HealthContext(BaseModel):
         description="When health was fetched",
     )
 
-    def format_for_prompt(self, verbose: bool = False) -> str:
+    def format_for_prompt(self, verbose: bool = False, compact: bool = False) -> str:
         """
         Format health data for injection into system prompt.
 
         Args:
             verbose: Whether to include detailed component info
+            compact: Whether to use ultra-compact format for smaller models (Ollama)
 
         Returns:
-            Compact markdown string for prompt injection
+            Formatted string for prompt injection
         """
+        # Ultra-compact mode for Ollama and smaller models
+        if compact:
+            return self._format_compact()
+
         lines = []
 
         # Header with overall health
@@ -205,10 +210,144 @@ class HealthContext(BaseModel):
                 ai_line += f" | Model: {ai_info['model']}"
             lines.append(ai_line)
 
+        # Ollama/Inference status (detailed model info)
+        ollama_info = self._extract_ollama_info()
+        if ollama_info:
+            version = ollama_info.get("version", "")
+            version_str = f" v{version}" if version else ""
+            lines.append(f"Inference: Ollama{version_str}")
+
+            # Installed models with details
+            installed = ollama_info.get("installed_models", [])
+            if installed:
+                model_strs = []
+                for m in installed[:5]:  # Limit to 5
+                    name = m.get("name", "unknown")
+                    size = m.get("size_gb", 0)
+                    details = m.get("details", {})
+                    quant = details.get("quantization_level", "")
+                    params = details.get("parameter_size", "")
+
+                    # Format: "qwen2.5:7b 4-bit 7.6B 4.7G"
+                    parts = [name]
+                    if quant and quant.startswith("Q"):
+                        parts.append(f"{quant[1]}-bit")
+                    if params:
+                        parts.append(params)
+                    parts.append(f"{size:.1f}G")
+                    model_strs.append(" ".join(parts))
+
+                lines.append(f"  Installed: {', '.join(model_strs)}")
+
+            # Running/warm models with VRAM
+            running = ollama_info.get("running_models", [])
+            total_vram = ollama_info.get("total_vram_gb", 0)
+            if running:
+                warm_names = [m.get("name", "unknown") for m in running]
+                lines.append(
+                    f"  Loaded: {', '.join(warm_names)} ({total_vram:.1f}G VRAM)"
+                )
+            else:
+                lines.append("  Loaded: none (cold)")
+
         # Unhealthy components with details
         issues = self._extract_issues()
         if issues:
             lines.append("Issues:")
+            for name, message in issues[:5]:
+                lines.append(f"  - {name}: {message}")
+
+        return "\n".join(lines)
+
+    def _format_compact(self) -> str:
+        """
+        Format health data in compact mode for smaller models.
+
+        Returns:
+            Multi-line compact summary with all key metrics
+        """
+        lines = []
+
+        # Core metrics
+        healthy_count = len(self.status.healthy_components)
+        total_count = len(self.status._get_all_components_flat())
+        health_pct = self.status.health_percentage
+        status = "OK" if self.status.overall_healthy else "DEGRADED"
+        lines.append(
+            f"Health: {status} ({health_pct:.0f}%, {healthy_count}/{total_count})"
+        )
+
+        # System resources
+        resources = self._extract_system_resources()
+        res_parts = []
+        if resources.get("cpu") is not None:
+            res_parts.append(f"CPU {resources['cpu']:.0f}%")
+        if resources.get("memory") is not None:
+            res_parts.append(f"Mem {resources['memory']:.0f}%")
+        if resources.get("disk") is not None:
+            res_parts.append(f"Disk {resources['disk']:.0f}%")
+        if res_parts:
+            lines.append(f"Resources: {' | '.join(res_parts)}")
+
+        # Database
+        db_info = self._extract_database_info()
+        if db_info:
+            db_parts = [db_info.get("status", "unknown")]
+            if db_info.get("table_count"):
+                db_parts.append(f"{db_info['table_count']} tables")
+            if db_info.get("total_rows"):
+                db_parts.append(f"{db_info['total_rows']:,} rows")
+            lines.append(f"Database: {', '.join(db_parts)}")
+
+        # Cache
+        cache_info = self._extract_cache_info()
+        if cache_info:
+            cache_parts = [cache_info.get("status", "unknown")]
+            if cache_info.get("hit_rate") is not None:
+                cache_parts.append(f"{cache_info['hit_rate']:.0f}% hit rate")
+            if cache_info.get("total_keys"):
+                cache_parts.append(f"{cache_info['total_keys']:,} keys")
+            lines.append(f"Cache: {', '.join(cache_parts)}")
+
+        # Workers
+        worker_info = self._extract_worker_info()
+        if worker_info:
+            active = worker_info.get("active_workers", 0)
+            configured = worker_info.get("configured_queues", 0)
+            queued = worker_info.get("total_queued", 0)
+            completed = worker_info.get("total_completed", 0)
+            lines.append(
+                f"Workers: {active}/{configured} active, {queued} queued, {completed} completed"
+            )
+
+        # Scheduler
+        scheduler_info = self._extract_scheduler_info()
+        if scheduler_info:
+            total = scheduler_info.get("total_tasks", 0)
+            active = scheduler_info.get("active_tasks", 0)
+            lines.append(f"Scheduler: {active}/{total} tasks active")
+
+        # AI service
+        ai_info = self._extract_ai_service_info()
+        if ai_info:
+            lines.append(
+                f"AI: {ai_info.get('status', 'unknown')}, {ai_info.get('provider', '?')}/{ai_info.get('model', '?')}"
+            )
+
+        # Ollama
+        ollama_info = self._extract_ollama_info()
+        if ollama_info:
+            installed = ollama_info.get("installed_count", 0)
+            running = ollama_info.get("running_count", 0)
+            vram = ollama_info.get("total_vram_gb", 0)
+            lines.append(
+                f"Ollama: {installed} models, {running} loaded, {vram:.1f}G VRAM"
+            )
+
+        # Issues with actual messages
+        issues = self._extract_issues()
+        if issues:
+            lines.append(f"Issues ({len(issues)}):")
             for name, message in issues[:5]:
                 lines.append(f"  - {name}: {message}")
 
@@ -392,6 +531,33 @@ class HealthContext(BaseModel):
         if ai.metadata:
             info["provider"] = ai.metadata.get("provider")
             info["model"] = ai.metadata.get("model")
+
+        return info
+
+    def _extract_ollama_info(self) -> dict[str, Any]:
+        """Extract Ollama/Inference info from health status."""
+        info: dict[str, Any] = {}
+
+        aegis = self.status.components.get("aegis")
+        if not aegis:
+            return info
+
+        components = aegis.sub_components.get("components")
+        if not components:
+            return info
+
+        ollama = components.sub_components.get("ollama")
+        if not ollama:
+            return info
+
+        info["status"] = ollama.status.value
+        if ollama.metadata:
+            info["version"] = ollama.metadata.get("version")
+            info["installed_models"] = ollama.metadata.get("installed_models", [])
+            info["running_models"] = ollama.metadata.get("running_models", [])
+            info["total_vram_gb"] = ollama.metadata.get("total_vram_gb", 0)
+            info["installed_count"] = ollama.metadata.get("installed_models_count", 0)
+            info["running_count"] = ollama.metadata.get("running_models_count", 0)
 
         return info
 

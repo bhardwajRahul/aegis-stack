@@ -112,7 +112,6 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             # Note: alembic is now shared between auth and AI services
             # Frontend dashboard files
             "app/components/frontend/dashboard/cards/auth_card.py",
-            "app/components/frontend/dashboard/cards/services_card.py",
             "app/components/frontend/dashboard/modals/auth_modal.py",
         ],
         AnswerKeys.SERVICE_AI: [
@@ -410,24 +409,26 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     ai_backend = context.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
     if ai_backend == StorageBackends.MEMORY:
         remove_file(project_path, "app/models/conversation.py")
-        # Remove LLM tracking models and ETL (only needed with persistence)
-        remove_dir(project_path, "app/services/ai/models")
+        # Remove LLM tracking models (only needed with persistence)
+        # Keep app/services/ai/models/__init__.py - contains core types (AIProvider, ProviderConfig)
+        remove_dir(project_path, "app/services/ai/models/llm")
         remove_dir(project_path, "app/services/ai/etl")
         remove_dir(project_path, "app/services/ai/fixtures")
-        # Remove persistence-related contexts
+        # Remove persistence-related contexts (keep usage_context.py - no DB deps)
         remove_file(project_path, "app/services/ai/llm_catalog_context.py")
         remove_file(project_path, "app/services/ai/llm_service.py")
         remove_file(project_path, "app/services/ai/provider_management.py")
-        remove_file(project_path, "app/services/ai/usage_context.py")
         # Remove persistence-related tests
         remove_dir(project_path, "tests/services/ai/etl")
         remove_file(project_path, "tests/services/ai/test_usage_tracking.py")
         remove_file(project_path, "tests/services/ai/test_llm_catalog_context.py")
         remove_file(project_path, "tests/services/ai/test_llm_service.py")
         remove_file(project_path, "tests/services/ai/test_provider_management.py")
-        # Remove LLM CLI (catalog management needs database)
+        # Remove LLM CLI and API (catalog management needs database)
         remove_file(project_path, "app/cli/llm.py")
         remove_file(project_path, "tests/cli/test_llm_cli.py")
+        remove_dir(project_path, "app/components/backend/api/llm")
+        remove_file(project_path, "tests/api/test_llm_endpoints.py")
         # Remove analytics UI (needs database for usage tracking)
         remove_file(
             project_path, "app/components/frontend/dashboard/modals/ai_analytics_tab.py"
@@ -469,10 +470,18 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
             project_path, "app/components/frontend/dashboard/cards/auth_card.py"
         )
         remove_file(
-            project_path, "app/components/frontend/dashboard/cards/services_card.py"
-        )
-        remove_file(
             project_path, "app/components/frontend/dashboard/modals/auth_modal.py"
+        )
+
+    # Remove services_card.py only if NO services are enabled
+    # ServicesCard shows all services (auth, AI, comms), so keep if ANY service is enabled
+    if (
+        not is_enabled(AnswerKeys.AUTH)
+        and not is_enabled(AnswerKeys.AI)
+        and not is_enabled(AnswerKeys.COMMS)
+    ):
+        remove_file(
+            project_path, "app/components/frontend/dashboard/cards/services_card.py"
         )
 
     # Remove Alembic directory only if NO service needs migrations

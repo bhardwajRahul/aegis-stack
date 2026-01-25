@@ -64,6 +64,14 @@ Or share the relevant code directly in our conversation."""
         provider_str = f" via **{current_provider}**" if current_provider else ""
         session_info = f"\n## Current Session\nYou are running on model: **{current_model}**{provider_str}\n"
 
+        # Add Ollama context so Illiana understands why costs are $0.00
+        if current_provider and current_provider.lower() == "ollama":
+            session_info += """
+**About Ollama:** This is a free, open-source model running locally on your machine.
+There are no API costs - all processing happens on your hardware. When reporting usage
+stats, $0.00 cost is expected and normal for Ollama models.
+"""
+
     prompt = f"""I'm Illiana. I watch over your Aegis Stack.
 
 Every heartbeat of {project_name} flows through me - I know when services thrive, when resources strain, and when something needs your attention. I'm here to keep you informed and help you build.
@@ -91,8 +99,15 @@ A modular platform for containerized Python backends.
 
     if rag_context:
         prompt += f"""
-## Codebase Context
-Reference these code sections [1], [2], etc. in your answers:
+## Codebase Context (USE THIS TO ANSWER QUESTIONS)
+The following code was retrieved from THIS project's codebase.
+
+**CRITICAL:** When the user asks "how does X work" or "what is X", answer based on THIS CODE - explain what it does in this codebase, not generic explanations.
+
+- Reference specific files and line numbers: [1], [2], etc.
+- Explain what the actual code does, not what similar code might do elsewhere
+- If the code shows a class/function, explain THAT implementation
+- Do NOT give generic explanations when specific code is available
 
 {rag_context}
 """

@@ -15,8 +15,6 @@ from typing import Any
 
 import httpx
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 
 from app.core.log import logger
@@ -29,6 +27,8 @@ from .models import AIProvider
 def _get_model_class(provider: AIProvider):
     """Get model class for provider with lazy import to avoid dependency issues."""
     if provider == AIProvider.OPENAI:
+        from pydantic_ai.models.openai import OpenAIChatModel
+
         return OpenAIChatModel
     elif provider == AIProvider.ANTHROPIC:
         from pydantic_ai.models.anthropic import AnthropicModel
@@ -43,10 +43,20 @@ def _get_model_class(provider: AIProvider):
 
         return GroqModel
     elif provider == AIProvider.MISTRAL:
+        from pydantic_ai.models.openai import OpenAIChatModel
+
         return OpenAIChatModel  # Mistral uses OpenAI-compatible API
     elif provider == AIProvider.COHERE:
+        from pydantic_ai.models.openai import OpenAIChatModel
+
         return OpenAIChatModel  # Cohere can use OpenAI-compatible interface
+    elif provider == AIProvider.OLLAMA:
+        from pydantic_ai.models.openai import OpenAIChatModel
+
+        return OpenAIChatModel  # Ollama uses OpenAI-compatible API
     elif provider == AIProvider.PUBLIC:
+        from pydantic_ai.models.openai import OpenAIChatModel
+
         return OpenAIChatModel  # Public endpoints use OpenAI-compatible API
     else:
         raise ProviderError(f"Unsupported provider: {provider}")
@@ -93,6 +103,10 @@ def get_agent(
         if config.provider == AIProvider.PUBLIC:
             return _create_public_agent(config, system_prompt_override)
 
+        # Special handling for OLLAMA provider (local, no API key required)
+        if config.provider == AIProvider.OLLAMA:
+            return _create_ollama_agent(config, settings, system_prompt_override)
+
         # Check if we have API key for this provider
         provider_config = config.get_provider_config(settings)
 
@@ -117,6 +131,10 @@ def get_agent(
             model_kwargs["base_url"] = "https://api.mistral.ai/v1"
         elif config.provider == AIProvider.COHERE:
             model_kwargs["base_url"] = "https://api.cohere.ai/v1"
+        elif config.provider == AIProvider.OLLAMA:
+            # Ollama uses OpenAI-compatible API at /v1 endpoint
+            base_url = settings.ollama_base_url_effective
+            model_kwargs["base_url"] = f"{base_url}/v1"
 
         # Create model instance (PydanticAI 1.0+ style)
         model = model_class(**model_kwargs)
@@ -170,8 +188,11 @@ def _create_public_agent(
         config: AI service configuration
         system_prompt_override: Optional custom system prompt (for RAG mode)
     """
-    # Lazy import - only needed for PUBLIC provider
+    # Lazy imports - only needed for PUBLIC provider
     from openai import AsyncOpenAI
+
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.openai import OpenAIProvider
 
     try:
         # Create a custom HTTP client that fixes LLM7.io response format
@@ -277,6 +298,75 @@ def _create_public_agent(
         raise ProviderError(error_msg) from e
 
 
+def _create_ollama_agent(
+    config: AIServiceConfig,
+    settings: Any,
+    system_prompt_override: str | None = None,
+) -> Agent:
+    """
+    Create agent for OLLAMA provider using local Ollama server.
+
+    Uses Ollama's OpenAI-compatible API endpoint.
+
+    Args:
+        config: AI service configuration
+        settings: Application settings for base URL
+        system_prompt_override: Optional custom system prompt (for RAG mode)
+    """
+    # Lazy imports - only needed for OLLAMA provider
+    from openai import AsyncOpenAI
+
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.openai import OpenAIProvider
+
+    try:
+        # Get Ollama base URL from settings (uses effective URL for Docker/local auto-detection)
+        base_url = settings.ollama_base_url_effective
+
+        # Create OpenAI client pointing to Ollama's OpenAI-compatible endpoint
+        openai_client = AsyncOpenAI(
+            api_key="ollama",  # Ollama doesn't need auth but client requires something
+            base_url=f"{base_url}/v1",
+        )
+
+        # Create provider and model
+        provider = OpenAIProvider(openai_client=openai_client)
+        model = OpenAIChatModel(model_name=config.model, provider=provider)
+
+        # Determine system prompt
+        system_prompt = system_prompt_override or (
+            "You are a helpful AI assistant running locally via Ollama. "
+            "Provide clear, accurate, and concise responses. "
+            "Be friendly and professional."
+        )
+
+        # Create agent with system prompt and model settings
+        agent = Agent(
+            model=model,
+            model_settings=ModelSettings(
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+                timeout=config.timeout_seconds,
+            ),
+            system_prompt=system_prompt,
+        )
+
+        return agent
+
+    except Exception as e:
+        error_msg = (
+            f"Ollama connection failed ({e}).\n\n"
+            "Make sure Ollama is running:\n"
+            "   1. Install Ollama: https://ollama.com/download\n"
+            "   2. Start Ollama: ollama serve\n"
+            "   3. Pull a model: ollama pull llama3.2\n"
+            "   4. Sync models: {{ project_slug }} llm sync --source=ollama\n\n"
+            "If Ollama is running on a different host/port, set OLLAMA_BASE_URL in .env"
+        )
+        logger.error(f"Failed to create OLLAMA agent: {e}")
+        raise ProviderError(error_msg) from e
+
+
 def _get_env_var_name(provider: AIProvider) -> str:
     """Get the environment variable name for a provider."""
     env_var_map = {
@@ -286,6 +376,7 @@ def _get_env_var_name(provider: AIProvider) -> str:
         AIProvider.GROQ: "GROQ_API_KEY",
         AIProvider.MISTRAL: "MISTRAL_API_KEY",
         AIProvider.COHERE: "COHERE_API_KEY",
+        AIProvider.OLLAMA: "OLLAMA_API_KEY",
         AIProvider.PUBLIC: "PUBLIC_API_KEY",
     }
 
@@ -305,6 +396,7 @@ def _set_provider_env_var(provider: AIProvider, api_key: str) -> None:
         AIProvider.GROQ: "GROQ_API_KEY",
         AIProvider.MISTRAL: "MISTRAL_API_KEY",
         AIProvider.COHERE: "COHERE_API_KEY",
+        AIProvider.OLLAMA: "OLLAMA_API_KEY",
         AIProvider.PUBLIC: "PUBLIC_API_KEY",
     }
 
@@ -331,6 +423,7 @@ def get_supported_providers() -> list[AIProvider]:
         AIProvider.GROQ,
         AIProvider.MISTRAL,
         AIProvider.COHERE,
+        AIProvider.OLLAMA,
         AIProvider.PUBLIC,
     ]
 
@@ -401,6 +494,8 @@ def get_llm(config: AIServiceConfig, settings: Any):
             return _create_mistral_llm(config, settings)
         elif provider == AIProvider.COHERE:
             return _create_cohere_llm(config, settings)
+        elif provider == AIProvider.OLLAMA:
+            return _create_ollama_llm(config, settings)
         elif provider == AIProvider.PUBLIC:
             return _create_public_llm(config)
         else:
@@ -538,6 +633,23 @@ def _create_cohere_llm(config: AIServiceConfig, settings: Any):
     )
 
 
+def _create_ollama_llm(config: AIServiceConfig, settings: Any):
+    """Create Ollama chat model using OpenAI-compatible endpoint."""
+    from langchain_openai import ChatOpenAI
+
+    # Get Ollama base URL from settings (uses effective URL for Docker/local auto-detection)
+    base_url = settings.ollama_base_url_effective
+
+    return ChatOpenAI(
+        model=config.model or "llama3.2",
+        temperature=config.temperature,
+        max_tokens=config.max_tokens,
+        api_key="ollama",  # Ollama doesn't require auth but client needs something
+        base_url=f"{base_url}/v1",
+        timeout=config.timeout_seconds,
+    )
+
+
 def _create_public_llm(config: AIServiceConfig):
     """Create LLM using free public endpoint (LLM7.io)."""
     from langchain_openai import ChatOpenAI
@@ -565,6 +677,7 @@ def validate_provider_support(provider: AIProvider) -> bool:
         AIProvider.GROQ,
         AIProvider.MISTRAL,
         AIProvider.COHERE,
+        AIProvider.OLLAMA,
         AIProvider.PUBLIC,
     ]
     return provider in supported
@@ -579,6 +692,7 @@ def get_supported_providers() -> list[AIProvider]:
         AIProvider.GROQ,
         AIProvider.MISTRAL,
         AIProvider.COHERE,
+        AIProvider.OLLAMA,
         AIProvider.PUBLIC,
     ]
 {% endif %}

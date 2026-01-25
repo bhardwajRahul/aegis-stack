@@ -255,17 +255,31 @@ async def set_active_model(model_id: str, force: bool = False) -> SetModelResult
             result = await session.exec(stmt)
             model = result.first()
 
-            if not model:
-                return SetModelResult(
-                    success=False,
-                    model_id=model_id,
-                    vendor=None,
-                    provider_updated=False,
-                    message=f"Model '{model_id}' not found in catalog. "
-                    "Use --force to set anyway.",
-                )
+            if model:
+                vendor_name = model.llm_vendor.name if model.llm_vendor else None
+            else:
+                # Model not in catalog - check if it's an Ollama model
+                try:
+                    from app.services.ai.ollama import OllamaClient
 
-            vendor_name = model.llm_vendor.name if model.llm_vendor else None
+                    client = OllamaClient()
+                    if await client.is_available():
+                        ollama_models = await client.fetch_models()
+                        if any(m.model_id == model_id for m in ollama_models):
+                            vendor_name = "Ollama"
+                except Exception:
+                    pass  # Ollama not available, fall through to error
+
+                # If still not found anywhere, suggest --force
+                if not vendor_name:
+                    return SetModelResult(
+                        success=False,
+                        model_id=model_id,
+                        vendor=None,
+                        provider_updated=False,
+                        message=f"Model '{model_id}' not found in catalog. "
+                        "Use --force to set anyway.",
+                    )
 
     # Prepare updates
     updates: dict[str, str] = {"AI_MODEL": model_id}

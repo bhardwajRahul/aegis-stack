@@ -17,6 +17,7 @@ from ..constants import (
     AnswerKeys,
     ComponentNames,
     Messages,
+    OllamaMode,
     StorageBackends,
 )
 from ..core.components import COMPONENTS, CORE_COMPONENTS, ComponentSpec, ComponentType
@@ -36,6 +37,9 @@ _ai_rag_selection: dict[str, bool] = {}
 
 # Global variable to store skip LLM sync selection for template generation
 _skip_llm_sync_selection: dict[str, bool] = {}
+
+# Global variable to store Ollama mode selection for template generation
+_ollama_mode_selection: dict[str, str] = {}
 
 # Global variable to store database engine selection for template generation
 _database_engine_selection: str | None = None
@@ -437,6 +441,37 @@ def clear_skip_llm_sync_selection() -> None:
     _skip_llm_sync_selection.clear()
 
 
+def get_ollama_mode_selection(service_name: str = "ai") -> str:
+    """
+    Get Ollama mode selection from interactive session.
+
+    Args:
+        service_name: Name of the AI service (defaults to "ai")
+
+    Returns:
+        Selected Ollama mode (host, docker, or none)
+    """
+    return _ollama_mode_selection.get(service_name, OllamaMode.NONE)
+
+
+def set_ollama_mode_selection(service_name: str, mode: str) -> None:
+    """
+    Set Ollama mode selection.
+
+    Args:
+        service_name: Name of the AI service (defaults to "ai")
+        mode: Ollama mode (host, docker, or none)
+    """
+    global _ollama_mode_selection
+    _ollama_mode_selection[service_name] = mode
+
+
+def clear_ollama_mode_selection() -> None:
+    """Clear stored Ollama mode selection (useful for testing)."""
+    global _ollama_mode_selection
+    _ollama_mode_selection.clear()
+
+
 def set_ai_service_config(
     service_name: str = "ai",
     framework: str | None = None,
@@ -455,6 +490,7 @@ def set_ai_service_config(
         providers: List of AI providers
     """
     global _ai_framework_selection, _ai_backend_selection, _ai_provider_selection
+    global _ollama_mode_selection
 
     if framework is not None:
         _ai_framework_selection[service_name] = framework
@@ -462,6 +498,9 @@ def set_ai_service_config(
         _ai_backend_selection[service_name] = backend
     if providers is not None:
         _ai_provider_selection[service_name] = providers
+        # Auto-set ollama_mode to "host" when ollama is a provider (non-interactive default)
+        if AIProviders.OLLAMA in providers:
+            _ollama_mode_selection[service_name] = OllamaMode.HOST
 
 
 def clear_all_ai_selections() -> None:
@@ -471,6 +510,7 @@ def clear_all_ai_selections() -> None:
     clear_ai_backend_selection()
     clear_ai_rag_selection()
     clear_skip_llm_sync_selection()
+    clear_ollama_mode_selection()
     clear_database_engine_selection()
 
 
@@ -574,6 +614,36 @@ def interactive_ai_service_config(
 
     # Store provider selection in global context for template generation
     _ai_provider_selection[service_name] = providers
+
+    # Ollama deployment mode selection (only if Ollama was selected)
+    if AIProviders.OLLAMA in providers:
+        typer.echo("\nOllama Deployment Mode:")
+        typer.echo("  How do you want to run Ollama?")
+        typer.echo(
+            "    1. Host - Connect to Ollama running on your machine (Mac/Windows)"
+        )
+        typer.echo("    2. Docker - Run Ollama in a Docker container (Linux/Deploy)")
+
+        use_host = typer.confirm(
+            "  Connect to host Ollama? (recommended for Mac/Windows)",
+            default=True,
+        )
+        ollama_mode = OllamaMode.HOST if use_host else OllamaMode.DOCKER
+        _ollama_mode_selection[service_name] = ollama_mode
+
+        if ollama_mode == OllamaMode.HOST:
+            typer.secho(
+                "  Ollama will connect to host.docker.internal:11434", fg="green"
+            )
+            typer.echo("  Make sure Ollama is running: ollama serve")
+        else:
+            typer.secho(
+                "  Ollama service will be added to docker-compose.yml", fg="green"
+            )
+            typer.echo("  Note: First startup may take time to download models")
+    else:
+        # No Ollama selected - set mode to none
+        _ollama_mode_selection[service_name] = OllamaMode.NONE
 
     # RAG selection with Python 3.14 compatibility check
     typer.echo("\nRAG (Retrieval-Augmented Generation):")

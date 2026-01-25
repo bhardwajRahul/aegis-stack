@@ -88,6 +88,14 @@ def sync(
             help="Mode filter: 'chat', 'embedding', or 'all'",
         ),
     ] = "chat",
+    source: Annotated[
+        str,
+        typer.Option(
+            "--source",
+            "-s",
+            help="Data source: 'cloud' (OpenRouter/LiteLLM), 'ollama', or 'all'",
+        ),
+    ] = "cloud",
     dry_run: Annotated[
         bool,
         typer.Option(
@@ -105,11 +113,15 @@ def sync(
         ),
     ] = False,
 ) -> None:
-    """Sync LLM catalog from OpenRouter and LiteLLM APIs.
+    """Sync LLM catalog from cloud APIs or local Ollama.
 
-    Fetches model data from public APIs and upserts to the local database.
-    LiteLLM provides the primary catalog (~2000 models) while OpenRouter
-    enriches with descriptions and metadata.
+    Fetches model data from public APIs or local Ollama server and upserts
+    to the local database.
+
+    Sources:
+      - cloud: OpenRouter + LiteLLM (~2000 models)
+      - ollama: Local Ollama models
+      - all: Both cloud and Ollama
     """
     if dry_run:
         console.print("[yellow]Dry run mode - no changes will be saved[/yellow]\n")
@@ -121,9 +133,17 @@ def sync(
 
     start_time = time.time()
 
+    # Build status message based on source
+    if source == "ollama":
+        status_msg = "[bold green]Syncing Ollama models..."
+    elif source == "all":
+        status_msg = f"[bold green]Syncing LLM catalog (mode={mode}, source=all)..."
+    else:
+        status_msg = f"[bold green]Syncing LLM catalog (mode={mode})..."
+
     with (
         suppress_logs(),
-        console.status(f"[bold green]Syncing LLM catalog (mode={mode})..."),
+        console.status(status_msg),
         Session(engine) as session,
     ):
         if refresh and not dry_run:
@@ -137,7 +157,7 @@ def sync(
             session.commit()
 
         result: SyncResult = asyncio.run(
-            sync_llm_catalog(session, mode=mode, dry_run=dry_run)
+            sync_llm_catalog(session, mode=mode, source=source, dry_run=dry_run)
         )
 
     duration = time.time() - start_time

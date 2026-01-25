@@ -167,10 +167,26 @@ class SlashCommandHandler:
         """Get cached collection names for tab completion."""
         return self._collection_cache
 
-{% if ai_backend != "memory" %}
     async def load_model_cache(self) -> None:
         """Pre-populate model cache for tab completion."""
         from app.core.log import logger
+
+        all_model_ids: list[str] = []
+
+        # Check for Ollama models (local, no API key needed)
+        try:
+            from app.services.ai.ollama import OllamaClient
+
+            ollama_client = OllamaClient()
+            if await ollama_client.is_available():
+                ollama_models = await ollama_client.fetch_models()
+                all_model_ids.extend([m.model_id for m in ollama_models])
+                logger.debug(f"Loaded {len(ollama_models)} Ollama models")
+        except Exception as e:
+            logger.debug(f"Ollama not available: {e}")
+{% if ai_backend != "memory" %}
+
+        # Check for cloud providers with API keys (requires LLM catalog)
         from app.services.ai.llm_service import list_models
         from app.services.ai.models import AIProvider
         from app.services.ai.provider_management import (
@@ -189,7 +205,7 @@ class SlashCommandHandler:
 
         configured_vendors = []
         for provider in AIProvider:
-            if provider.value == "public":
+            if provider.value in ("public", "ollama"):
                 continue
             if not check_provider_dependency_installed(provider.value):
                 continue
@@ -199,25 +215,29 @@ class SlashCommandHandler:
             if vendor_name:
                 configured_vendors.append(vendor_name)
 
-        if not configured_vendors:
-            logger.debug("No configured vendors for model cache")
+        # Fetch cloud provider models from database
+        if configured_vendors:
+            try:
+                for vendor in configured_vendors:
+                    results = await list_models(pattern=None, vendor=vendor, limit=100)
+                    all_model_ids.extend([m.model_id for m in results])
+                logger.debug(f"Loaded models from vendors: {configured_vendors}")
+            except Exception as e:
+                logger.warning(f"Failed to load cloud model cache: {e}")
+{% endif %}
+
+        if not all_model_ids:
+            logger.debug("No models available for model cache")
             self.console.print(
-                "[dim]No API keys configured - /model tab completion disabled. "
-                "Set OPENAI_API_KEY or other provider keys.[/dim]"
+                "[dim]No models available for /model tab completion. "
+                "Start Ollama or set provider API keys.[/dim]"
             )
             return
 
-        try:
-            all_results = []
-            for vendor in configured_vendors:
-                results = await list_models(pattern=None, vendor=vendor, limit=100)
-                all_results.extend(results)
-            all_results.sort(key=lambda m: m.released_on or "", reverse=True)
-            self._model_cache = [m.model_id for m in all_results]
-            logger.debug(f"Model cache loaded: {len(self._model_cache)} models")
-        except Exception as e:
-            logger.warning(f"Failed to load model cache: {e}")
+        self._model_cache = all_model_ids
+        logger.debug(f"Model cache loaded: {len(self._model_cache)} models")
 
+{% if ai_rag %}
     async def load_collection_cache(self) -> None:
         """Pre-populate collection cache for tab completion."""
         from app.core.config import settings
@@ -308,8 +328,6 @@ class SlashCommandHandler:
 
     async def _cmd_model(self, args: list[str]) -> CommandResult:
         """Switch AI model (auto-detects provider)."""
-        from app.services.ai.llm_service import set_active_model
-
         # Show current if no args
         if not args:
             current = self.ai_service.config
@@ -323,8 +341,10 @@ class SlashCommandHandler:
             return CommandResult(success=True)
 
         model = args[0]
+{% if ai_backend != "memory" %}
+        # Use set_active_model which auto-detects provider from model (requires LLM catalog)
+        from app.services.ai.llm_service import set_active_model
 
-        # Use set_active_model which auto-detects provider from model
         result = await set_active_model(model)
 
         if not result.success:
@@ -350,6 +370,70 @@ class SlashCommandHandler:
                 message=f"[green]Switched to model: {model}[/green]",
                 update_model=model,
             )
+{% else %}
+        # Without LLM catalog, check if model is in Ollama, then update .env directly
+        from pathlib import Path
+
+        provider = None
+
+        # Check if model is available in Ollama
+        if model in self._model_cache:
+            try:
+                from app.services.ai.ollama import OllamaClient
+
+                ollama_client = OllamaClient()
+                if await ollama_client.is_available():
+                    ollama_models = await ollama_client.fetch_models()
+                    ollama_model_ids = [m.model_id for m in ollama_models]
+                    if model in ollama_model_ids:
+                        provider = "ollama"
+            except Exception:
+                pass
+
+        # Update .env file directly
+        env_path = Path(".env")
+        updates = {"AI_MODEL": model}
+        if provider:
+            updates["AI_PROVIDER"] = provider
+
+        if env_path.exists():
+            lines: list[str] = []
+            updated_keys: set[str] = set()
+            with open(env_path) as f:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith("#") and "=" in stripped:
+                        key = stripped.split("=", 1)[0].strip()
+                        if key in updates:
+                            lines.append(f"{key}={updates[key]}\n")
+                            updated_keys.add(key)
+                            continue
+                    lines.append(line)
+            # Append any new keys
+            for key, value in updates.items():
+                if key not in updated_keys:
+                    lines.append(f"{key}={value}\n")
+            with open(env_path, "w") as f:
+                f.writelines(lines)
+
+        from dotenv import load_dotenv
+        load_dotenv(override=True)
+        self.ai_service.refresh_config()
+
+        if provider:
+            return CommandResult(
+                success=True,
+                message=f"[green]Switched to {provider}/{model}[/green]",
+                update_provider=provider,
+                update_model=model,
+            )
+        else:
+            return CommandResult(
+                success=True,
+                message=f"[green]Switched to model: {model}[/green]",
+                update_model=model,
+            )
+{% endif %}
 
     async def _cmd_status(self, args: list[str]) -> CommandResult:
         """Show current configuration."""

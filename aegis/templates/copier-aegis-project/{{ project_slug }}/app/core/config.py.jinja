@@ -163,7 +163,7 @@ class Settings(BaseSettings):
     AI_MODEL: str = "auto"  # Default model (public provider uses available models)
     AI_TEMPERATURE: float = 0.7
     AI_MAX_TOKENS: int = 1000
-    AI_TIMEOUT_SECONDS: float = 30.0
+    AI_TIMEOUT_SECONDS: float = 120.0
 
     # Provider API Keys (optional - many providers offer free tiers)
     OPENAI_API_KEY: str | None = None
@@ -172,6 +172,17 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str | None = None
     MISTRAL_API_KEY: str | None = None
     COHERE_API_KEY: str | None = None
+
+    # Ollama settings (local LLM inference)
+{% if ollama_mode == "host" %}
+    OLLAMA_BASE_URL: str = "http://host.docker.internal:11434"  # Host mode default
+{% elif ollama_mode == "docker" %}
+    OLLAMA_BASE_URL: str = "http://ollama:11434"  # Docker mode default
+{% else %}
+    OLLAMA_BASE_URL: str = "http://localhost:11434"  # Default for local testing
+{% endif %}
+    OLLAMA_BASE_URL_LOCAL: str | None = None  # Override for local CLI usage
+    OLLAMA_API_KEY: str | None = None  # Optional, usually not needed
 
     # Conversation settings
     AI_MAX_CONVERSATION_LENGTH: int = 50  # Max messages per conversation
@@ -209,7 +220,7 @@ class Settings(BaseSettings):
     RAG_CHAT_TOP_K: int = 15  # Number of chunks for AI chat context
 {% endif %}
 
-{% if include_redis or database_engine == "postgres" %}
+{% if include_redis or database_engine == "postgres" or ollama_mode != "none" %}
     @property
     def is_docker(self) -> bool:
         """Detect if running inside Docker container."""
@@ -218,6 +229,30 @@ class Settings(BaseSettings):
             os.path.exists("/.dockerenv") or
             bool(os.getenv("DOCKER_CONTAINER"))
         )
+{% endif %}
+
+{% if include_ai and ollama_mode != "none" %}
+    @property
+    def ollama_base_url_effective(self) -> str:
+        """Get effective Ollama URL, preferring local override when not in Docker."""
+        # If explicitly overridden for local use
+        if self.OLLAMA_BASE_URL_LOCAL and not self.is_docker:
+            return self.OLLAMA_BASE_URL_LOCAL
+
+        # Auto-translate Docker hostnames to localhost when running outside Docker
+        if not self.is_docker:
+            from urllib.parse import urlparse, urlunparse
+
+            parsed = urlparse(self.OLLAMA_BASE_URL)
+            # Translate Docker-specific hostnames to localhost
+            docker_hosts = {"ollama", "host.docker.internal"}
+            if parsed.hostname in docker_hosts:
+                netloc = "localhost"
+                if parsed.port:
+                    netloc = f"{netloc}:{parsed.port}"
+                return urlunparse(parsed._replace(netloc=netloc))
+
+        return self.OLLAMA_BASE_URL
 {% endif %}
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")

@@ -14,7 +14,7 @@ from pathlib import Path
 from .models import AIProvider
 
 # Provider to pydantic-ai-slim extras mapping
-# Note: mistral, cohere, and public use the OpenAI-compatible API
+# Note: mistral, cohere, ollama, and public use the OpenAI-compatible API
 PROVIDER_DEPENDENCIES: dict[str, str] = {
     "openai": "pydantic-ai-slim[openai]",
     "anthropic": "pydantic-ai-slim[anthropic]",
@@ -22,6 +22,7 @@ PROVIDER_DEPENDENCIES: dict[str, str] = {
     "groq": "pydantic-ai-slim[groq]",
     "mistral": "pydantic-ai-slim[openai]",
     "cohere": "pydantic-ai-slim[openai]",
+    "ollama": "pydantic-ai-slim[openai]",
     "public": "pydantic-ai-slim[openai]",
 }
 
@@ -34,6 +35,7 @@ PROVIDER_MODULE_CHECKS: dict[str, str] = {
     "groq": "groq",
     "mistral": "openai",  # Uses OpenAI-compatible API
     "cohere": "openai",  # Uses OpenAI-compatible API
+    "ollama": "openai",  # Uses OpenAI-compatible API
     "public": "openai",  # Uses OpenAI-compatible API
 }
 

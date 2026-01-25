@@ -1,11 +1,92 @@
 """Shared fixtures for LLM ETL service tests."""
 
+from collections.abc import Generator
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from app.services.ai.etl.clients.litellm_client import LiteLLMModel
+from app.services.ai.etl.clients.ollama_client import OllamaModel
 from app.services.ai.etl.clients.openrouter_client import OpenRouterModel
+from app.services.ai.models.llm import LargeLanguageModel, LLMVendor
+from sqlalchemy import Engine
+from sqlmodel import Session, SQLModel, create_engine
+
+# =============================================================================
+# Database Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def etl_db_engine() -> Generator[Engine]:
+    """Create an in-memory SQLite database engine for ETL service tests."""
+    engine = create_engine("sqlite:///:memory:", echo=False)
+    SQLModel.metadata.create_all(engine)
+    yield engine
+    SQLModel.metadata.drop_all(engine)
+    engine.dispose()
+
+
+@pytest.fixture
+def etl_session(etl_db_engine: Engine) -> Generator[Session]:
+    """Create a database session for ETL service tests."""
+    with Session(etl_db_engine) as session:
+        yield session
+
+
+@pytest.fixture
+def ollama_vendor(etl_session: Session) -> LLMVendor:
+    """Create Ollama vendor for testing."""
+    vendor = LLMVendor(
+        name="ollama",
+        description="Ollama - Run LLMs locally",
+        color="#FFFFFF",
+        api_base="http://localhost:11434/v1",
+        auth_method="none",
+    )
+    etl_session.add(vendor)
+    etl_session.commit()
+    etl_session.refresh(vendor)
+    return vendor
+
+
+@pytest.fixture
+def existing_ollama_model(
+    etl_session: Session, ollama_vendor: LLMVendor
+) -> LargeLanguageModel:
+    """Create an existing Ollama model for update tests."""
+    model = LargeLanguageModel(
+        model_id="llama3.2:latest",
+        title="Llama3.2:Latest",
+        description="Family: llama | Parameters: 3B | Quantization: Q4_0 | Size: 1.9 GB",
+        context_window=0,
+        streamable=True,
+        enabled=True,
+        llm_vendor_id=ollama_vendor.id,
+    )
+    etl_session.add(model)
+    etl_session.commit()
+    etl_session.refresh(model)
+    return model
+
+
+# =============================================================================
+# Mock Settings Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def mock_ollama_settings() -> MagicMock:
+    """Mock settings with Ollama configuration."""
+    settings = MagicMock()
+    settings.ollama_base_url_effective = "http://localhost:11434"
+    return settings
+
+
+# =============================================================================
+# API Response Fixtures
+# =============================================================================
 
 
 @pytest.fixture
@@ -198,6 +279,121 @@ def mock_httpx_litellm(mock_litellm_response: dict[str, Any]):
         mock_response = MagicMock()
         mock_response.json.return_value = mock_litellm_response
         mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        mock_httpx.AsyncClient.return_value = mock_client
+
+        yield mock_httpx
+
+
+@pytest.fixture
+def mock_ollama_response() -> dict[str, Any]:
+    """Sample Ollama /api/tags response with multiple models."""
+    return {
+        "models": [
+            {
+                "name": "llama3.2:latest",
+                "size": 2019393189,
+                "digest": "a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72",
+                "modified_at": "2024-10-15T14:30:00Z",
+                "details": {
+                    "parameter_size": "3B",
+                    "quantization_level": "Q4_0",
+                    "family": "llama",
+                },
+            },
+            {
+                "name": "mistral:7b",
+                "size": 4109865159,
+                "digest": "61e88e884507ba5e06c49b40e6226884b2a16e872382c2b44a42f2d119d804a5",
+                "modified_at": "2024-09-20T10:15:00Z",
+                "details": {
+                    "parameter_size": "7B",
+                    "quantization_level": "Q4_0",
+                    "family": "mistral",
+                },
+            },
+            {
+                "name": "codellama:13b",
+                "size": 7365960935,
+                "digest": "9f438cb9cd581fc025612d27f7c1a6669ff83a8bb0ed86c94fcf4c5440555697",
+                "modified_at": "2024-08-10T08:00:00Z",
+                "details": {
+                    "parameter_size": "13B",
+                    "quantization_level": "Q4_0",
+                    "family": "llama",
+                },
+            },
+        ]
+    }
+
+
+@pytest.fixture
+def mock_ollama_response_minimal() -> dict[str, Any]:
+    """Minimal Ollama response with only required fields."""
+    return {
+        "models": [
+            {
+                "name": "test-model:latest",
+                "size": 1000000,
+                "digest": "abc123",
+                "modified_at": "2024-01-01T00:00:00Z",
+            },
+        ]
+    }
+
+
+@pytest.fixture
+def sample_ollama_model() -> OllamaModel:
+    """Pre-constructed OllamaModel for testing."""
+    return OllamaModel(
+        name="llama3.2:latest",
+        size=2019393189,
+        digest="a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72",
+        modified_at=datetime(2024, 10, 15, 14, 30, 0, tzinfo=UTC),
+        parameter_size="3B",
+        quantization_level="Q4_0",
+        family="llama",
+    )
+
+
+@pytest.fixture
+def sample_ollama_models() -> list[OllamaModel]:
+    """List of OllamaModel objects for testing sync operations."""
+    return [
+        OllamaModel(
+            name="llama3.2:latest",
+            size=2019393189,
+            digest="a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72",
+            modified_at=datetime(2024, 10, 15, 14, 30, 0, tzinfo=UTC),
+            parameter_size="3B",
+            quantization_level="Q4_0",
+            family="llama",
+        ),
+        OllamaModel(
+            name="mistral:7b",
+            size=4109865159,
+            digest="61e88e884507ba5e06c49b40e6226884b2a16e872382c2b44a42f2d119d804a5",
+            modified_at=datetime(2024, 9, 20, 10, 15, 0, tzinfo=UTC),
+            parameter_size="7B",
+            quantization_level="Q4_0",
+            family="mistral",
+        ),
+    ]
+
+
+@pytest.fixture
+def mock_httpx_ollama(mock_ollama_response: dict[str, Any]):
+    """Mock httpx for Ollama API calls."""
+    with patch("app.services.ai.etl.clients.ollama_client.httpx") as mock_httpx:
+        mock_response = MagicMock()
+        mock_response.json.return_value = mock_ollama_response
+        mock_response.raise_for_status = MagicMock()
+        mock_response.status_code = 200
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)

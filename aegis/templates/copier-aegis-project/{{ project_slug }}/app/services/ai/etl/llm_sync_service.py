@@ -9,8 +9,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from app.core.config import settings
 from app.core.log import logger
 from app.services.ai.etl.clients.litellm_client import LiteLLMClient
+from app.services.ai.etl.clients.ollama_client import OllamaClient, OllamaModel
 from app.services.ai.etl.clients.openrouter_client import (
     OpenRouterClient,
     OpenRouterModelIndex,
@@ -138,6 +140,12 @@ VENDOR_METADATA: dict[str, dict[str, str]] = {
         "color": "#1DA1F2",
         "api_base": "https://api.x.ai/v1",
     },
+    "ollama": {
+        "description": "Ollama - Run LLMs locally",
+        "color": "#FFFFFF",
+        "api_base": "http://localhost:11434/v1",
+        "auth_method": "none",
+    },
 }
 
 
@@ -159,13 +167,47 @@ class LLMSyncService:
     async def sync(
         self,
         mode_filter: str | None = None,
+        source: str = "cloud",
         dry_run: bool = False,
     ) -> SyncResult:
-        """Sync LLM catalog from public APIs.
+        """Sync LLM catalog from public APIs or local sources.
 
         Args:
             mode_filter: Filter by mode ("chat", "embedding", "all", None).
                         None defaults to "chat".
+            source: Data source - "cloud" (OpenRouter/LiteLLM), "ollama", or "all".
+            dry_run: If True, don't commit changes to database.
+
+        Returns:
+            SyncResult with counts and any errors.
+        """
+        # Handle Ollama-only sync
+        if source == "ollama":
+            return await self.sync_ollama(dry_run=dry_run)
+
+        # Handle "all" - sync both cloud and ollama
+        if source == "all":
+            cloud_result = await self._sync_cloud(mode_filter, dry_run)
+            ollama_result = await self.sync_ollama(dry_run=dry_run)
+            # Merge results
+            cloud_result.vendors_added += ollama_result.vendors_added
+            cloud_result.models_added += ollama_result.models_added
+            cloud_result.models_updated += ollama_result.models_updated
+            cloud_result.errors.extend(ollama_result.errors)
+            return cloud_result
+
+        # Default: cloud-only sync
+        return await self._sync_cloud(mode_filter, dry_run)
+
+    async def _sync_cloud(
+        self,
+        mode_filter: str | None = None,
+        dry_run: bool = False,
+    ) -> SyncResult:
+        """Sync LLM catalog from cloud APIs (OpenRouter/LiteLLM).
+
+        Args:
+            mode_filter: Filter by mode ("chat", "embedding", "all", None).
             dry_run: If True, don't commit changes to database.
 
         Returns:
@@ -569,26 +611,167 @@ class LLMSyncService:
             self.session.add(mod_record)
             result.modalities_synced += 1
 
+    async def sync_ollama(self, dry_run: bool = False) -> SyncResult:
+        """Sync locally installed Ollama models to catalog.
+
+        Fetches models from local Ollama server and adds them to the catalog.
+
+        Args:
+            dry_run: If True, don't commit changes to database.
+
+        Returns:
+            SyncResult with counts and any errors.
+        """
+        result = SyncResult()
+
+        # Get Ollama base URL from settings (uses effective URL for Docker/local auto-detection)
+        base_url = settings.ollama_base_url_effective
+        client = OllamaClient(base_url=base_url)
+
+        # Check if Ollama is available
+        if not await client.is_available():
+            error_msg = (
+                f"Cannot connect to Ollama at {base_url}. "
+                "Make sure Ollama is running: ollama serve"
+            )
+            logger.error(error_msg)
+            result.errors.append(error_msg)
+            return result
+
+        logger.info(f"Syncing models from Ollama at {base_url}")
+
+        try:
+            ollama_models = await client.fetch_models()
+        except Exception as e:
+            error_msg = f"Failed to fetch models from Ollama: {e}"
+            logger.error(error_msg)
+            result.errors.append(error_msg)
+            return result
+
+        if not ollama_models:
+            logger.info("No models found in Ollama")
+            return result
+
+        # Pre-load caches
+        self._load_caches()
+
+        # Ensure Ollama vendor exists
+        vendor = self._upsert_vendor("ollama", result, dry_run)
+        if not vendor:
+            return result
+
+        # Process each Ollama model
+        for ollama_model in ollama_models:
+            try:
+                self._sync_ollama_model(ollama_model, vendor, result, dry_run)
+            except Exception as e:
+                error_msg = f"Failed to sync Ollama model {ollama_model.name}: {e}"
+                logger.warning(error_msg)
+                result.errors.append(error_msg)
+                continue
+
+        if not dry_run:
+            self.session.commit()
+
+        logger.info(
+            f"Ollama sync complete: {result.models_added} models added, "
+            f"{result.models_updated} updated, {len(result.errors)} errors"
+        )
+
+        return result
+
+    def _sync_ollama_model(
+        self,
+        ollama_model: "OllamaModel",
+        vendor: LLMVendor,
+        result: SyncResult,
+        dry_run: bool,
+    ) -> None:
+        """Sync a single Ollama model to the database.
+
+        Args:
+            ollama_model: Ollama model data from API.
+            vendor: Ollama vendor record.
+            result: SyncResult to update.
+            dry_run: If True, don't persist changes.
+        """
+        model_data = ollama_model
+
+        model_id = model_data.model_id  # e.g., "llama3.2" without tag
+        existing = self._model_cache.get(model_id)
+
+        # Generate title from model name
+        title = model_id.replace("-", " ").replace("_", " ").title()
+
+        # Build description from available metadata
+        desc_parts = []
+        if model_data.family:
+            desc_parts.append(f"Family: {model_data.family}")
+        if model_data.parameter_size:
+            desc_parts.append(f"Parameters: {model_data.parameter_size}")
+        if model_data.quantization_level:
+            desc_parts.append(f"Quantization: {model_data.quantization_level}")
+        desc_parts.append(f"Size: {model_data.size_gb:.1f} GB")
+        description = " | ".join(desc_parts)
+
+        if existing:
+            # Update existing model
+            changed = any(
+                [
+                    self._update_if_changed(existing, "title", title),
+                    self._update_if_changed(existing, "description", description),
+                    self._update_if_changed(existing, "llm_vendor_id", vendor.id),
+                ]
+            )
+
+            if changed:
+                if not dry_run:
+                    self.session.add(existing)
+                result.models_updated += 1
+        else:
+            # Create new model
+            model = LargeLanguageModel(
+                model_id=model_id,
+                title=title,
+                description=description,
+                context_window=0,  # Unknown for local models
+                streamable=True,
+                enabled=True,
+                color=VENDOR_METADATA.get("ollama", {}).get("color", "#FFFFFF"),
+                family=model_data.family,
+                llm_vendor_id=vendor.id,
+            )
+
+            if not dry_run:
+                self.session.add(model)
+                self.session.flush()
+
+            self._model_cache[model_id] = model
+            result.models_added += 1
+            logger.debug(f"Added Ollama model: {model_id}")
+
 
 async def sync_llm_catalog(
     session: Session,
     mode: str = "chat",
+    source: str = "cloud",
     dry_run: bool = False,
 ) -> SyncResult:
-    """Sync LLM catalog from public APIs.
+    """Sync LLM catalog from public APIs or local sources.
 
     Convenience function for one-off syncs.
 
     Args:
         session: Database session.
         mode: Mode filter ("chat", "embedding", "all").
+        source: Data source - "cloud", "ollama", or "all".
         dry_run: If True, don't commit changes.
 
     Returns:
         SyncResult with sync statistics.
     """
     service = LLMSyncService(session)
-    return await service.sync(mode_filter=mode, dry_run=dry_run)
+    return await service.sync(mode_filter=mode, source=source, dry_run=dry_run)
 
 
 def get_catalog_stats(session: Session) -> CatalogStats:

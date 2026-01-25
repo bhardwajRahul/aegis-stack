@@ -152,8 +152,10 @@ def providers() -> None:
         is_current = provider == ai_config.provider
 
         # Determine API key status
-        if provider == AIProvider.PUBLIC:
-            has_api_key = True  # PUBLIC doesn't need one
+        # LOCAL providers (PUBLIC, OLLAMA) don't require API keys
+        local_providers = {AIProvider.PUBLIC, AIProvider.OLLAMA}
+        if provider in local_providers:
+            has_api_key = True  # Local providers don't need API keys
             api_key_display = "[dim]N/A[/dim]"
         else:
             env_var = f"{provider.value.upper()}_API_KEY"
@@ -164,14 +166,18 @@ def providers() -> None:
         if is_current:
             if not is_installed:
                 status = "[bold red]Current (Not installed)[/bold red]"
-            elif not has_api_key and provider != AIProvider.PUBLIC:
+            elif not has_api_key and provider not in local_providers:
                 status = "[bold yellow]Current (Need API key)[/bold yellow]"
+            elif provider == AIProvider.OLLAMA:
+                status = "[bold green]Current (Local)[/bold green]"
             else:
                 status = "[bold green]Current[/bold green]"
         elif is_available:
-            status = "Ready"
+            status = "Ready" if provider not in local_providers else "Local"
         elif is_installed and not has_api_key:
             status = "[yellow]Need API key[/yellow]"
+        elif is_installed and provider == AIProvider.OLLAMA:
+            status = "[cyan]Local[/cyan]"
         elif not is_installed:
             status = "[red]Not installed[/red]"
         else:
@@ -1146,12 +1152,11 @@ async def _interactive_chat_session(
 {% endif %}
     )
 
-{% if ai_backend != "memory" %}
-    # Pre-load model cache for tab completion
+    # Pre-load model cache for tab completion (includes Ollama models)
     await command_handler.load_model_cache()
+{% if ai_rag %}
     # Pre-load collection cache for /rag tab completion
     await command_handler.load_collection_cache()
-
 {% endif %}
     # Create completer for slash command autocomplete
     chat_completer = ChatCompleter(command_handler)
@@ -1422,7 +1427,7 @@ async def _stream_chat_response(
         try:
             processed_content = set()
 
-            async with asyncio.timeout(30.0):  # 30 second timeout
+            async with asyncio.timeout(settings.AI_TIMEOUT_SECONDS):
                 async for chunk in ai_service.stream_chat(
                     message=message,
                     conversation_id=conversation_id,

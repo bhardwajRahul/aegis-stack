@@ -29,15 +29,25 @@ class UsageContext(BaseModel):
         default=0, description="Number of recent requests returned"
     )
 
-    def format_for_prompt(self) -> str:
+    def format_for_prompt(self, compact: bool = False) -> str:
         """
         Format usage data for injection into system prompt.
 
+        Args:
+            compact: Whether to use ultra-compact format for smaller models (Ollama)
+
         Returns:
-            Compact string for prompt injection
+            Formatted string for prompt injection
         """
         if self.total_requests == 0:
             return "Usage: No requests recorded yet"
+
+        # Ultra-compact mode for Ollama and smaller models
+        if compact:
+            return (
+                f"Usage: {self.total_requests} requests, "
+                f"{self.total_tokens:,} tokens, ${self.total_cost:.2f}"
+            )
 
         lines = [
             f"Usage: {self.total_requests:,} requests | "

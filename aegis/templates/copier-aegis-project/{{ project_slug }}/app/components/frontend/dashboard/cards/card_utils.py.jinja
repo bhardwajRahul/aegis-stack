@@ -441,6 +441,9 @@ def create_modal_for_component(
         DatabaseDetailDialog,
         {%- endif %}
         FrontendDetailDialog,
+        {%- if ollama_mode != "none" %}
+        OllamaDetailDialog,
+        {%- endif %}
         {%- if include_redis %}
         RedisDetailDialog,
         {%- endif %}
@@ -467,6 +470,9 @@ def create_modal_for_component(
         "database": DatabaseDetailDialog,
         {%- endif %}
         "frontend": FrontendDetailDialog,
+        {%- if ollama_mode != "none" %}
+        "ollama": OllamaDetailDialog,
+        {%- endif %}
         {%- if include_redis %}
         "redis": RedisDetailDialog,
         {%- endif %}

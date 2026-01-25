@@ -12,6 +12,7 @@ from aegis.cli.interactive import (
     clear_ai_backend_selection,
     clear_ai_provider_selection,
     clear_database_engine_selection,
+    clear_ollama_mode_selection,
     get_ai_backend_selection,
     get_ai_provider_selection,
     interactive_project_selection,
@@ -44,7 +45,8 @@ class TestAIProviderSelection:
             False,
             False,
             False,
-            False,  # All AI providers declined
+            False,
+            False,  # All AI providers declined (7 providers: openai, anthropic, google, groq, mistral, cohere, ollama)
             True,  # Enable RAG? Yes (default)
         ]
 
@@ -76,7 +78,8 @@ class TestAIProviderSelection:
             False,
             False,
             False,
-            False,  # Google, Groq, Mistral, Cohere
+            False,
+            False,  # Google, Groq, Mistral, Cohere, Ollama (7 providers)
             True,  # Enable RAG? Yes (default)
         ]
 
@@ -109,7 +112,8 @@ class TestAIProviderSelection:
             True,
             True,  # Google (recommended), Groq (recommended)
             False,
-            False,  # Mistral, Cohere
+            False,
+            False,  # Mistral, Cohere, Ollama (7 providers)
             True,  # Enable RAG? Yes (default)
         ]
 
@@ -182,7 +186,8 @@ class TestAIBackendSelection:
                 True,
                 True,
                 False,
-                False,  # Provider selection (Google, Groq recommended)
+                False,
+                False,  # Provider selection (7 providers: openai, anthropic, google, groq, mistral, cohere, ollama)
                 True,  # Enable RAG? Yes (default)
             ]
 
@@ -225,7 +230,8 @@ class TestAIBackendSelection:
                 True,
                 True,
                 False,
-                False,  # Provider selection (Google, Groq recommended)
+                False,
+                False,  # Provider selection (7 providers: openai, anthropic, google, groq, mistral, cohere, ollama)
                 True,  # Enable RAG? Yes (default)
             ]
 
@@ -262,7 +268,8 @@ class TestAIBackendSelection:
             True,
             True,
             False,
-            False,  # Provider selection (Google, Groq recommended)
+            False,
+            False,  # Provider selection (7 providers: openai, anthropic, google, groq, mistral, cohere, ollama)
             True,  # Enable RAG? Yes (default)
         ]
 
@@ -418,7 +425,8 @@ class TestAIConfigurationEndToEnd:
             True,
             True,
             False,
-            False,  # OpenAI, Google, Groq selected
+            False,
+            False,  # Provider selection (7 providers: openai yes, anthropic no, google yes, groq yes, mistral no, cohere no, ollama no)
             True,  # Enable RAG? Yes (default)
         ]
 
@@ -472,3 +480,92 @@ class TestAIConfigurationEndToEnd:
         ai_deps = config["_ai_deps"]
         assert "ai_providers" in ai_deps
         assert "pydantic-ai-slim" in ai_deps
+
+
+class TestOllamaModeSelection:
+    """Test cases for Ollama mode selection in interactive and non-interactive modes."""
+
+    def setup_method(self) -> None:
+        """Clear all AI selections before each test."""
+
+        clear_ai_provider_selection()
+        clear_ai_backend_selection()
+        clear_ollama_mode_selection()
+
+    @patch("typer.confirm")
+    def test_ai_service_with_ollama_host_mode(self, mock_confirm: Any) -> None:
+        """Test Ollama mode selection when Ollama is chosen as provider."""
+        from aegis.cli.interactive import (
+            get_ollama_mode_selection,
+        )
+        from aegis.constants import OllamaMode
+
+        clear_ollama_mode_selection()  # Reset state
+
+        mock_confirm.side_effect = [
+            False,  # redis
+            False,  # worker
+            False,  # scheduler
+            False,  # database
+            False,  # auth service
+            True,  # AI service
+            False,  # Use LangChain? No
+            False,  # Enable usage tracking? No
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,  # Decline first 6 providers (openai, anthropic, google, groq, mistral, cohere)
+            True,  # SELECT Ollama
+            True,  # Ollama mode: connect to host (True = HOST)
+            True,  # Enable RAG
+        ]
+
+        interactive_project_selection()
+
+        # Verify Ollama mode was set correctly
+        ollama_mode = get_ollama_mode_selection("ai")
+        assert ollama_mode == OllamaMode.HOST
+
+    def test_non_interactive_ollama_auto_default(self) -> None:
+        """Test that ollama_mode defaults to HOST when ollama in providers (non-interactive)."""
+        from aegis.cli.interactive import (
+            get_ollama_mode_selection,
+            set_ai_service_config,
+        )
+        from aegis.constants import AIProviders, OllamaMode
+
+        clear_ollama_mode_selection()
+
+        # Simulate bracket syntax: ai[sqlite,ollama]
+        set_ai_service_config(
+            service_name="ai",
+            framework="pydantic-ai",
+            backend="sqlite",
+            providers=["openai", AIProviders.OLLAMA],
+        )
+
+        # Verify auto-default to HOST
+        assert get_ollama_mode_selection("ai") == OllamaMode.HOST
+
+    def test_non_interactive_no_ollama_defaults_none(self) -> None:
+        """Test that ollama_mode defaults to NONE when ollama NOT in providers."""
+        from aegis.cli.interactive import (
+            get_ollama_mode_selection,
+            set_ai_service_config,
+        )
+        from aegis.constants import OllamaMode
+
+        clear_ollama_mode_selection()
+
+        # Simulate bracket syntax without ollama: ai[sqlite]
+        set_ai_service_config(
+            service_name="ai",
+            framework="pydantic-ai",
+            backend="sqlite",
+            providers=["openai", "anthropic"],
+        )
+
+        # Verify mode is NONE
+        assert get_ollama_mode_selection("ai") == OllamaMode.NONE

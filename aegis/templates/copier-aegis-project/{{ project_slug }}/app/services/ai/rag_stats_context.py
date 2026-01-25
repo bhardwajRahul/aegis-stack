@@ -36,15 +36,25 @@ class RAGStatsContext(BaseModel):
         default=None, description="Last activity timestamp"
     )
 
-    def format_for_prompt(self) -> str:
+    def format_for_prompt(self, compact: bool = False) -> str:
         """
         Format RAG stats for injection into system prompt.
 
+        Args:
+            compact: Whether to use ultra-compact format for smaller models (Ollama)
+
         Returns:
-            Compact string for prompt injection
+            Formatted string for prompt injection
         """
         if not self.enabled:
             return "RAG: disabled"
+
+        # Ultra-compact mode for Ollama and smaller models
+        if compact:
+            total_docs = sum(c.get("count", 0) for c in self.collections)
+            return (
+                f"RAG: {self.collection_count} collections, {total_docs:,} docs indexed"
+            )
 
         lines = []
 

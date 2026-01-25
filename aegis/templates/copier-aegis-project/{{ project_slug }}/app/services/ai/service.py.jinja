@@ -49,6 +49,52 @@ from .rag_stats_context import RAGStatsContext
 {% endif %}
 
 
+{% if ai_rag %}
+def _is_test_or_fixture_file(source_path: str) -> bool:
+    """
+    Check if a file path indicates a test file or fixture.
+
+    Used in RAG pipeline to deprioritize test files in search results.
+    Source files are returned before test files to improve context quality.
+
+    Args:
+        source_path: File path from RAG search result metadata
+
+    Returns:
+        True if the path matches test/fixture patterns, False otherwise
+
+    Pipeline position:
+        RAG Search → Score Filter → Dedupe → **This Filter** → Top-K Selection
+
+    Examples:
+        >>> _is_test_or_fixture_file("app/services/ai/llm_usage.py")
+        False
+        >>> _is_test_or_fixture_file("tests/test_llm_usage.py")
+        True
+        >>> _is_test_or_fixture_file("tests/fixtures/llm_fixtures.py")
+        True
+        >>> _is_test_or_fixture_file("app/components/conftest.py")
+        True
+    """
+    if not source_path:
+        return False
+
+    path_lower = source_path.lower()
+
+    # Test file patterns - ordered by specificity
+    test_patterns = [
+        "/tests/",          # tests directory
+        "/test_",           # test_something.py
+        "_test.py",         # something_test.py
+        "/fixtures/",       # fixtures directory
+        "_fixtures.py",     # fixture files
+        "/conftest.py",     # pytest conftest
+    ]
+
+    return any(pattern in path_lower for pattern in test_patterns)
+
+
+{% endif %}
 class AIServiceError(Exception):
     """Base exception for AI service errors."""
 
@@ -219,6 +265,7 @@ class AIService:
 
             # Store conversation ID in message metadata for easy lookup
             ai_message.metadata["conversation_id"] = conversation.id
+            ai_message.metadata["response_time_ms"] = response_time_ms
 
 {% if ai_rag %}
             # Add RAG sources to response metadata if RAG was used
@@ -231,6 +278,15 @@ class AIService:
             # Record usage tracking
             usage = self._extract_usage(result)
             self._record_usage("chat", usage, user_id)
+
+            # Add TPS (tokens per second) to metadata for performance monitoring
+            output_tokens = usage.get("output_tokens", 0)
+            if output_tokens > 0 and response_time_ms > 0:
+                ai_message.metadata["gen_tps"] = round(
+                    output_tokens * 1000 / response_time_ms, 1
+                )
+            ai_message.metadata["input_tokens"] = usage.get("input_tokens", 0)
+            ai_message.metadata["output_tokens"] = output_tokens
 {% endif %}
 
             # Finalize conversation (update metadata and save)
@@ -465,6 +521,12 @@ class AIService:
             input_tokens = stream_usage.get("input_tokens", 0)
             output_tokens = stream_usage.get("output_tokens", 0)
             cost = self.calculate_cost(input_tokens, output_tokens)
+
+            # Calculate TPS (tokens per second) for performance metrics
+            # This is especially useful for Ollama but works for all providers
+            gen_tps: float | None = None
+            if output_tokens > 0 and response_time_ms > 0:
+                gen_tps = round(output_tokens * 1000 / response_time_ms, 1)
 {% endif %}
 
             final_metadata = {
@@ -477,6 +539,8 @@ class AIService:
                 "input_tokens": input_tokens,
                 "output_tokens": output_tokens,
                 "cost": cost,
+                # TPS for performance monitoring (especially useful for Ollama)
+                "gen_tps": gen_tps,
 {% endif %}
             }
 {% if ai_rag %}
@@ -578,6 +642,13 @@ class AIService:
             tuple[Any, str]: (agent instance, conversation context string)
         """
         # Build system prompt with project context and optional contexts
+        # Get fresh config for current model/provider
+        config = self.config
+
+        # Use compact mode for Ollama (smaller context for better instruction following)
+        is_compact = config.provider.value == "ollama"
+        logger.debug(f"Compact mode: {is_compact} (provider={config.provider.value})")
+
         formatted_rag = None
 {% if ai_rag %}
         if rag_context and rag_context.results:
@@ -585,20 +656,17 @@ class AIService:
 
         formatted_rag_stats = None
         if rag_stats_context:
-            formatted_rag_stats = rag_stats_context.format_for_prompt()
+            formatted_rag_stats = rag_stats_context.format_for_prompt(compact=is_compact)
 {% endif %}
 
         formatted_health = None
         if health_context:
-            formatted_health = health_context.format_for_prompt()
+            formatted_health = health_context.format_for_prompt(compact=is_compact)
             logger.debug(f"Health context for prompt:\n{formatted_health}")
 
         formatted_usage = None
         if usage_context:
-            formatted_usage = usage_context.format_for_prompt()
-
-        # Get fresh config for current model/provider
-        config = self.config
+            formatted_usage = usage_context.format_for_prompt(compact=is_compact)
 
         system_prompt_override = build_system_prompt(
             self.settings,
@@ -609,7 +677,7 @@ class AIService:
             health_context=formatted_health,
             usage_context=formatted_usage,
             catalog_context=catalog_context,
-            use_rag=rag_context is not None,
+            use_rag=formatted_rag is not None,
             current_model=config.model,
             current_provider=config.provider.value,
         )
@@ -696,11 +764,14 @@ class AIService:
         Returns:
             list: List of message tuples for LangChain
         """
+        # Use compact mode for Ollama (smaller context for better instruction following)
+        is_compact = self.config.provider.value == "ollama"
+
         # Build dynamic system prompt with Illiana's persona
         rag_str = rag_context.format_for_prompt() if rag_context else None
-        rag_stats_str = rag_stats_context.format_for_prompt() if rag_stats_context else None
-        health_str = health_context.format_for_prompt() if health_context else None
-        usage_str = usage_context.format_for_prompt() if usage_context else None
+        rag_stats_str = rag_stats_context.format_for_prompt(compact=is_compact) if rag_stats_context else None
+        health_str = health_context.format_for_prompt(compact=is_compact) if health_context else None
+        usage_str = usage_context.format_for_prompt(compact=is_compact) if usage_context else None
 
         system_prompt = build_system_prompt(
             settings=self.settings,
@@ -856,10 +927,25 @@ class AIService:
                 seen.add(key)
                 deduped_results.append(r)
 
+        # Prioritize source files over test/fixture files
+        # Pipeline: Score Filter → Dedupe → Separate → Prioritize → Top-K
+        source_results = []
+        test_results = []
+        for r in deduped_results:
+            if _is_test_or_fixture_file(r.metadata.get("source", "")):
+                test_results.append(r)
+            else:
+                source_results.append(r)
+
+        # Return source files first, fill remaining slots with test files
+        results_to_use = source_results[:k]
+        if len(results_to_use) < k:
+            results_to_use.extend(test_results[: k - len(results_to_use)])
+
         return RAGContext(
             query=query,
             collection=target_collection,
-            results=deduped_results,
+            results=results_to_use,
         )
 
     async def _build_rag_stats_context(self) -> RAGStatsContext | None:

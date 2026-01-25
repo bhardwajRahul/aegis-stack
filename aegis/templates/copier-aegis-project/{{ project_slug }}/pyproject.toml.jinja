@@ -68,7 +68,7 @@ dependencies = [
 {%- if include_ai %}
 {%- if ai_framework == "pydantic-ai" %}
 {# Map provider names to pydantic-ai-slim extras (OpenAI-compatible providers -> openai) #}
-{%- set pydantic_extras = ai_providers | replace("public", "openai") | replace("openrouter", "openai") %}
+{%- set pydantic_extras = ai_providers | replace("public", "openai") | replace("openrouter", "openai") | replace("ollama", "openai") %}
     "pydantic-ai-slim[{{ pydantic_extras }}]>=1.0.10",
     "httpx>=0.27.0",
 {%- else %}

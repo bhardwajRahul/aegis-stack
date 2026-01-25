@@ -18,13 +18,30 @@ from .cards.card_utils import (
 # Map status overview component names to modal names
 MODAL_NAME_MAP = {
     "backend": "backend",
+{% if include_database %}
     "database": "database",
+{% endif %}
+{% if ollama_mode != "none" %}
+    "ollama": "ollama",
+{% endif %}
+{% if include_redis %}
     "cache": "redis",
+{% endif %}
+{% if include_worker %}
     "worker": "worker",
+{% endif %}
+{% if include_scheduler %}
     "scheduler": "scheduler",
+{% endif %}
+{% if include_auth %}
     "service_auth": "auth",
+{% endif %}
+{% if include_ai %}
     "service_ai": "ai",
+{% endif %}
+{% if include_comms %}
     "service_comms": "comms",
+{% endif %}
     "frontend": "frontend",
 }
 
@@ -64,6 +81,13 @@ def get_component_display_info(
 
     elif component_name == "cache":
         return ("Cache", "Redis")
+{% if ollama_mode != "none" %}
+
+    elif component_name == "ollama":
+        version = metadata.get("version", "")
+        subtitle = f"Ollama v{version}" if version else "Ollama"
+        return ("Inference", subtitle)
+{% endif %}
 
     elif component_name == "scheduler":
         return ("Scheduler", "APScheduler")
@@ -175,13 +199,30 @@ class StatusOverviewPanel(ft.Container):
         # Define display order (most important first)
         display_order = [
             "backend",
+{% if include_database %}
             "database",
+{% endif %}
+{% if ollama_mode != "none" %}
+            "ollama",
+{% endif %}
+{% if include_redis %}
             "cache",
+{% endif %}
+{% if include_worker %}
             "worker",
+{% endif %}
+{% if include_scheduler %}
             "scheduler",
+{% endif %}
+{% if include_auth %}
             "service_auth",
+{% endif %}
+{% if include_ai %}
             "service_ai",
+{% endif %}
+{% if include_comms %}
             "service_comms",
+{% endif %}
         ]
 
         # Build rows in order
