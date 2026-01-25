@@ -28,9 +28,11 @@ from .config import get_ai_config
 from .conversation import ConversationManager
 from .voice import (
     AudioInput,
+    SpeechRequest,
     STTProvider,
     STTService,
     TranscriptionResult,
+    TTSService,
     VoiceChatResponse,
 )
 from .models import (
@@ -133,6 +135,7 @@ class AIService:
         self.config = get_ai_config(settings)
         self.conversation_manager = ConversationManager()
         self._stt_service: STTService | None = None
+        self._tts_service: TTSService | None = None
 {% if ai_rag %}
         self._rag_service: RAGService | None = None
 {% endif %}
@@ -163,12 +166,20 @@ class AIService:
             self._stt_service = STTService(self.settings)
         return self._stt_service
 
+    @property
+    def tts(self) -> TTSService:
+        """Lazy initialization of TTS service."""
+        if self._tts_service is None:
+            self._tts_service = TTSService(self.settings)
+        return self._tts_service
+
     async def voice_chat(
         self,
         audio: AudioInput,
         conversation_id: str | None = None,
         user_id: str = "default",
         voice_mode: bool = False,
+        return_audio: bool = False,
 {% if ai_rag %}
         use_rag: bool = False,
         rag_collection: str | None = None,
@@ -182,12 +193,14 @@ class AIService:
         1. STT - Transcribe audio to text using configured provider
         2. Agent - Pass transcription to AI chat for processing
         3. Response - Return both full and voice-optimized responses
+        4. TTS - Optionally synthesize voice response (if return_audio=True)
 
         Args:
             audio: AudioInput containing raw audio bytes and metadata
             conversation_id: Optional conversation ID (creates new if None)
             user_id: User identifier for conversation ownership
             voice_mode: When True, summarize response for spoken output
+            return_audio: When True, synthesize response to audio using TTS
 {% if ai_rag %}
             use_rag: Enable RAG context injection from indexed codebase
             rag_collection: Collection to search (uses config default if None)
@@ -195,8 +208,8 @@ class AIService:
 {% endif %}
 
         Returns:
-            VoiceChatResponse: Contains transcription, full response, and
-            voice-optimized response (summarized if voice_mode=True)
+            VoiceChatResponse: Contains transcription, full response,
+            voice-optimized response, and optional audio response
 
         Raises:
             AIServiceError: If service is disabled or transcription/chat fails
@@ -240,11 +253,25 @@ class AIService:
                 # Only summarize longer responses
                 voice_response = await self._summarize_for_voice(full_response)
 
+            # 5. Optionally synthesize voice response
+            audio_response: bytes | None = None
+            if return_audio:
+                logger.info("voice_chat.tts_start", text_length=len(voice_response))
+                speech_request = SpeechRequest(text=voice_response)
+                speech_result = await self.tts.synthesize(speech_request)
+                audio_response = speech_result.audio
+                logger.info(
+                    "voice_chat.tts_complete",
+                    audio_size=len(audio_response),
+                    format=speech_result.format.value,
+                )
+
             return VoiceChatResponse(
                 transcription=transcription,
                 full_response=full_response,
                 voice_response=voice_response,
                 conversation_id=response.metadata.get("conversation_id"),
+                audio_response=audio_response,
             )
 
         except Exception as e:

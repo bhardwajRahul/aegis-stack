@@ -23,11 +23,12 @@ from app.services.ai.service import (
 from app.services.ai.voice import (
     AudioFormat,
     AudioInput,
+    SpeechRequest,
     TranscriptionResult,
     VoiceChatResponse,
 )
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -447,15 +448,17 @@ class VoiceChatApiResponse(BaseModel):
     full_response: str
     voice_response: str
     conversation_id: str | None = None
+    has_audio: bool = False  # Indicates if audio_response is available
 
 
-@router.post("/voice-chat", response_model=VoiceChatApiResponse)
+@router.post("/voice-chat")
 async def voice_chat(
     audio: UploadFile = File(..., description="Audio file to transcribe"),
     conversation_id: str | None = Query(None, description="Continue existing conversation"),
     voice_mode: bool = Query(False, description="Summarize response for spoken output"),
+    return_audio: bool = Query(False, description="Return TTS audio of response"),
     user_id: str = Query("api-user", description="User identifier"),
-) -> VoiceChatApiResponse:
+) -> VoiceChatApiResponse | Response:
     """
     Process voice input: transcribe → chat → return response.
 
@@ -463,6 +466,7 @@ async def voice_chat(
     1. **STT** - Transcribe uploaded audio to text
     2. **Agent** - Pass transcription to AI chat for processing
     3. **Response** - Return both full and voice-optimized responses
+    4. **TTS** - Optionally synthesize response to audio (if return_audio=True)
 
     Supported audio formats: wav, mp3, m4a, webm, ogg, flac, mp4
 
@@ -470,14 +474,12 @@ async def voice_chat(
         audio: Audio file upload (multipart/form-data)
         conversation_id: Optional conversation ID to continue
         voice_mode: When True, summarize response for spoken output
+        return_audio: When True, returns audio response instead of JSON
         user_id: User identifier for conversation ownership
 
     Returns:
-        VoiceChatApiResponse containing:
-        - transcription: What the user said (with timing if available)
-        - full_response: Complete AI response
-        - voice_response: Voice-optimized response (summarized if voice_mode=True)
-        - conversation_id: For continuing the conversation
+        If return_audio=False: VoiceChatApiResponse with transcription and text
+        If return_audio=True: Audio file (MP3) of the response
 
     Raises:
         HTTPException: 400 if audio format not supported
@@ -517,7 +519,21 @@ async def voice_chat(
             conversation_id=conversation_id,
             user_id=user_id,
             voice_mode=voice_mode,
+            return_audio=return_audio,
         )
+
+        # If audio response requested, return audio file directly
+        if return_audio and result.audio_response:
+            return Response(
+                content=result.audio_response,
+                media_type="audio/mpeg",
+                headers={
+                    "Content-Disposition": 'attachment; filename="response.mp3"',
+                    "X-Transcription": result.transcription.text[:100],  # First 100 chars
+                    "X-Conversation-Id": result.conversation_id or "",
+                },
+            )
+
 
         # Convert to API response
         transcription_segments = None
@@ -544,6 +560,7 @@ async def voice_chat(
             full_response=result.full_response,
             voice_response=result.voice_response,
             conversation_id=result.conversation_id,
+            has_audio=result.audio_response is not None,
         )
 
     except HTTPException:
@@ -659,6 +676,115 @@ async def stt_status() -> dict[str, Any]:
     except Exception as e:
         return {
             "service": "stt",
+            "status": "error",
+            "error": str(e),
+        }
+
+
+# ============================================================================
+# TTS (Text-to-Speech) Endpoints
+# ============================================================================
+
+
+@router.post("/synthesize")
+async def synthesize_speech(
+    text: str = Form(..., description="Text to synthesize into speech"),
+    voice: str | None = Form(None, description="Voice to use (provider-specific)"),
+    speed: float = Form(1.0, ge=0.25, le=4.0, description="Speech speed (0.25-4.0)"),
+) -> Response:
+    """
+    Synthesize speech from text.
+
+    Converts text to speech audio using the configured TTS provider.
+
+    Args:
+        text: Text to synthesize
+        voice: Optional voice ID (uses provider default if not specified)
+        speed: Speech speed multiplier (0.25 to 4.0, default 1.0)
+
+    Returns:
+        Audio file response (MP3 format)
+
+    Raises:
+        HTTPException: 503 if TTS service error
+    """
+    try:
+        request = SpeechRequest(text=text, voice=voice, speed=speed)
+        result = await ai_service.tts.synthesize(request)
+
+        return Response(
+            content=result.audio,
+            media_type="audio/mpeg",
+            headers={
+                "Content-Disposition": 'attachment; filename="speech.mp3"',
+            },
+        )
+
+    except Exception as e:
+        logger.exception("Speech synthesis failed")
+        raise HTTPException(status_code=503, detail=f"Speech synthesis failed: {e}")
+
+
+@router.post("/synthesize/stream")
+async def synthesize_speech_stream(
+    text: str = Form(..., description="Text to synthesize into speech"),
+    voice: str | None = Form(None, description="Voice to use (provider-specific)"),
+    speed: float = Form(1.0, ge=0.25, le=4.0, description="Speech speed (0.25-4.0)"),
+) -> StreamingResponse:
+    """
+    Stream synthesized speech.
+
+    Streams audio chunks as they are generated for lower latency.
+
+    Args:
+        text: Text to synthesize
+        voice: Optional voice ID (uses provider default if not specified)
+        speed: Speech speed multiplier (0.25 to 4.0, default 1.0)
+
+    Returns:
+        Streaming audio response (MP3 format)
+
+    Raises:
+        HTTPException: 503 if TTS service error
+    """
+    request = SpeechRequest(text=text, voice=voice, speed=speed)
+
+    async def generate():
+        try:
+            async for chunk in ai_service.tts.synthesize_stream(request):
+                yield chunk
+        except Exception as e:
+            logger.exception("Speech synthesis streaming failed")
+            raise HTTPException(
+                status_code=503, detail=f"Speech synthesis failed: {e}"
+            )
+
+    return StreamingResponse(
+        generate(),
+        media_type="audio/mpeg",
+        headers={
+            "Content-Disposition": 'attachment; filename="speech.mp3"',
+        },
+    )
+
+
+@router.get("/tts/status")
+async def tts_status() -> dict[str, Any]:
+    """
+    Get TTS (Text-to-Speech) service status.
+
+    Returns current TTS configuration and availability.
+    """
+    try:
+        status = ai_service.tts.get_status()
+        return {
+            "service": "tts",
+            "status": "available",
+            **status,
+        }
+    except Exception as e:
+        return {
+            "service": "tts",
             "status": "error",
             "error": str(e),
         }

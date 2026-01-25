@@ -938,6 +938,116 @@ def stt_status() -> None:
     )
 
 
+@app.command()
+def speak(
+    text: str = typer.Argument(..., help="Text to synthesize into speech"),
+    output: str = typer.Option("speech.mp3", "--output", "-o", help="Output file path"),
+    voice: str | None = typer.Option(
+        None, "--voice", "-v", help="Voice to use (alloy, echo, fable, onyx, nova, shimmer)"
+    ),
+    speed: float = typer.Option(
+        1.0, "--speed", "-s", min=0.25, max=4.0, help="Speech speed (0.25-4.0)"
+    ),
+) -> None:
+    """
+    Synthesize speech from text.
+
+    Converts text to speech audio using the configured TTS provider.
+
+    \b
+    Examples:
+        my-app ai speak "Hello, world!"
+        my-app ai speak "Hello" --voice nova --output hello.mp3
+        my-app ai speak "Fast speech" --speed 1.5
+    """
+    import asyncio
+    from pathlib import Path
+
+    from app.services.ai.service import AIService
+    from app.services.ai.voice import SpeechRequest
+
+    async def run_speak() -> None:
+        try:
+            with suppress_logs():
+                ai_service = AIService(settings)
+
+            # Show synthesis progress
+            from rich.progress import Progress, SpinnerColumn, TextColumn
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+                transient=True,
+            ) as progress:
+                progress.add_task(description="Synthesizing speech...", total=None)
+
+                request = SpeechRequest(text=text, voice=voice, speed=speed)
+                result = await ai_service.tts.synthesize(request)
+
+            # Save audio to file
+            output_path = Path(output)
+            with open(output_path, "wb") as f:
+                f.write(result.audio)
+
+            console.print()
+            console.print(f"[green]✓[/green] Audio saved to [cyan]{output_path}[/cyan]")
+            console.print(f"  [dim]Format: {result.format.value}[/dim]")
+            console.print(f"  [dim]Size: {len(result.audio):,} bytes[/dim]")
+
+            if result.duration_seconds:
+                console.print(f"  [dim]Duration: {result.duration_seconds:.1f}s[/dim]")
+
+        except KeyboardInterrupt:
+            typer.echo("\nSpeech synthesis interrupted", err=True)
+            raise typer.Exit(1)
+        except Exception as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+    asyncio.run(run_speak())
+
+
+@app.command("tts-status")
+def tts_status() -> None:
+    """Show TTS (Text-to-Speech) service status."""
+    from app.services.ai.service import AIService
+
+    with suppress_logs():
+        ai_service = AIService(settings)
+
+    status = ai_service.tts.get_status()
+
+    typer.secho("TTS Service Status", fg=typer.colors.BLUE, bold=True)
+    typer.secho("=" * 40, dim=True)
+
+    typer.echo(
+        typer.style("Provider: ", fg=typer.colors.CYAN) + status.get("provider", "unknown")
+    )
+    typer.echo(
+        typer.style("Model: ", fg=typer.colors.CYAN) + str(status.get("model", "default"))
+    )
+    typer.echo(
+        typer.style("Voice: ", fg=typer.colors.CYAN) + str(status.get("voice", "default"))
+    )
+    typer.echo(
+        typer.style("Speed: ", fg=typer.colors.CYAN) + str(status.get("speed", 1.0))
+    )
+
+    initialized = status.get("initialized", False)
+    status_color = typer.colors.GREEN if initialized else typer.colors.YELLOW
+    status_text = "Initialized" if initialized else "Not initialized (lazy-loaded)"
+    typer.echo(
+        typer.style("Status: ", fg=typer.colors.CYAN)
+        + typer.style(status_text, fg=status_color)
+    )
+
+    # Show available voices
+    typer.echo()
+    typer.echo(typer.style("OpenAI Voices: ", fg=typer.colors.CYAN) + "alloy, echo, fable, onyx, nova, shimmer")
+
+
+
 {% if ai_backend != "memory" %}
 # ============================================================================
 # Usage Statistics Command (requires database backend)
