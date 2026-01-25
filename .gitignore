@@ -139,4 +139,4 @@ demos/recordings
 .claude/settings.json
 
 # Typical generated stack folders
-my_app/
+my-app/
