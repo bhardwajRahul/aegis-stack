@@ -19,6 +19,24 @@ class STTProvider(str, Enum):
     GROQ_WHISPER = "groq_whisper"  # Groq API (ultra-fast)
 
 
+class TTSProvider(str, Enum):
+    """Supported Text-to-Speech providers."""
+
+    OPENAI = "openai"  # OpenAI TTS API
+    PIPER_LOCAL = "piper_local"  # Piper local TTS (ONNX-based)
+
+
+class OpenAIVoice(str, Enum):
+    """Available OpenAI TTS voices."""
+
+    ALLOY = "alloy"  # Neutral, balanced voice
+    ECHO = "echo"  # Warm, friendly voice
+    FABLE = "fable"  # British-accented, narrative voice
+    ONYX = "onyx"  # Deep, authoritative voice
+    NOVA = "nova"  # Energetic, youthful voice
+    SHIMMER = "shimmer"  # Clear, expressive voice
+
+
 class AudioFormat(str, Enum):
     """Supported audio formats for transcription."""
 
@@ -79,6 +97,37 @@ class TranscriptionResult(BaseModel):
     )
 
 
+class SpeechRequest(BaseModel):
+    """Input for TTS synthesis."""
+
+    text: str = Field(..., description="Text to synthesize into speech")
+    voice: str | None = Field(
+        default=None, description="Voice ID to use (provider-specific)"
+    )
+    language: str | None = Field(
+        default=None, description="Language code for synthesis"
+    )
+    speed: float = Field(
+        default=1.0,
+        ge=0.25,
+        le=4.0,
+        description="Speech speed multiplier (0.25 to 4.0)",
+    )
+
+
+class SpeechResult(BaseModel):
+    """Result of TTS synthesis."""
+
+    audio: bytes = Field(..., description="Synthesized audio data")
+    format: AudioFormat = Field(..., description="Audio format of the output")
+    duration_seconds: float | None = Field(
+        default=None, description="Duration of the audio in seconds"
+    )
+    provider: TTSProvider = Field(..., description="Provider used for synthesis")
+
+    model_config = {"arbitrary_types_allowed": True}
+
+
 class VoiceChatResponse(BaseModel):
     """Response from voice chat with both full and voice-optimized versions."""
 
@@ -94,3 +143,8 @@ class VoiceChatResponse(BaseModel):
     conversation_id: str | None = Field(
         default=None, description="Conversation ID for continuity"
     )
+    audio_response: bytes | None = Field(
+        default=None, description="TTS audio of the response (if return_audio=True)"
+    )
+
+    model_config = {"arbitrary_types_allowed": True}
