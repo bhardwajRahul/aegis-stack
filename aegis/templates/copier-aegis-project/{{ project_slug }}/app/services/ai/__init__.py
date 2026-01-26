@@ -1,8 +1,27 @@
 """
 AI service module.
 
-Provides AI chatbot functionality with configurable AI framework.
+Provides AI chatbot functionality with configurable AI framework,
+including Speech-to-Text (STT) capabilities for voice interactions.
 """
 
-# AI service exports will be added in ticket #159
-__all__ = []
+from .voice import (
+    AudioFormat,
+    AudioInput,
+    STTProvider,
+    STTService,
+    TranscriptionResult,
+    TranscriptionSegment,
+    VoiceChatResponse,
+)
+
+__all__ = [
+    # Voice/STT exports
+    "STTProvider",
+    "AudioFormat",
+    "AudioInput",
+    "TranscriptionSegment",
+    "TranscriptionResult",
+    "VoiceChatResponse",
+    "STTService",
+]

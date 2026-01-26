@@ -651,6 +651,293 @@ def history(
             typer.echo("")
 
 
+@app.command()
+def voice(
+    audio_file: str = typer.Argument(..., help="Path to audio file"),
+    conversation_id: str | None = typer.Option(
+        None, "--conversation-id", "-c", help="Continue existing conversation"
+    ),
+    voice_mode: bool = typer.Option(
+        False, "--voice", "-v", help="Summarize response for spoken output"
+    ),
+    user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
+{% if ai_rag %}
+    use_rag: bool = typer.Option(
+        False, "--rag", help="Enable RAG context injection"
+    ),
+    collection: str | None = typer.Option(
+        None, "--collection", help="RAG collection to search"
+    ),
+    top_k: int | None = typer.Option(
+        None, "--top-k", "-k", help="Number of RAG results to use"
+    ),
+{% endif %}
+) -> None:
+    """
+    Send voice input to AI agent.
+
+    Transcribes audio file and sends the transcription to the AI chat.
+    Supported formats: wav, mp3, m4a, webm, ogg, flac, mp4
+
+    \b
+    Examples:
+        my-app ai voice recording.wav
+        my-app ai voice recording.mp3 --voice
+        my-app ai voice recording.wav -c abc123
+{% if ai_rag %}
+        my-app ai voice recording.wav --rag
+{% endif %}
+    """
+    import asyncio
+    from pathlib import Path
+
+    from app.services.ai.service import AIService
+    from app.services.ai.voice import AudioFormat, AudioInput
+
+    async def run_voice() -> None:
+        try:
+            # Validate file exists
+            audio_path = Path(audio_file)
+            if not audio_path.exists():
+                console.print(f"[red]Error:[/red] File not found: {audio_file}")
+                raise typer.Exit(1)
+
+            # Determine audio format
+            ext = audio_path.suffix[1:].lower() if audio_path.suffix else "wav"
+            try:
+                audio_format = AudioFormat(ext)
+            except ValueError:
+                supported = ", ".join(f.value for f in AudioFormat)
+                console.print(f"[red]Error:[/red] Unsupported format: {ext}")
+                console.print(f"[dim]Supported formats: {supported}[/dim]")
+                raise typer.Exit(1)
+
+            # Read audio file
+            with open(audio_path, "rb") as f:
+                audio_content = f.read()
+
+            audio_input = AudioInput(
+                content=audio_content,
+                format=audio_format,
+            )
+
+            with suppress_logs():
+                ai_service = AIService(settings)
+
+            # Show transcription progress
+            from rich.progress import Progress, SpinnerColumn, TextColumn
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+                transient=True,
+            ) as progress:
+                progress.add_task(description="Transcribing audio...", total=None)
+
+                # Transcribe and chat
+                result = await ai_service.voice_chat(
+                    audio=audio_input,
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    voice_mode=voice_mode,
+{% if ai_rag %}
+                    use_rag=use_rag,
+                    rag_collection=collection,
+                    rag_top_k=top_k,
+{% endif %}
+                )
+
+            # Display results
+            console.print()
+            console.print("[bold cyan]Transcription:[/bold cyan]")
+            console.print(f"  {result.transcription.text}")
+
+            if result.transcription.language:
+                console.print(f"  [dim]Language: {result.transcription.language}[/dim]")
+            if result.transcription.duration_seconds:
+                console.print(
+                    f"  [dim]Duration: {result.transcription.duration_seconds:.1f}s[/dim]"
+                )
+
+            console.print()
+            console.print("[bold green]Response:[/bold green]")
+            if voice_mode:
+                console.print(f"  {result.voice_response}")
+                if result.voice_response != result.full_response:
+                    console.print()
+                    console.print("[dim]Full response available with --no-voice flag[/dim]")
+            else:
+                # Render as markdown for full response
+                from app.cli.ai_rendering import render_markdown_response
+
+                render_markdown_response(console, result.full_response)
+
+            if result.conversation_id:
+                console.print()
+                console.print(
+                    f"[dim]Conversation: {result.conversation_id[:8]}...[/dim]"
+                )
+
+        except KeyboardInterrupt:
+            typer.echo("\nVoice chat interrupted", err=True)
+            raise typer.Exit(1)
+        except Exception as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+    asyncio.run(run_voice())
+
+
+@app.command()
+def transcribe(
+    audio_file: str = typer.Argument(..., help="Path to audio file"),
+    language: str | None = typer.Option(
+        None, "--language", "-l", help="Language code (e.g., 'en', 'es')"
+    ),
+    json_output: bool = typer.Option(
+        False, "--json", "-j", help="Output raw JSON"
+    ),
+) -> None:
+    """
+    Transcribe audio to text (without chat).
+
+    Use this when you only need speech-to-text transcription.
+    Supported formats: wav, mp3, m4a, webm, ogg, flac, mp4
+
+    \b
+    Examples:
+        my-app ai transcribe recording.wav
+        my-app ai transcribe recording.mp3 -l en
+        my-app ai transcribe recording.wav --json
+    """
+    import asyncio
+    import json
+    from pathlib import Path
+
+    from app.services.ai.service import AIService
+    from app.services.ai.voice import AudioFormat, AudioInput
+
+    async def run_transcribe() -> None:
+        try:
+            # Validate file exists
+            audio_path = Path(audio_file)
+            if not audio_path.exists():
+                console.print(f"[red]Error:[/red] File not found: {audio_file}")
+                raise typer.Exit(1)
+
+            # Determine audio format
+            ext = audio_path.suffix[1:].lower() if audio_path.suffix else "wav"
+            try:
+                audio_format = AudioFormat(ext)
+            except ValueError:
+                supported = ", ".join(f.value for f in AudioFormat)
+                console.print(f"[red]Error:[/red] Unsupported format: {ext}")
+                console.print(f"[dim]Supported formats: {supported}[/dim]")
+                raise typer.Exit(1)
+
+            # Read audio file
+            with open(audio_path, "rb") as f:
+                audio_content = f.read()
+
+            audio_input = AudioInput(
+                content=audio_content,
+                format=audio_format,
+                language=language,
+            )
+
+            with suppress_logs():
+                ai_service = AIService(settings)
+
+            # Show transcription progress
+            from rich.progress import Progress, SpinnerColumn, TextColumn
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+                transient=True,
+            ) as progress:
+                progress.add_task(description="Transcribing...", total=None)
+                result = await ai_service.stt.transcribe(audio_input)
+
+            if json_output:
+                # Output as JSON
+                output = {
+                    "text": result.text,
+                    "language": result.language,
+                    "duration_seconds": result.duration_seconds,
+                    "confidence": result.confidence,
+                    "provider": result.provider.value,
+                }
+                if result.segments:
+                    output["segments"] = [
+                        {
+                            "text": seg.text,
+                            "start": seg.start,
+                            "end": seg.end,
+                            "confidence": seg.confidence,
+                        }
+                        for seg in result.segments
+                    ]
+                print(json.dumps(output, indent=2))
+            else:
+                # Pretty output
+                console.print()
+                console.print(result.text)
+                console.print()
+
+                # Metadata
+                meta_parts = []
+                if result.language:
+                    meta_parts.append(f"Language: {result.language}")
+                if result.duration_seconds:
+                    meta_parts.append(f"Duration: {result.duration_seconds:.1f}s")
+                if result.confidence:
+                    meta_parts.append(f"Confidence: {result.confidence:.1%}")
+                meta_parts.append(f"Provider: {result.provider.value}")
+
+                console.print(f"[dim]{' | '.join(meta_parts)}[/dim]")
+
+        except KeyboardInterrupt:
+            typer.echo("\nTranscription interrupted", err=True)
+            raise typer.Exit(1)
+        except Exception as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+    asyncio.run(run_transcribe())
+
+
+@app.command("stt-status")
+def stt_status() -> None:
+    """Show STT (Speech-to-Text) service status."""
+    from app.services.ai.service import AIService
+
+    with suppress_logs():
+        ai_service = AIService(settings)
+
+    status = ai_service.stt.get_status()
+
+    typer.secho("STT Service Status", fg=typer.colors.BLUE, bold=True)
+    typer.secho("=" * 40, dim=True)
+
+    typer.echo(
+        typer.style("Provider: ", fg=typer.colors.CYAN) + status.get("provider", "unknown")
+    )
+    typer.echo(
+        typer.style("Model: ", fg=typer.colors.CYAN) + str(status.get("model", "default"))
+    )
+
+    initialized = status.get("initialized", False)
+    status_color = typer.colors.GREEN if initialized else typer.colors.YELLOW
+    status_text = "Initialized" if initialized else "Not initialized (lazy-loaded)"
+    typer.echo(
+        typer.style("Status: ", fg=typer.colors.CYAN)
+        + typer.style(status_text, fg=status_color)
+    )
+
+
 {% if ai_backend != "memory" %}
 # ============================================================================
 # Usage Statistics Command (requires database backend)
