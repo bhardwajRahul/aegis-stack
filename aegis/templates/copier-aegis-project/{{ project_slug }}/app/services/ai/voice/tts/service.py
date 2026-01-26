@@ -6,12 +6,17 @@ configuration management, and streaming support.
 """
 
 import logging
+import time
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from typing import Any
 
-from .models import SpeechRequest, SpeechResult, TTSProvider
-from .tts_config import TTSConfig, get_tts_config
-from .tts_providers import BaseTTSProvider, get_tts_provider
+from app.core.db import get_async_session
+
+from ..models import SpeechRequest, SpeechResult, TTSProvider
+from .config import TTSConfig, get_tts_config
+from .providers import BaseTTSProvider, get_tts_provider
+from .usage import TTSUsage
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +29,13 @@ class TTSService:
 
     Example usage:
         ```python
-        from app.services.ai.voice import TTSService, SpeechRequest, TTSProvider
+        from app.services.ai.voice.tts import TTSService, SpeechRequest
 
         # Initialize with settings
         tts = TTSService(settings)
 
         # Or with explicit configuration
+        from app.services.ai.voice.models import TTSProvider
         tts = TTSService(provider=TTSProvider.OPENAI, voice="nova")
 
         # Synthesize speech
@@ -128,11 +134,16 @@ class TTSService:
 
         return self._provider_instance
 
-    async def synthesize(self, request: SpeechRequest) -> SpeechResult:
+    async def synthesize(
+        self,
+        request: SpeechRequest,
+        user_id: str | None = None,
+    ) -> SpeechResult:
         """Synthesize speech from text.
 
         Args:
             request: SpeechRequest containing text and synthesis options.
+            user_id: Optional user identifier for usage tracking.
 
         Returns:
             SpeechResult with synthesized audio data and metadata.
@@ -147,14 +158,38 @@ class TTSService:
             f"voice={request.voice or self.voice}) with {provider.provider_type.value}"
         )
 
-        result = await provider.synthesize(request)
+        start_time = time.perf_counter()
+        result: SpeechResult | None = None
+        error_message: str | None = None
+        success = True
 
-        logger.debug(
-            f"Synthesis complete: {len(result.audio)} bytes, "
-            f"format={result.format.value}"
-        )
+        try:
+            result = await provider.synthesize(request)
 
-        return result
+            logger.debug(
+                f"Synthesis complete: {len(result.audio)} bytes, "
+                f"format={result.format.value}"
+            )
+
+            return result
+
+        except Exception as e:
+            success = False
+            error_message = str(e)
+            raise
+
+        finally:
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            await self._record_usage(
+                input_characters=len(request.text),
+                output_bytes=len(result.audio) if result else None,
+                output_duration_seconds=result.duration_seconds if result else None,
+                voice=request.voice or self.voice,
+                latency_ms=latency_ms,
+                user_id=user_id,
+                success=success,
+                error_message=error_message,
+            )
 
     async def synthesize_stream(self, request: SpeechRequest) -> AsyncIterator[bytes]:
         """Stream synthesized audio.
@@ -222,3 +257,53 @@ class TTSService:
             "available": len(errors) == 0,
             "errors": errors if errors else None,
         }
+
+    async def _record_usage(
+        self,
+        input_characters: int,
+        output_bytes: int | None,
+        output_duration_seconds: float | None,
+        voice: str | None,
+        latency_ms: int,
+        user_id: str | None,
+        success: bool,
+        error_message: str | None,
+    ) -> None:
+        """Record TTS usage to database.
+
+        Args:
+            input_characters: Length of input text.
+            output_bytes: Size of output audio in bytes.
+            output_duration_seconds: Duration of output audio.
+            voice: Voice ID used for synthesis.
+            latency_ms: Request latency in milliseconds.
+            user_id: Optional user identifier.
+            success: Whether synthesis succeeded.
+            error_message: Error message if synthesis failed.
+        """
+        try:
+            async with get_async_session() as session:
+                usage = TTSUsage(
+                    provider=self.provider_type.value,
+                    model=self.model,
+                    voice=voice,
+                    user_id=user_id,
+                    timestamp=datetime.now(UTC),
+                    input_characters=input_characters,
+                    output_duration_seconds=output_duration_seconds,
+                    output_bytes=output_bytes,
+                    latency_ms=latency_ms,
+                    total_cost=0.0,  # TODO: Calculate cost based on provider pricing
+                    success=success,
+                    error_message=error_message,
+                )
+                session.add(usage)
+
+            logger.debug(
+                f"TTS usage recorded: {input_characters} chars, "
+                f"{latency_ms}ms, success={success}"
+            )
+
+        except Exception as e:
+            # Don't fail the request if usage tracking fails
+            logger.warning(f"Failed to record TTS usage: {e}")

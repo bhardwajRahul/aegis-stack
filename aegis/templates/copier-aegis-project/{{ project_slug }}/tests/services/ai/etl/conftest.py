@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from app.services.ai.etl.clients.litellm_client import LiteLLMModel
-from app.services.ai.etl.clients.ollama_client import OllamaModel
 from app.services.ai.etl.clients.openrouter_client import OpenRouterModel
 from app.services.ai.models.llm import LargeLanguageModel, LLMVendor
+from app.services.ai.ollama import OllamaModel, OllamaModelDetails
 from sqlalchemy import Engine
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -352,12 +352,17 @@ def sample_ollama_model() -> OllamaModel:
     """Pre-constructed OllamaModel for testing."""
     return OllamaModel(
         name="llama3.2:latest",
+        model="llama3.2:latest",
         size=2019393189,
         digest="a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72",
         modified_at=datetime(2024, 10, 15, 14, 30, 0, tzinfo=UTC),
-        parameter_size="3B",
-        quantization_level="Q4_0",
-        family="llama",
+        details=OllamaModelDetails(
+            format="gguf",
+            family="llama",
+            families=["llama"],
+            parameter_size="3B",
+            quantization_level="Q4_0",
+        ),
     )
 
 
@@ -367,21 +372,31 @@ def sample_ollama_models() -> list[OllamaModel]:
     return [
         OllamaModel(
             name="llama3.2:latest",
+            model="llama3.2:latest",
             size=2019393189,
             digest="a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72",
             modified_at=datetime(2024, 10, 15, 14, 30, 0, tzinfo=UTC),
-            parameter_size="3B",
-            quantization_level="Q4_0",
-            family="llama",
+            details=OllamaModelDetails(
+                format="gguf",
+                family="llama",
+                families=["llama"],
+                parameter_size="3B",
+                quantization_level="Q4_0",
+            ),
         ),
         OllamaModel(
             name="mistral:7b",
+            model="mistral:7b",
             size=4109865159,
             digest="61e88e884507ba5e06c49b40e6226884b2a16e872382c2b44a42f2d119d804a5",
             modified_at=datetime(2024, 9, 20, 10, 15, 0, tzinfo=UTC),
-            parameter_size="7B",
-            quantization_level="Q4_0",
-            family="mistral",
+            details=OllamaModelDetails(
+                format="gguf",
+                family="mistral",
+                families=["mistral"],
+                parameter_size="7B",
+                quantization_level="Q4_0",
+            ),
         ),
     ]
 
@@ -389,7 +404,7 @@ def sample_ollama_models() -> list[OllamaModel]:
 @pytest.fixture
 def mock_httpx_ollama(mock_ollama_response: dict[str, Any]):
     """Mock httpx for Ollama API calls."""
-    with patch("app.services.ai.etl.clients.ollama_client.httpx") as mock_httpx:
+    with patch("app.services.ai.ollama.httpx") as mock_httpx:
         mock_response = MagicMock()
         mock_response.json.return_value = mock_ollama_response
         mock_response.raise_for_status = MagicMock()

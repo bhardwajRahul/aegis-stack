@@ -96,10 +96,11 @@ class TemplateGenerator:
                     self.worker_backend = backend
                     break
 
-        # Extract AI config from ai[framework, backend, providers, rag] format in services
+        # Extract AI config from ai[framework, backend, providers, rag, voice] format in services
         self.ai_backend = StorageBackends.MEMORY  # Default to memory
         self.ai_framework = AIFrameworks.PYDANTIC_AI  # Default to pydantic-ai
         self.ai_rag = False  # Default to no RAG
+        self.ai_voice = False  # Default to no voice
         user_specified_ai_backend = False
 
         for service in self.selected_services:
@@ -109,6 +110,7 @@ class TemplateGenerator:
                     self.ai_backend = ai_config.backend
                     self.ai_framework = ai_config.framework
                     self.ai_rag = ai_config.rag_enabled
+                    self.ai_voice = ai_config.voice_enabled
                     user_specified_ai_backend = True
                 break
 
@@ -214,6 +216,8 @@ class TemplateGenerator:
             AnswerKeys.AI_PROVIDERS: self._get_ai_providers_string(),
             # AI RAG (Retrieval-Augmented Generation) selection
             AnswerKeys.AI_RAG: "yes" if self.ai_rag else "no",
+            # AI Voice (TTS and STT) selection
+            AnswerKeys.AI_VOICE: "yes" if self.ai_voice else "no",
             # Ollama deployment mode (host, docker, or none)
             AnswerKeys.OLLAMA_MODE: self._get_ollama_mode(),
             # Dependency lists for templates

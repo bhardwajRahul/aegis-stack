@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from app.services.ai.etl.clients.ollama_client import OllamaModel
 from app.services.ai.etl.llm_sync_service import (
     VENDOR_METADATA,
     LLMSyncService,
@@ -14,6 +13,7 @@ from app.services.ai.models.llm import (
     LargeLanguageModel,
     LLMVendor,
 )
+from app.services.ai.ollama import OllamaModel, OllamaModelDetails
 from sqlmodel import Session, select
 
 # =============================================================================
@@ -169,12 +169,17 @@ class TestSyncOllama:
         updated_ollama_models = [
             OllamaModel(
                 name="llama3.2:latest",
+                model="llama3.2:latest",
                 size=2500000000,
                 digest="updated_digest",
                 modified_at=datetime(2024, 11, 1, 0, 0, 0, tzinfo=UTC),
-                parameter_size="3B",
-                quantization_level="Q4_K_M",  # Different quantization
-                family="llama",
+                details=OllamaModelDetails(
+                    format="gguf",
+                    family="llama",
+                    families=["llama"],
+                    parameter_size="3B",
+                    quantization_level="Q4_K_M",  # Different quantization
+                ),
             ),
         ]
 

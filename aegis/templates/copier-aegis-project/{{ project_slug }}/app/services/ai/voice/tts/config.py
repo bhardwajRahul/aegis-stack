@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from .models import TTSProvider
+from ..models import TTSProvider
 
 
 class TTSConfig(BaseModel):
@@ -29,7 +29,6 @@ class TTSConfig(BaseModel):
     DEFAULT_MODELS: dict[TTSProvider, str] = Field(
         default={
             TTSProvider.OPENAI: "tts-1",
-            TTSProvider.PIPER_LOCAL: "en_US-lessac-medium",
         },
         exclude=True,
     )
@@ -37,7 +36,6 @@ class TTSConfig(BaseModel):
     DEFAULT_VOICES: dict[TTSProvider, str] = Field(
         default={
             TTSProvider.OPENAI: "alloy",
-            TTSProvider.PIPER_LOCAL: "default",
         },
         exclude=True,
     )

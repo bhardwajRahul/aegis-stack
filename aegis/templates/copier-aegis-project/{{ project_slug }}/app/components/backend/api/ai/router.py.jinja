@@ -451,7 +451,7 @@ class VoiceChatApiResponse(BaseModel):
     has_audio: bool = False  # Indicates if audio_response is available
 
 
-@router.post("/voice-chat")
+@router.post("/voice-chat", response_model=None)
 async def voice_chat(
     audio: UploadFile = File(..., description="Audio file to transcribe"),
     conversation_id: str | None = Query(None, description="Continue existing conversation"),

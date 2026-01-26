@@ -302,10 +302,70 @@ AI_MIGRATION = ServiceMigrationSpec(
     ],
 )
 
+VOICE_MIGRATION = ServiceMigrationSpec(
+    service_name="ai_voice",
+    description="AI voice service table (TTS and STT usage tracking)",
+    tables=[
+        TableSpec(
+            name="voice_usage",
+            columns=[
+                # === Core (all rows) ===
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec(
+                    "usage_type", "sa.String()", nullable=False
+                ),  # "tts" | "stt"
+                ColumnSpec(
+                    "provider", "sa.String()", nullable=False
+                ),  # openai, groq, whisper_local
+                ColumnSpec(
+                    "model", "sa.String()", nullable=True
+                ),  # tts-1, whisper-1, etc.
+                ColumnSpec("user_id", "sa.String()", nullable=True),
+                ColumnSpec("timestamp", "sa.DateTime(timezone=True)", nullable=False),
+                ColumnSpec("latency_ms", "sa.Integer()", nullable=True),
+                ColumnSpec("total_cost", "sa.Float()", nullable=False, default="0.0"),
+                ColumnSpec("success", "sa.Boolean()", nullable=False, default="True"),
+                ColumnSpec("error_message", "sa.String()", nullable=True),
+                # === TTS-specific (null for STT) ===
+                ColumnSpec("voice", "sa.String()", nullable=True),  # alloy, nova, etc.
+                ColumnSpec(
+                    "input_characters", "sa.Integer()", nullable=True
+                ),  # text length
+                ColumnSpec(
+                    "output_duration_seconds", "sa.Float()", nullable=True
+                ),  # audio length
+                ColumnSpec(
+                    "output_audio_bytes", "sa.Integer()", nullable=True
+                ),  # audio size
+                # === STT-specific (null for TTS) ===
+                ColumnSpec(
+                    "input_duration_seconds", "sa.Float()", nullable=True
+                ),  # audio length
+                ColumnSpec(
+                    "input_audio_bytes", "sa.Integer()", nullable=True
+                ),  # audio size
+                ColumnSpec(
+                    "output_characters", "sa.Integer()", nullable=True
+                ),  # transcription length
+                ColumnSpec(
+                    "detected_language", "sa.String()", nullable=True
+                ),  # en, es, etc.
+            ],
+            indexes=[
+                IndexSpec("ix_voice_usage_usage_type", ["usage_type"]),
+                IndexSpec("ix_voice_usage_provider", ["provider"]),
+                IndexSpec("ix_voice_usage_user_id", ["user_id"]),
+                IndexSpec("ix_voice_usage_timestamp", ["timestamp"]),
+            ],
+        ),
+    ],
+)
+
 # Registry of all service migrations
 MIGRATION_SPECS: dict[str, ServiceMigrationSpec] = {
     "auth": AUTH_MIGRATION,
     "ai": AI_MIGRATION,
+    "ai_voice": VOICE_MIGRATION,
 }
 
 # ============================================================================
@@ -588,6 +648,15 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     ai_backend = context.get("ai_backend", "memory")
     if (include_ai == "yes" or include_ai is True) and ai_backend != "memory":
         services.append("ai")
+
+    # AI Voice service (only if AI with persistence and voice enabled)
+    ai_voice = context.get("ai_voice")
+    if (
+        (include_ai == "yes" or include_ai is True)
+        and ai_backend != "memory"
+        and (ai_voice == "yes" or ai_voice is True)
+    ):
+        services.append("ai_voice")
 
     return services
 

@@ -1,7 +1,7 @@
 """Tests for STT providers."""
 
 from app.services.ai.voice.models import STTProvider
-from app.services.ai.voice.stt_providers import (
+from app.services.ai.voice.stt import (
     BaseSTTProvider,
     FasterWhisperProvider,
     GroqWhisperProvider,

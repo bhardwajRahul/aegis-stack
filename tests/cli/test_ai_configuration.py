@@ -476,6 +476,11 @@ class TestAIConfigurationEndToEnd:
         assert "ai_providers" in config
         assert "_ai_deps" in config
 
+        # Verify AI voice configuration exists
+        assert "ai_voice" in config
+        assert config["ai_voice"]["type"] == "bool"
+        assert "when" in config["ai_voice"]  # Should be conditional on include_ai
+
         # Verify AI dependencies template uses provider variable
         ai_deps = config["_ai_deps"]
         assert "ai_providers" in ai_deps

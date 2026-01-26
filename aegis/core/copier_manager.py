@@ -129,6 +129,8 @@ def generate_with_copier(
         )
         == "yes",
         AnswerKeys.AI_RAG: cookiecutter_context.get(AnswerKeys.AI_RAG, "no") == "yes",
+        AnswerKeys.AI_VOICE: cookiecutter_context.get(AnswerKeys.AI_VOICE, "no")
+        == "yes",
         AnswerKeys.OLLAMA_MODE: cookiecutter_context.get(
             AnswerKeys.OLLAMA_MODE, "none"
         ),
@@ -233,10 +235,13 @@ def generate_with_copier(
 
     # Generate migrations for services that need them (always, regardless of engine)
     if needs_migration_files:
+        # Get ai_voice from copier_data (it's a boolean after conversion)
+        ai_voice_enabled: bool = copier_data.get(AnswerKeys.AI_VOICE, False) is True
         context = {
             "include_auth": is_auth_included,
             "include_ai": is_ai_included,
             "ai_backend": ai_backend_str,
+            "ai_voice": ai_voice_enabled,
         }
         services = get_services_needing_migrations(context)
         if services:

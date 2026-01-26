@@ -155,6 +155,13 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/cli/rag.py",
             "tests/services/rag",
         ],
+        AnswerKeys.AI_VOICE: [
+            "app/components/backend/api/voice",
+            "app/services/ai/voice",
+            "tests/services/ai/voice",
+            "tests/api/test_voice_endpoints.py",
+            "app/components/frontend/dashboard/modals/voice_settings_tab.py",
+        ],
     }
 
 
@@ -448,6 +455,17 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/services/ai/rag_stats_context.py")
         remove_file(project_path, "tests/services/ai/test_rag_stats_context.py")
         remove_file(project_path, "app/components/frontend/dashboard/modals/rag_tab.py")
+
+    # Remove voice (TTS/STT) if not enabled
+    if not is_enabled(AnswerKeys.AI_VOICE):
+        remove_dir(project_path, "app/components/backend/api/voice")
+        remove_dir(project_path, "app/services/ai/voice")
+        remove_dir(project_path, "tests/services/ai/voice")
+        remove_file(project_path, "tests/api/test_voice_endpoints.py")
+        remove_file(
+            project_path,
+            "app/components/frontend/dashboard/modals/voice_settings_tab.py",
+        )
 
     # Remove comms service if not selected
     if not is_enabled(AnswerKeys.COMMS):

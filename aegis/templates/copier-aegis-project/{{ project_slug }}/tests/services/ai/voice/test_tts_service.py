@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock
 
 from app.services.ai.voice.models import TTSProvider
-from app.services.ai.voice.tts_service import TTSService
+from app.services.ai.voice.tts import TTSService
 
 
 class TestTTSServiceInit:
@@ -26,7 +26,7 @@ class TestTTSServiceInit:
     def test_init_with_explicit_provider(self) -> None:
         """Test initialization with explicit provider overrides settings."""
         settings = MagicMock()
-        settings.TTS_PROVIDER = "piper_local"
+        settings.TTS_PROVIDER = "openai"
 
         service = TTSService(settings, provider=TTSProvider.OPENAI)
 
@@ -72,9 +72,9 @@ class TestTTSServiceProperties:
 
     def test_provider_type_property(self) -> None:
         """Test provider_type property."""
-        service = TTSService(provider=TTSProvider.PIPER_LOCAL)
+        service = TTSService(provider=TTSProvider.OPENAI)
 
-        assert service.provider_type == TTSProvider.PIPER_LOCAL
+        assert service.provider_type == TTSProvider.OPENAI
 
     def test_model_property_returns_default(self) -> None:
         """Test model property returns provider default when not set."""

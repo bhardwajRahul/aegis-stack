@@ -247,11 +247,11 @@ class AIService:
             # 3. Get the full response content
             full_response = response.content
 
-            # 4. Optionally summarize for voice output
+            # 4. Optionally convert for voice output
             voice_response = full_response
-            if voice_mode and len(full_response) > 200:
-                # Only summarize longer responses
-                voice_response = await self._summarize_for_voice(full_response)
+            if voice_mode:
+                # Always convert to natural speech when voice_mode is enabled
+                voice_response = await self.prepare_for_voice(full_response)
 
             # 5. Optionally synthesize voice response
             audio_response: bytes | None = None
@@ -279,41 +279,55 @@ class AIService:
             logger.error(error_msg)
             raise AIServiceError(error_msg) from e
 
-    async def _summarize_for_voice(self, text: str) -> str:
+    async def prepare_for_voice(self, text: str, max_chars: int = 4096) -> str:
         """
-        Summarize a response for spoken output.
+        Convert a response to natural spoken format.
 
-        Creates a concise, conversational version of the response
-        that's natural to speak aloud.
+        Transforms any response (markdown, code, lists) into conversational
+        text that's natural to speak aloud. Always applies the transformation,
+        not just for long responses.
 
         Args:
-            text: The full response text to summarize
+            text: The full response text to convert
+            max_chars: Maximum characters for TTS output (default: 4096)
 
         Returns:
-            A voice-optimized summary (2-3 sentences)
+            A voice-optimized, conversational version of the response
         """
-        summary_prompt = (
-            "Summarize the following response for spoken output. "
-            "Keep it concise (2-3 sentences max), conversational, and natural to speak aloud. "
-            "Remove technical formatting, lists, code blocks, and markdown. "
-            "Focus on the key information:\n\n"
+        # Leave buffer for safety
+        target_chars = max_chars - 100
+
+        conversion_prompt = (
+            "Convert the following response into natural spoken language. "
+            "Remove markdown formatting, bullet points, code blocks, and technical symbols. "
+            "Make it conversational and natural to speak aloud. "
+            "Keep the key information but phrase it as you would say it in conversation. "
+            f"Stay under {target_chars} characters:\n\n"
             f"{text}"
         )
 
-        # Use a temporary conversation for summarization
+        # Use a temporary conversation for conversion
         # Don't save to history as this is an internal operation
         try:
-            # Create a lightweight chat call for summarization
+            # Create a lightweight chat call for conversion
             result = await self.chat(
-                message=summary_prompt,
+                message=conversion_prompt,
                 conversation_id=None,  # New conversation
-                user_id="system_voice_summarize",
+                user_id="system_voice_convert",
             )
             return result.content
         except Exception as e:
-            logger.warning(f"Voice summarization failed, using truncated original: {e}")
-            # Fallback: return first 200 chars
-            return text[:200] + "..." if len(text) > 200 else text
+            logger.warning(f"Voice conversion failed, using truncated original: {e}")
+            # Fallback: return truncated text
+            if len(text) > target_chars:
+                truncated = text[:target_chars]
+                # Try to end at a sentence boundary
+                for end_char in [". ", "! ", "? ", "\n"]:
+                    last_idx = truncated.rfind(end_char)
+                    if last_idx > target_chars // 2:
+                        return truncated[:last_idx + 1].strip()
+                return truncated.strip() + "..."
+            return text
 
     async def chat(
         self,

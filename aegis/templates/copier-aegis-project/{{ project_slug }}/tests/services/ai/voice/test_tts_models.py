@@ -17,10 +17,6 @@ class TestTTSProvider:
         """Test OpenAI provider value."""
         assert TTSProvider.OPENAI.value == "openai"
 
-    def test_piper_local_provider(self) -> None:
-        """Test Piper local provider value."""
-        assert TTSProvider.PIPER_LOCAL.value == "piper_local"
-
     def test_all_providers_are_strings(self) -> None:
         """Test all providers have string values."""
         for provider in TTSProvider:
