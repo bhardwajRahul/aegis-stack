@@ -372,3 +372,133 @@ class TestIsAIServiceWithOptions:
         """Partial matches like 'ai_test' should return False."""
         assert is_ai_service_with_options("ai_test") is False
         assert is_ai_service_with_options("my_ai") is False
+
+
+class TestAIServiceParserVoiceFeature:
+    """Test voice feature flag in AI service configuration.
+
+    The voice feature flag enables TTS (Text-to-Speech) and STT (Speech-to-Text)
+    capabilities in the AI service.
+    """
+
+    def test_voice_enabled_defaults_to_false(self) -> None:
+        """Voice should be disabled by default."""
+        result = parse_ai_service_config("ai")
+        assert result.voice_enabled is False
+
+    def test_voice_enabled_with_empty_brackets(self) -> None:
+        """ai[] should have voice disabled."""
+        result = parse_ai_service_config("ai[]")
+        assert result.voice_enabled is False
+
+    def test_voice_feature_flag(self) -> None:
+        """ai[voice] should enable voice."""
+        result = parse_ai_service_config("ai[voice]")
+        assert result.voice_enabled is True
+        # Other defaults should remain unchanged
+        assert result.framework == "pydantic-ai"
+        assert result.backend == "memory"
+        assert result.providers == ["public"]
+
+    def test_voice_with_backend(self) -> None:
+        """ai[sqlite, voice] should enable voice and set backend."""
+        result = parse_ai_service_config("ai[sqlite, voice]")
+        assert result.voice_enabled is True
+        assert result.backend == "sqlite"
+
+    def test_voice_with_framework(self) -> None:
+        """ai[langchain, voice] should enable voice and set framework."""
+        result = parse_ai_service_config("ai[langchain, voice]")
+        assert result.voice_enabled is True
+        assert result.framework == "langchain"
+
+    def test_voice_with_provider(self) -> None:
+        """ai[openai, voice] should enable voice and set provider."""
+        result = parse_ai_service_config("ai[openai, voice]")
+        assert result.voice_enabled is True
+        assert result.providers == ["openai"]
+
+    def test_voice_with_all_options(self) -> None:
+        """ai[langchain, sqlite, anthropic, voice] should work with all options."""
+        result = parse_ai_service_config("ai[langchain, sqlite, anthropic, voice]")
+        assert result.voice_enabled is True
+        assert result.framework == "langchain"
+        assert result.backend == "sqlite"
+        assert result.providers == ["anthropic"]
+
+    def test_voice_order_independent(self) -> None:
+        """Voice flag should work regardless of position."""
+        result1 = parse_ai_service_config("ai[voice, sqlite]")
+        result2 = parse_ai_service_config("ai[sqlite, voice]")
+        assert result1.voice_enabled is True
+        assert result2.voice_enabled is True
+        assert result1.backend == result2.backend == "sqlite"
+
+
+class TestAIServiceParserRagAndVoice:
+    """Test RAG and voice feature flags together."""
+
+    def test_rag_defaults_to_false(self) -> None:
+        """RAG should be disabled by default."""
+        result = parse_ai_service_config("ai")
+        assert result.rag_enabled is False
+
+    def test_rag_feature_flag(self) -> None:
+        """ai[rag] should enable RAG."""
+        result = parse_ai_service_config("ai[rag]")
+        assert result.rag_enabled is True
+        assert result.voice_enabled is False
+
+    def test_both_features_enabled(self) -> None:
+        """ai[rag, voice] should enable both features."""
+        result = parse_ai_service_config("ai[rag, voice]")
+        assert result.rag_enabled is True
+        assert result.voice_enabled is True
+
+    def test_all_features_with_options(self) -> None:
+        """ai[langchain, sqlite, openai, rag, voice] should work."""
+        result = parse_ai_service_config("ai[langchain, sqlite, openai, rag, voice]")
+        assert result.rag_enabled is True
+        assert result.voice_enabled is True
+        assert result.framework == "langchain"
+        assert result.backend == "sqlite"
+        assert result.providers == ["openai"]
+
+
+class TestAIServiceConfigVoiceAttribute:
+    """Test the AIServiceConfig dataclass voice_enabled attribute."""
+
+    def test_config_has_voice_enabled_attribute(self) -> None:
+        """AIServiceConfig should have voice_enabled attribute."""
+        config = AIServiceConfig(
+            framework="pydantic-ai",
+            backend="memory",
+            providers=["public"],
+            voice_enabled=True,
+        )
+        assert config.voice_enabled is True
+
+    def test_config_voice_enabled_defaults_false(self) -> None:
+        """AIServiceConfig voice_enabled should default to False."""
+        config = AIServiceConfig(
+            framework="pydantic-ai",
+            backend="memory",
+            providers=["public"],
+        )
+        assert config.voice_enabled is False
+
+    def test_config_equality_with_voice(self) -> None:
+        """AIServiceConfig instances with different voice_enabled are not equal."""
+        config1 = AIServiceConfig(
+            framework="pydantic-ai",
+            backend="memory",
+            providers=["public"],
+            voice_enabled=False,
+        )
+        config2 = AIServiceConfig(
+            framework="pydantic-ai",
+            backend="memory",
+            providers=["public"],
+            voice_enabled=True,
+        )
+        assert config1 != config2

@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock
 
 from app.services.ai.voice.models import TTSProvider
-from app.services.ai.voice.tts_config import TTSConfig, get_tts_config
+from app.services.ai.voice.tts import TTSConfig, get_tts_config
 
 
 class TestTTSConfigDefaults:
@@ -75,7 +75,6 @@ class TestTTSConfigFromSettings:
         """Test each valid provider string is parsed correctly."""
         providers = [
             ("openai", TTSProvider.OPENAI),
-            ("piper_local", TTSProvider.PIPER_LOCAL),
         ]
 
         for provider_str, expected_enum in providers:
@@ -104,12 +103,6 @@ class TestTTSConfigGetModel:
 
         assert config.get_model() == "tts-1"
 
-    def test_get_model_returns_provider_default_piper(self) -> None:
-        """Test get_model returns Piper default when model not set."""
-        config = TTSConfig(provider=TTSProvider.PIPER_LOCAL)
-
-        assert config.get_model() == "en_US-lessac-medium"
-
 
 class TestTTSConfigGetVoice:
     """Test TTSConfig.get_voice() method."""
@@ -126,12 +119,6 @@ class TestTTSConfigGetVoice:
 
         assert config.get_voice() == "alloy"
 
-    def test_get_voice_returns_provider_default_piper(self) -> None:
-        """Test get_voice returns Piper default when voice not set."""
-        config = TTSConfig(provider=TTSProvider.PIPER_LOCAL)
-
-        assert config.get_voice() == "default"
-
 
 class TestTTSConfigGetApiKey:
     """Test TTSConfig.get_api_key() method."""
@@ -144,14 +131,6 @@ class TestTTSConfigGetApiKey:
         config = TTSConfig(provider=TTSProvider.OPENAI)
 
         assert config.get_api_key(settings) == "sk-test-openai-key"
-
-    def test_get_api_key_local_returns_none(self) -> None:
-        """Test get_api_key returns None for local providers."""
-        settings = MagicMock()
-
-        config = TTSConfig(provider=TTSProvider.PIPER_LOCAL)
-
-        assert config.get_api_key(settings) is None
 
     def test_get_api_key_missing_returns_none(self) -> None:
         """Test get_api_key returns None when key not set."""
@@ -184,15 +163,6 @@ class TestTTSConfigValidation:
 
         assert len(errors) == 1
         assert "OPENAI_API_KEY" in errors[0]
-
-    def test_validate_local_no_key_required(self) -> None:
-        """Test validation passes for local providers without API key."""
-        settings = MagicMock(spec=[])
-
-        config = TTSConfig(provider=TTSProvider.PIPER_LOCAL)
-        errors = config.validate(settings)
-
-        assert len(errors) == 0
 
 
 class TestTTSConfigIsAvailable:

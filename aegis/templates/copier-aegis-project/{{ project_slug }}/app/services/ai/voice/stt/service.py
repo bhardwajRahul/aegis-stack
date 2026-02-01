@@ -6,11 +6,16 @@ configuration management, and optional caching.
 """
 
 import logging
+import time
+from datetime import UTC, datetime
 from typing import Any
 
+from app.core.db import get_async_session
+
+from ..models import AudioInput, STTProvider, TranscriptionResult
 from .config import STTConfig, get_stt_config
-from .models import AudioInput, STTProvider, TranscriptionResult
-from .stt_providers import BaseSTTProvider, get_stt_provider
+from .providers import BaseSTTProvider, get_stt_provider
+from .usage import STTUsage
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +28,8 @@ class STTService:
 
     Example usage:
         ```python
-        from app.services.ai.voice import STTService, AudioInput, STTProvider
+        from app.services.ai.voice.stt import STTService
+        from app.services.ai.voice.models import AudioInput, STTProvider
 
         # Initialize with settings
         stt = STTService(settings)
@@ -122,11 +128,16 @@ class STTService:
 
         return self._provider_instance
 
-    async def transcribe(self, audio: AudioInput) -> TranscriptionResult:
+    async def transcribe(
+        self,
+        audio: AudioInput,
+        user_id: str | None = None,
+    ) -> TranscriptionResult:
         """Transcribe audio to text.
 
         Args:
             audio: AudioInput containing raw audio bytes and metadata.
+            user_id: Optional user identifier for usage tracking.
 
         Returns:
             TranscriptionResult with transcribed text and metadata.
@@ -141,14 +152,38 @@ class STTService:
             f"format={audio.format.value}) with {provider.provider_type.value}"
         )
 
-        result = await provider.transcribe(audio)
+        start_time = time.perf_counter()
+        result: TranscriptionResult | None = None
+        error_message: str | None = None
+        success = True
 
-        logger.debug(
-            f"Transcription complete: {len(result.text)} chars, "
-            f"language={result.language}"
-        )
+        try:
+            result = await provider.transcribe(audio)
 
-        return result
+            logger.debug(
+                f"Transcription complete: {len(result.text)} chars, "
+                f"language={result.language}"
+            )
+
+            return result
+
+        except Exception as e:
+            success = False
+            error_message = str(e)
+            raise
+
+        finally:
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            await self._record_usage(
+                input_bytes=len(audio.content),
+                input_duration_seconds=audio.duration_seconds,
+                output_characters=len(result.text) if result else None,
+                detected_language=result.language if result else None,
+                latency_ms=latency_ms,
+                user_id=user_id,
+                success=success,
+                error_message=error_message,
+            )
 
     def reset_provider(self) -> None:
         """Reset the provider instance.
@@ -194,3 +229,53 @@ class STTService:
             "available": len(errors) == 0,
             "errors": errors if errors else None,
         }
+
+    async def _record_usage(
+        self,
+        input_bytes: int,
+        input_duration_seconds: float | None,
+        output_characters: int | None,
+        detected_language: str | None,
+        latency_ms: int,
+        user_id: str | None,
+        success: bool,
+        error_message: str | None,
+    ) -> None:
+        """Record STT usage to database.
+
+        Args:
+            input_bytes: Size of input audio in bytes.
+            input_duration_seconds: Duration of input audio.
+            output_characters: Length of transcribed text.
+            detected_language: Detected or specified language.
+            latency_ms: Request latency in milliseconds.
+            user_id: Optional user identifier.
+            success: Whether transcription succeeded.
+            error_message: Error message if transcription failed.
+        """
+        try:
+            async with get_async_session() as session:
+                usage = STTUsage(
+                    provider=self.provider_type.value,
+                    model=self.model,
+                    user_id=user_id,
+                    timestamp=datetime.now(UTC),
+                    input_duration_seconds=input_duration_seconds,
+                    input_bytes=input_bytes,
+                    output_characters=output_characters,
+                    detected_language=detected_language,
+                    latency_ms=latency_ms,
+                    total_cost=0.0,  # TODO: Calculate cost based on provider pricing
+                    success=success,
+                    error_message=error_message,
+                )
+                session.add(usage)
+
+            logger.debug(
+                f"STT usage recorded: {input_bytes} bytes, "
+                f"{latency_ms}ms, success={success}"
+            )
+
+        except Exception as e:
+            # Don't fail the request if usage tracking fails
+            logger.warning(f"Failed to record STT usage: {e}")

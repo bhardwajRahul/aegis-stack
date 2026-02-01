@@ -11,6 +11,7 @@ from aegis.core.migration_generator import (
     AI_MIGRATION,
     AUTH_MIGRATION,
     MIGRATION_SPECS,
+    VOICE_MIGRATION,
     ColumnSpec,
     IndexSpec,
     TableSpec,
@@ -327,3 +328,192 @@ class TestDataclasses:
         table = TableSpec("test", [ColumnSpec("id", "sa.Integer()")])
         assert table.indexes == []
         assert table.foreign_keys == []
+
+
+class TestVoiceMigrationSpec:
+    """Test AI voice migration specification.
+
+    The voice migration creates the voice_usage table for tracking
+    TTS (Text-to-Speech) and STT (Speech-to-Text) usage.
+    """
+
+    def test_ai_voice_spec_exists(self) -> None:
+        """Test ai_voice migration spec is defined in MIGRATION_SPECS."""
+        assert "ai_voice" in MIGRATION_SPECS
+        assert VOICE_MIGRATION.service_name == "ai_voice"
+
+    def test_voice_migration_has_one_table(self) -> None:
+        """Voice migration should have a single voice_usage table."""
+        assert len(VOICE_MIGRATION.tables) == 1
+        assert VOICE_MIGRATION.tables[0].name == "voice_usage"
+
+    def test_voice_usage_table_core_columns(self) -> None:
+        """Voice usage table should have core columns for all usage types."""
+        table = VOICE_MIGRATION.tables[0]
+        column_names = [col.name for col in table.columns]
+
+        # Core columns shared by TTS and STT
+        assert "id" in column_names
+        assert "usage_type" in column_names  # "tts" or "stt"
+        assert "provider" in column_names
+        assert "model" in column_names
+        assert "user_id" in column_names
+        assert "timestamp" in column_names
+        assert "latency_ms" in column_names
+        assert "total_cost" in column_names
+        assert "success" in column_names
+        assert "error_message" in column_names
+
+    def test_voice_usage_table_tts_columns(self) -> None:
+        """Voice usage table should have TTS-specific columns."""
+        table = VOICE_MIGRATION.tables[0]
+        column_names = [col.name for col in table.columns]
+
+        # TTS-specific columns (null for STT records)
+        assert "voice" in column_names
+        assert "input_characters" in column_names
+        assert "output_duration_seconds" in column_names
+        assert "output_audio_bytes" in column_names
+
+    def test_voice_usage_table_stt_columns(self) -> None:
+        """Voice usage table should have STT-specific columns."""
+        table = VOICE_MIGRATION.tables[0]
+        column_names = [col.name for col in table.columns]
+
+        # STT-specific columns (null for TTS records)
+        assert "input_duration_seconds" in column_names
+        assert "input_audio_bytes" in column_names
+        assert "output_characters" in column_names
+        assert "detected_language" in column_names
+
+    def test_voice_usage_table_indexes(self) -> None:
+        """Voice usage table should have appropriate indexes."""
+        table = VOICE_MIGRATION.tables[0]
+        index_names = [idx.name for idx in table.indexes]
+
+        assert "ix_voice_usage_usage_type" in index_names
+        assert "ix_voice_usage_provider" in index_names
+        assert "ix_voice_usage_user_id" in index_names
+        assert "ix_voice_usage_timestamp" in index_names
+
+    def test_voice_migration_description(self) -> None:
+        """Voice migration should have a descriptive description."""
+        assert "voice" in VOICE_MIGRATION.description.lower()
+        assert "tts" in VOICE_MIGRATION.description.lower()
+        assert "stt" in VOICE_MIGRATION.description.lower()
+
+
+class TestGetServicesNeedingMigrationsVoice:
+    """Test detection of ai_voice service needing migrations."""
+
+    def test_ai_voice_needs_migration_when_enabled(self) -> None:
+        """AI voice should need migration when all conditions met."""
+        context = {
+            "include_auth": False,
+            "include_ai": True,
+            "ai_backend": "sqlite",
+            "ai_voice": True,
+        }
+        result = get_services_needing_migrations(context)
+        assert "ai_voice" in result
+
+    def test_ai_voice_needs_migration_with_yes_string(self) -> None:
+        """AI voice should work with 'yes' string (cookiecutter format)."""
+        context = {
+            "include_auth": False,
+            "include_ai": "yes",
+            "ai_backend": "sqlite",
+            "ai_voice": "yes",
+        }
+        result = get_services_needing_migrations(context)
+        assert "ai_voice" in result
+
+    def test_ai_voice_not_needed_when_disabled(self) -> None:
+        """AI voice should not need migration when voice disabled."""
+        context = {
+            "include_auth": False,
+            "include_ai": True,
+            "ai_backend": "sqlite",
+            "ai_voice": False,
+        }
+        result = get_services_needing_migrations(context)
+        assert "ai_voice" not in result
+
+    def test_ai_voice_not_needed_without_persistence(self) -> None:
+        """AI voice should not need migration with memory backend."""
+        context = {
+            "include_auth": False,
+            "include_ai": True,
+            "ai_backend": "memory",
+            "ai_voice": True,
+        }
+        result = get_services_needing_migrations(context)
+        assert "ai_voice" not in result
+
+    def test_ai_voice_not_needed_without_ai(self) -> None:
+        """AI voice should not need migration without AI service."""
+        context = {
+            "include_auth": False,
+            "include_ai": False,
+            "ai_backend": "sqlite",
+            "ai_voice": True,
+        }
+        result = get_services_needing_migrations(context)
+        assert "ai_voice" not in result
+
+    def test_full_stack_with_voice(self) -> None:
+        """Full stack with auth, AI, and voice should have all migrations."""
+        context = {
+            "include_auth": True,
+            "include_ai": True,
+            "ai_backend": "sqlite",
+            "ai_voice": True,
+        }
+        result = get_services_needing_migrations(context)
+        assert result == ["auth", "ai", "ai_voice"]
+
+
+class TestGenerateVoiceMigration:
+    """Test voice migration file generation."""
+
+    def test_generates_voice_migration(self, tmp_path: Path) -> None:
+        """Test generates ai_voice migration file."""
+        result = generate_migration(tmp_path, "ai_voice")
+
+        assert result is not None
+        assert result.exists()
+        assert result.name == "001_ai_voice.py"
+
+        # Verify content
+        content = result.read_text()
+        assert "'voice_usage'" in content
+        assert "'usage_type'" in content
+        assert "op.create_index" in content
+
+    def test_voice_migration_after_ai(self, tmp_path: Path) -> None:
+        """Test voice migration chains correctly after AI migration."""
+        result = generate_migrations_for_services(tmp_path, ["ai", "ai_voice"])
+
+        assert len(result) == 2
+        assert result[0].name == "001_ai.py"
+        assert result[1].name == "002_ai_voice.py"
+
+        # Verify down_revision chain
+        ai_content = result[0].read_text()
+        voice_content = result[1].read_text()
+
+        assert "down_revision = None" in ai_content
+        assert "down_revision = '001'" in voice_content
+
+    def test_full_migration_chain(self, tmp_path: Path) -> None:
+        """Test full migration chain with auth, AI, and voice."""
+        result = generate_migrations_for_services(tmp_path, ["auth", "ai", "ai_voice"])
+
+        assert len(result) == 3
+        assert result[0].name == "001_auth.py"
+        assert result[1].name == "002_ai.py"
+        assert result[2].name == "003_ai_voice.py"
+
+        # Verify chain
+        voice_content = result[2].read_text()
+        assert "down_revision = '002'" in voice_content

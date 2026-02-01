@@ -216,3 +216,115 @@ class TestCopierAnswersTemplate:
             assert flag in template_content, (
                 f"Service flag '{flag}' is missing from .copier-answers.yml.jinja - this will cause add/remove operations to break for this service!"
             )
+
+
+class TestTemplateGeneratorVoice:
+    """Test AI voice configuration in template context.
+
+    These tests verify that the ai_voice flag is correctly set in the
+    template context when the voice feature is enabled via bracket syntax.
+    """
+
+    def test_ai_voice_disabled_by_default(self) -> None:
+        """AI voice should be disabled by default."""
+        gen = TemplateGenerator(
+            project_name="test-project",
+            selected_components=[],
+            selected_services=["ai"],
+        )
+        assert gen.ai_voice is False
+
+    def test_ai_voice_enabled_with_bracket_syntax(self) -> None:
+        """AI voice should be enabled with ai[voice] syntax."""
+        gen = TemplateGenerator(
+            project_name="test-project",
+            selected_components=[],
+            selected_services=["ai[voice]"],
+        )
+        assert gen.ai_voice is True
+
+    def test_ai_voice_with_other_options(self) -> None:
+        """AI voice should work with other bracket options."""
+        gen = TemplateGenerator(
+            project_name="test-project",
+            selected_components=["database"],
+            selected_services=["ai[sqlite, voice]"],
+        )
+        assert gen.ai_voice is True
+        assert gen.ai_backend == StorageBackends.SQLITE
+
+    def test_context_includes_ai_voice_no(self) -> None:
+        """Template context should include ai_voice as 'no' when disabled."""
+        gen = TemplateGenerator(
+            project_name="test-project",
+            selected_components=[],
+            selected_services=["ai"],
+        )
+        context = gen.get_template_context()
+        assert context["ai_voice"] == "no"
+
+    def test_context_includes_ai_voice_yes(self) -> None:
+        """Template context should include ai_voice as 'yes' when enabled."""
+        gen = TemplateGenerator(
+            project_name="test-project",
+            selected_components=[],
+            selected_services=["ai[voice]"],
+        )
+        context = gen.get_template_context()
+        assert context["ai_voice"] == "yes"
+
+    def test_no_ai_service_voice_disabled(self) -> None:
+        """Without AI service, ai_voice should be disabled."""
+        gen = TemplateGenerator(
+            project_name="test-project",
+            selected_components=[],
+            selected_services=[],
+        )
+        assert gen.ai_voice is False
+        context = gen.get_template_context()
+        assert context["ai_voice"] == "no"
+
+
+class TestTemplateGeneratorRagAndVoice:
+    """Test RAG and voice features together in template context."""
+
+    def test_rag_disabled_by_default(self) -> None:
+        """RAG should be disabled by default."""
+        gen = TemplateGenerator(
+            project_name="test-project",
+            selected_components=[],
+            selected_services=["ai"],
+        )
+        assert gen.ai_rag is False
+
+    def test_rag_enabled_with_bracket_syntax(self) -> None:
+        """RAG should be enabled with ai[rag] syntax."""
+        gen = TemplateGenerator(
+            project_name="test-project",
+            selected_components=[],
+            selected_services=["ai[rag]"],
+        )
+        assert gen.ai_rag is True
+        assert gen.ai_voice is False
+
+    def test_both_rag_and_voice_enabled(self) -> None:
+        """Both RAG and voice should be enabled together."""
+        gen = TemplateGenerator(
+            project_name="test-project",
+            selected_components=["database"],
+            selected_services=["ai[sqlite, rag, voice]"],
+        )
+        assert gen.ai_rag is True
+        assert gen.ai_voice is True
+        assert gen.ai_backend == StorageBackends.SQLITE
+
+    def test_context_with_both_features(self) -> None:
+        """Template context should correctly reflect both features."""
+        gen = TemplateGenerator(
+            project_name="test-project",
+            selected_components=[],
+            selected_services=["ai[rag, voice]"],
+        )
+        context = gen.get_template_context()
+        assert context["ai_rag"] == "yes"
+        assert context["ai_voice"] == "yes"

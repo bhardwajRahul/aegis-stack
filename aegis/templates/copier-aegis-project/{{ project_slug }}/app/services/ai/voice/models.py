@@ -23,7 +23,6 @@ class TTSProvider(str, Enum):
     """Supported Text-to-Speech providers."""
 
     OPENAI = "openai"  # OpenAI TTS API
-    PIPER_LOCAL = "piper_local"  # Piper local TTS (ONNX-based)
 
 
 class OpenAIVoice(str, Enum):
@@ -62,6 +61,10 @@ class AudioInput(BaseModel):
     language: str | None = Field(
         default=None,
         description="ISO 639-1 language code (e.g., 'en', 'es'). If None, auto-detect.",
+    )
+    duration_seconds: float | None = Field(
+        default=None,
+        description="Duration of audio in seconds (optional, for usage tracking)",
     )
 
     model_config = {"arbitrary_types_allowed": True}
@@ -148,3 +151,109 @@ class VoiceChatResponse(BaseModel):
     )
 
     model_config = {"arbitrary_types_allowed": True}
+
+
+# =============================================================================
+# Voice Catalog Models
+# =============================================================================
+
+
+class VoiceCategory(str, Enum):
+    """Voice personality/style categories."""
+
+    NEUTRAL = "neutral"
+    WARM = "warm"
+    ENERGETIC = "energetic"
+    AUTHORITATIVE = "authoritative"
+    EXPRESSIVE = "expressive"
+
+
+class ProviderInfo(BaseModel):
+    """Information about a voice provider (TTS or STT)."""
+
+    id: str = Field(..., description="Provider identifier (e.g., 'openai')")
+    name: str = Field(..., description="Display name (e.g., 'OpenAI')")
+    type: str = Field(..., description="Provider type: 'tts' or 'stt'")
+    requires_api_key: bool = Field(
+        default=True, description="Whether this provider requires an API key"
+    )
+    api_key_env_var: str | None = Field(
+        default=None, description="Environment variable name for API key"
+    )
+    is_local: bool = Field(
+        default=False, description="Whether this is a local/offline provider"
+    )
+    description: str | None = Field(default=None, description="Provider description")
+
+
+class ModelInfo(BaseModel):
+    """Information about a voice model."""
+
+    id: str = Field(..., description="Model identifier (e.g., 'tts-1')")
+    name: str = Field(..., description="Display name (e.g., 'TTS-1')")
+    provider_id: str = Field(..., description="Provider this model belongs to")
+    quality: str = Field(
+        default="standard", description="Quality tier: 'standard', 'hd', 'turbo'"
+    )
+    description: str | None = Field(default=None, description="Model description")
+    supports_streaming: bool = Field(
+        default=False, description="Whether this model supports streaming"
+    )
+    max_input_chars: int | None = Field(
+        default=None, description="Maximum input characters for TTS"
+    )
+
+
+class VoiceInfo(BaseModel):
+    """Information about a voice option."""
+
+    id: str = Field(..., description="Voice identifier (e.g., 'alloy')")
+    name: str = Field(..., description="Display name (e.g., 'Alloy')")
+    provider_id: str = Field(..., description="Provider this voice belongs to")
+    model_ids: list[str] = Field(
+        default_factory=list, description="Compatible model IDs"
+    )
+    description: str = Field(..., description="Voice description")
+    category: VoiceCategory | None = Field(
+        default=None, description="Voice personality category"
+    )
+    gender: str | None = Field(
+        default=None, description="Voice gender: 'male', 'female', 'neutral'"
+    )
+    preview_text: str = Field(
+        default="Hello, I'm {voice_name}. How can I help you today?",
+        description="Default text for voice preview",
+    )
+
+
+class VoiceSettingsResponse(BaseModel):
+    """Current voice settings response."""
+
+    tts_provider: str = "openai"
+    tts_model: str = "tts-1"
+    tts_voice: str = "alloy"
+    tts_speed: float = 1.0
+    stt_provider: str = "openai_whisper"
+    stt_model: str = "whisper-1"
+    stt_language: str | None = None
+
+
+class VoiceSettingsUpdate(BaseModel):
+    """Voice settings update request (partial update)."""
+
+    tts_provider: str | None = Field(None, description="TTS provider ID")
+    tts_model: str | None = Field(None, description="TTS model ID")
+    tts_voice: str | None = Field(None, description="TTS voice ID")
+    tts_speed: float | None = Field(
+        None, ge=0.25, le=4.0, description="TTS speed (0.25-4.0)"
+    )
+    stt_provider: str | None = Field(None, description="STT provider ID")
+    stt_model: str | None = Field(None, description="STT model ID")
+    stt_language: str | None = Field(None, description="STT language code (e.g., 'en')")
+
+
+class VoicePreviewRequest(BaseModel):
+    """Voice preview generation request."""
+
+    voice_id: str = Field(..., description="Voice ID to preview")
+    text: str | None = Field(None, description="Custom text (uses default if None)")

@@ -22,13 +22,17 @@ class AIServiceConfig:
     backend: str
     providers: list[str]
     rag_enabled: bool = False
+    voice_enabled: bool = False
 
 
 # Valid values for detection (using constants)
 FRAMEWORKS = set(AIFrameworks.ALL)
 BACKENDS = {StorageBackends.MEMORY, StorageBackends.SQLITE, StorageBackends.POSTGRES}
 PROVIDERS = AIProviders.ALL
-FEATURES = {"rag"}  # Feature flags (e.g., rag for RAG support)
+FEATURES = {
+    "rag",
+    "voice",
+}  # Feature flags (e.g., rag for RAG support, voice for TTS/STT)
 
 # Defaults (using constants)
 DEFAULT_FRAMEWORK = AIFrameworks.PYDANTIC_AI
@@ -137,12 +141,14 @@ def parse_ai_service_config(service_string: str) -> AIServiceConfig:
     backend = found_backends[0] if found_backends else DEFAULT_BACKEND
     providers = found_providers if found_providers else DEFAULT_PROVIDERS.copy()
     rag_enabled = "rag" in found_features
+    voice_enabled = "voice" in found_features
 
     return AIServiceConfig(
         framework=framework,
         backend=backend,
         providers=providers,
         rag_enabled=rag_enabled,
+        voice_enabled=voice_enabled,
     )
 
 

@@ -41,6 +41,15 @@ except ImportError:
     LLMCatalogTab = None  # type: ignore[misc, assignment]
     _HAS_LLM_CATALOG = False
 
+# Voice Settings tab - for TTS/STT configuration
+try:
+    from .voice_settings_tab import VoiceSettingsTab
+
+    _HAS_VOICE_SETTINGS = True
+except ImportError:
+    VoiceSettingsTab = None  # type: ignore[misc, assignment]
+    _HAS_VOICE_SETTINGS = False
+
 
 class OverviewSection(ft.Container):
     """Overview section showing key AI service metrics."""
@@ -223,6 +232,10 @@ class AIDetailDialog(BaseDetailPopup):
         # Add RAG tab only if RAG service is enabled
         if _HAS_RAG and RAGTab is not None:
             tabs_list.append(ft.Tab(text="RAG", content=RAGTab()))
+
+        # Add Voice tab
+        if _HAS_VOICE_SETTINGS and VoiceSettingsTab is not None:
+            tabs_list.append(ft.Tab(text="Voice", content=VoiceSettingsTab()))
 
         # Create tabbed interface
         tabs = ft.Tabs(

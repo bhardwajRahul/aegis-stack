@@ -72,13 +72,13 @@ services:
     <<: *app
     command:
       - scheduler
-{%- if include_redis or scheduler_backend == 'postgres' %}
+{%- if include_redis or scheduler_backend == 'postgres' or database_engine == 'postgres' %}
     depends_on:
 {%- if include_redis %}
       redis:
         condition: service_healthy
 {%- endif %}
-{%- if scheduler_backend == 'postgres' %}
+{%- if scheduler_backend == 'postgres' or database_engine == 'postgres' %}
       webserver:
         condition: service_healthy
 {%- endif %}

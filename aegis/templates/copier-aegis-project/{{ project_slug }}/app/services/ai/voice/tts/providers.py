@@ -1,17 +1,15 @@
 """
 TTS provider implementations.
 
-Provides a unified interface for Text-to-Speech synthesis across
-multiple providers: OpenAI TTS and local Piper.
+Provides a unified interface for Text-to-Speech synthesis.
 """
 
-import asyncio
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from typing import Any
 
-from .models import (
+from ..models import (
     AudioFormat,
     SpeechRequest,
     SpeechResult,
@@ -166,90 +164,6 @@ class OpenAITTSProvider(BaseTTSProvider):
             raise RuntimeError(f"Speech synthesis failed: {e}") from e
 
 
-class PiperLocalProvider(BaseTTSProvider):
-    """Piper local TTS provider (ONNX-based).
-
-    High-quality, fast local TTS that doesn't require a GPU.
-    Requires piper-tts to be installed.
-    """
-
-    provider_type = TTSProvider.PIPER_LOCAL
-
-    def __init__(
-        self,
-        model_path: str | None = None,
-        voice: str = "en_US-lessac-medium",
-    ) -> None:
-        """Initialize Piper local TTS provider.
-
-        Args:
-            model_path: Path to Piper model file (.onnx).
-                If None, uses voice name to find model.
-            voice: Voice/model name (e.g., en_US-lessac-medium).
-        """
-        self.model_path = model_path
-        self.voice = voice
-        self._piper: Any = None
-
-    def _get_piper(self) -> Any:
-        """Lazy-load the Piper TTS engine."""
-        if self._piper is None:
-            try:
-                from piper import PiperVoice
-            except ImportError as e:
-                raise RuntimeError(
-                    "Piper TTS not installed. Install with: uv add piper-tts"
-                ) from e
-
-            if self.model_path:
-                self._piper = PiperVoice.load(self.model_path)
-            else:
-                # Try to find model by voice name
-                raise RuntimeError(
-                    f"Piper model path required. Download a model for voice '{self.voice}' "
-                    "from https://github.com/rhasspy/piper/releases"
-                )
-
-        return self._piper
-
-    async def synthesize(self, request: SpeechRequest) -> SpeechResult:
-        """Synthesize speech using local Piper TTS."""
-        import io
-        import wave
-
-        piper = self._get_piper()
-
-        try:
-            # Run synthesis in thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
-
-            def _synthesize() -> bytes:
-                # Piper outputs raw PCM audio, we need to wrap it in WAV
-                audio_buffer = io.BytesIO()
-
-                with wave.open(audio_buffer, "wb") as wav_file:
-                    wav_file.setnchannels(1)  # Mono
-                    wav_file.setsampwidth(2)  # 16-bit
-                    wav_file.setframerate(22050)  # Piper default sample rate
-
-                    for audio_chunk in piper.synthesize(request.text):
-                        wav_file.writeframes(audio_chunk)
-
-                return audio_buffer.getvalue()
-
-            audio_data = await loop.run_in_executor(None, _synthesize)
-
-            return SpeechResult(
-                audio=audio_data,
-                format=AudioFormat.WAV,
-                provider=self.provider_type,
-            )
-
-        except Exception as e:
-            logger.error(f"Piper TTS synthesis failed: {e}")
-            raise RuntimeError(f"Speech synthesis failed: {e}") from e
-
-
 def get_tts_provider(
     provider: TTSProvider,
     api_key: str | None = None,
@@ -277,11 +191,6 @@ def get_tts_provider(
             api_key=api_key,
             model=model or "tts-1",
             voice=voice or "alloy",
-            **kwargs,
-        )
-    elif provider == TTSProvider.PIPER_LOCAL:
-        return PiperLocalProvider(
-            voice=voice or "en_US-lessac-medium",
             **kwargs,
         )
     else:

@@ -11,7 +11,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
-from .models import (
+from ..models import (
     AudioFormat,
     AudioInput,
     STTProvider,

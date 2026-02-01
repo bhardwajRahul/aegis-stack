@@ -93,6 +93,9 @@ def setup_logging() -> None:
     logging.getLogger("flet_runtime").setLevel(logging.INFO)
     logging.getLogger("flet_fastapi").setLevel(logging.INFO)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(
+        logging.WARNING
+    )  # Suppress HTTP request logs from health checks
 
     # Suppress RAG service logs (CLI uses progress bar instead)
     logging.getLogger("app.services.rag").setLevel(logging.WARNING)

@@ -1,10 +1,9 @@
 """Tests for TTS providers."""
 
 from app.services.ai.voice.models import TTSProvider
-from app.services.ai.voice.tts_providers import (
+from app.services.ai.voice.tts import (
     BaseTTSProvider,
     OpenAITTSProvider,
-    PiperLocalProvider,
     get_tts_provider,
 )
 
@@ -18,13 +17,6 @@ class TestGetTTSProvider:
 
         assert isinstance(provider, OpenAITTSProvider)
         assert provider.provider_type == TTSProvider.OPENAI
-
-    def test_get_piper_local_provider(self) -> None:
-        """Test factory returns PiperLocalProvider."""
-        provider = get_tts_provider(TTSProvider.PIPER_LOCAL)
-
-        assert isinstance(provider, PiperLocalProvider)
-        assert provider.provider_type == TTSProvider.PIPER_LOCAL
 
     def test_get_provider_with_api_key(self) -> None:
         """Test factory passes API key to provider."""
@@ -126,46 +118,6 @@ class TestOpenAITTSProvider:
         assert isinstance(provider, BaseTTSProvider)
 
 
-class TestPiperLocalProvider:
-    """Test PiperLocalProvider class."""
-
-    def test_default_voice(self) -> None:
-        """Test default voice is en_US-lessac-medium."""
-        provider = PiperLocalProvider()
-
-        assert provider.voice == "en_US-lessac-medium"
-
-    def test_custom_voice(self) -> None:
-        """Test custom voice can be set."""
-        provider = PiperLocalProvider(voice="en_GB-alba-medium")
-
-        assert provider.voice == "en_GB-alba-medium"
-
-    def test_model_path_default_none(self) -> None:
-        """Test model_path defaults to None."""
-        provider = PiperLocalProvider()
-
-        assert provider.model_path is None
-
-    def test_custom_model_path(self) -> None:
-        """Test custom model_path can be set."""
-        provider = PiperLocalProvider(model_path="/path/to/model.onnx")
-
-        assert provider.model_path == "/path/to/model.onnx"
-
-    def test_piper_lazy_loaded(self) -> None:
-        """Test Piper engine is not created until needed."""
-        provider = PiperLocalProvider()
-
-        assert provider._piper is None
-
-    def test_provider_type_is_piper(self) -> None:
-        """Test provider_type is PIPER_LOCAL."""
-        provider = PiperLocalProvider()
-
-        assert provider.provider_type == TTSProvider.PIPER_LOCAL
-
-
 class TestBaseTTSProviderInterface:
     """Test BaseTTSProvider abstract interface."""
 
@@ -173,7 +125,6 @@ class TestBaseTTSProviderInterface:
         """Test all provider classes have synthesize method."""
         providers = [
             OpenAITTSProvider,
-            PiperLocalProvider,
         ]
 
         for provider_class in providers:
@@ -186,7 +137,6 @@ class TestBaseTTSProviderInterface:
         """Test all provider classes have synthesize_stream method."""
         providers = [
             OpenAITTSProvider,
-            PiperLocalProvider,
         ]
 
         for provider_class in providers:
@@ -199,7 +149,6 @@ class TestBaseTTSProviderInterface:
         """Test all provider classes have provider_type class attribute."""
         providers = [
             (OpenAITTSProvider, TTSProvider.OPENAI),
-            (PiperLocalProvider, TTSProvider.PIPER_LOCAL),
         ]
 
         for provider_class, expected_type in providers:

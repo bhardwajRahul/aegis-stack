@@ -124,6 +124,7 @@ class AnswerKeys:
     AI_BACKEND = "ai_backend"
     AI_WITH_PERSISTENCE = "ai_with_persistence"
     AI_RAG = "ai_rag"
+    AI_VOICE = "ai_voice"
     OLLAMA_MODE = "ollama_mode"
     PROJECT_SLUG = "project_slug"
     SRC_PATH = "_src_path"

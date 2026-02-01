@@ -187,6 +187,7 @@ class Settings(BaseSettings):
     # Conversation settings
     AI_MAX_CONVERSATION_LENGTH: int = 50  # Max messages per conversation
     AI_CONVERSATION_TIMEOUT_HOURS: int = 24  # Auto-cleanup old conversations
+{% if ai_voice %}
 
     # Speech-to-Text (STT) Configuration
     # Provider: openai_whisper, whisper_local, faster_whisper, groq_whisper
@@ -197,11 +198,12 @@ class Settings(BaseSettings):
     STT_DEVICE: str | None = None  # Device: 'cpu', 'cuda', 'mps' (None = auto-detect)
 
     # Text-to-Speech (TTS) Configuration
-    # Provider: openai, piper_local
+    # Provider: openai
     TTS_PROVIDER: str = "openai"  # Default to OpenAI TTS API
     TTS_MODEL: str | None = None  # Model: tts-1 (fast), tts-1-hd (quality). None = default
     TTS_VOICE: str | None = None  # Voice: alloy, echo, fable, onyx, nova, shimmer. None = alloy
     TTS_SPEED: float = 1.0  # Speech speed multiplier (0.25 to 4.0)
+{% endif %}
 {% endif %}
 
 {% if include_comms %}

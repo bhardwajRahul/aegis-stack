@@ -12,7 +12,6 @@ from typing import Any
 from app.core.config import settings
 from app.core.log import logger
 from app.services.ai.etl.clients.litellm_client import LiteLLMClient
-from app.services.ai.etl.clients.ollama_client import OllamaClient, OllamaModel
 from app.services.ai.etl.clients.openrouter_client import (
     OpenRouterClient,
     OpenRouterModelIndex,
@@ -30,6 +29,7 @@ from app.services.ai.models.llm import (
     LLMVendor,
     Modality,
 )
+from app.services.ai.ollama import OllamaClient, OllamaModel
 from sqlmodel import Session, select
 
 
@@ -703,14 +703,14 @@ class LLMSyncService:
         # Generate title from model name
         title = model_id.replace("-", " ").replace("_", " ").title()
 
-        # Build description from available metadata
+        # Build description from available metadata (nested in details)
         desc_parts = []
-        if model_data.family:
-            desc_parts.append(f"Family: {model_data.family}")
-        if model_data.parameter_size:
-            desc_parts.append(f"Parameters: {model_data.parameter_size}")
-        if model_data.quantization_level:
-            desc_parts.append(f"Quantization: {model_data.quantization_level}")
+        if model_data.details.family:
+            desc_parts.append(f"Family: {model_data.details.family}")
+        if model_data.details.parameter_size:
+            desc_parts.append(f"Parameters: {model_data.details.parameter_size}")
+        if model_data.details.quantization_level:
+            desc_parts.append(f"Quantization: {model_data.details.quantization_level}")
         desc_parts.append(f"Size: {model_data.size_gb:.1f} GB")
         description = " | ".join(desc_parts)
 
@@ -738,7 +738,7 @@ class LLMSyncService:
                 streamable=True,
                 enabled=True,
                 color=VENDOR_METADATA.get("ollama", {}).get("color", "#FFFFFF"),
-                family=model_data.family,
+                family=model_data.details.family,
                 llm_vendor_id=vendor.id,
             )
 
