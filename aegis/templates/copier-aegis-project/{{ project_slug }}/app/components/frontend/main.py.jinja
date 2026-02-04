@@ -24,6 +24,9 @@ from .dashboard.cards import (
 {% if include_database %}
     DatabaseCard,
 {% endif %}
+{% if include_ingress %}
+    IngressCard,
+{% endif %}
 {% if ollama_mode != "none" %}
     OllamaCard,
 {% endif %}
@@ -644,6 +647,10 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
 {% if include_database %}
                 elif component_name == "database":
                     return DatabaseCard(component_data).build()
+{% endif %}
+{% if include_ingress %}
+                elif component_name == "ingress":
+                    return IngressCard(component_data).build()
 {% endif %}
 {% if ollama_mode != "none" %}
                 elif component_name == "ollama":

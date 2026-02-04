@@ -42,6 +42,9 @@ MODAL_NAME_MAP = {
 {% if include_comms %}
     "service_comms": "comms",
 {% endif %}
+{% if include_ingress %}
+    "ingress": "ingress",
+{% endif %}
     "frontend": "frontend",
 }
 
@@ -108,6 +111,13 @@ def get_component_display_info(
 
     elif component_name == "service_comms":
         return ("Comms Service", "Resend + Twilio")
+{% if include_ingress %}
+
+    elif component_name == "ingress":
+        version = metadata.get("version", "")
+        subtitle = f"Traefik {version}" if version and version != "unknown" else "Traefik"
+        return ("Ingress", subtitle)
+{% endif %}
 
     elif component_name == "frontend":
         return ("Frontend", "Flet")
@@ -222,6 +232,9 @@ class StatusOverviewPanel(ft.Container):
 {% endif %}
 {% if include_comms %}
             "service_comms",
+{% endif %}
+{% if include_ingress %}
+            "ingress",
 {% endif %}
         ]
 

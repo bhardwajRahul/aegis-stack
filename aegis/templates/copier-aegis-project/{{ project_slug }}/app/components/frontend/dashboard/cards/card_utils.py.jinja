@@ -72,8 +72,6 @@ def get_status_color(status: str) -> str:
     }
     return status_colors.get(status.lower(), Theme.Colors.SUCCESS)
 
-{%- if include_ai %}
-
 
 def get_ai_engine_display(metadata: dict) -> str:
     """
@@ -93,7 +91,6 @@ def get_ai_engine_display(metadata: dict) -> str:
     return engine_display_map.get(
         engine, engine.replace("-", " ").title() if engine else "AI Engine"
     )
-{%- endif %}
 
 
 def create_metric_container(label: str, value: str) -> ft.Container:
@@ -464,6 +461,9 @@ def create_modal_for_component(
         DatabaseDetailDialog,
         {%- endif %}
         FrontendDetailDialog,
+        {%- if include_ingress %}
+        IngressDetailDialog,
+        {%- endif %}
         {%- if ollama_mode != "none" %}
         OllamaDetailDialog,
         {%- endif %}
@@ -493,6 +493,9 @@ def create_modal_for_component(
         "database": DatabaseDetailDialog,
         {%- endif %}
         "frontend": FrontendDetailDialog,
+        {%- if include_ingress %}
+        "ingress": IngressDetailDialog,
+        {%- endif %}
         {%- if ollama_mode != "none" %}
         "ollama": OllamaDetailDialog,
         {%- endif %}

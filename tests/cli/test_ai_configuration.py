@@ -32,21 +32,22 @@ class TestAIProviderSelection:
         """Test AI service selection with default providers."""
         # Mock user responses: no components, yes AI service, no to all specific providers (triggers defaults)
         mock_confirm.side_effect = [
-            False,
-            False,
-            False,
-            False,  # redis, worker, scheduler, database
+            False,  # redis
+            False,  # worker
+            False,  # scheduler
+            False,  # database
+            False,  # ingress
             False,  # auth service
             True,  # AI service
-            False,  # Use LangChain? No (use PydanticAI)
+            False,  # Use PydanticAI? (framework, default True)
             False,  # Enable usage tracking with SQLite? No (memory backend)
-            False,
-            False,
-            False,
-            False,
-            False,
-            False,
-            False,  # All AI providers declined (7 providers: openai, anthropic, google, groq, mistral, cohere, ollama)
+            False,  # openai
+            False,  # anthropic
+            False,  # google
+            False,  # groq
+            False,  # mistral
+            False,  # cohere
+            False,  # ollama
             True,  # Enable RAG? Yes (default)
         ]
 
@@ -65,21 +66,22 @@ class TestAIProviderSelection:
         """Test AI service selection with custom provider selection."""
         # Mock user responses: no components, yes AI service, select openai and anthropic
         mock_confirm.side_effect = [
-            False,
-            False,
-            False,
-            False,  # redis, worker, scheduler, database
+            False,  # redis
+            False,  # worker
+            False,  # scheduler
+            False,  # database
+            False,  # ingress
             False,  # auth service
             True,  # AI service
             True,  # Use LangChain? Yes
             False,  # Enable usage tracking with SQLite? No (memory backend)
-            True,  # OpenAI
-            True,  # Anthropic
-            False,
-            False,
-            False,
-            False,
-            False,  # Google, Groq, Mistral, Cohere, Ollama (7 providers)
+            True,  # openai
+            True,  # anthropic
+            False,  # google
+            False,  # groq
+            False,  # mistral
+            False,  # cohere
+            False,  # ollama
             True,  # Enable RAG? Yes (default)
         ]
 
@@ -99,21 +101,22 @@ class TestAIProviderSelection:
         """Test AI service selection with recommended providers selected by default."""
         # Mock user responses: no components, yes AI service, accept recommended defaults
         mock_confirm.side_effect = [
-            False,
-            False,
-            False,
-            False,  # redis, worker, scheduler, database
+            False,  # redis
+            False,  # worker
+            False,  # scheduler
+            False,  # database
+            False,  # ingress
             False,  # auth service
             True,  # AI service
             False,  # Use LangChain? No (use PydanticAI)
             False,  # Enable usage tracking with SQLite? No (memory backend)
-            False,
-            False,  # OpenAI, Anthropic
-            True,
-            True,  # Google (recommended), Groq (recommended)
-            False,
-            False,
-            False,  # Mistral, Cohere, Ollama (7 providers)
+            False,  # openai
+            False,  # anthropic
+            True,  # google (recommended)
+            True,  # groq (recommended)
+            False,  # mistral
+            False,  # cohere
+            False,  # ollama
             True,  # Enable RAG? Yes (default)
         ]
 
@@ -133,10 +136,11 @@ class TestAIProviderSelection:
         """Test when AI service is not selected."""
         # Mock user responses: no components, no services
         mock_confirm.side_effect = [
-            False,
-            False,
-            False,
-            False,  # redis, worker, scheduler, database
+            False,  # redis
+            False,  # worker
+            False,  # scheduler
+            False,  # database
+            False,  # ingress
             False,  # auth service
             False,  # AI service
         ]
@@ -170,24 +174,25 @@ class TestAIBackendSelection:
         set_database_engine_selection("sqlite")
 
         try:
-            # Mock user responses: no components, yes AI service, yes SQLite tracking
+            # Mock user responses: no components, yes AI service, yes SQLite tracking with sync
             mock_confirm.side_effect = [
-                False,
-                False,
-                False,
-                False,  # redis, worker, scheduler, database
+                False,  # redis
+                False,  # worker
+                False,  # scheduler
+                False,  # database
+                False,  # ingress
                 False,  # auth service
                 True,  # AI service
                 False,  # Use LangChain? No (use PydanticAI)
                 True,  # Enable usage tracking? Yes
                 True,  # Sync LLM catalog during project generation? Yes
-                False,
-                False,
-                True,
-                True,
-                False,
-                False,
-                False,  # Provider selection (7 providers: openai, anthropic, google, groq, mistral, cohere, ollama)
+                False,  # openai
+                False,  # anthropic
+                True,  # google
+                True,  # groq
+                False,  # mistral
+                False,  # cohere
+                False,  # ollama
                 True,  # Enable RAG? Yes (default)
             ]
 
@@ -214,24 +219,25 @@ class TestAIBackendSelection:
         set_database_engine_selection("sqlite")
 
         try:
-            # Mock user responses: yes database, yes AI service, yes SQLite tracking
+            # Mock user responses: yes database, yes AI service, yes SQLite tracking with sync
             mock_confirm.side_effect = [
-                False,
-                False,
-                False,
-                True,  # redis, worker, scheduler, database (yes)
+                False,  # redis
+                False,  # worker
+                False,  # scheduler
+                True,  # database (yes)
+                False,  # ingress
                 False,  # auth service
                 True,  # AI service
                 False,  # Use LangChain? No (use PydanticAI)
                 True,  # Enable usage tracking? Yes
                 True,  # Sync LLM catalog during project generation? Yes
-                False,
-                False,
-                True,
-                True,
-                False,
-                False,
-                False,  # Provider selection (7 providers: openai, anthropic, google, groq, mistral, cohere, ollama)
+                False,  # openai
+                False,  # anthropic
+                True,  # google
+                True,  # groq
+                False,  # mistral
+                False,  # cohere
+                False,  # ollama
                 True,  # Enable RAG? Yes (default)
             ]
 
@@ -253,23 +259,24 @@ class TestAIBackendSelection:
     @patch("typer.confirm")
     def test_ai_backend_selection_memory(self, mock_confirm: Any) -> None:
         """Test that declining SQLite keeps memory backend."""
-        # Mock user responses: no components, yes AI service, no SQLite
+        # Mock user responses: no components, yes AI service, no SQLite tracking
         mock_confirm.side_effect = [
-            False,
-            False,
-            False,
-            False,  # redis, worker, scheduler, database
+            False,  # redis
+            False,  # worker
+            False,  # scheduler
+            False,  # database
+            False,  # ingress
             False,  # auth service
             True,  # AI service
             False,  # Use LangChain? No (use PydanticAI)
             False,  # Enable usage tracking with SQLite? No (memory)
-            False,
-            False,
-            True,
-            True,
-            False,
-            False,
-            False,  # Provider selection (7 providers: openai, anthropic, google, groq, mistral, cohere, ollama)
+            False,  # openai
+            False,  # anthropic
+            True,  # google
+            True,  # groq
+            False,  # mistral
+            False,  # cohere
+            False,  # ollama
             True,  # Enable RAG? Yes (default)
         ]
 
@@ -412,10 +419,11 @@ class TestAIConfigurationEndToEnd:
 
         # Mock interactive selection with AI service and specific providers
         mock_confirm.side_effect = [
-            False,
-            False,
-            False,
-            False,  # No infrastructure components
+            False,  # redis
+            False,  # worker
+            False,  # scheduler
+            False,  # database
+            False,  # ingress
             False,  # No auth service
             True,  # Yes AI service
             True,  # Use LangChain? Yes
@@ -512,16 +520,17 @@ class TestOllamaModeSelection:
             False,  # worker
             False,  # scheduler
             False,  # database
+            False,  # ingress
             False,  # auth service
             True,  # AI service
             False,  # Use LangChain? No
             False,  # Enable usage tracking? No
-            False,
-            False,
-            False,
-            False,
-            False,
-            False,  # Decline first 6 providers (openai, anthropic, google, groq, mistral, cohere)
+            False,  # openai
+            False,  # anthropic
+            False,  # google
+            False,  # groq
+            False,  # mistral
+            False,  # cohere
             True,  # SELECT Ollama
             True,  # Ollama mode: connect to host (True = HOST)
             True,  # Enable RAG

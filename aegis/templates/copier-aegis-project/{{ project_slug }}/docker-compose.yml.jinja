@@ -24,8 +24,10 @@ services:
     <<: *app
     command:
       - webserver
+{%- if not include_ingress %}
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
+{%- endif %}
 {%- if include_redis or database_engine == "postgres" or ollama_mode == "docker" %}
     depends_on:
 {%- if include_redis %}
@@ -62,6 +64,21 @@ services:
         reservations:
           memory: 256M
           cpus: '0.25'
+{%- if include_ingress %}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webserver.rule=PathPrefix(`/`)"
+{%- if ingress_tls %}
+      - "traefik.http.routers.webserver.entrypoints=websecure"
+      - "traefik.http.routers.webserver.tls.certresolver=letsencrypt"
+{%- if ingress_domain %}
+      - "traefik.http.routers.webserver.rule=Host(`{{ ingress_domain }}`)"
+{%- endif %}
+{%- else %}
+      - "traefik.http.routers.webserver.entrypoints=web"
+{%- endif %}
+      - "traefik.http.services.webserver.loadbalancer.server.port=${PORT:-8000}"
+{%- endif %}
     profiles:
       - dev
 
@@ -276,6 +293,44 @@ services:
       - prod
 {%- endif %}
 
+{%- if include_ingress %}
+  # TRAEFIK REVERSE PROXY
+
+  traefik:
+    image: traefik:v3.2
+    hostname: traefik
+    ports:
+      - "80:80"
+{%- if ingress_tls %}
+      - "443:443"
+{%- endif %}
+      - "8080:8080"  # Dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+{%- if ingress_tls %}
+      - traefik-letsencrypt:/letsencrypt
+{%- endif %}
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    profiles:
+      - dev
+      - prod
+{%- endif %}
+
   # TEST PROFILE
 
   test_runner:
@@ -294,4 +349,7 @@ volumes:
 {%- endif %}
 {%- if ollama_mode == "docker" %}
   ollama-data:
+{%- endif %}
+{%- if include_ingress and ingress_tls %}
+  traefik-letsencrypt:
 {%- endif %}

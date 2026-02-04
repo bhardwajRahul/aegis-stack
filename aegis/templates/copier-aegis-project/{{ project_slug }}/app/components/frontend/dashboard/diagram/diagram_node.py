@@ -19,6 +19,7 @@ COMPONENT_CONFIG: dict[str, dict[str, str]] = {
     "database": {"name": "Database", "modal_name": "database"},
     "cache": {"name": "Cache", "modal_name": "redis"},
     "worker": {"name": "Worker", "modal_name": "worker"},
+    "ingress": {"name": "Ingress", "modal_name": "ingress"},
     "ollama": {"name": "Inference", "modal_name": "ollama"},
     "scheduler": {"name": "Scheduler", "modal_name": "scheduler"},
     "service_ai": {"name": "AI Service", "modal_name": "ai"},
@@ -114,6 +115,11 @@ class DiagramNode(ft.Container):
             return get_ai_engine_display(metadata)
         elif component_name == "service_auth":
             return "JWT Authentication"
+        elif component_name == "ingress":
+            version = metadata.get("version", "")
+            if version and version != "unknown":
+                return f"Traefik {version}"
+            return "Traefik"
 
         # Fall back to static label
         return get_component_label(component_name)

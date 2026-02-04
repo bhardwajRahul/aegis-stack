@@ -570,7 +570,8 @@ class TestAddCommandInteractive:
         for component_name in COMPONENTS:
             if component_name not in CORE_COMPONENTS:
                 include_key = f"include_{component_name}"
-                assert initial_answers.get(include_key) is False, (
+                # Use falsy check - key may not exist in old cached projects
+                assert not initial_answers.get(include_key), (
                     f"{component_name} should be disabled initially"
                 )
 

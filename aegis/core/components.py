@@ -106,6 +106,13 @@ COMPONENTS: dict[str, ComponentSpec] = {
         # Note: async driver (aiosqlite or asyncpg) selected based on database_type in copier.yml
         template_files=["app/core/db.py"],
     ),
+    "ingress": ComponentSpec(
+        name="ingress",
+        type=ComponentType.INFRASTRUCTURE,
+        description="Traefik reverse proxy and load balancer",
+        docker_services=["traefik"],
+        recommends=["backend"],
+    ),
 }
 
 

@@ -11,6 +11,9 @@ from .comms_card import CommsCard
 {% if include_database %}
 from .database_card import DatabaseCard
 {% endif %}
+{% if include_ingress %}
+from .ingress_card import IngressCard
+{% endif %}
 {% if ollama_mode != "none" %}
 from .ollama_card import OllamaCard
 {% endif %}
@@ -44,6 +47,9 @@ __all__ = [
 {% endif %}
 {% if include_database %}
     "DatabaseCard",
+{% endif %}
+{% if include_ingress %}
+    "IngressCard",
 {% endif %}
 {% if ollama_mode != "none" %}
     "OllamaCard",

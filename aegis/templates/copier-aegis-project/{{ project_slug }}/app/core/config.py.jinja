@@ -224,6 +224,12 @@ class Settings(BaseSettings):
     SCHEDULER_FORCE_UPDATE: bool = False  # Force update jobs from code on restart
 {% endif %}
 
+{% if include_ingress %}
+    # Traefik Ingress settings
+    TRAEFIK_API_URL: str = "http://traefik:8080"  # Docker service name
+    TRAEFIK_API_URL_LOCAL: str | None = None  # Override for local CLI usage
+{% endif %}
+
 {% if ai_rag %}
     # RAG Service Configuration
     RAG_ENABLED: bool = True
@@ -237,7 +243,7 @@ class Settings(BaseSettings):
     RAG_CHAT_TOP_K: int = 15  # Number of chunks for AI chat context
 {% endif %}
 
-{% if include_redis or database_engine == "postgres" or ollama_mode != "none" %}
+{% if include_redis or database_engine == "postgres" or ollama_mode != "none" or include_ingress %}
     @property
     def is_docker(self) -> bool:
         """Detect if running inside Docker container."""
@@ -270,6 +276,29 @@ class Settings(BaseSettings):
                 return urlunparse(parsed._replace(netloc=netloc))
 
         return self.OLLAMA_BASE_URL
+{% endif %}
+
+{% if include_ingress %}
+    @property
+    def traefik_api_url_effective(self) -> str:
+        """Get effective Traefik API URL, preferring local override when not in Docker."""
+        # If explicitly overridden for local use
+        if self.TRAEFIK_API_URL_LOCAL and not self.is_docker:
+            return self.TRAEFIK_API_URL_LOCAL
+
+        # Auto-translate Docker hostnames to localhost when running outside Docker
+        if not self.is_docker:
+            from urllib.parse import urlparse, urlunparse
+
+            parsed = urlparse(self.TRAEFIK_API_URL)
+            # Translate Docker-specific hostnames to localhost
+            if parsed.hostname == "traefik":
+                netloc = "localhost"
+                if parsed.port:
+                    netloc = f"{netloc}:{parsed.port}"
+                return urlunparse(parsed._replace(netloc=netloc))
+
+        return self.TRAEFIK_API_URL
 {% endif %}
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
