@@ -500,6 +500,13 @@ async def startup_hook() -> None:
     logger.info("Ollama component health check registered")
     {%- endif %}
 
+    {%- if include_ingress %}
+    # Register ingress health check (Traefik reverse proxy)
+    from app.services.system.health import check_ingress_health
+    register_health_check("ingress", check_ingress_health)
+    logger.info("Ingress component health check registered")
+    {%- endif %}
+
     logger.info("Component health detection complete")
 
     # ==========================================

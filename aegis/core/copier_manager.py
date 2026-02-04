@@ -66,74 +66,68 @@ def generate_with_copier(
     """
     import subprocess
 
-    # Get cookiecutter context from template generator
-    cookiecutter_context = template_gen.get_template_context()
+    # Get template context from template generator
+    template_context = template_gen.get_template_context()
 
     # Determine Python version early - may need to override for RAG compatibility
     # When RAG is enabled, chromadb requires onnxruntime which lacks Python 3.14 wheels
-    python_version = cookiecutter_context.get("python_version", DEFAULT_PYTHON_VERSION)
-    ai_rag = cookiecutter_context.get(AnswerKeys.AI_RAG, "no") == "yes"
+    python_version = template_context.get("python_version", DEFAULT_PYTHON_VERSION)
+    ai_rag = template_context.get(AnswerKeys.AI_RAG, "no") == "yes"
     if ai_rag and python_version and Version(python_version) >= Version("3.14"):
         python_version = "3.13"
 
-    # Convert cookiecutter context to Copier data format
+    # Convert template context to Copier data format
     # Copier uses boolean values instead of "yes"/"no" strings
     copier_data = {
-        "project_name": cookiecutter_context["project_name"],
-        "project_slug": cookiecutter_context["project_slug"],
-        "project_description": cookiecutter_context.get(
+        "project_name": template_context["project_name"],
+        "project_slug": template_context["project_slug"],
+        "project_description": template_context.get(
             "project_description",
             "A production-ready async Python application built with Aegis Stack",
         ),
-        "author_name": cookiecutter_context.get("author_name", "Your Name"),
-        "author_email": cookiecutter_context.get(
-            "author_email", "your.email@example.com"
-        ),
-        "github_username": cookiecutter_context.get("github_username", "your-username"),
-        "version": cookiecutter_context.get("version", "0.1.0"),
+        "author_name": template_context.get("author_name", "Your Name"),
+        "author_email": template_context.get("author_email", "your.email@example.com"),
+        "github_username": template_context.get("github_username", "your-username"),
+        "version": template_context.get("version", "0.1.0"),
         "python_version": python_version,  # Uses override for RAG + Python 3.14
-        "aegis_version": cookiecutter_context.get("aegis_version", "0.0.0"),
+        "aegis_version": template_context.get("aegis_version", "0.0.0"),
         # Convert yes/no strings to booleans
-        AnswerKeys.SCHEDULER: cookiecutter_context[AnswerKeys.SCHEDULER] == "yes",
-        AnswerKeys.SCHEDULER_BACKEND: cookiecutter_context[
-            AnswerKeys.SCHEDULER_BACKEND
-        ],
-        AnswerKeys.SCHEDULER_WITH_PERSISTENCE: cookiecutter_context[
+        AnswerKeys.SCHEDULER: template_context[AnswerKeys.SCHEDULER] == "yes",
+        AnswerKeys.SCHEDULER_BACKEND: template_context[AnswerKeys.SCHEDULER_BACKEND],
+        AnswerKeys.SCHEDULER_WITH_PERSISTENCE: template_context[
             AnswerKeys.SCHEDULER_WITH_PERSISTENCE
         ]
         == "yes",
-        AnswerKeys.WORKER: cookiecutter_context[AnswerKeys.WORKER] == "yes",
-        AnswerKeys.WORKER_BACKEND: cookiecutter_context.get(
+        AnswerKeys.WORKER: template_context[AnswerKeys.WORKER] == "yes",
+        AnswerKeys.WORKER_BACKEND: template_context.get(
             AnswerKeys.WORKER_BACKEND, "arq"
         ),
-        AnswerKeys.REDIS: cookiecutter_context[AnswerKeys.REDIS] == "yes",
-        AnswerKeys.DATABASE: cookiecutter_context[AnswerKeys.DATABASE] == "yes",
-        AnswerKeys.DATABASE_ENGINE: cookiecutter_context.get(
+        AnswerKeys.REDIS: template_context[AnswerKeys.REDIS] == "yes",
+        AnswerKeys.DATABASE: template_context[AnswerKeys.DATABASE] == "yes",
+        AnswerKeys.DATABASE_ENGINE: template_context.get(
             AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE
         ),
         AnswerKeys.CACHE: False,  # Default to no
-        AnswerKeys.AUTH: cookiecutter_context.get(AnswerKeys.AUTH, "no") == "yes",
-        AnswerKeys.AI: cookiecutter_context.get(AnswerKeys.AI, "no") == "yes",
-        AnswerKeys.COMMS: cookiecutter_context.get(AnswerKeys.COMMS, "no") == "yes",
-        AnswerKeys.AI_FRAMEWORK: cookiecutter_context.get(
+        AnswerKeys.INGRESS: template_context.get(AnswerKeys.INGRESS, "no") == "yes",
+        AnswerKeys.AUTH: template_context.get(AnswerKeys.AUTH, "no") == "yes",
+        AnswerKeys.AI: template_context.get(AnswerKeys.AI, "no") == "yes",
+        AnswerKeys.COMMS: template_context.get(AnswerKeys.COMMS, "no") == "yes",
+        AnswerKeys.AI_FRAMEWORK: template_context.get(
             AnswerKeys.AI_FRAMEWORK, "pydantic-ai"
         ),
-        AnswerKeys.AI_PROVIDERS: cookiecutter_context.get(
+        AnswerKeys.AI_PROVIDERS: template_context.get(
             AnswerKeys.AI_PROVIDERS, "openai"
         ),
-        AnswerKeys.AI_BACKEND: cookiecutter_context.get(
+        AnswerKeys.AI_BACKEND: template_context.get(
             AnswerKeys.AI_BACKEND, StorageBackends.MEMORY
         ),
-        AnswerKeys.AI_WITH_PERSISTENCE: cookiecutter_context.get(
+        AnswerKeys.AI_WITH_PERSISTENCE: template_context.get(
             AnswerKeys.AI_WITH_PERSISTENCE, "no"
         )
         == "yes",
-        AnswerKeys.AI_RAG: cookiecutter_context.get(AnswerKeys.AI_RAG, "no") == "yes",
-        AnswerKeys.AI_VOICE: cookiecutter_context.get(AnswerKeys.AI_VOICE, "no")
-        == "yes",
-        AnswerKeys.OLLAMA_MODE: cookiecutter_context.get(
-            AnswerKeys.OLLAMA_MODE, "none"
-        ),
+        AnswerKeys.AI_RAG: template_context.get(AnswerKeys.AI_RAG, "no") == "yes",
+        AnswerKeys.AI_VOICE: template_context.get(AnswerKeys.AI_VOICE, "no") == "yes",
+        AnswerKeys.OLLAMA_MODE: template_context.get(AnswerKeys.OLLAMA_MODE, "none"),
     }
 
     # Detect dev vs production mode for template sourcing
@@ -193,7 +187,7 @@ def generate_with_copier(
     )
 
     # Copier creates the project in output_dir/project_slug
-    project_path = output_dir / cookiecutter_context["project_slug"]
+    project_path = output_dir / template_context["project_slug"]
 
     # Store template version in answers file for future reference
     # Copier only writes fields defined in copier.yml, so we add this manually
@@ -267,7 +261,7 @@ def generate_with_copier(
         python_version=python_version_str,
         seed_ai=ai_needs_seeding,
         skip_llm_sync=should_skip_llm_sync,
-        project_slug=cookiecutter_context["project_slug"],
+        project_slug=template_context["project_slug"],
     )
 
     # Initialize git repository for Copier updates

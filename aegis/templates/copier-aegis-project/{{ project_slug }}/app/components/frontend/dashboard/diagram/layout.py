@@ -30,16 +30,18 @@ class NodePosition:
 # Manual radial positions for optimal visual layout
 # Coordinates are normalized (-1 to 1), centered at (0, 0)
 # These positions are hand-tuned: compact layout
+# Ingress → Server hierarchy at top, other components radiate from Server
 RADIAL_POSITIONS: dict[str, tuple[float, float]] = {
-    "backend": (0.0, -0.15),  # Center - the hub
-    "database": (-0.45, -0.23),  # Left of center
-    "cache": (-0.20, 0.13),  # Bottom-left
-    "worker": (-0.28, -0.45),  # Upper-left
-    "scheduler": (0.28, -0.45),  # Upper-right
-    "ollama": (0.45, -0.23),  # Right of center
-    "service_ai": (0.50, -0.03),  # Right
-    "service_auth": (0.20, 0.13),  # Bottom-right
-    "service_comms": (-0.50, -0.03),  # Left
+    "ingress": (0.0, -0.45),  # Top center - entry point
+    "backend": (0.0, -0.10),  # Below ingress - the hub
+    "worker": (-0.45, -0.35),  # Upper-left
+    "scheduler": (0.45, -0.35),  # Upper-right
+    "database": (-0.50, 0.0),  # Left
+    "ollama": (0.50, 0.0),  # Right
+    "cache": (-0.15, 0.30),  # Bottom-center-left
+    "service_auth": (0.15, 0.30),  # Bottom-center-right
+    "service_ai": (0.50, 0.25),  # Bottom-right
+    "service_comms": (-0.50, 0.25),  # Bottom-left
 }
 
 
@@ -48,6 +50,7 @@ def get_connections(components: dict[str, ComponentStatus]) -> list[tuple[str, s
     Get connection pairs between components.
 
     Backend (Server) is the central hub connecting to all components.
+    Ingress sits in front of backend as the entry point.
     Additional connections show component relationships.
 
     Args:
@@ -58,9 +61,13 @@ def get_connections(components: dict[str, ComponentStatus]) -> list[tuple[str, s
     """
     connections: list[tuple[str, str]] = []
 
-    # All components connect through backend
+    # Ingress → Backend (if ingress exists)
+    if "ingress" in components and "backend" in components:
+        connections.append(("ingress", "backend"))
+
+    # All components connect through backend (except ingress which connects TO backend)
     for name in components:
-        if name != "backend":
+        if name != "backend" and name != "ingress":
             connections.append(("backend", name))
 
     # Inference → AI Service
@@ -74,11 +81,12 @@ def calculate_tree_positions(
     components: dict[str, ComponentStatus],
 ) -> list[NodePosition]:
     """
-    Calculate tree layout positions with backend at top.
+    Calculate tree layout positions with ingress at top, backend below.
 
-    Arranges components in a 3-tier hierarchical tree structure:
-    - Backend (Server) at top center
-    - Infrastructure components in second row (database, cache, worker, scheduler, ollama)
+    Arranges components in a 4-tier hierarchical tree structure:
+    - Ingress (Traefik) at top center - entry point
+    - Backend (Server) below ingress
+    - Infrastructure components in third row (database, cache, worker, scheduler, ollama)
     - Services in bottom row
 
     Args:
@@ -90,23 +98,36 @@ def calculate_tree_positions(
     positions: list[NodePosition] = []
 
     # Separate into categories
+    ingress_data = components.get("ingress")
     backend_data = components.get("backend")
 
-    # Infrastructure components (includes scheduler)
+    # Infrastructure components (excludes backend and ingress)
     infra_names = [
         name
         for name in components
-        if name != "backend" and not name.startswith("service_")
+        if name not in ("backend", "ingress") and not name.startswith("service_")
     ]
 
     # Services at bottom
     service_names = [name for name in components if name.startswith("service_")]
 
-    # Tier 1: Backend at top center
-    if backend_data:
+    # Tier 0: Ingress at very top (if present)
+    if ingress_data:
         positions.append(
             NodePosition(
-                x=0.0, y=-0.40, component_name="backend", component_data=backend_data
+                x=0.0, y=-0.48, component_name="ingress", component_data=ingress_data
+            )
+        )
+
+    # Tier 1: Backend below ingress
+    if backend_data:
+        backend_y = -0.40 if not ingress_data else -0.30
+        positions.append(
+            NodePosition(
+                x=0.0,
+                y=backend_y,
+                component_name="backend",
+                component_data=backend_data,
             )
         )
 

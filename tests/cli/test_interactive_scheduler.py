@@ -26,12 +26,14 @@ class TestInteractiveSchedulerFlow:
 
         try:
             # Mock user responses: redis=no, worker=no, scheduler=yes,
-            # persistence=yes, no auth service, no AI service
+            # persistence=yes, ingress=no, no auth service, no AI service
+            # Note: database is skipped because scheduler adds it
             mock_confirm.side_effect = [
                 False,  # redis
                 False,  # worker
                 True,  # scheduler
                 True,  # persistence
+                False,  # ingress
                 False,  # auth
                 False,  # AI
             ]
@@ -45,7 +47,7 @@ class TestInteractiveSchedulerFlow:
             assert services == []  # No services selected
 
             # Verify correct calls were made
-            assert mock_confirm.call_count == 6
+            assert mock_confirm.call_count == 7
         finally:
             clear_database_engine_selection()
 
@@ -57,12 +59,14 @@ class TestInteractiveSchedulerFlow:
 
         try:
             # Mock user responses: redis=no, worker=no, scheduler=yes,
-            # persistence=yes, no auth service, no AI service
+            # persistence=yes, ingress=no, no auth service, no AI service
+            # Note: database is skipped because scheduler adds it
             mock_confirm.side_effect = [
                 False,  # redis
                 False,  # worker
                 True,  # scheduler
                 True,  # persistence
+                False,  # ingress
                 False,  # auth
                 False,  # AI
             ]
@@ -83,13 +87,14 @@ class TestInteractiveSchedulerFlow:
         # No need to pre-set database engine since persistence=no skips that prompt
         try:
             # Mock user responses: redis=no, worker=no, scheduler=yes,
-            # persistence=no, database=no
+            # persistence=no, database=no, ingress=no, no auth, no AI
             mock_confirm.side_effect = [
                 False,  # redis
                 False,  # worker
                 True,  # scheduler
                 False,  # no persistence
                 False,  # database=no
+                False,  # ingress=no
                 False,  # no auth
                 False,  # no AI
             ]
@@ -107,12 +112,13 @@ class TestInteractiveSchedulerFlow:
     def test_scheduler_not_selected(self, mock_confirm: Any) -> None:
         """Test when scheduler is not selected."""
         try:
-            # Mock user responses: scheduler=no, database=no (other components)
+            # Mock user responses: scheduler=no, database=no, ingress=no (other components)
             mock_confirm.side_effect = [
                 False,  # redis
                 False,  # worker
                 False,  # scheduler
                 False,  # database
+                False,  # ingress
                 False,  # no auth
                 False,  # no AI
             ]
@@ -135,13 +141,14 @@ class TestInteractiveSchedulerFlow:
 
         try:
             # Mock user responses: redis=no, worker=no, scheduler=yes,
-            # persistence=yes
+            # persistence=yes, ingress=no, no auth, no AI
             # The database prompt should be skipped since scheduler adds it
             mock_confirm.side_effect = [
                 False,  # redis
                 False,  # worker
                 True,  # scheduler
                 True,  # persistence
+                False,  # ingress
                 False,  # no auth
                 False,  # no AI
             ]
@@ -153,8 +160,8 @@ class TestInteractiveSchedulerFlow:
             assert any(c.startswith("database") for c in components)
             assert scheduler_backend == "sqlite"
 
-            # Should not have been prompted for generic database (6 confirms total)
-            assert mock_confirm.call_count == 6
+            # Should not have been prompted for generic database (7 confirms total)
+            assert mock_confirm.call_count == 7
         finally:
             clear_database_engine_selection()
 
@@ -166,12 +173,14 @@ class TestInteractiveSchedulerFlow:
 
         try:
             # Mock responses: redis=no, worker=yes (adds redis), scheduler=yes,
-            # persistence=yes
+            # persistence=yes, ingress=no, no auth, no AI
+            # Note: database is skipped because scheduler adds it
             mock_confirm.side_effect = [
                 False,  # redis=no
                 True,  # worker=yes (auto-adds redis)
                 True,  # scheduler=yes
                 True,  # persistence=yes
+                False,  # ingress=no
                 False,  # no auth
                 False,  # no AI
             ]
@@ -192,8 +201,16 @@ class TestInteractiveSchedulerFlow:
     def test_standalone_database_selection_still_works(self, mock_confirm: Any) -> None:
         """Test that standalone database selection (without scheduler) still works."""
         try:
-            # Mock responses: redis=no, worker=no, scheduler=no, database=yes, no auth, no AI
-            mock_confirm.side_effect = [False, False, False, True, False, False]
+            # Mock responses: redis=no, worker=no, scheduler=no, database=yes, ingress=no, no auth, no AI
+            mock_confirm.side_effect = [
+                False,  # redis
+                False,  # worker
+                False,  # scheduler
+                True,  # database
+                False,  # ingress
+                False,  # no auth
+                False,  # no AI
+            ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()
 

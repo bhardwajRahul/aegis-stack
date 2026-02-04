@@ -115,6 +115,23 @@ include_cache:
   help: "Include Redis cache component?"
   default: false
 
+include_ingress:
+  type: bool
+  help: "Include Traefik reverse proxy?"
+  default: false
+
+ingress_tls:
+  type: bool
+  help: "Enable TLS with Let's Encrypt?"
+  default: false
+  when: "{{ include_ingress }}"
+
+ingress_domain:
+  type: str
+  help: "Domain for TLS certificate (e.g., example.com)"
+  default: ""
+  when: "{{ include_ingress and ingress_tls }}"
+
 scheduler_backend:
   type: str
   help: "Scheduler backend storage"
@@ -202,7 +219,7 @@ include_comms:
   default: false
 
 # Internal computed values (using Jinja2)
-_has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache }}"
+_has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache or include_ingress }}"
 _include_migrations: "{{ include_auth }}"
 
 # Component-specific dependencies (computed)

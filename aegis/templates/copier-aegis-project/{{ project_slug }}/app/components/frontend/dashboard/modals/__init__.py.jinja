@@ -19,6 +19,9 @@ from .comms_modal import CommsDetailDialog
 from .database_modal import DatabaseDetailDialog
 {%- endif %}
 from .frontend_modal import FrontendDetailDialog
+{%- if include_ingress %}
+from .ingress_modal import IngressDetailDialog
+{%- endif %}
 {%- if ollama_mode != "none" %}
 from .ollama_modal import OllamaDetailDialog
 {%- endif %}
@@ -47,6 +50,9 @@ __all__ = [
     "DatabaseDetailDialog",
     {%- endif %}
     "FrontendDetailDialog",
+    {%- if include_ingress %}
+    "IngressDetailDialog",
+    {%- endif %}
     {%- if ollama_mode != "none" %}
     "OllamaDetailDialog",
     {%- endif %}

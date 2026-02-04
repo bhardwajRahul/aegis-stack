@@ -13,7 +13,12 @@ from typing import Any
 
 import typer
 
-from aegis.constants import AnswerKeys, ComponentNames, StorageBackends, WorkerBackends
+from aegis.constants import (
+    AnswerKeys,
+    ComponentNames,
+    StorageBackends,
+    WorkerBackends,
+)
 from aegis.core.project_map import render_project_map
 
 # Task configuration constants (following tests/cli/test_utils.py pattern)
@@ -100,6 +105,11 @@ def get_component_file_mapping() -> dict[str, list[str]]:
         ComponentNames.REDIS: [
             "app/components/frontend/dashboard/cards/redis_card.py",
             "app/components/frontend/dashboard/modals/redis_modal.py",
+        ],
+        ComponentNames.INGRESS: [
+            "traefik",
+            "app/components/frontend/dashboard/cards/ingress_card.py",
+            "app/components/frontend/dashboard/modals/ingress_modal.py",
         ],
         AnswerKeys.SERVICE_AUTH: [
             "app/components/backend/api/auth",
@@ -364,6 +374,16 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         )
         remove_file(
             project_path, "app/components/frontend/dashboard/modals/redis_modal.py"
+        )
+
+    # Remove ingress component if not selected
+    if not is_enabled(AnswerKeys.INGRESS):
+        remove_dir(project_path, "traefik")
+        remove_file(
+            project_path, "app/components/frontend/dashboard/cards/ingress_card.py"
+        )
+        remove_file(
+            project_path, "app/components/frontend/dashboard/modals/ingress_modal.py"
         )
 
     # Remove cache component if not selected

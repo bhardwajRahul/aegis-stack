@@ -245,7 +245,16 @@ class TestInteractiveServiceSelection:
 
         with patch("typer.confirm") as mock_confirm:
             # Simulate: no components selected, but yes auth service + yes to database confirmation + no AI service
-            mock_confirm.side_effect = [False, False, False, False, True, True, False]
+            mock_confirm.side_effect = [
+                False,  # redis
+                False,  # worker
+                False,  # scheduler
+                False,  # database
+                False,  # ingress
+                True,  # auth service
+                True,  # database confirmation for auth
+                False,  # AI service
+            ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
 
@@ -261,7 +270,15 @@ class TestInteractiveServiceSelection:
 
         with patch("typer.confirm") as mock_confirm:
             # Simulate: no components, no services (decline auth, decline AI)
-            mock_confirm.side_effect = [False, False, False, False, False, False]
+            mock_confirm.side_effect = [
+                False,  # redis
+                False,  # worker
+                False,  # scheduler
+                False,  # database
+                False,  # ingress
+                False,  # auth service
+                False,  # AI service
+            ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
 

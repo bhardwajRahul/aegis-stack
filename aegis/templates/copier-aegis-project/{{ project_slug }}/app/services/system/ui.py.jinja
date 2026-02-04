@@ -67,5 +67,8 @@ def get_component_label(component_name: str) -> str:
         {%- if include_comms %}
         "service_comms": "Resend + Twilio",
         {%- endif %}
+        {%- if include_ingress %}
+        "ingress": "Traefik",
+        {%- endif %}
     }
     return mapping.get(component_name, component_name.replace("_", " ").title())

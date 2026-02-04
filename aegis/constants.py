@@ -15,9 +15,10 @@ class ComponentNames:
     DATABASE = "database"
     BACKEND = "backend"
     FRONTEND = "frontend"
+    INGRESS = "ingress"
 
     # Ordered list for interactive selection
-    INFRASTRUCTURE_ORDER = [REDIS, WORKER, SCHEDULER, DATABASE]
+    INFRASTRUCTURE_ORDER = [REDIS, WORKER, SCHEDULER, DATABASE, INGRESS]
 
 
 class StorageBackends:
@@ -103,6 +104,7 @@ class AnswerKeys:
     REDIS = "include_redis"
     DATABASE = "include_database"
     CACHE = "include_cache"
+    INGRESS = "include_ingress"
 
     # Service include flags
     AUTH = "include_auth"
