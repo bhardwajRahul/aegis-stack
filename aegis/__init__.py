@@ -2,4 +2,4 @@
 Aegis Stack CLI - Component generation and project management tools.
 """
 
-__version__ = "0.5.4"
+__version__ = "0.6.0rc1"

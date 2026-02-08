@@ -107,6 +107,7 @@ dependencies = [
 {%- if ai_rag %}
     "chromadb>=0.4.22,<1.0.0",  # Vector store - pin to 0.x for stability
     "sentence-transformers>=3.0.0",  # Local embeddings
+    "torch>=2.0.0",  # Explicit dep for CPU-only override (see [tool.uv.sources])
 {%- endif %}
 ]
 
@@ -184,3 +185,14 @@ testpaths = ["tests"]
 dev = [
     "httpx>=0.28.1",
 ]
+{%- if ai_rag %}
+
+# Route torch to CPU-only index to avoid ~2.5GB of CUDA/nvidia packages
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+{%- endif %}

@@ -8,8 +8,6 @@ x-app: &app
       - PORT=${PORT:-8000}
   env_file:
     - ${AEGIS_STACK_ENV_FILE:-.env}
-  volumes:
-    - .:/code
   environment:
     # Docker container marker for entrypoint script
     - DOCKER_CONTAINER=1
@@ -24,10 +22,6 @@ services:
     <<: *app
     command:
       - webserver
-{%- if not include_ingress %}
-    ports:
-      - "${PORT:-8000}:${PORT:-8000}"
-{%- endif %}
 {%- if include_redis or database_engine == "postgres" or ollama_mode == "docker" %}
     depends_on:
 {%- if include_redis %}
@@ -67,20 +61,40 @@ services:
 {%- if include_ingress %}
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.webserver.rule=PathPrefix(`/`)"
-{%- if ingress_tls %}
+      # Public router
+{%- if ingress_tls and ingress_domain %}
+      - "traefik.http.routers.webserver.rule=Host(`{{ ingress_domain }}`)"
       - "traefik.http.routers.webserver.entrypoints=websecure"
       - "traefik.http.routers.webserver.tls.certresolver=letsencrypt"
-{%- if ingress_domain %}
-      - "traefik.http.routers.webserver.rule=Host(`{{ ingress_domain }}`)"
-{%- endif %}
+{%- elif ingress_tls %}
+      - "traefik.http.routers.webserver.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.webserver.entrypoints=websecure"
+      - "traefik.http.routers.webserver.tls.certresolver=letsencrypt"
 {%- else %}
+      - "traefik.http.routers.webserver.rule=PathPrefix(`/`)"
       - "traefik.http.routers.webserver.entrypoints=web"
 {%- endif %}
       - "traefik.http.services.webserver.loadbalancer.server.port=${PORT:-8000}"
+      # Admin paths - IP restricted (set ADMIN_IP_ALLOWLIST in .env)
+{%- if ingress_tls and ingress_domain %}
+      - "traefik.http.routers.webserver-admin.rule=Host(`{{ ingress_domain }}`) && (PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))"
+      - "traefik.http.routers.webserver-admin.entrypoints=websecure"
+      - "traefik.http.routers.webserver-admin.tls.certresolver=letsencrypt"
+{%- elif ingress_tls %}
+      - "traefik.http.routers.webserver-admin.rule=PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`)"
+      - "traefik.http.routers.webserver-admin.entrypoints=websecure"
+      - "traefik.http.routers.webserver-admin.tls.certresolver=letsencrypt"
+{%- else %}
+      - "traefik.http.routers.webserver-admin.rule=PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`)"
+      - "traefik.http.routers.webserver-admin.entrypoints=web"
+{%- endif %}
+      - "traefik.http.routers.webserver-admin.service=webserver"
+      - "traefik.http.routers.webserver-admin.middlewares=admin-ipallowlist"
+      - "traefik.http.middlewares.admin-ipallowlist.ipallowlist.sourcerange=${ADMIN_IP_ALLOWLIST:-0.0.0.0/0}"
 {%- endif %}
     profiles:
       - dev
+      - prod
 
 
 {%- if include_scheduler %}
@@ -208,8 +222,6 @@ services:
   redis:
     image: redis:7-alpine
     hostname: redis
-    ports:
-      - "6379:6379"
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -228,6 +240,7 @@ services:
           cpus: '0.1'
     profiles:
       - dev
+      - prod
 {%- endif %}
 
 {%- if database_engine == "postgres" %}
@@ -236,8 +249,6 @@ services:
   postgres:
     image: postgres:16-alpine
     hostname: postgres
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -261,6 +272,7 @@ services:
           cpus: '0.25'
     profiles:
       - dev
+      - prod
 {%- endif %}
 
 {%- if ollama_mode == "docker" %}
@@ -269,8 +281,6 @@ services:
   ollama:
     image: ollama/ollama:latest
     hostname: ollama
-    ports:
-      - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
     healthcheck:
@@ -297,14 +307,10 @@ services:
   # TRAEFIK REVERSE PROXY
 
   traefik:
-    image: traefik:v3.2
+    image: traefik:v3.6
     hostname: traefik
-    ports:
-      - "80:80"
-{%- if ingress_tls %}
-      - "443:443"
-{%- endif %}
-      - "8080:8080"  # Dashboard
+    environment:
+      - DOCKER_API_VERSION=1.44
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro

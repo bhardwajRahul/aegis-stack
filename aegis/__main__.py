@@ -13,6 +13,17 @@ import typer
 from .commands.add import add_command
 from .commands.add_service import add_service_command
 from .commands.components import components_command
+from .commands.deploy import (
+    deploy_command,
+    deploy_init_command,
+    deploy_logs_command,
+    deploy_restart_command,
+    deploy_setup_command,
+    deploy_shell_command,
+    deploy_status_command,
+    deploy_stop_command,
+)
+from .commands.ingress import ingress_enable_command
 from .commands.init import init_command
 from .commands.remove import remove_command
 from .commands.remove_service import remove_service_command
@@ -61,6 +72,19 @@ app.command(name="add-service")(add_service_command)
 app.command(name="remove")(remove_command)
 app.command(name="remove-service")(remove_service_command)
 app.command(name="update")(update_command)
+
+# Ingress commands
+app.command(name="ingress-enable")(ingress_enable_command)
+
+# Deploy commands
+app.command(name="deploy-init")(deploy_init_command)
+app.command(name="deploy-setup")(deploy_setup_command)
+app.command(name="deploy")(deploy_command)
+app.command(name="deploy-logs")(deploy_logs_command)
+app.command(name="deploy-status")(deploy_status_command)
+app.command(name="deploy-stop")(deploy_stop_command)
+app.command(name="deploy-restart")(deploy_restart_command)
+app.command(name="deploy-shell")(deploy_shell_command)
 
 
 # This is what runs when you do: aegis

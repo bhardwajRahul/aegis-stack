@@ -1,29 +1,31 @@
 # {{ project_name }} - Aegis Stack Project
 # Developer-friendly commands for Docker workflow
 
+COMPOSE_DEV = docker compose -f docker-compose.yml -f docker-compose.dev.yml
+
 #=============================================================================
 # CORE DOCKER COMMANDS
 #=============================================================================
 
 build: ## Build Docker image
 	@echo "Building Docker image..."
-	@docker compose build webserver
+	@$(COMPOSE_DEV) build webserver
 
 serve: build ## Run all services (builds if needed)
 	@echo "Starting services... (Press Ctrl+C to stop)"
-	@docker compose --profile dev up --remove-orphans
+	@$(COMPOSE_DEV) --profile dev up --remove-orphans
 
 serve-bg: ## Run all services in background
 	@echo "Starting services in background..."
-	@docker compose --profile dev up -d --remove-orphans
+	@$(COMPOSE_DEV) --profile dev up -d --remove-orphans
 
 stop: ## Gracefully stop all services
 	@echo "Stopping services..."
-	@docker compose --profile dev down --remove-orphans
+	@$(COMPOSE_DEV) --profile dev down --remove-orphans
 
 clean: ## Clean up project containers, networks, volumes, and images
 	@echo "Cleaning up project Docker resources..."
-	@docker compose down --remove-orphans --volumes --rmi all 2>/dev/null || true
+	@$(COMPOSE_DEV) down --remove-orphans --volumes --rmi all 2>/dev/null || true
 
 #=============================================================================
 # DEVELOPER WORKFLOW COMMANDS (the ones you'll actually use)
@@ -196,7 +198,7 @@ migrate-reset: ## Reset database (WARNING: destructive)
 {% if database_engine == "postgres" %}
 db-clean: ## Remove postgres volume (nuclear reset when DB is broken)
 	@echo "Stopping containers and removing postgres volume..."
-	@docker compose --profile dev down --remove-orphans
+	@$(COMPOSE_DEV) --profile dev down --remove-orphans
 	@docker volume rm {{ project_slug }}_postgres-data 2>/dev/null || true
 	@echo "Postgres volume removed. Run 'make serve' to start fresh."
 
@@ -213,7 +215,68 @@ worker-test: ## Test workers in burst mode (process and exit)
 	@echo "Testing system worker in burst mode..."
 	@uv run python -m arq app.components.worker.queues.system.WorkerSettings --burst
 
+{% if include_ingress %}#=============================================================================
+# DEPLOYMENT (Production Server)
 #=============================================================================
+
+# Configuration - set these in .env.deploy or as environment variables
+DEPLOY_HOST ?= your-server-ip
+DEPLOY_USER ?= root
+DEPLOY_PATH ?= /opt/{{ project_slug }}
+DOCKER_CONTEXT ?= {{ project_slug }}-remote
+
+deploy-setup: ## Initial server setup (run once on fresh server)
+	@echo "Setting up server at $(DEPLOY_USER)@$(DEPLOY_HOST)..."
+	@scp scripts/server-setup.sh $(DEPLOY_USER)@$(DEPLOY_HOST):/tmp/
+	@ssh $(DEPLOY_USER)@$(DEPLOY_HOST) "chmod +x /tmp/server-setup.sh && /tmp/server-setup.sh"
+	@echo "Server setup complete!"
+
+deploy-context: ## Create Docker context for remote deployment
+	@echo "Creating Docker context '$(DOCKER_CONTEXT)'..."
+	@docker context rm $(DOCKER_CONTEXT) 2>/dev/null || true
+	@docker context create $(DOCKER_CONTEXT) --docker "host=ssh://$(DEPLOY_USER)@$(DEPLOY_HOST)"
+	@echo "Docker context '$(DOCKER_CONTEXT)' created"
+
+deploy-sync: ## Sync project files to remote server
+	@echo "Syncing project files to $(DEPLOY_HOST):$(DEPLOY_PATH)..."
+	@ssh $(DEPLOY_USER)@$(DEPLOY_HOST) "mkdir -p $(DEPLOY_PATH)"
+	@rsync -avz --exclude '.git' --exclude '__pycache__' --exclude '.venv' \
+		--exclude '*.pyc' --exclude '.pytest_cache' --exclude '.ruff_cache' \
+		--exclude 'data/' --exclude '.env' \
+		./ $(DEPLOY_USER)@$(DEPLOY_HOST):$(DEPLOY_PATH)/
+	@echo "Files synced successfully"
+
+deploy: deploy-sync ## Deploy to production server
+	@echo "Deploying to $(DEPLOY_HOST)..."
+	@if [ ! -f .env.deploy ]; then echo "ERROR: .env.deploy not found. Copy .env.deploy.example and configure it."; exit 1; fi
+	@scp .env.deploy $(DEPLOY_USER)@$(DEPLOY_HOST):$(DEPLOY_PATH)/.env
+	@docker --context $(DOCKER_CONTEXT) compose --profile prod up -d --build --remove-orphans
+	@echo "Deployment complete! Services running at $(DEPLOY_HOST)"
+
+deploy-logs: ## View logs from production server
+	@echo "Following production logs..."
+	@docker --context $(DOCKER_CONTEXT) compose logs -f
+
+deploy-status: ## Check production service status
+	@echo "Production service status:"
+	@docker --context $(DOCKER_CONTEXT) compose ps
+
+deploy-stop: ## Stop production services
+	@echo "Stopping production services..."
+	@docker --context $(DOCKER_CONTEXT) compose --profile prod down
+
+deploy-restart: ## Restart production services
+	@echo "Restarting production services..."
+	@docker --context $(DOCKER_CONTEXT) compose --profile prod restart
+
+deploy-shell: ## Open shell on production webserver
+	@docker --context $(DOCKER_CONTEXT) compose exec webserver /bin/bash
+
+deploy-health: ## Check health on production
+	@echo "Checking production health..."
+	@curl -s http://$(DEPLOY_HOST)/health | jq . || echo "Health check failed"
+
+{% endif %}#=============================================================================
 # HELP AND INFO
 #=============================================================================
 
@@ -239,7 +302,7 @@ help: ## Show this help message
 	@echo
 	@echo "TIP: Use 'make refresh' when everything is broken!"
 
-.PHONY: build serve stop clean rebuild refresh restart logs logs-web logs-worker logs-redis{% if include_scheduler %} logs-scheduler{% endif %} shell shell-worker ps redis-cli redis-stats redis-keys redis-reset health health-detailed health-json health-probe test test-verbose lint fix format typecheck check install deps-update clean-cache docs-serve docs-build{% if include_database %} migrate migrate-check migrate-history migrate-reset{% if database_engine == "postgres" %} db-clean db-fresh{% endif %}{% endif %} worker-test status help
+.PHONY: build serve stop clean rebuild refresh restart logs logs-web logs-worker logs-redis{% if include_scheduler %} logs-scheduler{% endif %} shell shell-worker ps redis-cli redis-stats redis-keys redis-reset health health-detailed health-json health-probe test test-verbose lint fix format typecheck check install deps-update clean-cache docs-serve docs-build{% if include_database %} migrate migrate-check migrate-history migrate-reset{% if database_engine == "postgres" %} db-clean db-fresh{% endif %}{% endif %} worker-test{% if include_ingress %} deploy-setup deploy-context deploy-sync deploy deploy-logs deploy-status deploy-stop deploy-restart deploy-shell deploy-health{% endif %} status help
 
 # Default target - show help
 .DEFAULT_GOAL := help

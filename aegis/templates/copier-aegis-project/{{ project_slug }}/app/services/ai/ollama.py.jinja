@@ -6,6 +6,7 @@ Provides a lightweight client for interacting with local Ollama server.
 This module is separate from ETL to ensure availability regardless of AI backend.
 """
 
+import asyncio
 from datetime import datetime
 
 import httpx
@@ -119,7 +120,7 @@ class OllamaServerStatus(BaseModel):
 class OllamaClient:
     """Client for fetching model data from local Ollama server."""
 
-    TIMEOUT = 10.0  # Local server should respond quickly
+    TIMEOUT = 2.0  # Local server responds in <100ms; 2s is generous
 
     def __init__(self, base_url: str = OLLAMA_DEFAULT_URL) -> None:
         """Initialize the Ollama client.
@@ -177,7 +178,7 @@ class OllamaClient:
             True if Ollama is available, False otherwise.
         """
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=2.0) as client:
                 response = await client.get(f"{self.base_url}/api/tags")
                 return response.status_code == 200
         except Exception:
@@ -294,10 +295,12 @@ class OllamaClient:
             if not available:
                 return OllamaServerStatus(available=False)
 
-            # Fetch all data in parallel-ish (could use asyncio.gather)
-            version = await self.fetch_version()
-            running_models = await self.fetch_running_models()
-            installed_models = await self.fetch_models()
+            # Fetch all data in parallel
+            version, running_models, installed_models = await asyncio.gather(
+                self.fetch_version(),
+                self.fetch_running_models(),
+                self.fetch_models(),
+            )
 
             # Calculate total VRAM usage
             total_vram_gb = sum(m.size_vram_gb for m in running_models)

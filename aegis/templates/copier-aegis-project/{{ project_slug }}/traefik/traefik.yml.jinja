@@ -11,8 +11,6 @@ ping:
 entryPoints:
   web:
     address: ":80"
-  traefik:
-    address: ":8080"
 {%- if ingress_tls %}
     http:
       redirections:
@@ -22,6 +20,8 @@ entryPoints:
   websecure:
     address: ":443"
 {%- endif %}
+  traefik:
+    address: ":8080"
 
 providers:
   docker:

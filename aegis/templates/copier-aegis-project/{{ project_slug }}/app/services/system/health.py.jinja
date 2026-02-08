@@ -344,7 +344,7 @@ async def check_system_status() -> None:
     This function gets the system status and logs any issues.
     Can be extended to send alerts to Slack, email, etc.
     """
-    logger.info("Running scheduled system health check")
+    logger.debug("Running scheduled system health check")
 
     try:
         status = await get_system_status()
@@ -354,7 +354,7 @@ async def check_system_status() -> None:
                 f"System healthy: {len(status.healthy_top_level_components)}/"
                 f"{status.total_components} components OK"
             )
-            logger.info(log_msg)
+            logger.debug(log_msg)
         else:
             logger.warning(
                 f"System issues detected: "
