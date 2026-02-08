@@ -13,7 +13,7 @@ from copier import run_update
 from packaging.version import parse
 from pydantic import BaseModel, Field
 
-from aegis.config.defaults import GITHUB_REPO_URL
+from aegis.config.defaults import GITHUB_REPO_URL, version_to_git_tag
 from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
 from aegis.core.copier_manager import load_copier_answers
 from aegis.core.post_gen_tasks import cleanup_components, run_post_generation_tasks
@@ -432,7 +432,7 @@ def resolve_version_to_ref(
     if not version or version == "latest":
         latest = get_latest_version(template_root)
         if latest:
-            return f"v{latest}"
+            return version_to_git_tag(latest)
         return "HEAD"
 
     # Check if it's a commit hash (40 hex characters)
@@ -442,9 +442,9 @@ def resolve_version_to_ref(
     # Check if it looks like a version number (add 'v' prefix)
     try:
         parse(version)
-        # Valid version number - always use v-prefixed tag format
-        # (git verification may fail when installed via pip/uvx, but tag format is consistent)
-        return f"v{version}"
+        # Valid version number - convert to git tag format
+        # PEP 440 "0.6.0rc1" → git tag "v0.6.0-rc1"
+        return version_to_git_tag(version)
     except Exception:
         pass
 
@@ -793,7 +793,7 @@ def get_commit_for_version(
         template_root = get_template_root()
 
     # Ensure version has 'v' prefix
-    tag_name = version if version.startswith("v") else f"v{version}"
+    tag_name = version if version.startswith("v") else version_to_git_tag(version)
 
     try:
         result = subprocess.run(

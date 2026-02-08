@@ -396,17 +396,17 @@ def git_repo_with_tags(tmp_path: Path) -> Path:
         ["git", "tag", "v0.2.0"], cwd=tmp_path, capture_output=True, check=True
     )
 
-    # Add a prerelease tag
-    (tmp_path / "test.txt").write_text("v0.3.0rc1")
+    # Add a prerelease tag (dash format matches our git tag convention)
+    (tmp_path / "test.txt").write_text("v0.3.0-rc1")
     subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
     subprocess.run(
-        ["git", "commit", "-m", "v0.3.0rc1"],
+        ["git", "commit", "-m", "v0.3.0-rc1"],
         cwd=tmp_path,
         capture_output=True,
         check=True,
     )
     subprocess.run(
-        ["git", "tag", "v0.3.0rc1"], cwd=tmp_path, capture_output=True, check=True
+        ["git", "tag", "v0.3.0-rc1"], cwd=tmp_path, capture_output=True, check=True
     )
 
     # Add another prerelease
@@ -444,7 +444,7 @@ class TestGetAvailableVersions:
         versions = get_available_versions(git_repo_with_tags)
 
         # Should NOT contain rc or alpha versions
-        assert "0.3.0rc1" not in versions
+        assert "0.3.0-rc1" not in versions
         assert "0.3.0-alpha.1" not in versions
 
     def test_includes_prereleases_when_requested(
@@ -454,7 +454,7 @@ class TestGetAvailableVersions:
         versions = get_available_versions(git_repo_with_tags, include_prereleases=True)
 
         # Should contain all versions including prereleases
-        assert "0.3.0rc1" in versions
+        assert "0.3.0-rc1" in versions
         assert "0.3.0-alpha.1" in versions
         assert "0.2.0" in versions
         assert "0.1.0" in versions
@@ -484,7 +484,7 @@ class TestGetLatestVersion:
         """Test that latest version is 0.2.0, not a prerelease."""
         latest = get_latest_version(git_repo_with_tags)
 
-        # Should be 0.2.0, NOT 0.3.0rc1 or 0.3.0-alpha.1
+        # Should be 0.2.0, NOT 0.3.0-rc1 or 0.3.0-alpha.1
         assert latest == "0.2.0"
 
     def test_returns_none_for_no_versions(self, git_repo: Path) -> None:
