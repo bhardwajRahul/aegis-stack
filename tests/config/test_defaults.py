@@ -11,6 +11,7 @@ from aegis.config.defaults import (
     SUPPORTED_PYTHON_VERSIONS,
     _generate_supported_versions,
     _parse_python_version_bounds,
+    version_to_git_tag,
 )
 
 
@@ -154,6 +155,38 @@ class TestConfigurationConstants:
             tuple(map(int, v.split("."))) for v in SUPPORTED_PYTHON_VERSIONS
         ]
         assert versions_as_tuples == sorted(versions_as_tuples)
+
+
+class TestVersionToGitTag:
+    """Test version_to_git_tag() function."""
+
+    def test_rc_version(self) -> None:
+        """Test release candidate versions get dash inserted."""
+        assert version_to_git_tag("0.6.0rc1") == "v0.6.0-rc1"
+        assert version_to_git_tag("0.6.0rc2") == "v0.6.0-rc2"
+        assert version_to_git_tag("1.0.0rc10") == "v1.0.0-rc10"
+
+    def test_stable_version(self) -> None:
+        """Test stable versions are unchanged (just prefixed with v)."""
+        assert version_to_git_tag("0.5.4") == "v0.5.4"
+        assert version_to_git_tag("1.0.0") == "v1.0.0"
+
+    def test_alpha_version(self) -> None:
+        """Test alpha pre-release versions."""
+        assert version_to_git_tag("0.7.0alpha1") == "v0.7.0-alpha1"
+
+    def test_beta_version(self) -> None:
+        """Test beta pre-release versions."""
+        assert version_to_git_tag("0.7.0beta2") == "v0.7.0-beta2"
+
+    def test_dev_version(self) -> None:
+        """Test dev pre-release versions."""
+        assert version_to_git_tag("0.8.0dev1") == "v0.8.0-dev1"
+
+    def test_already_has_dash(self) -> None:
+        """Test versions that already contain a dash don't get double-dashed."""
+        # If someone passes "0.6.0-rc1" it should become "v0.6.0-rc1", not "v0.6.0--rc1"
+        assert version_to_git_tag("0.6.0-rc1") == "v0.6.0-rc1"
 
 
 class TestIntegration:

@@ -5,6 +5,7 @@ These values are derived from the aegis-stack pyproject.toml to maintain
 a single source of truth.
 """
 
+import re
 from pathlib import Path
 
 
@@ -93,6 +94,26 @@ DEFAULT_PYTHON_VERSION = _max_version
 
 # Supported Python versions (auto-generated from min to max)
 SUPPORTED_PYTHON_VERSIONS = _generate_supported_versions(_min_version, _max_version)
+
+
+def version_to_git_tag(version: str) -> str:
+    """
+    Convert a PEP 440 version string to a git tag.
+
+    PEP 440 uses no separator before pre-release identifiers (e.g., 0.6.0rc1),
+    but our git tags use a dash (e.g., v0.6.0-rc1).
+
+    Args:
+        version: PEP 440 version string (e.g., "0.6.0rc1", "0.5.4")
+
+    Returns:
+        Git tag string (e.g., "v0.6.0-rc1", "v0.5.4")
+    """
+    # Insert dash before pre-release identifiers: rc, alpha, beta, dev
+    # Negative lookbehind ensures we don't double-dash if already present
+    normalized = re.sub(r"(?<!-)(rc|alpha|beta|dev)(\d+)", r"-\1\2", version)
+    return f"v{normalized}"
+
 
 # GitHub URL for template source (used when installed via pip/uvx)
 GITHUB_TEMPLATE_URL = "gh:lbedner/aegis-stack"

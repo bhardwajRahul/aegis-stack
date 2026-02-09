@@ -16,7 +16,11 @@ from packaging.version import Version
 
 from aegis import __version__
 
-from ..config.defaults import DEFAULT_PYTHON_VERSION, GITHUB_TEMPLATE_URL
+from ..config.defaults import (
+    DEFAULT_PYTHON_VERSION,
+    GITHUB_TEMPLATE_URL,
+    version_to_git_tag,
+)
 from ..constants import AnswerKeys, StorageBackends
 from .migration_generator import (
     generate_migrations_for_services,
@@ -159,7 +163,7 @@ def generate_with_copier(
         # Use GitHub URL for template source with CLI version as default ref
         # This ensures CLI v0.4.1 uses template v0.4.1, not HEAD
         template_source = GITHUB_TEMPLATE_URL
-        resolved_ref = vcs_ref if vcs_ref else f"v{__version__}"
+        resolved_ref = vcs_ref if vcs_ref else version_to_git_tag(__version__)
 
     # Store template version in answers for future reference
     # This allows aegis update to show "v0.4.1" instead of commit hash
