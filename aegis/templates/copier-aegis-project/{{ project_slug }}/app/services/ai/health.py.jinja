@@ -114,42 +114,24 @@ async def check_ai_service_health() -> ComponentStatus:
             )
 
             # Add Ollama-specific health info when using Ollama provider
+            # NOTE: Detailed model/VRAM info is reported by check_ollama_health() (component check).
+            # Here we only do a lightweight availability check to avoid redundant timeout costs.
             if current_config.provider == AIProvider.OLLAMA:
                 try:
                     from app.services.ai.ollama import OllamaClient
 
-                    # Get Ollama base URL from settings (uses effective URL for Docker/local auto-detection)
                     ollama_url = settings.ollama_base_url_effective
-
                     ollama_client = OllamaClient(base_url=ollama_url)
-                    ollama_status = await ollama_client.get_server_status()
+                    ollama_available = await ollama_client.is_available()
 
-                    metadata["ollama_available"] = ollama_status.available
+                    metadata["ollama_available"] = ollama_available
                     metadata["ollama_base_url"] = ollama_url
 
-                    if ollama_status.available:
-                        metadata["ollama_running_models"] = [
-                            {
-                                "name": m.name,
-                                "vram_gb": round(m.size_vram_gb, 2),
-                                "warm": m.is_warm,
-                            }
-                            for m in ollama_status.running_models
-                        ]
-                        metadata["ollama_installed_models_count"] = ollama_status.installed_models_count
-                        metadata["ollama_total_vram_gb"] = round(ollama_status.total_vram_gb, 2)
-
-                        # Update status based on Ollama health
-                        if ollama_status.running_models:
-                            # Show primary model info in message
-                            primary_model = ollama_status.running_models[0]
-                            message = f"Ollama ready - {primary_model.name} • {round(primary_model.size_vram_gb, 1)}GB VRAM • warm"
-                    else:
-                        # Ollama not available - warn but don't fail
+                    if not ollama_available:
                         status = ComponentStatusType.WARNING
                         message = "AI service configured for Ollama but server not reachable"
                 except Exception as e:
-                    logger.warning(f"Failed to get Ollama status: {e}")
+                    logger.warning(f"Failed to check Ollama availability: {e}")
                     metadata["ollama_error"] = str(e)
             else:
                 # Auto-discovery: Check if Ollama is running locally even when not configured

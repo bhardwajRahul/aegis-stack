@@ -1,0 +1,63 @@
+# Development overrides
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile dev up
+#
+# Adds:
+#   - Code volume mounts for hot-reload
+#   - Debug ports for direct service access
+
+services:
+  webserver:
+    volumes:
+      - .:/code
+{%- if not include_ingress %}
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+{%- endif %}
+{%- if include_scheduler %}
+
+  scheduler:
+    volumes:
+      - .:/code
+{%- endif %}
+{%- if include_worker %}
+
+  worker-load-test:
+    volumes:
+      - .:/code
+
+  worker-system:
+    volumes:
+      - .:/code
+{%- endif %}
+{%- if include_redis %}
+
+  redis:
+    ports:
+      - "6379:6379"
+{%- endif %}
+{%- if database_engine == "postgres" %}
+
+  postgres:
+    ports:
+      - "5432:5432"
+{%- endif %}
+{%- if ollama_mode == "docker" %}
+
+  ollama:
+    ports:
+      - "11434:11434"
+{%- endif %}
+{%- if include_ingress %}
+
+  traefik:
+    ports:
+      - "80:80"
+{%- if ingress_tls %}
+      - "443:443"
+{%- endif %}
+      - "8080:8080"  # Dashboard
+{%- endif %}
+
+  test_runner:
+    volumes:
+      - .:/code

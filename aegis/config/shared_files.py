@@ -28,6 +28,8 @@ SHARED_TEMPLATE_FILES: dict[str, SharedFilePolicy] = {
     # These files configure the project infrastructure and should be
     # automatically regenerated when components change.
     "docker-compose.yml": {"overwrite": True, "backup": True, "warn": False},
+    "docker-compose.dev.yml": {"overwrite": True, "backup": True, "warn": False},
+    "docker-compose.prod.yml": {"overwrite": True, "backup": True, "warn": False},
     "pyproject.toml": {"overwrite": True, "backup": True, "warn": False},
     "Makefile": {"overwrite": True, "backup": True, "warn": False},
     ".dockerignore": {"overwrite": True, "backup": False, "warn": False},
