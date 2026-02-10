@@ -155,6 +155,7 @@ aegis init my-app --services auth --components database --no-interactive --outpu
 | `worker` | ✅ Available | arq worker with Redis for background processing (auto-adds redis) |
 | `database` | ✅ Available | SQLite database with SQLModel ORM |
 | `redis` | ✅ Available | Redis cache and message broker |
+| `ingress` | ✅ Available | Traefik reverse proxy with auto-discovery and admin protection |
 | `cache` | 🚧 Coming Soon | Redis-based async caching layer |
 
 **Available Services:**
@@ -468,6 +469,207 @@ aegis update --force --yes
 
 ---
 
+## Deployment Commands
+
+Commands for deploying your project to a remote server. See the **[Deployment Guide](deployment/index.md)** for full workflows and examples.
+
+### aegis deploy-init
+
+Initialize deployment configuration for a project.
+
+**Usage:**
+```bash
+aegis deploy-init [OPTIONS]
+```
+
+**Options:**
+
+- `--host, -h TEXT` — Server IP address or hostname
+- `--user, -u TEXT` — SSH user for deployment (default: `root`)
+- `--path, -p TEXT` — Deployment path on server (default: `/opt/{project-name}`)
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-init --host 192.168.1.100
+aegis deploy-init --host myserver.com --user deploy
+```
+
+---
+
+### aegis deploy-setup
+
+Provision a remote server for deployment. Installs Docker, configures firewall, and prepares the server.
+
+**Usage:**
+```bash
+aegis deploy-setup [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-setup
+```
+
+---
+
+### aegis deploy
+
+Deploy the project to the configured server. Syncs files, builds Docker images, and starts services.
+
+**Usage:**
+```bash
+aegis deploy [OPTIONS]
+```
+
+**Options:**
+
+- `--build / --no-build` — Build images before deploying (default: `--build`)
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy
+aegis deploy --no-build
+```
+
+---
+
+### aegis deploy-logs
+
+View logs from the deployed application.
+
+**Usage:**
+```bash
+aegis deploy-logs [OPTIONS]
+```
+
+**Options:**
+
+- `--follow / --no-follow, -f` — Follow log output (default: `--follow`)
+- `--service, -s TEXT` — Show logs for a specific service
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-logs
+aegis deploy-logs --no-follow
+aegis deploy-logs --service webserver
+```
+
+---
+
+### aegis deploy-status
+
+Check the status of deployed services.
+
+**Usage:**
+```bash
+aegis deploy-status [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-status
+```
+
+---
+
+### aegis deploy-stop
+
+Stop all deployed services.
+
+**Usage:**
+```bash
+aegis deploy-stop [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-stop
+```
+
+---
+
+### aegis deploy-restart
+
+Restart all deployed services.
+
+**Usage:**
+```bash
+aegis deploy-restart [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-restart
+```
+
+---
+
+### aegis deploy-shell
+
+Open a shell in a deployed container.
+
+**Usage:**
+```bash
+aegis deploy-shell [OPTIONS]
+```
+
+**Options:**
+
+- `--service, -s TEXT` — Service to connect to (default: `webserver`)
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-shell
+aegis deploy-shell --service redis
+```
+
+---
+
+### aegis ingress-enable
+
+Enable TLS (HTTPS) on a project with the ingress component. Configures Let's Encrypt certificates via Traefik.
+
+**Usage:**
+```bash
+aegis ingress-enable [OPTIONS]
+```
+
+**Options:**
+
+- `--domain, -d TEXT` — Domain name for TLS certificate (e.g., `example.com`)
+- `--email, -e TEXT` — Email for Let's Encrypt certificate notifications
+- `--project-path, -p TEXT` — Path to the project (default: current directory)
+- `--yes, -y` — Skip confirmation prompts
+
+**Examples:**
+```bash
+aegis ingress-enable --domain example.com --email admin@example.com
+aegis ingress-enable -d example.com -e admin@example.com -y
+aegis ingress-enable  # interactive prompts
+```
+
+---
+
 ## Generated Project CLI
 
 When you add services to a project, they install their own CLI commands as entry point scripts. These commands are available after running `uv sync` in your generated project.
@@ -560,6 +762,10 @@ my-project/
 │   ├── services/          # Business logic
 │   ├── cli/               # CLI commands (if services added)
 │   └── integrations/      # App composition
+├── traefik/               # Traefik config (if ingress included)
+│   └── traefik.yml        # Traefik static configuration
+├── scripts/               # Deployment scripts (if ingress included)
+│   └── server-setup.sh    # Server provisioning
 ├── tests/                 # Test suite
 ├── docs/                  # Documentation
 ├── data/                  # SQLite databases (if database included)
