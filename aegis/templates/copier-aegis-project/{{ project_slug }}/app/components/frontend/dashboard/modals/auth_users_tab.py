@@ -308,7 +308,9 @@ class AuthUsersTab(ft.Container):
         ConfirmDialog(
             page=page,
             title="Delete User",
-            message=f"Permanently delete '{user.get('email')}'?\n\nThis cannot be undone.",
+            message=(
+                f"Permanently delete '{user.get('email')}'?\n\nThis cannot be undone."
+            ),
             confirm_text="Delete",
             on_confirm=do_delete,
             destructive=True,

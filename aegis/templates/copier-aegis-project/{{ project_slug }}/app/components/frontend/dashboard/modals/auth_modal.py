@@ -278,7 +278,8 @@ class AuthDetailDialog(BaseDetailPopup):
             indicator_color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
-        # Initialize base popup with tabs (non-scrollable - tabs handle their own scrolling)
+        # Initialize base popup with tabs
+        # (non-scrollable - tabs handle their own scrolling)
         super().__init__(
             page=page,
             component_data=component_data,
