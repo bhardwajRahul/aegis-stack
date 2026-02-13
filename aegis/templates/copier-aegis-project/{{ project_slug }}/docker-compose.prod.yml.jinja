@@ -10,6 +10,28 @@
 services:
   webserver:
     volumes: []  # Remove dev code mount - code is baked into the image
+{%- if ingress_tls %}
+    labels:
+      # Public router (HTTPS)
+{%- if ingress_domain %}
+      - "traefik.http.routers.webserver.rule=Host(`{{ ingress_domain }}`)"
+{%- else %}
+      - "traefik.http.routers.webserver.rule=PathPrefix(`/`)"
+{%- endif %}
+      - "traefik.http.routers.webserver.entrypoints=websecure"
+      - "traefik.http.routers.webserver.tls.certresolver=letsencrypt"
+      # Admin paths - IP restricted
+{%- if ingress_domain %}
+      - "traefik.http.routers.webserver-admin.rule=Host(`{{ ingress_domain }}`) && (PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))"
+{%- else %}
+      - "traefik.http.routers.webserver-admin.rule=PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`)"
+{%- endif %}
+      - "traefik.http.routers.webserver-admin.entrypoints=websecure"
+      - "traefik.http.routers.webserver-admin.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.webserver-admin.service=webserver"
+      - "traefik.http.routers.webserver-admin.middlewares=admin-ipallowlist"
+      - "traefik.http.middlewares.admin-ipallowlist.ipallowlist.sourcerange=${ADMIN_IP_ALLOWLIST:-0.0.0.0/0}"
+{%- endif %}
     profiles:
       - dev
       - prod
