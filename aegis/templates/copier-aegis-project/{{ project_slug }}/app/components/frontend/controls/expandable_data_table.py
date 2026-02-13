@@ -98,7 +98,8 @@ class ExpandableTableRow(ft.Container):
             bgcolor=ft.Colors.SURFACE,
             padding=ft.padding.symmetric(horizontal=Theme.Spacing.MD, vertical=10),
             on_hover=self._on_hover,
-            # animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),  # Disabled for debugging
+            # Animation disabled for debugging
+            # animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
         )
 
         # Clickable wrapper

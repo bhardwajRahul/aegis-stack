@@ -181,7 +181,7 @@ def _build_job_expanded_content(task: dict) -> ft.Control:
     #         [
     #             ft.Icon(ft.Icons.CONSTRUCTION, size=16, color=ft.Colors.ORANGE_900),
     #             ft.Text(
-    #                 "Work in progress - data below is placeholder, not real execution history",
+    #                 "WIP - placeholder data, not real history",
     #                 size=12,
     #                 color=ft.Colors.ORANGE_900,
     #             ),
@@ -228,7 +228,9 @@ def _build_job_expanded_content(task: dict) -> ft.Control:
     # content.append(ft.Container(height=Theme.Spacing.MD))
 
     # === Section 3: Recent Executions (hidden for now) ===
-    # content.append(SecondaryText("Recent Executions", size=Theme.Typography.BODY_SMALL))
+    # content.append(
+    #     SecondaryText("Recent Executions", size=Theme.Typography.BODY_SMALL)
+    # )
     # content.append(ft.Container(height=Theme.Spacing.XS))
     #
     # # Build execution rows

@@ -79,7 +79,8 @@ def _discover_lifecycle_hooks() -> dict[str, Any]:
     backend_dir = Path(__file__).parent.parent
 
     def get_hooks_from_dir(hook_dir: Path) -> list[dict[str, str]]:
-        """Get hook info from a directory by importing modules and reading docstrings."""
+        """Get hook info from a directory by importing modules
+        and reading docstrings."""
         hooks = []
         if not hook_dir.exists():
             return hooks
@@ -154,7 +155,9 @@ async def _backend_component_health() -> ComponentStatus:
     Includes comprehensive route and middleware metadata for dashboard display.
     """
     import os
-    global _cached_route_metadata, _cached_middleware_metadata, _cached_lifecycle_metadata
+    global _cached_route_metadata
+    global _cached_middleware_metadata
+    global _cached_lifecycle_metadata
 
     # Check if we're in test environment
     if os.getenv("PYTEST_CURRENT_TEST") or "pytest" in os.getenv("_", ""):

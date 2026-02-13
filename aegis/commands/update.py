@@ -37,6 +37,53 @@ from ..core.template_cleanup import (
 from ..core.version_compatibility import get_cli_version, get_project_template_version
 
 
+def _get_template_changed_files(
+    template_root: Path,
+    from_ref: str,
+    to_ref: str,
+) -> set[str] | None:
+    """Get project-relative paths of files that changed in the template between refs.
+
+    Diffs the template repo between two refs and extracts paths under the
+    ``{{ project_slug }}/`` directory, stripping the template prefix and
+    ``.jinja`` suffix so they map to actual project file paths.
+
+    Returns ``None`` on git failure (so the caller falls back to syncing
+    everything) and an empty ``set`` when the diff succeeded but found no
+    changed files.
+    """
+    result = subprocess.run(
+        [
+            "git",
+            "diff",
+            "--name-only",
+            from_ref,
+            to_ref,
+            "--",
+            "aegis/templates/copier-aegis-project/{{ project_slug }}/",
+        ],
+        cwd=template_root,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+
+    prefix = "aegis/templates/copier-aegis-project/{{ project_slug }}/"
+    changed: set[str] = set()
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if not line or not line.startswith(prefix):
+            continue
+        relative = line[len(prefix) :]
+        # Strip .jinja suffix — rendered files don't have it
+        if relative.endswith(".jinja"):
+            relative = relative[:-6]
+        if relative:
+            changed.add(relative)
+    return changed
+
+
 def update_command(
     to_version: str | None = typer.Option(
         None,
@@ -315,6 +362,16 @@ def update_command(
             vcs_ref=target_ref,  # Use specified version
         )
 
+        # Get the set of files that actually changed in the template between versions
+        # so sync_template_changes() only touches those, not every project customization
+        template_changed_files: set[str] | None = None
+        if current_commit:
+            template_changed_files = _get_template_changed_files(
+                template_root,
+                current_commit,
+                target_ref,
+            )
+
         # Load answers for cleanup and post-generation tasks
         answers = load_copier_answers(target_path)
 
@@ -340,7 +397,11 @@ def update_command(
         # from git apply because it only contains ignored files
         template_src = answers.get("_src_path", "gh:lbedner/aegis-stack")
         synced_files = sync_template_changes(
-            target_path, answers, template_src, target_ref
+            target_path,
+            answers,
+            template_src,
+            target_ref,
+            template_changed_files=template_changed_files,
         )
         if synced_files:
             typer.echo(f"   Synced {len(synced_files)} template changes")

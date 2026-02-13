@@ -165,7 +165,8 @@ class SystemDashboard:
                 healthy_count, total_count, worst_status
             )
             self._health_indicator_container.content = new_health_indicator
-            # Note: No .update() call here - batched with page.update() in refresh_dashboard
+            # No .update() call here - batched with
+            # page.update() in refresh_dashboard
         except PageDisconnectedException:
             logger.debug("Page disconnected during health status update")
             return
@@ -215,7 +216,8 @@ class SystemDashboard:
                 card.col = {"xs": 12, "sm": 6, "md": 4, "lg": 4, "xl": 4}
                 self._cards_container.content.controls.append(card)
 
-            # Note: No .update() call here - batched with page.update() in refresh_dashboard
+            # No .update() call here - batched with
+            # page.update() in refresh_dashboard
         except PageDisconnectedException:
             logger.debug("Page disconnected during component cards update")
             return
@@ -249,7 +251,8 @@ class SystemDashboard:
             if self._activity_feed:
                 self._activity_feed.refresh()
 
-            # Note: No .update() calls here - batched with page.update() in refresh_dashboard
+            # No .update() calls here - batched with
+            # page.update() in refresh_dashboard
         except PageDisconnectedException:
             logger.debug("Page disconnected during status overview update")
             return
@@ -278,7 +281,8 @@ class SystemDashboard:
 
         try:
             self._diagram_view.update_components(components)
-            # Note: No .update() calls here - batched with page.update() in refresh_dashboard
+            # No .update() calls here - batched with
+            # page.update() in refresh_dashboard
         except PageDisconnectedException:
             logger.debug("Page disconnected during diagram view update")
             return

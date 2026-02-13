@@ -321,9 +321,9 @@ async def get_system_status() -> SystemStatus:
         system_info=system_info,
     )
 
-    # Log unhealthy components
+    # Log unhealthy components (debug-only to avoid log spam from periodic checks)
     if not overall_healthy:
-        logger.warning(
+        logger.debug(
             f"System unhealthy: {status.unhealthy_components}",
             extra={"unhealthy_components": status.unhealthy_components},
         )
@@ -356,7 +356,7 @@ async def check_system_status() -> None:
             )
             logger.debug(log_msg)
         else:
-            logger.warning(
+            logger.debug(
                 f"System issues detected: "
                 f"{len(status.unhealthy_components)} unhealthy components",
                 extra={
@@ -368,7 +368,7 @@ async def check_system_status() -> None:
             # Log details for each unhealthy component
             for component_name in status.unhealthy_components:
                 component = status.components[component_name]
-                logger.error(
+                logger.debug(
                     f"{component_name}: {component.message}",
                     extra={"component": component.name, "metadata": component.metadata},
                 )
@@ -479,10 +479,15 @@ async def _run_health_check(
                         )
                     else:
                         # Status change
+                        change_msg = (
+                            f"{display_name}: "
+                            f"{previous_status.value} → "
+                            f"{current_status.value}"
+                        )
                         activity.add_event(
                             component=name,
                             event_type="status_change",
-                            message=f"{display_name}: {previous_status.value} → {current_status.value}",
+                            message=change_msg,
                             status=event_status,
                             details=details,
                         )
@@ -890,7 +895,6 @@ async def check_worker_health() -> ComponentStatus:
         total_queued = 0
         total_processed = 0
         total_ongoing = 0
-        overall_healthy = True
         active_workers = 0
 
         for queue_type, queue_config in functional_queues.items():
@@ -988,9 +992,6 @@ async def check_worker_health() -> ComponentStatus:
                     f"{queue_config['description']}: {', '.join(status_parts)}"
                 )
 
-                if queue_status == ComponentStatusType.UNHEALTHY:
-                    overall_healthy = False
-
                 queue_metadata: dict[str, Any] = {
                     "queue_type": queue_type,
                     "stream_name": stream_name,
@@ -1015,7 +1016,6 @@ async def check_worker_health() -> ComponentStatus:
 
             except aioredis.ConnectionError as e:
                 logger.error(f"Redis connection failed for {queue_type}: {e}")
-                overall_healthy = False
 
                 error_details = str(e).lower()
                 if "connection refused" in error_details:
@@ -1051,7 +1051,6 @@ async def check_worker_health() -> ComponentStatus:
                 logger.error(
                     f"Unexpected error checking {queue_type} queue health: {e}"
                 )
-                overall_healthy = False
                 queue_sub_components[queue_type] = ComponentStatus(
                     name=queue_type,
                     status=ComponentStatusType.UNHEALTHY,
@@ -1188,7 +1187,6 @@ async def check_worker_health() -> ComponentStatus:
         total_failed = 0
         total_retried = 0
         total_ongoing = 0
-        overall_healthy = True
         active_workers = 0
 
         for queue_type, queue_config in functional_queues.items():
@@ -1296,10 +1294,6 @@ async def check_worker_health() -> ComponentStatus:
                     f"{queue_config['description']}: {', '.join(status_parts)}"
                 )
 
-                # Update overall health based on this queue
-                if queue_status == ComponentStatusType.UNHEALTHY:
-                    overall_healthy = False
-
                 queue_metadata = {
                     "queue_type": queue_type,
                     "queue_name": queue_name,
@@ -1337,7 +1331,6 @@ async def check_worker_health() -> ComponentStatus:
 
             except aioredis.ConnectionError as e:
                 logger.error(f"Redis connection failed for {queue_type}: {e}")
-                overall_healthy = False
 
                 # Extract more specific connection error details
                 error_details = str(e).lower()
@@ -1382,7 +1375,6 @@ async def check_worker_health() -> ComponentStatus:
                     recommendation = "Check Redis configuration and permissions"
                     error_type = "redis_response_error"
 
-                overall_healthy = False
                 queue_sub_components[queue_type] = ComponentStatus(
                     name=queue_type,
                     status=ComponentStatusType.UNHEALTHY,
@@ -1401,7 +1393,6 @@ async def check_worker_health() -> ComponentStatus:
                 logger.error(
                     f"Unexpected error checking {queue_type} queue health: {e}"
                 )
-                overall_healthy = False
                 queue_sub_components[queue_type] = ComponentStatus(
                     name=queue_type,
                     status=ComponentStatusType.UNHEALTHY,
@@ -1628,7 +1619,9 @@ async def check_ingress_health() -> ComponentStatus:
         # Traefik API endpoint (dashboard API)
         traefik_api_url = settings.traefik_api_url_effective
 
-        async with httpx.AsyncClient(timeout=settings.HEALTH_CHECK_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(
+            timeout=settings.HEALTH_CHECK_TIMEOUT_SECONDS,
+        ) as client:
             # Check Traefik health endpoint
             try:
                 health_response = await client.get(f"{traefik_api_url}/ping")
@@ -1651,29 +1644,49 @@ async def check_ingress_health() -> ComponentStatus:
 
             # Get Traefik version and overview
             try:
-                version_response = await client.get(f"{traefik_api_url}/api/version")
-                version_data = version_response.json() if version_response.status_code == 200 else {}
+                version_response = await client.get(
+                    f"{traefik_api_url}/api/version"
+                )
+                if version_response.status_code == 200:
+                    version_data = version_response.json()
+                else:
+                    version_data = {}
             except Exception:
                 version_data = {}
 
             # Get HTTP routers
             try:
-                routers_response = await client.get(f"{traefik_api_url}/api/http/routers")
-                routers = routers_response.json() if routers_response.status_code == 200 else []
+                routers_response = await client.get(
+                    f"{traefik_api_url}/api/http/routers"
+                )
+                if routers_response.status_code == 200:
+                    routers = routers_response.json()
+                else:
+                    routers = []
             except Exception:
                 routers = []
 
             # Get HTTP services
             try:
-                services_response = await client.get(f"{traefik_api_url}/api/http/services")
-                services = services_response.json() if services_response.status_code == 200 else []
+                services_response = await client.get(
+                    f"{traefik_api_url}/api/http/services"
+                )
+                if services_response.status_code == 200:
+                    services = services_response.json()
+                else:
+                    services = []
             except Exception:
                 services = []
 
             # Get entrypoints
             try:
-                entrypoints_response = await client.get(f"{traefik_api_url}/api/entrypoints")
-                entrypoints = entrypoints_response.json() if entrypoints_response.status_code == 200 else []
+                entrypoints_response = await client.get(
+                    f"{traefik_api_url}/api/entrypoints"
+                )
+                if entrypoints_response.status_code == 200:
+                    entrypoints = entrypoints_response.json()
+                else:
+                    entrypoints = []
             except Exception:
                 entrypoints = []
 
@@ -1687,7 +1700,10 @@ async def check_ingress_health() -> ComponentStatus:
                 message = "Traefik running but no routers configured"
             else:
                 status = ComponentStatusType.HEALTHY
-                message = f"Traefik active: {len(enabled_routers)} routers, {len(enabled_services)} services"
+                message = (
+                    f"Traefik active: {len(enabled_routers)} routers, "
+                    f"{len(enabled_services)} services"
+                )
 
             # Extract entrypoint info
             entrypoint_info = []

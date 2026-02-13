@@ -86,7 +86,8 @@ def calculate_tree_positions(
     Arranges components in a 4-tier hierarchical tree structure:
     - Ingress (Traefik) at top center - entry point
     - Backend (Server) below ingress
-    - Infrastructure components in third row (database, cache, worker, scheduler, ollama)
+    - Infrastructure components in third row
+      (database, cache, worker, scheduler, ollama)
     - Services in bottom row
 
     Args:

@@ -452,7 +452,10 @@ class WorkerDetailDialog(BaseDetailPopup):
 
     @staticmethod
     def _compute_status_detail(component_data: ComponentStatus) -> str | None:
-        """Get status detail - only for non-healthy states, using health check message."""
+        """Get status detail for non-healthy states.
+
+        Uses health check message for detail text.
+        """
         from app.components.frontend.dashboard.cards.card_utils import get_status_detail
 
         return get_status_detail(component_data)

@@ -281,7 +281,11 @@ class Settings(BaseSettings):
 {% if include_ingress %}
     @property
     def traefik_api_url_effective(self) -> str:
-        """Get effective Traefik API URL, preferring local override when not in Docker."""
+        """
+        Get effective Traefik API URL.
+
+        Prefers local override when not in Docker.
+        """
         # If explicitly overridden for local use
         if self.TRAEFIK_API_URL_LOCAL and not self.is_docker:
             return self.TRAEFIK_API_URL_LOCAL

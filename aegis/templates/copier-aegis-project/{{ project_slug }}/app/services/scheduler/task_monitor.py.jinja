@@ -206,7 +206,10 @@ class TaskHealthMonitor:
             if hasattr(job, "func") and job.func:
                 func = job.func
                 module = getattr(func, "__module__", "")
-                name = getattr(func, "__qualname__", getattr(func, "__name__", "unknown"))
+                name = getattr(
+                    func, "__qualname__",
+                    getattr(func, "__name__", "unknown"),
+                )
                 if module:
                     return f"{module}.{name}"
                 return name

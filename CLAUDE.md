@@ -90,6 +90,21 @@ uvx --index-url https://test.pypi.org/simple/ \
 - `--extra-index-url` - Fallback: PyPI (for dependencies not on TestPyPI)
 - `--index-strategy unsafe-best-match` - Allows mixing packages from different indexes
 
+### Updating External Projects with Local Committed Template Changes
+To test local committed template changes against an external Aegis project, use the `--template-path` and `--to-version HEAD` flags:
+
+```bash
+# From the aegis-stack root (where .venv lives):
+aegis update -y -p /path/to/project -t /path/to/aegis-stack --to-version HEAD
+```
+
+**Key flags:**
+- `-p` / `--project-path` - Path to the target Aegis project
+- `-t` / `--template-path` - Points Copier at the local aegis-stack repo instead of the installed package
+- `--to-version HEAD` - Uses the latest commit on the current branch (not the version tag)
+
+**Note:** Template changes must be committed to git first — Copier reads from the git state, not the working tree.
+
 ## Code Navigation (LSP-First)
 
 Use the Language Server (Pyright) for code navigation instead of grep/glob:

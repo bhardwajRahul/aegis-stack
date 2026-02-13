@@ -98,6 +98,7 @@ def sync_template_changes(
     answers: dict,
     template_src: str,
     vcs_ref: str,
+    template_changed_files: set[str] | None = None,
 ) -> list[str]:
     """
     Sync template changes that Copier's git apply may have missed.
@@ -121,6 +122,10 @@ def sync_template_changes(
         answers: Copier answers dict (from .copier-answers.yml)
         template_src: Template source (e.g., "gh:user/repo")
         vcs_ref: Git ref for template version (e.g., "v0.5.3-rc1")
+        template_changed_files: Set of project-relative file paths that
+            actually changed in the template between versions. When provided,
+            only these files are eligible for sync — preserving intentional
+            project customizations in all other files.
 
     Returns:
         List of relative file paths that were updated
@@ -169,6 +174,14 @@ def sync_template_changes(
                 continue
 
             project_file = project_path / relative
+
+            # Only sync files the template actually changed between versions
+            # This preserves intentional project customizations
+            if (
+                template_changed_files is not None
+                and relative.as_posix() not in template_changed_files
+            ):
+                continue
 
             # Only update existing files (new files handled by cleanup_nested)
             if not project_file.exists():
