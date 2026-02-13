@@ -678,18 +678,15 @@ async def check_cache_health() -> ComponentStatus:
 
         # Cleanup test key
         await redis_client.delete(test_key)
-        await redis_client.aclose()
 
         # Verify test worked
         if retrieved_value.decode() != test_value:
             raise Exception("Redis set/get test failed")
 
         # Get comprehensive Redis info for detailed monitoring
-        redis_info_connection = aioredis.from_url(  # type: ignore[no-untyped-call]
-            redis_url, db=settings.REDIS_DB
-        )
-        redis_info_client: aioredis.Redis = cast(aioredis.Redis, redis_info_connection)
-        
+        # Reuse existing connection instead of creating a second one
+        redis_info_client = redis_client
+
         # Get multiple INFO sections for comprehensive metrics
         info = await redis_info_client.info()
         stats_info = await redis_info_client.info('stats')

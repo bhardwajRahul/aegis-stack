@@ -6,10 +6,23 @@ dealing with nested directory structures created during template updates.
 """
 
 import shutil
+import subprocess
 import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .verbosity import verbose_print
+
+
+@dataclass
+class SyncResult:
+    """Result of sync_template_changes() with details about what happened."""
+
+    synced: list[str] = field(default_factory=list)
+    """Files updated (clean merge or overwrite)."""
+
+    conflicts: list[str] = field(default_factory=list)
+    """Files with merge conflict markers that need manual resolution."""
 
 
 def cleanup_nested_project_directory(
@@ -66,12 +79,15 @@ def cleanup_nested_project_directory(
             # Create parent directories if needed
             dest.parent.mkdir(parents=True, exist_ok=True)
 
-            # Handle case where file exists at both locations
+            # Skip files that already exist — sync_template_changes() will
+            # handle them with a proper 3-way merge that preserves user
+            # customizations. Only move truly NEW files here.
             if dest.exists():
-                # Keep the nested version (it's from newer template)
-                # This handles edge cases where Copier created duplicates
-                dest.unlink()
-                verbose_print(f"   Replaced: {dest.relative_to(project_path)}")
+                source.unlink()
+                verbose_print(
+                    f"   Skipped (exists, will merge): {dest.relative_to(project_path)}"
+                )
+                continue
 
             shutil.move(str(source), str(dest))
 
@@ -99,23 +115,29 @@ def sync_template_changes(
     template_src: str,
     vcs_ref: str,
     template_changed_files: set[str] | None = None,
-) -> list[str]:
+    old_commit: str | None = None,
+) -> SyncResult:
     """
-    Sync template changes that Copier's git apply may have missed.
+    Sync template changes using 3-way merge to preserve user customizations.
 
-    Copier's update mechanism uses `git apply` with exclusions based on
-    `git status --ignored`. When the template uses a {{ project_slug }}/
-    wrapper, and the nested directory contains only ignored files, the
-    entire project slug directory gets excluded from the patch.
+    Copier's update mechanism uses `git apply` which is non-functional for
+    Aegis projects due to the {{ project_slug }}/ wrapper causing path
+    mismatches. This function is the primary mechanism for updating project
+    files.
 
-    This function works around that by:
-    1. Rendering the new template to a temp directory
-    2. Comparing files between project and rendered template
-    3. Updating project files that differ from template
+    It performs a 3-way merge for each changed file:
+    - **Base**: Old template render (what the project was originally generated from)
+    - **Current**: User's project file (may have customizations)
+    - **Other**: New template render (the update target)
+
+    Decision logic per file:
+    1. Old template doesn't exist → new file → write new version
+    2. Old template == user's file → user didn't customize → safe overwrite
+    3. Old template == new template → template didn't change → skip
+    4. All three differ → 3-way merge via `git merge-file`
 
     Note: This function only syncs EXISTING files. New files are handled by
     cleanup_nested_project_directory() which must run BEFORE this function.
-    The update command (aegis/commands/update.py) ensures this ordering.
 
     Args:
         project_path: Path to project root
@@ -124,29 +146,31 @@ def sync_template_changes(
         vcs_ref: Git ref for template version (e.g., "v0.5.3-rc1")
         template_changed_files: Set of project-relative file paths that
             actually changed in the template between versions. When provided,
-            only these files are eligible for sync — preserving intentional
-            project customizations in all other files.
+            only these files are eligible for sync.
+        old_commit: Git ref for the OLD template version (from _commit in
+            .copier-answers.yml). Used to render the base version for 3-way merge.
 
     Returns:
-        List of relative file paths that were updated
+        SyncResult with lists of synced files and files with conflicts.
     """
     from copier import run_copy
 
     project_slug = answers.get("project_slug", "")
     if not project_slug:
-        return []
+        return SyncResult()
 
-    files_updated: list[str] = []
+    result = SyncResult()
 
-    # Create temp directory for rendered template
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
+        new_render = temp_path / "new"
+        old_render = temp_path / "old"
 
-        # Render the new template version
+        # Render the NEW template version
         try:
             run_copy(
                 src_path=template_src,
-                dst_path=str(temp_path),
+                dst_path=str(new_render),
                 data=answers,
                 defaults=True,
                 overwrite=True,
@@ -155,28 +179,48 @@ def sync_template_changes(
                 quiet=True,
             )
         except Exception as e:
-            verbose_print(f"   Warning: Could not render template for sync: {e}")
-            return []
+            verbose_print(f"   Warning: Could not render new template for sync: {e}")
+            return SyncResult()
 
-        # The rendered template is in temp_path/project_slug/
-        rendered_dir = temp_path / project_slug
-        if not rendered_dir.exists():
-            return []
+        new_rendered_dir = new_render / project_slug
+        if not new_rendered_dir.exists():
+            return SyncResult()
+
+        # Render the OLD template version (for 3-way merge base)
+        old_rendered_dir: Path | None = None
+        if old_commit:
+            try:
+                run_copy(
+                    src_path=template_src,
+                    dst_path=str(old_render),
+                    data=answers,
+                    defaults=True,
+                    overwrite=True,
+                    unsafe=False,
+                    vcs_ref=old_commit,
+                    quiet=True,
+                )
+                candidate = old_render / project_slug
+                if candidate.exists():
+                    old_rendered_dir = candidate
+            except Exception as e:
+                verbose_print(
+                    f"   Warning: Could not render old template for merge base: {e}"
+                )
+                # Fall back to overwrite behavior (no old render available)
 
         # Compare and sync files
-        for template_file in rendered_dir.rglob("*"):
+        for template_file in new_rendered_dir.rglob("*"):
             if template_file.is_dir():
                 continue
 
-            # Skip certain files that shouldn't be synced
-            relative = template_file.relative_to(rendered_dir)
+            relative = template_file.relative_to(new_rendered_dir)
             if _should_skip_sync(str(relative)):
                 continue
 
             project_file = project_path / relative
 
             # Only sync files the template actually changed between versions
-            # This preserves intentional project customizations
             if (
                 template_changed_files is not None
                 and relative.as_posix() not in template_changed_files
@@ -187,20 +231,102 @@ def sync_template_changes(
             if not project_file.exists():
                 continue
 
-            # Compare file contents
             try:
-                template_content = template_file.read_bytes()
+                new_content = template_file.read_bytes()
                 project_content = project_file.read_bytes()
 
-                if template_content != project_content:
-                    # Update project file with template version
-                    project_file.write_bytes(template_content)
-                    files_updated.append(str(relative))
+                # No difference — nothing to do
+                if new_content == project_content:
+                    continue
+
+                old_file = old_rendered_dir / relative if old_rendered_dir else None
+
+                if old_file and old_file.exists():
+                    old_content = old_file.read_bytes()
+
+                    if old_content == project_content:
+                        # User didn't customize — safe to use new version
+                        project_file.write_bytes(new_content)
+                        result.synced.append(str(relative))
+                        verbose_print(f"   Synced: {relative}")
+                    elif old_content == new_content:
+                        # Template didn't change this file — keep user's version
+                        verbose_print(f"   Preserved: {relative} (user customized)")
+                        continue
+                    else:
+                        # All three differ — 3-way merge
+                        _three_way_merge(
+                            project_file, old_file, template_file, relative, result
+                        )
+                else:
+                    # No old render available — fall back to overwrite
+                    project_file.write_bytes(new_content)
+                    result.synced.append(str(relative))
                     verbose_print(f"   Synced: {relative}")
+
             except OSError as e:
                 verbose_print(f"   Warning: Could not sync {relative}: {e}")
 
-    return files_updated
+    return result
+
+
+def _three_way_merge(
+    project_file: Path,
+    old_file: Path,
+    new_file: Path,
+    relative: Path,
+    result: SyncResult,
+) -> None:
+    """Perform a 3-way merge using git merge-file.
+
+    Non-conflicting changes from both sides are merged automatically.
+    When conflicts exist (both sides changed the same region), the merged
+    output with conflict markers is written to the file and reported as a
+    conflict for manual resolution, similar to how ``git merge`` behaves.
+
+    This avoids both failure modes of auto-resolution:
+    - --ours silently dropped template fixes
+    - --theirs silently overwrote user customizations
+
+    Args:
+        project_file: User's current file (modified in-place on merge).
+        old_file: Old template render (base).
+        new_file: New template render (other).
+        relative: Relative path for logging/reporting.
+        result: SyncResult to append synced/conflict info to.
+    """
+    merge = subprocess.run(
+        [
+            "git",
+            "merge-file",
+            "-p",
+            str(project_file),
+            str(old_file),
+            str(new_file),
+        ],
+        capture_output=True,
+        check=False,
+    )
+    try:
+        if merge.returncode == 0:
+            # Clean merge — no conflicts, both sides' changes applied
+            project_file.write_bytes(merge.stdout)
+            result.synced.append(str(relative))
+            verbose_print(f"   Merged: {relative}")
+        elif merge.returncode == 1:
+            # Conflicts exist — write merged output with conflict markers
+            # directly into the file, just like git merge does
+            project_file.write_bytes(merge.stdout)
+            result.conflicts.append(str(relative))
+            verbose_print(f"   Conflict (needs manual review): {relative}")
+        else:
+            # merge-file failed entirely — fall back to overwrite
+            new_content = new_file.read_bytes()
+            project_file.write_bytes(new_content)
+            result.synced.append(str(relative))
+            verbose_print(f"   Synced (merge failed, overwrote): {relative}")
+    except OSError as e:
+        verbose_print(f"   Warning: Could not sync {relative}: {e}")
 
 
 def _should_skip_sync(relative_path: str) -> bool:

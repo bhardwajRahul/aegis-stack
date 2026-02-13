@@ -349,6 +349,16 @@ def update_command(
                     # If commit fails (e.g., no changes), that's OK
                     pass
 
+        # Get the set of files that actually changed in the template between versions
+        # so sync_template_changes() only touches those, not every project customization
+        template_changed_files: set[str] | None = None
+        if current_commit:
+            template_changed_files = _get_template_changed_files(
+                template_root,
+                current_commit,
+                target_ref,
+            )
+
         # Run Copier update with git-aware merge
         # NOTE: We do NOT pass src_path - Copier reads it from .copier-answers.yml
         # This is critical for Copier's git tracking detection to work correctly
@@ -361,16 +371,6 @@ def update_command(
             unsafe=False,  # Disable _tasks (we run them ourselves)
             vcs_ref=target_ref,  # Use specified version
         )
-
-        # Get the set of files that actually changed in the template between versions
-        # so sync_template_changes() only touches those, not every project customization
-        template_changed_files: set[str] | None = None
-        if current_commit:
-            template_changed_files = _get_template_changed_files(
-                template_root,
-                current_commit,
-                target_ref,
-            )
 
         # Load answers for cleanup and post-generation tasks
         answers = load_copier_answers(target_path)
@@ -392,19 +392,27 @@ def update_command(
                 # files and cleanup_components removes those not selected in answers
                 cleanup_components(target_path, answers)
 
-        # Sync template changes that Copier's git apply may have missed
-        # This handles the case where the {{ project_slug }}/ directory is excluded
-        # from git apply because it only contains ignored files
+        # Sync template changes using 3-way merge to preserve user customizations
+        # Copier's git apply is non-functional for Aegis projects due to the
+        # {{ project_slug }}/ wrapper causing path mismatches
         template_src = answers.get("_src_path", "gh:lbedner/aegis-stack")
-        synced_files = sync_template_changes(
+        sync_result = sync_template_changes(
             target_path,
             answers,
             template_src,
             target_ref,
             template_changed_files=template_changed_files,
+            old_commit=current_commit,
         )
-        if synced_files:
-            typer.echo(f"   Synced {len(synced_files)} template changes")
+        if sync_result.synced:
+            typer.echo(f"   Synced {len(sync_result.synced)} template changes")
+        if sync_result.conflicts:
+            typer.echo(
+                f"   {len(sync_result.conflicts)} file(s) have merge conflicts "
+                "(search for <<<<<<< to resolve):"
+            )
+            for conflict_file in sync_result.conflicts:
+                typer.echo(f"      - {conflict_file}")
 
         # Run post-generation tasks
         # Determine what services need migrations

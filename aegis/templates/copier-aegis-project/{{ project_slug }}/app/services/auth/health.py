@@ -70,21 +70,21 @@ async def check_auth_service_health() -> ComponentStatus:
             status = ComponentStatusType.HEALTHY
             message = "Auth service configured and ready"
 
-        # Get user count for display (limited to avoid performance issues)
+        # Get user count for display
         user_count = 0
         user_count_display = "0"
         if database_available:
             try:
                 from app.core.db import db_session
                 from app.models.user import User
+                from sqlalchemy import func
                 from sqlmodel import select
 
                 with db_session() as session:
-                    # Count up to 101 users to determine if we should show "100+"
-                    statement = select(User).limit(101)
-                    result = session.exec(statement)
-                    users = list(result.all())
-                    user_count = len(users)
+                    # Single COUNT query instead of loading up to 101 User objects
+                    user_count = session.exec(
+                        select(func.count()).select_from(User)
+                    ).one()
 
                     user_count_display = "100+" if user_count > 100 else str(user_count)
             except Exception:

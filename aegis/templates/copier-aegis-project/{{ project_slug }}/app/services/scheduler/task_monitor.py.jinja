@@ -77,13 +77,15 @@ class TaskHealthMonitor:
     async def _get_persistent_metadata(self) -> SchedulerHealthMetadata:
         """Get detailed metadata using ScheduledTaskManager (persistent mode)."""
         try:
-            # Get statistics
-            stats = await self.task_manager.get_statistics()
-            
-            # Get upcoming tasks (limit to top 5)
+            # Single list_tasks() call -- compute stats inline instead of
+            # calling get_statistics() (which internally calls list_tasks() again)
             tasks = await self.task_manager.list_tasks()
+
+            active_count = sum(1 for t in tasks if t.status == "active")
+            paused_count = sum(1 for t in tasks if t.status == "paused")
+
             upcoming_tasks = []
-            
+
             for task in tasks:
                 if task.next_run_time and task.status == "active":
                     # Try to get docstring from function reference
@@ -96,19 +98,18 @@ class TaskHealthMonitor:
                         function=task.function,
                         description=description,
                     ))
-            
-            # Sort by next run time and take top 5
+
+            # Sort by next run time
             upcoming_tasks.sort(key=lambda x: x.next_run)
-            upcoming_tasks = upcoming_tasks[:5]
-            
+
             return SchedulerHealthMetadata(
-                total_tasks=stats.total_tasks,
-                active_tasks=stats.active_tasks,
-                paused_tasks=stats.paused_tasks,
+                total_tasks=len(tasks),
+                active_tasks=active_count,
+                paused_tasks=paused_count,
                 upcoming_tasks=upcoming_tasks,
                 scheduler_state="running_persistent"
             )
-            
+
         except Exception as e:
             logger.error("Error getting persistent metadata", error=str(e))
             raise
@@ -126,12 +127,11 @@ class TaskHealthMonitor:
             active_tasks = sum(1 for job in jobs if job.next_run_time is not None)
             paused_tasks = total_tasks - active_tasks
             
-            # Get upcoming tasks (top 5)
             upcoming_tasks = []
             active_jobs = [job for job in jobs if job.next_run_time is not None]
             active_jobs.sort(key=lambda x: x.next_run_time)
-            
-            for job in active_jobs[:5]:
+
+            for job in active_jobs:
                 # Get function info
                 func_path = self._get_function_path(job)
                 func_doc = self._get_function_docstring(job)

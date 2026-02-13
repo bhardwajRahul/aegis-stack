@@ -5,6 +5,7 @@ These tests validate the post-update cleanup functions that handle
 nested directory structures created during Copier template updates.
 """
 
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
@@ -72,8 +73,8 @@ class TestCleanupNestedProjectDirectory:
         # Nested directory should be removed
         assert not nested_dir.exists()
 
-    def test_replaces_existing_files(self, tmp_path: Path) -> None:
-        """Test that files in project root are replaced by nested versions."""
+    def test_skips_existing_files(self, tmp_path: Path) -> None:
+        """Test that existing files are skipped (sync_template_changes handles them)."""
         project_slug = "my-project"
         nested_dir = tmp_path / project_slug
         nested_dir.mkdir()
@@ -88,9 +89,12 @@ class TestCleanupNestedProjectDirectory:
 
         result = cleanup_nested_project_directory(tmp_path, project_slug)
 
-        # File should be replaced with nested version
-        assert "config.py" in result
-        assert (tmp_path / "config.py").read_text() == "# new config from template"
+        # Existing file should NOT be in the moved list — it's skipped
+        assert "config.py" not in result
+        # Original content should be preserved (sync_template_changes will merge later)
+        assert (tmp_path / "config.py").read_text() == "# old config"
+        # Nested source file should be cleaned up
+        assert not nested_dir.exists()
 
     def test_creates_parent_directories(self, tmp_path: Path) -> None:
         """Test that parent directories are created if they don't exist."""
@@ -393,13 +397,14 @@ class TestSyncTemplateChanges:
     """Test sync_template_changes function."""
 
     def test_empty_project_slug_returns_empty(self, tmp_path: Path) -> None:
-        """Test that empty list is returned when project_slug is empty."""
+        """Test that empty SyncResult is returned when project_slug is empty."""
         answers: dict[str, str] = {"project_slug": ""}
         result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
-        assert result == []
+        assert result.synced == []
+        assert result.conflicts == []
 
-    def test_syncs_differing_files(self, tmp_path: Path) -> None:
-        """Test that files differing from template are synced."""
+    def test_syncs_differing_files_no_old_commit(self, tmp_path: Path) -> None:
+        """Test that files differing from template are synced (overwrite fallback)."""
         project_slug = "my-project"
         answers = {"project_slug": project_slug}
 
@@ -408,17 +413,9 @@ class TestSyncTemplateChanges:
         project_file.parent.mkdir(parents=True)
         project_file.write_text("# old config")
 
-        def mock_run_copy(
-            src_path: str,
-            dst_path: str,
-            data: dict,
-            defaults: bool,
-            overwrite: bool,
-            unsafe: bool,
-            vcs_ref: str,
-            quiet: bool,
-        ) -> None:
+        def mock_run_copy(**kwargs: object) -> None:
             """Mock run_copy to create rendered template."""
+            dst_path = str(kwargs["dst_path"])
             rendered_dir = Path(dst_path) / project_slug / "app"
             rendered_dir.mkdir(parents=True)
             (rendered_dir / "config.py").write_text("# new config from template")
@@ -426,8 +423,8 @@ class TestSyncTemplateChanges:
         with patch("copier.run_copy", side_effect=mock_run_copy):
             result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
 
-        # File should be synced
-        assert "app/config.py" in result
+        # File should be synced (no old_commit → overwrite fallback)
+        assert "app/config.py" in result.synced
         assert project_file.read_text() == "# new config from template"
 
     def test_skips_identical_files(self, tmp_path: Path) -> None:
@@ -435,22 +432,12 @@ class TestSyncTemplateChanges:
         project_slug = "my-project"
         answers = {"project_slug": project_slug}
 
-        # Create project file with same content as template
         project_file = tmp_path / "app" / "config.py"
         project_file.parent.mkdir(parents=True)
         project_file.write_text("# same content")
 
-        def mock_run_copy(
-            src_path: str,
-            dst_path: str,
-            data: dict,
-            defaults: bool,
-            overwrite: bool,
-            unsafe: bool,
-            vcs_ref: str,
-            quiet: bool,
-        ) -> None:
-            """Mock run_copy to create rendered template with same content."""
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
             rendered_dir = Path(dst_path) / project_slug / "app"
             rendered_dir.mkdir(parents=True)
             (rendered_dir / "config.py").write_text("# same content")
@@ -458,27 +445,15 @@ class TestSyncTemplateChanges:
         with patch("copier.run_copy", side_effect=mock_run_copy):
             result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
 
-        # File should NOT be synced (identical)
-        assert result == []
+        assert result.synced == []
 
     def test_skips_nonexistent_project_files(self, tmp_path: Path) -> None:
         """Test that new files in template are skipped (handled by cleanup_nested)."""
         project_slug = "my-project"
         answers = {"project_slug": project_slug}
 
-        # Don't create project file - it doesn't exist
-
-        def mock_run_copy(
-            src_path: str,
-            dst_path: str,
-            data: dict,
-            defaults: bool,
-            overwrite: bool,
-            unsafe: bool,
-            vcs_ref: str,
-            quiet: bool,
-        ) -> None:
-            """Mock run_copy to create new file in template."""
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
             rendered_dir = Path(dst_path) / project_slug / "app"
             rendered_dir.mkdir(parents=True)
             (rendered_dir / "new_file.py").write_text("# new file")
@@ -486,8 +461,7 @@ class TestSyncTemplateChanges:
         with patch("copier.run_copy", side_effect=mock_run_copy):
             result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
 
-        # New file should NOT be synced (doesn't exist in project)
-        assert result == []
+        assert result.synced == []
         assert not (tmp_path / "app" / "new_file.py").exists()
 
     def test_skips_files_matching_skip_patterns(self, tmp_path: Path) -> None:
@@ -495,21 +469,11 @@ class TestSyncTemplateChanges:
         project_slug = "my-project"
         answers = {"project_slug": project_slug}
 
-        # Create .env file in project
         env_file = tmp_path / ".env"
         env_file.write_text("SECRET=old_value")
 
-        def mock_run_copy(
-            src_path: str,
-            dst_path: str,
-            data: dict,
-            defaults: bool,
-            overwrite: bool,
-            unsafe: bool,
-            vcs_ref: str,
-            quiet: bool,
-        ) -> None:
-            """Mock run_copy to create .env in template."""
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
             rendered_dir = Path(dst_path) / project_slug
             rendered_dir.mkdir(parents=True)
             (rendered_dir / ".env").write_text("SECRET=new_value")
@@ -517,8 +481,7 @@ class TestSyncTemplateChanges:
         with patch("copier.run_copy", side_effect=mock_run_copy):
             result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
 
-        # .env should NOT be synced (in skip list)
-        assert result == []
+        assert result.synced == []
         assert env_file.read_text() == "SECRET=old_value"
 
     def test_syncs_only_listed_template_changed_files(self, tmp_path: Path) -> None:
@@ -526,7 +489,6 @@ class TestSyncTemplateChanges:
         project_slug = "my-project"
         answers = {"project_slug": project_slug}
 
-        # Create two project files with old content
         config_file = tmp_path / "app" / "config.py"
         config_file.parent.mkdir(parents=True)
         config_file.write_text("# old config")
@@ -534,16 +496,8 @@ class TestSyncTemplateChanges:
         main_file = tmp_path / "app" / "main.py"
         main_file.write_text("# old main")
 
-        def mock_run_copy(
-            src_path: str,
-            dst_path: str,
-            data: dict,
-            defaults: bool,
-            overwrite: bool,
-            unsafe: bool,
-            vcs_ref: str,
-            quiet: bool,
-        ) -> None:
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
             rendered_dir = Path(dst_path) / project_slug / "app"
             rendered_dir.mkdir(parents=True)
             (rendered_dir / "config.py").write_text("# new config")
@@ -558,9 +512,8 @@ class TestSyncTemplateChanges:
                 template_changed_files={"app/config.py"},
             )
 
-        # Only config.py should be synced (it's in template_changed_files)
-        assert "app/config.py" in result
-        assert "app/main.py" not in result
+        assert "app/config.py" in result.synced
+        assert "app/main.py" not in result.synced
         assert config_file.read_text() == "# new config"
         assert main_file.read_text() == "# old main"
 
@@ -569,21 +522,12 @@ class TestSyncTemplateChanges:
         project_slug = "my-project"
         answers = {"project_slug": project_slug}
 
-        # Create a project file with old content
         config_file = tmp_path / "app" / "config.py"
         config_file.parent.mkdir(parents=True)
         config_file.write_text("# old config")
 
-        def mock_run_copy(
-            src_path: str,
-            dst_path: str,
-            data: dict,
-            defaults: bool,
-            overwrite: bool,
-            unsafe: bool,
-            vcs_ref: str,
-            quiet: bool,
-        ) -> None:
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
             rendered_dir = Path(dst_path) / project_slug / "app"
             rendered_dir.mkdir(parents=True)
             (rendered_dir / "config.py").write_text("# new config")
@@ -597,8 +541,7 @@ class TestSyncTemplateChanges:
                 template_changed_files=set(),
             )
 
-        # Nothing should be synced — empty set means no template files changed
-        assert result == []
+        assert result.synced == []
         assert config_file.read_text() == "# old config"
 
     def test_none_template_changed_files_syncs_all(self, tmp_path: Path) -> None:
@@ -606,7 +549,6 @@ class TestSyncTemplateChanges:
         project_slug = "my-project"
         answers = {"project_slug": project_slug}
 
-        # Create two project files with old content
         config_file = tmp_path / "app" / "config.py"
         config_file.parent.mkdir(parents=True)
         config_file.write_text("# old config")
@@ -614,16 +556,8 @@ class TestSyncTemplateChanges:
         main_file = tmp_path / "app" / "main.py"
         main_file.write_text("# old main")
 
-        def mock_run_copy(
-            src_path: str,
-            dst_path: str,
-            data: dict,
-            defaults: bool,
-            overwrite: bool,
-            unsafe: bool,
-            vcs_ref: str,
-            quiet: bool,
-        ) -> None:
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
             rendered_dir = Path(dst_path) / project_slug / "app"
             rendered_dir.mkdir(parents=True)
             (rendered_dir / "config.py").write_text("# new config")
@@ -638,14 +572,13 @@ class TestSyncTemplateChanges:
                 template_changed_files=None,
             )
 
-        # Both files should be synced — None means no filtering
-        assert "app/config.py" in result
-        assert "app/main.py" in result
+        assert "app/config.py" in result.synced
+        assert "app/main.py" in result.synced
         assert config_file.read_text() == "# new config"
         assert main_file.read_text() == "# new main"
 
     def test_handles_render_failure(self, tmp_path: Path) -> None:
-        """Test that render failure returns empty list."""
+        """Test that render failure returns empty SyncResult."""
         answers = {"project_slug": "my-project"}
 
         with patch(
@@ -654,4 +587,215 @@ class TestSyncTemplateChanges:
         ):
             result = sync_template_changes(tmp_path, answers, "gh:test/repo", "v1.0.0")
 
-        assert result == []
+        assert result.synced == []
+        assert result.conflicts == []
+
+
+class TestThreeWayMerge:
+    """Test 3-way merge logic in sync_template_changes.
+
+    These tests exercise the core merge scenarios by providing old_commit
+    so that both old and new templates are rendered.
+    """
+
+    @staticmethod
+    def _make_mock(
+        project_slug: str,
+        old_content: str,
+        new_content: str,
+    ) -> Callable[..., None]:
+        """Create a mock_run_copy that renders old/new based on dst_path."""
+
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
+            rendered_dir = Path(dst_path) / project_slug / "app"
+            rendered_dir.mkdir(parents=True)
+            if "/old" in dst_path:
+                (rendered_dir / "config.py").write_text(old_content)
+            else:
+                (rendered_dir / "config.py").write_text(new_content)
+
+        return mock_run_copy
+
+    def test_user_didnt_customize_overwrites(self, tmp_path: Path) -> None:
+        """When user's file == old template, safe to overwrite with new."""
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        project_file = tmp_path / "app" / "config.py"
+        project_file.parent.mkdir(parents=True)
+        project_file.write_text("# original template content")
+
+        mock = self._make_mock(
+            project_slug,
+            old_content="# original template content",
+            new_content="# updated template content",
+        )
+
+        with patch("copier.run_copy", side_effect=mock):
+            result = sync_template_changes(
+                tmp_path,
+                answers,
+                "gh:test/repo",
+                "v2.0.0",
+                old_commit="abc123",
+            )
+
+        assert "app/config.py" in result.synced
+        assert result.conflicts == []
+        assert project_file.read_text() == "# updated template content"
+
+    def test_template_didnt_change_preserves_user(self, tmp_path: Path) -> None:
+        """When old template == new template, keep user's customized version."""
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        project_file = tmp_path / "app" / "config.py"
+        project_file.parent.mkdir(parents=True)
+        project_file.write_text("# user customized content")
+
+        mock = self._make_mock(
+            project_slug,
+            old_content="# same template",
+            new_content="# same template",
+        )
+
+        with patch("copier.run_copy", side_effect=mock):
+            result = sync_template_changes(
+                tmp_path,
+                answers,
+                "gh:test/repo",
+                "v2.0.0",
+                old_commit="abc123",
+            )
+
+        # Template didn't change → user's version preserved, not synced
+        assert result.synced == []
+        assert result.conflicts == []
+        assert project_file.read_text() == "# user customized content"
+
+    def test_clean_three_way_merge(self, tmp_path: Path) -> None:
+        """When all three differ but changes don't overlap, clean merge."""
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        # Base has 3 lines, user changed line 1, template changed line 3
+        base = "line1\nline2\nline3\n"
+        user = "user-changed-line1\nline2\nline3\n"
+        new = "line1\nline2\ntemplate-changed-line3\n"
+
+        project_file = tmp_path / "app" / "config.py"
+        project_file.parent.mkdir(parents=True)
+        project_file.write_text(user)
+
+        mock = self._make_mock(project_slug, old_content=base, new_content=new)
+
+        with patch("copier.run_copy", side_effect=mock):
+            result = sync_template_changes(
+                tmp_path,
+                answers,
+                "gh:test/repo",
+                "v2.0.0",
+                old_commit="abc123",
+            )
+
+        assert "app/config.py" in result.synced
+        assert result.conflicts == []
+        merged = project_file.read_text()
+        assert "user-changed-line1" in merged
+        assert "template-changed-line3" in merged
+
+    def test_conflicting_merge_writes_markers(self, tmp_path: Path) -> None:
+        """When user and template changed the same line, write conflict markers."""
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        base = "line1\nline2\nline3\n"
+        user = "user-line1\nline2\nline3\n"
+        new = "template-line1\nline2\nline3\n"
+
+        project_file = tmp_path / "app" / "config.py"
+        project_file.parent.mkdir(parents=True)
+        project_file.write_text(user)
+
+        mock = self._make_mock(project_slug, old_content=base, new_content=new)
+
+        with patch("copier.run_copy", side_effect=mock):
+            result = sync_template_changes(
+                tmp_path,
+                answers,
+                "gh:test/repo",
+                "v2.0.0",
+                old_commit="abc123",
+            )
+
+        # Conflicting file should be reported as conflict, not synced
+        assert "app/config.py" not in result.synced
+        assert "app/config.py" in result.conflicts
+        # File should contain conflict markers with both versions
+        content = project_file.read_text()
+        assert "<<<<<<<" in content
+        assert "user-line1" in content
+        assert "template-line1" in content
+
+    def test_old_render_failure_falls_back_to_overwrite(self, tmp_path: Path) -> None:
+        """When old template render fails, fall back to overwrite behavior."""
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        project_file = tmp_path / "app" / "config.py"
+        project_file.parent.mkdir(parents=True)
+        project_file.write_text("# user content")
+
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
+            if "/old" in dst_path:
+                raise Exception("Old render failed")
+            rendered_dir = Path(dst_path) / project_slug / "app"
+            rendered_dir.mkdir(parents=True)
+            (rendered_dir / "config.py").write_text("# new template content")
+
+        with patch("copier.run_copy", side_effect=mock_run_copy):
+            result = sync_template_changes(
+                tmp_path,
+                answers,
+                "gh:test/repo",
+                "v2.0.0",
+                old_commit="abc123",
+            )
+
+        # Falls back to overwrite since old render failed
+        assert "app/config.py" in result.synced
+        assert project_file.read_text() == "# new template content"
+
+    def test_old_file_not_in_old_render_falls_back(self, tmp_path: Path) -> None:
+        """When a file exists in new but not old template, fall back to overwrite."""
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        project_file = tmp_path / "app" / "config.py"
+        project_file.parent.mkdir(parents=True)
+        project_file.write_text("# old project content")
+
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
+            if "/old" in dst_path:
+                # Old render has no config.py (new file in template)
+                rendered_dir = Path(dst_path) / project_slug / "app"
+                rendered_dir.mkdir(parents=True)
+            else:
+                rendered_dir = Path(dst_path) / project_slug / "app"
+                rendered_dir.mkdir(parents=True)
+                (rendered_dir / "config.py").write_text("# new template content")
+
+        with patch("copier.run_copy", side_effect=mock_run_copy):
+            result = sync_template_changes(
+                tmp_path,
+                answers,
+                "gh:test/repo",
+                "v2.0.0",
+                old_commit="abc123",
+            )
+
+        assert "app/config.py" in result.synced
+        assert project_file.read_text() == "# new template content"

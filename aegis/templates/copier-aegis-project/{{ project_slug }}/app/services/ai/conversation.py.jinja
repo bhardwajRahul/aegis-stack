@@ -17,6 +17,7 @@ from typing import Any
 from app.core.log import logger
 
 {% if ai_backend != "memory" %}
+from sqlalchemy import delete, func, text
 from sqlmodel import select
 
 from app.core.db import db_session, init_database
@@ -179,9 +180,14 @@ class ConversationManager:
         conversations.sort(key=lambda c: c.updated_at, reverse=True)
         return conversations
 {% else %}
+        from sqlalchemy.orm import selectinload
+
         with db_session() as session:
-            stmt = select(ConversationModel).order_by(
-                ConversationModel.updated_at.desc()
+            # Use selectinload to eagerly load messages (2 queries instead of N+1)
+            stmt = (
+                select(ConversationModel)
+                .options(selectinload(ConversationModel.messages))  # type: ignore[arg-type]
+                .order_by(ConversationModel.updated_at.desc())
             )
             all_convs = session.exec(stmt).all()
 
@@ -193,12 +199,7 @@ class ConversationManager:
                 if user_id and meta_data.get("user_id") != user_id:
                     continue
 
-                # Load messages for this conversation
-                msg_stmt = select(MessageModel).where(
-                    MessageModel.conversation_id == conv_db.id
-                ).order_by(MessageModel.timestamp)
-                messages_db = session.exec(msg_stmt).all()
-
+                # Messages already loaded via selectinload
                 messages = [
                     ConversationMessage(
                         id=msg.id,
@@ -207,7 +208,7 @@ class ConversationManager:
                         timestamp=msg.timestamp,
                         metadata=msg.meta_data or {},
                     )
-                    for msg in messages_db
+                    for msg in sorted(conv_db.messages, key=lambda m: m.timestamp)
                 ]
 
                 conversations.append(Conversation(
@@ -281,7 +282,14 @@ class ConversationManager:
             )
         return len(self.conversations)
 {% else %}
-        return len(self.list_conversations(user_id))
+        if user_id:
+            # Must filter by JSON metadata field
+            return len(self.list_conversations(user_id))
+
+        with db_session() as session:
+            return session.exec(
+                select(func.count()).select_from(ConversationModel)
+            ).one()
 {% endif %}
 
     def get_recent_conversations(
@@ -310,8 +318,8 @@ class ConversationManager:
         Returns:
             int: Number of conversations cleaned up
         """
-        cutoff_time = datetime.now(UTC).timestamp() - (max_age_hours * 3600)
 {% if ai_backend == "memory" %}
+        cutoff_time = datetime.now(UTC).timestamp() - (max_age_hours * 3600)
         to_delete = []
 
         for conv_id, conversation in self.conversations.items():
@@ -326,27 +334,35 @@ class ConversationManager:
 
         return len(to_delete)
 {% else %}
-        deleted_count = 0
+        from datetime import timedelta
+
+        cutoff = datetime.now(UTC) - timedelta(hours=max_age_hours)
 
         with db_session() as session:
-            stmt = select(ConversationModel)
-            all_convs = session.exec(stmt).all()
+            # Find IDs of old conversations
+            old_conv_ids = session.exec(
+                select(ConversationModel.id).where(
+                    ConversationModel.updated_at < cutoff
+                )
+            ).all()
 
-            for conv in all_convs:
-                if conv.updated_at.timestamp() < cutoff_time:
-                    # Delete messages
-                    msg_stmt = select(MessageModel).where(
-                        MessageModel.conversation_id == conv.id
-                    )
-                    messages = session.exec(msg_stmt).all()
-                    for msg in messages:
-                        session.delete(msg)
+            if not old_conv_ids:
+                return 0
 
-                    # Delete conversation
-                    session.delete(conv)
-                    deleted_count += 1
-
+            # Bulk delete messages first (FK constraint), then conversations
+            session.execute(
+                delete(MessageModel).where(
+                    MessageModel.conversation_id.in_(old_conv_ids)  # type: ignore[union-attr]
+                )
+            )
+            session.execute(
+                delete(ConversationModel).where(
+                    ConversationModel.id.in_(old_conv_ids)  # type: ignore[union-attr]
+                )
+            )
             session.commit()
+
+            deleted_count = len(old_conv_ids)
 
         if deleted_count > 0:
             logger.info(f"Cleaned up {deleted_count} old conversations")
@@ -384,28 +400,33 @@ class ConversationManager:
         }
 {% else %}
         with db_session() as session:
-            # Count conversations
-            conv_stmt = select(ConversationModel)
-            all_convs = session.exec(conv_stmt).all()
-            total_conversations = len(all_convs)
+            # Use SQL COUNT queries instead of loading all rows into memory
+            total_conversations = session.exec(
+                select(func.count()).select_from(ConversationModel)
+            ).one()
 
-            # Count messages
-            msg_stmt = select(MessageModel)
-            all_msgs = session.exec(msg_stmt).all()
-            total_messages = len(all_msgs)
+            total_messages = session.exec(
+                select(func.count()).select_from(MessageModel)
+            ).one()
 
-            # Get unique users
-            users = set()
-            for conv in all_convs:
-                meta_data = conv.meta_data or {}
-                user_id = meta_data.get("user_id")
-                if user_id:
-                    users.add(user_id)
+{% if database_engine == "postgres" %}
+            unique_users = session.execute(text(
+                "SELECT COUNT(DISTINCT meta_data->>'user_id') "
+                "FROM conversation "
+                "WHERE meta_data->>'user_id' IS NOT NULL"
+            )).scalar() or 0
+{% else %}
+            unique_users = session.execute(text(
+                "SELECT COUNT(DISTINCT json_extract(meta_data, '$.user_id')) "
+                "FROM conversation "
+                "WHERE json_extract(meta_data, '$.user_id') IS NOT NULL"
+            )).scalar() or 0
+{% endif %}
 
             return {
                 "total_conversations": total_conversations,
                 "total_messages": total_messages,
-                "unique_users": len(users),
+                "unique_users": unique_users,
                 "average_messages_per_conversation": (
                     total_messages / total_conversations if total_conversations > 0 else 0
                 ),
