@@ -234,8 +234,18 @@ def get_all_component_files() -> dict[str, list[str]]:
         >>> files["scheduler"]
         ['app/components/scheduler', 'app/entrypoints/scheduler.py', ...]
     """
-    # List of known components (from copier.yml variables)
-    components = ["scheduler", "worker", "database", "auth", "ai"]
+    # List of known components and services (from copier.yml variables)
+    # Uses constants where available via ComponentNames and AnswerKeys
+    from ..constants import AnswerKeys, ComponentNames
+
+    components = [
+        ComponentNames.SCHEDULER,
+        ComponentNames.WORKER,
+        ComponentNames.DATABASE,
+        AnswerKeys.SERVICE_AUTH,
+        AnswerKeys.SERVICE_AI,
+        ComponentNames.OBSERVABILITY,
+    ]
 
     result: dict[str, list[str]] = {}
 

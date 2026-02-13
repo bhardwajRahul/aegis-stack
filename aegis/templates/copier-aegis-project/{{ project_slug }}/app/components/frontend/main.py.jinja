@@ -27,6 +27,9 @@ from .dashboard.cards import (
 {% if include_ingress %}
     IngressCard,
 {% endif %}
+{% if include_observability %}
+    ObservabilityCard,
+{% endif %}
 {% if ollama_mode != "none" %}
     OllamaCard,
 {% endif %}
@@ -655,6 +658,10 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
 {% if include_ingress %}
                 elif component_name == "ingress":
                     return IngressCard(component_data).build()
+{% endif %}
+{% if include_observability %}
+                elif component_name == "observability":
+                    return ObservabilityCard(component_data).build()
 {% endif %}
 {% if ollama_mode != "none" %}
                 elif component_name == "ollama":

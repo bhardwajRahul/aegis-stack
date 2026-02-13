@@ -101,6 +101,9 @@ def render_project_map(
     # Detect what exists
     has_scheduler = (app / "components" / "scheduler").exists()
     has_worker = (app / "components" / "worker").exists()
+    has_observability = (
+        app / "components" / "backend" / "middleware" / "logfire_tracing.py"
+    ).exists()
     has_auth = (app / "services" / "auth").exists()
     has_ai = (app / "services" / "ai").exists()
     has_comms = (app / "services" / "comms").exists()
@@ -128,6 +131,8 @@ def render_project_map(
     if has_worker:
         worker_backend = _detect_worker_backend(project_path)
         component_children.append(("worker/", worker_backend, "worker"))
+    if has_observability:
+        component_children.append(("observability", "Logfire", "observability"))
 
     # Render component children
     for i, (name, desc, check_name) in enumerate(component_children):

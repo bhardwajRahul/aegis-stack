@@ -37,11 +37,18 @@ services:
         condition: service_healthy
 {%- endif %}
 {%- endif %}
-{%- if include_redis %}
+{%- if include_redis or include_observability %}
     environment:
-      # Docker container marker and Redis connection for health checks
+      # Docker container marker
       - DOCKER_CONTAINER=1
+{%- if include_redis %}
+      # Redis connection for health checks
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+{%- endif %}
+{%- if include_observability %}
+      # Logfire observability token
+      - LOGFIRE_TOKEN=${LOGFIRE_TOKEN:-}
+{%- endif %}
 {%- endif %}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8000}/health/"]

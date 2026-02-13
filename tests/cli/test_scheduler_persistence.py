@@ -27,7 +27,7 @@ class TestSchedulerPersistenceTracking:
         set_database_engine_selection("sqlite")
 
         try:
-            # Simulate: no redis, no worker, yes scheduler, yes persistence, no ingress, no auth, no AI
+            # Simulate: no redis, no worker, yes scheduler, yes persistence, no ingress, no observability, no auth, no AI
             # Note: database is skipped because scheduler adds it
             mock_confirm.side_effect = [
                 False,  # redis
@@ -35,6 +35,7 @@ class TestSchedulerPersistenceTracking:
                 True,  # scheduler
                 True,  # persistence
                 False,  # ingress
+                False,  # observability
                 False,  # auth service
                 False,  # AI service
             ]
@@ -52,7 +53,7 @@ class TestSchedulerPersistenceTracking:
     def test_scheduler_without_persistence(self, mock_confirm: Any) -> None:
         """Test scheduler without persistence keeps scheduler_backend="memory"."""
         try:
-            # Simulate: no redis, no worker, yes scheduler, no persistence, no database, no ingress, no auth, no AI
+            # Simulate: no redis, no worker, yes scheduler, no persistence, no database, no ingress, no observability, no auth, no AI
             mock_confirm.side_effect = [
                 False,  # redis
                 False,  # worker
@@ -60,6 +61,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # persistence
                 False,  # database
                 False,  # ingress
+                False,  # observability
                 False,  # auth service
                 False,  # AI service
             ]
@@ -77,13 +79,14 @@ class TestSchedulerPersistenceTracking:
     def test_scheduler_not_selected(self, mock_confirm: Any) -> None:
         """Test no scheduler selection keeps scheduler_backend="memory"."""
         try:
-            # Simulate: no redis, no worker, no scheduler, yes database, no ingress, no auth, no AI
+            # Simulate: no redis, no worker, no scheduler, yes database, no ingress, no observability, no auth, no AI
             mock_confirm.side_effect = [
                 False,  # redis
                 False,  # worker
                 False,  # scheduler
                 True,  # database
                 False,  # ingress
+                False,  # observability
                 False,  # auth service
                 False,  # AI service
             ]
@@ -103,13 +106,14 @@ class TestSchedulerPersistenceTracking:
     ) -> None:
         """Test database selected independently doesn't affect scheduler persistence."""
         try:
-            # Simulate: no redis, no worker, no scheduler, yes database, no ingress, no auth, no AI
+            # Simulate: no redis, no worker, no scheduler, yes database, no ingress, no observability, no auth, no AI
             mock_confirm.side_effect = [
                 False,  # redis
                 False,  # worker
                 False,  # scheduler
                 True,  # database
                 False,  # ingress
+                False,  # observability
                 False,  # auth service
                 False,  # AI service
             ]
@@ -127,7 +131,7 @@ class TestSchedulerPersistenceTracking:
     def test_both_scheduler_and_independent_database(self, mock_confirm: Any) -> None:
         """Test scheduler without persistence + independent database."""
         try:
-            # Simulate: no redis, no worker, yes scheduler, no persistence, yes database, no ingress, no auth, no AI
+            # Simulate: no redis, no worker, yes scheduler, no persistence, yes database, no ingress, no observability, no auth, no AI
             mock_confirm.side_effect = [
                 False,  # redis
                 False,  # worker
@@ -135,6 +139,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # persistence
                 True,  # database
                 False,  # ingress
+                False,  # observability
                 False,  # auth service
                 False,  # AI service
             ]
@@ -155,7 +160,7 @@ class TestSchedulerPersistenceTracking:
         set_database_engine_selection("sqlite")
 
         try:
-            # Simulate: yes redis, yes worker, yes scheduler, yes persistence, no ingress, no auth, no AI
+            # Simulate: yes redis, yes worker, yes scheduler, yes persistence, no ingress, no observability, no auth, no AI
             # Note: database is skipped because scheduler adds it
             mock_confirm.side_effect = [
                 True,  # redis
@@ -163,6 +168,7 @@ class TestSchedulerPersistenceTracking:
                 True,  # scheduler
                 True,  # persistence
                 False,  # ingress
+                False,  # observability
                 False,  # auth service
                 False,  # AI service
             ]
@@ -184,7 +190,7 @@ class TestSchedulerPersistenceTracking:
         set_database_engine_selection("postgres")
 
         try:
-            # Simulate: no redis, no worker, yes scheduler, yes persistence, no ingress, no auth, no AI
+            # Simulate: no redis, no worker, yes scheduler, yes persistence, no ingress, no observability, no auth, no AI
             # Note: database is skipped because scheduler adds it
             mock_confirm.side_effect = [
                 False,  # redis
@@ -192,6 +198,7 @@ class TestSchedulerPersistenceTracking:
                 True,  # scheduler
                 True,  # persistence
                 False,  # ingress
+                False,  # observability
                 False,  # auth service
                 False,  # AI service
             ]
@@ -353,6 +360,7 @@ class TestSchedulerPersistenceLogic:
                 True,  # persistence
                 # database skipped (added by scheduler)
                 False,  # ingress
+                False,  # observability
                 False,  # auth service
                 False,  # AI service
             ]
@@ -380,6 +388,7 @@ class TestSchedulerPersistenceLogic:
                     True,  # persistence
                     # database skipped (added by scheduler)
                     False,  # ingress
+                    False,  # observability
                     False,  # auth service
                     False,  # AI service
                 ]

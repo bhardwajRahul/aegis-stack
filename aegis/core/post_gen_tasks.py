@@ -111,6 +111,10 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/components/frontend/dashboard/cards/ingress_card.py",
             "app/components/frontend/dashboard/modals/ingress_modal.py",
         ],
+        ComponentNames.OBSERVABILITY: [
+            "app/components/backend/middleware/logfire_tracing.py",
+            "app/components/frontend/dashboard/cards/observability_card.py",
+        ],
         AnswerKeys.SERVICE_AUTH: [
             "app/components/backend/api/auth",
             "app/models/user.py",
@@ -386,6 +390,16 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
             project_path, "app/components/frontend/dashboard/modals/ingress_modal.py"
         )
 
+    # Remove observability component if not selected
+    if not is_enabled(AnswerKeys.OBSERVABILITY):
+        remove_file(
+            project_path, "app/components/backend/middleware/logfire_tracing.py"
+        )
+        remove_file(
+            project_path,
+            "app/components/frontend/dashboard/cards/observability_card.py",
+        )
+
     # Remove cache component if not selected
     if not is_enabled(AnswerKeys.CACHE):
         pass  # Placeholder - cache component doesn't exist yet
@@ -579,6 +593,9 @@ def _render_jinja_template(src: Path, dst: Path, project_path: Path) -> None:
         "include_scheduler": (project_path / "app/components/scheduler").exists(),
         "include_worker": (project_path / "app/components/worker").exists(),
         "include_database": (project_path / "app/core/db.py").exists(),
+        "include_observability": (
+            project_path / "app/components/backend/middleware/logfire_tracing.py"
+        ).exists(),
         "include_cache": (project_path / "app/components/cache").exists(),
         # AI-specific settings (defaults)
         "ai_framework": "anthropic",

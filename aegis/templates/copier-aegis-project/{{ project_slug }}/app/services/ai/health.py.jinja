@@ -132,29 +132,30 @@ async def check_ai_service_health() -> ComponentStatus:
                     logger.warning(f"Failed to check Ollama availability: {e}")
                     metadata["ollama_error"] = str(e)
             else:
-                # Auto-discovery: Check if Ollama is running locally even when not configured
-                # This enables Illiana/Overseer to suggest "I detect Ollama - want to save on API costs?"
+                # Auto-discovery: Check if Ollama is running even when not configured as provider
+                # Uses the configured base URL (respects Docker vs local environment)
                 try:
                     import httpx
 
-                    discovery_url = f"{OLLAMA_LOCAL_DISCOVERY_URL}/api/tags"
+                    ollama_url = settings.ollama_base_url_effective
+                    discovery_url = f"{ollama_url}/api/tags"
                     async with httpx.AsyncClient(timeout=2.0) as client:
                         response = await client.get(discovery_url)
                         if response.status_code == 200:
                             data = response.json()
                             models = data.get("models", [])
                             metadata["ollama_detected"] = True
-                            metadata["ollama_detected_url"] = OLLAMA_LOCAL_DISCOVERY_URL
+                            metadata["ollama_detected_url"] = ollama_url
                             metadata["ollama_detected_models_count"] = len(models)
                             if models:
                                 # Show first 3 model names as preview
                                 model_names = [m.get("name", "unknown") for m in models[:3]]
                                 metadata["ollama_detected_models_preview"] = model_names
                             logger.debug(
-                                f"Ollama auto-discovered at {OLLAMA_LOCAL_DISCOVERY_URL} with {len(models)} models"
+                                f"Ollama auto-discovered at {ollama_url} with {len(models)} models"
                             )
                 except Exception:
-                    # Ollama not running locally - that's fine, just skip
+                    # Ollama not running - that's fine, just skip
                     metadata["ollama_detected"] = False
 
         return ComponentStatus(

@@ -510,6 +510,13 @@ async def startup_hook() -> None:
     logger.info("Ingress component health check registered")
     {%- endif %}
 
+    {%- if include_observability %}
+    # Register observability health check (Logfire status)
+    from app.services.system.health import check_observability_health
+    register_health_check("observability", check_observability_health)
+    logger.info("Observability component health check registered")
+    {%- endif %}
+
     logger.info("Component health detection complete")
 
     # ==========================================

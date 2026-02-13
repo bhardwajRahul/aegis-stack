@@ -22,6 +22,9 @@ from .frontend_modal import FrontendDetailDialog
 {%- if include_ingress %}
 from .ingress_modal import IngressDetailDialog
 {%- endif %}
+{%- if include_observability %}
+from .observability_modal import ObservabilityDetailDialog
+{%- endif %}
 {%- if ollama_mode != "none" %}
 from .ollama_modal import OllamaDetailDialog
 {%- endif %}
@@ -52,6 +55,9 @@ __all__ = [
     "FrontendDetailDialog",
     {%- if include_ingress %}
     "IngressDetailDialog",
+    {%- endif %}
+    {%- if include_observability %}
+    "ObservabilityDetailDialog",
     {%- endif %}
     {%- if ollama_mode != "none" %}
     "OllamaDetailDialog",

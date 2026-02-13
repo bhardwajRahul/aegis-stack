@@ -170,6 +170,9 @@ class TemplateGenerator:
             AnswerKeys.INGRESS: "yes"
             if ComponentNames.INGRESS in self.components
             else "no",
+            AnswerKeys.OBSERVABILITY: "yes"
+            if ComponentNames.OBSERVABILITY in self.components
+            else "no",
             # Database engine selection (sqlite or postgres)
             "database_engine": self.database_engine or StorageBackends.SQLITE,
             # Scheduler backend selection

@@ -113,6 +113,13 @@ COMPONENTS: dict[str, ComponentSpec] = {
         docker_services=["traefik"],
         recommends=["backend"],
     ),
+    "observability": ComponentSpec(
+        name="observability",
+        type=ComponentType.INFRASTRUCTURE,
+        description="Logfire observability, tracing, and metrics",
+        pyproject_deps=["logfire[fastapi,httpx]"],
+        template_files=["app/components/backend/middleware/logfire_tracing.py"],
+    ),
 }
 
 

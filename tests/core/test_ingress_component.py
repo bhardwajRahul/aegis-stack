@@ -77,9 +77,10 @@ class TestIngressInConstants:
         """Test that ingress is in INFRASTRUCTURE_ORDER."""
         assert ComponentNames.INGRESS in ComponentNames.INFRASTRUCTURE_ORDER
 
-    def test_ingress_is_last_in_infrastructure_order(self) -> None:
-        """Test that ingress is the last infrastructure component."""
-        assert ComponentNames.INFRASTRUCTURE_ORDER[-1] == ComponentNames.INGRESS
+    def test_ingress_is_near_end_of_infrastructure_order(self) -> None:
+        """Test that ingress is near the end of infrastructure component order."""
+        idx = ComponentNames.INFRASTRUCTURE_ORDER.index(ComponentNames.INGRESS)
+        assert idx >= len(ComponentNames.INFRASTRUCTURE_ORDER) - 2
 
     def test_ingress_in_answer_keys(self) -> None:
         """Test that INGRESS is defined in AnswerKeys."""
