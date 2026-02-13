@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from aegis.config.shared_files import SHARED_TEMPLATE_FILES
 from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
 
-from .component_files import get_component_files, get_template_path
+from .component_files import get_component_files, get_copier_defaults, get_template_path
 from .copier_manager import is_copier_project, load_copier_answers
 from .verbosity import verbose_print
 
@@ -96,7 +96,13 @@ class ManualUpdater:
 
         self.project_path = project_path
         self.template_path = get_template_path()
-        self.answers = load_copier_answers(project_path)
+
+        # Backfill missing answer keys with copier.yml defaults before any
+        # rendering. Without this, undefined variables (e.g. ollama_mode missing
+        # from older projects) cause Jinja2 conditionals to inject unrelated
+        # component code. See: #504
+        copier_defaults = get_copier_defaults()
+        self.answers = {**copier_defaults, **load_copier_answers(project_path)}
 
         # Setup Jinja2 environment
         # Template files are at: template/{{ project_slug }}/...

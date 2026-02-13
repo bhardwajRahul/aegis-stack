@@ -47,6 +47,45 @@ def load_copier_config() -> dict[str, Any]:
         raise yaml.YAMLError(f"Failed to parse copier.yml: {e}") from e
 
 
+def get_copier_defaults() -> dict[str, Any]:
+    """
+    Extract default values for all template variables from copier.yml.
+
+    Used by ManualUpdater to backfill missing answer keys before rendering
+    templates. Without this, undefined variables like ``ollama_mode`` cause
+    Jinja2 conditionals to inject unrelated component code (#504).
+
+    Returns:
+        Dictionary mapping variable names to their default values.
+        Skips Jinja2-expression defaults (they depend on other variables).
+        Returns empty dict if copier.yml is not available (e.g. pip install).
+    """
+    try:
+        config = load_copier_config()
+    except FileNotFoundError:
+        # copier.yml lives at repo root, not inside the aegis/ package.
+        # When installed via pip/uvx the file won't exist — fall back
+        # gracefully so ManualUpdater behaves the same as before this fix.
+        return {}
+
+    defaults: dict[str, Any] = {}
+
+    for key, value in config.items():
+        # Skip private/internal Copier keys (e.g. _min_copier_version)
+        if key.startswith("_"):
+            continue
+
+        if isinstance(value, dict) and "default" in value:
+            default = value["default"]
+            # Skip Jinja2 expression defaults — they depend on other variables
+            # and the answers file should already have them when relevant
+            if isinstance(default, str) and "{{" in default:
+                continue
+            defaults[key] = default
+
+    return defaults
+
+
 def parse_exclusion_pattern(pattern: str, component: str) -> str | None:
     """
     Parse a Jinja2 exclusion pattern to extract the file path for a component.

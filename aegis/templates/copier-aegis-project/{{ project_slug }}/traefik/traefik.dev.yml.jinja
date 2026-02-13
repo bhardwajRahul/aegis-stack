@@ -1,0 +1,26 @@
+# Traefik Static Configuration — Local Development
+# No HTTPS redirect, no TLS, no Let's Encrypt
+
+api:
+  dashboard: true
+  insecure: true
+
+ping:
+  entryPoint: traefik
+
+entryPoints:
+  web:
+    address: ":80"
+  traefik:
+    address: ":8080"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: {{ project_slug }}_default
+
+log:
+  level: INFO
+
+accessLog: {}

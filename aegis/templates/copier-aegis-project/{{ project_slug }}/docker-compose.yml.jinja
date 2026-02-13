@@ -61,36 +61,20 @@ services:
 {%- if include_ingress %}
     labels:
       - "traefik.enable=true"
+{%- if not ingress_tls %}
       # Public router
-{%- if ingress_tls and ingress_domain %}
-      - "traefik.http.routers.webserver.rule=Host(`{{ ingress_domain }}`)"
-      - "traefik.http.routers.webserver.entrypoints=websecure"
-      - "traefik.http.routers.webserver.tls.certresolver=letsencrypt"
-{%- elif ingress_tls %}
-      - "traefik.http.routers.webserver.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.webserver.entrypoints=websecure"
-      - "traefik.http.routers.webserver.tls.certresolver=letsencrypt"
-{%- else %}
       - "traefik.http.routers.webserver.rule=PathPrefix(`/`)"
       - "traefik.http.routers.webserver.entrypoints=web"
 {%- endif %}
       - "traefik.http.services.webserver.loadbalancer.server.port=${PORT:-8000}"
+{%- if not ingress_tls %}
       # Admin paths - IP restricted (set ADMIN_IP_ALLOWLIST in .env)
-{%- if ingress_tls and ingress_domain %}
-      - "traefik.http.routers.webserver-admin.rule=Host(`{{ ingress_domain }}`) && (PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))"
-      - "traefik.http.routers.webserver-admin.entrypoints=websecure"
-      - "traefik.http.routers.webserver-admin.tls.certresolver=letsencrypt"
-{%- elif ingress_tls %}
-      - "traefik.http.routers.webserver-admin.rule=PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`)"
-      - "traefik.http.routers.webserver-admin.entrypoints=websecure"
-      - "traefik.http.routers.webserver-admin.tls.certresolver=letsencrypt"
-{%- else %}
       - "traefik.http.routers.webserver-admin.rule=PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`)"
       - "traefik.http.routers.webserver-admin.entrypoints=web"
-{%- endif %}
       - "traefik.http.routers.webserver-admin.service=webserver"
       - "traefik.http.routers.webserver-admin.middlewares=admin-ipallowlist"
       - "traefik.http.middlewares.admin-ipallowlist.ipallowlist.sourcerange=${ADMIN_IP_ALLOWLIST:-0.0.0.0/0}"
+{%- endif %}
 {%- endif %}
     profiles:
       - dev
