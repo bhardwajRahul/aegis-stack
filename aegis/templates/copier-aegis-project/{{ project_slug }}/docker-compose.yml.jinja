@@ -98,12 +98,13 @@ services:
         condition: service_healthy
 {%- endif %}
 {%- endif %}
-{%- if include_redis %}
     environment:
-      # Docker container marker and Redis connection for health checks
+      # Docker container marker
       - DOCKER_CONTAINER=1
+{%- if include_redis %}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
 {%- endif %}
+      - SCHEDULER_FORCE_UPDATE=${SCHEDULER_FORCE_UPDATE:-false}
     restart: unless-stopped
     deploy:
       resources:

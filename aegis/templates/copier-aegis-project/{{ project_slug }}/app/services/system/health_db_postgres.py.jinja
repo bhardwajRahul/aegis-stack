@@ -16,6 +16,9 @@ from app.core.log import logger
 from app.services.system.health import format_bytes
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
+# Cache parsed migration files (they don't change at runtime)
+_migration_cache: list[dict[str, Any]] | None = None
+
 
 async def check_database_health() -> ComponentStatus:
     """
@@ -93,145 +96,169 @@ async def check_database_health() -> ComponentStatus:
             except Exception:
                 logger.debug("Failed to get pool information", exc_info=True)
 
-            # Get PostgreSQL settings
+            # Get PostgreSQL settings (single query instead of 6 SHOW queries)
             try:
                 pg_settings: dict[str, Any] = {}
 
-                result = session.execute(text("SHOW max_connections")).fetchone()
-                if result:
-                    pg_settings["max_connections"] = result[0]
-
-                result = session.execute(text("SHOW shared_buffers")).fetchone()
-                if result:
-                    pg_settings["shared_buffers"] = result[0]
-
-                result = session.execute(text("SHOW work_mem")).fetchone()
-                if result:
-                    pg_settings["work_mem"] = result[0]
-
-                result = session.execute(text("SHOW effective_cache_size")).fetchone()
-                if result:
-                    pg_settings["effective_cache_size"] = result[0]
-
-                result = session.execute(text("SHOW maintenance_work_mem")).fetchone()
-                if result:
-                    pg_settings["maintenance_work_mem"] = result[0]
-
-                result = session.execute(text("SHOW wal_level")).fetchone()
-                if result:
-                    pg_settings["wal_level"] = result[0]
+                rows = session.execute(text(
+                    "SELECT name, setting FROM pg_settings "
+                    "WHERE name IN ("
+                    "'max_connections','shared_buffers','work_mem',"
+                    "'effective_cache_size','maintenance_work_mem','wal_level')"
+                )).fetchall()
+                for row in rows:
+                    pg_settings[row[0]] = row[1]
 
                 enhanced_metadata["pg_settings"] = pg_settings
 
             except Exception:
                 logger.debug("Failed to collect PostgreSQL settings", exc_info=True)
 
-            # Collect table information using SQLAlchemy inspector
+            # Collect table row counts using pg_stat_user_tables
+            # (single query instead of N individual COUNT(*) queries)
+            # Note: n_live_tup is an estimate updated by autovacuum, perfect for monitoring
             table_info: list[dict[str, Any]] = []
             try:
-                from sqlalchemy import inspect
-                inspector = inspect(session.bind)
-                if inspector is not None:
-                    table_names = inspector.get_table_names()
+                rows = session.execute(text(
+                    "SELECT relname, n_live_tup FROM pg_stat_user_tables "
+                    "ORDER BY relname"
+                )).fetchall()
 
-                    for table_name in table_names:
-                        try:
-                            from sqlalchemy import quoted_name
-                            quoted_table = quoted_name(table_name, quote=True)
-                            count_result = session.execute(
-                                text(f"SELECT COUNT(*) FROM {quoted_table}")
-                            ).fetchone()
-                            row_count = count_result[0] if count_result else 0
+                for row in rows:
+                    table_info.append({
+                        "name": row[0],
+                        "rows": row[1]
+                    })
 
-                            table_info.append({
-                                "name": table_name,
-                                "rows": row_count
-                            })
-                        except Exception as e:
-                            logger.debug(
-                                f"Failed to count rows for table {table_name}: {e}"
-                            )
-                            table_info.append({
-                                "name": table_name,
-                                "rows": 0
-                            })
-
-                    enhanced_metadata["tables"] = table_info
-                    enhanced_metadata["table_count"] = len(table_names)
+                enhanced_metadata["tables"] = table_info
+                enhanced_metadata["table_count"] = len(table_info)
 
             except Exception:
                 logger.debug("Failed to collect table information", exc_info=True)
                 enhanced_metadata["tables"] = []
                 enhanced_metadata["table_count"] = 0
 
-            # Collect table schema details using SQLAlchemy inspector
+            # Collect table schema details using batch information_schema
+            # queries (4 queries instead of N*4 inspector calls)
             if table_info:
                 try:
-                    from sqlalchemy import inspect
-                    inspector = inspect(session.bind)
                     table_schemas: list[dict[str, Any]] = []
                     total_indexes = 0
                     total_foreign_keys = 0
 
+                    # Build per-table lookup from row counts
+                    row_count_map = {t["name"]: t["rows"] for t in table_info}
+
+                    # Batch query 1: All columns with types
+                    columns_rows = session.execute(text(
+                        "SELECT table_name, column_name, data_type, "
+                        "is_nullable, column_default "
+                        "FROM information_schema.columns "
+                        "WHERE table_schema = 'public' "
+                        "ORDER BY table_name, ordinal_position"
+                    )).fetchall()
+
+                    # Batch query 2: Primary key columns
+                    pk_rows = session.execute(text(
+                        "SELECT tc.table_name, kcu.column_name "
+                        "FROM information_schema.table_constraints tc "
+                        "JOIN information_schema.key_column_usage kcu "
+                        "ON tc.constraint_name = kcu.constraint_name "
+                        "AND tc.table_schema = kcu.table_schema "
+                        "WHERE tc.constraint_type = 'PRIMARY KEY' "
+                        "AND tc.table_schema = 'public'"
+                    )).fetchall()
+
+                    # Batch query 3: Indexes
+                    idx_rows = session.execute(text(
+                        "SELECT tablename, indexname, "
+                        "indexdef LIKE '%UNIQUE%' AS is_unique "
+                        "FROM pg_indexes "
+                        "WHERE schemaname = 'public'"
+                    )).fetchall()
+
+                    # Batch query 4: Foreign keys
+                    fk_rows = session.execute(text(
+                        "SELECT tc.table_name, tc.constraint_name, "
+                        "kcu.column_name, ccu.table_name AS referred_table, "
+                        "ccu.column_name AS referred_column "
+                        "FROM information_schema.table_constraints tc "
+                        "JOIN information_schema.key_column_usage kcu "
+                        "ON tc.constraint_name = kcu.constraint_name "
+                        "AND tc.table_schema = kcu.table_schema "
+                        "JOIN information_schema.constraint_column_usage ccu "
+                        "ON tc.constraint_name = ccu.constraint_name "
+                        "AND tc.table_schema = ccu.table_schema "
+                        "WHERE tc.constraint_type = 'FOREIGN KEY' "
+                        "AND tc.table_schema = 'public'"
+                    )).fetchall()
+
+                    # Group columns by table
+                    columns_by_table: dict[str, list[dict[str, Any]]] = {}
+                    for row in columns_rows:
+                        columns_by_table.setdefault(row[0], []).append({
+                            "name": row[1],
+                            "type": row[2],
+                            "nullable": row[3] == "YES",
+                            "default": str(row[4] or ""),
+                        })
+
+                    # Group primary keys by table
+                    pk_by_table: dict[str, set[str]] = {}
+                    for row in pk_rows:
+                        pk_by_table.setdefault(row[0], set()).add(row[1])
+
+                    # Group indexes by table
+                    idx_by_table: dict[str, list[dict[str, Any]]] = {}
+                    for row in idx_rows:
+                        idx_by_table.setdefault(row[0], []).append({
+                            "name": row[1],
+                            "unique": bool(row[2]),
+                            "columns": [],  # pg_indexes doesn't split columns easily
+                        })
+
+                    # Group foreign keys by table
+                    fk_by_table: dict[str, dict[str, dict[str, Any]]] = {}
+                    for row in fk_rows:
+                        table_name = row[0]
+                        constraint_name = row[1]
+                        fk_by_table.setdefault(table_name, {})
+                        if constraint_name not in fk_by_table[table_name]:
+                            fk_by_table[table_name][constraint_name] = {
+                                "name": constraint_name,
+                                "referred_table": row[3],
+                                "constrained_columns": [],
+                                "referred_columns": [],
+                            }
+                        fk_by_table[table_name][constraint_name][
+                            "constrained_columns"
+                        ].append(row[2])
+                        fk_by_table[table_name][constraint_name][
+                            "referred_columns"
+                        ].append(row[4])
+
+                    # Assemble per-table schema info
                     for table in table_info:
-                        table_name = table["name"]
-                        schema_info: dict[str, Any] = {
-                            "name": table_name, "rows": table["rows"]
-                        }
+                        tname = table["name"]
+                        pk_cols = pk_by_table.get(tname, set())
 
-                        try:
-                            columns = inspector.get_columns(table_name)
-                            # Get primary key columns
-                            pk_constraint = inspector.get_pk_constraint(table_name)
-                            pk_columns = set(
-                                pk_constraint.get("constrained_columns", [])
-                            )
+                        cols = columns_by_table.get(tname, [])
+                        for col in cols:
+                            col["primary_key"] = col["name"] in pk_cols
 
-                            schema_info["columns"] = [
-                                {
-                                    "name": col["name"],
-                                    "type": str(col["type"]),
-                                    "nullable": col.get("nullable", True),
-                                    "default": str(col.get("default", "")),
-                                    "primary_key": col["name"] in pk_columns,
-                                }
-                                for col in columns
-                            ]
-                        except Exception:
-                            schema_info["columns"] = []
+                        indexes = idx_by_table.get(tname, [])
+                        total_indexes += len(indexes)
 
-                        try:
-                            indexes = inspector.get_indexes(table_name)
-                            schema_info["indexes"] = [
-                                {
-                                    "name": idx["name"],
-                                    "unique": idx.get("unique", False),
-                                    "columns": idx.get("column_names", []),
-                                }
-                                for idx in indexes
-                            ]
-                            total_indexes += len(indexes)
-                        except Exception:
-                            schema_info["indexes"] = []
+                        fks = list(fk_by_table.get(tname, {}).values())
+                        total_foreign_keys += len(fks)
 
-                        try:
-                            fks = inspector.get_foreign_keys(table_name)
-                            schema_info["foreign_keys"] = [
-                                {
-                                    "name": fk.get("name"),
-                                    "referred_table": fk.get("referred_table"),
-                                    "constrained_columns": fk.get(
-                                        "constrained_columns", []
-                                    ),
-                                    "referred_columns": fk.get("referred_columns", []),
-                                }
-                                for fk in fks
-                            ]
-                            total_foreign_keys += len(fks)
-                        except Exception:
-                            schema_info["foreign_keys"] = []
-
-                        table_schemas.append(schema_info)
+                        table_schemas.append({
+                            "name": tname,
+                            "rows": row_count_map.get(tname, 0),
+                            "columns": cols,
+                            "indexes": indexes,
+                            "foreign_keys": fks,
+                        })
 
                     enhanced_metadata["table_schemas"] = table_schemas
                     enhanced_metadata["total_indexes"] = total_indexes
@@ -249,8 +276,9 @@ async def check_database_health() -> ComponentStatus:
                     )
 
             # Collect migration history from Alembic
+            # Migration files are cached since they don't change at runtime
             try:
-                migrations: list[dict[str, Any]] = []
+                global _migration_cache
 
                 result = session.execute(
                     text(
@@ -262,65 +290,80 @@ async def check_database_health() -> ComponentStatus:
                 ).fetchone()
 
                 if result and result[0]:
+                    # Always query current HEAD live
                     version_result = session.execute(
                         text("SELECT version_num FROM alembic_version")
                     ).fetchone()
                     current_version = version_result[0] if version_result else None
                     enhanced_metadata["current_migration"] = current_version
 
-                    alembic_versions_path = Path("alembic/versions")
-                    if alembic_versions_path.exists():
-                        migration_files = alembic_versions_path.glob("*.py")
-                        for migration_file in sorted(migration_files):
-                            if migration_file.name == "__init__.py":
-                                continue
+                    # Parse migration files once, cache forever
+                    if _migration_cache is None:
+                        _migration_cache = []
+                        alembic_versions_path = Path("alembic/versions")
+                        if alembic_versions_path.exists():
+                            migration_files = alembic_versions_path.glob("*.py")
+                            for migration_file in sorted(migration_files):
+                                if migration_file.name == "__init__.py":
+                                    continue
 
-                            try:
-                                with open(migration_file) as f:
-                                    content = f.read()
+                                try:
+                                    with open(migration_file) as f:
+                                        content = f.read()
 
-                                revision_id = migration_file.stem.split("_")[0]
-                                description = "No description"
-                                down_revision = None
-                                create_date = None
+                                    revision_id = migration_file.stem.split("_")[0]
+                                    description = "No description"
+                                    down_revision = None
+                                    create_date = None
 
-                                doc_pat = r'"""(.+?)"""'
-                                doc_match = re.search(doc_pat, content, re.DOTALL)
-                                if doc_match:
-                                    description = doc_match.group(1).strip()
+                                    doc_pat = r'"""(.+?)"""'
+                                    doc_match = re.search(
+                                        doc_pat, content, re.DOTALL
+                                    )
+                                    if doc_match:
+                                        description = doc_match.group(1).strip()
 
-                                rev_pat = r'revision\s*=\s*[\'"](.+?)[\'"]'
-                                revision_match = re.search(rev_pat, content)
-                                if revision_match:
-                                    revision_id = revision_match.group(1)
+                                    rev_pat = r'revision\s*=\s*[\'"](.+?)[\'"]'
+                                    revision_match = re.search(rev_pat, content)
+                                    if revision_match:
+                                        revision_id = revision_match.group(1)
 
-                                down_pat = r'down_revision\s*=\s*[\'"](.+?)[\'"]'
-                                down_match = re.search(down_pat, content)
-                                if down_match:
-                                    down_revision = down_match.group(1)
+                                    down_pat = (
+                                        r'down_revision\s*=\s*[\'"](.+?)[\'"]'
+                                    )
+                                    down_match = re.search(down_pat, content)
+                                    if down_match:
+                                        down_revision = down_match.group(1)
 
-                                date_pat = r'create_date\s*=\s*.+?datetime\((.+?)\)'
-                                date_match = re.search(date_pat, content)
-                                if date_match:
-                                    create_date = date_match.group(0)
+                                    date_pat = (
+                                        r'create_date\s*=\s*.+?datetime\((.+?)\)'
+                                    )
+                                    date_match = re.search(date_pat, content)
+                                    if date_match:
+                                        create_date = date_match.group(0)
 
-                                file_mtime = os.path.getmtime(migration_file)
+                                    file_mtime = os.path.getmtime(migration_file)
 
-                                migrations.append({
-                                    "revision": revision_id,
-                                    "down_revision": down_revision,
-                                    "description": description,
-                                    "file_mtime": file_mtime,
-                                    "create_date": create_date,
-                                    "is_current": revision_id == current_version,
-                                    "file_path": str(migration_file),
-                                    "content": content,
-                                })
+                                    _migration_cache.append({
+                                        "revision": revision_id,
+                                        "down_revision": down_revision,
+                                        "description": description,
+                                        "file_mtime": file_mtime,
+                                        "create_date": create_date,
+                                        "file_path": str(migration_file),
+                                    })
 
-                            except Exception as e:
-                                logger.debug(
-                                    f"Failed to parse migration {migration_file}: {e}"
-                                )
+                                except Exception as e:
+                                    logger.debug(
+                                        f"Failed to parse migration "
+                                        f"{migration_file}: {e}"
+                                    )
+
+                    # Stamp is_current from live HEAD onto cached data
+                    migrations = [
+                        {**m, "is_current": m["revision"] == current_version}
+                        for m in _migration_cache
+                    ]
 
                     enhanced_metadata["migrations"] = migrations
                     enhanced_metadata["migration_count"] = len(migrations)

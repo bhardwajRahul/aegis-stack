@@ -30,8 +30,9 @@ async def check_ai_service_health() -> ComponentStatus:
 
         current_config = get_ai_config(settings)
 
-        # Get service status (for runtime stats like conversation count)
-        service_status = ai_service.get_service_status()
+        # Get conversation statistics once (get_service_status() also calls
+        # get_stats() internally, so we skip it and use conversation_stats directly)
+        conversation_stats = ai_service.conversation_manager.get_stats()
         validation_errors = current_config.validate_configuration(settings)
 
         # Determine overall health using fresh config
@@ -47,9 +48,6 @@ async def check_ai_service_health() -> ComponentStatus:
             status = ComponentStatusType.HEALTHY
             message = f"AI service ready - {current_config.provider.value} provider"
 
-        # Get conversation statistics
-        conversation_stats = ai_service.conversation_manager.get_stats()
-
 {% if ai_backend != "memory" %}
         # Get usage statistics (includes total cost) - only with database backend
         usage_stats = ai_service.get_usage_stats()
@@ -62,8 +60,8 @@ async def check_ai_service_health() -> ComponentStatus:
             "enabled": current_config.enabled,
             "provider": current_config.provider.value,
             "model": current_config.model,
-            "agent_ready": service_status["agent_initialized"],
-            "total_conversations": service_status["total_conversations"],
+            "agent_ready": True,  # Agents created per request, always available
+            "total_conversations": conversation_stats["total_conversations"],
             "total_messages": conversation_stats["total_messages"],
             "unique_users": conversation_stats["unique_users"],
             "avg_messages_per_conversation": conversation_stats[
