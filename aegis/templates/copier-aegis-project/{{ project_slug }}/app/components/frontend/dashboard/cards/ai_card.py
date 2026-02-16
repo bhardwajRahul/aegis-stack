@@ -6,12 +6,12 @@ and conversation metrics with a clean layout.
 """
 
 import flet as ft
-from app.components.frontend.controls import PrimaryText, SecondaryText
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer
 from .card_utils import (
     create_header_row,
+    create_metric_container,
     get_ai_engine_display,
     get_status_colors,
 )
@@ -62,26 +62,6 @@ class AICard:
         # Fallback: truncate with ellipsis
         return model[:20] + "..."
 
-    def _create_metric_container(self, label: str, value: str) -> ft.Container:
-        """Create a properly sized metric container with neutral gray background."""
-        return ft.Container(
-            content=ft.Column(
-                [
-                    SecondaryText(label),
-                    ft.Container(height=8),
-                    PrimaryText(value),
-                ],
-                spacing=0,
-                horizontal_alignment=ft.CrossAxisAlignment.START,
-            ),
-            padding=ft.padding.all(16),
-            bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.GREY),
-            border_radius=8,
-            border=ft.border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.GREY)),
-            height=80,
-            expand=True,
-        )
-
     def _format_cost(self, cost: float) -> str:
         """Format cost for display."""
         if cost < 0.01:
@@ -111,8 +91,8 @@ class AICard:
             # Show Model and Cost when usage tracking works
             second_row = ft.Row(
                 [
-                    self._create_metric_container("Model", model_display),
-                    self._create_metric_container("Cost", cost_display),
+                    create_metric_container("Model", model_display),
+                    create_metric_container("Cost", cost_display),
                 ],
                 expand=True,
             )
@@ -120,10 +100,8 @@ class AICard:
             # Show Model and Conversations when no usage tracking
             second_row = ft.Row(
                 [
-                    self._create_metric_container("Model", model_display),
-                    self._create_metric_container(
-                        "Conversations", conversations_display
-                    ),
+                    create_metric_container("Model", model_display),
+                    create_metric_container("Conversations", conversations_display),
                 ],
                 expand=True,
             )
@@ -133,7 +111,7 @@ class AICard:
                 [
                     # Row 1: Provider (full width)
                     ft.Row(
-                        [self._create_metric_container("Provider", provider_display)],
+                        [create_metric_container("Provider", provider_display)],
                         expand=True,
                     ),
                     ft.Container(height=12),

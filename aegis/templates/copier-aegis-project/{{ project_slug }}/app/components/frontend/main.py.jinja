@@ -6,6 +6,7 @@ from typing import Any
 
 import flet as ft
 from flet import PageDisconnectedException
+import httpx
 
 from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
@@ -60,6 +61,55 @@ SERVICE_PREFIX = "service_"
 # Use simple filenames - Flet should auto-resolve from assets_dir
 DEFAULT_LOGO_PATH = "aegis-manifesto.png"
 DEFAULT_DARK_LOGO_PATH = "aegis-manifesto-dark.png"
+
+
+def _convert_component(comp_data: dict[str, Any]) -> ComponentStatus:
+    """Recursively convert API component data to ComponentStatus."""
+    try:
+        sub_components = {}
+        if "sub_components" in comp_data:
+            for sub_name, sub_data in comp_data[
+                "sub_components"
+            ].items():
+                sub_components[sub_name] = _convert_component(sub_data)
+
+        # Parse status from API response
+        status_str = comp_data.get("status", "unhealthy")
+        try:
+            status = ComponentStatusType(status_str)
+        except ValueError:
+            logger.warning(
+                f"Unknown status: {status_str}, default UNHEALTHY"
+            )
+            status = ComponentStatusType.UNHEALTHY
+
+        return ComponentStatus(
+            name=comp_data.get("name", "Unknown"),
+            status=status,
+            message=comp_data.get("message", "No message"),
+            response_time_ms=comp_data.get("response_time_ms"),
+            metadata=comp_data.get("metadata", {}),
+            sub_components=sub_components,
+        )
+    except Exception as e:
+        logger.error(
+            f"Failed to convert component data: {e}",
+            exc_info=True,
+            extra={
+                "error_type": type(e).__name__,
+                "function": "_convert_component",
+                "comp_data": comp_data
+            }
+        )
+        # Return a fallback ComponentStatus
+        return ComponentStatus(
+            name=comp_data.get("name", "Unknown"),
+            status=ComponentStatusType.UNHEALTHY,
+            message=f"Error converting component: {e}",
+            response_time_ms=None,
+            metadata={},
+            sub_components={},
+        )
 
 
 class SystemDashboard:
@@ -628,6 +678,9 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             ),
         )
 
+        # Persistent HTTP client - reused across refresh cycles, closed on exit
+        http_client = httpx.AsyncClient()
+
         def create_component_card(
             component_name: str, component_data: Any
         ) -> ft.Container:
@@ -729,13 +782,12 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
 
         async def refresh_dashboard() -> None:
             """Refresh the stunning marketing-grade dashboard."""
+            # Invalidate cached modals so next open rebuilds with fresh data
+            page.data.pop("_modal_cache", None)
             try:
                 # Use the single /health/ endpoint for all health data
-                import httpx
-
-                async with httpx.AsyncClient() as client:
-                    response = await client.get("http://localhost:8000/health/")
-                    data = response.json()
+                response = await http_client.get("http://localhost:8000/health/")
+                data = response.json()
 
                 # Extract components from health API response (navigate structure)
                 if "components" in data and "aegis" in data["components"]:
@@ -747,62 +799,13 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 else:
                     api_components = {}
 
-                # Convert API data back to ComponentStatus objects for the cards
-                def convert_component(comp_data: dict[str, Any]) -> ComponentStatus:
-                    """Recursively convert API component data to ComponentStatus."""
-                    try:
-                        sub_components = {}
-                        if "sub_components" in comp_data:
-                            for sub_name, sub_data in comp_data[
-                                "sub_components"
-                            ].items():
-                                sub_components[sub_name] = convert_component(sub_data)
-
-                        # Parse status from API response
-                        status_str = comp_data.get("status", "unhealthy")
-                        try:
-                            status = ComponentStatusType(status_str)
-                        except ValueError:
-                            logger.warning(
-                                f"Unknown status: {status_str}, default UNHEALTHY"
-                            )
-                            status = ComponentStatusType.UNHEALTHY
-
-                        return ComponentStatus(
-                            name=comp_data.get("name", "Unknown"),
-                            status=status,
-                            message=comp_data.get("message", "No message"),
-                            response_time_ms=comp_data.get("response_time_ms"),
-                            metadata=comp_data.get("metadata", {}),
-                            sub_components=sub_components,
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to convert component data: {e}",
-                            exc_info=True,
-                            extra={
-                                "error_type": type(e).__name__,
-                                "function": "convert_component",
-                                "comp_data": comp_data
-                            }
-                        )
-                        # Return a fallback ComponentStatus
-                        return ComponentStatus(
-                            name=comp_data.get("name", "Unknown"),
-                            status=ComponentStatusType.UNHEALTHY,
-                            message=f"Error converting component: {e}",
-                            response_time_ms=None,
-                            metadata={},
-                            sub_components={},
-                        )
-
                 components = {}
                 for name, comp_data in api_components.items():
                     # Special handling for "components" grouping - expand it
                     if name == COMPONENTS_GROUP_KEY and "sub_components" in comp_data:
                         # Add all individual components from the grouping
                         for sub_name, sub_data in comp_data["sub_components"].items():
-                            components[sub_name] = convert_component(sub_data)
+                            components[sub_name] = _convert_component(sub_data)
                     # Special handling for "services" grouping - expand services
                     elif name == SERVICES_GROUP_KEY and "sub_components" in comp_data:
                         # Add all individual services from the grouping
@@ -811,10 +814,10 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                         ].items():
                             components[
                                 f"{SERVICE_PREFIX}{service_name}"
-                            ] = convert_component(service_data)
+                            ] = _convert_component(service_data)
                     else:
                         # For other groupings, add as-is
-                        components[name] = convert_component(comp_data)
+                        components[name] = _convert_component(comp_data)
 
                 total_components = len(components)
                 healthy_components = len([c for c in components.values() if c.healthy])
@@ -878,17 +881,20 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
 
         async def auto_refresh() -> None:
             """Simple auto-refresh loop that stops when page disconnects."""
-            while dashboard._is_page_connected():
-                try:
-                    await refresh_dashboard()
-                    await asyncio.sleep(30)
-                except PageDisconnectedException:
-                    logger.debug("Page disconnected, stopping auto-refresh loop")
-                    break
-                except Exception as e:
-                    logger.error(f"Error in auto-refresh loop: {e}", exc_info=True)
-                    # Continue the loop even if refresh fails
-                    await asyncio.sleep(30)
+            try:
+                while dashboard._is_page_connected():
+                    try:
+                        await refresh_dashboard()
+                        await asyncio.sleep(30)
+                    except PageDisconnectedException:
+                        logger.debug("Page disconnected, stopping auto-refresh loop")
+                        break
+                    except Exception as e:
+                        logger.error(f"Error in auto-refresh loop: {e}", exc_info=True)
+                        # Continue the loop even if refresh fails
+                        await asyncio.sleep(30)
+            finally:
+                await http_client.aclose()
 
         # Initial load and start refresh
         await refresh_dashboard()

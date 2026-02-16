@@ -6,6 +6,7 @@ middleware stack, system metrics, and configuration details in a tabbed interfac
 """
 
 import flet as ft
+import logfire
 from app.components.frontend.controls import (
     BodyText,
     ExpandArrow,
@@ -447,21 +448,18 @@ class RouteTableRow(ft.Container):
     """Expandable table row for a single route."""
 
     def __init__(self, route_info: dict[str, object]) -> None:
-        """Initialize route table row."""
+        """Initialize route table row (header only — details built on first expand)."""
         super().__init__()
         self.route_info = route_info
         self.is_expanded = False
+        self._details_built = False
 
-        # Extract route data
+        # Extract route data for header
         path = str(route_info.get("path", ""))
         methods = list(route_info.get("methods", []))
-        name = str(route_info.get("name", ""))
         summary = str(route_info.get("summary", ""))
-        description = str(route_info.get("description", ""))
         deprecated = bool(route_info.get("deprecated", False))
-        path_params = list(route_info.get("path_params", []))
         dependencies = list(route_info.get("dependencies", []))
-        response_model = str(route_info.get("response_model", ""))
 
         has_auth = _has_auth_dependencies(dependencies)
 
@@ -540,8 +538,23 @@ class RouteTableRow(ft.Container):
             mouse_cursor=ft.MouseCursor.CLICK,
         )
 
-        # Build expandable details section
-        detail_rows = []
+        # Empty placeholder for details (built lazily on first expand)
+        self.details = ft.Container(visible=False)
+
+        self.content = ft.Column([self.row_header, self.details], spacing=0)
+        self.border = ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE))
+
+    def _build_details(self) -> None:
+        """Build the expandable detail panel (called once on first expand)."""
+        route_info = self.route_info
+        name = str(route_info.get("name", ""))
+        summary = str(route_info.get("summary", ""))
+        description = str(route_info.get("description", ""))
+        path_params = list(route_info.get("path_params", []))
+        dependencies = list(route_info.get("dependencies", []))
+        response_model = str(route_info.get("response_model", ""))
+
+        detail_rows: list[ft.Control] = []
 
         if name:
             detail_rows.append(
@@ -622,20 +635,15 @@ class RouteTableRow(ft.Container):
                 )
             )
 
-        self.details = ft.Container(
-            content=ft.Column(detail_rows, spacing=Theme.Spacing.SM),
-            padding=ft.padding.only(
-                top=Theme.Spacing.SM,
-                left=Theme.Spacing.MD + 24,  # Match arrow column width
-                right=Theme.Spacing.MD,
-                bottom=Theme.Spacing.MD,
-            ),
-            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-            visible=False,
+        self.details.content = ft.Column(detail_rows, spacing=Theme.Spacing.SM)
+        self.details.padding = ft.padding.only(
+            top=Theme.Spacing.SM,
+            left=Theme.Spacing.MD + 24,  # Match arrow column width
+            right=Theme.Spacing.MD,
+            bottom=Theme.Spacing.MD,
         )
-
-        self.content = ft.Column([self.row_header, self.details], spacing=0)
-        self.border = ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE))
+        self.details.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
+        self._details_built = True
 
     def _on_hover(self, e: ft.ControlEvent) -> None:
         """Handle hover state change."""
@@ -651,6 +659,8 @@ class RouteTableRow(ft.Container):
     def _toggle_expand(self, e: ft.ControlEvent) -> None:
         """Toggle expansion state."""
         _ = e  # Unused but required by callback signature
+        if not self._details_built:
+            self._build_details()
         self.is_expanded = not self.is_expanded
         self.details.visible = self.is_expanded
         self.expand_arrow.set_expanded(self.is_expanded)
@@ -1132,20 +1142,28 @@ class BackendDetailDialog(BaseDetailPopup):
             backend_component: ComponentStatus containing backend data
             page: Flet page instance
         """
-        # Build tabs
-        tabs = ft.Tabs(
-            selected_index=0,
-            animation_duration=200,
-            tabs=[
-                ft.Tab(text="Overview", content=OverviewTab(backend_component)),
-                ft.Tab(text="Routes", content=RoutesTab(backend_component)),
-                ft.Tab(text="Lifecycle", content=LifecycleTab(backend_component)),
-            ],
-            expand=True,
-            label_color=ft.Colors.ON_SURFACE,
-            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
-            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
-        )
+        # Build tabs with logfire instrumentation
+        with logfire.span("overseer.modal.backend.build_tabs"):
+            with logfire.span("overseer.modal.backend.overview_tab"):
+                overview_tab = OverviewTab(backend_component)
+            with logfire.span("overseer.modal.backend.routes_tab"):
+                routes_tab = RoutesTab(backend_component)
+            with logfire.span("overseer.modal.backend.lifecycle_tab"):
+                lifecycle_tab = LifecycleTab(backend_component)
+
+            tabs = ft.Tabs(
+                selected_index=0,
+                animation_duration=200,
+                tabs=[
+                    ft.Tab(text="Overview", content=overview_tab),
+                    ft.Tab(text="Routes", content=routes_tab),
+                    ft.Tab(text="Lifecycle", content=lifecycle_tab),
+                ],
+                expand=True,
+                label_color=ft.Colors.ON_SURFACE,
+                unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
+                indicator_color=ft.Colors.ON_SURFACE_VARIANT,
+            )
 
         # Initialize base popup with tabs
         # (non-scrollable - tabs handle their own scrolling)

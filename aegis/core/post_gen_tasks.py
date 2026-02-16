@@ -114,6 +114,7 @@ def get_component_file_mapping() -> dict[str, list[str]]:
         ComponentNames.OBSERVABILITY: [
             "app/components/backend/middleware/logfire_tracing.py",
             "app/components/frontend/dashboard/cards/observability_card.py",
+            "app/components/frontend/dashboard/modals/observability_modal.py",
         ],
         AnswerKeys.SERVICE_AUTH: [
             "app/components/backend/api/auth",
@@ -398,6 +399,10 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(
             project_path,
             "app/components/frontend/dashboard/cards/observability_card.py",
+        )
+        remove_file(
+            project_path,
+            "app/components/frontend/dashboard/modals/observability_modal.py",
         )
 
     # Remove cache component if not selected

@@ -6,12 +6,12 @@ Shows auth-specific metrics with a clean, functional layout.
 """
 
 import flet as ft
-from app.components.frontend.controls import PrimaryText, SecondaryText
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer
 from .card_utils import (
     create_header_row,
+    create_metric_container,
     get_status_colors,
 )
 
@@ -32,26 +32,6 @@ class AuthCard:
         self.component_data = component_data
         self.metadata = component_data.metadata or {}
 
-    def _create_metric_container(self, label: str, value: str) -> ft.Container:
-        """Create a properly sized metric container with neutral gray background."""
-        return ft.Container(
-            content=ft.Column(
-                [
-                    SecondaryText(label),
-                    ft.Container(height=8),
-                    PrimaryText(value),
-                ],
-                spacing=0,
-                horizontal_alignment=ft.CrossAxisAlignment.START,
-            ),
-            padding=ft.padding.all(16),
-            bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.GREY),
-            border_radius=8,
-            border=ft.border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.GREY)),
-            height=80,
-            expand=True,
-        )
-
     def _create_metrics_section(self) -> ft.Container:
         """Create the metrics section with a clean grid layout."""
         # Get real data from metadata
@@ -64,19 +44,15 @@ class AuthCard:
                 [
                     # Row 1: Total Users (full width)
                     ft.Row(
-                        [
-                            self._create_metric_container(
-                                "Total Users", user_count_display
-                            )
-                        ],
+                        [create_metric_container("Total Users", user_count_display)],
                         expand=True,
                     ),
                     ft.Container(height=12),
                     # Row 2: Algorithm and Token Expiry
                     ft.Row(
                         [
-                            self._create_metric_container("Algorithm", jwt_algorithm),
-                            self._create_metric_container(
+                            create_metric_container("Algorithm", jwt_algorithm),
+                            create_metric_container(
                                 "Token Expiry", token_expiry_display
                             ),
                         ],
