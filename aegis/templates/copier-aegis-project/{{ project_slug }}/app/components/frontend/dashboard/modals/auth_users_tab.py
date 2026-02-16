@@ -116,6 +116,7 @@ class UsersTableSection(ft.Container):
             columns=columns,
             rows=rows,
             empty_message="No users found",
+            scroll_height=400,
         )
 
         self.content = table

@@ -45,6 +45,9 @@ MODAL_NAME_MAP = {
 {% if include_ingress %}
     "ingress": "ingress",
 {% endif %}
+{% if include_observability %}
+    "observability": "observability",
+{% endif %}
     "frontend": "frontend",
 }
 
@@ -121,6 +124,13 @@ def get_component_display_info(
             else "Traefik"
         )
         return ("Ingress", subtitle)
+{% endif %}
+{% if include_observability %}
+
+    elif component_name == "observability":
+        version = metadata.get("logfire_version", "")
+        subtitle = f"Pydantic Logfire {version}".strip() if version else "Pydantic Logfire"
+        return ("Observability", subtitle)
 {% endif %}
 
     elif component_name == "frontend":
@@ -239,6 +249,9 @@ class StatusOverviewPanel(ft.Container):
 {% endif %}
 {% if include_ingress %}
             "ingress",
+{% endif %}
+{% if include_observability %}
+            "observability",
 {% endif %}
         ]
 

@@ -113,6 +113,8 @@ def generate_with_copier(
         ),
         AnswerKeys.CACHE: False,  # Default to no
         AnswerKeys.INGRESS: template_context.get(AnswerKeys.INGRESS, "no") == "yes",
+        AnswerKeys.OBSERVABILITY: template_context.get(AnswerKeys.OBSERVABILITY, "no")
+        == "yes",
         AnswerKeys.AUTH: template_context.get(AnswerKeys.AUTH, "no") == "yes",
         AnswerKeys.AI: template_context.get(AnswerKeys.AI, "no") == "yes",
         AnswerKeys.COMMS: template_context.get(AnswerKeys.COMMS, "no") == "yes",

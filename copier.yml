@@ -120,6 +120,11 @@ include_ingress:
   help: "Include Traefik reverse proxy?"
   default: false
 
+include_observability:
+  type: bool
+  help: "Include Logfire observability and tracing?"
+  default: false
+
 ingress_tls:
   type: bool
   help: "Enable TLS with Let's Encrypt?"
@@ -219,7 +224,7 @@ include_comms:
   default: false
 
 # Internal computed values (using Jinja2)
-_has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache or include_ingress }}"
+_has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache or include_ingress or include_observability }}"
 _include_migrations: "{{ include_auth }}"
 
 # Component-specific dependencies (computed)

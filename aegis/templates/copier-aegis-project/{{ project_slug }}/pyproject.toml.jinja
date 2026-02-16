@@ -57,6 +57,9 @@ dependencies = [
 {%- if include_cache %}
     "redis[hiredis]==5.0.8",
 {%- endif %}
+{%- if include_observability %}
+    "logfire[fastapi,httpx{%- if include_database %},sqlalchemy{%- endif %}{%- if include_redis %},redis{%- endif %}]",
+{%- endif %}
 {%- if include_auth %}
     "python-jose[cryptography]==3.3.0",
     "bcrypt>=4.0.0",

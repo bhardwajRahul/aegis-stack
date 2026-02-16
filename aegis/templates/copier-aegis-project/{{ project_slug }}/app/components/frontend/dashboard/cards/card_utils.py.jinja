@@ -465,6 +465,9 @@ def create_modal_for_component(
         {%- if include_ingress %}
         IngressDetailDialog,
         {%- endif %}
+        {%- if include_observability %}
+        ObservabilityDetailDialog,
+        {%- endif %}
         {%- if ollama_mode != "none" %}
         OllamaDetailDialog,
         {%- endif %}
@@ -496,6 +499,9 @@ def create_modal_for_component(
         "frontend": FrontendDetailDialog,
         {%- if include_ingress %}
         "ingress": IngressDetailDialog,
+        {%- endif %}
+        {%- if include_observability %}
+        "observability": ObservabilityDetailDialog,
         {%- endif %}
         {%- if ollama_mode != "none" %}
         "ollama": OllamaDetailDialog,

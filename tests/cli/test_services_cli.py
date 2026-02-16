@@ -251,6 +251,7 @@ class TestInteractiveServiceSelection:
                 False,  # scheduler
                 False,  # database
                 False,  # ingress
+                False,  # observability
                 True,  # auth service
                 True,  # database confirmation for auth
                 False,  # AI service
@@ -276,6 +277,7 @@ class TestInteractiveServiceSelection:
                 False,  # scheduler
                 False,  # database
                 False,  # ingress
+                False,  # observability
                 False,  # auth service
                 False,  # AI service
             ]

@@ -37,6 +37,7 @@ class TestAIProviderSelection:
             False,  # scheduler
             False,  # database
             False,  # ingress
+            False,  # observability
             False,  # auth service
             True,  # AI service
             False,  # Use PydanticAI? (framework, default True)
@@ -71,6 +72,7 @@ class TestAIProviderSelection:
             False,  # scheduler
             False,  # database
             False,  # ingress
+            False,  # observability
             False,  # auth service
             True,  # AI service
             True,  # Use LangChain? Yes
@@ -106,6 +108,7 @@ class TestAIProviderSelection:
             False,  # scheduler
             False,  # database
             False,  # ingress
+            False,  # observability
             False,  # auth service
             True,  # AI service
             False,  # Use LangChain? No (use PydanticAI)
@@ -141,6 +144,7 @@ class TestAIProviderSelection:
             False,  # scheduler
             False,  # database
             False,  # ingress
+            False,  # observability
             False,  # auth service
             False,  # AI service
         ]
@@ -181,6 +185,7 @@ class TestAIBackendSelection:
                 False,  # scheduler
                 False,  # database
                 False,  # ingress
+                False,  # observability
                 False,  # auth service
                 True,  # AI service
                 False,  # Use LangChain? No (use PydanticAI)
@@ -226,6 +231,7 @@ class TestAIBackendSelection:
                 False,  # scheduler
                 True,  # database (yes)
                 False,  # ingress
+                False,  # observability
                 False,  # auth service
                 True,  # AI service
                 False,  # Use LangChain? No (use PydanticAI)
@@ -266,6 +272,7 @@ class TestAIBackendSelection:
             False,  # scheduler
             False,  # database
             False,  # ingress
+            False,  # observability
             False,  # auth service
             True,  # AI service
             False,  # Use LangChain? No (use PydanticAI)
@@ -424,6 +431,7 @@ class TestAIConfigurationEndToEnd:
             False,  # scheduler
             False,  # database
             False,  # ingress
+            False,  # observability
             False,  # No auth service
             True,  # Yes AI service
             True,  # Use LangChain? Yes
@@ -521,6 +529,7 @@ class TestOllamaModeSelection:
             False,  # scheduler
             False,  # database
             False,  # ingress
+            False,  # observability
             False,  # auth service
             True,  # AI service
             False,  # Use LangChain? No
