@@ -6,7 +6,6 @@ Table layout matching the worker card pattern.
 """
 
 import contextlib
-from datetime import datetime
 
 import flet as ft
 from app.components.frontend.controls import SecondaryText
@@ -16,6 +15,7 @@ from app.services.system.models import ComponentStatus
 from .card_container import CardContainer
 from .card_utils import (
     create_header_row,
+    format_next_run_time,
     get_status_colors,
 )
 
@@ -60,54 +60,6 @@ def simplify_schedule(schedule: str) -> str:
         return schedule[:12] + "..."
 
     return schedule
-
-
-def format_relative_future_time(iso_str: str) -> str:
-    """Convert ISO datetime string to relative future time.
-
-    Args:
-        iso_str: ISO format datetime string
-
-    Returns:
-        Human-readable relative time like "in 2h", "in 30m"
-    """
-    try:
-        # Parse ISO datetime string
-        if "T" in iso_str:
-            dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-            # Make naive for comparison if needed
-            if dt.tzinfo is not None:
-                dt = dt.replace(tzinfo=None)
-        else:
-            dt = datetime.fromisoformat(iso_str)
-
-        now = datetime.now()
-        diff = dt - now
-
-        seconds = diff.total_seconds()
-        if seconds < 0:
-            return "now"
-        elif seconds < 60:
-            return f"in {int(seconds)}s"
-        elif seconds < 3600:
-            mins = int(seconds / 60)
-            return f"in {mins}m"
-        elif seconds < 86400:
-            hours = seconds / 3600
-            if hours == int(hours):
-                return f"in {int(hours)}h"
-            else:
-                # Show hours and minutes for more precision
-                h = int(hours)
-                m = int((seconds % 3600) / 60)
-                if m > 0:
-                    return f"in {h}h {m}m"
-                return f"in {h}h"
-        else:
-            days = int(seconds / 86400)
-            return f"in {days}d"
-    except Exception:
-        return "—"
 
 
 class SchedulerCard:
@@ -181,7 +133,7 @@ class SchedulerCard:
 
                 # Format schedule and next run time
                 schedule_display = simplify_schedule(schedule)
-                next_run_display = format_relative_future_time(next_run)
+                next_run_display = format_next_run_time(next_run)
 
                 # Active jobs have green status
                 status_icon = "🟢"
