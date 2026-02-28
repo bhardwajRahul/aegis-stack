@@ -6,7 +6,9 @@ Add your own jobs by importing service functions and calling scheduler.add_job()
 """
 
 import asyncio
+from typing import Any
 
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 {% if scheduler_backend != "memory" %}
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -22,6 +24,7 @@ from app.services.ai.jobs import sync_llm_catalog_job
 
 from app.core.config import settings
 from app.core.log import logger
+from app.services.system import activity
 
 {% if scheduler_backend != "memory" %}
 
@@ -173,8 +176,27 @@ async def run_scheduler() -> None:
 
     scheduler = create_scheduler()
 
+    def _on_job_event(event: Any) -> None:
+        """Emit activity events for job execution results."""
+        if event.code == EVENT_JOB_EXECUTED:
+            activity.add_event(
+                component="scheduler",
+                event_type="job_complete",
+                message=f"Job '{event.job_id}' completed",
+                status="success",
+            )
+        elif event.code == EVENT_JOB_ERROR:
+            activity.add_event(
+                component="scheduler",
+                event_type="job_failed",
+                message=f"Job '{event.job_id}' failed",
+                status="error",
+                details=str(event.exception),
+            )
+
     try:
         scheduler.start()
+        scheduler.add_listener(_on_job_event, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
         logger.info("Scheduler started successfully")
         logger.info(f"{len(scheduler.get_jobs())} jobs scheduled:")
 

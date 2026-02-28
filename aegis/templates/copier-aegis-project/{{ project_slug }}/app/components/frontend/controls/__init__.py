@@ -6,6 +6,7 @@ from .expand_arrow import ExpandArrow
 from .expandable_data_table import ExpandableDataTable, ExpandableRow
 from .form_fields import FormActionButtons, FormSecretField, FormTextField
 from .service_card import ServiceCard
+from .severity_filter import SeverityFilter
 from .table import (
     TableCellText,
     TableHeaderText,
@@ -71,4 +72,6 @@ __all__ = [
     "FormTextField",
     "FormSecretField",
     "FormActionButtons",
+    # Filter controls
+    "SeverityFilter",
 ]
