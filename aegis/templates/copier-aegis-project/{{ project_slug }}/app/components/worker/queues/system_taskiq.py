@@ -6,6 +6,7 @@ Handles system maintenance and monitoring tasks using TaskIQ patterns.
 
 from datetime import UTC, datetime
 
+from app.components.worker.middleware_taskiq import EventPublishMiddleware
 from app.core.config import settings
 from app.core.log import logger
 from taskiq_redis import RedisAsyncResultBackend, RedisStreamBroker
@@ -19,9 +20,11 @@ redis_url = (
 
 # Create the broker with Redis backend (using streams for acknowledgement support)
 # Use unique queue_name to ensure workers don't consume from each other's streams
-broker = RedisStreamBroker(
-    url=redis_url, queue_name="taskiq:system"
-).with_result_backend(RedisAsyncResultBackend(redis_url=redis_url))
+broker = (
+    RedisStreamBroker(url=redis_url, queue_name="taskiq:system")
+    .with_result_backend(RedisAsyncResultBackend(redis_url=redis_url))
+    .with_middlewares(EventPublishMiddleware().set_queue_name("system"))
+)
 
 
 @broker.task

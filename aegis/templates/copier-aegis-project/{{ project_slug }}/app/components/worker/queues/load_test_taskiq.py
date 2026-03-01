@@ -8,6 +8,7 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
+from app.components.worker.middleware_taskiq import EventPublishMiddleware
 from app.core.config import settings
 from app.core.log import logger
 from app.services.load_test_workloads import (
@@ -27,9 +28,11 @@ redis_url = (
 
 # Create the broker with Redis backend (using streams for acknowledgement support)
 # Use unique queue_name to ensure workers don't consume from each other's streams
-broker = RedisStreamBroker(
-    url=redis_url, queue_name="taskiq:load_test"
-).with_result_backend(RedisAsyncResultBackend(redis_url=redis_url))
+broker = (
+    RedisStreamBroker(url=redis_url, queue_name="taskiq:load_test")
+    .with_result_backend(RedisAsyncResultBackend(redis_url=redis_url))
+    .with_middlewares(EventPublishMiddleware().set_queue_name("load_test"))
+)
 
 
 @broker.task
