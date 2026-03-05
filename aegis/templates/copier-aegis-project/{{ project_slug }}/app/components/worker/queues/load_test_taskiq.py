@@ -8,6 +8,8 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
+import redis.asyncio as aioredis
+from app.components.worker.events import publish_event
 from app.components.worker.middleware_taskiq import EventPublishMiddleware
 from app.core.config import settings
 from app.core.log import logger
@@ -30,7 +32,9 @@ redis_url = (
 # Use unique queue_name to ensure workers don't consume from each other's streams
 broker = (
     RedisStreamBroker(url=redis_url, queue_name="taskiq:load_test")
-    .with_result_backend(RedisAsyncResultBackend(redis_url=redis_url))
+    .with_result_backend(
+        RedisAsyncResultBackend(redis_url=redis_url, result_ex_time=60)
+    )
     .with_middlewares(EventPublishMiddleware().set_queue_name("load_test"))
 )
 
@@ -108,6 +112,9 @@ async def load_test_orchestrator(
     tasks_sent = 0
     task_handles = []
 
+    # Redis client for publishing enqueue events to the dashboard
+    events_redis = aioredis.from_url(redis_url)
+
     try:
         # Spawn tasks in batches
         for batch_start in range(0, num_tasks, batch_size):
@@ -120,6 +127,12 @@ async def load_test_orchestrator(
                 handle = await task_func.kiq()
                 batch_handles.append(handle)
                 task_handles.append(handle)
+                await publish_event(
+                    events_redis,
+                    "job.enqueued",
+                    "load_test",
+                    {"job_id": str(handle.task_id), "task": task_type},
+                )
 
             tasks_sent += current_batch_size
             logger.info(
@@ -175,6 +188,8 @@ async def load_test_orchestrator(
     except Exception as e:
         logger.error(f"Load test orchestrator failed: {e}")
         return {"error": str(e), "tasks_sent": tasks_sent}
+    finally:
+        await events_redis.aclose()
 
 
 async def _monitor_task_completion(

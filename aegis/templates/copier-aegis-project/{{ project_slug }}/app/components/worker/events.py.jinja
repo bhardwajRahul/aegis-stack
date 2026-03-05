@@ -4,11 +4,10 @@ Worker event publishing via Redis Streams.
 Publishes lightweight lifecycle events (job enqueued, started, completed, failed,
 worker started/stopped) to a Redis Stream. These events are consumed by the SSE
 endpoint to provide real-time dashboard updates.
-
-Shared by both arq and TaskIQ worker backends.
 """
-
+{% if worker_backend != "taskiq" %}
 import re
+{%- endif %}
 from datetime import UTC, datetime
 from typing import Any
 
@@ -51,7 +50,7 @@ async def publish_event(
 
 
 async def read_queue_totals(redis_client: Any) -> dict[str, dict[str, int]]:
-    """Read absolute job totals per queue from arq's Redis keys.
+    """Read absolute job totals per queue as a baseline for SSE.
 
     Called ONCE on SSE connect to establish a baseline. The SSE endpoint
     then applies stream event deltas on top of this baseline.
@@ -64,7 +63,14 @@ async def read_queue_totals(redis_client: Any) -> dict[str, dict[str, int]]:
         E.g. {"load_test": {"queued": 5, "ongoing": 2, "completed": 100, "failed": 1}}
     """
     from app.components.worker.registry import get_all_queue_metadata
-
+{% if worker_backend == "taskiq" %}
+    # TaskIQ doesn't maintain persistent counters in Redis —
+    # real-time counts come from stream events (deltas).
+    return {
+        qt: {"queued": 0, "ongoing": 0, "completed": 0, "failed": 0}
+        for qt in get_all_queue_metadata()
+    }
+{%- else %}
     queue_names = {
         qt: meta["queue_name"] for qt, meta in get_all_queue_metadata().items()
     }
@@ -99,3 +105,4 @@ async def read_queue_totals(redis_client: Any) -> dict[str, dict[str, int]]:
             "failed": failed,
         }
     return totals
+{%- endif %}

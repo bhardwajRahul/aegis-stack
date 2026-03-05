@@ -238,7 +238,7 @@ def _compute_queue_values(
 def _format_eta(seconds: float) -> str:
     """Format an ETA in seconds to a human-readable string."""
     if seconds < 1:
-        return "< 1s"
+        return "—"
     s = int(seconds)
     if s < 60:
         return f"{s}s"
@@ -379,6 +379,10 @@ class OverviewSection(ft.Container):
         """Increment a MetricCard's numeric value by delta."""
         current = int(card.value_text.value or "0")
         card.set_value(str(current + delta))
+
+    def sync_queued(self, total: int) -> None:
+        """Set queued card to an explicit value (used after per-queue cleanup)."""
+        self._card_queued.set_value(str(total))
 
     def increment_queued(self) -> None:
         """Increment queued count by 1."""
@@ -548,7 +552,6 @@ class QueueHealthSection(ft.Container):
     def increment_ongoing(self, queue: str) -> None:
         """Increment processing cell (index 3) for a queue."""
         self._increment_cell(queue, 3)
-        # Force status to Active when ongoing > 0
         cells = self._queue_cells.get(queue)
         if cells:
             cells[0].value = "🔵"
@@ -563,15 +566,27 @@ class QueueHealthSection(ft.Container):
         current = int(cells[3].value or "0")
         new_val = max(0, current - 1)
         cells[3].value = str(new_val)
-        # Revert to Online when ongoing hits 0
         if new_val == 0:
-            cells[0].value = "🟢"
-            cells[9].value = "Online"
-            cells[9].color = Theme.Colors.SUCCESS
-            # Reset throughput tracking when queue goes fully idle
             queued = int(cells[2].value or "0")
-            if queued == 0:
+            if queued <= 1:
+                # Revert to Online when truly idle. The <= 1 guard
+                # tolerates a stale queued count of 1 caused by SSE
+                # event gaps (events published between read_queue_totals
+                # and the first XREAD are lost, leaving the counter off
+                # by 1). Zero out queued to prevent the stale value from
+                # persisting in the UI.
+                cells[2].value = "0"
+                cells[0].value = "🟢"
+                cells[9].value = "Online"
+                cells[9].color = Theme.Colors.SUCCESS
                 self._queue_tracking.pop(queue, None)
+
+    def total_queued(self) -> int:
+        """Sum queued values across all queue rows."""
+        total = 0
+        for cells in self._queue_cells.values():
+            total += int(cells[2].value or "0")
+        return total
 
     def increment_completed(self, queue: str) -> None:
         """Increment completed cell (index 4) for a queue."""
@@ -615,8 +630,12 @@ class QueueHealthSection(ft.Container):
         # ETA based on queued jobs remaining
         if queued > 0 and tps > 0:
             eta_s = queued / tps
-            cells[8].value = _format_eta(eta_s)
-            cells[8].color = Theme.Colors.WARNING
+            eta_str = _format_eta(eta_s)
+            cells[8].value = eta_str
+            # Only color as warning when showing a real ETA, not "—"
+            cells[8].color = (
+                Theme.Colors.WARNING if eta_str != "—" else ft.Colors.ON_SURFACE_VARIANT
+            )
         else:
             cells[8].value = "—"
             cells[8].color = ft.Colors.ON_SURFACE_VARIANT
@@ -658,8 +677,10 @@ class QueueHealthSection(ft.Container):
             "start_completed": completed,
         }
         cells[7].value = "—"
+        cells[7].color = ft.Colors.ON_SURFACE_VARIANT
         cells[8].value = "—"
-        # Update status icon/text to match ongoing state
+        cells[8].color = ft.Colors.ON_SURFACE_VARIANT
+        # set_queue_totals is the authoritative baseline — set status here
         if ongoing > 0:
             cells[0].value = "🔵"
             cells[9].value = "Active"
@@ -794,6 +815,8 @@ class WorkerDetailDialog(BaseDetailPopup):
         self._overview.decrement_ongoing()
         self._queue_health.increment_completed(queue)
         self._queue_health.decrement_ongoing(queue)
+        # Sync summary queued card with per-queue totals (cleanup may have zeroed rows)
+        self._overview.sync_queued(self._queue_health.total_queued())
         self._dirty = True
 
     def increment_failed(self, queue: str) -> None:
@@ -802,6 +825,8 @@ class WorkerDetailDialog(BaseDetailPopup):
         self._overview.decrement_ongoing()
         self._queue_health.increment_failed(queue)
         self._queue_health.decrement_ongoing(queue)
+        # Sync summary queued card with per-queue totals (cleanup may have zeroed rows)
+        self._overview.sync_queued(self._queue_health.total_queued())
         self._dirty = True
 
     def set_totals(self, queues: dict[str, dict[str, int]]) -> None:

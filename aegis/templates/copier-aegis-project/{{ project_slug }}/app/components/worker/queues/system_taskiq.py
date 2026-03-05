@@ -22,7 +22,9 @@ redis_url = (
 # Use unique queue_name to ensure workers don't consume from each other's streams
 broker = (
     RedisStreamBroker(url=redis_url, queue_name="taskiq:system")
-    .with_result_backend(RedisAsyncResultBackend(redis_url=redis_url))
+    .with_result_backend(
+        RedisAsyncResultBackend(redis_url=redis_url, result_ex_time=60)
+    )
     .with_middlewares(EventPublishMiddleware().set_queue_name("system"))
 )
 

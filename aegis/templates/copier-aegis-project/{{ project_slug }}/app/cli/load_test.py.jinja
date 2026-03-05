@@ -54,7 +54,7 @@ class QueueChoice(str, Enum):
 @app.command("run")
 def run_load_test(
     num_tasks: int = typer.Option(
-        100, "--tasks", "-n", help="Number of tasks to spawn", min=10, max=10000
+        100, "--tasks", "-n", help="Number of tasks to spawn", min=1
     ),
     task_type: LoadTestTypes = typer.Option(
         LoadTestTypes.CPU_INTENSIVE, "--type", "-t", help="Type of load test to run"
@@ -131,7 +131,7 @@ def run_load_test(
 @app.command("cpu")
 def quick_cpu_test_cmd(
     num_tasks: int = typer.Option(
-        50, "--tasks", "-n", help="Number of CPU tasks", min=10, max=1000
+        50, "--tasks", "-n", help="Number of CPU tasks", min=1
     ),
     wait: bool = typer.Option(True, "--wait/--no-wait", help="Wait for completion"),
 ) -> None:
@@ -178,7 +178,7 @@ def quick_cpu_test_cmd(
 @app.command("io")
 def quick_io_test_cmd(
     num_tasks: int = typer.Option(
-        100, "--tasks", "-n", help="Number of I/O tasks", min=10, max=1000
+        100, "--tasks", "-n", help="Number of I/O tasks", min=1
     ),
     wait: bool = typer.Option(True, "--wait/--no-wait", help="Wait for completion"),
 ) -> None:
@@ -227,7 +227,7 @@ def quick_io_test_cmd(
 @app.command("memory")
 def quick_memory_test_cmd(
     num_tasks: int = typer.Option(
-        200, "--tasks", "-n", help="Number of memory tasks", min=10, max=1000
+        200, "--tasks", "-n", help="Number of memory tasks", min=1
     ),
     wait: bool = typer.Option(True, "--wait/--no-wait", help="Wait for completion"),
 ) -> None:

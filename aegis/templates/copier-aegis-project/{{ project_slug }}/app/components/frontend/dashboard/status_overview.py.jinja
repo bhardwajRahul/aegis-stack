@@ -11,8 +11,8 @@ from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_label
 
 from .cards.card_utils import (
+    _open_modal,
     create_header_row,
-    create_modal_for_component,
 )
 
 # Map status overview component names to modal names
@@ -180,11 +180,7 @@ class ClickableStatusCell(ft.Container):
             return
 
         modal_name = MODAL_NAME_MAP.get(self._component_name, self._component_name)
-        popup = create_modal_for_component(modal_name, self._component_data, e.page)
-        if popup:
-            e.page.overlay.append(popup)
-            popup.show()
-            e.page.update()
+        _open_modal(modal_name, self._component_data, e.page)
 
 
 class StatusOverviewPanel(ft.Container):

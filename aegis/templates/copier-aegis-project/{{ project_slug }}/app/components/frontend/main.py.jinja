@@ -846,22 +846,9 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                     components, create_component_card
                 )
 
-                # Live-update visible modals, preserve cache for open ones
-                _old_cache = page.data.get("_modal_cache", {})
-                _preserved: dict[str, Any] = {}
-{% if include_worker %}
-                _worker_popup = _old_cache.get("worker")
-                if _worker_popup and _worker_popup.visible:
-                    # Don't call update_data() here — it overwrites the
-                    # real-time SSE counters with stale /health values.
-                    # The SSE stream drives all counter updates.
-                    _preserved["worker"] = _worker_popup
-{% endif %}
-                # Replace cache: keep visible modals, drop closed ones
-                if _preserved:
-                    page.data["_modal_cache"] = _preserved
-                else:
-                    page.data.pop("_modal_cache", None)
+                # Keep worker modal cached permanently so SSE counters
+                # survive close/reopen cycles without resetting.
+                # Other modals can be pruned when closed.
 
                 # Safe page update - check connection first
                 if dashboard._is_page_connected():
@@ -898,20 +885,27 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             page.data = {}
         page.data["refresh_dashboard"] = refresh_dashboard
 
-        # Shutdown flag — set by Flet's on_disconnect callback.
-        # More reliable than checking private _Page__conn attribute.
-        _page_alive = True
-
-        def _on_page_disconnect(_: Any) -> None:
-            nonlocal _page_alive
-            _page_alive = False
-            logger.debug("Page disconnect event received, signalling shutdown")
-
-        page.on_disconnect = _on_page_disconnect
+        # Consecutive disconnect checks before declaring page truly dead.
+        # Flet sessions reconnect within a few seconds — this grace period
+        # prevents background tasks from exiting during transient blips.
+        _DISCONNECT_GRACE_CHECKS = 30  # ~30s at 1s per check
+        _consecutive_disconnects = 0
 
         def _is_alive() -> bool:
-            """Check if the page is still alive (not disconnected)."""
-            return _page_alive and dashboard._is_page_connected()
+            """Check if the page is still alive.
+
+            Tolerates transient WebSocket disconnects (Flet session reconnects)
+            by requiring multiple consecutive failures before returning False.
+            """
+            nonlocal _consecutive_disconnects
+            if dashboard._is_page_connected():
+                _consecutive_disconnects = 0
+                return True
+            _consecutive_disconnects += 1
+            if _consecutive_disconnects >= _DISCONNECT_GRACE_CHECKS:
+                logger.debug("Page permanently disconnected after grace period")
+                return False
+            return True  # Still within grace period
 
         async def auto_refresh() -> None:
             """Auto-refresh loop. Exits on page disconnect to allow clean shutdown.
@@ -924,8 +918,9 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                     await refresh_dashboard()
                     await asyncio.sleep(30)
                 except PageDisconnectedException:
-                    logger.debug("Page disconnected, stopping auto-refresh")
-                    break
+                    # Transient disconnect — skip this cycle, loop will retry
+                    logger.debug("Page disconnected during refresh, retrying")
+                    await asyncio.sleep(5)
                 except Exception as e:
                     logger.error(f"Error in auto-refresh loop: {e}", exc_info=True)
                     await asyncio.sleep(30)
@@ -951,7 +946,8 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                     try:
                         worker_popup.flush()
                     except PageDisconnectedException:
-                        break
+                        # Transient disconnect — skip this flush, loop will retry
+                        pass
                     except Exception as e:
                         logger.debug(f"Worker modal flush failed: {e}")
 
@@ -966,16 +962,22 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             UI updates are flushed by a separate periodic task, not inline,
             so the last batch always renders even when the stream goes quiet.
 
-            Exits on page disconnect to allow clean process shutdown.
+            Survives transient page disconnects (Flet session reconnects).
+            Only exits when _is_alive() returns False after the grace period.
             """
+            logger.info("SSE: starting worker event listener")
             while _is_alive():
                 try:
+                    logger.info("SSE: connecting to /events/worker/stream")
                     async with http_client.stream(
                         "GET", "http://localhost:8000/events/worker/stream",
                         timeout=httpx.Timeout(
                             connect=5.0, read=15.0, write=5.0, pool=5.0,
                         ),
                     ) as response:
+                        logger.info(
+                            f"SSE: connected, status={response.status_code}"
+                        )
                         async for line in response.aiter_lines():
                             if not _is_alive():
                                 return
@@ -993,7 +995,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                             worker_popup = page.data.get(
                                 "_modal_cache", {}
                             ).get("worker")
-                            if not worker_popup or not worker_popup.visible:
+                            if not worker_popup:
                                 continue
 
                             try:
@@ -1013,17 +1015,22 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                                 elif event_type == "job.failed" and queue:
                                     worker_popup.increment_failed(queue)
                             except PageDisconnectedException:
-                                return
+                                # Transient disconnect — break inner loop,
+                                # outer loop will reconnect after sleep
+                                break
                             except Exception as e:
                                 logger.debug(
                                     f"SSE modal update failed: {e}"
                                 )
 
                 except PageDisconnectedException:
-                    return
-                except Exception as e:
-                    logger.debug(f"SSE connection lost: {e}, reconnecting in 5s")
+                    # Transient disconnect — sleep and retry
+                    logger.debug("SSE: page disconnected, retrying in 5s")
                     await asyncio.sleep(5)
+                except Exception as e:
+                    logger.info(f"SSE: connection error: {e}, reconnecting in 5s")
+                    await asyncio.sleep(5)
+            logger.info("SSE: listener exiting (page permanently disconnected)")
 {% endif %}
 
         # Initial load and start refresh

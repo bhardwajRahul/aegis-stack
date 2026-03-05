@@ -544,6 +544,10 @@ def _open_modal(
         if popup:
             modal_cache[component_name] = popup
             page.overlay.append(popup)
+    else:
+        # Refresh cached modal with latest health check data
+        if hasattr(popup, "update_data"):
+            popup.update_data(component_data)
     if popup:
         popup.show()
         page.update()

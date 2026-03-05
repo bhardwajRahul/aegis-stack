@@ -101,8 +101,7 @@ class LoadTestRequest(BaseModel):
     num_tasks: int = Field(
         100,
         description="Number of tasks to spawn for the load test",
-        ge=10,
-        le=10000
+        ge=1,
     )
     task_type: LoadTestTypes = Field(
         LoadTestTypes.CPU_INTENSIVE,
