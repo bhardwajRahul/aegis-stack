@@ -8,7 +8,9 @@ No inheritance or ABC complexity - just common functionality extracted.
 from collections.abc import Callable
 
 import flet as ft
+{%- if include_observability %}
 import logfire
+{%- endif %}
 from app.components.frontend.controls import (
     H3Text,
     LabelText,
@@ -434,7 +436,9 @@ def create_progress_indicator(
     )
 
 
+{%- if include_observability %}
 @logfire.instrument("overseer.modal.create {component_name}")
+{%- endif %}
 def create_modal_for_component(
     component_name: str, component_data: ComponentStatus, page: ft.Page
 ) -> ft.Container | None:
@@ -526,7 +530,9 @@ def create_modal_for_component(
     return None
 
 
+{%- if include_observability %}
 @logfire.instrument("overseer.modal.open {component_name}")
+{%- endif %}
 def _open_modal(
     component_name: str, component_data: ComponentStatus, page: ft.Page
 ) -> None:
@@ -538,6 +544,10 @@ def _open_modal(
         if popup:
             modal_cache[component_name] = popup
             page.overlay.append(popup)
+    else:
+        # Refresh cached modal with latest health check data
+        if hasattr(popup, "update_data"):
+            popup.update_data(component_data)
     if popup:
         popup.show()
         page.update()

@@ -1,7 +1,7 @@
 """
 Database initialization startup hook.
 
-Runs Alembic migrations and {% if database_engine == "sqlite" %}ensures directory structure exists{% else %}verifies connectivity{% endif %}
+{% if database_engine == "sqlite" %}Ensures directory structure exists and creates tables{% else %}Runs Alembic migrations and verifies connectivity{% endif %}
 when the backend starts up (only when database component is included).
 """
 {% if include_database %}
@@ -16,7 +16,7 @@ from app.core.log import logger
 from app.models.user import User  # noqa: F401
 {% endif %}
 
-
+{% if database_engine == "postgres" %}
 def _check_and_stamp_existing_tables() -> None:
     """
     Detect when tables for a pending migration already exist.
@@ -155,6 +155,7 @@ def _run_migrations() -> bool:
     except Exception as e:
         logger.error(f"Failed to run migrations: {e}")
         return False
+{% endif %}
 
 
 async def startup_database_init() -> None:
@@ -162,9 +163,11 @@ async def startup_database_init() -> None:
     Initialize database and run migrations.
 
     This hook runs when the backend starts to:
-    1. {% if database_engine == "sqlite" %}Ensure database directory exists{% else %}Verify database connectivity{% endif %}
+    1. {% if database_engine == "sqlite" %}Ensure database directory exists and create tables{% else %}Verify database connectivity{% endif %}
+{% if database_engine == "postgres" %}
     2. Run Alembic migrations (idempotent - safe to run multiple times)
     3. Verify database schema is ready
+{%- endif %}
     {%- if include_ai and database_engine == "postgres" %}
     4. Sync LLM catalog (AI service, postgres only)
     {%- endif %}
@@ -175,33 +178,47 @@ async def startup_database_init() -> None:
         from app.core.db import DATABASE_PATH
         db_path = Path(DATABASE_PATH)
         db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Create tables via SQLModel (no Alembic needed for SQLite)
+        from sqlmodel import SQLModel
+
+        from app.core.db import engine
+        SQLModel.metadata.create_all(engine)
+        logger.info("Database tables created/verified (SQLite)")
 {% endif %}
 
+{% if database_engine == "postgres" %}
         # Run Alembic migrations (idempotent)
         migrations_ok = _run_migrations()
 
         if not migrations_ok:
             logger.warning("Migrations failed - database may not be fully initialized")
             # Continue anyway to allow debugging
+{% endif %}
 
         # Verify database connectivity
         try:
-            from app.core.db import db_session
-            from sqlmodel import text
             from sqlalchemy import inspect
+            from sqlmodel import text
+
+            from app.core.db import db_session
 
             with db_session(autocommit=False) as session:
                 # Basic connectivity check
                 session.exec(text("SELECT 1"))
 
-                # Verify alembic_version table exists
                 inspector = inspect(session.connection())
                 table_names = inspector.get_table_names()
+{% if database_engine == "postgres" %}
 
+                # Verify alembic_version table exists
                 if "alembic_version" in table_names:
                     logger.info(f"Database ready with {len(table_names)} tables")
                 else:
                     logger.warning("alembic_version table missing after migrations")
+{% else %}
+                logger.info(f"Database ready with {len(table_names)} tables")
+{% endif %}
 
         except Exception as e:
             logger.warning(f"Database verification failed: {e}")

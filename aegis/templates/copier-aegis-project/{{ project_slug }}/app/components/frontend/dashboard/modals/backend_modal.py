@@ -5,8 +5,10 @@ Displays comprehensive backend/FastAPI information including routes,
 middleware stack, system metrics, and configuration details in a tabbed interface.
 """
 
+from collections.abc import Generator
+from contextlib import contextmanager
+
 import flet as ft
-import logfire
 from app.components.frontend.controls import (
     BodyText,
     ExpandArrow,
@@ -21,6 +23,21 @@ from app.services.system.models import ComponentStatus
 from ..cards.card_utils import create_progress_indicator, get_status_detail
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
+
+try:
+    import logfire
+except ModuleNotFoundError:  # observability not installed
+    logfire = None  # type: ignore[assignment]
+
+
+@contextmanager
+def _span(name: str) -> Generator[None, None, None]:
+    """Logfire span wrapper — no-op when logfire is unavailable."""
+    if logfire is not None:
+        with logfire.span(name):
+            yield
+    else:
+        yield
 
 
 def _get_metric_color(percent: float) -> str:
@@ -1142,13 +1159,13 @@ class BackendDetailDialog(BaseDetailPopup):
             backend_component: ComponentStatus containing backend data
             page: Flet page instance
         """
-        # Build tabs with logfire instrumentation
-        with logfire.span("overseer.modal.backend.build_tabs"):
-            with logfire.span("overseer.modal.backend.overview_tab"):
+        # Build tabs with optional logfire instrumentation
+        with _span("overseer.modal.backend.build_tabs"):
+            with _span("overseer.modal.backend.overview_tab"):
                 overview_tab = OverviewTab(backend_component)
-            with logfire.span("overseer.modal.backend.routes_tab"):
+            with _span("overseer.modal.backend.routes_tab"):
                 routes_tab = RoutesTab(backend_component)
-            with logfire.span("overseer.modal.backend.lifecycle_tab"):
+            with _span("overseer.modal.backend.lifecycle_tab"):
                 lifecycle_tab = LifecycleTab(backend_component)
 
             tabs = ft.Tabs(

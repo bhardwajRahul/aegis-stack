@@ -105,15 +105,15 @@ class MetricCard(ft.Container):
             spacing=6,
         )
 
-        # Value text
-        value_text = ft.Text(
+        # Value text — stored as instance attribute for live updates
+        self.value_text = ft.Text(
             value,
             size=24,
             weight=ft.FontWeight.W_600,
         )
 
         self.content = ft.Column(
-            [header_row, value_text],
+            [header_row, self.value_text],
             spacing=Theme.Spacing.XS,
         )
         self.padding = Theme.Spacing.MD
@@ -121,6 +121,12 @@ class MetricCard(ft.Container):
         self.border_radius = Theme.Components.CARD_RADIUS
         self.border = ft.border.all(0.5, ft.Colors.OUTLINE)
         self.expand = True
+
+    def set_value(self, value: str, color: str | None = None) -> None:
+        """Update the displayed value (and optionally its color) in place."""
+        self.value_text.value = value
+        if color is not None:
+            self.value_text.color = color
 
 
 class SectionHeader(ft.Row):

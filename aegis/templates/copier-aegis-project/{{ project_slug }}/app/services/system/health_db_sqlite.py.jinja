@@ -17,6 +17,11 @@ from app.core.log import logger
 from app.services.system.health import format_bytes
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
+# Cache static data that doesn't change at runtime
+_pragma_cache: dict[str, Any] | None = None
+_schema_cache: dict[str, Any] | None = None
+_migration_cache: list[dict[str, Any]] | None = None
+
 
 async def check_database_health() -> ComponentStatus:
     """
@@ -25,8 +30,10 @@ async def check_database_health() -> ComponentStatus:
     Returns:
         ComponentStatus indicating database health
     """
+    global _pragma_cache, _schema_cache, _migration_cache
+
     try:
-        from app.core.db import db_session
+        from app.core.db import get_async_session
 
         db_url = settings.DATABASE_URL
         if db_url.startswith("sqlite:///"):
@@ -56,6 +63,7 @@ async def check_database_health() -> ComponentStatus:
             "engine_echo": settings.DATABASE_ENGINE_ECHO,
         }
 
+        # --- Always live: version, file size, pool info ---
         if db_url.startswith("sqlite:///"):
             try:
                 enhanced_metadata["version"] = sqlite3.sqlite_version
@@ -77,27 +85,34 @@ async def check_database_health() -> ComponentStatus:
                     "Failed to collect enhanced database metadata", exc_info=True
                 )
 
-        with db_session(autocommit=False) as session:
+        async with get_async_session() as session:
             from sqlalchemy import text
-            session.execute(text("SELECT 1"))
 
+            # --- Always live: connectivity check ---
+            await session.execute(text("SELECT 1"))
+
+            # --- Always live: table names and row counts ---
             table_info: list[dict[str, Any]] = []
             if db_url.startswith("sqlite:///"):
                 try:
-                    from sqlalchemy import inspect
-                    inspector = inspect(session.bind)
-                    if inspector is None:
-                        table_names: list[str] = []
-                    else:
-                        table_names = inspector.get_table_names()
+                    def _get_table_names(conn: Any) -> list[str]:
+                        from sqlalchemy import inspect
+                        inspector = inspect(conn)
+                        return inspector.get_table_names() if inspector else []
+
+                    table_names = await session.run_sync(
+                        lambda sync_session: _get_table_names(
+                            sync_session.connection()
+                        )
+                    )
 
                     for table_name in table_names:
                         try:
                             from sqlalchemy import quoted_name
                             quoted_table = quoted_name(table_name, quote=True)
-                            count_result = session.execute(
+                            count_result = (await session.execute(
                                 text(f"SELECT COUNT(*) FROM {quoted_table}")
-                            ).fetchone()
+                            )).fetchone()
                             row_count = count_result[0] if count_result else 0
 
                             table_info.append({
@@ -117,235 +132,352 @@ async def check_database_health() -> ComponentStatus:
                     enhanced_metadata["table_count"] = len(table_names)
 
                 except Exception:
-                    logger.debug("Failed to collect table information", exc_info=True)
+                    logger.debug(
+                        "Failed to collect table information", exc_info=True
+                    )
                     enhanced_metadata["tables"] = []
                     enhanced_metadata["table_count"] = 0
 
+            # --- Cached: PRAGMA settings (don't change at runtime) ---
             if db_url.startswith("sqlite:///"):
-                try:
-                    pragma_settings: dict[str, Any] = {}
+                if _pragma_cache is not None:
+                    enhanced_metadata["pragma_settings"] = _pragma_cache[
+                        "pragma_settings"
+                    ]
+                    enhanced_metadata["wal_enabled"] = _pragma_cache["wal_enabled"]
+                    enhanced_metadata["comprehensive_pragma"] = _pragma_cache[
+                        "comprehensive_pragma"
+                    ]
+                else:
+                    try:
+                        pragma_settings: dict[str, Any] = {}
+                        wal_enabled = False
 
-                    result = session.execute(text("PRAGMA foreign_keys")).fetchone()
-                    if result:
-                        pragma_settings["foreign_keys"] = bool(result[0])
+                        result = (await session.execute(
+                            text("PRAGMA foreign_keys")
+                        )).fetchone()
+                        if result:
+                            pragma_settings["foreign_keys"] = bool(result[0])
 
-                    result = session.execute(text("PRAGMA journal_mode")).fetchone()
-                    if result:
-                        journal_mode = result[0].lower()
-                        pragma_settings["journal_mode"] = journal_mode
-                        enhanced_metadata["wal_enabled"] = journal_mode == "wal"
+                        result = (await session.execute(
+                            text("PRAGMA journal_mode")
+                        )).fetchone()
+                        if result:
+                            journal_mode = result[0].lower()
+                            pragma_settings["journal_mode"] = journal_mode
+                            wal_enabled = journal_mode == "wal"
 
-                    result = session.execute(text("PRAGMA cache_size")).fetchone()
-                    if result:
-                        pragma_settings["cache_size"] = result[0]
+                        result = (await session.execute(
+                            text("PRAGMA cache_size")
+                        )).fetchone()
+                        if result:
+                            pragma_settings["cache_size"] = result[0]
 
-                    enhanced_metadata["pragma_settings"] = pragma_settings
+                        comprehensive_pragma: dict[str, Any] = {}
 
-                except Exception:
-                    logger.debug(
-                        "Failed to collect SQLite PRAGMA settings", exc_info=True
-                    )
+                        result = (await session.execute(
+                            text("PRAGMA synchronous")
+                        )).fetchone()
+                        if result:
+                            comprehensive_pragma["synchronous"] = result[0]
 
-            if db_url.startswith("sqlite:///"):
-                try:
-                    comprehensive_pragma: dict[str, Any] = {}
+                        result = (await session.execute(
+                            text("PRAGMA temp_store")
+                        )).fetchone()
+                        if result:
+                            comprehensive_pragma["temp_store"] = result[0]
 
-                    result = session.execute(text("PRAGMA synchronous")).fetchone()
-                    if result:
-                        comprehensive_pragma["synchronous"] = result[0]
+                        result = (await session.execute(
+                            text("PRAGMA mmap_size")
+                        )).fetchone()
+                        if result:
+                            comprehensive_pragma["mmap_size"] = result[0]
 
-                    result = session.execute(text("PRAGMA temp_store")).fetchone()
-                    if result:
-                        comprehensive_pragma["temp_store"] = result[0]
+                        result = (await session.execute(
+                            text("PRAGMA page_size")
+                        )).fetchone()
+                        if result:
+                            comprehensive_pragma["page_size"] = result[0]
 
-                    result = session.execute(text("PRAGMA mmap_size")).fetchone()
-                    if result:
-                        comprehensive_pragma["mmap_size"] = result[0]
+                        result = (await session.execute(
+                            text("PRAGMA auto_vacuum")
+                        )).fetchone()
+                        if result:
+                            comprehensive_pragma["auto_vacuum"] = result[0]
 
-                    result = session.execute(text("PRAGMA page_size")).fetchone()
-                    if result:
-                        comprehensive_pragma["page_size"] = result[0]
+                        result = (await session.execute(
+                            text("PRAGMA busy_timeout")
+                        )).fetchone()
+                        if result:
+                            comprehensive_pragma["busy_timeout"] = result[0]
 
-                    result = session.execute(text("PRAGMA auto_vacuum")).fetchone()
-                    if result:
-                        comprehensive_pragma["auto_vacuum"] = result[0]
+                        result = (await session.execute(
+                            text("PRAGMA page_count")
+                        )).fetchone()
+                        if result:
+                            comprehensive_pragma["page_count"] = result[0]
 
-                    result = session.execute(text("PRAGMA busy_timeout")).fetchone()
-                    if result:
-                        comprehensive_pragma["busy_timeout"] = result[0]
+                        result = (await session.execute(
+                            text("PRAGMA freelist_count")
+                        )).fetchone()
+                        if result:
+                            freelist = result[0]
+                            comprehensive_pragma["freelist_count"] = freelist
+                            page_count = comprehensive_pragma.get("page_count", 0)
+                            if page_count > 0:
+                                efficiency = (
+                                    (1 - freelist / page_count) * 100
+                                )
+                                comprehensive_pragma["db_efficiency"] = round(
+                                    efficiency, 2
+                                )
 
-                    result = session.execute(text("PRAGMA page_count")).fetchone()
-                    if result:
-                        comprehensive_pragma["page_count"] = result[0]
-
-                    result = session.execute(text("PRAGMA freelist_count")).fetchone()
-                    if result:
-                        freelist = result[0]
-                        comprehensive_pragma["freelist_count"] = freelist
-                        page_count = comprehensive_pragma.get("page_count", 0)
-                        if page_count > 0:
-                            efficiency = (1 - freelist / page_count) * 100
-                            comprehensive_pragma["db_efficiency"] = round(efficiency, 2)
-
-                    enhanced_metadata["comprehensive_pragma"] = comprehensive_pragma
-
-                except Exception:
-                    logger.debug(
-                        "Failed to collect comprehensive PRAGMA settings",
-                        exc_info=True,
-                    )
-
-            if db_url.startswith("sqlite:///") and table_info:
-                try:
-                    table_schemas: list[dict[str, Any]] = []
-                    total_indexes = 0
-                    total_foreign_keys = 0
-
-                    for table in table_info:
-                        table_name = table["name"]
-                        schema_info: dict[str, Any] = {
-                            "name": table_name, "rows": table["rows"]
+                        _pragma_cache = {
+                            "pragma_settings": pragma_settings,
+                            "wal_enabled": wal_enabled,
+                            "comprehensive_pragma": comprehensive_pragma,
                         }
 
-                        columns: list[dict[str, Any]] = []
-                        from sqlalchemy import quoted_name
-                        quoted_table = quoted_name(table_name, quote=True)
-                        result = session.execute(
-                            text(f"PRAGMA table_info({quoted_table})")
-                        ).fetchall()
-                        for row in result:
-                            columns.append({
-                                "name": row[1],
-                                "type": row[2] or "BLOB",  # Default to BLOB if no type
-                                "nullable": not bool(row[3]),  # Invert notnull
-                                "default": str(row[4]) if row[4] is not None else "None",
-                                "primary_key": bool(row[5]),
-                            })
-                        schema_info["columns"] = columns
+                        enhanced_metadata["pragma_settings"] = pragma_settings
+                        enhanced_metadata["wal_enabled"] = wal_enabled
+                        enhanced_metadata["comprehensive_pragma"] = (
+                            comprehensive_pragma
+                        )
 
-                        indexes: list[dict[str, Any]] = []
-                        result = session.execute(
-                            text(f"PRAGMA index_list({quoted_table})")
-                        ).fetchall()
-                        for row in result:
-                            # Get column names for this index
-                            quoted_index = quoted_name(row[1], quote=True)
-                            index_result = session.execute(
-                                text(f"PRAGMA index_info({quoted_index})")
-                            ).fetchall()
-                            column_names = [idx_row[2] for idx_row in index_result]
+                    except Exception:
+                        logger.debug(
+                            "Failed to collect PRAGMA settings",
+                            exc_info=True,
+                        )
 
-                            indexes.append({
-                                "name": row[1],
-                                "unique": bool(row[2]),
-                                "columns": column_names,
-                            })
-                            total_indexes += 1
+            # --- Cached: table schemas, indexes, foreign keys ---
+            if db_url.startswith("sqlite:///") and table_info:
+                # Invalidate schema cache if table list changed
+                cached_tables = (
+                    {s["name"] for s in _schema_cache["table_schemas"]}
+                    if _schema_cache is not None
+                    else set()
+                )
+                current_tables = {t["name"] for t in table_info}
 
-                        schema_info["indexes"] = indexes
-
-                        foreign_keys: list[dict[str, Any]] = []
-                        result = session.execute(
-                            text(f"PRAGMA foreign_key_list({quoted_table})")
-                        ).fetchall()
-                        for row in result:
-                            foreign_keys.append({
-                                "column": row[3],
-                                "referred_table": row[2],
-                                "referred_column": row[4],
-                            })
-                            total_foreign_keys += 1
-
-                        schema_info["foreign_keys"] = foreign_keys
-                        table_schemas.append(schema_info)
-
+                if _schema_cache is not None and cached_tables == current_tables:
+                    # Update row counts in cached schemas (rows are live)
+                    row_map = {t["name"]: t["rows"] for t in table_info}
+                    table_schemas = []
+                    for schema in _schema_cache["table_schemas"]:
+                        table_schemas.append({
+                            **schema,
+                            "rows": row_map.get(schema["name"], 0),
+                        })
                     enhanced_metadata["table_schemas"] = table_schemas
-                    enhanced_metadata["total_indexes"] = total_indexes
-                    enhanced_metadata["total_foreign_keys"] = total_foreign_keys
+                    enhanced_metadata["total_indexes"] = _schema_cache[
+                        "total_indexes"
+                    ]
+                    enhanced_metadata["total_foreign_keys"] = _schema_cache[
+                        "total_foreign_keys"
+                    ]
+                else:
+                    try:
+                        table_schemas_list: list[dict[str, Any]] = []
+                        total_indexes = 0
+                        total_foreign_keys = 0
 
-                    if table_info:
-                        total_rows = sum(t["rows"] for t in table_info)
-                        largest_table = max(table_info, key=lambda t: t["rows"])
-                        enhanced_metadata["total_rows"] = total_rows
-                        enhanced_metadata["largest_table"] = largest_table
+                        for table in table_info:
+                            table_name = table["name"]
+                            schema_info: dict[str, Any] = {
+                                "name": table_name, "rows": table["rows"]
+                            }
 
-                except Exception:
-                    logger.debug(
-                        "Failed to collect table schema details", exc_info=True
-                    )
+                            columns: list[dict[str, Any]] = []
+                            from sqlalchemy import quoted_name
+                            quoted_table = quoted_name(table_name, quote=True)
+                            result = (await session.execute(
+                                text(f"PRAGMA table_info({quoted_table})")
+                            )).fetchall()
+                            for row in result:
+                                columns.append({
+                                    "name": row[1],
+                                    "type": row[2] or "BLOB",
+                                    "nullable": not bool(row[3]),
+                                    "default": (
+                                        str(row[4])
+                                        if row[4] is not None
+                                        else "None"
+                                    ),
+                                    "primary_key": bool(row[5]),
+                                })
+                            schema_info["columns"] = columns
 
+                            indexes: list[dict[str, Any]] = []
+                            result = (await session.execute(
+                                text(f"PRAGMA index_list({quoted_table})")
+                            )).fetchall()
+                            for row in result:
+                                quoted_index = quoted_name(row[1], quote=True)
+                                index_result = (await session.execute(
+                                    text(f"PRAGMA index_info({quoted_index})")
+                                )).fetchall()
+                                column_names = [
+                                    idx_row[2] for idx_row in index_result
+                                ]
+
+                                indexes.append({
+                                    "name": row[1],
+                                    "unique": bool(row[2]),
+                                    "columns": column_names,
+                                })
+                                total_indexes += 1
+
+                            schema_info["indexes"] = indexes
+
+                            foreign_keys: list[dict[str, Any]] = []
+                            result = (await session.execute(
+                                text(
+                                    f"PRAGMA foreign_key_list({quoted_table})"
+                                )
+                            )).fetchall()
+                            for row in result:
+                                foreign_keys.append({
+                                    "column": row[3],
+                                    "referred_table": row[2],
+                                    "referred_column": row[4],
+                                })
+                                total_foreign_keys += 1
+
+                            schema_info["foreign_keys"] = foreign_keys
+                            table_schemas_list.append(schema_info)
+
+                        _schema_cache = {
+                            "table_schemas": table_schemas_list,
+                            "total_indexes": total_indexes,
+                            "total_foreign_keys": total_foreign_keys,
+                        }
+
+                        enhanced_metadata["table_schemas"] = table_schemas_list
+                        enhanced_metadata["total_indexes"] = total_indexes
+                        enhanced_metadata["total_foreign_keys"] = (
+                            total_foreign_keys
+                        )
+
+                    except Exception:
+                        logger.debug(
+                            "Failed to collect table schema details",
+                            exc_info=True,
+                        )
+
+                if table_info:
+                    total_rows = sum(t["rows"] for t in table_info)
+                    largest_table = max(table_info, key=lambda t: t["rows"])
+                    enhanced_metadata["total_rows"] = total_rows
+                    enhanced_metadata["largest_table"] = largest_table
+
+            # --- Cached: migration files (static on disk) ---
             if db_url.startswith("sqlite:///"):
                 try:
-                    migrations: list[dict[str, Any]] = []
-
-                    result = session.execute(
+                    result = (await session.execute(
                         text(
                             "SELECT name FROM sqlite_master "
                             "WHERE type='table' AND name='alembic_version'"
                         )
-                    ).fetchone()
+                    )).fetchone()
 
                     if result:
-                        version_result = session.execute(
+                        # Always query current HEAD live
+                        version_result = (await session.execute(
                             text("SELECT version_num FROM alembic_version")
-                        ).fetchone()
-                        current_version = version_result[0] if version_result else None
+                        )).fetchone()
+                        current_version = (
+                            version_result[0] if version_result else None
+                        )
                         enhanced_metadata["current_migration"] = current_version
 
-                        alembic_versions_path = Path("alembic/versions")
-                        if alembic_versions_path.exists():
-                            migration_files = alembic_versions_path.glob("*.py")
-                            for migration_file in sorted(migration_files):
-                                if migration_file.name == "__init__.py":
-                                    continue
+                        # Parse migration files once, cache forever
+                        if _migration_cache is None:
+                            _migration_cache = []
+                            alembic_versions_path = Path("alembic/versions")
+                            if alembic_versions_path.exists():
+                                migration_files = (
+                                    alembic_versions_path.glob("*.py")
+                                )
+                                for mf in sorted(migration_files):
+                                    if mf.name == "__init__.py":
+                                        continue
 
-                                try:
-                                    with open(migration_file) as f:
-                                        content = f.read()
+                                    try:
+                                        with open(mf) as f:
+                                            content = f.read()
 
-                                    revision_id = migration_file.stem.split("_")[0]
-                                    description = "No description"
-                                    down_revision = None
-                                    create_date = None
+                                        revision_id = (
+                                            mf.stem.split("_")[0]
+                                        )
+                                        description = "No description"
+                                        down_revision = None
+                                        create_date = None
 
-                                    doc_pat = r'"""(.+?)"""'
-                                    doc_match = re.search(doc_pat, content, re.DOTALL)
-                                    if doc_match:
-                                        description = doc_match.group(1).strip()
+                                        doc_pat = r'"""(.+?)"""'
+                                        doc_match = re.search(
+                                            doc_pat, content, re.DOTALL
+                                        )
+                                        if doc_match:
+                                            description = (
+                                                doc_match.group(1).strip()
+                                            )
 
-                                    rev_pat = r'revision\s*=\s*[\'"](.+?)[\'"]'
-                                    revision_match = re.search(rev_pat, content)
-                                    if revision_match:
-                                        revision_id = revision_match.group(1)
+                                        rev_pat = (
+                                            r'revision\s*=\s*[\'"](.+?)[\'"]'
+                                        )
+                                        revision_match = re.search(
+                                            rev_pat, content
+                                        )
+                                        if revision_match:
+                                            revision_id = (
+                                                revision_match.group(1)
+                                            )
 
-                                    down_pat = r'down_revision\s*=\s*[\'"](.+?)[\'"]'
-                                    down_match = re.search(down_pat, content)
-                                    if down_match:
-                                        down_revision = down_match.group(1)
+                                        down_pat = (
+                                            r'down_revision\s*=\s*'
+                                            r'[\'"](.+?)[\'"]'
+                                        )
+                                        down_match = re.search(
+                                            down_pat, content
+                                        )
+                                        if down_match:
+                                            down_revision = (
+                                                down_match.group(1)
+                                            )
 
-                                    date_pat = r'create_date\s*=\s*.+?datetime\((.+?)\)'
-                                    date_match = re.search(date_pat, content)
-                                    if date_match:
-                                        create_date = date_match.group(0)
+                                        date_pat = (
+                                            r'create_date\s*=\s*'
+                                            r'.+?datetime\((.+?)\)'
+                                        )
+                                        date_match = re.search(
+                                            date_pat, content
+                                        )
+                                        if date_match:
+                                            create_date = date_match.group(0)
 
-                                    file_mtime = os.path.getmtime(migration_file)
+                                        file_mtime = os.path.getmtime(mf)
 
-                                    migrations.append({
-                                        "revision": revision_id,
-                                        "down_revision": down_revision,
-                                        "description": description,
-                                        "file_mtime": file_mtime,
-                                        "create_date": create_date,
-                                        "is_current": revision_id == current_version,
-                                        "content": content,
-                                        "file_path": str(migration_file),
-                                    })
+                                        _migration_cache.append({
+                                            "revision": revision_id,
+                                            "down_revision": down_revision,
+                                            "description": description,
+                                            "file_mtime": file_mtime,
+                                            "create_date": create_date,
+                                            "file_path": str(mf),
+                                        })
 
-                                except Exception as e:
-                                    logger.debug(
-                                        f"Failed to parse migration "
-                                        f"{migration_file}: {e}"
-                                    )
+                                    except Exception as e:
+                                        logger.debug(
+                                            f"Failed to parse migration "
+                                            f"{mf}: {e}"
+                                        )
+
+                        # Stamp is_current from live HEAD onto cached data
+                        migrations = [
+                            {**m, "is_current": m["revision"] == current_version}
+                            for m in _migration_cache
+                        ]
 
                         enhanced_metadata["migrations"] = migrations
                         enhanced_metadata["migration_count"] = len(migrations)
@@ -355,7 +487,9 @@ async def check_database_health() -> ComponentStatus:
                         enhanced_metadata["migration_count"] = 0
 
                 except Exception:
-                    logger.debug("Failed to collect migration history", exc_info=True)
+                    logger.debug(
+                        "Failed to collect migration history", exc_info=True
+                    )
                     enhanced_metadata["migrations"] = []
                     enhanced_metadata["migration_count"] = 0
 

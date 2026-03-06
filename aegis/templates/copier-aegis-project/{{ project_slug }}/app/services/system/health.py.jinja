@@ -128,14 +128,22 @@ async def get_system_status() -> SystemStatus:
     """
     start_time = datetime.now(UTC)
 
-    # Run custom component checks (these are top-level components)
-    component_results = {}
-    component_tasks = []
+    # Launch ALL checks concurrently (components + services + metrics)
+    # so total time = max(all checks) instead of sum(sequential groups)
+    component_tasks: list[tuple[str, asyncio.Task[ComponentStatus]]] = []
     for name, check_fn in _health_checks.items():
         task = asyncio.create_task(_run_health_check(name, check_fn))
         component_tasks.append((name, task))
 
+    service_tasks: list[tuple[str, asyncio.Task[ComponentStatus]]] = []
+    for name, check_fn in _service_health_checks.items():
+        task = asyncio.create_task(_run_health_check(name, check_fn))
+        service_tasks.append((name, task))
+
+    metrics_task = asyncio.create_task(_get_cached_system_metrics(start_time))
+
     # Collect component results
+    component_results = {}
     for name, task in component_tasks:
         try:
             component_results[name] = await task
@@ -148,14 +156,8 @@ async def get_system_status() -> SystemStatus:
                 response_time_ms=None,
             )
 
-    # Run service health checks
-    service_results = {}
-    service_tasks = []
-    for name, check_fn in _service_health_checks.items():
-        task = asyncio.create_task(_run_health_check(name, check_fn))
-        service_tasks.append((name, task))
-
     # Collect service results
+    service_results = {}
     for name, task in service_tasks:
         try:
             service_results[name] = await task
@@ -168,8 +170,8 @@ async def get_system_status() -> SystemStatus:
                 response_time_ms=None,
             )
 
-    # Get system metrics (with caching for performance)
-    system_metrics = await _get_cached_system_metrics(start_time)
+    # Collect system metrics (already running concurrently)
+    system_metrics = await metrics_task
 
     # Group system metrics under backend component if it exists
     if "backend" in component_results:
@@ -879,7 +881,9 @@ async def check_worker_health() -> ComponentStatus:
         # Create Redis connection with auto-detection for local vs Docker
         redis_connection = aioredis.from_url(  # type: ignore[no-untyped-call]
             settings.redis_url_effective,
-            db=settings.REDIS_DB
+            db=settings.REDIS_DB,
+            socket_timeout=3,
+            socket_connect_timeout=3,
         )
         redis_client: aioredis.Redis = cast(aioredis.Redis, redis_connection)
 
@@ -1168,7 +1172,9 @@ async def check_worker_health() -> ComponentStatus:
         # Step 1: Call untyped function with explicit ignore
         redis_connection = aioredis.from_url(  # type: ignore[no-untyped-call]
             settings.redis_url_effective,
-            db=settings.REDIS_DB
+            db=settings.REDIS_DB,
+            socket_timeout=3,
+            socket_connect_timeout=3,
         )
         # Step 2: Cast the result to proper type
         redis_client: aioredis.Redis = cast(aioredis.Redis, redis_connection)

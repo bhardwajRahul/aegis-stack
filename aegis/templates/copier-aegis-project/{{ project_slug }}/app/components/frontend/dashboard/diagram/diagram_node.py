@@ -10,7 +10,7 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus, ComponentStatusType
 from app.services.system.ui import get_component_label
 
-from ..cards.card_utils import create_modal_for_component, get_ai_engine_display
+from ..cards.card_utils import _open_modal, get_ai_engine_display
 
 # Component configuration: display names and modal routing
 # Subtitles are generated dynamically via get_component_label()
@@ -207,15 +207,7 @@ class DiagramNode(ft.Container):
         if not e.page:
             return
 
-        popup = create_modal_for_component(
-            self._modal_name,
-            self._component_data,
-            e.page,
-        )
-        if popup:
-            e.page.overlay.append(popup)
-            popup.show()
-            e.page.update()
+        _open_modal(self._modal_name, self._component_data, e.page)
 
     def update_data(self, component_data: ComponentStatus) -> None:
         """

@@ -337,7 +337,11 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
                 for taskiq_file in queues_dir.glob("*_taskiq.py"):
                     taskiq_file.unlink()
 
-                # arq: Remove TaskIQ pool, API, and registry files
+                # arq: Remove TaskIQ middleware, pool, API, and registry files
+                middleware_taskiq = worker_dir / "middleware_taskiq.py"
+                if middleware_taskiq.exists():
+                    middleware_taskiq.unlink()
+
                 pools_taskiq = worker_dir / "pools_taskiq.py"
                 if pools_taskiq.exists():
                     pools_taskiq.unlink()

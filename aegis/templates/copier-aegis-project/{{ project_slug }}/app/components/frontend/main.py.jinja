@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable
+import json
 from typing import Any
 
 import flet as ft
@@ -679,7 +680,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
         )
 
         # Persistent HTTP client - reused across refresh cycles, closed on exit
-        http_client = httpx.AsyncClient()
+        http_client = httpx.AsyncClient(timeout=httpx.Timeout(10.0))
 
         def create_component_card(
             component_name: str, component_data: Any
@@ -782,8 +783,6 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
 
         async def refresh_dashboard() -> None:
             """Refresh the stunning marketing-grade dashboard."""
-            # Invalidate cached modals so next open rebuilds with fresh data
-            page.data.pop("_modal_cache", None)
             try:
                 # Use the single /health/ endpoint for all health data
                 response = await http_client.get("http://localhost:8000/health/")
@@ -847,6 +846,10 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                     components, create_component_card
                 )
 
+                # Keep worker modal cached permanently so SSE counters
+                # survive close/reopen cycles without resetting.
+                # Other modals can be pruned when closed.
+
                 # Safe page update - check connection first
                 if dashboard._is_page_connected():
                     try:
@@ -862,6 +865,9 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 # Instead, propagate this exception so the auto_refresh loop can handle
                 # the disconnection gracefully and stop further updates.
                 raise
+            except httpx.TimeoutException:
+                # Health endpoint slow (e.g. during load tests) — skip this cycle
+                logger.warning("Dashboard refresh skipped: health endpoint timed out")
             except Exception as e:
                 logger.error(
                     f"Dashboard refresh failed: {e}",
@@ -879,25 +885,160 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             page.data = {}
         page.data["refresh_dashboard"] = refresh_dashboard
 
+        # Consecutive disconnect checks before declaring page truly dead.
+        # Flet sessions reconnect within a few seconds — this grace period
+        # prevents background tasks from exiting during transient blips.
+        _DISCONNECT_GRACE_CHECKS = 30  # ~30s at 1s per check
+        _consecutive_disconnects = 0
+
+        def _is_alive() -> bool:
+            """Check if the page is still alive.
+
+            Tolerates transient WebSocket disconnects (Flet session reconnects)
+            by requiring multiple consecutive failures before returning False.
+            """
+            nonlocal _consecutive_disconnects
+            if dashboard._is_page_connected():
+                _consecutive_disconnects = 0
+                return True
+            _consecutive_disconnects += 1
+            if _consecutive_disconnects >= _DISCONNECT_GRACE_CHECKS:
+                logger.debug("Page permanently disconnected after grace period")
+                return False
+            return True  # Still within grace period
+
         async def auto_refresh() -> None:
-            """Simple auto-refresh loop that stops when page disconnects."""
-            try:
-                while dashboard._is_page_connected():
+            """Auto-refresh loop. Exits on page disconnect to allow clean shutdown.
+
+            On hot-reload, uvicorn kills the process and starts fresh —
+            flet_main runs again with a new http_client and new tasks.
+            """
+            while _is_alive():
+                try:
+                    await refresh_dashboard()
+                    await asyncio.sleep(30)
+                except PageDisconnectedException:
+                    # Transient disconnect — skip this cycle, loop will retry
+                    logger.debug("Page disconnected during refresh, retrying")
+                    await asyncio.sleep(5)
+                except Exception as e:
+                    logger.error(f"Error in auto-refresh loop: {e}", exc_info=True)
+                    await asyncio.sleep(30)
+
+{% if include_worker and include_redis %}
+        # How often the frontend pushes UI updates to the browser (seconds).
+        # Events are received and counted immediately; only rendering is throttled.
+        _UI_FLUSH_INTERVAL = 0.1
+
+        async def flush_worker_modal() -> None:
+            """Periodically flush dirty worker modal UI updates.
+
+            Runs independently of the SSE listener so that the final batch
+            of events is always rendered — even when the stream goes quiet
+            and aiter_lines() blocks waiting for the next event.
+            """
+            while _is_alive():
+                await asyncio.sleep(_UI_FLUSH_INTERVAL)
+                worker_popup = page.data.get(
+                    "_modal_cache", {}
+                ).get("worker")
+                if worker_popup and worker_popup.visible:
                     try:
-                        await refresh_dashboard()
-                        await asyncio.sleep(30)
+                        worker_popup.flush()
                     except PageDisconnectedException:
-                        logger.debug("Page disconnected, stopping auto-refresh loop")
-                        break
+                        # Transient disconnect — skip this flush, loop will retry
+                        pass
                     except Exception as e:
-                        logger.error(f"Error in auto-refresh loop: {e}", exc_info=True)
-                        # Continue the loop even if refresh fails
-                        await asyncio.sleep(30)
-            finally:
-                await http_client.aclose()
+                        logger.debug(f"Worker modal flush failed: {e}")
+
+        async def listen_for_worker_events() -> None:
+            """
+            Listen to SSE worker events and update the worker modal directly.
+
+            On connect, receives a "totals" event with absolute counters
+            (baseline). Then receives individual job events as deltas.
+            On reconnect, a new baseline is sent automatically.
+
+            UI updates are flushed by a separate periodic task, not inline,
+            so the last batch always renders even when the stream goes quiet.
+
+            Survives transient page disconnects (Flet session reconnects).
+            Only exits when _is_alive() returns False after the grace period.
+            """
+            logger.info("SSE: starting worker event listener")
+            while _is_alive():
+                try:
+                    logger.info("SSE: connecting to /events/worker/stream")
+                    async with http_client.stream(
+                        "GET", "http://localhost:8000/events/worker/stream",
+                        timeout=httpx.Timeout(
+                            connect=5.0, read=15.0, write=5.0, pool=5.0,
+                        ),
+                    ) as response:
+                        logger.info(
+                            f"SSE: connected, status={response.status_code}"
+                        )
+                        async for line in response.aiter_lines():
+                            if not _is_alive():
+                                return
+                            if not line.startswith("data: "):
+                                continue
+
+                            try:
+                                event = json.loads(line[6:])
+                            except (json.JSONDecodeError, ValueError):
+                                continue
+
+                            event_type = event.get("type", "")
+                            queue = event.get("queue", "")
+
+                            worker_popup = page.data.get(
+                                "_modal_cache", {}
+                            ).get("worker")
+                            if not worker_popup:
+                                continue
+
+                            try:
+                                # Absolute baseline (sent once on connect)
+                                if event_type == "totals":
+                                    worker_popup.set_totals(
+                                        event.get("queues", {})
+                                    )
+                                # Individual deltas
+                                elif event_type == "job.enqueued" and queue:
+                                    worker_popup.increment_queued(queue)
+                                elif event_type == "job.started" and queue:
+                                    worker_popup.increment_ongoing(queue)
+                                    worker_popup.decrement_queued(queue)
+                                elif event_type == "job.completed" and queue:
+                                    worker_popup.increment_completed(queue)
+                                elif event_type == "job.failed" and queue:
+                                    worker_popup.increment_failed(queue)
+                            except PageDisconnectedException:
+                                # Transient disconnect — break inner loop,
+                                # outer loop will reconnect after sleep
+                                break
+                            except Exception as e:
+                                logger.debug(
+                                    f"SSE modal update failed: {e}"
+                                )
+
+                except PageDisconnectedException:
+                    # Transient disconnect — sleep and retry
+                    logger.debug("SSE: page disconnected, retrying in 5s")
+                    await asyncio.sleep(5)
+                except Exception as e:
+                    logger.info(f"SSE: connection error: {e}, reconnecting in 5s")
+                    await asyncio.sleep(5)
+            logger.info("SSE: listener exiting (page permanently disconnected)")
+{% endif %}
 
         # Initial load and start refresh
         await refresh_dashboard()
+{% if include_worker and include_redis %}
+        asyncio.create_task(listen_for_worker_events())
+        asyncio.create_task(flush_worker_modal())
+{% endif %}
         asyncio.create_task(auto_refresh())
 
     return flet_main

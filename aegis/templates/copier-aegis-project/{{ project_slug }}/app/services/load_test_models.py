@@ -21,9 +21,7 @@ class LoadTestError(Exception):
 class LoadTestConfiguration(BaseModel):
     """Load test configuration with validation and defaults."""
 
-    num_tasks: int = Field(
-        default=100, ge=10, le=10000, description="Number of tasks to spawn"
-    )
+    num_tasks: int = Field(default=100, ge=1, description="Number of tasks to spawn")
     task_type: LoadTestTypes = Field(
         default=LoadTestTypes.CPU_INTENSIVE, description="Type of load test to run"
     )
