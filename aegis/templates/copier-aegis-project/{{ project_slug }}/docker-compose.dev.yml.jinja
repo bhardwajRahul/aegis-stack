@@ -9,10 +9,8 @@ services:
   webserver:
     volumes:
       - .:/code
-{%- if not include_ingress %}
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
-{%- endif %}
 {%- if include_ingress and ingress_tls %}
     labels:
       # Dev router (HTTP, localhost — no TLS)

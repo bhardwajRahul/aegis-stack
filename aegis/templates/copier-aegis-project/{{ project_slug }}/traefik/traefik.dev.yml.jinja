@@ -11,8 +11,19 @@ ping:
 entryPoints:
   web:
     address: ":80"
+    transport:
+      respondingTimeouts:
+        # Disable read timeout so WebSocket connections stay open indefinitely
+        readTimeout: "0s"
   traefik:
     address: ":8080"
+
+# Backend connection settings (Traefik → uvicorn)
+serversTransport:
+  forwardingTimeouts:
+    dialTimeout: "5s"
+    # Disable response header timeout for WebSocket upgrade requests
+    responseHeaderTimeout: "0s"
 
 providers:
   docker:
