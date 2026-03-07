@@ -195,16 +195,25 @@ class LoadTestResult(BaseModel):
 
 
 class OrchestratorRawResult(BaseModel):
-    """Raw orchestrator result format for transformation."""
+    """Raw orchestrator result format for transformation.
 
-    test_id: str | None = Field(
-        None, description="Test identifier (optional for TaskIQ)"
-    )
+    Supports both fire-and-forget (enqueue-only) and monitored orchestrator
+    results. Fire-and-forget returns enqueue_duration_seconds; monitored
+    returns total_duration_seconds with completion stats.
+    """
+
+    test_id: str | None = Field(None, description="Test identifier (optional)")
     task_type: str = Field(..., description="Task type executed")
     tasks_sent: int = Field(..., description="Tasks enqueued")
     tasks_completed: int = Field(0, description="Successfully completed")
     tasks_failed: int = Field(0, description="Failed tasks")
-    total_duration_seconds: float = Field(..., description="Total duration")
+    # Fire-and-forget orchestrator fields
+    enqueue_duration_seconds: float = Field(0, description="Time to enqueue all tasks")
+    enqueue_throughput_per_second: float = Field(
+        0, description="Enqueue throughput (tasks/sec)"
+    )
+    # Monitored orchestrator fields (arq/TaskIQ)
+    total_duration_seconds: float = Field(0, description="Total duration")
     overall_throughput_per_second: float = Field(0, description="Overall throughput")
     failure_rate_percent: float = Field(0, description="Failure rate")
     completion_percentage: float = Field(0, description="Completion rate")
@@ -227,12 +236,18 @@ class OrchestratorRawResult(BaseModel):
             target_queue=self.target_queue,
         )
 
+        # Use whichever duration is available
+        duration = self.total_duration_seconds or self.enqueue_duration_seconds
+        throughput = (
+            self.overall_throughput_per_second or self.enqueue_throughput_per_second
+        )
+
         metrics = LoadTestMetrics(
             tasks_sent=self.tasks_sent,
             tasks_completed=self.tasks_completed,
             tasks_failed=self.tasks_failed,
-            total_duration_seconds=self.total_duration_seconds,
-            overall_throughput=self.overall_throughput_per_second,
+            total_duration_seconds=duration,
+            overall_throughput=throughput,
             failure_rate_percent=self.failure_rate_percent,
             completion_percentage=self.completion_percentage,
             average_throughput_per_second=self.average_throughput_per_second,

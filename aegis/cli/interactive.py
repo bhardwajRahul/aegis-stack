@@ -19,6 +19,7 @@ from ..constants import (
     Messages,
     OllamaMode,
     StorageBackends,
+    WorkerBackends,
 )
 from ..core.components import COMPONENTS, CORE_COMPONENTS, ComponentSpec, ComponentType
 from ..core.services import SERVICES, ServiceType, get_services_by_type
@@ -106,6 +107,42 @@ def clear_database_engine_selection() -> None:
     _database_engine_selection = None
 
 
+def select_worker_backend() -> str:
+    """
+    Interactive worker backend selection using arrow keys.
+
+    Returns:
+        Selected backend: "arq", "taskiq", or "dramatiq"
+    """
+    typer.echo("\nWorker Backend:")
+
+    choices = [
+        questionary.Choice(
+            title="arq - Async, lightweight (default)",
+            value=WorkerBackends.ARQ,
+        ),
+        questionary.Choice(
+            title="Dramatiq - Process-based, ideal for CPU-bound work",
+            value=WorkerBackends.DRAMATIQ,
+        ),
+        questionary.Choice(
+            title="TaskIQ - Async, framework-style with per-queue brokers",
+            value=WorkerBackends.TASKIQ,
+        ),
+    ]
+
+    result = questionary.select(
+        "Select worker backend:",
+        choices=choices,
+        default=WorkerBackends.ARQ,
+    ).ask()
+
+    if result is None:
+        raise typer.Abort()
+
+    return result
+
+
 def set_database_engine_selection(engine: str | None) -> None:
     """
     Pre-set database engine selection (for testing or CLI args).
@@ -170,14 +207,29 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
                 # Redis already selected, simple worker prompt
                 prompt = f"  Add {component_spec.description.lower()}?"
                 if typer.confirm(prompt, default=True):
-                    selected.append(ComponentNames.WORKER)
+                    backend = select_worker_backend()
+                    if backend == WorkerBackends.ARQ:
+                        selected.append(ComponentNames.WORKER)
+                    else:
+                        selected.append(f"{ComponentNames.WORKER}[{backend}]")
+                    typer.secho(f"Worker with {backend} backend configured", fg="green")
             else:
                 # Redis not selected, offer to add both
                 prompt = (
                     f"  Add {component_spec.description.lower()}? (will auto-add Redis)"
                 )
                 if typer.confirm(prompt, default=True):
-                    selected.extend([ComponentNames.REDIS, ComponentNames.WORKER])
+                    backend = select_worker_backend()
+                    if backend == WorkerBackends.ARQ:
+                        selected.extend([ComponentNames.REDIS, ComponentNames.WORKER])
+                    else:
+                        selected.extend(
+                            [
+                                ComponentNames.REDIS,
+                                f"{ComponentNames.WORKER}[{backend}]",
+                            ]
+                        )
+                    typer.secho(f"Worker with {backend} backend configured", fg="green")
         elif component_name == ComponentNames.SCHEDULER:
             # Enhanced scheduler selection with persistence and database options
             prompt = f"  Add {component_spec.description}?"
@@ -738,14 +790,29 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
                 # Redis already available
                 prompt = f"  Add {component_spec.description.lower()}?"
                 if typer.confirm(prompt, default=True):
-                    selected.append(ComponentNames.WORKER)
+                    backend = select_worker_backend()
+                    if backend == WorkerBackends.ARQ:
+                        selected.append(ComponentNames.WORKER)
+                    else:
+                        selected.append(f"{ComponentNames.WORKER}[{backend}]")
+                    typer.secho(f"Worker with {backend} backend configured", fg="green")
             else:
                 # Need to add redis too
                 prompt = (
                     f"  Add {component_spec.description.lower()}? (will auto-add Redis)"
                 )
                 if typer.confirm(prompt, default=True):
-                    selected.extend([ComponentNames.REDIS, ComponentNames.WORKER])
+                    backend = select_worker_backend()
+                    if backend == WorkerBackends.ARQ:
+                        selected.extend([ComponentNames.REDIS, ComponentNames.WORKER])
+                    else:
+                        selected.extend(
+                            [
+                                ComponentNames.REDIS,
+                                f"{ComponentNames.WORKER}[{backend}]",
+                            ]
+                        )
+                    typer.secho(f"Worker with {backend} backend configured", fg="green")
 
         elif component_name == ComponentNames.SCHEDULER:
             prompt = f"  Add {component_spec.description}?"

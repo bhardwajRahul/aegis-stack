@@ -68,9 +68,10 @@ AVAILABLE COMPONENTS
 Infrastructure Components
 ----------------------------------------
   scheduler     - APScheduler-based async task scheduling
-  worker        - Pure arq worker with multiple queues (requires: redis)
-  database      - SQLite database with SQLModel ORM
+  worker        - Background task processing (arq, Dramatiq, or TaskIQ) (requires: redis)
+  database      - SQLite or PostgreSQL with SQLModel ORM
   redis         - Redis cache and message broker
+  observability - Logfire observability, tracing, and metrics
 ```
 
 ### aegis services
@@ -152,10 +153,11 @@ aegis init my-app --services auth --components database --no-interactive --outpu
 |-----------|--------|-------------|
 | `scheduler` | ✅ Available | APScheduler-based async task scheduling |
 | `scheduler[sqlite]` | ✅ Available | Scheduler with SQLite persistence (auto-adds database) |
-| `worker` | ✅ Available | arq worker with Redis for background processing (auto-adds redis) |
-| `database` | ✅ Available | SQLite database with SQLModel ORM |
+| `worker` | ✅ Available | Background task worker (arq, TaskIQ, or Dramatiq) with Redis for background processing (auto-adds redis) |
+| `database` | ✅ Available | SQLite or PostgreSQL with SQLModel ORM |
 | `redis` | ✅ Available | Redis cache and message broker |
 | `ingress` | ✅ Available | Traefik reverse proxy with auto-discovery and admin protection |
+| `observability` | ✅ Available | Logfire observability, tracing, and metrics |
 | `cache` | 🚧 Coming Soon | Redis-based async caching layer |
 
 **Available Services:**
@@ -701,16 +703,30 @@ my-app tasks history    # View execution history
 
 **→ [Complete Scheduler CLI Reference](components/scheduler/cli.md)**
 
-**Worker** - Native `arq` CLI
+**Worker** - Backend-specific CLI
 
-Background task processing with Redis-backed queues:
+Background task processing with Redis-backed queues. Commands depend on your selected backend:
 
+**arq (default):**
 ```bash
-arq my_project.components.worker.WorkerSettings  # Start worker
-arq --watch my_project.components.worker.WorkerSettings  # Auto-reload
+arq my_project.components.worker.queues.system.WorkerSettings   # Start worker
+arq --watch my_project.components.worker.queues.system.WorkerSettings  # Auto-reload
 ```
 
-**→ [Complete Worker CLI Reference](components/worker/index.md#arq-cli-commands)**
+**Dramatiq:**
+```bash
+dramatiq app.components.worker.broker \
+  app.components.worker.queues.system \
+  app.components.worker.queues.load_test \
+  --queues system load_test
+```
+
+**TaskIQ:**
+```bash
+taskiq worker app.components.worker.queues.system:broker
+```
+
+**→ [Complete Worker CLI Reference](components/worker/index.md#cli-commands)**
 
 ### Service CLIs
 
@@ -756,7 +772,7 @@ my-project/
 │   │   ├── backend/        # FastAPI backend
 │   │   ├── frontend/       # Flet frontend
 │   │   ├── scheduler.py    # APScheduler (if included)
-│   │   ├── worker/         # arq worker queues (if included)
+│   │   ├── worker/         # Worker queues (if included)
 │   │   └── database.py     # Database setup (if included)
 │   ├── core/              # Framework utilities
 │   ├── services/          # Business logic

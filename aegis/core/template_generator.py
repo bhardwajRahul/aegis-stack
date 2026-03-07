@@ -265,6 +265,8 @@ class TemplateGenerator:
                     if base_name == ComponentNames.WORKER:
                         if self.worker_backend == WorkerBackends.TASKIQ:
                             deps.extend(["taskiq>=0.11.11", "taskiq-redis>=1.0.2"])
+                        elif self.worker_backend == WorkerBackends.DRAMATIQ:
+                            deps.append("dramatiq[redis]>=1.17.0")
                         else:
                             deps.extend(spec.pyproject_deps)  # arq deps from spec
                     # Handle database engine-specific dependencies
@@ -484,11 +486,11 @@ class TemplateGenerator:
 
         # Discover queue files from the template directory
         template_root = (
-            Path(__file__).parent.parent / "templates" / "cookiecutter-aegis-project"
+            Path(__file__).parent.parent / "templates" / "copier-aegis-project"
         )
         worker_queues_dir = (
             template_root
-            / "{{cookiecutter.project_slug}}"
+            / "{{ project_slug }}"
             / "app"
             / "components"
             / "worker"
@@ -499,17 +501,23 @@ class TemplateGenerator:
             for queue_file in worker_queues_dir.glob("*.py"):
                 if queue_file.stem == "__init__":
                     continue
-                # Filter based on worker backend
-                # _taskiq.py files are for taskiq, others are for arq
+                # Filter based on worker backend — each backend has _suffix.py files
+                # that get renamed to .py by post_gen_tasks
                 is_taskiq_file = queue_file.stem.endswith("_taskiq")
+                is_dramatiq_file = queue_file.stem.endswith("_dramatiq")
+                is_backend_specific = is_taskiq_file or is_dramatiq_file
+
                 if self.worker_backend == WorkerBackends.TASKIQ:
-                    # Show taskiq files without the _taskiq suffix (how they'll appear after rename)
                     if is_taskiq_file:
                         final_name = queue_file.name.replace("_taskiq.py", ".py")
                         queues.append(f"app/components/worker/queues/{final_name}")
+                elif self.worker_backend == WorkerBackends.DRAMATIQ:
+                    if is_dramatiq_file:
+                        final_name = queue_file.name.replace("_dramatiq.py", ".py")
+                        queues.append(f"app/components/worker/queues/{final_name}")
                 else:
-                    # Show arq files (non-taskiq files)
-                    if not is_taskiq_file:
+                    # arq (default): show non-backend-specific files
+                    if not is_backend_specific:
                         queues.append(f"app/components/worker/queues/{queue_file.name}")
 
         return sorted(queues)

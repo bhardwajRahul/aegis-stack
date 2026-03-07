@@ -5,7 +5,7 @@ Publishes lightweight lifecycle events (job enqueued, started, completed, failed
 worker started/stopped) to a Redis Stream. These events are consumed by the SSE
 endpoint to provide real-time dashboard updates.
 """
-{% if worker_backend != "taskiq" %}
+{% if worker_backend == "arq" %}
 import re
 {%- endif %}
 from datetime import UTC, datetime
@@ -70,6 +70,24 @@ async def read_queue_totals(redis_client: Any) -> dict[str, dict[str, int]]:
         qt: {"queued": 0, "ongoing": 0, "completed": 0, "failed": 0}
         for qt in get_all_queue_metadata()
     }
+{%- elif worker_backend == "dramatiq" %}
+    # Dramatiq uses Redis lists for queues. LLEN gives queue depth.
+    # Completed/failed counts come from stream events (deltas).
+    totals: dict[str, dict[str, int]] = {}
+    for queue_type, meta in get_all_queue_metadata().items():
+        queued = 0
+        try:
+            redis_queue_name = meta.get("redis_queue_name", f"dramatiq:{queue_type}")
+            queued = await redis_client.llen(redis_queue_name) or 0
+        except Exception:
+            pass
+        totals[queue_type] = {
+            "queued": queued,
+            "ongoing": 0,
+            "completed": 0,
+            "failed": 0,
+        }
+    return totals
 {%- else %}
     queue_names = {
         qt: meta["queue_name"] for qt, meta in get_all_queue_metadata().items()

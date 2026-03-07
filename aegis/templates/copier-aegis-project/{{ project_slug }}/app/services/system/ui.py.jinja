@@ -50,7 +50,7 @@ def get_component_label(component_name: str) -> str:
         {%- endif %}
         "cache": "Redis",
         {%- if include_worker %}
-        "worker": "{{ worker_backend }}",
+        "worker": "{{ worker_backend | title }}",
         {%- endif %}
         {%- if include_scheduler %}
         "scheduler": "APScheduler",
@@ -72,3 +72,19 @@ def get_component_label(component_name: str) -> str:
         {%- endif %}
     }
     return mapping.get(component_name, component_name.replace("_", " ").title())
+
+
+def get_component_subtitle(
+    component_name: str, metadata: dict[str, object] | None = None
+) -> str:
+    """Get a versioned subtitle for a component (e.g. 'Dramatiq 1.17.0').
+
+    Uses the base label from ``get_component_label`` and appends the version
+    from health-check metadata when available.
+    """
+    label = get_component_label(component_name)
+    if metadata:
+        version = metadata.get("version", "")
+        if version and version != "unknown":
+            return f"{label} {version}"
+    return label

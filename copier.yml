@@ -88,11 +88,12 @@ include_worker:
 
 worker_backend:
   type: str
-  help: "Worker backend (arq or taskiq)"
+  help: "Worker backend (arq, taskiq, or dramatiq)"
   default: "arq"
   choices:
     - "arq"
     - "taskiq"
+    - "dramatiq"
   when: "{{ include_worker }}"
 
 include_database:

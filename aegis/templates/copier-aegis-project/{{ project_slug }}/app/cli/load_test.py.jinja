@@ -475,7 +475,7 @@ async def _run_load_test_and_wait(
     Combines enqueue and polling to avoid 'Event loop is closed' errors
     from Redis connections that span multiple asyncio.run() calls.
     """
-{% if worker_backend == "taskiq" %}
+{% if worker_backend == "taskiq" or worker_backend == "dramatiq" %}
     from app.components.worker.pools import shutdown_brokers
 {% else %}
     from app.components.worker.pools import clear_pool_cache
@@ -494,7 +494,7 @@ async def _run_load_test_and_wait(
         result = await _poll_for_result_with_progress(task_id, target_queue, timeout)
         return task_id, result
     finally:
-{% if worker_backend == "taskiq" %}
+{% if worker_backend == "taskiq" or worker_backend == "dramatiq" %}
         await shutdown_brokers()
 {% else %}
         await clear_pool_cache()
@@ -512,7 +512,7 @@ async def _run_quick_test_and_wait(
 
     Combines enqueue and polling to avoid 'Event loop is closed' errors.
     """
-{% if worker_backend == "taskiq" %}
+{% if worker_backend == "taskiq" or worker_backend == "dramatiq" %}
     from app.components.worker.pools import shutdown_brokers
 {% else %}
     from app.components.worker.pools import clear_pool_cache
@@ -533,7 +533,7 @@ async def _run_quick_test_and_wait(
         )
         return task_id, result
     finally:
-{% if worker_backend == "taskiq" %}
+{% if worker_backend == "taskiq" or worker_backend == "dramatiq" %}
         await shutdown_brokers()
 {% else %}
         await clear_pool_cache()

@@ -48,7 +48,7 @@ def detect_worker_backend(components: list[str]) -> str:
         components: List of component names, possibly including worker[backend]
 
     Returns:
-        Backend name: "arq" or "taskiq"
+        Backend name: "arq", "taskiq", or "dramatiq"
     """
     for component in components:
         base_name = extract_base_component_name(component)

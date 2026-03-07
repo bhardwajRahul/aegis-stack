@@ -84,7 +84,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
     "worker": ComponentSpec(
         name="worker",
         type=ComponentType.INFRASTRUCTURE,
-        description="Background task processing infrastructure with arq",
+        description="Background task processing (arq, Dramatiq, or TaskIQ)",
         requires=["redis"],  # Hard dependency
         pyproject_deps=["arq==0.25.0"],
         docker_services=["worker-system", "worker-load-test"],
