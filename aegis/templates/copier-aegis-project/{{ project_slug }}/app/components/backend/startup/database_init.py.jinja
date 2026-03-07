@@ -1,7 +1,7 @@
 """
 Database initialization startup hook.
 
-{% if database_engine == "sqlite" %}Ensures directory structure exists and creates tables{% else %}Runs Alembic migrations and verifies connectivity{% endif %}
+{% if database_engine == "sqlite" %}Ensures directory structure exists and creates tables{% elif needs_migrations %}Runs Alembic migrations and verifies connectivity{% else %}Creates tables and verifies connectivity{% endif %}
 when the backend starts up (only when database component is included).
 """
 {% if include_database %}
@@ -16,7 +16,8 @@ from app.core.log import logger
 from app.models.user import User  # noqa: F401
 {% endif %}
 
-{% if database_engine == "postgres" %}
+{% set needs_migrations = include_auth or (include_ai and ai_backend != "memory") %}
+{% if database_engine == "postgres" and needs_migrations %}
 def _check_and_stamp_existing_tables() -> None:
     """
     Detect when tables for a pending migration already exist.
@@ -164,7 +165,7 @@ async def startup_database_init() -> None:
 
     This hook runs when the backend starts to:
     1. {% if database_engine == "sqlite" %}Ensure database directory exists and create tables{% else %}Verify database connectivity{% endif %}
-{% if database_engine == "postgres" %}
+{% if database_engine == "postgres" and needs_migrations %}
     2. Run Alembic migrations (idempotent - safe to run multiple times)
     3. Verify database schema is ready
 {%- endif %}
@@ -187,13 +188,22 @@ async def startup_database_init() -> None:
         logger.info("Database tables created/verified (SQLite)")
 {% endif %}
 
-{% if database_engine == "postgres" %}
+{% if database_engine == "postgres" and needs_migrations %}
         # Run Alembic migrations (idempotent)
         migrations_ok = _run_migrations()
 
         if not migrations_ok:
             logger.warning("Migrations failed - database may not be fully initialized")
             # Continue anyway to allow debugging
+{% endif %}
+
+{% if database_engine == "postgres" and not needs_migrations %}
+        # No migrations needed - create tables directly via SQLModel
+        from sqlmodel import SQLModel
+
+        from app.core.db import engine
+        SQLModel.metadata.create_all(engine)
+        logger.info("Database tables created/verified (PostgreSQL)")
 {% endif %}
 
         # Verify database connectivity
@@ -209,7 +219,7 @@ async def startup_database_init() -> None:
 
                 inspector = inspect(session.connection())
                 table_names = inspector.get_table_names()
-{% if database_engine == "postgres" %}
+{% if database_engine == "postgres" and needs_migrations %}
 
                 # Verify alembic_version table exists
                 if "alembic_version" in table_names:

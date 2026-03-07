@@ -32,7 +32,7 @@ broker = (
 @broker.task
 async def system_health_check() -> dict[str, str]:
     """Simple system health check task."""
-    logger.info("Running system health check task")
+    logger.debug("Running system health check task")
 
     return {
         "status": "healthy",

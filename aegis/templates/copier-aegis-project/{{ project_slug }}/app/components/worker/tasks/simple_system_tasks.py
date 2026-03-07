@@ -9,7 +9,7 @@ from app.core.log import logger
 
 async def system_health_check(ctx: dict[str, Any]) -> dict[str, str]:
     """Simple system health check task."""
-    logger.info("Running system health check task")
+    logger.debug("Running system health check task")
 
     # Simple health check - just return current timestamp
     return {

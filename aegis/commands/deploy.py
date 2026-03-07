@@ -326,6 +326,8 @@ def deploy_command(
             "--exclude",
             ".env",
             "--exclude",
+            ".env.deploy",
+            "--exclude",
             ".aegis/",
             f"{project_root}/",
             f"{user}@{host}:{deploy_path}/",
@@ -335,12 +337,21 @@ def deploy_command(
         typer.secho("Failed to sync files", fg="red", err=True)
         raise typer.Exit(1)
 
-    # Copy .env file if exists
-    env_file = project_root / ".env"
-    if env_file.exists():
-        typer.echo("Copying .env file...")
+    # Copy .env file if exists (prefer .env.deploy for production values)
+    deploy_env_file = project_root / ".env.deploy"
+    dev_env_file = project_root / ".env"
+    if deploy_env_file.exists():
+        env_file = deploy_env_file
+    elif dev_env_file.exists():
+        env_file = dev_env_file
+    else:
+        env_file = None
+
+    if env_file is not None:
+        typer.echo(f"Copying {env_file.name} to server as .env...")
+        safe_path = shlex.quote(f"{deploy_path}/.env")
         env_result = subprocess.run(
-            ["scp", str(env_file), f"{user}@{host}:{deploy_path}/.env"]
+            ["scp", str(env_file), f"{user}@{host}:{safe_path}"]
         )
         if env_result.returncode != 0:
             typer.secho("Failed to copy .env file", fg="red", err=True)
