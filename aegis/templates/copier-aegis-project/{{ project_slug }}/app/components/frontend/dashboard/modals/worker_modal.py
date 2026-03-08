@@ -19,7 +19,7 @@ from app.components.frontend.controls import (
 from app.components.frontend.theme import AegisTheme as Theme
 from app.components.worker.registry import get_queue_metadata
 from app.services.system.models import ComponentStatus
-from app.services.system.ui import get_component_label
+from app.services.system.ui import get_component_subtitle
 
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
@@ -773,7 +773,7 @@ class WorkerDetailDialog(BaseDetailPopup):
             page=page,
             component_data=component_data,
             title_text="Worker",
-            subtitle_text=get_component_label("worker"),
+            subtitle_text=get_component_subtitle("worker", component_data.metadata),
             sections=sections,
             status_detail=status_detail,
         )

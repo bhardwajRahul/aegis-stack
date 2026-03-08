@@ -39,6 +39,8 @@ dependencies = [
 {%- if worker_backend == "taskiq" %}
     "taskiq>=0.11.11",
     "taskiq-redis>=1.0.2",
+{%- elif worker_backend == "dramatiq" %}
+    "dramatiq[redis]>=1.17.0",
 {%- else %}
     "arq==0.25.0",
 {%- endif %}

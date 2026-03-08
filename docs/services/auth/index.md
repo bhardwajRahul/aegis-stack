@@ -39,7 +39,7 @@ graph TB
 
         subgraph "Required Components"
             Backend[⚡ Backend Component<br/>FastAPI Routes]
-            Database[💾 Database Component<br/>SQLite + SQLModel]
+            Database[💾 Database Component<br/>SQLite / PostgreSQL]
         end
 
         subgraph "Security Layer"

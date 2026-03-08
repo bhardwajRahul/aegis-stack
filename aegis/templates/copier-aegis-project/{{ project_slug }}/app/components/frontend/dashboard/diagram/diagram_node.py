@@ -8,7 +8,7 @@ click-to-open-modal functionality and hover effects.
 import flet as ft
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus, ComponentStatusType
-from app.services.system.ui import get_component_label
+from app.services.system.ui import get_component_label, get_component_subtitle
 
 from ..cards.card_utils import _open_modal, get_ai_engine_display
 
@@ -115,11 +115,8 @@ class DiagramNode(ft.Container):
             return get_ai_engine_display(metadata)
         elif component_name == "service_auth":
             return "JWT Authentication"
-        elif component_name == "ingress":
-            version = metadata.get("version", "")
-            if version and version != "unknown":
-                return f"Traefik {version}"
-            return "Traefik"
+        elif component_name in ("ingress", "worker"):
+            return get_component_subtitle(component_name, metadata)
 
         # Fall back to static label
         return get_component_label(component_name)

@@ -35,8 +35,9 @@ class WorkerBackends:
 
     ARQ = "arq"
     TASKIQ = "taskiq"
+    DRAMATIQ = "dramatiq"
 
-    ALL = [ARQ, TASKIQ]
+    ALL = [ARQ, TASKIQ, DRAMATIQ]
 
 
 class AIFrameworks:
@@ -98,6 +99,8 @@ class OllamaMode:
 
 class AnswerKeys:
     """Keys in Copier .copier-answers.yml configuration."""
+
+    ANSWERS_FILENAME = ".copier-answers.yml"
 
     # Component include flags
     SCHEDULER = "include_scheduler"

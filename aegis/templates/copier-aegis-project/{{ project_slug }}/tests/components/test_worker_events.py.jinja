@@ -132,6 +132,65 @@ async def test_post_execute_failed() -> None:
 
     fields = mw._redis.xadd.call_args[0][1]
     assert fields["type"] == "job.failed"
+{%- elif worker_backend == "dramatiq" %}
+
+# ---------------------------------------------------------------------------
+# Group 2: EventPublishMiddleware (Dramatiq only)
+# ---------------------------------------------------------------------------
+
+from app.components.worker.middleware_dramatiq import EventPublishMiddleware  # noqa: E402
+
+
+def test_before_process_message_publishes_job_started() -> None:
+    """before_process_message should publish a job.started event."""
+    mw = EventPublishMiddleware()
+    mw._redis = MagicMock()
+
+    message = MagicMock()
+    message.message_id = "msg-42"
+    message.actor_name = "cpu_intensive_task"
+    message.queue_name = "load_test"
+
+    mw.before_process_message(MagicMock(), message)
+
+    mw._redis.xadd.assert_called_once()
+    fields = mw._redis.xadd.call_args[0][1]
+    assert fields["type"] == "job.started"
+    assert fields["queue"] == "load_test"
+
+
+def test_after_process_message_completed() -> None:
+    """after_process_message should publish job.completed on success."""
+    mw = EventPublishMiddleware()
+    mw._redis = MagicMock()
+
+    message = MagicMock()
+    message.message_id = "msg-1"
+    message.actor_name = "cleanup"
+    message.queue_name = "system"
+
+    mw.after_process_message(MagicMock(), message, result=None, exception=None)
+
+    fields = mw._redis.xadd.call_args[0][1]
+    assert fields["type"] == "job.completed"
+
+
+def test_after_process_message_failed() -> None:
+    """after_process_message should publish job.failed on exception."""
+    mw = EventPublishMiddleware()
+    mw._redis = MagicMock()
+
+    message = MagicMock()
+    message.message_id = "msg-2"
+    message.actor_name = "flaky_task"
+    message.queue_name = "system"
+
+    mw.after_process_message(
+        MagicMock(), message, result=None, exception=RuntimeError("boom")
+    )
+
+    fields = mw._redis.xadd.call_args[0][1]
+    assert fields["type"] == "job.failed"
 {%- endif %}
 
 

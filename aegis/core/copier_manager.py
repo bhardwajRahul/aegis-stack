@@ -198,13 +198,23 @@ def generate_with_copier(
     # Store template version in answers file for future reference
     # Copier only writes fields defined in copier.yml, so we add this manually
     # This allows 'aegis update' to show "v0.4.1" instead of commit hash
-    template_version = copier_data.get("_template_version")
-    if template_version:
-        answers_file = project_path / ".copier-answers.yml"
-        if answers_file.exists():
-            answers = yaml.safe_load(answers_file.read_text())
+    # Copier doesn't persist conditional fields (those with `when:`) to the answers
+    # file even when their value is provided via `data`. Patch them in manually so
+    # downstream code (project_map, aegis update) can read them back.
+    answers_file = project_path / AnswerKeys.ANSWERS_FILENAME
+    if answers_file.exists():
+        answers = yaml.safe_load(answers_file.read_text()) or {}
+
+        template_version = copier_data.get("_template_version")
+        if template_version:
             answers["_template_version"] = template_version
-            answers_file.write_text(yaml.safe_dump(answers, default_flow_style=False))
+
+        # Persist conditional choice fields that Copier omits
+        for key in (AnswerKeys.WORKER_BACKEND, AnswerKeys.SCHEDULER_BACKEND):
+            if key in copier_data:
+                answers[key] = copier_data[key]
+
+        answers_file.write_text(yaml.safe_dump(answers, default_flow_style=False))
 
     # Clean up unwanted component files based on selection
     # This must happen BEFORE post-generation tasks (which run linting on the remaining files)

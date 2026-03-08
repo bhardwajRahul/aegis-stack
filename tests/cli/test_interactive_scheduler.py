@@ -13,6 +13,7 @@ from aegis.cli.interactive import (
     interactive_project_selection,
     set_database_engine_selection,
 )
+from aegis.constants import WorkerBackends
 
 
 class TestInteractiveSchedulerFlow:
@@ -170,8 +171,13 @@ class TestInteractiveSchedulerFlow:
         finally:
             clear_database_engine_selection()
 
+    @patch(
+        "aegis.cli.interactive.select_worker_backend", return_value=WorkerBackends.ARQ
+    )
     @patch("typer.confirm")
-    def test_redis_worker_then_scheduler_sqlite(self, mock_confirm: Any) -> None:
+    def test_redis_worker_then_scheduler_sqlite(
+        self, mock_confirm: Any, mock_worker_backend: Any
+    ) -> None:
         """Test complex flow: redis + worker, then scheduler with SQLite."""
         # Pre-set database engine
         set_database_engine_selection("sqlite")

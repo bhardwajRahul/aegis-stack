@@ -32,9 +32,10 @@ graph TB
     
     subgraph "Optional Infrastructure"
         Scheduler[Scheduler<br/>APScheduler Jobs]
-        Database[Database<br/>SQLite + SQLModel]
-        Worker[Worker Queues<br/>arq + Redis]
+        Database[Database<br/>SQLite / PostgreSQL]
+        Worker[Worker Queues<br/>arq / Dramatiq / TaskIQ]
         Ingress[Ingress<br/>Traefik Proxy]
+        Observability[Observability<br/>Logfire]
         Cache[Cache Layer<br/>Redis Sessions]
     end
     
@@ -104,12 +105,14 @@ graph TB
 
 | Component | Purpose | Implementation | Status |
 |-----------|---------|----------------|--------|
-| **Core** (Backend + Frontend + CLI) | API + UI + Management | FastAPI + Flet + Typer | ✅ Always included |
-| **Database** | Data persistence, ORM | SQLite + SQLModel | ✅ Available |
+| **Core** (Backend + Overseer + CLI) | API + UI + Management | FastAPI + Flet + Typer | ✅ Always included |
+| **Database** | Data persistence, ORM | SQLite or PostgreSQL + SQLModel | ✅ Available |
+| **Inference** | Local AI model serving | Ollama (Docker or external) | ✅ Available |
+| **Cache** | Message broker, pub/sub | Redis | ✅ Available |
+| **Worker** | Background task queues | arq, Dramatiq, or TaskIQ | ✅ Available |
 | **Scheduler** | Background tasks, cron jobs | APScheduler | ✅ Available |
-| **Worker** | Async task queues | arq + Redis | 🧪 Experimental |
 | **Ingress** | Reverse proxy, TLS, routing | Traefik v3 | ✅ Available |
-| **Cache** | Session storage, performance | Redis | 🚧 Coming soon |
+| **Observability** | Tracing, metrics, logging | Pydantic Logfire | ✅ Available |
 
 !!! tip "Component Composition"
     Components can be combined to enable different capabilities. For detailed patterns on how components integrate with services and each other, see the **[Integration Patterns Reference](../integration-patterns.md)**.
@@ -122,7 +125,10 @@ graph TB
 
 **Next:** Choose your first component combination and see the integration in action:
 
-- **[Database Component](./database.md)** - SQLite persistence with SQLModel ORM
+- **[Database Component](./database.md)** - SQLite or PostgreSQL with SQLModel ORM
 - **[Scheduler Component](./scheduler.md)** - Background tasks and cron jobs
-- **[Worker Component](./worker/index.md)** - Async task processing and queues
+- **[Worker Component](./worker/index.md)** - Background task processing and queues
 - **[Ingress Component](./ingress.md)** - Traefik reverse proxy and TLS
+- **[Auth Service](../services/auth/index.md)** - User authentication with JWT
+- **[AI Service](../services/ai/index.md)** - Multi-provider AI conversations
+- **[Comms Service](../services/comms/index.md)** - Email, SMS, and voice

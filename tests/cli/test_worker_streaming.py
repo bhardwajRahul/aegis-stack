@@ -26,10 +26,10 @@ class TestWorkerEventInfrastructure:
     def test_taskiq_project_has_middleware(
         self, project_factory: "ProjectFactory"
     ) -> None:
-        """TaskIQ worker projects should have middleware_taskiq.py for lifecycle events."""
+        """TaskIQ worker projects should have middleware.py (renamed from middleware_taskiq.py)."""
         project_path = project_factory("base_with_worker_taskiq")
         middleware_file = (
-            project_path / "app" / "components" / "worker" / "middleware_taskiq.py"
+            project_path / "app" / "components" / "worker" / "middleware.py"
         )
         assert middleware_file.exists()
 
@@ -68,10 +68,10 @@ class TestEventWiring:
     def test_taskiq_middleware_publishes_lifecycle_events(
         self, project_factory: "ProjectFactory"
     ) -> None:
-        """middleware_taskiq.py should publish all 5 lifecycle event types."""
+        """middleware.py (from TaskIQ backend) should publish all 5 lifecycle event types."""
         project_path = project_factory("base_with_worker_taskiq")
         content = (
-            project_path / "app" / "components" / "worker" / "middleware_taskiq.py"
+            project_path / "app" / "components" / "worker" / "middleware.py"
         ).read_text()
         for event_type in [
             "worker.started",

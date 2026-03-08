@@ -5,29 +5,22 @@ Project structure map rendering for post-generation output.
 from pathlib import Path
 
 import typer
+import yaml
+
+from ..constants import AnswerKeys, WorkerBackends
 
 
 def _detect_worker_backend(project_path: Path) -> str:
-    """Detect the worker backend (arq or taskiq) from project files."""
-    worker_dir = project_path / "app" / "components" / "worker"
-    if not worker_dir.exists():
-        return "worker"
-
-    # Check queues directory for backend-specific imports
-    queues_dir = worker_dir / "queues"
-    if queues_dir.exists():
-        for queue_file in queues_dir.glob("*.py"):
-            try:
-                content = queue_file.read_text()
-                if "from arq" in content or "import arq" in content:
-                    return "arq"
-                if "from taskiq" in content or "import taskiq" in content:
-                    return "taskiq"
-            except (OSError, UnicodeDecodeError):
-                # Best-effort detection: ignore unreadable or malformed files
-                pass
-
-    return "worker"
+    """Detect the worker backend from .copier-answers.yml."""
+    answers_file = project_path / AnswerKeys.ANSWERS_FILENAME
+    if answers_file.exists():
+        try:
+            answers = yaml.safe_load(answers_file.read_text())
+            if answers and AnswerKeys.WORKER_BACKEND in answers:
+                return answers[AnswerKeys.WORKER_BACKEND]
+        except (OSError, yaml.YAMLError):
+            pass
+    return WorkerBackends.ARQ
 
 
 def _is_highlighted(name: str, highlight: list[str] | None) -> bool:

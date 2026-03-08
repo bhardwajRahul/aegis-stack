@@ -70,10 +70,11 @@ Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your S
 ### Infrastructure Components
 | Component | Purpose | Status |
 |-----------|---------|--------|
-| **Core** (FastAPI + Flet) | Web API + Frontend | ✅ **Always Included** |
-| **Database** | SQLite + SQLModel ORM | ✅ **Available** |
+| **Core** (FastAPI + Flet) | Web API + Overseer | ✅ **Always Included** |
+| **Database** | SQLite or PostgreSQL + SQLModel ORM | ✅ **Available** |
 | **Scheduler** | Background tasks, cron jobs | ✅ **Available** |
-| **Worker** | Async task queues (arq + Redis) | 🧪 **Experimental** |
+| **Worker** | Task queues (arq, Dramatiq, or TaskIQ) | ✅ **Available** |
+| **Observability** | Tracing, metrics, logging (Logfire) | ✅ **Available** |
 | **Cache** | Redis caching and sessions | 🚧 **Coming Soon** |
 
 ### Business Services

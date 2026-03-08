@@ -14,6 +14,7 @@ from aegis.cli.interactive import (
     interactive_project_selection,
     set_database_engine_selection,
 )
+from aegis.constants import WorkerBackends
 from aegis.core.template_generator import TemplateGenerator
 
 
@@ -153,8 +154,13 @@ class TestSchedulerPersistenceTracking:
         finally:
             clear_database_engine_selection()
 
+    @patch(
+        "aegis.cli.interactive.select_worker_backend", return_value=WorkerBackends.ARQ
+    )
     @patch("typer.confirm")
-    def test_full_stack_with_scheduler_persistence(self, mock_confirm: Any) -> None:
+    def test_full_stack_with_scheduler_persistence(
+        self, mock_confirm: Any, mock_worker_backend: Any
+    ) -> None:
         """Test full stack selection with scheduler persistence."""
         # Pre-set database engine
         set_database_engine_selection("sqlite")

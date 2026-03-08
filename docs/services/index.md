@@ -18,9 +18,10 @@ graph TB
 
     subgraph "Components Layer (Infrastructure)"
         Backend[⚡ Backend<br/>FastAPI Routes]
-        Database[💾 Database<br/>SQLite + SQLModel]
-        Worker[🔄 Worker<br/>arq + Redis]
+        Database[💾 Database<br/>SQLite / PostgreSQL]
+        Worker[🔄 Worker<br/>arq / Dramatiq / TaskIQ]
         Scheduler[⏰ Scheduler<br/>APScheduler]
+        Observability[🔍 Observability<br/>Logfire]
         Cache[🗄️ Cache<br/>Redis Sessions<br/>🚧 Coming Soon]
     end
 
@@ -85,7 +86,7 @@ graph LR
         AuthAPI["Auth API routes"]
         UserModel["User model"]
         JWT["JWT security"]
-        DB[SQLite database]
+        DB[Database]
         API[FastAPI app]
         UI[Flet frontend]
     end

@@ -280,86 +280,98 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         queues_dir = project_path / "app/components/worker/queues"
         worker_dir = project_path / "app/components/worker"
         api_dir = project_path / "app/components/backend/api"
+        services_dir = project_path / "app/services"
 
-        if queues_dir.exists():
-            if worker_backend == WorkerBackends.TASKIQ:
-                # Using TaskIQ: rename _taskiq.py files and remove ALL arq files
-                # Track which files we rename so we know what to keep
-                taskiq_final_names = {"__init__.py"}  # Always keep __init__.py
+        # Helper: remove all files matching a suffix pattern
+        def _remove_backend_files(suffix: str) -> None:
+            """Remove all files with the given backend suffix."""
+            for f in queues_dir.glob(f"*{suffix}"):
+                f.unlink()
+            for name in [
+                f"middleware{suffix}",
+                f"pools{suffix}",
+                f"registry{suffix}",
+                f"broker{suffix}",
+            ]:
+                target = worker_dir / name
+                if target.exists():
+                    target.unlink()
+            api_file = api_dir / f"worker{suffix}"
+            if api_file.exists():
+                api_file.unlink()
+            load_test_file = services_dir / f"load_test{suffix}"
+            if load_test_file.exists():
+                load_test_file.unlink()
 
-                for taskiq_file in queues_dir.glob("*_taskiq.py"):
-                    final_name = taskiq_file.name.replace("_taskiq.py", ".py")
-                    arq_file = taskiq_file.with_name(final_name)
+        # Helper: rename backend-specific files to canonical names
+        def _rename_backend_files(suffix: str) -> set[str]:
+            """Rename *_<backend>.py files to *.py, return set of final names."""
+            final_names = {"__init__.py"}
+
+            # Rename queue files
+            if queues_dir.exists():
+                for backend_file in queues_dir.glob(f"*{suffix}"):
+                    final_name = backend_file.name.replace(suffix, ".py")
+                    arq_file = backend_file.with_name(final_name)
                     if arq_file.exists():
                         arq_file.unlink()
-                    taskiq_file.rename(queues_dir / final_name)
-                    taskiq_final_names.add(final_name)
+                    backend_file.rename(queues_dir / final_name)
+                    final_names.add(final_name)
 
-                # Remove arq-only files (those without taskiq counterparts)
+            # Rename worker-dir files (pools, registry, middleware, broker)
+            for stem in ["pools", "registry", "middleware", "broker"]:
+                backend_file = worker_dir / f"{stem}{suffix}"
+                canonical = worker_dir / f"{stem}.py"
+                if backend_file.exists():
+                    if canonical.exists():
+                        canonical.unlink()
+                    backend_file.rename(canonical)
+
+            # Rename API file
+            api_backend = api_dir / f"worker{suffix}"
+            api_canonical = api_dir / "worker.py"
+            if api_backend.exists():
+                if api_canonical.exists():
+                    api_canonical.unlink()
+                api_backend.rename(api_canonical)
+
+            # Rename load_test service file
+            lt_backend = services_dir / f"load_test{suffix}"
+            lt_canonical = services_dir / "load_test.py"
+            if lt_backend.exists():
+                if lt_canonical.exists():
+                    lt_canonical.unlink()
+                lt_backend.rename(lt_canonical)
+
+            return final_names
+
+        if queues_dir.exists():
+            if worker_backend == WorkerBackends.DRAMATIQ:
+                # Using Dramatiq: rename _dramatiq.py files, remove arq + taskiq
+                dramatiq_final_names = _rename_backend_files("_dramatiq.py")
+
+                # Remove arq-only queue files (those without dramatiq counterparts)
+                for py_file in queues_dir.glob("*.py"):
+                    if py_file.name not in dramatiq_final_names:
+                        py_file.unlink()
+
+                _remove_backend_files("_taskiq.py")
+
+            elif worker_backend == WorkerBackends.TASKIQ:
+                # Using TaskIQ: rename _taskiq.py files, remove arq + dramatiq
+                taskiq_final_names = _rename_backend_files("_taskiq.py")
+
+                # Remove arq-only queue files (those without taskiq counterparts)
                 for py_file in queues_dir.glob("*.py"):
                     if py_file.name not in taskiq_final_names:
                         py_file.unlink()
 
-                # TaskIQ: Keep pools_taskiq.py, remove pools.py (arq version)
-                pools_arq = worker_dir / "pools.py"
-                pools_taskiq = worker_dir / "pools_taskiq.py"
-                if pools_arq.exists():
-                    pools_arq.unlink()
-                if pools_taskiq.exists():
-                    pools_taskiq.rename(worker_dir / "pools.py")
+                _remove_backend_files("_dramatiq.py")
 
-                # TaskIQ: Keep worker_taskiq.py, remove worker.py (arq version)
-                worker_api_arq = api_dir / "worker.py"
-                worker_api_taskiq = api_dir / "worker_taskiq.py"
-                if worker_api_arq.exists():
-                    worker_api_arq.unlink()
-                if worker_api_taskiq.exists():
-                    worker_api_taskiq.rename(api_dir / "worker.py")
-
-                # TaskIQ: Keep registry_taskiq.py, remove registry.py (arq version)
-                registry_arq = worker_dir / "registry.py"
-                registry_taskiq = worker_dir / "registry_taskiq.py"
-                if registry_arq.exists():
-                    registry_arq.unlink()
-                if registry_taskiq.exists():
-                    registry_taskiq.rename(worker_dir / "registry.py")
-
-                # TaskIQ: Keep load_test_taskiq.py, remove load_test.py (arq version)
-                services_dir = project_path / "app/services"
-                load_test_arq = services_dir / "load_test.py"
-                load_test_taskiq = services_dir / "load_test_taskiq.py"
-                if load_test_arq.exists():
-                    load_test_arq.unlink()
-                if load_test_taskiq.exists():
-                    load_test_taskiq.rename(services_dir / "load_test.py")
             else:
-                # Using arq (default): remove taskiq versions
-                for taskiq_file in queues_dir.glob("*_taskiq.py"):
-                    taskiq_file.unlink()
-
-                # arq: Remove TaskIQ middleware, pool, API, and registry files
-                middleware_taskiq = worker_dir / "middleware_taskiq.py"
-                if middleware_taskiq.exists():
-                    middleware_taskiq.unlink()
-
-                pools_taskiq = worker_dir / "pools_taskiq.py"
-                if pools_taskiq.exists():
-                    pools_taskiq.unlink()
-
-                worker_api_taskiq = api_dir / "worker_taskiq.py"
-                if worker_api_taskiq.exists():
-                    worker_api_taskiq.unlink()
-
-                # arq: Remove TaskIQ registry file
-                registry_taskiq = worker_dir / "registry_taskiq.py"
-                if registry_taskiq.exists():
-                    registry_taskiq.unlink()
-
-                # arq: Remove TaskIQ load_test service
-                services_dir = project_path / "app/services"
-                load_test_taskiq = services_dir / "load_test_taskiq.py"
-                if load_test_taskiq.exists():
-                    load_test_taskiq.unlink()
+                # Using arq (default): remove taskiq and dramatiq versions
+                _remove_backend_files("_taskiq.py")
+                _remove_backend_files("_dramatiq.py")
 
     # Remove shared component integration tests only when BOTH scheduler AND worker disabled
     if not is_enabled(AnswerKeys.SCHEDULER) and not is_enabled(AnswerKeys.WORKER):
