@@ -19,6 +19,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
+from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import create_progress_indicator, get_status_detail
 from .base_detail_popup import BaseDetailPopup
@@ -1187,9 +1188,9 @@ class BackendDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=backend_component,
-            title_text="Server",
+            title_text=get_component_title("backend"),
             sections=[tabs],
-            subtitle_text="FastAPI + Flet",
+            subtitle_text=get_component_subtitle("backend", backend_component.metadata),
             scrollable=False,
             width=1100,
             height=800,

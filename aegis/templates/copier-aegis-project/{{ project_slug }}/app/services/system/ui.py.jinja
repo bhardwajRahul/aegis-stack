@@ -40,6 +40,43 @@ def get_status_color_name(status: ComponentStatusType) -> str:
     return "white"
 
 
+def get_component_title(component_name: str) -> str:
+    """Map component keys to category/title names for modal headers."""
+    mapping = {
+        "backend": "Server",
+        "frontend": "Frontend",
+        {%- if include_database %}
+        "database": "Database",
+        {%- endif %}
+        "cache": "Cache",
+        {%- if include_worker %}
+        "worker": "Worker",
+        {%- endif %}
+        {%- if include_scheduler %}
+        "scheduler": "Scheduler",
+        {%- endif %}
+        {%- if include_observability %}
+        "observability": "Observability",
+        {%- endif %}
+        {%- if include_ollama %}
+        "ollama": "Inference",
+        {%- endif %}
+        {%- if include_ai_service %}
+        "service_ai": "AI Service",
+        {%- endif %}
+        {%- if include_auth %}
+        "service_auth": "Auth Service",
+        {%- endif %}
+        {%- if include_comms %}
+        "service_comms": "Communications",
+        {%- endif %}
+        {%- if include_ingress %}
+        "ingress": "Ingress",
+        {%- endif %}
+    }
+    return mapping.get(component_name, component_name.replace("_", " ").title())
+
+
 def get_component_label(component_name: str) -> str:
     """Map component keys to user-facing labels (brand or friendly name)."""
     mapping = {
@@ -50,7 +87,7 @@ def get_component_label(component_name: str) -> str:
         {%- endif %}
         "cache": "Redis",
         {%- if include_worker %}
-        "worker": "{{ worker_backend | title }}",
+        "worker": "{{ worker_backend }}",
         {%- endif %}
         {%- if include_scheduler %}
         "scheduler": "APScheduler",

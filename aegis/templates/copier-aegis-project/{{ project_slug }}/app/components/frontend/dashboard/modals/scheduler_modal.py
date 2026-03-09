@@ -16,6 +16,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
+from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import (
     format_next_run_time,
@@ -448,8 +449,8 @@ class SchedulerDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text="Scheduler",
-            subtitle_text="APScheduler",
+            title_text=get_component_title("scheduler"),
+            subtitle_text=get_component_subtitle("scheduler", metadata),
             sections=sections,
             status_detail=get_status_detail(component_data),
         )

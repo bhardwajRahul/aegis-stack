@@ -25,6 +25,7 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.core.config import reload_settings
 from app.services.system.env_config import EnvConfigService
 from app.services.system.models import ComponentStatus, ComponentStatusType
+from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
@@ -781,8 +782,8 @@ class CommsDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text="Comms Service",
-            subtitle_text="Resend + Twilio",
+            title_text=get_component_title("service_comms"),
+            subtitle_text=get_component_subtitle("service_comms", metadata),
             sections=[tabs],
             scrollable=False,
             status_detail=get_status_detail(component_data),
