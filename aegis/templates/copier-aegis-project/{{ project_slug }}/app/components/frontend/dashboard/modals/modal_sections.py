@@ -306,9 +306,9 @@ class PieChartCard(ft.Container):
     Features interactive hover effects with segment expansion and tooltips.
     """
 
-    # Segment radius constants
-    NORMAL_RADIUS = 55
-    HOVER_RADIUS = 65
+    # Segment radius constants (must fit within chart container)
+    NORMAL_RADIUS = 45
+    HOVER_RADIUS = 52
 
     def __init__(
         self,
@@ -330,14 +330,24 @@ class PieChartCard(ft.Container):
         self._hovered_index: int | None = None
 
         if not sections:
-            self.content = SecondaryText("No data available")
+            self.content = ft.Column(
+                [
+                    SecondaryText(title),
+                    ft.Container(
+                        content=SecondaryText("No data", size=13),
+                        expand=True,
+                        alignment=ft.alignment.center,
+                    ),
+                ],
+                spacing=0,
+                expand=True,
+            )
             self._setup_card_style()
             return
 
         # Build pie chart sections with auto-assigned colors
         self._pie_sections: list[ft.PieChartSection] = []
         legend_items: list[ft.Row] = []
-        total = sum(float(s.get("value", 0)) for s in sections)
 
         for i, section in enumerate(sections):
             value = float(section.get("value", 0))
@@ -349,37 +359,21 @@ class PieChartCard(ft.Container):
             self._section_labels.append(label)
             self._section_values.append(value)
 
-            # Calculate percentage for title display (only show if >= 15%)
-            pct = (value / total * 100) if total > 0 else 0
-
             self._pie_sections.append(
                 ft.PieChartSection(
                     value=value,
-                    title=f"{pct:.0f}%" if pct >= 15 else "",
+                    title="",
                     color=color,
                     radius=self.NORMAL_RADIUS,
-                    title_style=ft.TextStyle(
-                        color=ft.Colors.WHITE,
-                        size=11,
-                        weight=ft.FontWeight.W_600,
-                    ),
                 )
             )
             legend_items.append(self._legend_item(label, color))
-
-        # Tooltip text (shown on hover next to title)
-        self._tooltip_text = ft.Text(
-            "",
-            size=12,
-            color=ft.Colors.ON_SURFACE,
-        )
 
         # Donut chart with hover interaction
         self._pie_chart = ft.PieChart(
             sections=self._pie_sections,
             sections_space=2,
-            center_space_radius=30,
-            expand=True,
+            center_space_radius=28,
             on_chart_event=self._on_chart_event,
         )
 
@@ -393,7 +387,11 @@ class PieChartCard(ft.Container):
         # Layout: chart + legend horizontal, centered
         chart_row = ft.Row(
             [
-                ft.Container(content=self._pie_chart, width=140, height=140),
+                ft.Container(
+                    content=self._pie_chart,
+                    width=130,
+                    height=130,
+                ),
                 legend,
             ],
             spacing=Theme.Spacing.LG,
@@ -401,26 +399,18 @@ class PieChartCard(ft.Container):
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
-        # Title row with hover info in top-right corner
-        title_row = ft.Row(
-            [
-                ft.Text(title, size=14, weight=ft.FontWeight.W_600),
-                ft.Container(expand=True),  # Spacer
-                self._tooltip_text,
-            ],
-        )
-
-        # Title at top, chart+legend centered in remaining space
+        # Column layout with chart pushed down to avoid overlap
         self.content = ft.Column(
             [
-                title_row,
+                SecondaryText(title),
                 ft.Container(
                     content=chart_row,
                     expand=True,
                     alignment=ft.alignment.center,
+                    margin=ft.margin.only(top=Theme.Spacing.MD),
                 ),
             ],
-            spacing=Theme.Spacing.SM,
+            spacing=0,
             expand=True,
         )
         self._setup_card_style()
@@ -430,13 +420,18 @@ class PieChartCard(ft.Container):
         self.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
         self.border = ft.border.all(0.5, ft.Colors.OUTLINE)
         self.border_radius = Theme.Components.CARD_RADIUS
-        self.padding = Theme.Spacing.LG
-        self.height = 220
+        self.padding = ft.padding.only(
+            left=Theme.Spacing.MD,
+            right=Theme.Spacing.MD,
+            top=Theme.Spacing.SM,
+            bottom=Theme.Spacing.SM,
+        )
+        self.height = 210
         self.expand = True
         self.clip_behavior = ft.ClipBehavior.HARD_EDGE
 
     def _on_chart_event(self, e: ft.PieChartEvent) -> None:
-        """Handle hover events - expand segment and show tooltip."""
+        """Handle hover events - expand hovered segment."""
         # Reset all sections to normal radius
         for section in self._pie_sections:
             section.radius = self.NORMAL_RADIUS
@@ -444,25 +439,19 @@ class PieChartCard(ft.Container):
         # Check if hovering over a section (section_index is -1 when not hovering)
         idx = e.section_index
         if idx is not None and idx >= 0 and idx < len(self._pie_sections):
-            # Expand hovered section
             self._pie_sections[idx].radius = self.HOVER_RADIUS
-            # Show tooltip with label
-            self._tooltip_text.value = self._section_labels[idx]
             self._hovered_index = idx
         else:
-            # Clear tooltip when not hovering
-            self._tooltip_text.value = ""
             self._hovered_index = None
 
         self._pie_chart.update()
-        self._tooltip_text.update()
 
     def _legend_item(self, label: str, color: str) -> ft.Row:
         """Create a legend item with color dot and label."""
         return ft.Row(
             [
                 ft.Container(width=10, height=10, bgcolor=color, border_radius=5),
-                ft.Text(label, size=12),
+                SecondaryText(label, size=Theme.Typography.BODY_SMALL),
             ],
             spacing=8,
         )

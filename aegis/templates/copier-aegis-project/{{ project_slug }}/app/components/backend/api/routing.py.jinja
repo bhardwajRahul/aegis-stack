@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.components.backend.api import health
 {%- if include_worker %}
 from app.components.backend.api import events as worker_events
+from app.components.backend.api import task_history
 from app.components.backend.api import worker
 {%- endif %}
 {%- if scheduler_backend != "memory" %}
@@ -33,6 +34,7 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(health.router, prefix="/health", tags=["health"])
     {%- if include_worker %}
     app.include_router(worker.router, prefix="/api/v1", tags=["worker"])
+    app.include_router(task_history.router, prefix="/api/v1", tags=["task-history"])
     app.include_router(worker_events.router, prefix="/events", tags=["events"])
     {%- endif %}
     {%- if scheduler_backend != "memory" %}

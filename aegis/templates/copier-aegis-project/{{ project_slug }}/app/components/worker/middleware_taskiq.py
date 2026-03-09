@@ -56,6 +56,10 @@ class EventPublishMiddleware(TaskiqMiddleware):
                 self._queue_name,
                 {"job_id": message.task_id, "task": message.task_name},
             )
+            # Record task started in history
+            from app.components.worker.task_history import record_task_started
+
+            await record_task_started(self._redis, message.task_id)
         return message
 
     async def post_execute(
@@ -69,4 +73,14 @@ class EventPublishMiddleware(TaskiqMiddleware):
                 event_type,
                 self._queue_name,
                 {"job_id": message.task_id, "task": message.task_name},
+            )
+            # Record task finished in history
+            from app.components.worker.task_history import record_task_finished
+
+            error_msg = str(result.error) if result.is_err and result.error else None
+            await record_task_finished(
+                self._redis,
+                message.task_id,
+                success=not result.is_err,
+                error=error_msg,
             )

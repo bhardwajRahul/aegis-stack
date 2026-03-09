@@ -21,6 +21,7 @@ from app.components.frontend.controls.expandable_data_table import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
+from app.services.system.ui import get_component_title
 
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
@@ -624,7 +625,7 @@ class ObservabilityDetailDialog(BaseDetailPopup):
             super().__init__(
                 page=page,
                 component_data=component_data,
-                title_text="Observability",
+                title_text=get_component_title("observability"),
                 subtitle_text=subtitle,
                 sections=sections,
                 scrollable=True,
@@ -675,7 +676,7 @@ class ObservabilityDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text="Observability",
+            title_text=get_component_title("observability"),
             subtitle_text=subtitle,
             sections=[tabs],
             scrollable=False,

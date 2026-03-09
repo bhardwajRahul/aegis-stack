@@ -188,6 +188,16 @@ async def enqueue_task(
             queue_type or get_default_queue(),
             {"job_id": str(task_handle.task_id), "task": task_name},
         )
+        # Record task enqueued in history
+        from app.components.worker.task_history import record_task_enqueued
+
+        await record_task_enqueued(
+            events_redis,
+            str(task_handle.task_id),
+            task_name,
+            queue_type or get_default_queue(),
+            ttl_seconds=settings.TASK_HISTORY_TTL_SECONDS,
+        )
     except Exception as e:
         logger.debug(f"Failed to publish enqueue event: {e}")
 

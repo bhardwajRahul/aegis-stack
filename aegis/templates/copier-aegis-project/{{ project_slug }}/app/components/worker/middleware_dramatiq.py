@@ -141,6 +141,10 @@ class EventPublishMiddleware(dramatiq.Middleware):
                 message.queue_name,
                 {"job_id": message.message_id, "task": message.actor_name},
             )
+            # Record task started in history
+            from app.components.worker.task_history import record_task_started_sync
+
+            record_task_started_sync(self._redis, message.message_id)
 
     def after_process_message(
         self,
@@ -158,4 +162,13 @@ class EventPublishMiddleware(dramatiq.Middleware):
                 event_type,
                 message.queue_name,
                 {"job_id": message.message_id, "task": message.actor_name},
+            )
+            # Record task finished in history
+            from app.components.worker.task_history import record_task_finished_sync
+
+            record_task_finished_sync(
+                self._redis,
+                message.message_id,
+                success=exception is None,
+                error=str(exception) if exception else None,
             )

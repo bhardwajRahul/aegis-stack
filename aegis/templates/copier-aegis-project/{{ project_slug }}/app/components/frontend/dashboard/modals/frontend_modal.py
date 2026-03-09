@@ -14,6 +14,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
+from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
@@ -336,8 +337,8 @@ class FrontendDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text="Frontend",
-            subtitle_text="Flet",
+            title_text=get_component_title("frontend"),
+            subtitle_text=get_component_subtitle("frontend", metadata),
             sections=sections,
             status_detail=get_status_detail(component_data),
         )

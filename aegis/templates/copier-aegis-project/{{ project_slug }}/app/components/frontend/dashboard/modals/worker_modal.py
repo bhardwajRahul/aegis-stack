@@ -19,10 +19,11 @@ from app.components.frontend.controls import (
 from app.components.frontend.theme import AegisTheme as Theme
 from app.components.worker.registry import get_queue_metadata
 from app.services.system.models import ComponentStatus
-from app.services.system.ui import get_component_subtitle
+from app.services.system.ui import get_component_subtitle, get_component_title
 
 from .base_detail_popup import BaseDetailPopup
-from .modal_sections import MetricCard
+from .modal_sections import MetricCard, PieChartCard
+from .task_history_section import TaskHistorySection
 
 # Worker health status thresholds
 FAILURE_RATE_CRITICAL_THRESHOLD = 20  # % - Red status (failing)
@@ -301,7 +302,7 @@ def _build_queue_health_row(queue_component: ComponentStatus) -> ExpandableRow:
 
 
 class OverviewSection(ft.Container):
-    """Overview section showing key worker metrics."""
+    """Overview section showing key worker metrics and charts."""
 
     def __init__(self, worker_component: ComponentStatus, page: ft.Page) -> None:
         """
@@ -315,13 +316,6 @@ class OverviewSection(ft.Container):
 
         metadata = worker_component.metadata or {}
 
-        # Get queue sub-components
-        queues_component = worker_component.sub_components.get("queues")
-        if queues_component and queues_component.sub_components:
-            total_queues = len(queues_component.sub_components)
-        else:
-            total_queues = 0
-
         total_ongoing = metadata.get("total_ongoing", 0)
         total_queued = metadata.get("total_queued", 0)
         total_completed = metadata.get("total_completed", 0)
@@ -330,9 +324,15 @@ class OverviewSection(ft.Container):
         # Color for failed jobs - red if any failures
         failed_color = Theme.Colors.ERROR if total_failed > 0 else Theme.Colors.SUCCESS
 
+        # Broker info from metadata
+        redis_url = metadata.get("redis_url", "redis://localhost:6379")
+        broker_display = redis_url.replace("redis://", "")
+
         # Store references for live updates
-        self._card_queues = MetricCard(
-            "Total Queues", str(total_queues), Theme.Colors.INFO
+        self._card_broker = MetricCard(
+            "Broker",
+            broker_display,
+            Theme.Colors.INFO,
         )
         self._card_processing = MetricCard(
             "Processing", str(total_ongoing), Theme.Colors.INFO
@@ -345,9 +345,9 @@ class OverviewSection(ft.Container):
         )
         self._card_failed = MetricCard("Failed", str(total_failed), failed_color)
 
-        self.content = ft.Row(
+        cards_row = ft.Row(
             [
-                self._card_queues,
+                self._card_broker,
                 self._card_processing,
                 self._card_queued,
                 self._card_completed,
@@ -356,24 +356,222 @@ class OverviewSection(ft.Container):
             spacing=Theme.Spacing.MD,
         )
 
+        # Pie charts
+        self._charts_row = self._build_charts_row(worker_component)
+
+        self.content = ft.Column(
+            [cards_row, self._charts_row],
+            spacing=Theme.Spacing.LG,
+        )
+
+    def _build_charts_row(self, worker_component: ComponentStatus) -> ft.Row:
+        """Build the pie charts row from worker component data."""
+        metadata = worker_component.metadata or {}
+        total_completed = metadata.get("total_completed", 0)
+        total_failed = metadata.get("total_failed", 0)
+
+        # Chart 1: Completion Breakdown (completed vs failed)
+        completion_sections: list[dict[str, object]] = []
+        completion_total = total_completed + total_failed
+        if total_completed > 0:
+            pct = total_completed / completion_total * 100 if completion_total else 0
+            completion_sections.append(
+                {
+                    "value": total_completed,
+                    "label": f"Completed ({total_completed:,}) · {pct:.0f}%",
+                    "color": Theme.Colors.SUCCESS,
+                }
+            )
+        if total_failed > 0:
+            pct = total_failed / completion_total * 100 if completion_total else 0
+            completion_sections.append(
+                {
+                    "value": total_failed,
+                    "label": f"Failed ({total_failed:,}) · {pct:.0f}%",
+                    "color": Theme.Colors.ERROR,
+                }
+            )
+        completion_chart = PieChartCard("Completion Breakdown", completion_sections)
+
+        # Gather per-queue data
+        queues_component = worker_component.sub_components.get("queues")
+        per_queue: list[
+            tuple[str, int, int, int]
+        ] = []  # (name, completed, failed, queued)
+        if queues_component and queues_component.sub_components:
+            for name, queue in queues_component.sub_components.items():
+                meta = queue.metadata or {}
+                per_queue.append(
+                    (
+                        name,
+                        meta.get("jobs_completed", 0),
+                        meta.get("jobs_failed", 0),
+                        meta.get("queued_jobs", 0),
+                    )
+                )
+
+        # Chart 2: Work Distribution (per-queue completed)
+        dist_sections: list[dict[str, object]] = []
+        dist_total = sum(c for _, c, _, _ in per_queue)
+        for name, completed, _, _ in per_queue:
+            if completed > 0:
+                pct = completed / dist_total * 100 if dist_total else 0
+                dist_sections.append(
+                    {
+                        "value": completed,
+                        "label": f"{name} ({completed:,}) · {pct:.0f}%",
+                    }
+                )
+        distribution_chart = PieChartCard("Work Distribution", dist_sections)
+
+        # Chart 3: Failure Distribution (per-queue failures)
+        fail_sections: list[dict[str, object]] = []
+        fail_total = sum(f for _, _, f, _ in per_queue)
+        for name, _, failed, _ in per_queue:
+            if failed > 0:
+                pct = failed / fail_total * 100 if fail_total else 0
+                fail_sections.append(
+                    {
+                        "value": failed,
+                        "label": f"{name} ({failed:,}) · {pct:.0f}%",
+                        "color": Theme.Colors.ERROR,
+                    }
+                )
+        failure_chart = PieChartCard("Failure Distribution", fail_sections)
+
+        # Chart 4: Queue Backlog (per-queue pending tasks)
+        backlog_sections: list[dict[str, object]] = []
+        backlog_total = sum(q for _, _, _, q in per_queue)
+        for name, _, _, queued in per_queue:
+            if queued > 0:
+                pct = queued / backlog_total * 100 if backlog_total else 0
+                backlog_sections.append(
+                    {
+                        "value": queued,
+                        "label": f"{name} ({queued:,}) · {pct:.0f}%",
+                        "color": Theme.Colors.WARNING,
+                    }
+                )
+        backlog_chart = PieChartCard("Queue Backlog", backlog_sections)
+
+        return ft.Column(
+            [
+                ft.Row(
+                    [completion_chart, distribution_chart], spacing=Theme.Spacing.MD
+                ),
+                ft.Row([failure_chart, backlog_chart], spacing=Theme.Spacing.MD),
+            ],
+            spacing=Theme.Spacing.MD,
+        )
+
     def update_data(self, worker_component: ComponentStatus) -> None:
         """Update metric values in place."""
         metadata = worker_component.metadata or {}
 
-        queues_component = worker_component.sub_components.get("queues")
-        if queues_component and queues_component.sub_components:
-            total_queues = len(queues_component.sub_components)
-        else:
-            total_queues = 0
-
         total_failed = metadata.get("total_failed", 0)
         failed_color = Theme.Colors.ERROR if total_failed > 0 else Theme.Colors.SUCCESS
 
-        self._card_queues.set_value(str(total_queues))
         self._card_processing.set_value(str(metadata.get("total_ongoing", 0)))
         self._card_queued.set_value(str(metadata.get("total_queued", 0)))
         self._card_completed.set_value(str(metadata.get("total_completed", 0)))
         self._card_failed.set_value(str(total_failed), failed_color)
+
+        # Rebuild charts
+        new_charts_row = self._build_charts_row(worker_component)
+        self.content.controls[1] = new_charts_row
+        self._charts_row = new_charts_row
+
+    def rebuild_charts(
+        self,
+        per_queue_completed: dict[str, int] | None = None,
+        per_queue_failed: dict[str, int] | None = None,
+        per_queue_queued: dict[str, int] | None = None,
+    ) -> None:
+        """Rebuild pie charts from current card values and per-queue data."""
+        total_completed = int(self._card_completed.value_text.value or "0")
+        total_failed = int(self._card_failed.value_text.value or "0")
+
+        # Chart 1: Completion Breakdown
+        completion_sections: list[dict[str, object]] = []
+        completion_total = total_completed + total_failed
+        if total_completed > 0:
+            pct = total_completed / completion_total * 100 if completion_total else 0
+            completion_sections.append(
+                {
+                    "value": total_completed,
+                    "label": f"Completed ({total_completed:,}) · {pct:.0f}%",
+                    "color": Theme.Colors.SUCCESS,
+                }
+            )
+        if total_failed > 0:
+            pct = total_failed / completion_total * 100 if completion_total else 0
+            completion_sections.append(
+                {
+                    "value": total_failed,
+                    "label": f"Failed ({total_failed:,}) · {pct:.0f}%",
+                    "color": Theme.Colors.ERROR,
+                }
+            )
+        completion_chart = PieChartCard("Completion Breakdown", completion_sections)
+
+        # Chart 2: Work Distribution
+        dist_sections: list[dict[str, object]] = []
+        if per_queue_completed:
+            dist_total = sum(per_queue_completed.values())
+            for name, completed in per_queue_completed.items():
+                if completed > 0:
+                    pct = completed / dist_total * 100 if dist_total else 0
+                    dist_sections.append(
+                        {
+                            "value": completed,
+                            "label": f"{name} ({completed:,}) · {pct:.0f}%",
+                        }
+                    )
+        distribution_chart = PieChartCard("Work Distribution", dist_sections)
+
+        # Chart 3: Failure Distribution
+        fail_sections: list[dict[str, object]] = []
+        if per_queue_failed:
+            fail_total = sum(per_queue_failed.values())
+            for name, failed in per_queue_failed.items():
+                if failed > 0:
+                    pct = failed / fail_total * 100 if fail_total else 0
+                    fail_sections.append(
+                        {
+                            "value": failed,
+                            "label": f"{name} ({failed:,}) · {pct:.0f}%",
+                            "color": Theme.Colors.ERROR,
+                        }
+                    )
+        failure_chart = PieChartCard("Failure Distribution", fail_sections)
+
+        # Chart 4: Queue Backlog
+        backlog_sections: list[dict[str, object]] = []
+        if per_queue_queued:
+            backlog_total = sum(per_queue_queued.values())
+            for name, queued in per_queue_queued.items():
+                if queued > 0:
+                    pct = queued / backlog_total * 100 if backlog_total else 0
+                    backlog_sections.append(
+                        {
+                            "value": queued,
+                            "label": f"{name} ({queued:,}) · {pct:.0f}%",
+                            "color": Theme.Colors.WARNING,
+                        }
+                    )
+        backlog_chart = PieChartCard("Queue Backlog", backlog_sections)
+
+        new_charts = ft.Column(
+            [
+                ft.Row(
+                    [completion_chart, distribution_chart], spacing=Theme.Spacing.MD
+                ),
+                ft.Row([failure_chart, backlog_chart], spacing=Theme.Spacing.MD),
+            ],
+            spacing=Theme.Spacing.MD,
+        )
+        self.content.controls[1] = new_charts
+        self._charts_row = new_charts
 
     def _increment_card(self, card: MetricCard, delta: int = 1) -> None:
         """Increment a MetricCard's numeric value by delta."""
@@ -588,6 +786,27 @@ class QueueHealthSection(ft.Container):
             total += int(cells[2].value or "0")
         return total
 
+    def per_queue_completed(self) -> dict[str, int]:
+        """Return completed counts per queue."""
+        return {
+            queue: int(cells[4].value or "0")
+            for queue, cells in self._queue_cells.items()
+        }
+
+    def per_queue_failed(self) -> dict[str, int]:
+        """Return failed counts per queue."""
+        return {
+            queue: int(cells[5].value or "0")
+            for queue, cells in self._queue_cells.items()
+        }
+
+    def per_queue_queued(self) -> dict[str, int]:
+        """Return queued (pending) counts per queue."""
+        return {
+            queue: int(cells[2].value or "0")
+            for queue, cells in self._queue_cells.items()
+        }
+
     def increment_completed(self, queue: str) -> None:
         """Increment completed cell (index 4) for a queue."""
         self._increment_cell(queue, 4)
@@ -691,64 +910,16 @@ class QueueHealthSection(ft.Container):
             cells[9].color = Theme.Colors.SUCCESS
 
 
-class BrokerSection(ft.Container):
-    """Visual broker connection diagram showing Redis as the message broker."""
-
-    def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
-        """
-        Initialize broker section.
-
-        Args:
-            component_data: Worker ComponentStatus with Redis URL in metadata
-        """
-        super().__init__()
-
-        metadata = component_data.metadata or {}
-        redis_url = metadata.get("redis_url", "redis://localhost:6379")
-
-        # Parse URL for display (just host:port)
-        display_url = redis_url.replace("redis://", "")
-
-        # Arrow pointing down from table to broker
-        arrow = ft.Container(
-            content=ft.Text("▼", size=24, color=ft.Colors.OUTLINE),
-            alignment=ft.alignment.center,
-        )
-
-        # Redis broker box
-        broker_box = ft.Container(
-            content=ft.Column(
-                [
-                    ft.Text("Redis", size=16, weight=ft.FontWeight.W_600),
-                    SecondaryText("Message Broker", size=12),
-                    ft.Container(height=4),
-                    BodyText(display_url, size=11),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=2,
-            ),
-            padding=ft.padding.all(16),
-            border=ft.border.all(1, ft.Colors.OUTLINE),
-            border_radius=12,
-            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-            width=160,
-        )
-
-        self.content = ft.Column(
-            [arrow, broker_box],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=8,
-        )
-        self.padding = Theme.Spacing.MD
-
-
 class WorkerDetailDialog(BaseDetailPopup):
     """
     Worker component detail popup dialog.
 
     Displays comprehensive worker information including queue health,
-    job statistics, and broker connection diagram.
+    job statistics, and charts.
     """
+
+    # Worker modal is taller to accommodate tabs
+    WORKER_MODAL_HEIGHT = 800
 
     def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         """
@@ -760,22 +931,63 @@ class WorkerDetailDialog(BaseDetailPopup):
         # Build sections (store references for live updates)
         self._overview = OverviewSection(component_data, page)
         self._queue_health = QueueHealthSection(component_data, page)
-        self._broker = BrokerSection(component_data, page)
+        self._task_history = TaskHistorySection(page)
         self._dirty = False
 
-        sections = [self._overview, self._queue_health, self._broker]
+        # Build tabbed layout (matches AI modal tab styling)
+        tabs = ft.Tabs(
+            selected_index=0,
+            animation_duration=200,
+            expand=True,
+            label_color=ft.Colors.ON_SURFACE,
+            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
+            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
+            tabs=[
+                ft.Tab(
+                    text="Overview",
+                    content=ft.Container(
+                        content=ft.Column(
+                            [self._overview],
+                            spacing=0,
+                            scroll=ft.ScrollMode.AUTO,
+                        ),
+                        expand=True,
+                    ),
+                ),
+                ft.Tab(
+                    text="Queues",
+                    content=ft.Container(
+                        content=ft.Column(
+                            [self._queue_health],
+                            spacing=0,
+                            scroll=ft.ScrollMode.AUTO,
+                        ),
+                        expand=True,
+                    ),
+                ),
+                ft.Tab(
+                    text="Activity",
+                    content=ft.Container(
+                        content=self._task_history,
+                        expand=True,
+                    ),
+                ),
+            ],
+        )
 
         # Compute status detail (e.g., "2/3 queues online")
         status_detail = self._compute_status_detail(component_data)
 
-        # Initialize base popup with custom sections
+        # Initialize base popup with tabs as single section (non-scrollable)
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text="Worker",
+            title_text=get_component_title("worker"),
             subtitle_text=get_component_subtitle("worker", component_data.metadata),
-            sections=sections,
+            sections=[tabs],
             status_detail=status_detail,
+            scrollable=False,
+            height=self.WORKER_MODAL_HEIGHT,
         )
 
     def update_data(self, component_data: ComponentStatus) -> None:
@@ -817,6 +1029,11 @@ class WorkerDetailDialog(BaseDetailPopup):
         self._queue_health.decrement_ongoing(queue)
         # Sync summary queued card with per-queue totals (cleanup may have zeroed rows)
         self._overview.sync_queued(self._queue_health.total_queued())
+        self._overview.rebuild_charts(
+            self._queue_health.per_queue_completed(),
+            self._queue_health.per_queue_failed(),
+            self._queue_health.per_queue_queued(),
+        )
         self._dirty = True
 
     def increment_failed(self, queue: str) -> None:
@@ -827,6 +1044,11 @@ class WorkerDetailDialog(BaseDetailPopup):
         self._queue_health.decrement_ongoing(queue)
         # Sync summary queued card with per-queue totals (cleanup may have zeroed rows)
         self._overview.sync_queued(self._queue_health.total_queued())
+        self._overview.rebuild_charts(
+            self._queue_health.per_queue_completed(),
+            self._queue_health.per_queue_failed(),
+            self._queue_health.per_queue_queued(),
+        )
         self._dirty = True
 
     def set_totals(self, queues: dict[str, dict[str, int]]) -> None:
@@ -851,6 +1073,11 @@ class WorkerDetailDialog(BaseDetailPopup):
             total_ongoing,
             total_completed,
             total_failed,
+        )
+        self._overview.rebuild_charts(
+            self._queue_health.per_queue_completed(),
+            self._queue_health.per_queue_failed(),
+            self._queue_health.per_queue_queued(),
         )
         self._dirty = True
 

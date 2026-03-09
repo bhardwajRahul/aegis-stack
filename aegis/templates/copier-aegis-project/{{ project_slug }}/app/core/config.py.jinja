@@ -110,6 +110,9 @@ class Settings(BaseSettings):
     # Worker health check settings
     WORKER_HEALTH_CHECK_INTERVAL: int = 15  # In seconds (default: 15)
 
+    # Task history retention (Redis Hashes auto-expire after this)
+    TASK_HISTORY_TTL_SECONDS: int = 86400  # 24 hours
+
     # PURE ARQ IMPLEMENTATION - NO CONFIGURATION NEEDED!
     # Worker configuration comes from individual WorkerSettings classes
     # in app/components/worker/queues/ - just import and use as arq intended!

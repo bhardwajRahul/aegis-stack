@@ -251,6 +251,33 @@ class LoadTestResults(BaseModel):
     performance_summary: str = Field(
         ..., description="Human readable performance summary"
     )
+
+
+class TaskHistoryRecord(BaseModel):
+    """A single task history record from Redis."""
+
+    job_id: str = Field(..., description="Unique task identifier")
+    name: str = Field("", description="Task function name")
+    queue: str = Field("", description="Queue the task was sent to")
+    status: str = Field(
+        "unknown", description="Task status: enqueued, running, completed, failed"
+    )
+    enqueued_at: str | None = Field(None, description="ISO timestamp when enqueued")
+    started_at: str | None = Field(None, description="ISO timestamp when started")
+    finished_at: str | None = Field(None, description="ISO timestamp when finished")
+    duration_ms: str | None = Field(None, description="Duration in milliseconds")
+    description: str | None = Field(None, description="Task function docstring")
+    error: str | None = Field(None, description="Error message if task failed")
+
+
+class TaskHistoryListResponse(BaseModel):
+    """Paginated list of task history records."""
+
+    tasks: list[TaskHistoryRecord] = Field(..., description="Task records")
+    total: int = Field(..., description="Total number of records for this queue")
+    offset: int = Field(0, description="Current offset")
+    limit: int = Field(50, description="Page size")
+    queue: str = Field(..., description="Queue name filter")
 {%- endif %}
 
 {%- if scheduler_backend != "memory" %}

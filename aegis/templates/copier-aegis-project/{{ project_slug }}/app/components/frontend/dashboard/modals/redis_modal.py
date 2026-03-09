@@ -16,6 +16,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
+from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
@@ -563,8 +564,6 @@ class RedisDetailDialog(BaseDetailPopup):
             component_data: ComponentStatus containing component health and metrics
         """
         metadata = component_data.metadata or {}
-        version = metadata.get("version", "")
-        subtitle = f"Redis {version}" if version else "Redis"
 
         # Build tabs
         tabs = ft.Tabs(
@@ -589,8 +588,8 @@ class RedisDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text="Cache",
-            subtitle_text=subtitle,
+            title_text=get_component_title("cache"),
+            subtitle_text=get_component_subtitle("cache", metadata),
             sections=[tabs],
             scrollable=False,
             width=900,

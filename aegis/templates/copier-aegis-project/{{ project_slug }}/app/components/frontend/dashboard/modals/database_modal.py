@@ -21,6 +21,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
+from app.services.system.ui import get_component_title
 
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
@@ -660,7 +661,7 @@ class DatabaseDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=database_component,
-            title_text="Database",
+            title_text=get_component_title("database"),
             subtitle_text=subtitle,
             sections=[tabs],
             scrollable=False,

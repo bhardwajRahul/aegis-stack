@@ -75,11 +75,25 @@ class WorkerSettings:
     async def on_job_start(ctx: dict[str, Any]) -> None:
         """Publish job.started event when a job begins processing."""
         if "events_redis" in ctx:
+            job_id = str(ctx.get("job_id", "unknown"))
             await publish_event(
                 ctx["events_redis"],
                 "job.started",
                 ctx.get("worker_queue_name", "system"),
-                {"job_id": str(ctx.get("job_id", "unknown"))},
+                {"job_id": job_id},
+            )
+            # Record task started in history
+            from app.components.worker.task_history import (
+                record_task_started,
+                resolve_arq_task_name,
+            )
+
+            task_name = await resolve_arq_task_name(ctx["events_redis"], job_id)
+            await record_task_started(
+                ctx["events_redis"],
+                job_id,
+                task_name=task_name,
+                queue_name="system",
             )
 
     @staticmethod
@@ -93,11 +107,16 @@ class WorkerSettings:
 
         # Determine success/failure from arq's stored result
         success = True
+        error_msg: str | None = None
+        task_name: str | None = None
         try:
             raw = await ctx["events_redis"].get(result_key_prefix + job_id)
             if raw:
                 result = deserialize_result(raw)
                 success = result.success
+                task_name = result.function
+                if not success and result.result:
+                    error_msg = str(result.result)
         except Exception:
             pass
 
@@ -107,4 +126,15 @@ class WorkerSettings:
             event_type,
             queue,
             {"job_id": job_id, "status": "success" if success else "failed"},
+        )
+        # Record task finished in history
+        from app.components.worker.task_history import record_task_finished
+
+        await record_task_finished(
+            ctx["events_redis"],
+            job_id,
+            success=success,
+            error=error_msg,
+            task_name=task_name,
+            queue_name=queue,
         )

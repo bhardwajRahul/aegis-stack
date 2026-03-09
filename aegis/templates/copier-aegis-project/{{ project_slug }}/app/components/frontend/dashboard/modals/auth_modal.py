@@ -16,6 +16,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
+from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import get_status_detail
 from .auth_users_tab import AuthUsersTab
@@ -283,8 +284,8 @@ class AuthDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text="Auth Service",
-            subtitle_text="JWT Authentication",
+            title_text=get_component_title("service_auth"),
+            subtitle_text=get_component_subtitle("service_auth", metadata),
             sections=[tabs],
             scrollable=False,
             status_detail=get_status_detail(component_data),
