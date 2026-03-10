@@ -85,7 +85,13 @@ class EventPublishMiddleware(dramatiq.Middleware):
     def before_worker_boot(
         self, broker: dramatiq.Broker, worker: dramatiq.Worker
     ) -> None:
-        """Create Redis client, publish worker.started, start heartbeat."""
+        """Initialize the middleware on worker boot.
+
+        Creates a sync Redis connection, publishes a worker.started event
+        for each queue this worker consumes, sets initial heartbeat keys,
+        and starts a background thread that refreshes heartbeats every 10s.
+        Called once when the Dramatiq worker process starts.
+        """
         try:
             self._redis = redis.from_url(_get_redis_url())
             self._queue_names = (
@@ -113,7 +119,12 @@ class EventPublishMiddleware(dramatiq.Middleware):
     def before_worker_shutdown(
         self, broker: dramatiq.Broker, worker: dramatiq.Worker
     ) -> None:
-        """Publish worker.stopped, stop heartbeat, close Redis client."""
+        """Gracefully shut down the middleware.
+
+        Stops the heartbeat thread, publishes a worker.stopped event for
+        each queue, deletes heartbeat keys, and closes the Redis connection.
+        Called once when the Dramatiq worker process is shutting down.
+        """
         self._stop_event.set()
         if self._heartbeat_thread:
             self._heartbeat_thread.join(timeout=5)
@@ -133,7 +144,12 @@ class EventPublishMiddleware(dramatiq.Middleware):
     def before_process_message(
         self, broker: dramatiq.Broker, message: dramatiq.Message
     ) -> None:
-        """Publish job.started event before task execution."""
+        """Run before each task executes.
+
+        Publishes a job.started event to the Redis Stream and records the
+        task as started in the task history. Fires after the message is
+        dequeued but before the actor function runs.
+        """
         if self._redis:
             _sync_publish(
                 self._redis,
@@ -144,7 +160,12 @@ class EventPublishMiddleware(dramatiq.Middleware):
             # Record task started in history
             from app.components.worker.task_history import record_task_started_sync
 
-            record_task_started_sync(self._redis, message.message_id)
+            record_task_started_sync(
+                self._redis,
+                message.message_id,
+                task_name=message.actor_name,
+                queue_name=message.queue_name,
+            )
 
     def after_process_message(
         self,
@@ -154,7 +175,13 @@ class EventPublishMiddleware(dramatiq.Middleware):
         result: object | None = None,
         exception: BaseException | None = None,
     ) -> None:
-        """Publish job.completed or job.failed event after task execution."""
+        """Run after each task completes or fails.
+
+        Publishes a job.completed or job.failed event to the Redis Stream
+        and records the final status in the task history. Fires after the
+        actor function returns (or raises), with the exception available
+        for inspection.
+        """
         if self._redis:
             event_type = "job.failed" if exception else "job.completed"
             _sync_publish(
@@ -171,4 +198,6 @@ class EventPublishMiddleware(dramatiq.Middleware):
                 message.message_id,
                 success=exception is None,
                 error=str(exception) if exception else None,
+                task_name=message.actor_name,
+                queue_name=message.queue_name,
             )

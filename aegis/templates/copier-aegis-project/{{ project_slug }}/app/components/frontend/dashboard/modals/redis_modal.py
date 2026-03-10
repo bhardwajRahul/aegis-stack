@@ -164,6 +164,47 @@ class PerformanceSection(ft.Container):
         )
 
 
+def _format_slow_command(command: str) -> tuple[str, str]:
+    """Format a raw SLOWLOG command into a readable (summary, detail) pair.
+
+    Returns:
+        Tuple of (formatted command, tooltip detail).
+    """
+    parts = command.split()
+    if not parts:
+        return command, command
+
+    cmd = parts[0].upper()
+
+    # EVALSHA: show script context instead of raw hash + args
+    if cmd == "EVALSHA" and len(parts) >= 4:
+        # parts: EVALSHA <sha> <numkeys> <key1> ...
+        keys = parts[3 : 3 + int(parts[2])] if parts[2].isdigit() else []
+        key_str = " ".join(keys) if keys else "unknown"
+        return f"EVALSHA (Lua) on {key_str}", command
+
+    # For key-based commands, shorten UUIDs in keys for readability
+    if len(parts) >= 2:
+        formatted_parts = [cmd]
+        for part in parts[1:]:
+            # Shorten UUID segments (8-4-4-4-12 hex pattern)
+            if len(part) > 24 and "-" in part:
+                # Shorten embedded UUIDs but keep prefix
+                segments = part.split(":")
+                shortened = []
+                for seg in segments:
+                    if len(seg) == 36 and seg.count("-") == 4:
+                        shortened.append(f"{seg[:8]}...")
+                    else:
+                        shortened.append(seg)
+                formatted_parts.append(":".join(shortened))
+            else:
+                formatted_parts.append(part)
+        return " ".join(formatted_parts), command
+
+    return command, command
+
+
 class SlowQueryRow(ft.Container):
     """Single slow query display row."""
 
@@ -195,6 +236,8 @@ class SlowQueryRow(ft.Container):
         else:
             duration_color = Theme.Colors.SUCCESS
 
+        display_cmd, tooltip_cmd = _format_slow_command(command)
+
         self.content = ft.Row(
             [
                 ft.Container(
@@ -210,7 +253,13 @@ class SlowQueryRow(ft.Container):
                     width=COL_WIDTH_DURATION,
                 ),
                 ft.Container(
-                    content=BodyText(command),
+                    content=ft.Text(
+                        display_cmd,
+                        size=Theme.Typography.BODY,
+                        color=ft.Colors.ON_SURFACE,
+                        font_family="monospace",
+                        tooltip=tooltip_cmd,
+                    ),
                     width=COL_WIDTH_SLOWLOG_CMD,
                 ),
             ],

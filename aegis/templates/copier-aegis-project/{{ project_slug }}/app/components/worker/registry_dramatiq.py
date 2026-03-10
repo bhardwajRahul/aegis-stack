@@ -93,6 +93,70 @@ def get_all_queue_metadata() -> dict[str, dict[str, Any]]:
     return metadata
 
 
+def get_queue_lifecycle(queue_name: str) -> dict[str, dict[str, str]]:
+    """Get lifecycle hook info for a queue.
+
+    Returns the middleware hooks that fire during a worker's lifecycle.
+    In Dramatiq, hooks are middleware methods on EventPublishMiddleware.
+
+    Args:
+        queue_name: Name of the queue (e.g., 'system', 'load_test')
+
+    Returns:
+        Dictionary mapping hook names to their metadata.
+    """
+    from app.components.worker.middleware import EventPublishMiddleware
+
+    hooks: dict[str, dict[str, str]] = {}
+    hook_map = {
+        "on_startup": "before_worker_boot",
+        "on_shutdown": "before_worker_shutdown",
+        "on_job_start": "before_process_message",
+        "after_job_end": "after_process_message",
+    }
+    for key, method_name in hook_map.items():
+        fn = getattr(EventPublishMiddleware, method_name, None)
+        if fn and callable(fn):
+            hooks[key] = {
+                "name": method_name,
+                "module": f"{fn.__module__}.EventPublishMiddleware.{method_name}",
+                "description": (fn.__doc__ or "").strip(),
+            }
+    return hooks
+
+
+def get_task_docstrings(queue_name: str) -> dict[str, dict[str, str]]:
+    """Get docstrings and module paths for all tasks in a queue.
+
+    Imports the queue module and extracts docstrings from task functions.
+    Handles Dramatiq's @dramatiq.actor decorator via .fn attribute.
+
+    Args:
+        queue_name: Name of the queue (e.g., 'system', 'load_test')
+
+    Returns:
+        Dict mapping function name to {"description": ..., "module": ...}
+    """
+    try:
+        module = importlib.import_module(f"app.components.worker.queues.{queue_name}")
+    except ImportError:
+        return {}
+
+    result: dict[str, dict[str, str]] = {}
+    metadata = get_queue_metadata(queue_name)
+    for func_name in metadata.get("tasks", []):
+        obj = getattr(module, func_name, None)
+        if obj is None:
+            continue
+        # Dramatiq actors wrap the original function in .fn
+        fn = getattr(obj, "fn", obj)
+        doc = (fn.__doc__ or "").strip() if hasattr(fn, "__doc__") else ""
+        mod = f"{fn.__module__}.{fn.__qualname__}" if hasattr(fn, "__module__") else ""
+        if doc or mod:
+            result[func_name] = {"description": doc, "module": mod}
+    return result
+
+
 def validate_queue_name(queue_name: str) -> bool:
     """Check if a queue name is valid.
 

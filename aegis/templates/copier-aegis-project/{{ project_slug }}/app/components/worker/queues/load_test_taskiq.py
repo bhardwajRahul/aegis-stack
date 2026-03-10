@@ -10,7 +10,7 @@ from typing import Any
 
 import redis.asyncio as aioredis
 from app.components.worker.events import publish_event
-from app.components.worker.middleware_taskiq import EventPublishMiddleware
+from app.components.worker.middleware import EventPublishMiddleware
 from app.core.config import settings
 from app.core.log import logger
 from app.services.load_test_workloads import (
@@ -41,25 +41,41 @@ broker = (
 
 @broker.task
 async def cpu_intensive_task() -> dict[str, Any]:
-    """CPU-bound task for load testing."""
+    """Stress-test CPU with synthetic computation.
+
+    Runs a configurable burst of mathematical operations (prime sieve,
+    matrix multiply) to measure worker throughput under CPU pressure.
+    """
     return await run_cpu_intensive()
 
 
 @broker.task
 async def io_simulation_task() -> dict[str, Any]:
-    """I/O simulation task for load testing."""
+    """Simulate I/O-bound workloads with async sleep.
+
+    Mimics network calls, file reads, and database queries using
+    randomised async delays to test worker concurrency handling.
+    """
     return await run_io_simulation()
 
 
 @broker.task
 async def memory_operations_task() -> dict[str, Any]:
-    """Memory operations task for load testing."""
+    """Exercise memory allocation and garbage collection.
+
+    Allocates and releases large byte buffers and data structures to
+    test worker memory behaviour under sustained allocation pressure.
+    """
     return await run_memory_operations()
 
 
 @broker.task
 async def failure_testing_task() -> dict[str, Any]:
-    """Task that randomly fails for testing error handling."""
+    """Randomly raise exceptions for error-handling validation.
+
+    Fails with a configurable probability to verify retry logic,
+    dead-letter routing, and failure metric collection.
+    """
     return await run_failure_testing()
 
 
