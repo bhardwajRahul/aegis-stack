@@ -6,7 +6,7 @@ Handles system maintenance and monitoring tasks using TaskIQ patterns.
 
 from datetime import UTC, datetime
 
-from app.components.worker.middleware_taskiq import EventPublishMiddleware
+from app.components.worker.middleware import EventPublishMiddleware
 from app.core.config import settings
 from app.core.log import logger
 from taskiq_redis import RedisAsyncResultBackend, RedisStreamBroker
@@ -31,7 +31,12 @@ broker = (
 
 @broker.task
 async def system_health_check() -> dict[str, str]:
-    """Simple system health check task."""
+    """Verify worker connectivity and responsiveness.
+
+    Returns a timestamped health status to confirm the worker process
+    is alive and can execute tasks. Used by the scheduler for periodic
+    liveness monitoring.
+    """
     logger.debug("Running system health check task")
 
     return {
@@ -43,7 +48,11 @@ async def system_health_check() -> dict[str, str]:
 
 @broker.task
 async def cleanup_temp_files() -> dict[str, str]:
-    """Simple temp file cleanup task placeholder."""
+    """Remove stale temporary files from the working directory.
+
+    Placeholder for application-specific cleanup logic. Scans for
+    expired temp files, upload artifacts, and cache entries.
+    """
     logger.info("Running temp file cleanup task")
 
     return {

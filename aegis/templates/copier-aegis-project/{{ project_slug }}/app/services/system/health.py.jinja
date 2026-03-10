@@ -971,6 +971,19 @@ async def check_worker_health() -> ComponentStatus:
                     else 0
                 )
 
+                # Enrich with task history for failure tracking
+                from app.components.worker.task_history import get_queue_stats
+
+                stats = await get_queue_stats(redis_client, queue_type)
+                jobs_failed = stats["failed"]
+                if stats["total"] > 0:
+                    jobs_completed = stats["completed"]
+                    jobs_ongoing = stats["running"]
+                total_finished = jobs_completed + jobs_failed
+                failure_rate = (
+                    (jobs_failed / total_finished * 100) if total_finished > 0 else 0.0
+                )
+
                 total_queued += queued_jobs
                 total_processed += jobs_completed
                 total_ongoing += jobs_ongoing
@@ -1018,6 +1031,8 @@ async def check_worker_health() -> ComponentStatus:
                     "queued_jobs": queued_jobs,
                     "jobs_ongoing": jobs_ongoing,
                     "jobs_completed": jobs_completed,
+                    "jobs_failed": jobs_failed,
+                    "failure_rate_percent": round(failure_rate, 1),
                     "consumer_count": consumer_count,
                     "max_concurrency": queue_config["max_jobs"],
                     "timeout_seconds": queue_config["timeout"],
@@ -1137,6 +1152,12 @@ async def check_worker_health() -> ComponentStatus:
         except ImportError:
             arq_version = ""
 
+        # Compute totals across all queues
+        total_failed = sum(
+            q.metadata.get("jobs_failed", 0)
+            for q in queue_sub_components.values()
+        )
+
         return ComponentStatus(
             name="worker",
             status=worker_status,
@@ -1146,6 +1167,7 @@ async def check_worker_health() -> ComponentStatus:
                 "total_queued": total_queued,
                 "total_completed": total_processed,
                 "total_ongoing": total_ongoing,
+                "total_failed": total_failed,
                 "active_workers": active_workers,
                 "redis_url": settings.REDIS_URL,
                 "version": arq_version,
@@ -1254,12 +1276,26 @@ async def check_worker_health() -> ComponentStatus:
                     f"{queue_config['description']}: {', '.join(status_parts)}"
                 )
 
+                # Get job stats from task history
+                from app.components.worker.task_history import get_queue_stats
+
+                stats = await get_queue_stats(redis_client, queue_type)
+                jobs_ongoing = stats["running"]
+                jobs_completed = stats["completed"]
+                jobs_failed = stats["failed"]
+                total_finished = jobs_completed + jobs_failed
+                failure_rate = (
+                    (jobs_failed / total_finished * 100) if total_finished > 0 else 0.0
+                )
+
                 queue_metadata: dict[str, Any] = {
                     "queue_type": queue_type,
                     "redis_queue_name": redis_queue_name,
                     "queued_jobs": queued_jobs,
-                    "jobs_ongoing": 0,
-                    "jobs_completed": 0,
+                    "jobs_ongoing": jobs_ongoing,
+                    "jobs_completed": jobs_completed,
+                    "jobs_failed": jobs_failed,
+                    "failure_rate_percent": round(failure_rate, 1),
                     "max_concurrency": queue_config["max_jobs"],
                     "timeout_seconds": queue_config["timeout"],
                     "description": queue_config["description"],
@@ -1373,6 +1409,20 @@ async def check_worker_health() -> ComponentStatus:
         except ImportError:
             dramatiq_version = ""
 
+        # Compute totals across all queues
+        total_ongoing = sum(
+            q.metadata.get("jobs_ongoing", 0)
+            for q in queue_sub_components.values()
+        )
+        total_completed = sum(
+            q.metadata.get("jobs_completed", 0)
+            for q in queue_sub_components.values()
+        )
+        total_failed = sum(
+            q.metadata.get("jobs_failed", 0)
+            for q in queue_sub_components.values()
+        )
+
         return ComponentStatus(
             name="worker",
             status=worker_status,
@@ -1380,6 +1430,9 @@ async def check_worker_health() -> ComponentStatus:
             response_time_ms=None,
             metadata={
                 "total_queued": total_queued,
+                "total_ongoing": total_ongoing,
+                "total_completed": total_completed,
+                "total_failed": total_failed,
                 "active_workers": active_workers,
                 "redis_url": settings.REDIS_URL,
                 "version": dramatiq_version,

@@ -271,6 +271,44 @@ async def _pipeline_get_statuses(redis: Any, job_ids: list[str]) -> list[str | N
     return [(r if isinstance(r, str) else r.decode()) if r else None for r in results]
 
 
+async def get_queue_stats(
+    redis: Any,
+    queue_name: str,
+    limit: int = 0,
+) -> dict[str, int]:
+    """Count tasks by status for a queue.
+
+    Args:
+        redis: Async Redis client.
+        queue_name: Queue name to count stats for.
+        limit: If > 0, only scan the most recent N tasks (faster for health checks).
+               If 0, scan all tasks.
+
+    Returns:
+        Dict with keys: running, completed, failed, total.
+    """
+    index_key = f"{_QUEUE_INDEX_PREFIX}{queue_name}"
+    try:
+        if limit > 0:
+            all_ids_raw = await redis.zrevrange(index_key, 0, limit - 1)
+        else:
+            all_ids_raw = await redis.zrange(index_key, 0, -1)
+        if not all_ids_raw:
+            return {"running": 0, "completed": 0, "failed": 0, "total": 0}
+
+        all_ids = [j if isinstance(j, str) else j.decode() for j in all_ids_raw]
+        statuses = await _pipeline_get_statuses(redis, all_ids)
+
+        counts = {"running": 0, "completed": 0, "failed": 0, "total": len(all_ids)}
+        for s in statuses:
+            if s in counts:
+                counts[s] += 1
+        return counts
+    except Exception as e:
+        logger.debug(f"Failed to get queue stats: {e}")
+        return {"running": 0, "completed": 0, "failed": 0, "total": 0}
+
+
 async def list_tasks_by_queue(
     redis: Any,
     queue_name: str,
@@ -430,19 +468,47 @@ def record_task_enqueued_sync(
         logger.debug(f"Failed to record task enqueued (sync): {e}")
 
 
-def record_task_started_sync(redis: Any, job_id: str) -> None:
-    """Sync variant of record_task_started for Dramatiq."""
+def record_task_started_sync(
+    redis: Any,
+    job_id: str,
+    task_name: str | None = None,
+    queue_name: str | None = None,
+    ttl_seconds: int = 86400,
+) -> None:
+    """Sync variant of record_task_started for Dramatiq.
+
+    Creates the record on-the-fly if it doesn't exist yet (e.g. sub-tasks
+    dispatched via ``actor.send()`` that bypassed ``record_task_enqueued``).
+    """
     key = f"{_TASK_KEY_PREFIX}{job_id}"
+    now = datetime.now(UTC)
     try:
         if not redis.exists(key):
-            return
-        redis.hset(
-            key,
-            mapping={
+            mapping: dict[str, str] = {
+                "job_id": job_id,
                 "status": "running",
-                "started_at": datetime.now(UTC).isoformat(),
-            },
-        )
+                "started_at": now.isoformat(),
+                "enqueued_at": now.isoformat(),
+            }
+            _enrich_mapping(mapping, task_name)
+            if queue_name:
+                mapping["queue"] = queue_name
+            redis.hset(key, mapping=mapping)
+            redis.expire(key, ttl_seconds)
+            if queue_name:
+                redis.zadd(
+                    f"{_QUEUE_INDEX_PREFIX}{queue_name}",
+                    {job_id: now.timestamp()},
+                )
+            return
+        mapping = {
+            "status": "running",
+            "started_at": now.isoformat(),
+        }
+        _enrich_mapping(mapping, task_name)
+        if queue_name:
+            mapping["queue"] = queue_name
+        redis.hset(key, mapping=mapping)
     except Exception as e:
         logger.debug(f"Failed to record task started (sync): {e}")
 
@@ -452,17 +518,42 @@ def record_task_finished_sync(
     job_id: str,
     success: bool,
     error: str | None = None,
+    task_name: str | None = None,
+    queue_name: str | None = None,
+    ttl_seconds: int = 86400,
 ) -> None:
-    """Sync variant of record_task_finished for Dramatiq."""
+    """Sync variant of record_task_finished for Dramatiq.
+
+    Creates the record on-the-fly if it doesn't exist yet.
+    """
     key = f"{_TASK_KEY_PREFIX}{job_id}"
     try:
-        if not redis.exists(key):
-            return
         now = datetime.now(UTC)
-        mapping: dict[str, str] = {
+        if not redis.exists(key):
+            mapping: dict[str, str] = {
+                "job_id": job_id,
+                "status": "completed" if success else "failed",
+                "finished_at": now.isoformat(),
+                "enqueued_at": now.isoformat(),
+            }
+            _enrich_mapping(mapping, task_name)
+            if queue_name:
+                mapping["queue"] = queue_name
+            if error:
+                mapping["error"] = str(error)[:2000]
+            redis.hset(key, mapping=mapping)
+            redis.expire(key, ttl_seconds)
+            if queue_name:
+                redis.zadd(
+                    f"{_QUEUE_INDEX_PREFIX}{queue_name}",
+                    {job_id: now.timestamp()},
+                )
+            return
+        mapping = {
             "status": "completed" if success else "failed",
             "finished_at": now.isoformat(),
         }
+        _enrich_mapping(mapping, task_name)
         started_raw = redis.hget(key, "started_at")
         if started_raw:
             started_str = (

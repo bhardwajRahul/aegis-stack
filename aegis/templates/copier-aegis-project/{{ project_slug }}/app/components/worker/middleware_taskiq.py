@@ -28,7 +28,12 @@ class EventPublishMiddleware(TaskiqMiddleware):
         return self
 
     async def startup(self) -> None:
-        """Create Redis client and publish worker.started event."""
+        """Initialize the middleware on worker boot.
+
+        Creates an async Redis connection and publishes a worker.started
+        event to the Redis Stream. Called once when the TaskIQ worker
+        process starts, before any tasks are consumed.
+        """
         try:
             redis_url = (
                 settings.redis_url_effective
@@ -41,14 +46,24 @@ class EventPublishMiddleware(TaskiqMiddleware):
             logger.debug(f"Failed to initialize event publishing: {e}")
 
     async def shutdown(self) -> None:
-        """Publish worker.stopped event and close Redis client."""
+        """Gracefully shut down the middleware.
+
+        Publishes a worker.stopped event to the Redis Stream and closes
+        the Redis connection. Called once when the TaskIQ worker process
+        is shutting down, after all in-flight tasks have completed.
+        """
         if self._redis:
             await publish_event(self._redis, "worker.stopped", self._queue_name)
             await self._redis.aclose()
             self._redis = None
 
     async def pre_execute(self, message: TaskiqMessage) -> TaskiqMessage:
-        """Publish job.started event before task execution."""
+        """Run before each task executes.
+
+        Publishes a job.started event to the Redis Stream and records
+        the task as started in the task history. Fires after the message
+        is acknowledged from the stream but before the task function runs.
+        """
         if self._redis:
             await publish_event(
                 self._redis,
@@ -65,7 +80,13 @@ class EventPublishMiddleware(TaskiqMiddleware):
     async def post_execute(
         self, message: TaskiqMessage, result: TaskiqResult[Any]
     ) -> None:
-        """Publish job.completed or job.failed event after task execution."""
+        """Run after each task completes or fails.
+
+        Publishes a job.completed or job.failed event to the Redis Stream
+        and records the final status in the task history. Fires after the
+        task function returns (or raises), with the result available for
+        inspection.
+        """
         if self._redis:
             event_type = "job.failed" if result.is_err else "job.completed"
             await publish_event(

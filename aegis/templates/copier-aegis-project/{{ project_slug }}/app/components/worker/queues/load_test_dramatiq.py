@@ -32,25 +32,41 @@ redis_url = (
 
 @dramatiq.actor(queue_name="load_test", store_results=True)
 async def cpu_intensive_task() -> dict[str, Any]:
-    """CPU-bound task for load testing."""
+    """Stress-test CPU with synthetic computation.
+
+    Runs a configurable burst of mathematical operations (prime sieve,
+    matrix multiply) to measure worker throughput under CPU pressure.
+    """
     return await run_cpu_intensive()
 
 
 @dramatiq.actor(queue_name="load_test", store_results=True)
 async def io_simulation_task() -> dict[str, Any]:
-    """I/O simulation task for load testing."""
+    """Simulate I/O-bound workloads with async sleep.
+
+    Mimics network calls, file reads, and database queries using
+    randomised async delays to test worker concurrency handling.
+    """
     return await run_io_simulation()
 
 
 @dramatiq.actor(queue_name="load_test", store_results=True)
 async def memory_operations_task() -> dict[str, Any]:
-    """Memory operations task for load testing."""
+    """Exercise memory allocation and garbage collection.
+
+    Allocates and releases large byte buffers and data structures to
+    test worker memory behaviour under sustained allocation pressure.
+    """
     return await run_memory_operations()
 
 
 @dramatiq.actor(queue_name="load_test", store_results=True)
 async def failure_testing_task() -> dict[str, Any]:
-    """Task that randomly fails for testing error handling."""
+    """Randomly raise exceptions for error-handling validation.
+
+    Fails with a configurable probability to verify retry logic,
+    dead-letter routing, and failure metric collection.
+    """
     return await run_failure_testing()
 
 
