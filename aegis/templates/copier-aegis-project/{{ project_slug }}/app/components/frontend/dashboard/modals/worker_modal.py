@@ -446,7 +446,6 @@ class OverviewSection(ft.Container):
                     {
                         "value": failed,
                         "label": f"{name} ({failed:,}) · {pct:.0f}%",
-                        "color": Theme.Colors.ERROR,
                     }
                 )
         failure_chart = PieChartCard("Failure Distribution", fail_sections)
@@ -461,7 +460,6 @@ class OverviewSection(ft.Container):
                     {
                         "value": queued,
                         "label": f"{name} ({queued:,}) · {pct:.0f}%",
-                        "color": Theme.Colors.WARNING,
                     }
                 )
         backlog_chart = PieChartCard("Queue Backlog", backlog_sections)
@@ -552,7 +550,6 @@ class OverviewSection(ft.Container):
                         {
                             "value": failed,
                             "label": f"{name} ({failed:,}) · {pct:.0f}%",
-                            "color": Theme.Colors.ERROR,
                         }
                     )
         failure_chart = PieChartCard("Failure Distribution", fail_sections)
@@ -568,7 +565,6 @@ class OverviewSection(ft.Container):
                         {
                             "value": queued,
                             "label": f"{name} ({queued:,}) · {pct:.0f}%",
-                            "color": Theme.Colors.WARNING,
                         }
                     )
         backlog_chart = PieChartCard("Queue Backlog", backlog_sections)

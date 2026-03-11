@@ -1148,7 +1148,9 @@ async def check_worker_health() -> ComponentStatus:
         try:
             import arq
 
-            arq_version = getattr(arq, "__version__", "")
+            arq_version = getattr(arq, "VERSION", "")
+            if isinstance(arq_version, tuple):
+                arq_version = ".".join(str(v) for v in arq_version)
         except ImportError:
             arq_version = ""
 
@@ -1773,13 +1775,15 @@ async def check_worker_health() -> ComponentStatus:
         # Determine worker status from queue statuses (let propagate_status handle it)
         worker_status = propagate_status([queues_status])
 
-        # Get taskiq version for display
+        # Get arq version for display
         try:
-            import taskiq
+            import arq
 
-            taskiq_version = getattr(taskiq, "__version__", "")
+            arq_version = getattr(arq, "VERSION", "")
+            if isinstance(arq_version, tuple):
+                arq_version = ".".join(str(v) for v in arq_version)
         except ImportError:
-            taskiq_version = ""
+            arq_version = ""
 
         return ComponentStatus(
             name="worker",
@@ -1800,7 +1804,7 @@ async def check_worker_health() -> ComponentStatus:
                     else 0
                 ),
                 "redis_url": settings.REDIS_URL,
-                "version": taskiq_version,
+                "version": arq_version,
                 "queue_configuration": {
                     queue_type: {
                         "description": config["description"],
