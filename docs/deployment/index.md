@@ -37,6 +37,16 @@ server:
 
 docker:
   context: my-project-remote
+
+# Optional: backup settings (defaults shown)
+backup:
+  keep_count: 5           # Number of backups to retain
+  include_database: true  # pg_dump before deploy
+
+# Optional: health check after deploy (defaults shown)
+health_check:
+  retries: 3              # Number of retry attempts
+  auto_rollback: true     # Rollback on failed health check
 ```
 
 | Field | Description |
@@ -45,6 +55,12 @@ docker:
 | `server.user` | SSH user (default: `root`) |
 | `server.path` | Application directory on server (default: `/opt/{project-name}`) |
 | `docker.context` | Docker context name (used by generated Makefile `deploy-*` targets) |
+| `backup.keep_count` | Number of backups to keep on server (default: `5`) |
+| `backup.include_database` | Include PostgreSQL dump in backup (default: `true`) |
+| `health_check.retries` | Number of health check attempts (default: `3`) |
+| `health_check.auto_rollback` | Auto-rollback on failed health check (default: `true`) |
+
+All `backup` and `health_check` fields are optional — missing fields use defaults. Existing `deploy.yml` files work without changes.
 
 !!! tip "Git-ignore deploy config"
     Add `.aegis/` to your `.gitignore` to keep deployment config out of version control. `deploy-init` will remind you if it's missing.
@@ -131,15 +147,20 @@ aegis deploy [OPTIONS]
 **Options:**
 
 - `--build / --no-build` — Build Docker images before deploying (default: `--build`)
+- `--backup / --no-backup` — Create backup before deploying (default: `--backup`)
+- `--health-check / --no-health-check` — Run health check after deploying (default: `--health-check`)
 - `--project-path TEXT` — Path to the project (default: current directory)
 
 **What it does:**
 
-1. **Syncs files** to the server via `rsync`
-2. **Copies `.env`** file separately (excluded from rsync for safety)
-3. **Stops existing services** with `docker compose down`
-4. **Builds and starts services** with production compose overrides
-5. **Restarts Traefik** if the ingress component is present (ensures container re-discovery)
+1. **Creates a backup** of the current deployment (files + database)
+2. **Syncs files** to the server via `rsync`
+3. **Copies `.env`** file separately (excluded from rsync for safety)
+4. **Stops existing services** with `docker compose down`
+5. **Builds and starts services** with production compose overrides
+6. **Restarts Traefik** if the ingress component is present (ensures container re-discovery)
+7. **Runs health check** against `/health/` endpoint
+8. **Auto-rollback** if health check fails — restores the backup from step 1
 
 **Excluded from sync:**
 
@@ -154,14 +175,108 @@ Files and directories excluded from the rsync transfer:
 - `data/` — Local database files
 - `.env` — Environment file (copied separately)
 - `.aegis/` — Deploy configuration
+- `backups/` — Server-side backups
 
 **Examples:**
 ```bash
-# Full deploy with build
+# Full deploy with build (backup + health check enabled by default)
 aegis deploy
 
 # Skip image rebuild (faster, uses cached images)
 aegis deploy --no-build
+
+# Deploy without backup or health check (original behavior)
+aegis deploy --no-backup --no-health-check
+```
+
+---
+
+### aegis deploy-backup
+
+Create a backup of the currently deployed application on the remote server.
+
+**Usage:**
+```bash
+aegis deploy-backup [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**What it does:**
+
+1. Creates a timestamped backup directory on the server
+2. Copies all deployed files into the backup via server-side `rsync`
+3. Dumps the PostgreSQL database if a postgres container is running
+4. Prunes old backups beyond the retention count (default: 5)
+
+SQLite databases are automatically included in the file backup since they live in the deploy directory.
+
+**Examples:**
+```bash
+aegis deploy-backup
+```
+
+---
+
+### aegis deploy-backups
+
+List available deployment backups on the remote server.
+
+**Usage:**
+```bash
+aegis deploy-backups [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Example output:**
+```
+Backups on 143.198.20.208 (3 total):
+
+  Timestamp                Size         Database
+  ──────────────────────── ──────────── ──────────
+  2026-03-11_183045        42M          yes
+  2026-03-10_120000        41M          no
+  2026-03-09_090000        40M          yes
+
+Rollback with: aegis deploy-rollback --backup <timestamp>
+```
+
+---
+
+### aegis deploy-rollback
+
+Rollback to a previous deployment backup.
+
+**Usage:**
+```bash
+aegis deploy-rollback [OPTIONS]
+```
+
+**Options:**
+
+- `--backup, -b TEXT` — Backup timestamp to rollback to (default: latest)
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**What it does:**
+
+1. Stops all running services
+2. Restores files from the backup snapshot
+3. Restores the PostgreSQL database if a dump exists in the backup
+4. Rebuilds and starts all services
+5. Restarts Traefik if present
+
+**Examples:**
+```bash
+# Rollback to the most recent backup
+aegis deploy-rollback
+
+# Rollback to a specific backup
+aegis deploy-rollback --backup 2026-03-11_183045
 ```
 
 ---
@@ -387,11 +502,49 @@ aegis deploy
 ### Subsequent Deployments
 
 ```bash
-# Make changes, then redeploy
+# Make changes, then redeploy (auto-backup + health check)
 aegis deploy
 
 # Or skip rebuild for config-only changes
 aegis deploy --no-build
+```
+
+### Backup and Rollback
+
+Every `aegis deploy` automatically creates a backup before making changes. If the health check fails after deploy, the previous version is restored automatically.
+
+```bash
+# Create a manual backup
+aegis deploy-backup
+
+# List available backups
+aegis deploy-backups
+
+# Rollback to the most recent backup
+aegis deploy-rollback
+
+# Rollback to a specific backup
+aegis deploy-rollback --backup 2026-03-11_183045
+```
+
+**How backups work:**
+
+- Backups are stored on the server at `{deploy_path}/backups/{timestamp}/`
+- Each backup contains a full snapshot of deployed files
+- PostgreSQL databases are dumped via `pg_dump` (SQLite files are included automatically)
+- Old backups are pruned automatically (default: keep last 5)
+- Backups are never synced or overwritten during deploys
+
+**Auto-rollback flow:**
+
+```
+aegis deploy
+  → backup current state
+  → sync new code
+  → docker compose up
+  → health check (GET /health/)
+    → pass: done
+    → fail: restore backup automatically
 ```
 
 ### Monitoring

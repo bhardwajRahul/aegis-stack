@@ -14,10 +14,13 @@ from .commands.add import add_command
 from .commands.add_service import add_service_command
 from .commands.components import components_command
 from .commands.deploy import (
+    deploy_backup_command,
+    deploy_backups_command,
     deploy_command,
     deploy_init_command,
     deploy_logs_command,
     deploy_restart_command,
+    deploy_rollback_command,
     deploy_setup_command,
     deploy_shell_command,
     deploy_status_command,
@@ -80,6 +83,9 @@ app.command(name="ingress-enable")(ingress_enable_command)
 app.command(name="deploy-init")(deploy_init_command)
 app.command(name="deploy-setup")(deploy_setup_command)
 app.command(name="deploy")(deploy_command)
+app.command(name="deploy-backup")(deploy_backup_command)
+app.command(name="deploy-backups")(deploy_backups_command)
+app.command(name="deploy-rollback")(deploy_rollback_command)
 app.command(name="deploy-logs")(deploy_logs_command)
 app.command(name="deploy-status")(deploy_status_command)
 app.command(name="deploy-stop")(deploy_stop_command)

@@ -521,7 +521,7 @@ aegis deploy-setup
 
 ### aegis deploy
 
-Deploy the project to the configured server. Syncs files, builds Docker images, and starts services.
+Deploy the project to the configured server. Creates a backup, syncs files, builds Docker images, starts services, and runs a health check. Auto-rollback on failure.
 
 **Usage:**
 ```bash
@@ -531,12 +531,77 @@ aegis deploy [OPTIONS]
 **Options:**
 
 - `--build / --no-build` — Build images before deploying (default: `--build`)
+- `--backup / --no-backup` — Create backup before deploying (default: `--backup`)
+- `--health-check / --no-health-check` — Run health check after deploying (default: `--health-check`)
 - `--project-path TEXT` — Path to the project (default: current directory)
 
 **Examples:**
 ```bash
 aegis deploy
 aegis deploy --no-build
+aegis deploy --no-backup --no-health-check
+```
+
+---
+
+### aegis deploy-backup
+
+Create a backup of the currently deployed application on the remote server.
+
+**Usage:**
+```bash
+aegis deploy-backup [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-backup
+```
+
+---
+
+### aegis deploy-backups
+
+List available deployment backups with timestamps, sizes, and database dump status.
+
+**Usage:**
+```bash
+aegis deploy-backups [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-backups
+```
+
+---
+
+### aegis deploy-rollback
+
+Rollback to a previous deployment backup. Uses the latest backup if none specified.
+
+**Usage:**
+```bash
+aegis deploy-rollback [OPTIONS]
+```
+
+**Options:**
+
+- `--backup, -b TEXT` — Backup timestamp to rollback to (default: latest)
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-rollback
+aegis deploy-rollback --backup 2026-03-11_183045
 ```
 
 ---
