@@ -319,10 +319,15 @@ def generate_with_copier(
         print(f"Warning: Failed to initialize git repository: {e}")
         print("Run 'git init && git add . && git commit' manually")
 
-    # Show docs/GitHub links
+    # Show docs/star links
     typer.echo()
     typer.secho("Docs: https://lbedner.github.io/aegis-stack", dim=True)
-    typer.secho("GitHub: https://github.com/lbedner/aegis-stack", dim=True)
+    typer.echo()
+    star = typer.style("\u2605", fg=typer.colors.BRIGHT_YELLOW, bold=True)
+    typer.echo(
+        f"{star} If Aegis Stack made your life easier, consider leaving a star:\n"
+        "  https://github.com/lbedner/aegis-stack"
+    )
 
     # CRITICAL: Fix _src_path in .copier-answers.yml for future updates to work
     #

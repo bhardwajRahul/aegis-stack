@@ -6,11 +6,15 @@
 [![CI](https://github.com/lbedner/aegis-stack/workflows/CI/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/ci.yml)
 [![Documentation](https://github.com/lbedner/aegis-stack/workflows/Deploy%20Documentation/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/docs.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Commits per Month](https://img.shields.io/github/commit-activity/m/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
-[![Total Commits](https://img.shields.io/github/commit-activity/t/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
+[![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-orange.json)](https://github.com/copier-org/copier)
+
 [![Monthly Downloads](https://img.shields.io/pypi/dm/aegis-stack)](https://pypi.org/project/aegis-stack/)
 [![Total Downloads](https://static.pepy.tech/badge/aegis-stack)](https://pepy.tech/project/aegis-stack)
-[![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-orange.json)](https://github.com/copier-org/copier)
+[![PyPI - Top 10% 2026](https://img.shields.io/badge/PyPI-Top_10%25_2026-2ea043)](https://clickpy.clickhouse.com/dashboard/aegis-stack?min_date=2026-01-01&max_date=2026-12-31)
+
+[![Commits per Month](https://img.shields.io/github/commit-activity/m/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
+[![Total Commits](https://img.shields.io/github/commit-activity/t/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
+[![Last Commit](https://img.shields.io/github/last-commit/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
 
 You need to ship reliable software, but management only gave you 2 weeks.
 
@@ -20,7 +24,7 @@ No time for health checks, proper testing, or clean architecture. Just enough ti
 
 ![Aegis Stack Quick Start Demo](docs/images/aegis-demo.gif)
 
-Aegis Stack is a system for creating and evolving modular Python applications over time, built on tools you already know.
+A production-ready FastAPI platform with modular components and a built-in control plane.
 
 ## Prerequisites
 
@@ -40,7 +44,7 @@ uvx aegis-stack init user-app --services auth
 uvx aegis-stack init task-processor --components scheduler,worker
 
 # Start building
-cd my-api && uv sync && cp .env.example .env && make serve
+cd my-api && make serve
 ```
 
 **Installation alternatives:** See the [Installation Guide](https://lbedner.github.io/aegis-stack/installation/) for `uv tool install`, `pip install`, and development setup.
@@ -119,7 +123,7 @@ Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your S
 - **Database** → Postgres / SQLite
 - **Cache/Queue** → Redis
 - **Scheduler** → APScheduler
-- **Worker** → Arq / Taskiq
+- **Worker** → Arq / Taskiq / Dramatiq
 
 **Services** (business logic)
 
@@ -131,10 +135,12 @@ Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your S
 
 ## Learn More
 
+- **[Overseer](https://lbedner.github.io/aegis-stack/overseer/)** - Built-in system dashboard
+- **[Deployment](https://lbedner.github.io/aegis-stack/deployment/)** - Deploy with backups, rollback, and health checks
 - **[CLI Reference](https://lbedner.github.io/aegis-stack/cli-reference/)** - Complete command reference
-- **[About](https://lbedner.github.io/aegis-stack/about/)** - The philosophy and vision behind Aegis Stack
 - **[Evolving Your Stack](https://lbedner.github.io/aegis-stack/evolving-your-stack/)** - Add/remove components as needs change
 - **[Technology Stack](https://lbedner.github.io/aegis-stack/technology/)** - Battle-tested technology choices
+- **[About](https://lbedner.github.io/aegis-stack/about/)** - The philosophy and vision behind Aegis Stack
 
 ## For The Veterans
 
