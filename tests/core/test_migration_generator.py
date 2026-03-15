@@ -203,6 +203,8 @@ class TestGenerateMigration:
         assert "op.create_table" in content
         assert "'user'" in content
         assert "'email'" in content
+        assert "'is_verified'" in content
+        assert "'last_login'" in content
 
     def test_generates_ai_migration(self, tmp_path: Path) -> None:
         """Test generates AI migration file."""
@@ -280,6 +282,9 @@ class TestMigrationSpecs:
         assert AUTH_MIGRATION.service_name == "auth"
         assert len(AUTH_MIGRATION.tables) == 1
         assert AUTH_MIGRATION.tables[0].name == "user"
+        column_names = [col.name for col in AUTH_MIGRATION.tables[0].columns]
+        assert "is_verified" in column_names
+        assert "last_login" in column_names
 
     def test_ai_spec_exists(self) -> None:
         """Test AI migration spec is defined."""

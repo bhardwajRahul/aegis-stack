@@ -69,6 +69,7 @@ class UsersTableSection(ft.Container):
             DataTableColumn("Email", style="primary"),
             DataTableColumn("Name", width=140, style="secondary"),
             DataTableColumn("Status", width=45, style=None),
+            DataTableColumn("Verified", width=55, style=None),
             DataTableColumn("Created", width=80, style="secondary"),
             DataTableColumn("Actions", width=80, alignment="right", style=None),
         ]
@@ -79,6 +80,12 @@ class UsersTableSection(ft.Container):
             status_tag = Tag(
                 text="On" if is_active else "Off",
                 color=Theme.Colors.SUCCESS if is_active else Theme.Colors.WARNING,
+            )
+
+            is_verified = user.get("is_verified", False)
+            verified_tag = Tag(
+                text="Yes" if is_verified else "No",
+                color=Theme.Colors.SUCCESS if is_verified else Theme.Colors.WARNING,
             )
 
             # Action buttons
@@ -107,6 +114,7 @@ class UsersTableSection(ft.Container):
                     user.get("email", ""),
                     user.get("full_name") or "-",
                     status_tag,
+                    verified_tag,
                     _format_relative_time(user.get("created_at", "")),
                     action_buttons,
                 ]

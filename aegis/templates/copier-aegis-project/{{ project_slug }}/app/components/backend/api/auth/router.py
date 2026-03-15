@@ -1,5 +1,7 @@
 """Authentication API routes."""
 
+from datetime import UTC, datetime
+
 from app.components.backend.api.deps import get_async_db
 from app.core.security import create_access_token, verify_password
 from app.models.user import UserCreate, UserResponse
@@ -48,6 +50,11 @@ async def login(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Update last_login timestamp
+    await user_service.update_user(
+        user.id, last_login=datetime.now(UTC).replace(tzinfo=None)
+    )
 
     # Create access token
     access_token = create_access_token(data={"sub": user.email})

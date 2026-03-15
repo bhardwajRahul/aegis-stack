@@ -351,7 +351,8 @@ class ActivityFeed(ft.Container):
             animate_opacity=_anim,
         )
 
-        # Colored indicator dot (visible when a non-"All" filter is active and pills collapsed)
+        # Colored indicator dot
+        # (visible when a non-"All" filter is active and pills collapsed)
         self._filter_dot = ft.Container(
             width=6,
             height=6,

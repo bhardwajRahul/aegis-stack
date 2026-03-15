@@ -888,7 +888,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
         # Consecutive disconnect checks before declaring page truly dead.
         # Flet sessions reconnect within a few seconds — this grace period
         # prevents background tasks from exiting during transient blips.
-        _DISCONNECT_GRACE_CHECKS = 30  # ~30s at 1s per check
+        _disconnect_grace_checks = 30  # ~30s at 1s per check
         _consecutive_disconnects = 0
 
         def _is_alive() -> bool:
@@ -902,7 +902,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 _consecutive_disconnects = 0
                 return True
             _consecutive_disconnects += 1
-            if _consecutive_disconnects >= _DISCONNECT_GRACE_CHECKS:
+            if _consecutive_disconnects >= _disconnect_grace_checks:
                 logger.debug("Page permanently disconnected after grace period")
                 return False
             return True  # Still within grace period
