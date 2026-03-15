@@ -38,6 +38,8 @@ class TestAuthServiceIntegration:
         assert created_user.email == user_data.email
         assert created_user.full_name == user_data.full_name
         assert created_user.is_active is True
+        assert created_user.is_verified is False
+        assert created_user.last_login is None
         # Password should be hashed
         assert created_user.hashed_password != user_data.password
         assert verify_password(user_data.password, created_user.hashed_password)

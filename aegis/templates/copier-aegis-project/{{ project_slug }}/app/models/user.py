@@ -12,6 +12,7 @@ class UserBase(SQLModel):
     email: EmailStr = Field(unique=True, index=True)
     full_name: str | None = None
     is_active: bool = Field(default=True)
+    is_verified: bool = Field(default=False)
 
 
 class User(UserBase, table=True):
@@ -19,6 +20,7 @@ class User(UserBase, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     hashed_password: str
+    last_login: datetime | None = None
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
@@ -42,5 +44,6 @@ class UserResponse(UserBase):
     """User response model (excludes sensitive data)."""
 
     id: int
+    last_login: datetime | None = None
     created_at: datetime
     updated_at: datetime | None = None
