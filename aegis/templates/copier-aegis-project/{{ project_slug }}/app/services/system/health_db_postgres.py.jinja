@@ -14,10 +14,10 @@ from typing import Any
 from app.core.config import settings
 from app.core.log import logger
 from app.services.system.health import format_bytes
-from app.services.system.models import ComponentStatus, ComponentStatusType
+from app.services.system.models import ComponentStatus, ComponentStatusType, MigrationInfo
 
 # Cache static data that doesn't change at runtime
-_migration_cache: list[dict[str, Any]] | None = None
+_migration_cache: list[MigrationInfo] | None = None
 _pg_settings_cache: dict[str, Any] | None = None
 _schema_cache: dict[str, Any] | None = None
 
@@ -386,14 +386,15 @@ async def check_database_health() -> ComponentStatus:
 
                                     file_mtime = os.path.getmtime(migration_file)
 
-                                    _migration_cache.append({
-                                        "revision": revision_id,
-                                        "down_revision": down_revision,
-                                        "description": description,
-                                        "file_mtime": file_mtime,
-                                        "create_date": create_date,
-                                        "file_path": str(migration_file),
-                                    })
+                                    _migration_cache.append(MigrationInfo(
+                                        revision=revision_id,
+                                        down_revision=down_revision,
+                                        description=description,
+                                        content=content,
+                                        file_mtime=file_mtime,
+                                        create_date=create_date,
+                                        file_path=str(migration_file),
+                                    ))
 
                                 except Exception as e:
                                     logger.debug(
@@ -403,11 +404,11 @@ async def check_database_health() -> ComponentStatus:
 
                     # Stamp is_current from live HEAD onto cached data
                     migrations = [
-                        {**m, "is_current": m["revision"] == current_version}
+                        m.model_copy(update={"is_current": m.revision == current_version})
                         for m in _migration_cache
                     ]
 
-                    enhanced_metadata["migrations"] = migrations
+                    enhanced_metadata["migrations"] = [m.model_dump() for m in migrations]
                     enhanced_metadata["migration_count"] = len(migrations)
                 else:
                     enhanced_metadata["current_migration"] = None

@@ -239,11 +239,21 @@ class TestInteractiveServiceSelection:
 
     def test_interactive_project_selection_includes_services(self):
         """Test that interactive project selection includes service prompts."""
-        from unittest.mock import patch
+        from unittest.mock import MagicMock, patch
 
         from aegis.cli.interactive import interactive_project_selection
 
-        with patch("typer.confirm") as mock_confirm:
+        # Mock questionary.select for auth level prompt
+        mock_questionary_result = MagicMock()
+        mock_questionary_result.ask.return_value = "basic"
+
+        with (
+            patch("typer.confirm") as mock_confirm,
+            patch(
+                "aegis.cli.interactive.questionary.select",
+                return_value=mock_questionary_result,
+            ),
+        ):
             # Simulate: no components selected, but yes auth service + yes to database confirmation + no AI service
             mock_confirm.side_effect = [
                 False,  # redis
@@ -261,7 +271,7 @@ class TestInteractiveServiceSelection:
 
             assert components == []  # No components selected
             assert scheduler_backend == "memory"  # Default
-            assert "auth" in services  # Auth service selected
+            assert any("auth" in s for s in services)  # Auth service selected
 
     def test_interactive_project_selection_no_services(self):
         """Test that services can be declined in interactive mode."""

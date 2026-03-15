@@ -97,6 +97,15 @@ class OllamaMode:
     DOCKER_URL = "http://ollama:11434"  # For Docker service
 
 
+class AuthLevels:
+    """Auth level options for the auth service."""
+
+    BASIC = "basic"
+    RBAC = "rbac"
+
+    ALL = [BASIC, RBAC]
+
+
 class AnswerKeys:
     """Keys in Copier .copier-answers.yml configuration."""
 
@@ -131,6 +140,9 @@ class AnswerKeys:
     AI_BACKEND = "ai_backend"
     AI_WITH_PERSISTENCE = "ai_with_persistence"
     AI_RAG = "ai_rag"
+    AUTH_LEVEL = "auth_level"
+    AUTH_RBAC = "include_auth_rbac"
+    AUTH_ORG = "include_auth_org"
     AI_VOICE = "ai_voice"
     OLLAMA_MODE = "ollama_mode"
     PROJECT_SLUG = "project_slug"

@@ -9,6 +9,10 @@ import typer
 
 from ..constants import ComponentNames, Messages, WorkerBackends
 from ..core.ai_service_parser import is_ai_service_with_options, parse_ai_service_config
+from ..core.auth_service_parser import (
+    is_auth_service_with_options,
+    parse_auth_service_config,
+)
 from ..core.component_utils import (
     clean_component_names,
     extract_base_component_name,
@@ -19,7 +23,7 @@ from ..core.component_utils import (
 from ..core.dependency_resolver import DependencyResolver
 from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES
-from .interactive import set_ai_service_config
+from .interactive import set_ai_service_config, set_auth_level_selection
 from .utils import expand_scheduler_dependencies
 
 
@@ -185,6 +189,20 @@ def validate_and_resolve_services(
                 )
             except ValueError as e:
                 typer.secho(f"Invalid AI service syntax: {e}", fg="red", err=True)
+                raise typer.Exit(1)
+
+    # Parse Auth service bracket syntax and store config
+    for service in selected_services:
+        if is_auth_service_with_options(service):
+            try:
+                auth_config = parse_auth_service_config(service)
+                set_auth_level_selection(
+                    service_name="auth",
+                    level=auth_config.level,
+                )
+                typer.echo(f"Auth service: level={auth_config.level}")
+            except ValueError as e:
+                typer.secho(f"Invalid auth service syntax: {e}", fg="red", err=True)
                 raise typer.Exit(1)
 
     # Resolve services to components
