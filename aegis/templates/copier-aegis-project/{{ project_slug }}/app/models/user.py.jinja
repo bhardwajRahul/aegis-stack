@@ -13,6 +13,9 @@ class UserBase(SQLModel):
     full_name: str | None = None
     is_active: bool = Field(default=True)
     is_verified: bool = Field(default=False)
+{% if include_auth_rbac %}
+    role: str = Field(default="user")
+{% endif %}
 
 
 class User(UserBase, table=True):
