@@ -13,12 +13,14 @@ from ..config.defaults import DEFAULT_PYTHON_VERSION
 from ..constants import (
     AIFrameworks,
     AnswerKeys,
+    AuthLevels,
     ComponentNames,
     OllamaMode,
     StorageBackends,
     WorkerBackends,
 )
 from .ai_service_parser import is_ai_service_with_options, parse_ai_service_config
+from .auth_service_parser import is_auth_service_with_options, parse_auth_service_config
 from .component_utils import (
     extract_base_component_name,
     extract_base_service_name,
@@ -29,6 +31,7 @@ from .services import SERVICES
 
 # Service names for bracket syntax detection
 SERVICE_AI = "ai"
+SERVICE_AUTH = "auth"
 
 
 class TemplateGenerator:
@@ -112,6 +115,15 @@ class TemplateGenerator:
                     self.ai_rag = ai_config.rag_enabled
                     self.ai_voice = ai_config.voice_enabled
                     user_specified_ai_backend = True
+                break
+
+        # Extract auth level from auth[level] format in services
+        self.auth_level = AuthLevels.BASIC  # Default to basic
+        for service in self.selected_services:
+            if extract_base_service_name(service) == SERVICE_AUTH:
+                if is_auth_service_with_options(service):
+                    auth_config = parse_auth_service_config(service)
+                    self.auth_level = auth_config.level
                 break
 
         # Auto-detect: if AI service selected AND database available AND no explicit backend,
@@ -198,6 +210,13 @@ class TemplateGenerator:
                 for s in self.selected_services
             )
             else "no",
+            # Auth level selection (basic or rbac)
+            AnswerKeys.AUTH_LEVEL: self._get_auth_level(),
+            # Derived auth level flags for template conditionals
+            AnswerKeys.AUTH_RBAC: "yes"
+            if self._get_auth_level() == AuthLevels.RBAC
+            else "no",
+            AnswerKeys.AUTH_ORG: "no",  # Reserved for future org-level auth
             AnswerKeys.AI: "yes"
             if any(
                 extract_base_service_name(s) == AnswerKeys.SERVICE_AI
@@ -386,6 +405,32 @@ class TemplateGenerator:
         from ..cli.interactive import get_ollama_mode_selection
 
         return get_ollama_mode_selection("ai")
+
+    def _get_auth_level(self) -> str:
+        """
+        Get auth level selection (basic or rbac).
+
+        Uses the value parsed from bracket syntax in __init__, falling back
+        to the interactive global selection.
+
+        Returns:
+            Auth level string
+        """
+        has_auth = any(
+            extract_base_service_name(s) == AnswerKeys.SERVICE_AUTH
+            for s in self.selected_services
+        )
+        if not has_auth:
+            return AuthLevels.BASIC  # Default
+
+        # If bracket syntax was parsed, self.auth_level is already set
+        if self.auth_level != AuthLevels.BASIC:
+            return self.auth_level
+
+        # Fall back to interactive global selection
+        from ..cli.interactive import get_auth_level_selection
+
+        return get_auth_level_selection("auth")
 
     def _get_ai_framework_deps(self) -> list[str]:
         """

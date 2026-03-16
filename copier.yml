@@ -160,6 +160,27 @@ include_auth:
   help: "Include authentication service with JWT?"
   default: false
 
+auth_level:
+  type: str
+  help: "Authentication level"
+  default: "basic"
+  choices:
+    - "basic"
+    - "rbac"
+  when: "{{ include_auth }}"
+
+include_auth_rbac:
+  type: bool
+  help: "Include role-based access control?"
+  default: "{{ auth_level == 'rbac' }}"
+  when: "{{ include_auth }}"
+
+include_auth_org:
+  type: bool
+  help: "Include multi-tenant organization support?"
+  default: false
+  when: "{{ include_auth }}"
+
 include_ai:
   type: bool
   help: "Include AI service?"

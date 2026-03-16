@@ -15,6 +15,7 @@ from ..constants import (
     AIFrameworks,
     AIProviders,
     AnswerKeys,
+    AuthLevels,
     ComponentNames,
     Messages,
     OllamaMode,
@@ -41,6 +42,9 @@ _skip_llm_sync_selection: dict[str, bool] = {}
 
 # Global variable to store Ollama mode selection for template generation
 _ollama_mode_selection: dict[str, str] = {}
+
+# Global variable to store auth level selection for template generation
+_auth_level_selection: dict[str, str] = {}
 
 # Global variable to store database engine selection for template generation
 _database_engine_selection: str | None = None
@@ -324,6 +328,9 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
             for service_name, service_spec in auth_services.items():
                 prompt = f"  Add {service_spec.description.lower()}?"
                 if typer.confirm(prompt, default=True):
+                    # Prompt for auth level first
+                    level = interactive_auth_service_config(service_name)
+
                     # Auth service requires database - provide explicit confirmation
                     typer.echo("\nDatabase Required:")
                     typer.echo("  Authentication requires a database for user storage")
@@ -336,17 +343,19 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
 
                     if database_already_selected:
                         typer.secho("Database component already selected", fg="green")
-                        selected_services.append(service_name)
                     else:
                         auth_confirm_prompt = "  Continue and add database component?"
-                        if typer.confirm(auth_confirm_prompt, default=True):
-                            selected_services.append(service_name)
-                            # Note: Database will be auto-added by service resolution in init.py
-                            typer.secho(
-                                "Authentication + Database configured", fg="green"
-                            )
-                        else:
+                        if not typer.confirm(auth_confirm_prompt, default=True):
                             typer.echo("Authentication service cancelled")
+                            continue
+
+                    # Build auth service string with bracket syntax
+                    service_string = f"{service_name}[{level}]"
+                    selected_services.append(service_string)
+
+                    # Note: Database will be auto-added by service resolution in init.py
+                    if not database_already_selected:
+                        typer.secho("Authentication + Database configured", fg="green")
 
         # AI & Machine Learning Services
         ai_services = get_services_by_type(ServiceType.AI)
@@ -564,6 +573,86 @@ def clear_all_ai_selections() -> None:
     clear_skip_llm_sync_selection()
     clear_ollama_mode_selection()
     clear_database_engine_selection()
+    clear_auth_level_selection()
+
+
+def get_auth_level_selection(service_name: str = "auth") -> str:
+    """
+    Get auth level selection from interactive session.
+
+    Args:
+        service_name: Name of the auth service (defaults to "auth")
+
+    Returns:
+        Selected auth level, or default (basic) if none selected
+    """
+    return _auth_level_selection.get(service_name, AuthLevels.BASIC)
+
+
+def set_auth_level_selection(
+    service_name: str = "auth", level: str | None = None
+) -> None:
+    """
+    Set auth level selection from CLI arguments or bracket syntax.
+
+    Args:
+        service_name: Name of the auth service (defaults to "auth")
+        level: Auth level (basic or rbac) or None to skip
+    """
+    global _auth_level_selection
+    if level is not None:
+        _auth_level_selection[service_name] = level
+
+
+def clear_auth_level_selection() -> None:
+    """Clear stored auth level selection (useful for testing)."""
+    global _auth_level_selection
+    _auth_level_selection.clear()
+
+
+def interactive_auth_service_config(
+    service_name: str = AnswerKeys.SERVICE_AUTH,
+) -> str:
+    """
+    Interactive auth service configuration prompts.
+
+    Prompts user for auth level selection.
+    Stores selection in global state for template generation.
+
+    Args:
+        service_name: Name of the auth service (defaults to "auth")
+
+    Returns:
+        Selected auth level string
+    """
+    global _auth_level_selection
+
+    typer.echo("\nAuthentication Level:")
+
+    choices = [
+        questionary.Choice(
+            title="Basic - Email/password login",
+            value=AuthLevels.BASIC,
+        ),
+        questionary.Choice(
+            title="With Roles - + role-based access control",
+            value=AuthLevels.RBAC,
+        ),
+    ]
+
+    result = questionary.select(
+        "What type of authentication?",
+        choices=choices,
+        default=AuthLevels.BASIC,
+    ).ask()
+
+    if result is None:
+        raise typer.Abort()
+
+    _auth_level_selection[service_name] = result
+    typer.secho(f"  Selected auth level: {result}", fg="green")
+
+    return result
 
 
 def interactive_ai_service_config(
@@ -1007,7 +1096,10 @@ def interactive_service_selection(project_path: Path) -> list[str]:
 
             prompt = f"  Add {service_spec.description.lower()}{requirement_text}?"
             if typer.confirm(prompt, default=True):
-                selected_services.append(service_name)
+                # Prompt for auth level
+                level = interactive_auth_service_config(service_name)
+                service_string = f"{service_name}[{level}]"
+                selected_services.append(service_string)
 
                 if missing_components:
                     typer.echo(

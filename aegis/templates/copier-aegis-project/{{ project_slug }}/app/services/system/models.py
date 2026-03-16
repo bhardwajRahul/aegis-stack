@@ -238,5 +238,18 @@ class Alert(BaseModel):
     )
 
 
+class MigrationInfo(BaseModel):
+    """Migration file metadata for dashboard display."""
+
+    revision: str
+    down_revision: str | None = None
+    description: str = "No description"
+    content: str = ""
+    file_mtime: float = 0.0
+    create_date: str | None = None
+    file_path: str = ""
+    is_current: bool = False
+
+
 # Singleton for alert severity constants
 alert_severity = AlertSeverity()
