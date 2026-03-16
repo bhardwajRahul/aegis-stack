@@ -119,11 +119,13 @@ class TemplateGenerator:
 
         # Extract auth level from auth[level] format in services
         self.auth_level = AuthLevels.BASIC  # Default to basic
+        self._user_specified_auth_level = False
         for service in self.selected_services:
             if extract_base_service_name(service) == SERVICE_AUTH:
                 if is_auth_service_with_options(service):
                     auth_config = parse_auth_service_config(service)
                     self.auth_level = auth_config.level
+                    self._user_specified_auth_level = True
                 break
 
         # Auto-detect: if AI service selected AND database available AND no explicit backend,
@@ -423,8 +425,8 @@ class TemplateGenerator:
         if not has_auth:
             return AuthLevels.BASIC  # Default
 
-        # If bracket syntax was parsed, self.auth_level is already set
-        if self.auth_level != AuthLevels.BASIC:
+        # If bracket syntax was used, trust the parsed value
+        if self._user_specified_auth_level:
             return self.auth_level
 
         # Fall back to interactive global selection

@@ -90,6 +90,7 @@ AUTH_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec(
                     "is_verified", "sa.Boolean()", nullable=False, default="False"
                 ),
+                ColumnSpec("role", "sa.String()", nullable=False, default="'user'"),
                 ColumnSpec("hashed_password", "sa.String()", nullable=False),
                 ColumnSpec("last_login", "sa.DateTime()", nullable=True),
                 ColumnSpec("created_at", "sa.DateTime()", nullable=False),

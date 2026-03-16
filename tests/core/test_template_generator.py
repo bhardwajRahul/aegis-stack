@@ -8,7 +8,7 @@ is available.
 
 from pathlib import Path
 
-from aegis.constants import StorageBackends
+from aegis.constants import AuthLevels, StorageBackends
 from aegis.core.template_generator import TemplateGenerator
 
 
@@ -328,3 +328,131 @@ class TestTemplateGeneratorRagAndVoice:
         context = gen.get_template_context()
         assert context["ai_rag"] == "yes"
         assert context["ai_voice"] == "yes"
+
+
+class TestTemplateGeneratorAuthLevel:
+    """Test auth service level configuration in template context.
+
+    These tests verify that the auth_level and include_auth_rbac flags
+    are correctly set in the template context when auth service is selected
+    with different level specifications.
+    """
+
+    def setup_method(self) -> None:
+        """Clear auth level selection before each test."""
+        from aegis.cli.interactive import clear_auth_level_selection
+
+        clear_auth_level_selection()
+
+    def test_auth_basic_default(self) -> None:
+        """Auth service should default to basic level."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth"],
+        )
+        assert gen.auth_level == AuthLevels.BASIC
+
+    def test_auth_rbac_bracket_syntax(self) -> None:
+        """Auth service with auth[rbac] syntax should set rbac level."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth[rbac]"],
+        )
+        assert gen.auth_level == AuthLevels.RBAC
+
+    def test_auth_basic_bracket_syntax(self) -> None:
+        """Auth service with auth[basic] syntax should set basic level."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth[basic]"],
+        )
+        assert gen.auth_level == AuthLevels.BASIC
+
+    def test_no_auth_defaults_to_basic(self) -> None:
+        """Without auth service, auth_level should default to basic."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=[],
+        )
+        assert gen.auth_level == AuthLevels.BASIC
+
+    def test_context_auth_level_basic(self) -> None:
+        """Template context should include auth_level as 'basic' when basic."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth"],
+        )
+        context = gen.get_template_context()
+        assert context["auth_level"] == AuthLevels.BASIC
+
+    def test_context_auth_basic_bracket_overrides_interactive_rbac(self) -> None:
+        """Explicit auth[basic] should override prior interactive RBAC selection."""
+        from aegis.cli.interactive import set_auth_level_selection
+
+        set_auth_level_selection(service_name="auth", level="rbac")
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth[basic]"],
+        )
+        context = gen.get_template_context()
+        assert context["auth_level"] == "basic"
+        assert context["include_auth_rbac"] == "no"
+
+    def test_context_auth_level_rbac(self) -> None:
+        """Template context should include auth_level as 'rbac' when rbac."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth[rbac]"],
+        )
+        context = gen.get_template_context()
+        assert context["auth_level"] == AuthLevels.RBAC
+
+    def test_context_include_auth_rbac_no(self) -> None:
+        """Template context should include_auth_rbac as 'no' when basic."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth"],
+        )
+        context = gen.get_template_context()
+        assert context["include_auth_rbac"] == "no"
+
+    def test_context_include_auth_rbac_yes(self) -> None:
+        """Template context should include_auth_rbac as 'yes' when rbac."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth[rbac]"],
+        )
+        context = gen.get_template_context()
+        assert context["include_auth_rbac"] == "yes"
+
+    def test_auth_with_other_services(self) -> None:
+        """Auth with other services should preserve auth level."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=["database"],
+            selected_services=["auth[rbac]", "ai"],
+        )
+        assert gen.auth_level == AuthLevels.RBAC
+        context = gen.get_template_context()
+        assert context["include_auth_rbac"] == "yes"
+        assert context["include_ai"] == "yes"
+
+    def test_auth_empty_brackets_defaults_to_basic(self) -> None:
+        """Auth service with auth[] (empty brackets) should default to basic."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth[]"],
+        )
+        assert gen.auth_level == AuthLevels.BASIC
+        context = gen.get_template_context()
+        assert context["include_auth_rbac"] == "no"

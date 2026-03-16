@@ -57,3 +57,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
     truncated = _truncate_password(plain_password)
     return bcrypt.checkpw(truncated.encode("utf-8"), hashed_password.encode("utf-8"))
+
+{% if include_auth_rbac %}
+
+# Role constants
+ROLE_ADMIN = "admin"
+ROLE_MODERATOR = "moderator"
+ROLE_USER = "user"
+VALID_ROLES = {ROLE_ADMIN, ROLE_MODERATOR, ROLE_USER}
+{% endif %}
