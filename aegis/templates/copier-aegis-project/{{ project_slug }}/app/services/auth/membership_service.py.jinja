@@ -1,0 +1,96 @@
+"""Membership service for managing organization members."""
+{% if include_auth_org %}
+
+from datetime import UTC, datetime
+
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.models.org import (
+    VALID_ORG_ROLES,
+    Organization,
+    OrganizationMember,
+)
+
+
+class MembershipService:
+    """Service for managing organization memberships."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    async def add_member(
+        self, org_id: int, user_id: int, role: str = "member"
+    ) -> OrganizationMember:
+        """Add a user to an organization."""
+        if role not in VALID_ORG_ROLES:
+            raise ValueError(f"Invalid org role: {role}. Valid: {VALID_ORG_ROLES}")
+        member = OrganizationMember(
+            organization_id=org_id,
+            user_id=user_id,
+            role=role,
+            joined_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+        self.db.add(member)
+        await self.db.commit()
+        await self.db.refresh(member)
+        return member
+
+    async def remove_member(self, org_id: int, user_id: int) -> bool:
+        """Remove a user from an organization."""
+        member = await self.get_member(org_id, user_id)
+        if not member:
+            return False
+        await self.db.delete(member)
+        await self.db.commit()
+        return True
+
+    async def get_member(
+        self, org_id: int, user_id: int
+    ) -> OrganizationMember | None:
+        """Get a specific membership."""
+        statement = select(OrganizationMember).where(
+            OrganizationMember.organization_id == org_id,
+            OrganizationMember.user_id == user_id,
+        )
+        result = await self.db.exec(statement)
+        return result.first()
+
+    async def update_member_role(
+        self, org_id: int, user_id: int, role: str
+    ) -> OrganizationMember | None:
+        """Update a member's role within an organization."""
+        if role not in VALID_ORG_ROLES:
+            raise ValueError(f"Invalid org role: {role}. Valid: {VALID_ORG_ROLES}")
+        member = await self.get_member(org_id, user_id)
+        if not member:
+            return None
+        member.role = role
+        self.db.add(member)
+        await self.db.commit()
+        await self.db.refresh(member)
+        return member
+
+    async def list_org_members(self, org_id: int) -> list[OrganizationMember]:
+        """List all members of an organization."""
+        statement = select(OrganizationMember).where(
+            OrganizationMember.organization_id == org_id
+        )
+        result = await self.db.exec(statement)
+        return list(result.all())
+
+    async def list_user_orgs(self, user_id: int) -> list[Organization]:
+        """List all organizations a user belongs to."""
+        statement = (
+            select(Organization)
+            .join(
+                OrganizationMember,
+                OrganizationMember.organization_id == Organization.id,
+            )
+            .where(OrganizationMember.user_id == user_id)
+        )
+        result = await self.db.exec(statement)
+        return list(result.all())
+{% else %}
+# Membership service not included (auth_level != org)
+{% endif %}

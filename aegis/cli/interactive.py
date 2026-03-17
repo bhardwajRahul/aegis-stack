@@ -638,6 +638,10 @@ def interactive_auth_service_config(
             title="With Roles - + role-based access control",
             value=AuthLevels.RBAC,
         ),
+        questionary.Choice(
+            title="With Organizations - + multi-tenant support",
+            value=AuthLevels.ORG,
+        ),
     ]
 
     result = questionary.select(

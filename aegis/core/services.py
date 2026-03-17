@@ -58,6 +58,7 @@ SERVICES: dict[str, ServiceSpec] = {
         template_files=[
             "app/components/backend/api/auth/",
             "app/models/user.py",
+            "app/models/org.py",
             "app/services/auth/",
             "app/core/security.py",
         ],

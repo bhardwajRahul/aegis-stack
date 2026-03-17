@@ -101,6 +101,55 @@ AUTH_MIGRATION = ServiceMigrationSpec(
     ],
 )
 
+ORG_MIGRATION = ServiceMigrationSpec(
+    service_name="auth_org",
+    description="Organization and membership tables",
+    tables=[
+        TableSpec(
+            name="organization",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("name", "sa.String()", nullable=False),
+                ColumnSpec("slug", "sa.String()", nullable=False),
+                ColumnSpec("description", "sa.String()", nullable=True),
+                ColumnSpec("is_active", "sa.Boolean()", nullable=False, default="True"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=True),
+            ],
+            indexes=[IndexSpec("ix_organization_slug", ["slug"], unique=True)],
+        ),
+        TableSpec(
+            name="organization_member",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=False),
+                ColumnSpec("user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("role", "sa.String()", nullable=False, default="'member'"),
+                ColumnSpec("joined_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec(
+                    "ix_org_member_org_user",
+                    ["organization_id", "user_id"],
+                    unique=True,
+                ),
+                IndexSpec(
+                    "ix_org_member_organization_id",
+                    ["organization_id"],
+                ),
+                IndexSpec(
+                    "ix_org_member_user_id",
+                    ["user_id"],
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["organization_id"], "organization", ["id"]),
+                ForeignKeySpec(["user_id"], "user", ["id"]),
+            ],
+        ),
+    ],
+)
+
 AI_MIGRATION = ServiceMigrationSpec(
     service_name="ai",
     description="AI service tables (LLM catalog, usage tracking, conversations)",
@@ -369,6 +418,7 @@ VOICE_MIGRATION = ServiceMigrationSpec(
 # Registry of all service migrations
 MIGRATION_SPECS: dict[str, ServiceMigrationSpec] = {
     "auth": AUTH_MIGRATION,
+    "auth_org": ORG_MIGRATION,
     "ai": AI_MIGRATION,
     "ai_voice": VOICE_MIGRATION,
 }
@@ -647,6 +697,17 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     include_auth = context.get("include_auth")
     if include_auth == "yes" or include_auth is True:
         services.append("auth")
+
+    # Auth org tables (only with org-level auth)
+    include_auth_org = context.get("include_auth_org")
+    auth_level = context.get("auth_level")
+    org_enabled = (
+        include_auth_org == "yes"
+        or include_auth_org is True
+        or (isinstance(auth_level, str) and auth_level.lower() == "org")
+    )
+    if (include_auth == "yes" or include_auth is True) and org_enabled:
+        services.append("auth_org")
 
     # AI service (only with persistence backend)
     include_ai = context.get("include_ai")
