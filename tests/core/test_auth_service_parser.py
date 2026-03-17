@@ -58,6 +58,16 @@ class TestAuthServiceParserLevels:
         result = parse_auth_service_config("auth[BASIC]")
         assert result.level == "basic"
 
+    def test_org_level(self) -> None:
+        """auth[org] → org"""
+        result = parse_auth_service_config("auth[org]")
+        assert result.level == "org"
+
+    def test_org_level_case_insensitive(self) -> None:
+        """auth[ORG] → org (case insensitive)"""
+        result = parse_auth_service_config("auth[ORG]")
+        assert result.level == "org"
+
 
 class TestAuthServiceParserWhitespace:
     """Test whitespace handling."""

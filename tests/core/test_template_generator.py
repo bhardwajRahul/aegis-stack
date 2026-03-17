@@ -456,3 +456,24 @@ class TestTemplateGeneratorAuthLevel:
         assert gen.auth_level == AuthLevels.BASIC
         context = gen.get_template_context()
         assert context["include_auth_rbac"] == "no"
+
+    def test_auth_org_bracket_syntax(self) -> None:
+        """Auth service with auth[org] syntax should set org level."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth[org]"],
+        )
+        assert gen.auth_level == AuthLevels.ORG
+
+    def test_context_auth_org_implies_rbac(self) -> None:
+        """Template context with org level should have both org and rbac flags."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth[org]"],
+        )
+        context = gen.get_template_context()
+        assert context["auth_level"] == AuthLevels.ORG
+        assert context["include_auth_org"] == "yes"
+        assert context["include_auth_rbac"] == "yes"

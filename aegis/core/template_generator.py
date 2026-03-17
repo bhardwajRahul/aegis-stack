@@ -212,13 +212,14 @@ class TemplateGenerator:
                 for s in self.selected_services
             )
             else "no",
-            # Auth level selection (basic or rbac)
-            AnswerKeys.AUTH_LEVEL: self._get_auth_level(),
+            # Auth level selection (basic, rbac, or org)
+            AnswerKeys.AUTH_LEVEL: (auth_level := self._get_auth_level()),
             # Derived auth level flags for template conditionals
+            # Org level implies RBAC (org gets both roles and orgs)
             AnswerKeys.AUTH_RBAC: "yes"
-            if self._get_auth_level() == AuthLevels.RBAC
+            if auth_level in (AuthLevels.RBAC, AuthLevels.ORG)
             else "no",
-            AnswerKeys.AUTH_ORG: "no",  # Reserved for future org-level auth
+            AnswerKeys.AUTH_ORG: "yes" if auth_level == AuthLevels.ORG else "no",
             AnswerKeys.AI: "yes"
             if any(
                 extract_base_service_name(s) == AnswerKeys.SERVICE_AI

@@ -102,8 +102,9 @@ class AuthLevels:
 
     BASIC = "basic"
     RBAC = "rbac"
+    ORG = "org"
 
-    ALL = [BASIC, RBAC]
+    ALL = [BASIC, RBAC, ORG]
 
 
 class AnswerKeys:

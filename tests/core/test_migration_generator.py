@@ -11,6 +11,7 @@ from aegis.core.migration_generator import (
     AI_MIGRATION,
     AUTH_MIGRATION,
     MIGRATION_SPECS,
+    ORG_MIGRATION,
     VOICE_MIGRATION,
     ColumnSpec,
     IndexSpec,
@@ -64,6 +65,50 @@ class TestGetServicesNeedingMigrations:
         context = {"include_auth": False, "include_ai": False, "ai_backend": "memory"}
         result = get_services_needing_migrations(context)
         assert result == []
+
+    def test_auth_org_needs_migration(self) -> None:
+        """Test auth_org service needs migration when org level enabled."""
+        context = {
+            "include_auth": "yes",
+            "include_auth_org": "yes",
+            "include_ai": False,
+            "ai_backend": "memory",
+        }
+        result = get_services_needing_migrations(context)
+        assert "auth_org" in result
+
+    def test_auth_org_not_needed_without_org(self) -> None:
+        """Test auth_org service not needed when org level disabled."""
+        context = {
+            "include_auth": "yes",
+            "include_auth_org": "no",
+            "include_ai": False,
+            "ai_backend": "memory",
+        }
+        result = get_services_needing_migrations(context)
+        assert "auth_org" not in result
+
+    def test_auth_org_needs_migration_via_auth_level(self) -> None:
+        """Test auth_org detected via auth_level fallback when include_auth_org missing."""
+        context = {
+            "include_auth": "yes",
+            "auth_level": "org",
+            "include_ai": False,
+            "ai_backend": "memory",
+        }
+        result = get_services_needing_migrations(context)
+        assert "auth_org" in result
+
+    def test_auth_org_not_needed_without_auth(self) -> None:
+        """Test auth_org service not needed when auth not included."""
+        context = {
+            "include_auth": False,
+            "include_auth_org": "yes",
+            "include_ai": False,
+            "ai_backend": "memory",
+        }
+        result = get_services_needing_migrations(context)
+        assert "auth_org" not in result
 
 
 class TestGetVersionsDir:
@@ -313,6 +358,54 @@ class TestMigrationSpecs:
         )
         assert len(message_table.foreign_keys) == 1
         assert message_table.foreign_keys[0].ref_table == "conversation"
+
+
+class TestOrgMigrationSpec:
+    """Test organization migration specification."""
+
+    def test_org_spec_exists(self) -> None:
+        """Test org migration spec is defined in MIGRATION_SPECS."""
+        assert "auth_org" in MIGRATION_SPECS
+        assert ORG_MIGRATION.service_name == "auth_org"
+
+    def test_org_has_two_tables(self) -> None:
+        """Organization migration should have two tables."""
+        assert len(ORG_MIGRATION.tables) == 2
+
+    def test_organization_table_columns(self) -> None:
+        """Organization table should have expected columns."""
+        org_table = next(t for t in ORG_MIGRATION.tables if t.name == "organization")
+        column_names = [col.name for col in org_table.columns]
+
+        assert "name" in column_names
+        assert "slug" in column_names
+        assert "description" in column_names
+        assert "is_active" in column_names
+        assert "created_at" in column_names
+        assert "updated_at" in column_names
+
+    def test_org_member_table_columns(self) -> None:
+        """Organization member table should have expected columns."""
+        member_table = next(
+            t for t in ORG_MIGRATION.tables if t.name == "organization_member"
+        )
+        column_names = [col.name for col in member_table.columns]
+
+        assert "organization_id" in column_names
+        assert "user_id" in column_names
+        assert "role" in column_names
+        assert "joined_at" in column_names
+
+    def test_org_member_foreign_keys(self) -> None:
+        """Organization member table should have foreign keys to org and user."""
+        member_table = next(
+            t for t in ORG_MIGRATION.tables if t.name == "organization_member"
+        )
+        assert len(member_table.foreign_keys) == 2
+
+        ref_tables = {fk.ref_table for fk in member_table.foreign_keys}
+        assert "organization" in ref_tables
+        assert "user" in ref_tables
 
 
 class TestDataclasses:

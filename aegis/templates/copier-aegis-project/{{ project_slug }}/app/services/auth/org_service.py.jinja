@@ -1,0 +1,66 @@
+"""Organization service for CRUD operations."""
+{% if include_auth_org %}
+
+from datetime import UTC, datetime
+
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.models.org import OrgCreate, Organization
+
+
+class OrgService:
+    """Service for managing organizations."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    async def create_org(self, org_data: OrgCreate) -> Organization:
+        """Create a new organization."""
+        org = Organization.model_validate(org_data)
+        self.db.add(org)
+        await self.db.commit()
+        await self.db.refresh(org)
+        return org
+
+    async def get_org_by_id(self, org_id: int) -> Organization | None:
+        """Get an organization by ID."""
+        return await self.db.get(Organization, org_id)
+
+    async def get_org_by_slug(self, slug: str) -> Organization | None:
+        """Get an organization by slug."""
+        statement = select(Organization).where(Organization.slug == slug)
+        result = await self.db.exec(statement)
+        return result.first()
+
+    async def update_org(self, org_id: int, **updates: str) -> Organization | None:
+        """Update an organization's fields."""
+        org = await self.get_org_by_id(org_id)
+        if not org:
+            return None
+        for field, value in updates.items():
+            if hasattr(org, field):
+                setattr(org, field, value)
+        org.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self.db.add(org)
+        await self.db.commit()
+        await self.db.refresh(org)
+        return org
+
+    async def delete_org(self, org_id: int) -> bool:
+        """Delete an organization."""
+        org = await self.get_org_by_id(org_id)
+        if not org:
+            return False
+        await self.db.delete(org)
+        await self.db.commit()
+        return True
+
+    async def list_orgs(self) -> list[Organization]:
+        """List all organizations."""
+        statement = select(Organization).order_by(Organization.created_at.desc())
+        result = await self.db.exec(statement)
+        return list(result.all())
+{% else %}
+# Organization service not included (auth_level != org)
+{% endif %}
