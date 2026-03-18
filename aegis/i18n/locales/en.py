@@ -112,8 +112,8 @@ MESSAGES: dict[str, str] = {
     "interactive.auth_level_label": "Authentication Level:",
     "interactive.auth_select": "What type of authentication?",
     "interactive.auth_basic": "Basic - Email/password login",
-    "interactive.auth_rbac": "With Roles - + role-based access control",
-    "interactive.auth_org": "With Organizations - + multi-tenant support",
+    "interactive.auth_rbac": "With Roles - + role-based access control (experimental)",
+    "interactive.auth_org": "With Organizations - + multi-tenant support (experimental)",
     "interactive.auth_selected": "Selected auth level: {level}",
     "interactive.auth_db_required": "Database Required:",
     "interactive.auth_db_reason": (
