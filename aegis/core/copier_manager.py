@@ -116,6 +116,9 @@ def generate_with_copier(
         AnswerKeys.OBSERVABILITY: template_context.get(AnswerKeys.OBSERVABILITY, "no")
         == "yes",
         AnswerKeys.AUTH: template_context.get(AnswerKeys.AUTH, "no") == "yes",
+        AnswerKeys.AUTH_LEVEL: template_context.get(AnswerKeys.AUTH_LEVEL, "basic"),
+        AnswerKeys.AUTH_RBAC: template_context.get(AnswerKeys.AUTH_RBAC, "no") == "yes",
+        AnswerKeys.AUTH_ORG: template_context.get(AnswerKeys.AUTH_ORG, "no") == "yes",
         AnswerKeys.AI: template_context.get(AnswerKeys.AI, "no") == "yes",
         AnswerKeys.COMMS: template_context.get(AnswerKeys.COMMS, "no") == "yes",
         AnswerKeys.AI_FRAMEWORK: template_context.get(
@@ -249,6 +252,8 @@ def generate_with_copier(
         ai_voice_enabled: bool = copier_data.get(AnswerKeys.AI_VOICE, False) is True
         context = {
             "include_auth": is_auth_included,
+            "include_auth_org": copier_data.get(AnswerKeys.AUTH_ORG, False) is True,
+            "auth_level": copier_data.get(AnswerKeys.AUTH_LEVEL, "basic"),
             "include_ai": is_ai_included,
             "ai_backend": ai_backend_str,
             "ai_voice": ai_voice_enabled,
@@ -355,6 +360,19 @@ def generate_with_copier(
             else:
                 # Production mode: use GitHub URL
                 answers["_src_path"] = GITHUB_TEMPLATE_URL
+
+            # Persist conditional auth fields (Copier may omit conditional
+            # questions from answers file when values are provided via data)
+            if copier_data.get(AnswerKeys.AUTH):
+                answers[AnswerKeys.AUTH_LEVEL] = copier_data.get(
+                    AnswerKeys.AUTH_LEVEL, "basic"
+                )
+                answers[AnswerKeys.AUTH_RBAC] = copier_data.get(
+                    AnswerKeys.AUTH_RBAC, False
+                )
+                answers[AnswerKeys.AUTH_ORG] = copier_data.get(
+                    AnswerKeys.AUTH_ORG, False
+                )
 
             with open(answers_file, "w") as f:
                 yaml.safe_dump(answers, f, default_flow_style=False, sort_keys=False)
