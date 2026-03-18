@@ -208,6 +208,9 @@ class TestCopierAnswersTemplate:
         # All service include flags that should be in the template
         required_service_flags = [
             "include_auth",
+            "auth_level",
+            "include_auth_rbac",
+            "include_auth_org",
             "include_ai",
             "include_comms",  # This was missing and caused the bug!
         ]

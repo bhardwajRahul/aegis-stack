@@ -167,18 +167,19 @@ auth_level:
   choices:
     - "basic"
     - "rbac"
+    - "org"
   when: "{{ include_auth }}"
 
 include_auth_rbac:
   type: bool
   help: "Include role-based access control?"
-  default: "{{ auth_level == 'rbac' }}"
+  default: "{{ auth_level in ['rbac', 'org'] }}"
   when: "{{ include_auth }}"
 
 include_auth_org:
   type: bool
   help: "Include multi-tenant organization support?"
-  default: false
+  default: "{{ auth_level == 'org' }}"
   when: "{{ include_auth }}"
 
 include_ai:
