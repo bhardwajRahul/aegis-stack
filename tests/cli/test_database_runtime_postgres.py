@@ -60,6 +60,7 @@ def _run_db_test(
     """Run a test script inside the generated PostgreSQL project."""
     if generated_db_project_postgres is None:
         pytest.skip("PostgreSQL project not available")
+        return  # unreachable, but helps type checkers understand the narrowing
 
     assert generated_db_project_postgres.project_path is not None
     result = run_project_command(

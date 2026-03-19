@@ -50,6 +50,7 @@ class TestAIProviderSelection:
             False,  # cohere
             False,  # ollama
             True,  # Enable RAG? Yes (default)
+            True,  # Enable voice?
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -85,6 +86,7 @@ class TestAIProviderSelection:
             False,  # cohere
             False,  # ollama
             True,  # Enable RAG? Yes (default)
+            True,  # Enable voice?
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -121,6 +123,7 @@ class TestAIProviderSelection:
             False,  # cohere
             False,  # ollama
             True,  # Enable RAG? Yes (default)
+            True,  # Enable voice?
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -199,6 +202,7 @@ class TestAIBackendSelection:
                 False,  # cohere
                 False,  # ollama
                 True,  # Enable RAG? Yes (default)
+                True,  # Enable voice?
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -245,6 +249,7 @@ class TestAIBackendSelection:
                 False,  # cohere
                 False,  # ollama
                 True,  # Enable RAG? Yes (default)
+                True,  # Enable voice?
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -285,6 +290,7 @@ class TestAIBackendSelection:
             False,  # cohere
             False,  # ollama
             True,  # Enable RAG? Yes (default)
+            True,  # Enable voice?
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -444,6 +450,7 @@ class TestAIConfigurationEndToEnd:
             False,
             False,  # Provider selection (7 providers: openai yes, anthropic no, google yes, groq yes, mistral no, cohere no, ollama no)
             True,  # Enable RAG? Yes (default)
+            True,  # Enable voice?
         ]
 
         # Run interactive selection
@@ -543,6 +550,7 @@ class TestOllamaModeSelection:
             True,  # SELECT Ollama
             True,  # Ollama mode: connect to host (True = HOST)
             True,  # Enable RAG
+            True,  # Enable voice?
         ]
 
         interactive_project_selection()

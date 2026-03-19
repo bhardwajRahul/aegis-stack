@@ -47,6 +47,8 @@ uvx aegis-stack init task-processor --components scheduler,worker
 cd my-api && make serve
 ```
 
+> **CLI language support:** Use `aegis --lang zh` for Simplified Chinese (简体中文), or set `AEGIS_LANG=zh`.
+
 **Installation alternatives:** See the [Installation Guide](https://lbedner.github.io/aegis-stack/installation/) for `uv tool install`, `pip install`, and development setup.
 
 ## Overseer - Built-In System Visibility

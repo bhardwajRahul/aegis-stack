@@ -24,6 +24,19 @@ from ..constants import (
 )
 from ..core.components import COMPONENTS, CORE_COMPONENTS, ComponentSpec, ComponentType
 from ..core.services import SERVICES, ServiceType, get_services_by_type
+from ..i18n import t
+
+
+def _translated_desc(name: str, fallback: str) -> str:
+    """Get translated description for a component or service, with fallback."""
+    # Try component.* first, then service.*
+    for prefix in ("component", "service"):
+        key = f"{prefix}.{name}"
+        result = t(key)
+        if result != key:
+            return result
+    return fallback
+
 
 # Global variable to store AI provider selections for template generation
 _ai_provider_selection: dict[str, list[str]] = {}
@@ -36,6 +49,9 @@ _ai_backend_selection: dict[str, str] = {}
 
 # Global variable to store AI RAG selection for template generation
 _ai_rag_selection: dict[str, bool] = {}
+
+# Global variable to store AI voice selection for template generation
+_ai_voice_selection: dict[str, bool] = {}
 
 # Global variable to store skip LLM sync selection for template generation
 _skip_llm_sync_selection: dict[str, bool] = {}
@@ -68,26 +84,26 @@ def select_database_engine(context: str = "Database") -> str:
     # If already selected, reuse that choice
     if _database_engine_selection is not None:
         typer.secho(
-            f"  Using previously selected database: {_database_engine_selection.upper()}",
+            f"  {t('interactive.db_reuse', engine=_database_engine_selection.upper())}",
             fg="green",
         )
         return _database_engine_selection
 
-    typer.echo(f"\n{context} Database Engine:")
+    typer.echo(f"\n{t('interactive.db_engine_label', context=context)}")
 
     choices = [
         questionary.Choice(
-            title="SQLite - Simple, file-based (good for development)",
+            title=t("interactive.db_sqlite"),
             value=StorageBackends.SQLITE,
         ),
         questionary.Choice(
-            title="PostgreSQL - Production-ready, multi-container support",
+            title=t("interactive.db_postgres"),
             value=StorageBackends.POSTGRES,
         ),
     ]
 
     result = questionary.select(
-        "Select database engine:",
+        t("interactive.db_select"),
         choices=choices,
         default=StorageBackends.SQLITE,
     ).ask()
@@ -118,25 +134,25 @@ def select_worker_backend() -> str:
     Returns:
         Selected backend: "arq", "taskiq", or "dramatiq"
     """
-    typer.echo("\nWorker Backend:")
+    typer.echo(f"\n{t('interactive.worker_label')}")
 
     choices = [
         questionary.Choice(
-            title="arq - Async, lightweight (default)",
+            title=t("interactive.worker_arq"),
             value=WorkerBackends.ARQ,
         ),
         questionary.Choice(
-            title="Dramatiq - Process-based, ideal for CPU-bound work",
+            title=t("interactive.worker_dramatiq"),
             value=WorkerBackends.DRAMATIQ,
         ),
         questionary.Choice(
-            title="TaskIQ - Async, framework-style with per-queue brokers",
+            title=t("interactive.worker_taskiq"),
             value=WorkerBackends.TASKIQ,
         ),
     ]
 
     result = questionary.select(
-        "Select worker backend:",
+        t("interactive.worker_select"),
         choices=choices,
         default=WorkerBackends.ARQ,
     ).ask()
@@ -178,9 +194,9 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
         Tuple of (selected_components, scheduler_backend, selected_services, skip_llm_sync)
     """
 
-    Messages.print_section_header(Messages.SECTION_COMPONENT_SELECTION)
+    Messages.print_section_header(t("interactive.component_selection"))
     typer.secho(
-        f"Core components ({' + '.join(CORE_COMPONENTS)}) included automatically\n",
+        t("interactive.core_included", components=" + ".join(CORE_COMPONENTS)) + "\n",
         fg="green",
     )
 
@@ -192,7 +208,7 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
     # Get all infrastructure components from registry
     infra_components = get_interactive_infrastructure_components()
 
-    typer.echo("Infrastructure Components:")
+    typer.echo(t("interactive.infra_header"))
 
     # Process components in a specific order to handle dependencies
     component_order = ComponentNames.INFRASTRUCTURE_ORDER
@@ -209,19 +225,22 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
         if component_name == ComponentNames.WORKER:
             if ComponentNames.REDIS in selected:
                 # Redis already selected, simple worker prompt
-                prompt = f"  Add {component_spec.description.lower()}?"
+                desc = _translated_desc(component_name, component_spec.description)
+                prompt = f"  {t('interactive.add_prompt', description=desc)}"
                 if typer.confirm(prompt, default=True):
                     backend = select_worker_backend()
                     if backend == WorkerBackends.ARQ:
                         selected.append(ComponentNames.WORKER)
                     else:
                         selected.append(f"{ComponentNames.WORKER}[{backend}]")
-                    typer.secho(f"Worker with {backend} backend configured", fg="green")
+                    typer.secho(
+                        t("interactive.worker_configured", backend=backend),
+                        fg="green",
+                    )
             else:
                 # Redis not selected, offer to add both
-                prompt = (
-                    f"  Add {component_spec.description.lower()}? (will auto-add Redis)"
-                )
+                desc = _translated_desc(component_name, component_spec.description)
+                prompt = f"  {t('interactive.add_with_redis', description=desc)}"
                 if typer.confirm(prompt, default=True):
                     backend = select_worker_backend()
                     if backend == WorkerBackends.ARQ:
@@ -233,19 +252,20 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
                                 f"{ComponentNames.WORKER}[{backend}]",
                             ]
                         )
-                    typer.secho(f"Worker with {backend} backend configured", fg="green")
+                    typer.secho(
+                        t("interactive.worker_configured", backend=backend),
+                        fg="green",
+                    )
         elif component_name == ComponentNames.SCHEDULER:
             # Enhanced scheduler selection with persistence and database options
-            prompt = f"  Add {component_spec.description}?"
+            desc = _translated_desc(component_name, component_spec.description)
+            prompt = f"  {t('interactive.add_prompt', description=desc)}"
             if typer.confirm(prompt, default=True):
                 selected.append(ComponentNames.SCHEDULER)
 
                 # Follow-up: persistence question
-                typer.echo("\nScheduler Persistence:")
-                persistence_prompt = (
-                    "  Do you want to persist scheduled jobs? "
-                    "(Enables job history, recovery after restarts)"
-                )
+                typer.echo(f"\n{t('interactive.scheduler_persistence')}")
+                persistence_prompt = f"  {t('interactive.persist_prompt')}"
                 if typer.confirm(persistence_prompt, default=True):
                     # Database engine selection with arrow keys
                     database_engine = select_database_engine(context="Scheduler")
@@ -260,14 +280,17 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
                     database_added_by_scheduler = True
                     scheduler_backend = database_engine
                     typer.secho(
-                        f"Scheduler + {database_engine.upper()} database configured",
+                        t(
+                            "interactive.scheduler_db_configured",
+                            engine=database_engine.upper(),
+                        ),
                         fg="green",
                     )
 
                     # Show bonus backup job message only when database is added
-                    typer.echo("\nBonus: Adding database backup job")
+                    typer.echo(f"\n{t('interactive.bonus_backup')}")
                     typer.secho(
-                        "Scheduled daily database backup job included (runs at 2 AM)",
+                        t("interactive.backup_desc"),
                         fg="green",
                     )
 
@@ -278,20 +301,22 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
                 continue
 
             # Standard database prompt (when not added by scheduler)
-            prompt = f"  Add {component_spec.description}?"
+            desc = _translated_desc(component_name, component_spec.description)
+            prompt = f"  {t('interactive.add_prompt', description=desc)}"
             if typer.confirm(prompt, default=True):
                 selected.append(ComponentNames.DATABASE)
 
                 # Show bonus backup job message when database added with scheduler
                 if ComponentNames.SCHEDULER in selected:
-                    typer.echo("\nBonus: Adding database backup job")
+                    typer.echo(f"\n{t('interactive.bonus_backup')}")
                     typer.secho(
-                        "Scheduled daily database backup job included (runs at 2 AM)",
+                        t("interactive.backup_desc"),
                         fg="green",
                     )
         else:
             # Standard prompt for other components
-            prompt = f"  Add {component_spec.description}?"
+            desc = _translated_desc(component_name, component_spec.description)
+            prompt = f"  {t('interactive.add_prompt', description=desc)}"
             if typer.confirm(prompt, default=True):
                 selected.append(component_name)
 
@@ -314,27 +339,26 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
 
     if SERVICES:  # Only show services if any are available
         Messages.print_section_header(
-            Messages.SECTION_SERVICE_SELECTION, newline_before=True
+            t("interactive.service_selection"), newline_before=True
         )
-        typer.echo(
-            "Services provide business logic functionality for your application.\n"
-        )
+        typer.echo(t("interactive.services_intro") + "\n")
 
         # Group services by type for better organization
         auth_services = get_services_by_type(ServiceType.AUTH)
 
         if auth_services:
-            typer.echo("Authentication Services:")
+            typer.echo(t("interactive.auth_header"))
             for service_name, service_spec in auth_services.items():
-                prompt = f"  Add {service_spec.description.lower()}?"
+                desc = _translated_desc(service_name, service_spec.description)
+                prompt = f"  {t('interactive.add_prompt', description=desc)}"
                 if typer.confirm(prompt, default=True):
                     # Prompt for auth level first
                     level = interactive_auth_service_config(service_name)
 
                     # Auth service requires database - provide explicit confirmation
-                    typer.echo("\nDatabase Required:")
-                    typer.echo("  Authentication requires a database for user storage")
-                    typer.echo("  (user accounts, sessions, JWT tokens)")
+                    typer.echo(f"\n{t('interactive.auth_db_required')}")
+                    typer.echo(f"  {t('interactive.auth_db_reason')}")
+                    typer.echo(f"  {t('interactive.auth_db_details')}")
 
                     # Check if database is already selected
                     database_already_selected = any(
@@ -342,11 +366,11 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
                     )
 
                     if database_already_selected:
-                        typer.secho("Database component already selected", fg="green")
+                        typer.secho(t("interactive.auth_db_already"), fg="green")
                     else:
-                        auth_confirm_prompt = "  Continue and add database component?"
+                        auth_confirm_prompt = f"  {t('interactive.auth_db_confirm')}"
                         if not typer.confirm(auth_confirm_prompt, default=True):
-                            typer.echo("Authentication service cancelled")
+                            typer.echo(t("interactive.auth_cancelled"))
                             continue
 
                     # Build auth service string with bracket syntax
@@ -355,19 +379,20 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
 
                     # Note: Database will be auto-added by service resolution in init.py
                     if not database_already_selected:
-                        typer.secho("Authentication + Database configured", fg="green")
+                        typer.secho(t("interactive.auth_db_configured"), fg="green")
 
         # AI & Machine Learning Services
         ai_services = get_services_by_type(ServiceType.AI)
 
         if ai_services:
-            typer.echo("\nAI & Machine Learning Services:")
+            typer.echo(f"\n{t('interactive.ai_header')}")
             for service_name, service_spec in ai_services.items():
-                prompt = f"  Add {service_spec.description.lower()}?"
+                desc = _translated_desc(service_name, service_spec.description)
+                prompt = f"  {t('interactive.add_prompt', description=desc)}"
                 if typer.confirm(prompt, default=True):
                     # AI service requires backend (always available) - no dependency issues
                     # Use the reusable AI configuration function
-                    backend, framework, providers, rag_enabled = (
+                    backend, framework, providers, rag_enabled, voice_enabled = (
                         interactive_ai_service_config(service_name)
                     )
 
@@ -379,13 +404,13 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
 
                         if database_already_selected:
                             typer.secho(
-                                "  Database already selected - usage tracking enabled",
+                                f"  {t('interactive.ai_db_already')}",
                                 fg="green",
                             )
                         else:
                             selected.append(f"{ComponentNames.DATABASE}[{backend}]")
                             typer.secho(
-                                f"  Database ({backend}) added for usage tracking",
+                                f"  {t('interactive.ai_db_added', backend=backend)}",
                                 fg="green",
                             )
 
@@ -394,9 +419,11 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
                     options = [backend, framework] + providers
                     if rag_enabled:
                         options.append("rag")
+                    if voice_enabled:
+                        options.append("voice")
                     service_string = f"{service_name}[{','.join(options)}]"
                     selected_services.append(service_string)
-                    typer.secho("AI service configured", fg="green")
+                    typer.secho(t("interactive.ai_configured"), fg="green")
 
         # Future service types can be added here as they become available
         # payment_services = get_services_by_type(ServiceType.PAYMENT)
@@ -481,6 +508,25 @@ def clear_ai_rag_selection() -> None:
     """Clear stored AI RAG selection (useful for testing)."""
     global _ai_rag_selection
     _ai_rag_selection.clear()
+
+
+def get_ai_voice_selection(service_name: str = "ai") -> bool:
+    """
+    Get AI voice selection from interactive session.
+
+    Args:
+        service_name: Name of the AI service (defaults to "ai")
+
+    Returns:
+        True if voice is enabled, False otherwise
+    """
+    return _ai_voice_selection.get(service_name, False)
+
+
+def clear_ai_voice_selection() -> None:
+    """Clear stored AI voice selection (useful for testing)."""
+    global _ai_voice_selection
+    _ai_voice_selection.clear()
 
 
 def get_skip_llm_sync_selection(service_name: str = "ai") -> bool:
@@ -570,6 +616,7 @@ def clear_all_ai_selections() -> None:
     clear_ai_framework_selection()
     clear_ai_backend_selection()
     clear_ai_rag_selection()
+    clear_ai_voice_selection()
     clear_skip_llm_sync_selection()
     clear_ollama_mode_selection()
     clear_database_engine_selection()
@@ -627,25 +674,25 @@ def interactive_auth_service_config(
     """
     global _auth_level_selection
 
-    typer.echo("\nAuthentication Level:")
+    typer.echo(f"\n{t('interactive.auth_level_label')}")
 
     choices = [
         questionary.Choice(
-            title="Basic - Email/password login",
+            title=t("interactive.auth_basic"),
             value=AuthLevels.BASIC,
         ),
         questionary.Choice(
-            title="With Roles - + role-based access control",
+            title=t("interactive.auth_rbac"),
             value=AuthLevels.RBAC,
         ),
         questionary.Choice(
-            title="With Organizations - + multi-tenant support",
+            title=t("interactive.auth_org"),
             value=AuthLevels.ORG,
         ),
     ]
 
     result = questionary.select(
-        "What type of authentication?",
+        t("interactive.auth_select"),
         choices=choices,
         default=AuthLevels.BASIC,
     ).ask()
@@ -654,18 +701,18 @@ def interactive_auth_service_config(
         raise typer.Abort()
 
     _auth_level_selection[service_name] = result
-    typer.secho(f"  Selected auth level: {result}", fg="green")
+    typer.secho(f"  {t('interactive.auth_selected', level=result)}", fg="green")
 
     return result
 
 
 def interactive_ai_service_config(
     service_name: str = AnswerKeys.SERVICE_AI,
-) -> tuple[str, str, list[str], bool]:
+) -> tuple[str, str, list[str], bool, bool]:
     """
     Interactive AI service configuration prompts.
 
-    Prompts user for framework, backend, provider, and RAG selection.
+    Prompts user for framework, backend, provider, RAG, and voice selection.
     Stores selections in global state for template generation.
 
     Args:
@@ -681,26 +728,31 @@ def interactive_ai_service_config(
         _ai_rag_selection
 
     # Framework selection
-    typer.echo("\nAI Framework Selection:")
-    typer.echo("  Choose your AI framework:")
-    typer.echo("    1. PydanticAI - Type-safe, Pythonic AI framework (recommended)")
-    typer.echo("    2. LangChain - Popular framework with extensive integrations")
+    typer.echo(f"\n{t('interactive.ai_framework_label')}")
+    typer.echo(f"  {t('interactive.ai_framework_intro')}")
+    typer.echo(f"    1. {t('interactive.ai_pydanticai')}")
+    typer.echo(f"    2. {t('interactive.ai_langchain')}")
 
-    use_pydanticai = typer.confirm("  Use PydanticAI? (recommended)", default=True)
+    use_pydanticai = typer.confirm(
+        f"  {t('interactive.ai_use_pydanticai')}", default=True
+    )
     framework = AIFrameworks.PYDANTIC_AI if use_pydanticai else AIFrameworks.LANGCHAIN
     _ai_framework_selection[service_name] = framework
-    typer.secho(f"  Selected framework: {framework}", fg="green")
+    typer.secho(
+        f"  {t('interactive.ai_selected_framework', framework=framework)}",
+        fg="green",
+    )
 
     # AI Backend Selection
-    typer.echo("\nLLM Usage Tracking:")
+    typer.echo(f"\n{t('interactive.ai_tracking_label')}")
     enable_tracking = typer.confirm(
-        "  Enable usage tracking? (token counts, costs, conversation history)",
+        f"  {t('interactive.ai_tracking_prompt')}",
         default=True,
     )
 
     if enable_tracking:
         # Database engine selection with arrow keys (reuses previous selection)
-        backend = select_database_engine(context="AI Usage Tracking")
+        backend = select_database_engine(context=t("interactive.ai_tracking_context"))
     else:
         backend = StorageBackends.MEMORY
 
@@ -708,39 +760,40 @@ def interactive_ai_service_config(
 
     # LLM catalog sync prompt (only for database backends)
     if backend in (StorageBackends.SQLITE, StorageBackends.POSTGRES):
-        typer.echo("\nLLM Catalog Sync:")
-        typer.echo("  Syncing fetches latest model data from OpenRouter/LiteLLM APIs")
-        typer.echo("  This requires network access and takes ~30-60 seconds")
+        typer.echo(f"\n{t('interactive.ai_sync_label')}")
+        typer.echo(f"  {t('interactive.ai_sync_desc')}")
+        typer.echo(f"  {t('interactive.ai_sync_time')}")
         skip_sync = not typer.confirm(
-            "  Sync LLM catalog during project generation?",
+            f"  {t('interactive.ai_sync_prompt')}",
             default=True,  # Default to sync
         )
         _skip_llm_sync_selection[service_name] = skip_sync
         if not skip_sync:
-            typer.secho(
-                "  LLM catalog will be synced after project generation", fg="green"
-            )
+            typer.secho(f"  {t('interactive.ai_sync_will')}", fg="green")
         else:
-            typer.echo("  LLM sync skipped - static fixture data will be available")
+            typer.echo(f"  {t('interactive.ai_sync_skipped')}")
 
     # Provider selection
-    typer.echo("\nAI Provider Selection:")
-    typer.echo("  Choose AI providers to include (multiple selection supported)")
-    typer.echo("  Provider Options:")
+    typer.echo(f"\n{t('interactive.ai_provider_label')}")
+    typer.echo(f"  {t('interactive.ai_provider_intro')}")
+    typer.echo(f"  {t('interactive.ai_provider_options')}")
 
     providers: list[str] = []
 
     # Ask about each provider
     for (
         provider_id,
-        name,
-        description,
-        pricing,
+        _name,
+        _description,
+        _pricing,
         recommended,
     ) in AIProviders.PROVIDER_INFO:
-        recommend_text = " (Recommended)" if recommended else ""
+        provider_label = t(f"interactive.ai_provider.{provider_id}")
+        recommend_text = (
+            f" {t('interactive.ai_provider_recommended')}" if recommended else ""
+        )
         if typer.confirm(
-            f"    ☐ {name} - {description} ({pricing}){recommend_text}?",
+            f"    \u2610 {provider_label}{recommend_text}?",
             default=True,
         ):
             providers.append(provider_id)
@@ -748,70 +801,77 @@ def interactive_ai_service_config(
     # Handle no providers selected
     if not providers:
         typer.secho(
-            "  No providers selected, adding recommended defaults...",
+            f"  {t('interactive.ai_no_providers')}",
             fg="yellow",
         )
         providers = list(AIProviders.INTERACTIVE_DEFAULTS)
 
     # Show selected providers
-    typer.secho(f"\n  Selected providers: {', '.join(providers)}", fg="green")
-    typer.echo("  Dependencies will be optimized for your selection")
+    typer.secho(
+        f"\n  {t('interactive.ai_selected_providers', providers=', '.join(providers))}",
+        fg="green",
+    )
+    typer.echo(f"  {t('interactive.ai_deps_optimized')}")
 
     # Store provider selection in global context for template generation
     _ai_provider_selection[service_name] = providers
 
     # Ollama deployment mode selection (only if Ollama was selected)
     if AIProviders.OLLAMA in providers:
-        typer.echo("\nOllama Deployment Mode:")
-        typer.echo("  How do you want to run Ollama?")
-        typer.echo(
-            "    1. Host - Connect to Ollama running on your machine (Mac/Windows)"
-        )
-        typer.echo("    2. Docker - Run Ollama in a Docker container (Linux/Deploy)")
+        typer.echo(f"\n{t('interactive.ai_ollama_label')}")
+        typer.echo(f"  {t('interactive.ai_ollama_intro')}")
+        typer.echo(f"    1. {t('interactive.ai_ollama_host')}")
+        typer.echo(f"    2. {t('interactive.ai_ollama_docker')}")
 
         use_host = typer.confirm(
-            "  Connect to host Ollama? (recommended for Mac/Windows)",
+            f"  {t('interactive.ai_ollama_host_prompt')}",
             default=True,
         )
         ollama_mode = OllamaMode.HOST if use_host else OllamaMode.DOCKER
         _ollama_mode_selection[service_name] = ollama_mode
 
         if ollama_mode == OllamaMode.HOST:
-            typer.secho(
-                "  Ollama will connect to host.docker.internal:11434", fg="green"
-            )
-            typer.echo("  Make sure Ollama is running: ollama serve")
+            typer.secho(f"  {t('interactive.ai_ollama_host_ok')}", fg="green")
+            typer.echo(f"  {t('interactive.ai_ollama_host_hint')}")
         else:
-            typer.secho(
-                "  Ollama service will be added to docker-compose.yml", fg="green"
-            )
-            typer.echo("  Note: First startup may take time to download models")
+            typer.secho(f"  {t('interactive.ai_ollama_docker_ok')}", fg="green")
+            typer.echo(f"  {t('interactive.ai_ollama_docker_hint')}")
     else:
         # No Ollama selected - set mode to none
         _ollama_mode_selection[service_name] = OllamaMode.NONE
 
     # RAG selection with Python 3.14 compatibility check
-    typer.echo("\nRAG (Retrieval-Augmented Generation):")
+    typer.echo(f"\n{t('interactive.ai_rag_label')}")
     if sys.version_info >= (3, 14):
         typer.secho(
-            "  Warning: RAG requires Python <3.14 (chromadb/onnxruntime limitation)",
+            f"  {t('interactive.ai_rag_warning')}",
             fg="yellow",
         )
-        typer.echo("  Enabling RAG will generate a project requiring Python 3.11-3.13")
+        typer.echo(f"  {t('interactive.ai_rag_compat_note')}")
         rag_enabled = typer.confirm(
-            "  Enable RAG despite Python 3.14 incompatibility?",
+            f"  {t('interactive.ai_rag_compat_prompt')}",
             default=True,
         )
     else:
         rag_enabled = typer.confirm(
-            "  Enable RAG for document indexing and semantic search?",
+            f"  {t('interactive.ai_rag_prompt')}",
             default=True,
         )
     _ai_rag_selection[service_name] = rag_enabled
     if rag_enabled:
-        typer.secho("  RAG enabled with ChromaDB vector store", fg="green")
+        typer.secho(f"  {t('interactive.ai_rag_enabled')}", fg="green")
 
-    return backend, framework, providers, rag_enabled
+    # Voice (TTS/STT) selection
+    typer.echo(f"\n{t('interactive.ai_voice_label')}")
+    voice_enabled = typer.confirm(
+        f"  {t('interactive.ai_voice_prompt')}",
+        default=True,
+    )
+    _ai_voice_selection[service_name] = voice_enabled
+    if voice_enabled:
+        typer.secho(f"  {t('interactive.ai_voice_enabled')}", fg="green")
+
+    return backend, framework, providers, rag_enabled, voice_enabled
 
 
 def interactive_component_add_selection(project_path: Path) -> tuple[list[str], str]:
@@ -1212,7 +1272,7 @@ def interactive_service_remove_selection(project_path: Path) -> list[str]:
     typer.echo("Currently enabled services:")
     for service_name in enabled_services:
         service_spec = SERVICES[service_name]
-        typer.secho(f"  • {service_name}: {service_spec.description}", fg="cyan")
+        typer.secho(f"  \u2022 {service_name}: {service_spec.description}", fg="cyan")
     typer.echo()
 
     # Ask which to remove
