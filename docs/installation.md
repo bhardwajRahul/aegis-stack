@@ -132,3 +132,18 @@ Choose the method that works best for your workflow:
     - Access to development tools
 
     **Best for:** Contributing, customizing, latest features
+
+## CLI Language Support
+
+Aegis Stack CLI supports Simplified Chinese (简体中文). Set your language with a flag or environment variable:
+
+```bash
+# Via flag
+aegis --lang zh init my-project
+
+# Via environment variable
+export AEGIS_LANG=zh
+aegis init my-project
+```
+
+Supported languages: `en` (English, default), `zh` (简体中文)

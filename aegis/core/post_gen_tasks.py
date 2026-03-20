@@ -20,6 +20,7 @@ from aegis.constants import (
     WorkerBackends,
 )
 from aegis.core.project_map import render_project_map
+from aegis.i18n import t
 
 # Task configuration constants (following tests/cli/test_utils.py pattern)
 POST_GEN_TIMEOUT_INSTALL = 300  # 5 minutes for dependency installation
@@ -741,7 +742,7 @@ def install_dependencies(project_path: Path, python_version: str | None = None) 
         allowing uv to auto-detect a compatible Python version.
     """
     try:
-        typer.secho("Installing dependencies with uv...", fg=typer.colors.CYAN)
+        typer.secho(t("postgen.deps_installing"), fg=typer.colors.CYAN)
 
         # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
         env = os.environ.copy()
@@ -762,34 +763,27 @@ def install_dependencies(project_path: Path, python_version: str | None = None) 
         )
 
         if result.returncode == 0:
-            typer.secho("Dependencies installed successfully", fg=typer.colors.GREEN)
+            typer.secho(t("postgen.deps_success"), fg=typer.colors.GREEN)
             return True
         else:
-            typer.secho(
-                "Warning: Dependency installation failed", fg=typer.colors.YELLOW
-            )
+            typer.secho(t("postgen.deps_warn_failed"), fg=typer.colors.YELLOW)
             if result.stderr:
                 truncated = _truncate_stderr(result.stderr)
                 for line in truncated.split("\n"):
                     typer.echo(f"   {line}")
-            typer.secho("Run 'uv sync' manually after project creation", dim=True)
+            typer.secho(t("postgen.deps_manual"), dim=True)
             return False
 
     except subprocess.TimeoutExpired:
-        typer.secho(
-            "Warning: Dependency installation timeout - run 'uv sync' manually",
-            fg=typer.colors.YELLOW,
-        )
+        typer.secho(t("postgen.deps_timeout"), fg=typer.colors.YELLOW)
         return False
     except FileNotFoundError:
-        typer.secho("Warning: uv not found in PATH", fg=typer.colors.YELLOW)
-        typer.secho("Install uv first: https://github.com/astral-sh/uv", dim=True)
+        typer.secho(t("postgen.deps_uv_missing"), fg=typer.colors.YELLOW)
+        typer.secho(t("postgen.deps_uv_install"), dim=True)
         return False
     except Exception as e:
-        typer.secho(
-            f"Warning: Dependency installation failed: {e}", fg=typer.colors.YELLOW
-        )
-        typer.secho("Run 'uv sync' manually after project creation", dim=True)
+        typer.secho(t("postgen.deps_warn_error", error=e), fg=typer.colors.YELLOW)
+        typer.secho(t("postgen.deps_manual"), dim=True)
         return False
 
 
@@ -804,26 +798,24 @@ def setup_env_file(project_path: Path) -> bool:
         True if setup succeeded or .env already exists, False on error
     """
     try:
-        typer.secho("Setting up environment configuration...", fg=typer.colors.CYAN)
+        typer.secho(t("postgen.env_setup"), fg=typer.colors.CYAN)
         env_example = project_path / ".env.example"
         env_file = project_path / ".env"
 
         if env_example.exists() and not env_file.exists():
             shutil.copy(env_example, env_file)
-            typer.secho(
-                "Environment file created from .env.example", fg=typer.colors.GREEN
-            )
+            typer.secho(t("postgen.env_created"), fg=typer.colors.GREEN)
             return True
         elif env_file.exists():
-            typer.echo("Environment file already exists")
+            typer.echo(t("postgen.env_exists"))
             return True
         else:
-            typer.secho("Warning: No .env.example file found", fg=typer.colors.YELLOW)
+            typer.secho(t("postgen.env_missing"), fg=typer.colors.YELLOW)
             return False
 
     except Exception as e:
-        typer.secho(f"Warning: Environment setup failed: {e}", fg=typer.colors.YELLOW)
-        typer.secho("Copy .env.example to .env manually", dim=True)
+        typer.secho(t("postgen.env_error", error=e), fg=typer.colors.YELLOW)
+        typer.secho(t("postgen.env_manual"), dim=True)
         return False
 
 
@@ -851,7 +843,7 @@ def run_migrations(
         return True  # No migrations needed
 
     try:
-        typer.secho("Setting up database schema...", fg=typer.colors.CYAN)
+        typer.secho(t("postgen.db_setup"), fg=typer.colors.CYAN)
 
         # Ensure data directory exists
         data_dir = project_path / "data"
@@ -861,14 +853,10 @@ def run_migrations(
         alembic_ini_path = project_path / "alembic" / "alembic.ini"
         if not alembic_ini_path.exists():
             typer.secho(
-                f"Warning: Alembic config file not found at {alembic_ini_path}",
+                t("postgen.db_alembic_missing", path=alembic_ini_path),
                 fg=typer.colors.YELLOW,
             )
-            typer.secho(
-                "Skipping database migration. Please ensure the config file exists "
-                "and run 'alembic upgrade head' manually.",
-                dim=True,
-            )
+            typer.secho(t("postgen.db_alembic_hint"), dim=True)
             return False
 
         # Run alembic migrations using uv run (ensures correct environment)
@@ -892,32 +880,23 @@ def run_migrations(
         )
 
         if result.returncode == 0:
-            typer.secho("Database tables created successfully", fg=typer.colors.GREEN)
+            typer.secho(t("postgen.db_success"), fg=typer.colors.GREEN)
             return True
         else:
-            typer.secho(
-                "Warning: Database migration setup failed", fg=typer.colors.YELLOW
-            )
+            typer.secho(t("postgen.db_failed"), fg=typer.colors.YELLOW)
             if result.stderr:
                 truncated = _truncate_stderr(result.stderr)
                 for line in truncated.split("\n"):
                     typer.echo(f"   {line}")
-            typer.secho(
-                "Run 'alembic upgrade head' manually after project creation", dim=True
-            )
+            typer.secho(t("postgen.db_manual"), dim=True)
             return False
 
     except subprocess.TimeoutExpired:
-        typer.secho(
-            "Warning: Migration setup timeout - run 'alembic upgrade head' manually",
-            fg=typer.colors.YELLOW,
-        )
+        typer.secho(t("postgen.db_timeout"), fg=typer.colors.YELLOW)
         return False
     except Exception as e:
-        typer.secho(f"Warning: Migration setup failed: {e}", fg=typer.colors.YELLOW)
-        typer.secho(
-            "Run 'alembic upgrade head' manually after project creation", dim=True
-        )
+        typer.secho(t("postgen.db_error", error=e), fg=typer.colors.YELLOW)
+        typer.secho(t("postgen.db_manual"), dim=True)
         return False
 
 
@@ -932,7 +911,7 @@ def format_code(project_path: Path) -> bool:
         True if formatting succeeded, False otherwise
     """
     try:
-        typer.secho("Auto-formatting generated code...", fg=typer.colors.CYAN)
+        typer.secho(t("postgen.format_start"), fg=typer.colors.CYAN)
 
         # Call make fix to auto-format the generated project
         # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
@@ -949,28 +928,22 @@ def format_code(project_path: Path) -> bool:
         )
 
         if result.returncode == 0:
-            typer.secho("Code formatting completed successfully", fg=typer.colors.GREEN)
+            typer.secho(t("postgen.format_success"), fg=typer.colors.GREEN)
             return True
         else:
-            typer.secho(
-                "Some formatting issues detected, but project created successfully",
-                fg=typer.colors.YELLOW,
-            )
-            typer.secho("Run 'make fix' manually to resolve remaining issues", dim=True)
+            typer.secho(t("postgen.format_partial"), fg=typer.colors.YELLOW)
+            typer.secho(t("postgen.format_manual"), dim=True)
             return False
 
     except FileNotFoundError:
-        typer.secho("Run 'make fix' to format code when ready", dim=True)
+        typer.secho(t("postgen.format_hint"), dim=True)
         return False
     except subprocess.TimeoutExpired:
-        typer.secho(
-            "Warning: Formatting timeout - run 'make fix' manually when ready",
-            fg=typer.colors.YELLOW,
-        )
+        typer.secho(t("postgen.format_timeout"), fg=typer.colors.YELLOW)
         return False
     except Exception as e:
-        typer.secho(f"Warning: Auto-formatting skipped: {e}", fg=typer.colors.YELLOW)
-        typer.secho("Run 'make fix' manually to format code", dim=True)
+        typer.secho(t("postgen.format_error", error=e), fg=typer.colors.YELLOW)
+        typer.secho(t("postgen.format_error_manual"), dim=True)
         return False
 
 
@@ -995,7 +968,7 @@ def seed_llm_fixtures(project_path: Path, python_version: str | None = None) -> 
         True if seeding succeeded, False otherwise
     """
     try:
-        typer.secho("Seeding LLM fixtures...", fg=typer.colors.CYAN)
+        typer.secho(t("postgen.llm_seeding"), fg=typer.colors.CYAN)
 
         # Run the seeding script using uv run
         # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
@@ -1027,32 +1000,23 @@ def seed_llm_fixtures(project_path: Path, python_version: str | None = None) -> 
         )
 
         if result.returncode == 0:
-            typer.secho("LLM fixtures seeded successfully", fg=typer.colors.GREEN)
+            typer.secho(t("postgen.llm_seed_success"), fg=typer.colors.GREEN)
             return True
         else:
-            typer.secho(
-                "Warning: LLM fixture seeding failed",
-                fg=typer.colors.YELLOW,
-            )
+            typer.secho(t("postgen.llm_seed_failed"), fg=typer.colors.YELLOW)
             if result.stderr:
                 # Show truncated error output
                 truncated = result.stderr[:500]
                 for line in truncated.split("\n"):
                     typer.echo(f"   {line}")
-            typer.secho(
-                "You can seed fixtures manually by running the fixture loader",
-                dim=True,
-            )
+            typer.secho(t("postgen.llm_seed_manual"), dim=True)
             return False
 
     except subprocess.TimeoutExpired:
-        typer.secho(
-            "Warning: LLM fixture seeding timeout",
-            fg=typer.colors.YELLOW,
-        )
+        typer.secho(t("postgen.llm_seed_timeout"), fg=typer.colors.YELLOW)
         return False
     except Exception as e:
-        typer.secho(f"Warning: LLM fixture seeding failed: {e}", fg=typer.colors.YELLOW)
+        typer.secho(t("postgen.llm_seed_error", error=e), fg=typer.colors.YELLOW)
         return False
 
 
@@ -1075,7 +1039,7 @@ def sync_llm_catalog(
         True if sync succeeded, False otherwise (non-critical)
     """
     try:
-        typer.secho("Syncing LLM catalog from external APIs...", fg=typer.colors.CYAN)
+        typer.secho(t("postgen.llm_syncing"), fg=typer.colors.CYAN)
 
         # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
         env = os.environ.copy()
@@ -1097,35 +1061,29 @@ def sync_llm_catalog(
         )
 
         if result.returncode == 0:
-            typer.secho("LLM catalog synced successfully", fg=typer.colors.GREEN)
+            typer.secho(t("postgen.llm_sync_success"), fg=typer.colors.GREEN)
             return True
         else:
-            typer.secho(
-                "Warning: LLM catalog sync failed",
-                fg=typer.colors.YELLOW,
-            )
+            typer.secho(t("postgen.llm_sync_failed"), fg=typer.colors.YELLOW)
             if result.stderr:
                 truncated = _truncate_stderr(result.stderr)
                 for line in truncated.split("\n"):
                     typer.echo(f"   {line}")
             typer.secho(
-                f"Run '{project_slug} llm sync' manually to populate the catalog",
+                t("postgen.llm_sync_manual", slug=project_slug),
                 dim=True,
             )
             return False
 
     except subprocess.TimeoutExpired:
-        typer.secho(
-            "Warning: LLM catalog sync timeout",
-            fg=typer.colors.YELLOW,
-        )
+        typer.secho(t("postgen.llm_sync_timeout"), fg=typer.colors.YELLOW)
         typer.secho(
             f"Run '{project_slug} llm sync' manually to populate the catalog",
             dim=True,
         )
         return False
     except Exception as e:
-        typer.secho(f"Warning: LLM catalog sync failed: {e}", fg=typer.colors.YELLOW)
+        typer.secho(t("postgen.llm_sync_error", error=e), fg=typer.colors.YELLOW)
         typer.secho(
             f"Run '{project_slug} llm sync' manually to populate the catalog",
             dim=True,
@@ -1168,9 +1126,7 @@ def run_post_generation_tasks(
         non-critical and won't cause hard failures.
     """
     typer.echo()
-    typer.secho(
-        "Setting up your project environment...", fg=typer.colors.BLUE, bold=True
-    )
+    typer.secho(t("postgen.setup_start"), fg=typer.colors.BLUE, bold=True)
 
     # Task 1: Install dependencies (CRITICAL - fails entire generation if this fails)
     deps_success = install_dependencies(project_path, python_version)
@@ -1178,19 +1134,13 @@ def run_post_generation_tasks(
     if not deps_success:
         typer.echo()
         typer.secho(
-            "Project generation failed: dependency installation failed",
+            t("postgen.deps_failed"),
             fg=typer.colors.RED,
             bold=True,
         )
         typer.echo()
-        typer.secho(
-            "The generated project files remain in place, but the project is not usable.",
-            dim=True,
-        )
-        typer.secho(
-            "Fix the dependency issue (check Python version compatibility) and try again.",
-            dim=True,
-        )
+        typer.secho(t("postgen.deps_failed_detail"), dim=True)
+        typer.secho(t("postgen.deps_failed_hint"), dim=True)
         raise DependencyInstallationError(
             f"Failed to install dependencies for project at {project_path}"
         )
@@ -1210,40 +1160,31 @@ def run_post_generation_tasks(
         fixtures_loaded = seed_llm_fixtures(project_path, python_version)
 
         if skip_llm_sync:
-            typer.secho("LLM catalog sync skipped", fg=typer.colors.CYAN)
+            typer.secho(t("postgen.llm_sync_skipped"), fg=typer.colors.CYAN)
             if fixtures_loaded:
-                typer.secho(
-                    "Static fixture data loaded (may be outdated)",
-                    dim=True,
-                )
-            typer.secho(
-                f"Run '{slug} llm sync' later to get latest model data",
-                dim=True,
-            )
+                typer.secho(t("postgen.llm_fixtures_outdated"), dim=True)
+            typer.secho(t("postgen.llm_sync_hint", slug=slug), dim=True)
         else:
             # Try to sync from live APIs for up-to-date data
             sync_success = sync_llm_catalog(project_path, slug, python_version)
             if not sync_success and fixtures_loaded:
-                typer.secho(
-                    "Static fixture data is available but may be outdated",
-                    dim=True,
-                )
+                typer.secho(t("postgen.llm_fixtures_fallback"), dim=True)
 
     # Task 5: Format code (non-critical)
     format_code(project_path)
 
     # Print final status (only reached if deps succeeded)
     typer.echo()
-    typer.secho("Project ready to run!", fg=typer.colors.GREEN, bold=True)
+    typer.secho(t("postgen.ready"), fg=typer.colors.GREEN, bold=True)
 
     # Show project structure map
     typer.echo()
     render_project_map(project_path)
 
     typer.echo()
-    typer.secho("Next steps:", fg=typer.colors.CYAN, bold=True)
-    typer.echo(f"   cd {project_path}")
-    typer.echo("   make serve")
-    typer.echo("   Open Overseer: http://localhost:8000/dashboard/")
+    typer.secho(t("postgen.next_steps"), fg=typer.colors.CYAN, bold=True)
+    typer.echo(t("postgen.next_cd", path=project_path))
+    typer.echo(t("postgen.next_serve"))
+    typer.echo(t("postgen.next_dashboard"))
 
     return True

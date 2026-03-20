@@ -26,6 +26,7 @@ from app.core.log import logger
 
 from .config import get_ai_config
 from .conversation import ConversationManager
+{% if ai_voice %}
 from .voice import (
     AudioInput,
     SpeechRequest,
@@ -35,6 +36,7 @@ from .voice import (
     TTSService,
     VoiceChatResponse,
 )
+{% endif %}
 from .models import (
     Conversation,
     ConversationMessage,
@@ -134,8 +136,10 @@ class AIService:
         self.settings = settings
         self.config = get_ai_config(settings)
         self.conversation_manager = ConversationManager()
+{% if ai_voice %}
         self._stt_service: STTService | None = None
         self._tts_service: TTSService | None = None
+{% endif %}
 {% if ai_rag %}
         self._rag_service: RAGService | None = None
 {% endif %}
@@ -159,6 +163,7 @@ class AIService:
         return self._rag_service
 {% endif %}
 
+{% if ai_voice %}
     @property
     def stt(self) -> STTService:
         """Lazy initialization of STT service."""
@@ -328,6 +333,7 @@ class AIService:
                         return truncated[:last_idx + 1].strip()
                 return truncated.strip() + "..."
             return text
+{% endif %}
 
     async def chat(
         self,

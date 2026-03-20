@@ -8,6 +8,7 @@ import typer
 import yaml
 
 from ..constants import AnswerKeys, WorkerBackends
+from ..i18n import t
 
 
 def _detect_worker_backend(project_path: Path) -> str:
@@ -106,14 +107,14 @@ def render_project_map(
 
     project_name = project_path.name
 
-    typer.secho("Project Structure:", fg=typer.colors.CYAN, bold=True)
+    typer.secho(t("projectmap.title"), fg=typer.colors.CYAN, bold=True)
     typer.echo(f"{project_name}/")
 
     # app/ section
     typer.echo("├── app/")
 
     # components/
-    typer.echo("│   ├── components/       ← Components")
+    typer.echo(f"│   ├── components/       ← {t('projectmap.components')}")
     _render_line("│   │   ├── ", "backend/", "FastAPI", highlight, uses, "backend")
 
     # Build component children
@@ -136,14 +137,14 @@ def render_project_map(
     # services/ - only show if any services exist
     service_children: list[tuple[str, str, str]] = []  # (name, desc, check_name)
     if has_auth:
-        service_children.append(("auth/", "Authentication", "auth"))
+        service_children.append(("auth/", t("projectmap.auth"), "auth"))
     if has_ai:
-        service_children.append(("ai/", "AI conversations", "ai"))
+        service_children.append(("ai/", t("projectmap.ai"), "ai"))
     if has_comms:
-        service_children.append(("comms/", "Communications", "comms"))
+        service_children.append(("comms/", t("projectmap.comms"), "comms"))
 
     if service_children:
-        typer.echo("│   ├── services/         ← Business logic")
+        typer.echo(f"│   ├── services/         ← {t('projectmap.services')}")
         for i, (name, desc, check_name) in enumerate(service_children):
             is_last = i == len(service_children) - 1
             prefix = "│   │   └── " if is_last else "│   │   ├── "
@@ -152,22 +153,24 @@ def render_project_map(
     # models/ - only show if database component
     if has_models:
         _render_line(
-            "│   ├── ", "models/", "Database models", highlight, uses, "database"
+            "│   ├── ", "models/", t("projectmap.models"), highlight, uses, "database"
         )
 
     # cli/ - only show if any CLI commands exist
     if has_cli:
-        typer.echo("│   ├── cli/               ← CLI commands")
+        typer.echo(f"│   ├── cli/               ← {t('projectmap.cli')}")
 
     # entrypoints/ - always present
-    typer.echo("│   └── entrypoints/       ← Run targets")
+    typer.echo(f"│   └── entrypoints/       ← {t('projectmap.entrypoints')}")
 
     # Root level directories
-    typer.echo("├── tests/                 ← Test suite")
+    typer.echo(f"├── tests/                 ← {t('projectmap.tests')}")
 
     # alembic/ - only show if migrations
     if has_alembic:
-        _render_line("├── ", "alembic/", "Migrations", highlight, uses, "database")
+        _render_line(
+            "├── ", "alembic/", t("projectmap.migrations"), highlight, uses, "database"
+        )
 
     # docs/ - always present (last item)
-    typer.echo("└── docs/                  ← Documentation")
+    typer.echo(f"└── docs/                  ← {t('projectmap.docs')}")

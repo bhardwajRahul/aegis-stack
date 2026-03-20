@@ -15,6 +15,7 @@ from copier import run_copy, run_update
 from packaging.version import Version
 
 from aegis import __version__
+from aegis.i18n import t
 
 from ..config.defaults import (
     DEFAULT_PYTHON_VERSION,
@@ -326,12 +327,11 @@ def generate_with_copier(
 
     # Show docs/star links
     typer.echo()
-    typer.secho("Docs: https://lbedner.github.io/aegis-stack", dim=True)
+    typer.secho(t("postgen.docs_link"), dim=True)
     typer.echo()
     star = typer.style("\u2605", fg=typer.colors.BRIGHT_YELLOW, bold=True)
     typer.echo(
-        f"{star} If Aegis Stack made your life easier, consider leaving a star:\n"
-        "  https://github.com/lbedner/aegis-stack"
+        f"{star} {t('postgen.star_prompt')}\n  https://github.com/lbedner/aegis-stack"
     )
 
     # CRITICAL: Fix _src_path in .copier-answers.yml for future updates to work

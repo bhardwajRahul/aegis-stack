@@ -34,6 +34,8 @@ from .commands.services import services_command
 from .commands.update import update_command
 from .commands.version import version_command
 from .core.verbosity import set_verbose
+from .i18n import detect_locale, set_locale
+from .i18n.locales import AVAILABLE_LOCALES
 
 # Create the main Typer application
 app = typer.Typer(
@@ -60,9 +62,23 @@ def main(
         "-v",
         help="Enable verbose output (show detailed file operations)",
     ),
+    lang: str | None = typer.Option(
+        None,
+        "--lang",
+        help="Output language (en, zh). Default: auto-detect from AEGIS_LANG or system locale",
+        envvar="AEGIS_LANG",
+    ),
 ) -> None:
     """Aegis Stack CLI - Global options and configuration."""
     set_verbose(verbose)
+    if lang and lang.lower() not in AVAILABLE_LOCALES:
+        typer.secho(
+            f"Unsupported language '{lang}'. Available: {', '.join(sorted(AVAILABLE_LOCALES))}",
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(1)
+    set_locale(lang if lang else detect_locale())
 
 
 # Register commands

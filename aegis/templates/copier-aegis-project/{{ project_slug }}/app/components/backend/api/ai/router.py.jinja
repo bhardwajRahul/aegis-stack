@@ -20,6 +20,7 @@ from app.services.ai.service import (
     ConversationError,
     ProviderError,
 )
+{% if ai_voice %}
 from app.services.ai.voice import (
     AudioFormat,
     AudioInput,
@@ -27,6 +28,7 @@ from app.services.ai.voice import (
     TranscriptionResult,
     VoiceChatResponse,
 )
+{% endif %}
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
@@ -420,6 +422,7 @@ async def get_usage_stats(
 {% endif %}
 
 
+{% if ai_voice %}
 # Voice/STT Request/Response models
 class TranscriptionSegmentResponse(BaseModel):
     """A segment of transcribed audio with timing."""
@@ -788,3 +791,4 @@ async def tts_status() -> dict[str, Any]:
             "status": "error",
             "error": str(e),
         }
+{% endif %}
