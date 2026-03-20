@@ -7,6 +7,7 @@ to their required components and validating service-to-component compatibility.
 
 from ..constants import AnswerKeys, ComponentNames, StorageBackends
 from .ai_service_parser import is_ai_service_with_options, parse_ai_service_config
+from .auth_service_parser import is_auth_service_with_options, parse_auth_service_config
 from .component_utils import extract_base_component_name, extract_base_service_name
 from .dependency_resolver import DependencyResolver
 from .services import SERVICES, get_service_dependencies
@@ -56,6 +57,19 @@ class ServiceResolver:
                     # Auto-add database component for AI persistence
                     database_component = (
                         f"{ComponentNames.DATABASE}[{ai_config.backend}]"
+                    )
+                    service_required_components.add(database_component)
+
+            # Handle Auth service with engine override (from bracket syntax)
+            if base_service == AnswerKeys.SERVICE_AUTH and is_auth_service_with_options(
+                service
+            ):
+                auth_config = parse_auth_service_config(service)
+                if auth_config.engine:
+                    # Replace plain "database" with engine-specific version
+                    service_required_components.discard(ComponentNames.DATABASE)
+                    database_component = (
+                        f"{ComponentNames.DATABASE}[{auth_config.engine}]"
                     )
                     service_required_components.add(database_component)
 

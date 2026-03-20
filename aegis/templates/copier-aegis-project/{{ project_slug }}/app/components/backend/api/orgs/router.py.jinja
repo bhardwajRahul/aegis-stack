@@ -2,6 +2,7 @@
 {% if include_auth_org %}
 
 from app.components.backend.api.deps import get_async_db
+from app.core.config import settings
 from app.models.org import (
     MemberResponse,
     OrgCreate,
@@ -19,11 +20,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 router = APIRouter(prefix="/orgs", tags=["organizations"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
 
 
 async def _get_current_user(
-    token: str = Depends(oauth2_scheme),
+    token: str | None = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_async_db),
 ):
     """Get authenticated user."""
@@ -35,8 +36,10 @@ async def _require_org_role(
     db: AsyncSession,
     user_id: int,
     allowed_roles: set[str],
-) -> OrganizationMember:
+) -> OrganizationMember | None:
     """Check user has required org role. Raises 403 if not."""
+    if not settings.AUTH_ENABLED:
+        return None  # Skip org membership check in dev mode
     membership_service = MembershipService(db)
     member = await membership_service.get_member(org_id, user_id)
     if not member or member.role not in allowed_roles:
@@ -71,9 +74,10 @@ async def create_org(
 
     org = await org_service.create_org(org_data)
 
-    # Add creator as owner
-    membership_service = MembershipService(db)
-    await membership_service.add_member(org.id, user.id, role=ORG_ROLE_OWNER)
+    # Add creator as owner (skip when auth disabled — dev user has no real DB row)
+    if settings.AUTH_ENABLED:
+        membership_service = MembershipService(db)
+        await membership_service.add_member(org.id, user.id, role=ORG_ROLE_OWNER)
 
     return OrgResponse.model_validate(org)
 

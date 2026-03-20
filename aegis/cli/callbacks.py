@@ -200,6 +200,10 @@ def validate_and_resolve_services(
                     service_name="auth",
                     level=auth_config.level,
                 )
+                if auth_config.engine:
+                    from .interactive import set_database_engine_selection
+
+                    set_database_engine_selection(auth_config.engine)
                 typer.echo(f"Auth service: level={auth_config.level}")
             except ValueError as e:
                 typer.secho(f"Invalid auth service syntax: {e}", fg="red", err=True)

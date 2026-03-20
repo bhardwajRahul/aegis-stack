@@ -10,6 +10,7 @@ from pathlib import Path
 from aegis.core.migration_generator import (
     AI_MIGRATION,
     AUTH_MIGRATION,
+    AUTH_RBAC_MIGRATION,
     MIGRATION_SPECS,
     ORG_MIGRATION,
     VOICE_MIGRATION,
@@ -65,6 +66,52 @@ class TestGetServicesNeedingMigrations:
         context = {"include_auth": False, "include_ai": False, "ai_backend": "memory"}
         result = get_services_needing_migrations(context)
         assert result == []
+
+    def test_auth_rbac_needs_migration(self) -> None:
+        """Test auth_rbac migration needed when rbac level enabled."""
+        context = {
+            "include_auth": "yes",
+            "include_auth_rbac": "yes",
+            "include_ai": False,
+            "ai_backend": "memory",
+        }
+        result = get_services_needing_migrations(context)
+        assert "auth_rbac" in result
+
+    def test_auth_rbac_needs_migration_via_auth_level(self) -> None:
+        """Test auth_rbac detected via auth_level fallback."""
+        context = {
+            "include_auth": "yes",
+            "auth_level": "rbac",
+            "include_ai": False,
+            "ai_backend": "memory",
+        }
+        result = get_services_needing_migrations(context)
+        assert "auth_rbac" in result
+
+    def test_auth_rbac_needs_migration_when_org(self) -> None:
+        """Test auth_rbac also generated for org level (org implies rbac)."""
+        context = {
+            "include_auth": "yes",
+            "auth_level": "org",
+            "include_ai": False,
+            "ai_backend": "memory",
+        }
+        result = get_services_needing_migrations(context)
+        assert "auth_rbac" in result
+        assert "auth_org" in result
+
+    def test_auth_rbac_not_needed_for_basic(self) -> None:
+        """Test auth_rbac not generated for basic auth."""
+        context = {
+            "include_auth": "yes",
+            "auth_level": "basic",
+            "include_ai": False,
+            "ai_backend": "memory",
+        }
+        result = get_services_needing_migrations(context)
+        assert "auth" in result
+        assert "auth_rbac" not in result
 
     def test_auth_org_needs_migration(self) -> None:
         """Test auth_org service needs migration when org level enabled."""
@@ -249,8 +296,32 @@ class TestGenerateMigration:
         assert "'user'" in content
         assert "'email'" in content
         assert "'is_verified'" in content
-        assert "'role'" in content
         assert "'last_login'" in content
+        # Only role is in auth_rbac migration, not base
+        assert "'role'" not in content
+
+    def test_generates_auth_rbac_migration(self, tmp_path: Path) -> None:
+        """Test generates auth_rbac migration with ALTER TABLE."""
+        # Generate base auth first so rbac gets correct revision chain
+        generate_migration(tmp_path, "auth")
+        result = generate_migration(tmp_path, "auth_rbac")
+
+        assert result is not None
+        assert result.exists()
+        assert result.name == "002_auth_rbac.py"
+
+        content = result.read_text()
+        assert "revision = '002'" in content
+        assert "down_revision = '001'" in content
+        # Should use add_column, NOT create_table
+        assert "op.add_column" in content
+        assert "op.create_table" not in content
+        assert "'role'" in content
+        # is_verified and last_login are in base auth, not rbac
+        assert "'is_verified'" not in content
+        assert "'last_login'" not in content
+        # Downgrade should use drop_column
+        assert "op.drop_column" in content
 
     def test_generates_ai_migration(self, tmp_path: Path) -> None:
         """Test generates AI migration file."""
@@ -329,9 +400,25 @@ class TestMigrationSpecs:
         assert len(AUTH_MIGRATION.tables) == 1
         assert AUTH_MIGRATION.tables[0].name == "user"
         column_names = [col.name for col in AUTH_MIGRATION.tables[0].columns]
+        assert "email" in column_names
+        assert "hashed_password" in column_names
         assert "is_verified" in column_names
-        assert "role" in column_names
         assert "last_login" in column_names
+        # Only role is in RBAC migration
+        assert "role" not in column_names
+
+    def test_auth_rbac_spec_exists(self) -> None:
+        """Test auth RBAC migration spec is defined with alter_tables."""
+        assert "auth_rbac" in MIGRATION_SPECS
+        assert AUTH_RBAC_MIGRATION.service_name == "auth_rbac"
+        assert len(AUTH_RBAC_MIGRATION.tables) == 0
+        assert len(AUTH_RBAC_MIGRATION.alter_tables) == 1
+        assert AUTH_RBAC_MIGRATION.alter_tables[0].name == "user"
+        col_names = [c.name for c in AUTH_RBAC_MIGRATION.alter_tables[0].add_columns]
+        assert "role" in col_names
+        # is_verified and last_login are in base auth, not rbac
+        assert "is_verified" not in col_names
+        assert "last_login" not in col_names
 
     def test_ai_spec_exists(self) -> None:
         """Test AI migration spec is defined."""

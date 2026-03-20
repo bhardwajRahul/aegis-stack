@@ -138,6 +138,25 @@ async def check_auth_service_health() -> ComponentStatus:
             "verified_user_count": verified_user_count,
             "security_level": security_level,
         }
+{% if include_auth_org %}
+
+        # Get organization count
+        if database_available:
+            try:
+                from app.models.org import Organization
+
+                with db_session() as session:
+                    org_count = session.execute(
+                        select(func.count()).select_from(Organization)
+                    ).scalar() or 0
+                    metadata["org_count"] = org_count
+                    metadata["org_count_display"] = (
+                        "100+" if org_count > 100 else str(org_count)
+                    )
+            except Exception:
+                metadata["org_count"] = 0
+                metadata["org_count_display"] = "0"
+{% endif %}
 
         # Add configuration issues to metadata if any
         if jwt_errors:

@@ -15,6 +15,9 @@ from app.core.log import logger
 # Import models to register them with SQLModel metadata
 from app.models.user import User  # noqa: F401
 {% endif %}
+{% if include_auth_org %}
+from app.models.org import Organization, OrganizationMember  # noqa: F401
+{% endif %}
 
 {% set needs_migrations = include_auth or (include_ai and ai_backend != "memory") %}
 {% if database_engine == "postgres" and needs_migrations %}
@@ -49,20 +52,55 @@ def _check_and_stamp_existing_tables() -> None:
             context = MigrationContext.configure(session.connection())
             current_rev = context.get_current_revision()
 
-        # Signature table for each migration (first table created by that migration)
-        signature_tables = {
-            "001": "user",        # auth migration
-            "002": "llm_vendor",  # ai migration
+        # Map known service migrations to their signature
+        # - ("table", name): check if table exists (CREATE TABLE migrations)
+        # - ("column", table, col): check if column exists (ALTER TABLE migrations)
+        service_signatures: dict[str, tuple[str, ...]] = {
+            "auth": ("table", "user"),
+            "auth_rbac": ("column", "user", "role"),
+            "auth_org": ("table", "organization"),
+            "ai": ("table", "llm_vendor"),
+            "ai_voice": ("table", "voice_usage"),
         }
 
-        # Walk revisions and stamp any with pre-existing tables
+        # Build signature mapping from migration filenames
+        signatures: dict[str, tuple[str, ...]] = {}
+        for rev in script.walk_revisions():
+            if rev.down_revision is not None or rev.revision:
+                parts = rev.path.stem.split("_", 1)
+                if len(parts) > 1:
+                    service_name = parts[1]
+                    sig = service_signatures.get(service_name)
+                    if sig:
+                        signatures[rev.revision] = sig
+
+        # Get column info for alter-table checks
+        db_columns: dict[str, set[str]] = {}
+        for table_name in existing_tables:
+            try:
+                cols = inspector.get_columns(table_name)
+                db_columns[table_name] = {c["name"] for c in cols}
+            except Exception:
+                pass
+
+        # Walk revisions and stamp any already applied
         for rev in script.walk_revisions():
             # Skip if already applied
             if current_rev and rev.revision <= current_rev:
                 continue
 
-            sig_table = signature_tables.get(rev.revision)
-            if sig_table and sig_table in existing_tables:
+            sig = signatures.get(rev.revision)
+            if not sig:
+                continue
+
+            already_applied = False
+            if sig[0] == "table":
+                already_applied = sig[1] in existing_tables
+            elif sig[0] == "column":
+                table_name, col_name = sig[1], sig[2]
+                already_applied = col_name in db_columns.get(table_name, set())
+
+            if already_applied:
                 logger.warning(
                     f"Migration {rev.revision} tables already exist. "
                     "Stamping as complete (Docker volume likely persisted)..."
@@ -159,6 +197,62 @@ def _run_migrations() -> bool:
 {% endif %}
 
 
+def _check_schema_mismatch() -> None:
+    """
+    Detect missing columns/tables and warn user.
+
+    Compares SQLModel metadata (what the code expects) against
+    the actual database schema. Only checks tables registered
+    in SQLModel metadata — user-created tables are ignored.
+    """
+    try:
+        from sqlalchemy import inspect as sa_inspect
+        from sqlmodel import SQLModel
+
+        from app.core.db import engine
+
+        inspector = sa_inspect(engine)
+        existing_tables = set(inspector.get_table_names())
+
+        # Only check tables in SQLModel metadata (our models)
+        expected_tables = set(SQLModel.metadata.tables.keys())
+        missing_tables = expected_tables - existing_tables - {"alembic_version"}
+
+        # Check columns for tables that exist in both
+        missing_columns: dict[str, set[str]] = {}
+        for table_name in expected_tables & existing_tables:
+            model_cols = {
+                c.name for c in SQLModel.metadata.tables[table_name].columns
+            }
+            db_cols = {c["name"] for c in inspector.get_columns(table_name)}
+            missing = model_cols - db_cols
+            if missing:
+                missing_columns[table_name] = missing
+
+        if missing_tables or missing_columns:
+            logger.error("=" * 60)
+            logger.error("SCHEMA MISMATCH DETECTED")
+            logger.error(
+                "Your database is missing columns/tables expected by the code."
+            )
+            if missing_tables:
+                logger.error(
+                    f"  Missing tables: {', '.join(sorted(missing_tables))}"
+                )
+            for table, cols in sorted(missing_columns.items()):
+                logger.error(
+                    f"  Missing columns in '{table}': {', '.join(sorted(cols))}"
+                )
+            logger.error("")
+            logger.error(
+                "  Fix: run 'make migrate-fix' to auto-generate a safe migration"
+            )
+            logger.error("=" * 60)
+
+    except Exception as e:
+        logger.debug(f"Schema mismatch check skipped: {e}")
+
+
 async def startup_database_init() -> None:
     """
     Initialize database and run migrations.
@@ -186,6 +280,9 @@ async def startup_database_init() -> None:
         from app.core.db import engine
         SQLModel.metadata.create_all(engine)
         logger.info("Database tables created/verified (SQLite)")
+
+        # Check for schema mismatches (e.g., after aegis update added new columns)
+        _check_schema_mismatch()
 {% endif %}
 
 {% if database_engine == "postgres" and needs_migrations %}
@@ -195,6 +292,9 @@ async def startup_database_init() -> None:
         if not migrations_ok:
             logger.warning("Migrations failed - database may not be fully initialized")
             # Continue anyway to allow debugging
+
+        # Check for schema mismatches (e.g., after aegis update added new columns)
+        _check_schema_mismatch()
 {% endif %}
 
 {% if database_engine == "postgres" and not needs_migrations %}

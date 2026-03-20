@@ -64,12 +64,21 @@ class TableSpec:
 
 
 @dataclass
+class AlterTableSpec:
+    """Specification for altering an existing table (adding columns)."""
+
+    name: str
+    add_columns: list[ColumnSpec]
+
+
+@dataclass
 class ServiceMigrationSpec:
     """Migration specification for a service."""
 
     service_name: str
     tables: list[TableSpec]
     description: str
+    alter_tables: list[AlterTableSpec] = field(default_factory=list)
 
 
 # ============================================================================
@@ -90,13 +99,26 @@ AUTH_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec(
                     "is_verified", "sa.Boolean()", nullable=False, default="False"
                 ),
-                ColumnSpec("role", "sa.String()", nullable=False, default="'user'"),
                 ColumnSpec("hashed_password", "sa.String()", nullable=False),
                 ColumnSpec("last_login", "sa.DateTime()", nullable=True),
                 ColumnSpec("created_at", "sa.DateTime()", nullable=False),
                 ColumnSpec("updated_at", "sa.DateTime()", nullable=True),
             ],
             indexes=[IndexSpec("ix_user_email", ["email"], unique=True)],
+        ),
+    ],
+)
+
+AUTH_RBAC_MIGRATION = ServiceMigrationSpec(
+    service_name="auth_rbac",
+    description="RBAC role column for user table",
+    tables=[],
+    alter_tables=[
+        AlterTableSpec(
+            name="user",
+            add_columns=[
+                ColumnSpec("role", "sa.String()", nullable=False, default="'user'"),
+            ],
         ),
     ],
 )
@@ -418,6 +440,7 @@ VOICE_MIGRATION = ServiceMigrationSpec(
 # Registry of all service migrations
 MIGRATION_SPECS: dict[str, ServiceMigrationSpec] = {
     "auth": AUTH_MIGRATION,
+    "auth_rbac": AUTH_RBAC_MIGRATION,
     "auth_org": ORG_MIGRATION,
     "ai": AI_MIGRATION,
     "ai_voice": VOICE_MIGRATION,
@@ -449,7 +472,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    """Create {{ service_name }} service tables."""
+    """{{ upgrade_description }}"""
 {% for table in tables %}
     # Create {{ table.name }} table
     op.create_table(
@@ -473,9 +496,21 @@ def upgrade() -> None:
 {% endfor %}
 
 {% endfor %}
+{% for alter in alter_tables %}
+    # Alter {{ alter.name }} table
+{% for column in alter.add_columns %}
+    op.add_column('{{ alter.name }}', sa.Column('{{ column.name }}', {{ column.type }}, nullable={{ column.nullable }}{% if column.server_default %}, server_default={{ column.server_default }}{% endif %}))
+{% endfor %}
+
+{% endfor %}
 
 def downgrade() -> None:
-    """Drop {{ service_name }} service tables."""
+    """Reverse {{ service_name }} migration."""
+{% for alter in alter_tables|reverse %}
+{% for column in alter.add_columns|reverse %}
+    op.drop_column('{{ alter.name }}', '{{ column.name }}')
+{% endfor %}
+{% endfor %}
 {% for table in tables|reverse %}
 {% for index in table.indexes %}
     op.drop_index(op.f('{{ index.name }}'), table_name='{{ table.name }}')
@@ -604,14 +639,48 @@ def _render_migration(
             }
         )
 
+    # Prepare alter table data for template
+    alter_tables_data = []
+    for alter in spec.alter_tables:
+        cols = []
+        for col in alter.add_columns:
+            # For add_column, server_default needs sa.text() wrapper
+            server_default = None
+            if col.default is not None:
+                server_default = f'sa.text("{col.default}")'
+            cols.append(
+                {
+                    "name": col.name,
+                    "type": col.type,
+                    "nullable": col.nullable,
+                    "server_default": server_default,
+                }
+            )
+        alter_tables_data.append(
+            {
+                "name": alter.name,
+                "add_columns": cols,
+            }
+        )
+
+    # Build upgrade description
+    if spec.tables and spec.alter_tables:
+        upgrade_description = f"Create and alter {spec.service_name} service tables."
+    elif spec.alter_tables:
+        upgrade_description = f"Add {spec.service_name} columns."
+    else:
+        upgrade_description = f"Create {spec.service_name} service tables."
+
     return template.render(
         description=spec.description,
         service_name=spec.service_name,
+        upgrade_description=upgrade_description,
         revision=revision,
         down_revision=down_revision,
         down_revision_repr=f"'{down_revision}'" if down_revision else "None",
         create_date=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S.%f"),
         tables=tables_data,
+        alter_tables=alter_tables_data,
     )
 
 
@@ -693,14 +762,24 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     """
     services = []
 
-    # Auth service
+    # Auth service (base user table)
     include_auth = context.get("include_auth")
     if include_auth == "yes" or include_auth is True:
         services.append("auth")
 
+    # Auth RBAC columns (rbac or org level)
+    include_auth_rbac = context.get("include_auth_rbac")
+    auth_level = context.get("auth_level")
+    rbac_enabled = (
+        include_auth_rbac == "yes"
+        or include_auth_rbac is True
+        or (isinstance(auth_level, str) and auth_level.lower() in ("rbac", "org"))
+    )
+    if (include_auth == "yes" or include_auth is True) and rbac_enabled:
+        services.append("auth_rbac")
+
     # Auth org tables (only with org-level auth)
     include_auth_org = context.get("include_auth_org")
-    auth_level = context.get("auth_level")
     org_enabled = (
         include_auth_org == "yes"
         or include_auth_org is True

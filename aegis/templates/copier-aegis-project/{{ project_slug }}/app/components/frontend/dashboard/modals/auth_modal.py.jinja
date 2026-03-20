@@ -20,6 +20,9 @@ from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import get_status_detail
 from .auth_users_tab import AuthUsersTab
+{% if include_auth_org %}
+from .auth_orgs_tab import AuthOrgsTab
+{% endif %}
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
 
@@ -266,6 +269,9 @@ class AuthDetailDialog(BaseDetailPopup):
         tabs_list = [
             ft.Tab(text="Overview", content=OverviewTab(component_data)),
             ft.Tab(text="Users", content=AuthUsersTab(metadata=metadata)),
+{% if include_auth_org %}
+            ft.Tab(text="Organizations", content=AuthOrgsTab(metadata=metadata)),
+{% endif %}
         ]
 
         # Create tabbed interface

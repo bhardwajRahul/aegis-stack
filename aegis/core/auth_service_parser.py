@@ -1,16 +1,20 @@
 """
 Auth service bracket syntax parser.
 
-Parses auth[level] syntax where level is one of: basic, rbac.
-Default (plain "auth" without brackets): basic.
+Parses auth[level, engine] syntax where values are detected by type:
+- Levels: basic, rbac, org
+- Engines: sqlite, postgres
+
+Order doesn't matter. Defaults: basic, (no engine override).
 """
 
 from dataclasses import dataclass
 
-from ..constants import AuthLevels
+from ..constants import AuthLevels, StorageBackends
 
-# Valid auth levels
+# Valid values for detection
 LEVELS = set(AuthLevels.ALL)
+ENGINES = {StorageBackends.SQLITE, StorageBackends.POSTGRES}
 
 DEFAULT_LEVEL = AuthLevels.BASIC
 
@@ -20,6 +24,7 @@ class AuthServiceConfig:
     """Parsed auth service configuration."""
 
     level: str
+    engine: str | None = None
 
 
 def parse_auth_service_config(service_string: str) -> AuthServiceConfig:
@@ -27,10 +32,11 @@ def parse_auth_service_config(service_string: str) -> AuthServiceConfig:
     Parse auth[...] service string into config.
 
     Args:
-        service_string: Service specification like "auth", "auth[]", or "auth[rbac]"
+        service_string: Service specification like "auth", "auth[rbac]",
+                        or "auth[org,postgres]"
 
     Returns:
-        AuthServiceConfig with level
+        AuthServiceConfig with level and optional engine
 
     Raises:
         ValueError: If service string is invalid or has unknown values
@@ -65,15 +71,40 @@ def parse_auth_service_config(service_string: str) -> AuthServiceConfig:
     if not bracket_content:
         return AuthServiceConfig(level=DEFAULT_LEVEL)
 
-    # Single value expected
-    level = bracket_content.lower()
+    # Split by comma and categorize
+    values = [v.strip().lower() for v in bracket_content.split(",") if v.strip()]
 
-    if level not in LEVELS:
+    found_levels: list[str] = []
+    found_engines: list[str] = []
+
+    for value in values:
+        if value in LEVELS:
+            found_levels.append(value)
+        elif value in ENGINES:
+            found_engines.append(value)
+        else:
+            raise ValueError(
+                f"Unknown value '{value}' in auth[...] syntax. "
+                f"Valid levels: {', '.join(sorted(LEVELS))}. "
+                f"Valid engines: {', '.join(sorted(ENGINES))}."
+            )
+
+    if len(found_levels) > 1:
         raise ValueError(
-            f"Unknown auth level '{level}'. Valid levels: {', '.join(sorted(LEVELS))}."
+            f"Cannot specify multiple levels: {', '.join(found_levels)}. "
+            f"Choose one of: {', '.join(sorted(LEVELS))}."
         )
 
-    return AuthServiceConfig(level=level)
+    if len(found_engines) > 1:
+        raise ValueError(
+            f"Cannot specify multiple engines: {', '.join(found_engines)}. "
+            f"Choose one of: {', '.join(sorted(ENGINES))}."
+        )
+
+    level = found_levels[0] if found_levels else DEFAULT_LEVEL
+    engine = found_engines[0] if found_engines else None
+
+    return AuthServiceConfig(level=level, engine=engine)
 
 
 def is_auth_service_with_options(service_string: str) -> bool:

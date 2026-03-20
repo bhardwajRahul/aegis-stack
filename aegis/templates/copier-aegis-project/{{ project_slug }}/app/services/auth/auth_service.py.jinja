@@ -1,5 +1,6 @@
 """Authentication service utilities."""
 
+from app.core.config import settings
 from app.core.security import verify_token
 from app.models.user import User
 from app.services.auth.user_service import UserService
@@ -13,14 +14,33 @@ from app.components.backend.api.deps import get_async_db
 from app.core.security import VALID_ROLES
 {% endif %}
 
+# Synthetic user returned when AUTH_ENABLED=false (dev mode)
+_DEV_USER = User(
+    id=0,
+    email="dev@localhost",
+    full_name="Development User",
+    hashed_password="",
+    is_active=True,
+    is_verified=True,
+{% if include_auth_rbac %}
+    role="admin",
+{% endif %}
+)
 
-async def get_current_user_from_token(token: str, db: AsyncSession) -> User:
+
+async def get_current_user_from_token(token: str | None, db: AsyncSession) -> User:
     """Get current user from JWT token."""
+    if not settings.AUTH_ENABLED:
+        return _DEV_USER
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    if token is None:
+        raise credentials_exception
 
     # Verify token
     payload = verify_token(token)
@@ -48,7 +68,7 @@ async def get_current_user_from_token(token: str, db: AsyncSession) -> User:
 
 {% if include_auth_rbac %}
 
-_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
+_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
 
 
 def require_role(*required_roles: str):
@@ -68,9 +88,11 @@ def require_role(*required_roles: str):
             raise ValueError(f"Invalid role: {role}. Valid roles: {VALID_ROLES}")
 
     async def dependency(
-        token: str = Depends(_oauth2_scheme),
+        token: str | None = Depends(_oauth2_scheme),
         db: AsyncSession = Depends(get_async_db),
     ) -> User:
+        if not settings.AUTH_ENABLED:
+            return _DEV_USER
         user = await get_current_user_from_token(token, db)
         if user.role not in required_roles:
             raise HTTPException(
