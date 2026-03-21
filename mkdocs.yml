@@ -64,6 +64,11 @@ nav:
       - Examples: services/auth/examples.md
     - AI Service:
       - Getting Started: services/ai/index.md
+      - Illiana: services/ai/illiana.md
+      - LLM Catalog: services/ai/llm-catalog.md
+      - RAG: services/ai/rag.md
+      - Cost Tracking: services/ai/cost-tracking.md
+      - Voice: services/ai/voice.md
       - Engines: services/ai/engines.md
       - Provider Setup: services/ai/providers.md
       - API Reference: services/ai/api.md

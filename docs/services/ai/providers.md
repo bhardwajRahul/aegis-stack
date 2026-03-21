@@ -13,13 +13,14 @@ The AI service supports multiple providers through either [Pydantic AI](https://
 
 | Provider | API Key Required | Speed | Best For |
 |----------|------------------|-------|----------|
-| **PUBLIC** | ❌ No | Basic | Instant testing, no setup |
-| **Google Gemini** | ✅ Yes (free tier) | Good | Development, prototyping |
-| **Groq** | ✅ Yes (free tier) | Very fast | Production, low cost |
-| **OpenAI** | ✅ Yes | Good | Production, familiar API |
-| **Anthropic** | ✅ Yes | Good | Claude models |
-| **Mistral** | ✅ Yes | Good | Open models |
-| **Cohere** | ✅ Yes (free tier) | Good | Command models |
+| **PUBLIC** | No | Basic | Instant testing, no setup |
+| **Ollama** | No (local) | Varies | Privacy, offline, no API costs |
+| **Google Gemini** | Yes (free tier) | Good | Development, prototyping |
+| **Groq** | Yes (free tier) | Very fast | Production, low cost |
+| **OpenAI** | Yes | Good | Production, familiar API |
+| **Anthropic** | Yes | Good | Claude models |
+| **Mistral** | Yes | Good | Open models |
+| **Cohere** | Yes (free tier) | Good | Command models |
 
 !!! tip "Recommendation"
     **Start:** PUBLIC (no API key, instant) → **Develop:** Google Gemini (free tier) → **Production:** Groq (very fast, low cost)
@@ -31,7 +32,7 @@ All providers are configured through environment variables in your `.env` file:
 ```bash
 # Core AI Service Settings
 AI_ENABLED=true                    # Enable/disable service
-AI_PROVIDER=public                 # Provider: openai, anthropic, google, groq, mistral, cohere, public
+AI_PROVIDER=public                 # Provider: openai, anthropic, google, groq, mistral, cohere, ollama, public
 AI_MODEL=auto                      # Model name (varies by provider, "auto" for PUBLIC)
 AI_TEMPERATURE=0.7                 # Response creativity (0.0-2.0)
 AI_MAX_TOKENS=1000                 # Maximum response length
@@ -178,9 +179,69 @@ COHERE_API_KEY=...                 # Cohere API key
 
     **Best for:** Enterprise features, RAG applications
 
+## Ollama (Local)
+
+Run models locally with zero API costs. Supports hundreds of open-source models.
+
+### Setup
+
+1. Install Ollama from [ollama.ai](https://ollama.ai/)
+2. Pull a model:
+
+```bash
+ollama pull llama3.1
+```
+
+3. Configure your environment:
+
+```bash
+AI_PROVIDER=ollama
+AI_MODEL=llama3.1
+```
+
+### Ollama Deployment Modes
+
+Configure at project generation:
+
+```bash
+# Host mode: Ollama runs on your machine (default)
+aegis init my-app --services ai
+
+# Docker mode: Ollama runs in a Docker container
+# (select during aegis init interactive prompts)
+```
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `host` | Ollama on localhost:11434 | Development, GPU on host |
+| `docker` | Ollama in Docker container | Portable, CI/CD |
+| `none` | No Ollama support | Cloud-only providers |
+
+### Switching Models via CLI
+
+With the LLM Catalog, you can discover and switch Ollama models:
+
+```bash
+# Sync Ollama models into catalog
+my-app llm sync --source ollama
+
+# List available Ollama models
+my-app llm list --vendor ollama
+
+# Switch to an Ollama model
+my-app llm use llama3.1
+
+# Or use /model in interactive chat
+my-app ai chat
+> /model llama3.1
+```
+
+!!! tip "Cost Tracking with Ollama"
+    Ollama models show $0.00 cost in usage stats - this is expected and normal since all processing happens locally. Illiana is aware of this and won't flag it as an issue.
+
 ## Switching Providers
 
-You can switch providers at any time by changing your `.env` file:
+You can switch providers at any time by changing your `.env` file or using the CLI:
 
 ```bash
 # Switch from PUBLIC to Groq
@@ -189,24 +250,38 @@ GROQ_API_KEY=your-key-here
 AI_MODEL=llama-3.1-8b-instant
 ```
 
-Then restart your application:
+### Via .env
+
+Edit `.env` and restart:
 
 ```bash
-# Stop the server
-make stop
-
-# Start with new provider
-make serve
+make stop && make serve
 ```
 
-**Testing the switch:**
+### Via CLI (with LLM Catalog)
+
+Update `.env` from the catalog (takes effect on next CLI invocation or server restart):
 
 ```bash
-# Verify new provider is active
-my-app ai status
+# Auto-detects provider from model name and updates .env
+my-app llm use gpt-4o              # → sets AI_PROVIDER=openai
+my-app llm use claude-sonnet-4-20250514  # → sets AI_PROVIDER=anthropic
+my-app llm use llama3.1            # → sets AI_PROVIDER=ollama
+```
 
-# Test with a message
-my-app ai chat "Hello from the new provider!"
+Switch instantly within an interactive chat session (refreshes in-process, no restart needed):
+
+```bash
+my-app ai chat
+> /model gpt-4o
+✓ Switched to OpenAI/gpt-4o
+```
+
+**Verify the switch:**
+
+```bash
+my-app ai status
+my-app llm current
 ```
 
 ## Troubleshooting
@@ -241,6 +316,7 @@ my-app ai providers
 
 **Next Steps:**
 
+- **[LLM Catalog](llm-catalog.md)** - Browse and switch between ~2000 models
 - **[CLI Commands](cli.md)** - Using the AI service from command line
 - **[API Reference](api.md)** - Using the AI service via REST API
 - **[Service Layer](integration.md)** - Using the AI service in your code
