@@ -29,8 +29,14 @@ from app.services.ai.models.llm import (
     LLMVendor,
     Modality,
 )
-from app.services.ai.ollama import OllamaClient, OllamaModel
 from sqlmodel import Session, select
+
+try:
+    from app.services.ai.ollama import OllamaClient, OllamaModel
+except ModuleNotFoundError:
+    # Ollama module not generated (ollama_mode is "none")
+    OllamaClient = None  # type: ignore[assignment, misc]
+    OllamaModel = None  # type: ignore[assignment, misc]
 
 
 @dataclass
@@ -623,6 +629,10 @@ class LLMSyncService:
             SyncResult with counts and any errors.
         """
         result = SyncResult()
+
+        if OllamaClient is None:
+            result.errors.append("Ollama integration not available")
+            return result
 
         # Get Ollama base URL from settings (uses effective URL for Docker/local auto-detection)
         base_url = settings.ollama_base_url_effective

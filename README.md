@@ -51,19 +51,19 @@ cd my-api && make serve
 
 **Installation alternatives:** See the [Installation Guide](https://lbedner.github.io/aegis-stack/installation/) for `uv tool install`, `pip install`, and development setup.
 
-## Overseer - Built-In System Visibility
+## Overseer - Your Application's Control Plane
 
 ![Overseer](docs/images/overseer-demo.gif)
 
-**[Overseer](https://lbedner.github.io/aegis-stack/overseer/)** is the built-in system dashboard that ships with every Aegis Stack project.
+<sub>[Live Demo: sector-7g.dev/dashboard](https://sector-7g.dev/dashboard/)</sub>
 
-It provides a live view of what your application is doing at runtime - across core components (Backend, Database, Workers, Scheduler) and services (Auth, AI, Comms) - through a web UI.
+**[Overseer](https://lbedner.github.io/aegis-stack/overseer/)** is the embedded control plane that ships with every Aegis Stack project.
 
-Overseer goes beyond simple health checks. You can inspect worker queues, scheduled jobs, database state, and AI usage, all in one place, without wiring up external tools.
+It gives you full runtime visibility into your system - components, services, infrastructure, and data flows - through a single dashboard. No external tooling, no vendor integrations, no setup.
 
-No Datadog. No New Relic. No vendor lock-in.
+Inspect worker queues, scheduled jobs, database schema and migrations, AI token usage, auth sessions - everything your application is doing, in real time.
 
-Just a clear view of your system, included from day one.
+Every Aegis project ships with its own control plane from day one.
 
 ## CLI - First-Class System Interface
 

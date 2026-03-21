@@ -61,7 +61,7 @@ def get_component_title(component_name: str) -> str:
         {%- if include_ollama %}
         "ollama": "Inference",
         {%- endif %}
-        {%- if include_ai_service %}
+        {%- if include_ai %}
         "service_ai": "AI Service",
         {%- endif %}
         {%- if include_auth %}
@@ -95,7 +95,7 @@ def get_component_label(component_name: str) -> str:
         {%- if include_ollama %}
         "ollama": "Ollama",
         {%- endif %}
-        {%- if include_ai_service %}
+        {%- if include_ai %}
         "service_ai": "LLM Provider",
         {%- endif %}
         {%- if include_auth %}
