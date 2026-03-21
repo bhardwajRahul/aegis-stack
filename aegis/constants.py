@@ -208,7 +208,9 @@ class Messages:
     @classmethod
     def copier_only_command(cls, command_name: str) -> str:
         """Generate message for Copier-only command."""
-        return f"The 'aegis {command_name}' command only works with Copier-generated projects."
+        from .i18n import t
+
+        return t("shared.copier_only", command=command_name)
 
     @classmethod
     def print_section_header(cls, title: str, newline_before: bool = False) -> None:
@@ -225,16 +227,20 @@ class Messages:
         """Print standard next steps message."""
         import typer
 
-        typer.echo(f"\n{cls.NEXT_STEPS_HEADER}")
-        typer.echo(cls.NEXT_STEP_MAKE_CHECK)
-        typer.echo(cls.NEXT_STEP_TEST)
-        typer.echo(cls.NEXT_STEP_COMMIT)
+        from .i18n import t
+
+        typer.echo(f"\n{t('shared.next_steps')}")
+        typer.echo(t("shared.next_make_check"))
+        typer.echo(t("shared.next_test"))
+        typer.echo(t("shared.next_commit"))
 
     @classmethod
     def print_review_changes(cls) -> None:
         """Print standard review changes message."""
         import typer
 
-        typer.echo(f"\n{cls.REVIEW_CHANGES_HEADER}")
-        typer.echo(cls.REVIEW_DOCKER_COMPOSE)
-        typer.echo(cls.REVIEW_PYPROJECT)
+        from .i18n import t
+
+        typer.echo(f"\n{t('shared.review_header')}")
+        typer.echo(t("shared.review_docker"))
+        typer.echo(t("shared.review_pyproject"))

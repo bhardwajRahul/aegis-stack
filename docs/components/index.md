@@ -129,6 +129,7 @@ graph TB
 - **[Scheduler Component](./scheduler.md)** - Background tasks and cron jobs
 - **[Worker Component](./worker/index.md)** - Background task processing and queues
 - **[Ingress Component](./ingress.md)** - Traefik reverse proxy and TLS
+- **[Observability Component](./observability.md)** - Pydantic Logfire tracing and metrics
 - **[Auth Service](../services/auth/index.md)** - User authentication with JWT
 - **[AI Service](../services/ai/index.md)** - Multi-provider AI conversations
 - **[Comms Service](../services/comms/index.md)** - Email, SMS, and voice
