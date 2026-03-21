@@ -23,6 +23,7 @@ from ..core.component_utils import (
 from ..core.dependency_resolver import DependencyResolver
 from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES
+from ..i18n import t
 from .interactive import set_ai_service_config, set_auth_level_selection
 from .utils import expand_scheduler_dependencies
 
@@ -165,7 +166,9 @@ def validate_and_resolve_services(
     ]
     if unknown_services:
         typer.secho(
-            f"Unknown services: {', '.join(unknown_services)}", fg="red", err=True
+            t("validation.unknown_services", names=", ".join(unknown_services)),
+            fg="red",
+            err=True,
         )
         available = list(SERVICES.keys())
         typer.echo(f"Available services: {', '.join(available)}", err=True)

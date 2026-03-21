@@ -18,6 +18,14 @@ from ..core.manual_updater import ManualUpdater
 from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES
 from ..core.version_compatibility import validate_version_compatibility
+from ..i18n import t
+
+
+def _translated_service_desc(name: str, fallback: str) -> str:
+    """Get translated description for a service, with fallback."""
+    svc_key = f"service.{name}"
+    result = t(svc_key)
+    return result if result != svc_key else fallback
 
 
 def remove_service_command(
@@ -67,7 +75,7 @@ def remove_service_command(
     Global options: Use --verbose/-v before the command for detailed output.
     """
 
-    typer.echo("Aegis Stack - Remove Services")
+    typer.echo(t("remove_service.title"))
     typer.echo("=" * 50)
 
     # Resolve project path
@@ -76,7 +84,7 @@ def remove_service_command(
     # Validate it's a Copier project
     validate_copier_project(target_path, "remove-service")
 
-    typer.echo(f"Project: {target_path}")
+    typer.echo(t("remove_service.project", path=target_path))
 
     # Check version compatibility between CLI and project template
     validate_version_compatibility(
@@ -85,29 +93,22 @@ def remove_service_command(
 
     # Validate services argument or interactive mode
     if not interactive and not services:
-        typer.secho(
-            "Error: services argument is required (or use --interactive)",
-            fg="red",
-            err=True,
-        )
-        typer.echo("   Usage: aegis remove-service auth,ai", err=True)
-        typer.echo("   Or: aegis remove-service --interactive", err=True)
+        typer.secho(t("remove_service.error_no_args"), fg="red", err=True)
+        typer.echo(f"   {t('remove_service.usage_hint')}", err=True)
+        typer.echo(f"   {t('remove_service.interactive_hint')}", err=True)
         raise typer.Exit(1)
 
     # Interactive mode
     if interactive:
         if services:
-            typer.secho(
-                "Warning: --interactive flag ignores service arguments",
-                fg="yellow",
-            )
+            typer.secho(t("remove_service.interactive_ignores_args"), fg="yellow")
 
         from ..cli.interactive import interactive_service_remove_selection
 
         selected_services = interactive_service_remove_selection(target_path)
 
         if not selected_services:
-            typer.secho("\nNo services selected for removal", fg="green")
+            typer.secho(f"\n{t('remove_service.no_selected')}", fg="green")
             raise typer.Exit(0)
 
         # Convert to comma-separated string for existing logic
@@ -128,15 +129,17 @@ def remove_service_command(
                 typer.secho(f"{error}", fg="red", err=True)
             raise typer.Exit(1)
 
+    except typer.Exit:
+        raise
     except Exception as e:
-        typer.secho(f"Service validation failed: {e}", fg="red", err=True)
+        typer.secho(t("remove_service.validation_failed", error=e), fg="red", err=True)
         raise typer.Exit(1)
 
     # Load existing project configuration
     try:
         existing_answers = load_copier_answers(target_path)
     except Exception as e:
-        typer.secho(f"Failed to load project configuration: {e}", fg="red", err=True)
+        typer.secho(t("remove_service.load_config_failed", error=e), fg="red", err=True)
         raise typer.Exit(1)
 
     # Check which services are currently enabled
@@ -152,53 +155,54 @@ def remove_service_command(
             services_to_remove.append(service)
 
     if not_enabled:
-        typer.echo(f"Not enabled: {', '.join(not_enabled)}", err=False)
+        typer.echo(t("remove_service.not_enabled", services=", ".join(not_enabled)))
 
     if not services_to_remove:
-        typer.secho("No services to remove!", fg="green")
+        typer.secho(t("remove_service.nothing_to_remove"), fg="green")
         raise typer.Exit(0)
 
     # Show what will be removed
-    typer.secho("\nServices to remove:", fg="yellow")
+    typer.secho(f"\n{t('remove_service.services_to_remove')}", fg="yellow")
     for service in services_to_remove:
         if service in SERVICES:
-            desc = SERVICES[service].description
+            desc = _translated_service_desc(service, SERVICES[service].description)
             typer.echo(f"   • {service}: {desc}")
 
     # Warn about auth-specific data
     if AnswerKeys.SERVICE_AUTH in services_to_remove:
-        typer.secho("\nIMPORTANT: Auth Service Warning", fg="yellow")
-        typer.echo("   Removing auth service will delete:")
-        typer.echo("   • User authentication API endpoints")
-        typer.echo("   • User model and authentication services")
-        typer.echo("   • JWT token handling code")
-        typer.echo("   Note: Database tables and alembic migrations are NOT deleted.")
+        typer.secho(f"\n{t('remove_service.auth_warning')}", fg="yellow")
+        typer.echo(f"   {t('remove_service.auth_delete_intro')}")
+        typer.echo(f"   • {t('remove_service.auth_delete_endpoints')}")
+        typer.echo(f"   • {t('remove_service.auth_delete_models')}")
+        typer.echo(f"   • {t('remove_service.auth_delete_jwt')}")
+        typer.echo(f"   {t('remove_service.auth_db_note')}")
         typer.echo()
 
     # Confirm before proceeding
     typer.echo()
-    typer.secho(
-        "WARNING: This will DELETE service files from your project!", fg="yellow"
-    )
+    typer.secho(t("remove_service.warning_delete"), fg="yellow")
 
-    if not yes and not typer.confirm("Remove these services?"):
-        typer.secho("Operation cancelled", fg="red")
+    if not yes and not typer.confirm(t("remove_service.confirm")):
+        typer.secho(t("shared.operation_cancelled"), fg="red")
         raise typer.Exit(0)
 
     # Remove services using ManualUpdater
-    typer.echo("\nRemoving services...")
     try:
         updater = ManualUpdater(target_path)
 
         for service in services_to_remove:
-            typer.echo(f"\nRemoving service: {service}...")
+            typer.echo(f"\n{t('remove_service.removing', service=service)}")
 
             # Remove the service
             result = updater.remove_component(service)
 
             if not result.success:
                 typer.secho(
-                    f"Failed to remove service {service}: {result.error_message}",
+                    t(
+                        "remove_service.failed_service",
+                        service=service,
+                        error=result.error_message,
+                    ),
                     fg="red",
                     err=True,
                 )
@@ -206,18 +210,21 @@ def remove_service_command(
 
             # Show results
             if result.files_deleted:
-                typer.secho(f"   Removed {len(result.files_deleted)} files", fg="green")
+                typer.secho(
+                    f"   {t('remove_service.removed_files', count=len(result.files_deleted))}",
+                    fg="green",
+                )
 
-        typer.secho("\nServices removed successfully!", fg="green")
+        typer.secho(f"\n{t('remove_service.success')}", fg="green")
 
         # Provide next steps
         Messages.print_review_changes()
         Messages.print_next_steps()
 
         # Note about remaining components
-        typer.echo("\nNote: Service dependencies (database, etc.) were NOT removed.")
-        typer.echo("Use 'aegis remove <component>' to remove components separately.")
+        typer.echo(f"\n{t('remove_service.deps_not_removed')}")
+        typer.echo(t("remove_service.deps_remove_hint"))
 
     except Exception as e:
-        typer.secho(f"\nFailed to remove services: {e}", fg="red", err=True)
+        typer.secho(f"\n{t('remove_service.failed', error=e)}", fg="red", err=True)
         raise typer.Exit(1)

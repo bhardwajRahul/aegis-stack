@@ -13,6 +13,9 @@ MESSAGES: dict[str, str] = {
     "validation.invalid_python": (
         "Invalid Python version '{version}'. Must be one of: {supported}"
     ),
+    "validation.unknown_service": "Unknown service: {name}",
+    "validation.unknown_services": "Unknown services: {names}",
+    "validation.unknown_component": "Unknown component: {name}",
     # ── Init command ───────────────────────────────────────────────────
     "init.title": "Aegis Stack Project Initialization",
     "init.location": "Location:",
@@ -428,4 +431,319 @@ MESSAGES: dict[str, str] = {
     "postgen.star_prompt": (
         "If Aegis Stack made your life easier, consider leaving a star:"
     ),
+    # ── Add-service command ────────────────────────────────────────────
+    "add_service.title": "Aegis Stack - Add Services",
+    "add_service.project": "Project: {path}",
+    "add_service.error_no_args": (
+        "Error: services argument is required (or use --interactive)"
+    ),
+    "add_service.usage_hint": "Usage: aegis add-service auth,ai",
+    "add_service.interactive_hint": "Or: aegis add-service --interactive",
+    "add_service.interactive_ignores_args": (
+        "Warning: --interactive flag ignores service arguments"
+    ),
+    "add_service.no_selected": "No services selected",
+    "add_service.already_enabled": "Already enabled: {services}",
+    "add_service.all_enabled": "All requested services are already enabled!",
+    "add_service.validation_failed": "Service validation failed: {error}",
+    "add_service.load_config_failed": ("Failed to load project configuration: {error}"),
+    "add_service.services_to_add": "Services to add:",
+    "add_service.required_components": ("Required components (will be auto-added):"),
+    "add_service.already_have_components": (
+        "Already have required components: {components}"
+    ),
+    "add_service.confirm": "Add these services?",
+    "add_service.adding_component": ("Adding required component: {component}..."),
+    "add_service.failed_component": ("Failed to add component {component}: {error}"),
+    "add_service.added_files": "Added {count} files",
+    "add_service.skipped_files": "Skipped {count} existing files",
+    "add_service.adding_service": "Adding service: {service}...",
+    "add_service.failed_service": ("Failed to add service {service}: {error}"),
+    "add_service.resolve_failed": ("Failed to resolve service dependencies: {error}"),
+    "add_service.bootstrap_alembic": "Bootstrapping alembic infrastructure...",
+    "add_service.created_file": "Created: {file}",
+    "add_service.generated_migration": "Generated migration: {name}",
+    "add_service.applying_migrations": "Applying database migrations...",
+    "add_service.migration_failed": (
+        "Warning: Auto-migration failed. Run 'make migrate' manually."
+    ),
+    "add_service.success": "Services added successfully!",
+    "add_service.failed": "Failed to add services: {error}",
+    "add_service.auth_setup": "Auth Service Setup:",
+    "add_service.auth_create_users": "   1. Create test users: {cmd}",
+    "add_service.auth_view_routes": "   2. View auth routes: {url}",
+    "add_service.ai_setup": "AI Service Setup:",
+    "add_service.ai_set_provider": (
+        "   1. Set {env_var} in .env (openai, anthropic, google, groq)"
+    ),
+    "add_service.ai_set_api_key": ("   2. Set provider API key ({env_var}, etc.)"),
+    "add_service.ai_test_cli": "   3. Test with CLI: {cmd}",
+    # ── Remove-service command ─────────────────────────────────────────
+    "remove_service.title": "Aegis Stack - Remove Services",
+    "remove_service.project": "Project: {path}",
+    "remove_service.error_no_args": (
+        "Error: services argument is required (or use --interactive)"
+    ),
+    "remove_service.usage_hint": "Usage: aegis remove-service auth,ai",
+    "remove_service.interactive_hint": "Or: aegis remove-service --interactive",
+    "remove_service.interactive_ignores_args": (
+        "Warning: --interactive flag ignores service arguments"
+    ),
+    "remove_service.no_selected": "No services selected for removal",
+    "remove_service.not_enabled": "Not enabled: {services}",
+    "remove_service.nothing_to_remove": "No services to remove!",
+    "remove_service.validation_failed": "Service validation failed: {error}",
+    "remove_service.load_config_failed": (
+        "Failed to load project configuration: {error}"
+    ),
+    "remove_service.services_to_remove": "Services to remove:",
+    "remove_service.auth_warning": "IMPORTANT: Auth Service Warning",
+    "remove_service.auth_delete_intro": "Removing auth service will delete:",
+    "remove_service.auth_delete_endpoints": ("User authentication API endpoints"),
+    "remove_service.auth_delete_models": ("User model and authentication services"),
+    "remove_service.auth_delete_jwt": "JWT token handling code",
+    "remove_service.auth_db_note": (
+        "Note: Database tables and alembic migrations are NOT deleted."
+    ),
+    "remove_service.warning_delete": (
+        "WARNING: This will DELETE service files from your project!"
+    ),
+    "remove_service.confirm": "Remove these services?",
+    "remove_service.removing": "Removing service: {service}...",
+    "remove_service.failed_service": ("Failed to remove service {service}: {error}"),
+    "remove_service.removed_files": "Removed {count} files",
+    "remove_service.success": "Services removed successfully!",
+    "remove_service.failed": "Failed to remove services: {error}",
+    "remove_service.deps_not_removed": (
+        "Note: Service dependencies (database, etc.) were NOT removed."
+    ),
+    "remove_service.deps_remove_hint": (
+        "Use 'aegis remove <component>' to remove components separately."
+    ),
+    # ── Version command ────────────────────────────────────────────────
+    "version.info": "Aegis Stack CLI v{version}",
+    # ── Components command ─────────────────────────────────────────────
+    "components.core_title": "CORE COMPONENTS",
+    "components.backend_desc": (
+        "  backend      - FastAPI backend server (always included)"
+    ),
+    "components.frontend_desc": (
+        "  frontend     - Flet frontend interface (always included)"
+    ),
+    "components.infra_title": "INFRASTRUCTURE COMPONENTS",
+    "components.requires": "Requires: {deps}",
+    "components.recommends": "Recommends: {deps}",
+    "components.usage_hint": (
+        "Use 'aegis init PROJECT_NAME --components redis,worker' to select components"
+    ),
+    # ── Services command ───────────────────────────────────────────────
+    "services.title": "AVAILABLE SERVICES",
+    "services.type_auth": "Authentication Services",
+    "services.type_payment": "Payment Services",
+    "services.type_ai": "AI & Machine Learning Services",
+    "services.type_notification": "Notification Services",
+    "services.type_analytics": "Analytics Services",
+    "services.type_storage": "Storage Services",
+    "services.requires_components": "Requires components: {deps}",
+    "services.recommends_components": "Recommends components: {deps}",
+    "services.requires_services": "Requires services: {deps}",
+    "services.none_available": "  No services available yet.",
+    "services.usage_hint": (
+        "Use 'aegis init PROJECT_NAME --services auth' to add services"
+    ),
+    # ── Update command ─────────────────────────────────────────────────
+    "update.title": "Aegis Stack - Update Template",
+    "update.not_copier": ("Project at {path} was not generated with Copier."),
+    "update.copier_only": (
+        "The 'aegis update' command only works with Copier-generated projects."
+    ),
+    "update.need_regen": ("Projects generated before v0.2.0 need to be regenerated."),
+    "update.project": "Project: {path}",
+    "update.commit_or_stash": (
+        "Commit or stash your changes before running 'aegis update'."
+    ),
+    "update.clean_required": (
+        "Copier requires a clean git tree to safely merge changes."
+    ),
+    "update.git_clean": "Git tree is clean",
+    "update.dirty_tree": "Git tree has uncommitted changes",
+    "update.changelog_breaking": "Breaking Changes:",
+    "update.changelog_features": "New Features:",
+    "update.changelog_fixes": "Bug Fixes:",
+    "update.changelog_other": "Other Changes:",
+    "update.current_commit": "   Current: {commit}...",
+    "update.target_commit": "   Target:  {commit}...",
+    "update.unknown_version": ("Warning: Cannot determine current template version"),
+    "update.untagged_commit": (
+        "Project may have been generated from an untagged commit"
+    ),
+    "update.custom_template": "Using custom template ({source}): {path}",
+    "update.version_info": "Version Information:",
+    "update.current_cli": "   Current CLI:      {version}",
+    "update.current_template": "   Current Template: {version}",
+    "update.current_template_commit": ("   Current Template: {commit}... (commit)"),
+    "update.current_template_unknown": "   Current Template: unknown",
+    "update.target_template": "   Target Template:  {version}",
+    "update.already_at_version": ("Project is already at the requested version"),
+    "update.already_at_commit": "Project is already at the target commit",
+    "update.downgrade_blocked": "Downgrade not supported",
+    "update.downgrade_reason": (
+        "Copier does not support downgrading to older template versions."
+    ),
+    "update.changelog": "Changelog:",
+    "update.dry_run": "DRY RUN MODE - No changes will be applied",
+    "update.dry_run_hint": "To apply this update, run:",
+    "update.confirm": "Apply this update?",
+    "update.cancelled": "Update cancelled",
+    "update.creating_backup": "Creating backup point...",
+    "update.backup_created": "   Backup created: {tag}",
+    "update.backup_failed": "Could not create backup point",
+    "update.updating": "Updating project...",
+    "update.updating_to": "Updating to template version {version}",
+    "update.moved_files": ("   Moved {count} new files from nested directory"),
+    "update.synced_files": "   Synced {count} template changes",
+    "update.merge_conflicts": (
+        "   {count} file(s) have merge conflicts (search for <<<<<<< to resolve):"
+    ),
+    "update.running_postgen": "Running post-generation tasks...",
+    "update.version_updated": ("   Updated __aegis_version__ to {version}"),
+    "update.success": "Update completed successfully!",
+    "update.partial_success": (
+        "Update completed with some post-generation task failures"
+    ),
+    "update.partial_detail": ("   Some setup tasks failed. See details above."),
+    "update.next_steps": "Next Steps:",
+    "update.next_review": "   1. Review changes: git diff",
+    "update.next_conflicts": "   2. Check for conflicts (*.rej files)",
+    "update.next_test": "   3. Run tests: make check",
+    "update.next_commit": ("   4. Commit changes: git add . && git commit"),
+    "update.failed": "Update failed: {error}",
+    "update.rollback_prompt": "Rollback to previous state?",
+    "update.manual_rollback": "Manual rollback: git reset --hard {tag}",
+    "update.troubleshooting": "Troubleshooting:",
+    "update.troubleshoot_clean": ("   - Ensure you have a clean git tree"),
+    "update.troubleshoot_version": ("   - Check that the version/commit exists"),
+    "update.troubleshoot_docs": ("   - Review Copier documentation for update issues"),
+    # ── Ingress command ────────────────────────────────────────────────
+    "ingress.title": "Aegis Stack - Enable Ingress TLS",
+    "ingress.project": "Project: {path}",
+    "ingress.not_found": ("Ingress component not found. Adding it first..."),
+    "ingress.add_confirm": "Add the ingress component?",
+    "ingress.add_failed": ("Failed to add ingress component: {error}"),
+    "ingress.added": "Ingress component added.",
+    "ingress.tls_already": "TLS is already enabled on this project.",
+    "ingress.domain_label": "   Domain: {domain}",
+    "ingress.acme_email": "   ACME email: {email}",
+    "ingress.domain_prompt": (
+        "Domain name (e.g., example.com, or empty for IP-based routing)"
+    ),
+    "ingress.email_reuse": "Using existing email for ACME: {email}",
+    "ingress.email_prompt": "Email for Let's Encrypt notifications",
+    "ingress.email_required": (
+        "Error: --email is required for TLS (needed for Let's Encrypt)"
+    ),
+    "ingress.tls_config": "TLS Configuration:",
+    "ingress.domain_none": ("   Domain: (none - IP/PathPrefix routing)"),
+    "ingress.tls_confirm": "Enable TLS with this configuration?",
+    "ingress.enabling": "Enabling TLS...",
+    "ingress.updated_file": "   Updated: {file}",
+    "ingress.created_file": "   Created: {file}",
+    "ingress.success": "TLS enabled successfully!",
+    "ingress.available_at": ("   Your app will be available at: https://{domain}"),
+    "ingress.https_configured": ("   HTTPS is now configured with Let's Encrypt"),
+    "ingress.next_steps": "Next steps:",
+    "ingress.next_deploy": "   1. Deploy with: aegis deploy",
+    "ingress.next_ports": ("   2. Ensure ports 80 and 443 are open on your server"),
+    "ingress.next_dns": (
+        "   3. Point your DNS A record for {domain} to your server IP"
+    ),
+    "ingress.next_certs": ("   Certificates will be auto-provisioned on first request"),
+    # ── Deploy commands ────────────────────────────────────────────────
+    "deploy.no_config": (
+        "No deploy configuration found. Run 'aegis deploy-init' first."
+    ),
+    "deploy.init_saved": ("Deploy configuration saved to {file}"),
+    "deploy.prompt_host": "Server IP or hostname",
+    "deploy.init_gitignore": (
+        "Note: Consider adding .aegis/ to .gitignore to avoid committing deploy config"
+    ),
+    "deploy.setup_title": "Setting up server at {target}...",
+    "deploy.checking_ssh": "Checking SSH connectivity...",
+    "deploy.adding_host_key": "Adding server to known_hosts...",
+    "deploy.ssh_keyscan_failed": ("Failed to scan SSH host key: {error}"),
+    "deploy.ssh_failed": "SSH connection failed: {error}",
+    "deploy.copying_script": "Copying setup script to server...",
+    "deploy.copy_failed": "Failed to copy setup script",
+    "deploy.running_setup": ("Running server setup (this may take a few minutes)..."),
+    "deploy.setup_failed": "Server setup failed",
+    "deploy.setup_script_missing": ("Server setup script not found: {path}"),
+    "deploy.setup_script_hint": (
+        "Make sure your project was created with the ingress component."
+    ),
+    "deploy.setup_complete": "Server setup complete!",
+    "deploy.setup_next": ("Next: Run 'aegis deploy' to deploy your application"),
+    "deploy.deploying": "Deploying to {host}...",
+    "deploy.creating_backup": "Creating backup {timestamp}...",
+    "deploy.backup_failed": "Failed to create backup: {error}",
+    "deploy.backup_db": "Backing up PostgreSQL database...",
+    "deploy.backup_db_failed": (
+        "Warning: Database backup failed, continuing without it"
+    ),
+    "deploy.backup_created": "Backup created: {timestamp}",
+    "deploy.backup_pruned": "Pruned old backup: {name}",
+    "deploy.no_existing": ("No existing deployment found, skipping backup"),
+    "deploy.syncing": "Syncing files to server...",
+    "deploy.mkdir_failed": ("Failed to create remote directory '{path}'"),
+    "deploy.sync_failed": "Failed to sync files",
+    "deploy.copying_env": "Copying {file} to server as .env...",
+    "deploy.env_copy_failed": "Failed to copy .env file",
+    "deploy.stopping": "Stopping existing services...",
+    "deploy.building": "Building and starting services on server...",
+    "deploy.start_failed": "Failed to start services",
+    "deploy.auto_rollback": "Auto-rolling back to previous version...",
+    "deploy.health_waiting": "Waiting for containers to stabilize...",
+    "deploy.health_attempt": ("Health check attempt {n}/{total}..."),
+    "deploy.health_passed": "Health check passed",
+    "deploy.health_retry": ("Health check failed, retrying in {interval}s..."),
+    "deploy.health_all_failed": "All health check attempts failed",
+    "deploy.rolled_back": "Rolled back to backup {timestamp}",
+    "deploy.rollback_failed": ("Rollback failed! Manual intervention required."),
+    "deploy.health_failed_hint": (
+        "Deploy completed but health check failed. Check logs with: aegis deploy-logs"
+    ),
+    "deploy.complete": "Deployment complete!",
+    "deploy.app_running": ("   Application running at: http://{host}"),
+    "deploy.overseer": ("   Overseer dashboard: http://{host}/dashboard/"),
+    "deploy.view_logs": "   View logs: aegis deploy-logs",
+    "deploy.check_status": "   Check status: aegis deploy-status",
+    "deploy.backup_complete": "Backup complete!",
+    "deploy.creating_backup_on": "Creating backup on {host}...",
+    "deploy.no_backups": "No backups found.",
+    "deploy.backups_header": ("Backups on {host} ({count} total):"),
+    "deploy.rollback_hint": (
+        "Rollback with: aegis deploy-rollback --backup <timestamp>"
+    ),
+    "deploy.no_backups_available": "No backups available.",
+    "deploy.rolling_back": ("Rolling back to backup {backup} on {host}..."),
+    "deploy.rollback_not_found": "Backup not found: {timestamp}",
+    "deploy.rollback_stopping": "Stopping services...",
+    "deploy.rollback_restoring": ("Restoring files from backup {timestamp}..."),
+    "deploy.rollback_restore_failed": ("Failed to restore files: {error}"),
+    "deploy.rollback_db": "Restoring database...",
+    "deploy.rollback_pg_wait": "Waiting for PostgreSQL to be ready...",
+    "deploy.rollback_pg_timeout": (
+        "PostgreSQL did not become ready, attempting restore anyway"
+    ),
+    "deploy.rollback_db_failed": "Warning: Database restore failed",
+    "deploy.rollback_starting": "Starting services...",
+    "deploy.rollback_start_failed": ("Failed to start services after rollback"),
+    "deploy.rollback_complete": "Rollback complete!",
+    "deploy.rollback_failed_final": "Rollback failed!",
+    "deploy.status_header": "Service status on {host}:",
+    "deploy.stop_stopping": "Stopping services...",
+    "deploy.stop_success": "Services stopped",
+    "deploy.stop_failed": "Failed to stop services",
+    "deploy.restart_restarting": "Restarting services...",
+    "deploy.restart_success": "Services restarted",
+    "deploy.restart_failed": "Failed to restart services",
 }

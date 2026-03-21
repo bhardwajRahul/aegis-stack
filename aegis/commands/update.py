@@ -35,6 +35,7 @@ from ..core.template_cleanup import (
     sync_template_changes,
 )
 from ..core.version_compatibility import get_cli_version, get_project_template_version
+from ..i18n import t
 
 
 def _get_template_changed_files(
@@ -135,7 +136,7 @@ def update_command(
     Note: This command requires a clean git working tree.
     """
 
-    typer.echo("Aegis Stack - Update Template")
+    typer.echo(t("update.title"))
     typer.echo("=" * 50)
 
     # Resolve project path
@@ -144,42 +145,40 @@ def update_command(
     # Validate it's a Copier project
     if not is_copier_project(target_path):
         typer.secho(
-            f"Project at {target_path} was not generated with Copier.",
+            t("update.not_copier", path=target_path),
             fg="red",
             err=True,
         )
         typer.echo(
-            "   The 'aegis update' command only works with Copier-generated projects.",
+            f"   {t('update.copier_only')}",
             err=True,
         )
         typer.echo(
-            "   Projects generated before v0.2.0 need to be regenerated.",
+            f"   {t('update.need_regen')}",
             err=True,
         )
         raise typer.Exit(1)
 
-    typer.echo(f"Project: {target_path}")
+    typer.echo(t("update.project", path=target_path))
 
     # Check git status
     is_clean, git_message = validate_clean_git_tree(target_path)
     if not is_clean:
         typer.secho(git_message, fg="red", err=True)
         typer.echo(
-            "   Commit or stash your changes before running 'aegis update'.",
+            f"   {t('update.commit_or_stash')}",
             err=True,
         )
-        typer.echo(
-            "   Copier requires a clean git tree to safely merge changes.", err=True
-        )
+        typer.echo(f"   {t('update.clean_required')}", err=True)
         raise typer.Exit(1)
 
-    typer.secho("Git tree is clean", fg="green")
+    typer.secho(t("update.git_clean"), fg="green")
 
     # Get current template version
     current_commit = get_current_template_commit(target_path)
     if not current_commit:
-        typer.secho("Warning: Cannot determine current template version", fg="yellow")
-        typer.echo("   Project may have been generated from an untagged commit")
+        typer.secho(t("update.unknown_version"), fg="yellow")
+        typer.echo(f"   {t('update.untagged_commit')}")
 
     current_version = get_project_template_version(target_path)
     cli_version = get_cli_version()
@@ -197,7 +196,7 @@ def update_command(
 
     if effective_template_path:
         source = "flag" if template_path else "AEGIS_TEMPLATE_PATH"
-        typer.echo(f"Using custom template ({source}): {template_root}")
+        typer.echo(t("update.custom_template", source=source, path=template_root))
 
     # Resolve target version
     if to_version:
@@ -219,20 +218,20 @@ def update_command(
 
     # Display version information
     typer.echo("")
-    typer.echo("Version Information:")
-    typer.echo(f"   Current CLI:      {cli_version}")
+    typer.echo(t("update.version_info"))
+    typer.echo(t("update.current_cli", version=cli_version))
     if current_version:
-        typer.echo(f"   Current Template: {current_version}")
+        typer.echo(t("update.current_template", version=current_version))
     elif current_commit:
-        typer.echo(f"   Current Template: {current_commit[:8]}... (commit)")
+        typer.echo(t("update.current_template_commit", commit=current_commit[:8]))
     else:
-        typer.echo("   Current Template: unknown")
-    typer.echo(f"   Target Template:  {target_version_display}")
+        typer.echo(t("update.current_template_unknown"))
+    typer.echo(t("update.target_template", version=target_version_display))
 
     # Check if already up to date (version-based)
     if current_version and to_version and current_version == to_version:
         typer.echo("")
-        typer.secho("Project is already at the requested version", fg="green")
+        typer.secho(t("update.already_at_version"), fg="green")
         return
 
     # Check if already at target commit (for HEAD/branch updates)
@@ -241,9 +240,9 @@ def update_command(
 
         if target_commit and current_commit == target_commit:
             typer.echo("")
-            typer.secho("Project is already at the target commit", fg="green")
-            typer.echo(f"   Current: {current_commit[:8]}...")
-            typer.echo(f"   Target:  {target_commit[:8]}...")
+            typer.secho(t("update.already_at_commit"), fg="green")
+            typer.echo(t("update.current_commit", commit=current_commit[:8]))
+            typer.echo(t("update.target_commit", commit=target_commit[:8]))
             return
 
         # Check for downgrade attempt (not supported by Copier)
@@ -251,11 +250,11 @@ def update_command(
             current_commit, target_commit, template_root
         ):
             typer.echo("")
-            typer.secho("Downgrade not supported", fg="red", err=True)
-            typer.echo(f"   Current: {current_commit[:8]}...", err=True)
-            typer.echo(f"   Target:  {target_commit[:8]}...", err=True)
+            typer.secho(t("update.downgrade_blocked"), fg="red", err=True)
+            typer.echo(t("update.current_commit", commit=current_commit[:8]), err=True)
+            typer.echo(t("update.target_commit", commit=target_commit[:8]), err=True)
             typer.echo(
-                "   Copier does not support downgrading to older template versions.",
+                f"   {t('update.downgrade_reason')}",
                 err=True,
             )
             raise typer.Exit(1)
@@ -263,7 +262,7 @@ def update_command(
     # Get and display changelog
     if current_commit:
         typer.echo("")
-        typer.echo("Changelog:")
+        typer.echo(t("update.changelog"))
         typer.echo("-" * 50)
         changelog = get_changelog(current_commit, target_ref, template_root)
         typer.echo(changelog)
@@ -272,9 +271,9 @@ def update_command(
     # Dry run mode
     if dry_run:
         typer.echo("")
-        typer.secho("DRY RUN MODE - No changes will be applied", fg="cyan")
+        typer.secho(t("update.dry_run"), fg="cyan")
         typer.echo("")
-        typer.echo("To apply this update, run:")
+        typer.echo(t("update.dry_run_hint"))
         if to_version:
             typer.echo(f"  aegis update --to-version {to_version}")
         else:
@@ -284,22 +283,22 @@ def update_command(
     # Confirmation
     if not yes:
         typer.echo("")
-        if not typer.confirm("Apply this update?", default=True):
-            typer.secho("Update cancelled", fg="red")
+        if not typer.confirm(t("update.confirm"), default=True):
+            typer.secho(t("update.cancelled"), fg="red")
             raise typer.Exit(0)
 
     # Create backup point before update
     typer.echo("")
-    typer.echo("Creating backup point...")
+    typer.echo(t("update.creating_backup"))
     backup_tag = create_backup_point(target_path)
     if backup_tag:
-        typer.echo(f"   Backup created: {backup_tag}")
+        typer.echo(t("update.backup_created", tag=backup_tag))
     else:
-        typer.secho("Could not create backup point", fg="yellow")
+        typer.secho(t("update.backup_failed"), fg="yellow")
 
     # Perform update using Copier
     typer.echo("")
-    typer.echo("Updating project...")
+    typer.echo(t("update.updating"))
 
     try:
         # Import here to avoid circular dependency
@@ -370,7 +369,9 @@ def update_command(
             conflict="rej",  # Create .rej files for conflicts
             unsafe=False,  # Disable _tasks (we run them ourselves)
             vcs_ref=target_ref,  # Use specified version
+            quiet=True,  # Suppress copier's English output
         )
+        typer.echo(t("update.updating_to", version=target_version_display))
 
         # Load answers for cleanup and post-generation tasks
         answers = load_copier_answers(target_path)
@@ -383,9 +384,7 @@ def update_command(
         if project_slug:
             moved_files = cleanup_nested_project_directory(target_path, project_slug)
             if moved_files:
-                typer.echo(
-                    f"   Moved {len(moved_files)} new files from nested directory"
-                )
+                typer.echo(t("update.moved_files", count=len(moved_files)))
 
                 # CRITICAL: Clean up files that shouldn't exist based on component selection
                 # This mirrors what happens during 'aegis init' - the template includes all
@@ -405,12 +404,9 @@ def update_command(
             old_commit=current_commit,
         )
         if sync_result.synced:
-            typer.echo(f"   Synced {len(sync_result.synced)} template changes")
+            typer.echo(t("update.synced_files", count=len(sync_result.synced)))
         if sync_result.conflicts:
-            typer.echo(
-                f"   {len(sync_result.conflicts)} file(s) have merge conflicts "
-                "(search for <<<<<<< to resolve):"
-            )
+            typer.echo(t("update.merge_conflicts", count=len(sync_result.conflicts)))
             for conflict_file in sync_result.conflicts:
                 typer.echo(f"      - {conflict_file}")
 
@@ -422,7 +418,7 @@ def update_command(
         ai_needs_migrations = include_ai and ai_backend != "memory"
         include_migrations = include_auth or ai_needs_migrations
 
-        typer.echo("Running post-generation tasks...")
+        typer.echo(t("update.running_postgen"))
         tasks_success = run_post_generation_tasks(
             target_path, include_migrations=include_migrations
         )
@@ -438,24 +434,24 @@ def update_command(
             )
             if updated_content != content:
                 init_file.write_text(updated_content)
-                typer.echo(f"   Updated __aegis_version__ to {aegis_version}")
+                typer.echo(t("update.version_updated", version=aegis_version))
 
         # Show update result
         typer.echo("")
         if tasks_success:
-            typer.secho("Update completed successfully!", fg="green")
+            typer.secho(t("update.success"), fg="green")
         else:
             typer.secho(
-                "Update completed with some post-generation task failures",
+                t("update.partial_success"),
                 fg="yellow",
             )
-            typer.echo("   Some setup tasks failed. See details above.")
+            typer.echo(t("update.partial_detail"))
         typer.echo("")
-        typer.echo("Next Steps:")
-        typer.echo("   1. Review changes: git diff")
-        typer.echo("   2. Check for conflicts (*.rej files)")
-        typer.echo("   3. Run tests: make check")
-        typer.echo("   4. Commit changes: git add . && git commit")
+        typer.echo(t("update.next_steps"))
+        typer.echo(t("update.next_review"))
+        typer.echo(t("update.next_conflicts"))
+        typer.echo(t("update.next_test"))
+        typer.echo(t("update.next_commit"))
 
         # Check for conflict files and display enhanced report
         conflicts = analyze_conflict_files(target_path)
@@ -470,25 +466,25 @@ def update_command(
 
     except Exception as e:
         typer.echo("")
-        typer.secho(f"Update failed: {e}", fg="red", err=True)
+        typer.secho(t("update.failed", error=e), fg="red", err=True)
 
         # Offer rollback if backup exists
         if backup_tag:
             typer.echo("")
-            if yes or typer.confirm("Rollback to previous state?", default=True):
+            if yes or typer.confirm(t("update.rollback_prompt"), default=True):
                 success, message = rollback_to_backup(target_path, backup_tag)
                 if success:
                     typer.secho(message, fg="green")
                     cleanup_backup_tag(target_path, backup_tag)
                 else:
                     typer.secho(message, fg="red", err=True)
-                    typer.echo(f"   Manual rollback: git reset --hard {backup_tag}")
+                    typer.echo(f"   {t('update.manual_rollback', tag=backup_tag)}")
             else:
-                typer.echo(f"Manual rollback: git reset --hard {backup_tag}")
+                typer.echo(t("update.manual_rollback", tag=backup_tag))
 
         typer.echo("")
-        typer.echo("Troubleshooting:")
-        typer.echo("   - Ensure you have a clean git tree")
-        typer.echo("   - Check that the version/commit exists")
-        typer.echo("   - Review Copier documentation for update issues")
+        typer.echo(t("update.troubleshooting"))
+        typer.echo(t("update.troubleshoot_clean"))
+        typer.echo(t("update.troubleshoot_version"))
+        typer.echo(t("update.troubleshoot_docs"))
         raise typer.Exit(1)

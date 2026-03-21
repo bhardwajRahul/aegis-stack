@@ -31,6 +31,21 @@ from ..core.migration_generator import (
 from ..core.project_map import render_project_map
 from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES, get_service_dependencies
+from ..i18n import t
+
+
+def _translated_component_desc(name: str, fallback: str) -> str:
+    """Get translated description for a component, with fallback."""
+    key = f"component.{name}"
+    result = t(key)
+    return result if result != key else fallback
+
+
+def _translated_service_desc(name: str, fallback: str) -> str:
+    """Get translated description for a service, with fallback."""
+    key = f"service.{name}"
+    result = t(key)
+    return result if result != key else fallback
 
 
 def add_service_command(
@@ -70,7 +85,7 @@ def add_service_command(
     (the default since v0.2.0). Services may auto-add required components.
     """
 
-    typer.secho("Aegis Stack - Add Services", fg=typer.colors.BLUE, bold=True)
+    typer.echo(t("add_service.title"))
     typer.echo("=" * 50)
 
     # Resolve project path
@@ -79,33 +94,26 @@ def add_service_command(
     # Validate it's a Copier project
     validate_copier_project(target_path, "add-service")
 
-    typer.echo(f"{typer.style('Project:', fg=typer.colors.CYAN)} {target_path}")
+    typer.echo(t("add_service.project", path=target_path))
 
     # Validate services argument or interactive mode
     if not interactive and not services:
-        typer.secho(
-            "Error: services argument is required (or use --interactive)",
-            fg="red",
-            err=True,
-        )
-        typer.echo("   Usage: aegis add service auth,ai", err=True)
-        typer.echo("   Or: aegis add service --interactive", err=True)
+        typer.secho(t("add_service.error_no_args"), fg="red", err=True)
+        typer.echo(f"   {t('add_service.usage_hint')}", err=True)
+        typer.echo(f"   {t('add_service.interactive_hint')}", err=True)
         raise typer.Exit(1)
 
     # Interactive mode
     if interactive:
         if services:
-            typer.secho(
-                "Warning: --interactive flag ignores service arguments",
-                fg="yellow",
-            )
+            typer.secho(t("add_service.interactive_ignores_args"), fg="yellow")
 
         from ..cli.interactive import interactive_service_selection
 
         selected_services = interactive_service_selection(target_path)
 
         if not selected_services:
-            typer.secho("\nNo services selected", fg="green")
+            typer.secho(f"\n{t('add_service.no_selected')}", fg="green")
             raise typer.Exit(0)
 
         # Convert to comma-separated string for existing logic
@@ -134,15 +142,17 @@ def add_service_command(
             for error in errors:
                 typer.secho(f"{error}", fg="red", err=True)
             raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as e:
-        typer.secho(f"Service validation failed: {e}", fg="red", err=True)
+        typer.secho(t("add_service.validation_failed", error=e), fg="red", err=True)
         raise typer.Exit(1)
 
     # Load existing project configuration
     try:
         existing_answers = load_copier_answers(target_path)
     except Exception as e:
-        typer.secho(f"Failed to load project configuration: {e}", fg="red", err=True)
+        typer.secho(t("add_service.load_config_failed", error=e), fg="red", err=True)
         raise typer.Exit(1)
 
     # Check which services are already enabled
@@ -155,13 +165,15 @@ def add_service_command(
             already_enabled.append(service)
 
     if already_enabled:
-        typer.echo(f"Already enabled: {', '.join(already_enabled)}", err=False)
+        typer.echo(
+            t("add_service.already_enabled", services=", ".join(already_enabled))
+        )
 
     # Filter out already enabled services
     services_to_add = [s for s in selected_services if s not in already_enabled]
 
     if not services_to_add:
-        typer.secho("All requested services are already enabled!", fg="green")
+        typer.secho(t("add_service.all_enabled"), fg="green")
         raise typer.Exit(0)
 
     # Handle AI service interactive configuration
@@ -214,7 +226,7 @@ def add_service_command(
             services_to_add
         )
     except ValueError as e:
-        typer.secho(f"Failed to resolve service dependencies: {e}", fg="red", err=True)
+        typer.secho(t("add_service.resolve_failed", error=e), fg="red", err=True)
         raise typer.Exit(1)
 
     # If AI service selected SQLite backend, ensure database is in required components
@@ -236,21 +248,25 @@ def add_service_command(
             missing_components.append(component)
 
     # Show what will be added
-    typer.secho("\nServices to add:", fg=typer.colors.CYAN, bold=True)
+    typer.secho(
+        f"\n{t('add_service.services_to_add')}", fg=typer.colors.CYAN, bold=True
+    )
     for service in services_to_add:
         base_service = service_base_map[service]
         if base_service in SERVICES:
-            desc = SERVICES[base_service].description
+            desc = _translated_service_desc(
+                base_service, SERVICES[base_service].description
+            )
             typer.echo(f"   • {service}: {desc}")
 
     # Show component requirements
     if missing_components:
-        typer.secho(
-            "\nRequired components (will be auto-added):", fg=typer.colors.YELLOW
-        )
+        typer.secho(f"\n{t('add_service.required_components')}", fg=typer.colors.YELLOW)
         for component in missing_components:
             if component in COMPONENTS:
-                desc = COMPONENTS[component].description
+                desc = _translated_component_desc(
+                    component, COMPONENTS[component].description
+                )
                 typer.echo(f"   • {component}: {desc}")
 
     if enabled_components:
@@ -258,14 +274,14 @@ def add_service_command(
         non_core_enabled = [c for c in enabled_components if c not in CORE_COMPONENTS]
         if non_core_enabled:
             typer.secho(
-                f"\nAlready have required components: {', '.join(non_core_enabled)}",
+                f"\n{t('add_service.already_have_components', components=', '.join(non_core_enabled))}",
                 fg="green",
             )
 
     # Confirm before proceeding
     typer.echo()
-    if not yes and not typer.confirm("Add these services?", default=True):
-        typer.secho("Operation cancelled", fg="red")
+    if not yes and not typer.confirm(t("add_service.confirm"), default=True):
+        typer.secho(t("shared.operation_cancelled"), fg="red")
         raise typer.Exit(0)
 
     # Prepare update data for ManualUpdater
@@ -284,14 +300,14 @@ def add_service_command(
         update_data[include_key] = True
 
     # Add services using ManualUpdater
-    typer.secho("\nUpdating project...", fg=typer.colors.CYAN, bold=True)
     try:
         updater = ManualUpdater(target_path)
 
         # Add missing components first
         for component in missing_components:
             typer.secho(
-                f"\nAdding required component: {component}...", fg=typer.colors.CYAN
+                f"\n{t('add_service.adding_component', component=component)}",
+                fg=typer.colors.CYAN,
             )
 
             # Prepare component-specific data
@@ -312,23 +328,33 @@ def add_service_command(
 
             if not result.success:
                 typer.secho(
-                    f"Failed to add component {component}: {result.error_message}",
+                    t(
+                        "add_service.failed_component",
+                        component=component,
+                        error=result.error_message,
+                    ),
                     fg="red",
                     err=True,
                 )
                 raise typer.Exit(1)
 
             if result.files_modified:
-                typer.secho(f"   Added {len(result.files_modified)} files", fg="green")
+                typer.secho(
+                    f"   {t('add_service.added_files', count=len(result.files_modified))}",
+                    fg="green",
+                )
             if result.files_skipped:
                 typer.secho(
-                    f"   Skipped {len(result.files_skipped)} existing files",
+                    f"   {t('add_service.skipped_files', count=len(result.files_skipped))}",
                     fg="yellow",
                 )
 
         # Now add each service sequentially
         for service in services_to_add:
-            typer.secho(f"\nAdding service: {service}...", fg=typer.colors.CYAN)
+            typer.secho(
+                f"\n{t('add_service.adding_service', service=service)}",
+                fg=typer.colors.CYAN,
+            )
 
             # Prepare service-specific data
             service_data: dict[str, bool | str] = {}
@@ -361,7 +387,11 @@ def add_service_command(
 
             if not result.success:
                 typer.secho(
-                    f"Failed to add service {service}: {result.error_message}",
+                    t(
+                        "add_service.failed_service",
+                        service=service,
+                        error=result.error_message,
+                    ),
                     fg="red",
                     err=True,
                 )
@@ -369,10 +399,13 @@ def add_service_command(
 
             # Show results
             if result.files_modified:
-                typer.secho(f"   Added {len(result.files_modified)} files", fg="green")
+                typer.secho(
+                    f"   {t('add_service.added_files', count=len(result.files_modified))}",
+                    fg="green",
+                )
             if result.files_skipped:
                 typer.secho(
-                    f"   Skipped {len(result.files_skipped)} existing files",
+                    f"   {t('add_service.skipped_files', count=len(result.files_skipped))}",
                     fg="yellow",
                 )
 
@@ -391,19 +424,21 @@ def add_service_command(
             alembic_dir = target_path / "alembic"
             if not alembic_dir.exists():
                 typer.secho(
-                    "\nBootstrapping alembic infrastructure...", fg=typer.colors.CYAN
+                    f"\n{t('add_service.bootstrap_alembic')}",
+                    fg=typer.colors.CYAN,
                 )
                 created = bootstrap_alembic(
                     target_path, updater.jinja_env, updater.answers
                 )
                 for f in created:
-                    typer.echo(f"   Created: {f}")
+                    typer.echo(f"   {t('add_service.created_file', file=f)}")
 
             if not service_has_migration(target_path, base_service):
                 migration_path = generate_migration(target_path, base_service)
                 if migration_path:
                     typer.secho(
-                        f"   Generated migration: {migration_path.name}", fg="green"
+                        f"   {t('add_service.generated_migration', name=migration_path.name)}",
+                        fg="green",
                     )
 
         # Auto-run migrations for services that need them
@@ -418,18 +453,17 @@ def add_service_command(
             and (service_base_map[s] != AnswerKeys.SERVICE_AI or ai_needs_migrations)
         ]
         if services_with_migrations:
-            typer.secho("\nApplying database migrations...", fg=typer.colors.CYAN)
+            typer.secho(
+                f"\n{t('add_service.applying_migrations')}", fg=typer.colors.CYAN
+            )
             from ..core.post_gen_tasks import run_migrations
 
             migration_success = run_migrations(target_path, include_migrations=True)
 
             if not migration_success:
-                typer.secho(
-                    "Warning: Auto-migration failed. Run 'make migrate' manually.",
-                    fg="yellow",
-                )
+                typer.secho(t("add_service.migration_failed"), fg="yellow")
 
-        typer.secho("\nServices added successfully!", fg="green")
+        typer.secho(f"\n{t('add_service.success')}", fg="green")
 
         # Show project map with newly added services + auto-added components highlighted
         base_services_for_highlight = [service_base_map[s] for s in services_to_add]
@@ -463,24 +497,34 @@ def add_service_command(
 
         if AnswerKeys.SERVICE_AUTH in base_services_added:
             project_slug = existing_answers.get(AnswerKeys.PROJECT_SLUG, "my-project")
-            typer.secho("\nAuth Service Setup:", fg=typer.colors.CYAN, bold=True)
+            typer.secho(
+                f"\n{t('add_service.auth_setup')}", fg=typer.colors.CYAN, bold=True
+            )
             cmd = typer.style(f"{project_slug} auth create-test-users", bold=True)
-            typer.echo(f"   1. Create test users: {cmd}")
+            typer.echo(t("add_service.auth_create_users", cmd=cmd))
             url = typer.style("http://localhost:8000/docs", bold=True)
-            typer.echo(f"   2. View auth routes: {url}")
+            typer.echo(t("add_service.auth_view_routes", url=url))
 
         if AnswerKeys.SERVICE_AI in base_services_added:
             project_slug = existing_answers.get(AnswerKeys.PROJECT_SLUG, "my-project")
-            typer.secho("\nAI Service Setup:", fg=typer.colors.CYAN, bold=True)
-            typer.echo(
-                f"   1. Set {typer.style('AI_PROVIDER', bold=True)} in .env (openai, anthropic, google, groq)"
+            typer.secho(
+                f"\n{t('add_service.ai_setup')}", fg=typer.colors.CYAN, bold=True
             )
             typer.echo(
-                f"   2. Set provider API key ({typer.style('OPENAI_API_KEY', bold=True)}, etc.)"
+                t(
+                    "add_service.ai_set_provider",
+                    env_var=typer.style("AI_PROVIDER", bold=True),
+                )
+            )
+            typer.echo(
+                t(
+                    "add_service.ai_set_api_key",
+                    env_var=typer.style("OPENAI_API_KEY", bold=True),
+                )
             )
             cmd = typer.style(f"{project_slug} ai chat", bold=True)
-            typer.echo(f"   3. Test with CLI: {cmd}")
+            typer.echo(t("add_service.ai_test_cli", cmd=cmd))
 
     except Exception as e:
-        typer.secho(f"\nFailed to add services: {e}", fg="red", err=True)
+        typer.secho(f"\n{t('add_service.failed', error=e)}", fg="red", err=True)
         raise typer.Exit(1)

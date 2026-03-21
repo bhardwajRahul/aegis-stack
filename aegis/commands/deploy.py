@@ -15,6 +15,8 @@ from pathlib import Path
 import typer
 import yaml
 
+from ..i18n import t
+
 _BACKUP_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}$")
 
 # Deploy config file name
@@ -149,7 +151,7 @@ def _create_backup(
     backup_dir = f"{deploy_path}/backups/{timestamp}"
     safe_backup = shlex.quote(backup_dir)
 
-    typer.echo(f"Creating backup {timestamp}...")
+    typer.echo(t("deploy.creating_backup", timestamp=timestamp))
 
     # Create backup directory and copy files
     commands = [
@@ -158,7 +160,7 @@ def _create_backup(
     ]
     result = _run_remote_capture(host, user, " && ".join(commands))
     if result.returncode != 0:
-        typer.secho(f"Failed to create backup: {result.stderr}", fg="red", err=True)
+        typer.secho(t("deploy.backup_failed", error=result.stderr), fg="red", err=True)
         return None
 
     # Database backup if PostgreSQL is running
@@ -169,7 +171,7 @@ def _create_backup(
             host, user, f"{compose_prefix} ps postgres --quiet 2>/dev/null"
         )
         if pg_check.returncode == 0 and pg_check.stdout.strip():
-            typer.echo("Backing up PostgreSQL database...")
+            typer.echo(t("deploy.backup_db"))
             db_cmd = (
                 f"{compose_prefix} exec -T postgres"
                 f" sh -c 'pg_dump -U $POSTGRES_USER $POSTGRES_DB'"
@@ -178,7 +180,7 @@ def _create_backup(
             db_result = _run_remote_capture(host, user, db_cmd)
             if db_result.returncode != 0:
                 typer.secho(
-                    "Warning: Database backup failed, continuing without it",
+                    t("deploy.backup_db_failed"),
                     fg="yellow",
                 )
 
@@ -192,7 +194,7 @@ def _create_backup(
         host, user, f"echo -e {shlex.quote(manifest)} > {safe_backup}/manifest.yml"
     )
 
-    typer.secho(f"Backup created: {timestamp}", fg="green")
+    typer.secho(t("deploy.backup_created", timestamp=timestamp), fg="green")
     return timestamp
 
 
@@ -213,7 +215,7 @@ def _prune_backups(host: str, user: str, deploy_path: str, keep_count: int) -> N
             continue  # skip unexpected directory names
         safe_old = shlex.quote(f"{deploy_path}/backups/{old_backup}")
         _run_remote_capture(host, user, f"rm -rf {safe_old}")
-        typer.echo(f"Pruned old backup: {old_backup}")
+        typer.echo(t("deploy.backup_pruned", name=old_backup))
 
 
 def _rollback_to_backup(
@@ -227,15 +229,19 @@ def _rollback_to_backup(
     # Verify backup exists
     check = _run_remote_capture(host, user, f"test -d {safe_backup}")
     if check.returncode != 0:
-        typer.secho(f"Backup not found: {backup_timestamp}", fg="red", err=True)
+        typer.secho(
+            t("deploy.rollback_not_found", timestamp=backup_timestamp),
+            fg="red",
+            err=True,
+        )
         return False
 
     compose_prefix = _compose_prefix(deploy_path)
 
-    typer.echo("Stopping services...")
+    typer.echo(t("deploy.rollback_stopping"))
     _run_remote(host, user, f"{compose_prefix} down --remove-orphans")
 
-    typer.echo(f"Restoring files from backup {backup_timestamp}...")
+    typer.echo(t("deploy.rollback_restoring", timestamp=backup_timestamp))
     restore_result = _run_remote_capture(
         host,
         user,
@@ -243,7 +249,7 @@ def _rollback_to_backup(
     )
     if restore_result.returncode != 0:
         typer.secho(
-            f"Failed to restore files: {restore_result.stderr}",
+            t("deploy.rollback_restore_failed", error=restore_result.stderr),
             fg="red",
             err=True,
         )
@@ -252,10 +258,10 @@ def _rollback_to_backup(
     # Check for database backup
     db_check = _run_remote_capture(host, user, f"test -f {safe_backup}/db_backup.sql")
     if db_check.returncode == 0:
-        typer.echo("Restoring database...")
+        typer.echo(t("deploy.rollback_db"))
         # Start only postgres first
         _run_remote(host, user, f"{compose_prefix} up -d postgres")
-        typer.echo("Waiting for PostgreSQL to be ready...")
+        typer.echo(t("deploy.rollback_pg_wait"))
         for _ in range(30):  # 60 seconds max (30 * 2s)
             ready = _run_remote_capture(
                 host,
@@ -267,7 +273,7 @@ def _rollback_to_backup(
             time.sleep(2)
         else:
             typer.secho(
-                "PostgreSQL did not become ready, attempting restore anyway",
+                t("deploy.rollback_pg_timeout"),
                 fg="yellow",
             )
         db_restore = _run_remote_capture(
@@ -278,12 +284,12 @@ def _rollback_to_backup(
             f" sh -c 'psql -U $POSTGRES_USER $POSTGRES_DB'",
         )
         if db_restore.returncode != 0:
-            typer.secho("Warning: Database restore failed", fg="yellow")
+            typer.secho(t("deploy.rollback_db_failed"), fg="yellow")
 
-    typer.echo("Starting services...")
+    typer.echo(t("deploy.rollback_starting"))
     start_result = _run_remote(host, user, f"{compose_prefix} up -d --build")
     if start_result.returncode != 0:
-        typer.secho("Failed to start services after rollback", fg="red", err=True)
+        typer.secho(t("deploy.rollback_start_failed"), fg="red", err=True)
         return False
 
     return True
@@ -297,23 +303,23 @@ def _run_health_check(
     Waits for containers to stabilize, then checks the /health/ endpoint.
     Returns True if healthy.
     """
-    typer.echo("Waiting for containers to stabilize...")
+    typer.echo(t("deploy.health_waiting"))
     time.sleep(10)
 
     for attempt in range(1, retries + 1):
-        typer.echo(f"Health check attempt {attempt}/{retries}...")
+        typer.echo(t("deploy.health_attempt", n=attempt, total=retries))
         result = _run_remote_capture(
             host, user, "curl -sf http://localhost:8000/health/ 2>/dev/null"
         )
         if result.returncode == 0:
-            typer.secho("Health check passed", fg="green")
+            typer.secho(t("deploy.health_passed"), fg="green")
             return True
 
         if attempt < retries:
-            typer.echo(f"Health check failed, retrying in {interval}s...")
+            typer.echo(t("deploy.health_retry", interval=interval))
             time.sleep(interval)
 
-    typer.secho("All health check attempts failed", fg="red", err=True)
+    typer.secho(t("deploy.health_all_failed"), fg="red", err=True)
     return False
 
 
@@ -348,7 +354,7 @@ def deploy_init_command(
 
     # Interactive prompts if not provided
     if not host:
-        host = typer.prompt("Server IP or hostname")
+        host = typer.prompt(t("deploy.prompt_host"))
 
     if not path:
         path = f"/opt/{project_name}"
@@ -366,7 +372,7 @@ def deploy_init_command(
 
     _save_deploy_config(config)
 
-    typer.secho(f"\nDeploy configuration saved to {DEPLOY_CONFIG_FILE}", fg="green")
+    typer.secho(f"\n{t('deploy.init_saved', file=DEPLOY_CONFIG_FILE)}", fg="green")
     typer.echo(f"   Host: {host}")
     typer.echo(f"   User: {user}")
     typer.echo(f"   Path: {path}")
@@ -378,7 +384,7 @@ def deploy_init_command(
         content = gitignore_path.read_text()
         if ".aegis/" not in content and ".aegis" not in content:
             typer.secho(
-                "\nNote: Consider adding .aegis/ to .gitignore to avoid committing deploy config",
+                t("deploy.init_gitignore"),
                 fg="yellow",
             )
 
@@ -400,7 +406,7 @@ def deploy_setup_command(
     config = _load_deploy_config(project_path)
     if not config:
         typer.secho(
-            "No deploy configuration found. Run 'aegis deploy-init' first.",
+            t("deploy.no_config"),
             fg="red",
             err=True,
         )
@@ -414,17 +420,17 @@ def deploy_setup_command(
 
     if not setup_script.exists():
         typer.secho(
-            f"Server setup script not found: {setup_script}",
+            t("deploy.setup_script_missing", path=setup_script),
             fg="red",
             err=True,
         )
-        typer.echo("Make sure your project was created with the ingress component.")
+        typer.echo(t("deploy.setup_script_hint"))
         raise typer.Exit(1)
 
-    typer.secho(f"Setting up server at {user}@{host}...", fg="blue", bold=True)
+    typer.secho(t("deploy.setup_title", target=f"{user}@{host}"), fg="blue", bold=True)
 
     # Add host key to known_hosts if needed
-    typer.echo("Checking SSH connectivity...")
+    typer.echo(t("deploy.checking_ssh"))
     result = subprocess.run(
         [
             "ssh",
@@ -441,7 +447,7 @@ def deploy_setup_command(
 
     if result.returncode != 0:
         if "Host key verification failed" in result.stderr:
-            typer.echo("Adding server to known_hosts...")
+            typer.echo(t("deploy.adding_host_key"))
             keyscan_result = subprocess.run(
                 ["ssh-keyscan", "-H", host],
                 capture_output=True,
@@ -449,7 +455,7 @@ def deploy_setup_command(
             )
             if keyscan_result.returncode != 0:
                 typer.secho(
-                    f"Failed to scan SSH host key: {keyscan_result.stderr}",
+                    t("deploy.ssh_keyscan_failed", error=keyscan_result.stderr),
                     fg="red",
                     err=True,
                 )
@@ -458,19 +464,19 @@ def deploy_setup_command(
             with open(known_hosts, "a") as f:
                 f.write(keyscan_result.stdout)
         else:
-            typer.secho(f"SSH connection failed: {result.stderr}", fg="red", err=True)
+            typer.secho(t("deploy.ssh_failed", error=result.stderr), fg="red", err=True)
             raise typer.Exit(1)
 
     # Copy and run setup script
-    typer.echo("Copying setup script to server...")
+    typer.echo(t("deploy.copying_script"))
     scp_result = subprocess.run(
         ["scp", str(setup_script), f"{user}@{host}:/tmp/server-setup.sh"]
     )
     if scp_result.returncode != 0:
-        typer.secho("Failed to copy setup script", fg="red", err=True)
+        typer.secho(t("deploy.copy_failed"), fg="red", err=True)
         raise typer.Exit(1)
 
-    typer.echo("Running server setup (this may take a few minutes)...")
+    typer.echo(t("deploy.running_setup"))
     ssh_result = subprocess.run(
         [
             "ssh",
@@ -479,11 +485,11 @@ def deploy_setup_command(
         ]
     )
     if ssh_result.returncode != 0:
-        typer.secho("Server setup failed", fg="red", err=True)
+        typer.secho(t("deploy.setup_failed"), fg="red", err=True)
         raise typer.Exit(1)
 
-    typer.secho("\nServer setup complete!", fg="green", bold=True)
-    typer.echo("Next: Run 'aegis deploy' to deploy your application")
+    typer.secho(f"\n{t('deploy.setup_complete')}", fg="green", bold=True)
+    typer.echo(t("deploy.setup_next"))
 
 
 def deploy_command(
@@ -518,7 +524,7 @@ def deploy_command(
     config = _load_deploy_config(project_path)
     if not config:
         typer.secho(
-            "No deploy configuration found. Run 'aegis deploy-init' first.",
+            t("deploy.no_config"),
             fg="red",
             err=True,
         )
@@ -532,7 +538,7 @@ def deploy_command(
 
     project_root = Path(project_path) if project_path else _get_project_root()
 
-    typer.secho(f"Deploying to {host}...", fg="blue", bold=True)
+    typer.secho(t("deploy.deploying", host=host), fg="blue", bold=True)
 
     # Step 1: Create backup before deploying
     backup_timestamp: str | None = None
@@ -551,16 +557,16 @@ def deploy_command(
             if backup_timestamp:
                 _prune_backups(host, user, deploy_path, backup_cfg["keep_count"])
         else:
-            typer.echo("No existing deployment found, skipping backup")
+            typer.echo(t("deploy.no_existing"))
 
     # Step 2: Sync files to server
-    typer.echo("Syncing files to server...")
+    typer.echo(t("deploy.syncing"))
     mkdir_result = subprocess.run(
         ["ssh", f"{user}@{host}", f"mkdir -p {shlex.quote(deploy_path)}"]
     )
     if mkdir_result.returncode != 0:
         typer.secho(
-            f"Failed to create remote directory '{deploy_path}'",
+            t("deploy.mkdir_failed", path=deploy_path),
             fg="red",
             err=True,
         )
@@ -597,7 +603,7 @@ def deploy_command(
         ]
     )
     if rsync_result.returncode != 0:
-        typer.secho("Failed to sync files", fg="red", err=True)
+        typer.secho(t("deploy.sync_failed"), fg="red", err=True)
         raise typer.Exit(1)
 
     # Step 3: Copy .env file (prefer .env.deploy for production values)
@@ -611,29 +617,29 @@ def deploy_command(
         env_file = None
 
     if env_file is not None:
-        typer.echo(f"Copying {env_file.name} to server as .env...")
+        typer.echo(t("deploy.copying_env", file=env_file.name))
         safe_path = shlex.quote(f"{deploy_path}/.env")
         env_result = subprocess.run(
             ["scp", str(env_file), f"{user}@{host}:{safe_path}"]
         )
         if env_result.returncode != 0:
-            typer.secho("Failed to copy .env file", fg="red", err=True)
+            typer.secho(t("deploy.env_copy_failed"), fg="red", err=True)
             raise typer.Exit(1)
 
     # Step 4: Stop existing services
-    typer.echo("Stopping existing services...")
+    typer.echo(t("deploy.stopping"))
     compose_prefix = _compose_prefix(deploy_path)
     _run_remote(host, user, f"{compose_prefix} down --remove-orphans")
 
     # Step 5: Build and start services
-    typer.echo("Building and starting services on server...")
+    typer.echo(t("deploy.building"))
     build_flag = "--build" if build else ""
     compose_cmd = f"{compose_prefix} up -d {build_flag}"
     compose_result = subprocess.run(["ssh", f"{user}@{host}", compose_cmd])
     if compose_result.returncode != 0:
-        typer.secho("Failed to start services", fg="red", err=True)
+        typer.secho(t("deploy.start_failed"), fg="red", err=True)
         if backup_timestamp and health_cfg["auto_rollback"]:
-            typer.secho("Auto-rolling back to previous version...", fg="yellow")
+            typer.secho(t("deploy.auto_rollback"), fg="yellow")
             _rollback_to_backup(host, user, deploy_path, backup_timestamp)
         raise typer.Exit(1)
 
@@ -656,36 +662,35 @@ def deploy_command(
         if not healthy:
             if backup_timestamp and health_cfg["auto_rollback"]:
                 typer.secho(
-                    "Auto-rolling back to previous version...",
+                    t("deploy.auto_rollback"),
                     fg="yellow",
                     bold=True,
                 )
                 success = _rollback_to_backup(host, user, deploy_path, backup_timestamp)
                 if success:
                     typer.secho(
-                        f"Rolled back to backup {backup_timestamp}",
+                        t("deploy.rolled_back", timestamp=backup_timestamp),
                         fg="green",
                     )
                 else:
                     typer.secho(
-                        "Rollback failed! Manual intervention required.",
+                        t("deploy.rollback_failed"),
                         fg="red",
                         err=True,
                     )
                 raise typer.Exit(1)
             else:
                 typer.secho(
-                    "Deploy completed but health check failed. "
-                    "Check logs with: aegis deploy-logs",
+                    t("deploy.health_failed_hint"),
                     fg="yellow",
                 )
                 raise typer.Exit(1)
 
-    typer.secho("\nDeployment complete!", fg="green", bold=True)
-    typer.echo(f"   Application running at: http://{host}")
-    typer.echo(f"   Overseer dashboard: http://{host}/dashboard/")
-    typer.echo("   View logs: aegis deploy-logs")
-    typer.echo("   Check status: aegis deploy-status")
+    typer.secho(f"\n{t('deploy.complete')}", fg="green", bold=True)
+    typer.echo(t("deploy.app_running", host=host))
+    typer.echo(t("deploy.overseer", host=host))
+    typer.echo(t("deploy.view_logs"))
+    typer.echo(t("deploy.check_status"))
 
 
 def deploy_backup_command(
@@ -705,7 +710,7 @@ def deploy_backup_command(
     config = _load_deploy_config(project_path)
     if not config:
         typer.secho(
-            "No deploy configuration found. Run 'aegis deploy-init' first.",
+            t("deploy.no_config"),
             fg="red",
             err=True,
         )
@@ -716,7 +721,7 @@ def deploy_backup_command(
     deploy_path = config["server"]["path"]
     backup_cfg = _get_backup_config(config)
 
-    typer.secho(f"Creating backup on {host}...", fg="blue", bold=True)
+    typer.secho(t("deploy.creating_backup_on", host=host), fg="blue", bold=True)
 
     timestamp = _create_backup(
         host,
@@ -728,7 +733,7 @@ def deploy_backup_command(
         raise typer.Exit(1)
 
     _prune_backups(host, user, deploy_path, backup_cfg["keep_count"])
-    typer.secho("\nBackup complete!", fg="green", bold=True)
+    typer.secho(f"\n{t('deploy.backup_complete')}", fg="green", bold=True)
 
 
 def deploy_backups_command(
@@ -747,7 +752,7 @@ def deploy_backups_command(
     config = _load_deploy_config(project_path)
     if not config:
         typer.secho(
-            "No deploy configuration found. Run 'aegis deploy-init' first.",
+            t("deploy.no_config"),
             fg="red",
             err=True,
         )
@@ -761,12 +766,16 @@ def deploy_backups_command(
     result = _run_remote_capture(host, user, f"ls -1t {safe_path} 2>/dev/null")
 
     if result.returncode != 0 or not result.stdout.strip():
-        typer.echo("No backups found.")
+        typer.echo(t("deploy.no_backups"))
         return
 
     backups = [b.strip() for b in result.stdout.strip().splitlines() if b.strip()]
 
-    typer.secho(f"Backups on {host} ({len(backups)} total):\n", fg="blue", bold=True)
+    typer.secho(
+        f"{t('deploy.backups_header', host=host, count=len(backups))}\n",
+        fg="blue",
+        bold=True,
+    )
     typer.echo(f"  {'Timestamp':<24} {'Size':<12} {'Database'}")
     typer.echo(f"  {'─' * 24} {'─' * 12} {'─' * 10}")
 
@@ -786,7 +795,7 @@ def deploy_backups_command(
 
         typer.echo(f"  {backup_name:<24} {size:<12} {has_db}")
 
-    typer.echo("\nRollback with: aegis deploy-rollback --backup <timestamp>")
+    typer.echo(f"\n{t('deploy.rollback_hint')}")
 
 
 def deploy_rollback_command(
@@ -810,7 +819,7 @@ def deploy_rollback_command(
     config = _load_deploy_config(project_path)
     if not config:
         typer.secho(
-            "No deploy configuration found. Run 'aegis deploy-init' first.",
+            t("deploy.no_config"),
             fg="red",
             err=True,
         )
@@ -827,12 +836,12 @@ def deploy_rollback_command(
             host, user, f"ls -1t {safe_path} 2>/dev/null | head -1"
         )
         if result.returncode != 0 or not result.stdout.strip():
-            typer.secho("No backups available.", fg="red", err=True)
+            typer.secho(t("deploy.no_backups_available"), fg="red", err=True)
             raise typer.Exit(1)
         backup = result.stdout.strip()
 
     typer.secho(
-        f"Rolling back to backup {backup} on {host}...",
+        t("deploy.rolling_back", backup=backup, host=host),
         fg="yellow",
         bold=True,
     )
@@ -848,11 +857,11 @@ def deploy_rollback_command(
         if traefik_check.returncode == 0:
             _run_remote(host, user, f"{prefix} restart traefik")
 
-        typer.secho("\nRollback complete!", fg="green", bold=True)
-        typer.echo("   Check status: aegis deploy-status")
-        typer.echo("   View logs: aegis deploy-logs")
+        typer.secho(f"\n{t('deploy.rollback_complete')}", fg="green", bold=True)
+        typer.echo(t("deploy.check_status"))
+        typer.echo(t("deploy.view_logs"))
     else:
-        typer.secho("Rollback failed!", fg="red", err=True)
+        typer.secho(t("deploy.rollback_failed_final"), fg="red", err=True)
         raise typer.Exit(1)
 
 
@@ -878,7 +887,7 @@ def deploy_logs_command(
     config = _load_deploy_config(project_path)
     if not config:
         typer.secho(
-            "No deploy configuration found. Run 'aegis deploy-init' first.",
+            t("deploy.no_config"),
             fg="red",
             err=True,
         )
@@ -908,7 +917,7 @@ def deploy_status_command(
     config = _load_deploy_config(project_path)
     if not config:
         typer.secho(
-            "No deploy configuration found. Run 'aegis deploy-init' first.",
+            t("deploy.no_config"),
             fg="red",
             err=True,
         )
@@ -918,7 +927,7 @@ def deploy_status_command(
     user = config["server"]["user"]
     deploy_path = config["server"]["path"]
 
-    typer.secho(f"Service status on {host}:", fg="blue", bold=True)
+    typer.secho(t("deploy.status_header", host=host), fg="blue", bold=True)
     _run_remote(host, user, f"{_compose_prefix(deploy_path)} ps")
 
 
@@ -936,7 +945,7 @@ def deploy_stop_command(
     config = _load_deploy_config(project_path)
     if not config:
         typer.secho(
-            "No deploy configuration found. Run 'aegis deploy-init' first.",
+            t("deploy.no_config"),
             fg="red",
             err=True,
         )
@@ -946,12 +955,12 @@ def deploy_stop_command(
     user = config["server"]["user"]
     deploy_path = config["server"]["path"]
 
-    typer.secho("Stopping services...", fg="yellow")
+    typer.secho(t("deploy.stop_stopping"), fg="yellow")
     result = _run_remote(host, user, f"{_compose_prefix(deploy_path)} down")
     if result.returncode == 0:
-        typer.secho("Services stopped", fg="green")
+        typer.secho(t("deploy.stop_success"), fg="green")
     else:
-        typer.secho("Failed to stop services", fg="red", err=True)
+        typer.secho(t("deploy.stop_failed"), fg="red", err=True)
         raise typer.Exit(1)
 
 
@@ -969,7 +978,7 @@ def deploy_restart_command(
     config = _load_deploy_config(project_path)
     if not config:
         typer.secho(
-            "No deploy configuration found. Run 'aegis deploy-init' first.",
+            t("deploy.no_config"),
             fg="red",
             err=True,
         )
@@ -979,12 +988,12 @@ def deploy_restart_command(
     user = config["server"]["user"]
     deploy_path = config["server"]["path"]
 
-    typer.secho("Restarting services...", fg="yellow")
+    typer.secho(t("deploy.restart_restarting"), fg="yellow")
     result = _run_remote(host, user, f"{_compose_prefix(deploy_path)} restart")
     if result.returncode == 0:
-        typer.secho("Services restarted", fg="green")
+        typer.secho(t("deploy.restart_success"), fg="green")
     else:
-        typer.secho("Failed to restart services", fg="red", err=True)
+        typer.secho(t("deploy.restart_failed"), fg="red", err=True)
         raise typer.Exit(1)
 
 
@@ -1006,7 +1015,7 @@ def deploy_shell_command(
     config = _load_deploy_config(project_path)
     if not config:
         typer.secho(
-            "No deploy configuration found. Run 'aegis deploy-init' first.",
+            t("deploy.no_config"),
             fg="red",
             err=True,
         )
