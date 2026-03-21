@@ -1,5 +1,7 @@
 # Cost Tracking & Usage Analytics
 
+![Usage Analytics](../../images/usage.png)
+
 Every AI request is automatically tracked — tokens consumed, cost calculated, and success or failure recorded. No instrumentation required. The data is available immediately via API and visualized in the frontend analytics dashboard.
 
 !!! info "Requires Database Backend"

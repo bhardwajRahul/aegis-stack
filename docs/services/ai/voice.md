@@ -1,6 +1,11 @@
 # Voice (TTS/STT)
 
+![Voice](../../images/voice.png)
+
 Voice capabilities add Text-to-Speech (TTS) and Speech-to-Text (STT) to the AI service. Multiple providers are supported, from cloud APIs to fully local inference.
+
+!!! warning "Experimental Feature"
+    Voice is currently experimental. Some features may not work out of the box and will require configuration on your part. For example, TTS and STT providers that need API keys (like OpenAI) may return errors or hang in the frontend if the key is not set. Make sure your provider credentials are configured before using voice features.
 
 !!! info "Enable at Project Generation"
     Voice is an optional feature enabled at project generation:
@@ -163,11 +168,14 @@ curl http://localhost:8000/voice/catalog/stt/openai_whisper/models | jq
 # Get current settings
 curl http://localhost:8000/voice/settings | jq
 
-# Update settings
+# Preview settings (returns merged config without persisting)
 curl -X POST http://localhost:8000/voice/settings \
   -H "Content-Type: application/json" \
   -d '{"tts_voice": "nova", "tts_speed": 1.2}'
 ```
+
+!!! note
+    This endpoint returns what the settings would look like if applied. To actually persist changes, update the corresponding environment variables in your `.env` file.
 
 **Settings fields:** `tts_provider`, `tts_model`, `tts_voice`, `tts_speed`, `stt_provider`, `stt_model`, `stt_language`
 

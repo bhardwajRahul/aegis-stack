@@ -208,7 +208,7 @@ Configure at project generation:
 aegis init my-app --services ai
 
 # Docker mode: Ollama runs in a Docker container
-# (configured via ollama_mode in copier.yml)
+# (select during aegis init interactive prompts)
 ```
 
 | Mode | Description | Use Case |
@@ -260,15 +260,18 @@ make stop && make serve
 
 ### Via CLI (with LLM Catalog)
 
-Switch instantly without restarting:
+Update `.env` from the catalog (takes effect on next CLI invocation or server restart):
 
 ```bash
-# Auto-detects provider from model name
+# Auto-detects provider from model name and updates .env
 my-app llm use gpt-4o              # → sets AI_PROVIDER=openai
 my-app llm use claude-sonnet-4-20250514  # → sets AI_PROVIDER=anthropic
 my-app llm use llama3.1            # → sets AI_PROVIDER=ollama
+```
 
-# Or in interactive chat
+Switch instantly within an interactive chat session (refreshes in-process, no restart needed):
+
+```bash
 my-app ai chat
 > /model gpt-4o
 ✓ Switched to OpenAI/gpt-4o

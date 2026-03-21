@@ -1,5 +1,7 @@
 # LLM Catalog
 
+![LLM Catalog](../../images/llm_catalog.png)
+
 The LLM Catalog is a local database of ~2000 language models synced from cloud APIs and local Ollama. It provides model discovery, pricing, capabilities, and one-command model switching.
 
 !!! info "Requires Database Backend"

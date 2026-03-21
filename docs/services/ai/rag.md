@@ -1,5 +1,7 @@
 # RAG (Retrieval-Augmented Generation)
 
+![RAG Indexing](../../images/rag_1.png)
+
 RAG enables semantic search over your codebase or documents. Index files into ChromaDB collections, then search them directly or let Illiana use them as context during conversations.
 
 ## What You Get
@@ -51,7 +53,7 @@ graph LR
 
 ### Pipeline
 
-1. **Loading** - `CodebaseLoader` reads files, respects `.gitignore`, extracts metadata (path, name, extension)
+1. **Loading** - `CodebaseLoader` reads files, applies default and configured exclude patterns, and extracts metadata (path, name, extension)
 2. **Chunking** - `DocumentChunker` splits documents into configurable-size chunks with overlap, preserving line numbers
 3. **Embedding** - Text chunks are converted to vectors using sentence-transformers (local) or OpenAI API
 4. **Indexing** - Vectors are stored in ChromaDB with metadata for retrieval
@@ -115,6 +117,8 @@ my-app rag files --collection code
 ```
 
 ### rag search
+
+![RAG Search](../../images/rag_2.png)
 
 Semantic search across indexed documents:
 
