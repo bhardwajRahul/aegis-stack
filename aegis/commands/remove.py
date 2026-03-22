@@ -18,6 +18,14 @@ from ..core.copier_manager import load_copier_answers
 from ..core.dependency_resolver import DependencyResolver
 from ..core.manual_updater import ManualUpdater
 from ..core.version_compatibility import validate_version_compatibility
+from ..i18n import t
+
+
+def _translated_desc(name: str, fallback: str) -> str:
+    """Get translated description for a component, with fallback."""
+    key = f"component.{name}"
+    result = t(key)
+    return result if result != key else fallback
 
 
 def remove_command(
@@ -62,7 +70,7 @@ def remove_command(
     Global options: Use --verbose/-v before the command for detailed output.
     """
 
-    typer.echo("Aegis Stack - Remove Components")
+    typer.echo(t("remove.title"))
     typer.echo("=" * 50)
 
     # Resolve project path
@@ -71,36 +79,29 @@ def remove_command(
     # Validate it's a Copier project
     validate_copier_project(target_path, "remove")
 
-    typer.echo(f"Project: {target_path}")
+    typer.echo(t("remove.project", path=target_path))
 
     # Check version compatibility between CLI and project template
     validate_version_compatibility(target_path, command_name="remove", force=force)
 
     # Validate components argument or interactive mode
     if not interactive and not components:
-        typer.secho(
-            "Error: components argument is required (or use --interactive)",
-            fg="red",
-            err=True,
-        )
-        typer.echo("   Usage: aegis remove scheduler,worker", err=True)
-        typer.echo("   Or: aegis remove --interactive", err=True)
+        typer.secho(t("remove.error_no_args"), fg="red", err=True)
+        typer.echo(f"   {t('remove.usage_hint')}", err=True)
+        typer.echo(f"   {t('remove.interactive_hint')}", err=True)
         raise typer.Exit(1)
 
     # Interactive mode
     if interactive:
         if components:
-            typer.secho(
-                "Warning: --interactive flag ignores component arguments",
-                fg="yellow",
-            )
+            typer.secho(t("shared.interactive_ignores_args"), fg="yellow")
 
         from ..cli.interactive import interactive_component_remove_selection
 
         selected_components = interactive_component_remove_selection(target_path)
 
         if not selected_components:
-            typer.secho("\nNo components selected for removal", fg="green")
+            typer.secho(f"\n{t('remove.no_selected')}", fg="green")
             raise typer.Exit(0)
 
         # Convert to comma-separated string for existing logic
@@ -123,14 +124,14 @@ def remove_command(
             raise typer.Exit(1)
 
     except Exception as e:
-        typer.secho(f"Component validation failed: {e}", fg="red", err=True)
+        typer.secho(t("remove.validation_failed", error=e), fg="red", err=True)
         raise typer.Exit(1)
 
     # Load existing project configuration
     try:
         existing_answers = load_copier_answers(target_path)
     except Exception as e:
-        typer.secho(f"Failed to load project configuration: {e}", fg="red", err=True)
+        typer.secho(t("remove.load_config_failed", error=e), fg="red", err=True)
         raise typer.Exit(1)
 
     # Check which components are currently enabled
@@ -140,7 +141,9 @@ def remove_command(
     for component in selected_components:
         # Check if component is core (cannot be removed)
         if component in CORE_COMPONENTS:
-            typer.secho(f"Cannot remove core component: {component}", fg="yellow")
+            typer.secho(
+                t("remove.cannot_remove_core", component=component), fg="yellow"
+            )
             continue
 
         # Check if component is enabled
@@ -151,10 +154,10 @@ def remove_command(
             components_to_remove.append(component)
 
     if not_enabled:
-        typer.echo(f"Not enabled: {', '.join(not_enabled)}", err=False)
+        typer.echo(t("remove.not_enabled", components=", ".join(not_enabled)))
 
     if not components_to_remove:
-        typer.secho("No components to remove!", fg="green")
+        typer.secho(t("remove.nothing_to_remove"), fg="green")
         raise typer.Exit(0)
 
     # Auto-remove redis if worker is being removed (redis has no standalone functionality)
@@ -168,57 +171,55 @@ def remove_command(
         )  # Future: cache component may use redis
     ):
         components_to_remove.append(ComponentNames.REDIS)
-        typer.echo(
-            "Auto-removing redis (no standalone functionality, only used by worker)",
-            err=False,
-        )
+        typer.echo(t("remove.auto_remove_redis"))
 
     # Check for scheduler with sqlite backend - warn about persistence
     if ComponentNames.SCHEDULER in components_to_remove:
         scheduler_backend = existing_answers.get(AnswerKeys.SCHEDULER_BACKEND)
         if scheduler_backend == StorageBackends.SQLITE:
-            typer.secho("\nIMPORTANT: Scheduler Persistence Warning", fg="yellow")
-            typer.echo("   Your scheduler uses SQLite for job persistence.")
-            typer.echo("   The database file at data/scheduler.db will remain.")
+            typer.secho(f"\n{t('remove.scheduler_persistence_warn')}", fg="yellow")
+            typer.echo(f"   {t('remove.scheduler_persistence_detail')}")
+            typer.echo(f"   {t('remove.scheduler_db_remains')}")
             typer.echo()
-            typer.echo("   To keep your job history: Leave the database component")
-            typer.echo("   To remove all data: Also remove the database component")
+            typer.echo(f"   {t('remove.scheduler_keep_hint')}")
+            typer.echo(f"   {t('remove.scheduler_remove_hint')}")
             typer.echo()
 
     # Show what will be removed
-    typer.secho("\nComponents to remove:", fg="yellow")
+    typer.secho(f"\n{t('remove.components_to_remove')}", fg="yellow")
     for component in components_to_remove:
         if component in COMPONENTS:
-            desc = COMPONENTS[component].description
+            desc = _translated_desc(component, COMPONENTS[component].description)
             typer.echo(f"   • {component}: {desc}")
 
     # Confirm before proceeding
     typer.echo()
-    typer.secho(
-        "WARNING: This will DELETE component files from your project!", fg="yellow"
-    )
-    typer.echo("   Make sure you have committed your changes to git.")
+    typer.secho(t("remove.warning_delete"), fg="yellow")
+    typer.echo(f"   {t('remove.commit_hint')}")
     typer.echo()
 
-    if not yes and not typer.confirm("Remove these components?"):
-        typer.secho("Operation cancelled", fg="red")
+    if not yes and not typer.confirm(t("remove.confirm")):
+        typer.secho(t("shared.operation_cancelled"), fg="red")
         raise typer.Exit(0)
 
     # Run manual removal for each component
-    typer.echo("\nRemoving components...")
     try:
         updater = ManualUpdater(target_path)
 
         # Remove each component sequentially
         for component in components_to_remove:
-            typer.echo(f"\nRemoving {component}...")
+            typer.echo(f"\n{t('remove.removing', component=component)}")
 
             # Remove the component
             result = updater.remove_component(component)
 
             if not result.success:
                 typer.secho(
-                    f"Failed to remove {component}: {result.error_message}",
+                    t(
+                        "remove.failed_component",
+                        component=component,
+                        error=result.error_message,
+                    ),
                     fg="red",
                     err=True,
                 )
@@ -226,11 +227,14 @@ def remove_command(
 
             # Show results
             if result.files_deleted:
-                typer.secho(f"   Removed {len(result.files_deleted)} files", fg="green")
+                typer.secho(
+                    f"   {t('remove.removed_files', count=len(result.files_deleted))}",
+                    fg="green",
+                )
 
-        typer.secho("\nComponents removed successfully!", fg="green")
+        typer.secho(f"\n{t('remove.success')}", fg="green")
         Messages.print_next_steps()
 
     except Exception as e:
-        typer.secho(f"\nFailed to remove components: {e}", fg="red", err=True)
+        typer.secho(f"\n{t('remove.failed', error=e)}", fg="red", err=True)
         raise typer.Exit(1)

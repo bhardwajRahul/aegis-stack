@@ -33,13 +33,26 @@ class TestWorkerEventInfrastructure:
         )
         assert middleware_file.exists()
 
-    def test_arq_project_no_middleware(self, project_factory: "ProjectFactory") -> None:
-        """arq worker projects should NOT have middleware_taskiq.py (arq uses queue hooks)."""
+    def test_arq_project_no_middleware_file(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """arq worker projects should NOT have any middleware file (arq uses queue hooks)."""
         project_path = project_factory("base_with_worker")
-        middleware_file = (
-            project_path / "app" / "components" / "worker" / "middleware_taskiq.py"
-        )
-        assert not middleware_file.exists()
+        worker_dir = project_path / "app" / "components" / "worker"
+        assert not (worker_dir / "middleware.py").exists()
+        assert not (worker_dir / "middleware_taskiq.py").exists()
+        assert not (worker_dir / "middleware_dramatiq.py").exists()
+
+    def test_arq_registry_uses_worker_settings(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """arq registry.py should introspect WorkerSettings, not import from middleware."""
+        project_path = project_factory("base_with_worker")
+        content = (
+            project_path / "app" / "components" / "worker" / "registry.py"
+        ).read_text()
+        assert "get_worker_settings" in content
+        assert "from app.components.worker.middleware" not in content
 
     def test_worker_project_has_sse_endpoint(
         self, project_factory: "ProjectFactory"

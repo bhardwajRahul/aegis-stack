@@ -1,9 +1,8 @@
 """
 Worker queue registry with dynamic discovery.
 
-Discovers queue modules by scanning the queues directory and checking
-for registered worker actors. Engine-agnostic interface for queue
-introspection — works with arq, dramatiq, taskiq, or any future backend.
+Pure arq implementation - WorkerSettings classes are the single source of truth.
+No configuration files, no abstractions, just arq as intended.
 """
 
 import importlib
@@ -11,6 +10,30 @@ from pathlib import Path
 from typing import Any
 
 from app.core.log import logger
+
+
+def get_worker_settings(queue_name: str) -> Any:
+    """Import and return WorkerSettings class for a queue.
+
+    Args:
+        queue_name: Name of the queue (e.g., 'system', 'load_test')
+
+    Returns:
+        WorkerSettings class from the queue module
+
+    Raises:
+        ImportError: If queue module doesn't exist
+        AttributeError: If WorkerSettings class not found
+    """
+    try:
+        module = importlib.import_module(f"app.components.worker.queues.{queue_name}")
+        return module.WorkerSettings
+    except ImportError as e:
+        logger.error(f"Failed to import worker queue '{queue_name}': {e}")
+        raise
+    except AttributeError as e:
+        logger.error(f"WorkerSettings class not found in '{queue_name}' queue: {e}")
+        raise
 
 
 def discover_worker_queues() -> list[str]:
@@ -32,62 +55,66 @@ def discover_worker_queues() -> list[str]:
     queues = []
 
     for file in queue_files:
+        # Skip __init__.py and other special files
         if file.stem not in ["__init__", "__pycache__"]:
+            # Verify the file has a WorkerSettings class
             try:
-                importlib.import_module(f"app.components.worker.queues.{file.stem}")
+                get_worker_settings(file.stem)
                 queues.append(file.stem)
             except (ImportError, AttributeError):
-                logger.debug(f"Skipping '{file.stem}' - not a valid queue module")
+                logger.debug(f"Skipping '{file.stem}' - no valid WorkerSettings class")
                 continue
 
     return sorted(queues)
 
 
 def get_queue_metadata(queue_name: str) -> dict[str, Any]:
-    """Get metadata for a queue.
+    """Get metadata for a queue from its WorkerSettings class.
 
     Args:
         queue_name: Name of the queue
 
     Returns:
         Dictionary with queue metadata:
-        - queue_name: Logical queue name
-        - redis_queue_name: Redis key used by the broker
-        - tasks: List of task function names in this queue
-        - task_count: Number of registered tasks
-        - functions: Alias for tasks (backwards compat)
+        - queue_name: Redis queue name
         - max_jobs: Maximum concurrent jobs
         - timeout: Job timeout in seconds
-        - description: Human-readable description
+        - functions: List of function names in this queue
+        - description: Human-readable description (if available)
     """
-    if queue_name == "load_test":
-        task_names = [
-            "cpu_intensive_task",
-            "io_simulation_task",
-            "memory_operations_task",
-            "failure_testing_task",
-            "load_test_orchestrator",
-        ]
-    elif queue_name == "system":
-        task_names = [
-            "system_health_check",
-            "cleanup_temp_files",
-        ]
-    else:
-        task_names = []
+    try:
+        settings_class = get_worker_settings(queue_name)
 
-    metadata = {
-        "queue_name": queue_name,
-        "redis_queue_name": f"dramatiq:{queue_name}",
-        "tasks": task_names,
-        "task_count": len(task_names),
-        "functions": task_names,
-        "max_jobs": 10,
-        "timeout": 300,
-        "description": f"{queue_name.replace('_', ' ').title()} worker queue",
-    }
+        metadata = {
+            "queue_name": getattr(
+                settings_class, "queue_name", f"arq:queue:{queue_name}"
+            ),
+            "max_jobs": getattr(settings_class, "max_jobs", 10),
+            "timeout": getattr(settings_class, "job_timeout", 300),
+            "functions": [f.__name__ for f in getattr(settings_class, "functions", [])],
+        }
 
-    return metadata
+        # Add description if available
+        if hasattr(settings_class, "description"):
+            metadata["description"] = settings_class.description
+        elif hasattr(settings_class, "__doc__") and settings_class.__doc__:
+            metadata["description"] = settings_class.__doc__.strip()
+        else:
+            metadata["description"] = (
+                f"{queue_name.replace('_', ' ').title()} worker queue"
+            )
+
+        return metadata
+
+    except (ImportError, AttributeError) as e:
+        logger.error(f"Failed to get metadata for queue '{queue_name}': {e}")
+        return {
+            "queue_name": f"arq:queue:{queue_name}",
+            "max_jobs": 10,
+            "timeout": 300,
+            "functions": [],
+            "description": f"Unknown queue: {queue_name}",
+        }
 
 
 def get_all_queue_metadata() -> dict[str, dict[str, Any]]:
@@ -105,50 +132,39 @@ def get_all_queue_metadata() -> dict[str, dict[str, Any]]:
 def get_queue_lifecycle(queue_name: str) -> dict[str, dict[str, str]]:
     """Get lifecycle hook info for a queue.
 
-    Returns the middleware hooks that fire during a worker's lifecycle.
-    In dramatiq, hooks are middleware-based (shared across all queues via
-    EventPublishMiddleware) rather than per-queue configuration classes.
+    In arq, lifecycle hooks are defined on the WorkerSettings class
+    (on_startup, on_shutdown, on_job_start, after_job_end).
 
     Args:
         queue_name: Name of the queue (e.g., 'system', 'load_test')
 
     Returns:
-        Dictionary mapping hook names to their metadata:
-        - on_startup: Hook called before the worker boots
-        - on_shutdown: Hook called before the worker shuts down
-        - on_job_start: Hook called before processing a message
-        - after_job_end: Hook called after processing a message
-
-        Each hook entry contains:
-        - name: Method name on the middleware class
-        - module: Fully qualified module path
-        - description: Docstring of the hook method
+        Dictionary mapping hook names to their metadata.
     """
-    from app.components.worker.middleware import EventPublishMiddleware
+    try:
+        settings_class = get_worker_settings(queue_name)
+    except (ImportError, AttributeError):
+        return {}
 
     hooks: dict[str, dict[str, str]] = {}
-    hook_map = {
-        "on_startup": "before_worker_boot",
-        "on_shutdown": "before_worker_shutdown",
-        "on_job_start": "before_process_message",
-        "after_job_end": "after_process_message",
-    }
-    for key, method_name in hook_map.items():
-        fn = getattr(EventPublishMiddleware, method_name, None)
+    hook_names = ["on_startup", "on_shutdown", "on_job_start", "after_job_end"]
+
+    for hook_name in hook_names:
+        fn = getattr(settings_class, hook_name, None)
         if fn and callable(fn):
-            hooks[key] = {
-                "name": method_name,
-                "module": (f"{fn.__module__}.EventPublishMiddleware.{method_name}"),
+            hooks[hook_name] = {
+                "name": fn.__name__,
+                "module": f"{fn.__module__}.{fn.__qualname__}",
                 "description": (fn.__doc__ or "").strip(),
             }
+
     return hooks
 
 
 def get_task_docstrings(queue_name: str) -> dict[str, dict[str, str]]:
     """Get docstrings and module paths for all tasks in a queue.
 
-    Imports the queue module and extracts docstrings from task functions.
-    Handles decorated functions (e.g. dramatiq actors via .fn attribute).
+    In arq, task functions are listed in WorkerSettings.functions.
 
     Args:
         queue_name: Name of the queue (e.g., 'system', 'load_test')
@@ -157,32 +173,26 @@ def get_task_docstrings(queue_name: str) -> dict[str, dict[str, str]]:
         Dict mapping function name to {"description": ..., "module": ...}
     """
     try:
-        module = importlib.import_module(f"app.components.worker.queues.{queue_name}")
-    except ImportError:
+        settings_class = get_worker_settings(queue_name)
+    except (ImportError, AttributeError):
         return {}
 
     result: dict[str, dict[str, str]] = {}
-    metadata = get_queue_metadata(queue_name)
-    for func_name in metadata.get("tasks", []):
-        obj = getattr(module, func_name, None)
-        if obj is None:
-            continue
-        # Dramatiq actors wrap the original function in .fn
-        fn = getattr(obj, "fn", obj)
+    for fn in getattr(settings_class, "functions", []):
         doc = (fn.__doc__ or "").strip() if hasattr(fn, "__doc__") else ""
         mod = f"{fn.__module__}.{fn.__qualname__}" if hasattr(fn, "__module__") else ""
         if doc or mod:
-            result[func_name] = {"description": doc, "module": mod}
+            result[fn.__name__] = {"description": doc, "module": mod}
     return result
 
 
 def validate_queue_name(queue_name: str) -> bool:
-    """Check if a queue name is valid (has a corresponding queue module).
+    """Check if a queue name is valid (has a corresponding WorkerSettings).
 
     Args:
         queue_name: Name to validate
 
     Returns:
-        True if queue exists and has valid worker configuration
+        True if queue exists and has valid WorkerSettings
     """
     return queue_name in discover_worker_queues()

@@ -64,7 +64,11 @@ def _render_line(
 
     # Build the line with consistent 18-char name column
     if is_new:
-        typer.secho(f"{prefix}{padded_name}← NEW", fg=typer.colors.GREEN, bold=True)
+        typer.secho(
+            f"{prefix}{padded_name}← {t('projectmap.new')}",
+            fg=typer.colors.GREEN,
+            bold=True,
+        )
     elif uses_marker:
         typer.echo(f"{prefix}{padded_name}", nl=False)
         typer.secho(f"← {uses_marker}", fg=typer.colors.CYAN)

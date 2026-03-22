@@ -216,6 +216,120 @@ MESSAGES: dict[str, str] = {
     "interactive.ai_db_already": ("Database already selected - usage tracking enabled"),
     "interactive.ai_db_added": ("Database ({backend}) added for usage tracking"),
     "interactive.ai_configured": "AI service configured",
+    # ── Shared: validation ──────────────────────────────────────────────
+    "shared.not_copier_project": ("Project at {path} was not generated with Copier."),
+    "shared.copier_only": (
+        "The 'aegis {command}' command only works with Copier-generated projects."
+    ),
+    "shared.regenerate_hint": (
+        "To add components, regenerate the project with the new components included."
+    ),
+    "shared.git_not_initialized": "Project is not in a git repository",
+    "shared.git_required": "Copier updates require git for change tracking",
+    "shared.git_init_hint": (
+        "Projects created with 'aegis init' should have git initialized automatically"
+    ),
+    "shared.git_manual_init": (
+        "If you created this project manually, run: "
+        "git init && git add . && git commit -m 'Initial commit'"
+    ),
+    "shared.empty_component": "Empty component name is not allowed",
+    "shared.empty_service": "Empty service name is not allowed",
+    # ── Shared: next steps / review ──────────────────────────────────
+    "shared.next_steps": "Next steps:",
+    "shared.next_make_check": "   1. Run 'make check' to verify the update",
+    "shared.next_test": "   2. Test your application",
+    "shared.next_commit": "   3. Commit the changes with: git add . && git commit",
+    "shared.review_header": "Review changes:",
+    "shared.review_docker": "   git diff docker-compose.yml",
+    "shared.review_pyproject": "   git diff pyproject.toml",
+    "shared.operation_cancelled": "Operation cancelled",
+    "shared.interactive_ignores_args": (
+        "Warning: --interactive flag ignores component arguments"
+    ),
+    "shared.no_components_selected": "No components selected",
+    "shared.no_services_selected": "No services selected",
+    # ── Add command ──────────────────────────────────────────────────
+    "add.title": "Aegis Stack - Add Components",
+    "add.project": "Project: {path}",
+    "add.error_no_args": (
+        "Error: components argument is required (or use --interactive)"
+    ),
+    "add.usage_hint": "Usage: aegis add scheduler,worker",
+    "add.interactive_hint": "Or: aegis add --interactive",
+    "add.auto_added_deps": "Auto-added dependencies: {deps}",
+    "add.validation_failed": "Component validation failed: {error}",
+    "add.load_config_failed": "Failed to load project configuration: {error}",
+    "add.already_enabled": "Already enabled: {components}",
+    "add.all_enabled": "All requested components are already enabled!",
+    "add.components_to_add": "Components to add:",
+    "add.scheduler_backend": "Scheduler backend: {backend}",
+    "add.confirm": "Add these components?",
+    "add.updating": "Updating project...",
+    "add.adding": "Adding {component}...",
+    "add.added_files": "Added {count} files",
+    "add.skipped_files": "Skipped {count} existing files",
+    "add.success": "Components added successfully!",
+    "add.failed_component": "Failed to add {component}: {error}",
+    "add.failed": "Failed to add components: {error}",
+    "add.invalid_format": "Invalid component format: {error}",
+    "add.bracket_override": (
+        "Bracket syntax 'scheduler[{engine}]' overrides --backend {backend}"
+    ),
+    "add.invalid_scheduler_backend": ("Invalid scheduler backend: '{backend}'"),
+    "add.valid_backends": "Valid options: {options}",
+    "add.postgres_coming": "Note: PostgreSQL support coming in future release",
+    "add.auto_added_db": ("Auto-added database component for scheduler persistence"),
+    # ── Remove command ────────────────────────────────────────────────
+    "remove.title": "Aegis Stack - Remove Components",
+    "remove.project": "Project: {path}",
+    "remove.error_no_args": (
+        "Error: components argument is required (or use --interactive)"
+    ),
+    "remove.usage_hint": "Usage: aegis remove scheduler,worker",
+    "remove.interactive_hint": "Or: aegis remove --interactive",
+    "remove.no_selected": "No components selected for removal",
+    "remove.validation_failed": "Component validation failed: {error}",
+    "remove.load_config_failed": "Failed to load project configuration: {error}",
+    "remove.cannot_remove_core": "Cannot remove core component: {component}",
+    "remove.not_enabled": "Not enabled: {components}",
+    "remove.nothing_to_remove": "No components to remove!",
+    "remove.auto_remove_redis": (
+        "Auto-removing redis (no standalone functionality, only used by worker)"
+    ),
+    "remove.scheduler_persistence_warn": "IMPORTANT: Scheduler Persistence Warning",
+    "remove.scheduler_persistence_detail": (
+        "Your scheduler uses SQLite for job persistence."
+    ),
+    "remove.scheduler_db_remains": (
+        "The database file at data/scheduler.db will remain."
+    ),
+    "remove.scheduler_keep_hint": (
+        "To keep your job history: Leave the database component"
+    ),
+    "remove.scheduler_remove_hint": (
+        "To remove all data: Also remove the database component"
+    ),
+    "remove.components_to_remove": "Components to remove:",
+    "remove.warning_delete": (
+        "WARNING: This will DELETE component files from your project!"
+    ),
+    "remove.commit_hint": "Make sure you have committed your changes to git.",
+    "remove.confirm": "Remove these components?",
+    "remove.removing_all": "Removing components...",
+    "remove.removing": "Removing {component}...",
+    "remove.removed_files": "Removed {count} files",
+    "remove.failed_component": "Failed to remove {component}: {error}",
+    "remove.success": "Components removed successfully!",
+    "remove.failed": "Failed to remove components: {error}",
+    # ── Manual updater ─────────────────────────────────────────────────
+    "updater.processing_files": "Processing {count} component files...",
+    "updater.updating_shared": "Updating shared template files...",
+    "updater.running_postgen": "Running post-generation tasks...",
+    "updater.deps_synced": "Dependencies synced (uv sync)",
+    "updater.code_formatted": "Code formatted (make fix)",
+    # ── Project map ──────────────────────────────────────────────────
+    "projectmap.new": "NEW",
     # ── Post-generation: setup tasks ──────────────────────────────────
     "postgen.setup_start": "Setting up your project environment...",
     "postgen.deps_installing": "Installing dependencies with uv...",

@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from aegis.config.shared_files import SHARED_TEMPLATE_FILES
 from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
+from aegis.i18n import t
 
 from .component_files import get_component_files, get_copier_defaults, get_template_path
 from .copier_manager import is_copier_project, load_copier_answers
@@ -171,7 +172,7 @@ class ManualUpdater:
             else:
                 # Render and copy each file for this component
                 typer.secho(
-                    f"   Processing {len(component_files)} component files...",
+                    f"   {t('updater.processing_files', count=len(component_files))}",
                     fg=typer.colors.CYAN,
                 )
                 for file_path in component_files:
@@ -409,7 +410,7 @@ class ManualUpdater:
         shared_files_backed_up: list[str] = []
         shared_files_need_manual_merge: list[str] = []
 
-        print("\nUpdating shared template files...")
+        print(f"\n{t('updater.updating_shared')}")
         for shared_file, policy in SHARED_TEMPLATE_FILES.items():
             template_file = f"{PROJECT_SLUG_PLACEHOLDER}/{shared_file}"
             output_path = self.project_path / shared_file
@@ -530,7 +531,7 @@ class ManualUpdater:
         - Code is auto-formatted
         - Imports are organized
         """
-        print("\nRunning post-generation tasks...")
+        print(f"\n{t('updater.running_postgen')}")
 
         # Run uv sync to update dependencies
         try:
@@ -540,7 +541,7 @@ class ManualUpdater:
                 check=True,
                 capture_output=True,
             )
-            print("   Dependencies synced (uv sync)")
+            print(f"   {t('updater.deps_synced')}")
         except subprocess.CalledProcessError as e:
             print(f"   Warning: Failed to sync dependencies: {e}")
 
@@ -552,7 +553,7 @@ class ManualUpdater:
                 check=True,
                 capture_output=True,
             )
-            print("   Code formatted (make fix)")
+            print(f"   {t('updater.code_formatted')}")
         except subprocess.CalledProcessError:
             typer.echo(
                 "   "
