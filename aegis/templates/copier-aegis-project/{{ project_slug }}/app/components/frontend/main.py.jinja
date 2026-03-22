@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import Awaitable, Callable
 import json
+import time
 from typing import Any
 
 import flet as ft
@@ -62,6 +63,22 @@ SERVICE_PREFIX = "service_"
 # Use simple filenames - Flet should auto-resolve from assets_dir
 DEFAULT_LOGO_PATH = "aegis-manifesto.png"
 DEFAULT_DARK_LOGO_PATH = "aegis-manifesto-dark.png"
+
+
+def _format_uptime(start: float) -> str:
+    """Format elapsed time since start as a compact uptime string."""
+    elapsed = int(time.monotonic() - start)
+    minutes = elapsed // 60
+    hours = minutes // 60
+    days = hours // 24
+    if days > 0:
+        return f"Up {days}d {hours % 24}h"
+    elif hours > 0:
+        return f"Up {hours}h {minutes % 60}m"
+    elif minutes > 0:
+        return f"Up {minutes}m"
+    else:
+        return "Up <1m"
 
 
 def _convert_component(comp_data: dict[str, Any]) -> ComponentStatus:
@@ -518,6 +535,29 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             margin=ft.margin.only(right=20),  # Space before theme button
         )
 
+        # Subtle uptime indicator - updated on each refresh cycle
+        _session_start = time.monotonic()
+        uptime_text = ft.Text(
+            value=_format_uptime(_session_start),
+            size=Theme.Typography.CAPTION,
+            color=Theme.Colors.TEXT_SECONDARY,
+            weight=ft.FontWeight.W_400,
+            opacity=0.7,
+        )
+
+        # Wrap health indicator + uptime in a column
+        health_with_uptime = ft.Column(
+            [
+                health_indicator_container,
+                ft.Container(
+                    content=uptime_text,
+                    alignment=ft.alignment.center,
+                ),
+            ],
+            spacing=0,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+
         # Header with modern layout: logo left, status+controls right
         header = ft.Container(
             content=ft.Row(
@@ -528,7 +568,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                     ),
                     ft.Row(
                         [
-                            health_indicator_container,  # Health status
+                            health_with_uptime,  # Health status + uptime
                             # View toggle
                             ft.Container(content=view_toggle_button, padding=10),
                             # Theme toggle
@@ -846,9 +886,8 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                     components, create_component_card
                 )
 
-                # Keep worker modal cached permanently so SSE counters
-                # survive close/reopen cycles without resetting.
-                # Other modals can be pruned when closed.
+                # Update uptime display
+                uptime_text.value = _format_uptime(_session_start)
 
                 # Safe page update - check connection first
                 if dashboard._is_page_connected():
