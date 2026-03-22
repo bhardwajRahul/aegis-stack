@@ -210,17 +210,4 @@ fi
 #=============================================================================
 
 echo ""
-echo "=== Setup Complete ==="
-echo ""
-echo "Verifying installation:"
-echo "  Docker: $(docker --version)"
-echo "  Docker Compose: $(docker compose version)"
-echo "  uv: $(uv --version)"
-echo "  App Directory: $APP_DIR"
-echo ""
-echo "Next steps:"
-echo "  1. On your local machine, run: make deploy-context"
-echo "  2. Create .env.deploy with your production settings"
-echo "  3. Run: make deploy"
-echo ""
 {% endif %}

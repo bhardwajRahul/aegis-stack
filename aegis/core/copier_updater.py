@@ -506,7 +506,7 @@ def validate_clean_git_tree(project_path: Path) -> tuple[bool, str]:
         if result.stdout.strip():
             return False, t("update.dirty_tree")
 
-        return True, "Git tree is clean"
+        return True, t("update.git_clean")
 
     except subprocess.CalledProcessError as e:
         return False, f"Failed to check git status: {e}"

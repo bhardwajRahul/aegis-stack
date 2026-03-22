@@ -189,4 +189,4 @@ def ingress_enable_command(
     typer.echo(t("ingress.next_ports"))
     if domain:
         typer.echo(t("ingress.next_dns", domain=domain))
-    typer.echo(t("ingress.next_certs", step="3" if not domain else "4"))
+    typer.echo(t("ingress.next_certs"))

@@ -663,6 +663,10 @@ MESSAGES: dict[str, str] = {
         "No deploy configuration found. Run 'aegis deploy-init' first."
     ),
     "deploy.init_saved": ("Deploy configuration saved to {file}"),
+    "deploy.init_host": "   Host: {host}",
+    "deploy.init_user": "   User: {user}",
+    "deploy.init_path": "   Path: {path}",
+    "deploy.init_docker_context": "   Docker Context: {context}",
     "deploy.prompt_host": "Server IP or hostname",
     "deploy.init_gitignore": (
         "Note: Consider adding .aegis/ to .gitignore to avoid committing deploy config"
@@ -681,6 +685,11 @@ MESSAGES: dict[str, str] = {
         "Make sure your project was created with the ingress component."
     ),
     "deploy.setup_complete": "Server setup complete!",
+    "deploy.setup_verify": "Verifying installation:",
+    "deploy.setup_verify_docker": "  Docker: {version}",
+    "deploy.setup_verify_compose": "  Docker Compose: {version}",
+    "deploy.setup_verify_uv": "  uv: {version}",
+    "deploy.setup_verify_app_dir": "  App Directory: {path}",
     "deploy.setup_next": ("Next: Run 'aegis deploy' to deploy your application"),
     "deploy.deploying": "Deploying to {host}...",
     "deploy.creating_backup": "Creating backup {timestamp}...",
@@ -720,6 +729,9 @@ MESSAGES: dict[str, str] = {
     "deploy.creating_backup_on": "Creating backup on {host}...",
     "deploy.no_backups": "No backups found.",
     "deploy.backups_header": ("Backups on {host} ({count} total):"),
+    "deploy.col_timestamp": "Timestamp",
+    "deploy.col_size": "Size",
+    "deploy.col_database": "Database",
     "deploy.rollback_hint": (
         "Rollback with: aegis deploy-rollback --backup <timestamp>"
     ),

@@ -373,10 +373,10 @@ def deploy_init_command(
     _save_deploy_config(config)
 
     typer.secho(f"\n{t('deploy.init_saved', file=DEPLOY_CONFIG_FILE)}", fg="green")
-    typer.echo(f"   Host: {host}")
-    typer.echo(f"   User: {user}")
-    typer.echo(f"   Path: {path}")
-    typer.echo(f"   Docker Context: {project_name}-remote")
+    typer.echo(t("deploy.init_host", host=host))
+    typer.echo(t("deploy.init_user", user=user))
+    typer.echo(t("deploy.init_path", path=path))
+    typer.echo(t("deploy.init_docker_context", context=f"{project_name}-remote"))
 
     # Check if .aegis is in .gitignore
     gitignore_path = project_root / ".gitignore"
@@ -487,6 +487,18 @@ def deploy_setup_command(
     if ssh_result.returncode != 0:
         typer.secho(t("deploy.setup_failed"), fg="red", err=True)
         raise typer.Exit(1)
+
+    # Verify installation on remote server
+    deploy_path = config["server"]["path"]
+    typer.echo("")
+    typer.echo(t("deploy.setup_verify"))
+    docker_ver = _run_remote_capture(host, user, "docker --version")
+    typer.echo(t("deploy.setup_verify_docker", version=docker_ver.stdout.strip()))
+    compose_ver = _run_remote_capture(host, user, "docker compose version")
+    typer.echo(t("deploy.setup_verify_compose", version=compose_ver.stdout.strip()))
+    uv_ver = _run_remote_capture(host, user, "PATH=$HOME/.local/bin:$PATH uv --version")
+    typer.echo(t("deploy.setup_verify_uv", version=uv_ver.stdout.strip()))
+    typer.echo(t("deploy.setup_verify_app_dir", path=deploy_path))
 
     typer.secho(f"\n{t('deploy.setup_complete')}", fg="green", bold=True)
     typer.echo(t("deploy.setup_next"))
@@ -776,7 +788,10 @@ def deploy_backups_command(
         fg="blue",
         bold=True,
     )
-    typer.echo(f"  {'Timestamp':<24} {'Size':<12} {'Database'}")
+    ts = t("deploy.col_timestamp")
+    sz = t("deploy.col_size")
+    db = t("deploy.col_database")
+    typer.echo(f"  {ts:<24} {sz:<12} {db}")
     typer.echo(f"  {'─' * 24} {'─' * 12} {'─' * 10}")
 
     for backup_name in backups:
