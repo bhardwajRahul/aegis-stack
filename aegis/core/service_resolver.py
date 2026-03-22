@@ -6,6 +6,7 @@ to their required components and validating service-to-component compatibility.
 """
 
 from ..constants import AnswerKeys, ComponentNames, StorageBackends
+from ..i18n import t
 from .ai_service_parser import is_ai_service_with_options, parse_ai_service_config
 from .auth_service_parser import is_auth_service_with_options, parse_auth_service_config
 from .component_utils import extract_base_component_name, extract_base_service_name
@@ -103,7 +104,7 @@ class ServiceResolver:
         for service in services:
             base_service = extract_base_service_name(service)
             if base_service not in SERVICES:
-                errors.append(f"Unknown service: {base_service}")
+                errors.append(t("validation.unknown_service", name=base_service))
                 continue
 
             # Validate AI service bracket syntax if provided

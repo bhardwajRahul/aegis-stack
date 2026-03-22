@@ -8,6 +8,8 @@ and metadata used for project generation and validation.
 from dataclasses import dataclass, field
 from enum import Enum
 
+from ..i18n import t
+
 
 class ServiceType(Enum):
     """Service type classifications."""
@@ -147,7 +149,7 @@ def validate_service_dependencies(
 
     for service_name in selected_services:
         if service_name not in SERVICES:
-            errors.append(f"Unknown service: {service_name}")
+            errors.append(t("validation.unknown_service", name=service_name))
             continue
 
         service = SERVICES[service_name]

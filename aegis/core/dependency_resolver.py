@@ -5,6 +5,7 @@ This module handles dependency resolution, validation, and recommendations
 for component selection during project generation.
 """
 
+from ..i18n import t
 from .component_utils import extract_base_component_name
 from .components import COMPONENTS
 
@@ -73,7 +74,7 @@ class DependencyResolver:
             # Extract base name for lookup
             base_name = extract_base_component_name(component)
             if base_name not in COMPONENTS:
-                errors.append(f"Unknown component: {base_name}")
+                errors.append(t("validation.unknown_component", name=base_name))
                 continue
 
             spec = COMPONENTS[base_name]

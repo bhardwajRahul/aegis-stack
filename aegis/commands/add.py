@@ -180,6 +180,8 @@ def add_command(
         if auto_added:
             typer.echo(t("add.auto_added_deps", deps=", ".join(auto_added)))
 
+    except typer.Exit:
+        raise
     except Exception as e:
         typer.secho(t("add.validation_failed", error=e), fg="red", err=True)
         raise typer.Exit(1)

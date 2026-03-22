@@ -18,6 +18,7 @@ from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
 from aegis.core.copier_manager import load_copier_answers
 from aegis.core.post_gen_tasks import cleanup_components, run_post_generation_tasks
 from aegis.core.template_cleanup import cleanup_nested_project_directory
+from aegis.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -503,9 +504,9 @@ def validate_clean_git_tree(project_path: Path) -> tuple[bool, str]:
         )
 
         if result.stdout.strip():
-            return False, "Git tree has uncommitted changes"
+            return False, t("update.dirty_tree")
 
-        return True, "Git tree is clean"
+        return True, t("update.git_clean")
 
     except subprocess.CalledProcessError as e:
         return False, f"Failed to check git status: {e}"
@@ -554,25 +555,25 @@ def _format_commits_as_changelog(
     lines = []
 
     if breaking:
-        lines.append("Breaking Changes:")
+        lines.append(t("update.changelog_breaking"))
         for commit_hash, message in breaking:
             lines.append(format_commit(commit_hash, message))
         lines.append("")
 
     if features:
-        lines.append("New Features:")
+        lines.append(t("update.changelog_features"))
         for commit_hash, message in features:
             lines.append(format_commit(commit_hash, message))
         lines.append("")
 
     if fixes:
-        lines.append("Bug Fixes:")
+        lines.append(t("update.changelog_fixes"))
         for commit_hash, message in fixes:
             lines.append(format_commit(commit_hash, message))
         lines.append("")
 
     if other:
-        lines.append("Other Changes:")
+        lines.append(t("update.changelog_other"))
         for commit_hash, message in other:
             lines.append(format_commit(commit_hash, message))
 
