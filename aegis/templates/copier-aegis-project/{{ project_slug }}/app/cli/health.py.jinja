@@ -17,6 +17,7 @@ import typer
 from app.core.config import settings
 from app.core.constants import CLI, APIEndpoints, Defaults
 from app.core.log import setup_logging
+from app.i18n import lazy_t, t
 from app.services.system.models import (
     ComponentStatusType,
     DetailedHealthResponse,
@@ -24,7 +25,7 @@ from app.services.system.models import (
 )
 from app.services.system.ui import get_status_color_name, get_status_icon
 
-app = typer.Typer(name="health", help="System health monitoring commands")
+app = typer.Typer(name="health", help=lazy_t("health.help"))
 console = Console()
 
 
@@ -71,16 +72,18 @@ def _format_status_breakdown(counts: dict[str, int]) -> str:
     parts = []
 
     if counts["healthy"] > 0:
-        parts.append(f"{counts['healthy']} healthy")
+        parts.append(t("health.count_healthy", count=counts["healthy"]))
     if counts["warning"] > 0:
-        suffix = "s" if counts["warning"] > 1 else ""
-        parts.append(f"{counts['warning']} warning{suffix}")
+        if counts["warning"] > 1:
+            parts.append(t("health.count_warnings", count=counts["warning"]))
+        else:
+            parts.append(t("health.count_warning", count=counts["warning"]))
     if counts["info"] > 0:
-        parts.append(f"{counts['info']} info")
+        parts.append(t("health.count_info", count=counts["info"]))
     if counts["unhealthy"] > 0:
-        parts.append(f"{counts['unhealthy']} unhealthy")
+        parts.append(t("health.count_unhealthy", count=counts["unhealthy"]))
 
-    return ", ".join(parts) if parts else "0 components"
+    return ", ".join(parts) if parts else t("health.zero_components")
 
 
 def _get_status_color(counts: dict[str, int]) -> str:
@@ -111,24 +114,23 @@ def _display_scheduler_metadata(
     active_tasks = metadata.get("active_tasks", 0)
     paused_tasks = metadata.get("paused_tasks", 0)
 
-    console.print(f"{tree_indent}[dim]Task Statistics:[/dim]")
+    console.print(f"{tree_indent}[dim]{t('health.task_statistics')}[/dim]")
     console.print(
-        f"{tree_indent}  [dim]• Total: {total_tasks}, Active: {active_tasks}, "
-        f"Paused: {paused_tasks}[/dim]"
+        f"{tree_indent}  [dim]• {t('health.task_stats_line', total=total_tasks, active=active_tasks, paused=paused_tasks)}[/dim]"
     )
 
     # Upcoming tasks
     upcoming_tasks = metadata.get("upcoming_tasks", [])
     if upcoming_tasks:
-        console.print(f"{tree_indent}[dim]Upcoming Tasks:[/dim]")
+        console.print(f"{tree_indent}[dim]{t('health.upcoming_tasks')}[/dim]")
         # In detailed mode, show all tasks. Otherwise show top 3
         max_tasks = len(upcoming_tasks) if detailed else 3
         for task in upcoming_tasks[:max_tasks]:
-            task_name = task.get("name", task.get("id", "Unknown"))
-            next_run = task.get("next_run", "Unknown")
+            task_name = task.get("name", task.get("id", t("shared.unknown")))
+            next_run = task.get("next_run", t("shared.unknown"))
 
             # Format next run time more human-readable
-            if next_run and next_run != "Unknown":
+            if next_run and next_run != t("shared.unknown"):
                 try:
                     from datetime import datetime
 
@@ -140,21 +142,21 @@ def _display_scheduler_metadata(
                 except Exception:
                     formatted_time = next_run
             else:
-                formatted_time = "Unknown"
+                formatted_time = t("shared.unknown")
 
             console.print(
-                f"{tree_indent}  [dim]• {task_name} - Next: {formatted_time}[/dim]"
+                f"{tree_indent}  [dim]• {t('health.task_next_run', name=task_name, time=formatted_time)}[/dim]"
             )
 
         # Show "and X more..." if there are more tasks (only in non-detailed mode)
         if not detailed and len(upcoming_tasks) > 3:
             remaining = len(upcoming_tasks) - 3
-            task_word = "task" if remaining == 1 else "tasks"
+            task_word = t("health.task_word") if remaining == 1 else t("health.tasks_word")
             console.print(
-                f"{tree_indent}  [dim]• ... and {remaining} more {task_word}[/dim]"
+                f"{tree_indent}  [dim]• {t('health.more_tasks', count=remaining, word=task_word)}[/dim]"
             )
     else:
-        console.print(f"{tree_indent}[dim]No upcoming tasks scheduled[/dim]")
+        console.print(f"{tree_indent}[dim]{t('health.no_upcoming_tasks')}[/dim]")
 
 
 async def get_health_data(
@@ -179,13 +181,11 @@ async def get_health_data(
 
         except httpx.ConnectError:
             raise ConnectionError(
-                f"Cannot connect to API server at {base_url}. "
-                "Make sure the application is running with "
-                "'make serve' or 'make run-dev'."
+                t("health.connect_error", url=base_url)
             ) from None
         except httpx.TimeoutException:
             raise TimeoutError(
-                f"API request to {url} timed out after {Defaults.API_TIMEOUT} seconds."
+                t("health.timeout_error", url=url, timeout=Defaults.API_TIMEOUT)
             ) from None
         except httpx.HTTPStatusError as e:
             # Handle structured error responses from health endpoint
@@ -196,16 +196,16 @@ async def get_health_data(
                         error_data["detail"], dict
                     ):
                         detail = error_data["detail"]
-                        message = detail.get("message", "System is unhealthy")
+                        message = detail.get("message", t("health.system_unhealthy"))
                         unhealthy_components = detail.get("unhealthy_components", [])
                         health_percentage = detail.get("health_percentage", 0)
 
                         error_msg = f"{message}"
                         if unhealthy_components:
                             components_str = ", ".join(unhealthy_components)
-                            error_msg += f" (Unhealthy: {components_str})"
+                            error_msg += f" ({t('health.unhealthy_label', components=components_str)})"
                         if health_percentage is not None:
-                            error_msg += f" - Health: {health_percentage:.1f}%"
+                            error_msg += f" - {t('health.health_pct_label', pct=f'{health_percentage:.1f}%')}"
 
                         raise RuntimeError(error_msg) from None
                 except (ValueError, KeyError, TypeError):
@@ -213,7 +213,7 @@ async def get_health_data(
                     pass
 
             raise RuntimeError(
-                f"API returned error {e.response.status_code}: {e.response.text}"
+                t("health.api_error", status=e.response.status_code, text=e.response.text)
             ) from None
 
 
@@ -226,16 +226,13 @@ async def is_system_healthy() -> bool:
         return False
 
 
-@app.command("status")
+@app.command("status", help=lazy_t("health.help_status"))
 def health_status(
     detailed: bool = typer.Option(
-        False, "--detailed", "-d", help="Show detailed component information"
+        False, "--detailed", "-d", help=lazy_t("health.opt_detailed")
     ),
-    json_output: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
+    json_output: bool = typer.Option(False, "--json", "-j", help=lazy_t("health.opt_json")),
 ) -> None:
-    """Show system health status (always exits 0 for inspection).
-
-    Use --detailed for component metadata and response times."""
     setup_logging()
 
     try:
@@ -256,28 +253,27 @@ def health_status(
             error_data = {"error": str(e), "status": "error"}
             print(json.dumps(error_data, indent=2))
         else:
-            console.print(f"[red]Health status failed: {e}[/red]")
+            console.print(f"[red]{t('health.status_failed', error=e)}[/red]")
         # Exit 1 only on actual errors (connection failures, etc), not unhealthy status
         sys.exit(1)
 
 
-@app.command("probe")
+@app.command("probe", help=lazy_t("health.help_probe"))
 def health_probe() -> None:
-    """Health probe for monitoring - exits 1 if unhealthy (like k8s probes)."""
     setup_logging()
 
     try:
         healthy = asyncio.run(is_system_healthy())
 
         if healthy:
-            console.print("[green]System is healthy[/green]")
+            console.print(f"[green]{t('health.system_healthy')}[/green]")
             sys.exit(0)
         else:
-            console.print("[red]System is unhealthy[/red]")
+            console.print(f"[red]{t('health.system_unhealthy_msg')}[/red]")
             sys.exit(1)
 
     except Exception as e:
-        console.print(f"[red]Health probe failed: {e}[/red]")
+        console.print(f"[red]{t('health.probe_failed', error=e)}[/red]")
         sys.exit(1)
 
 
@@ -386,11 +382,8 @@ def _display_health_status(
 
     overall_color = "green" if overall_healthy else "red"
 
-    title = "System Health"
-    if overall_healthy:
-        title += " - Healthy"
-    else:
-        title += " - Unhealthy"
+    status_label = t("health.healthy") if overall_healthy else t("health.unhealthy")
+    title = f"{t('health.title')} - {status_label}"
 
     # Get component status breakdown
     components_group_dict = {}
@@ -413,12 +406,12 @@ def _display_health_status(
     component_status_color = _get_status_color(component_counts)
 
     panel_content = [
-        f"Overall Status: [bold {overall_color}]"
-        + ("Healthy" if overall_healthy else "Unhealthy")
+        f"{t('health.overall_status')} [bold {overall_color}]"
+        + status_label
         + f"[/bold {overall_color}]",
-        f"Health Percentage: [bold]"
+        f"{t('health.health_percentage')} [bold]"
         f"{health_percentage:.{CLI.HEALTH_PERCENTAGE_DECIMALS}f}%[/bold]",
-        f"Components: [bold {component_status_color}]"
+        f"{t('health.components_label')} [bold {component_status_color}]"
         f"{component_breakdown}[/bold {component_status_color}]",
     ]
 
@@ -444,20 +437,20 @@ def _display_health_status(
         service_status_color = _get_status_color(service_counts)
 
         panel_content.append(
-            f"Services: [bold {service_status_color}]"
+            f"{t('health.services_label')} [bold {service_status_color}]"
             f"{service_breakdown}[/bold {service_status_color}]"
         )
 
-    panel_content.append(f"Timestamp: {timestamp}")
+    panel_content.append(f"{t('health.timestamp_label')} {timestamp}")
 
     console.print(
         Panel("\n".join(panel_content), title=title, border_style=overall_color)
     )
 
     # Component and Service Tree Display
-    tree_title = "Component Tree"
+    tree_title = t("health.component_tree")
     if hasattr(health_data, "has_services") and health_data.has_services:
-        tree_title = "Component & Service Tree"
+        tree_title = t("health.component_service_tree")
     console.print(f"\n[bold magenta]{tree_title}:[/bold magenta]")
 
     # Sort components: unhealthy first, then by name
@@ -501,7 +494,7 @@ def _display_health_status(
             console.print(
                 Panel(
                     "\n".join(sys_info_content),
-                    title="System Information",
+                    title=t("health.system_info"),
                     border_style="blue",
                 )
             )

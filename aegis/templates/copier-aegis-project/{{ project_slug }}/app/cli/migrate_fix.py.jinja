@@ -19,6 +19,7 @@ from alembic.script import ScriptDirectory
 from sqlmodel import SQLModel
 
 from app.core.db import engine
+from app.i18n import t
 
 {% if include_auth %}
 # Import models to register with SQLModel metadata
@@ -80,9 +81,7 @@ def _get_additive_diffs() -> list[tuple]:
             table = diff[1]
             if table.name in managed_tables:
                 print(
-                    f"  WARNING: Table '{table.name}' is missing entirely. "
-                    "Create a manual migration with: "
-                    "alembic revision --autogenerate -m 'add {table.name}'"
+                    t("migrate.table_missing_warning", table=table.name)
                 )
 
         # Skip: add_index, remove_table, remove_column, remove_index,
@@ -99,7 +98,7 @@ def _generate_fix_migration(diffs: list[tuple]) -> Path | None:
     # Get current head
     heads = script_dir.get_heads()
     if not heads:
-        print("No existing migrations found. Run 'make migrate' first.")
+        print(t("migrate.no_existing_migrations"))
         return None
 
     head = heads[0]
@@ -201,24 +200,24 @@ def downgrade() -> None:
 
 def main() -> None:
     """Check for schema mismatches and generate fix migration."""
-    print("Checking schema against models...")
+    print(t("migrate.checking_schema"))
 
     diffs = _get_additive_diffs()
 
     if not diffs:
-        print("Schema is up to date. No fix needed.")
+        print(t("migrate.schema_up_to_date"))
         sys.exit(0)
 
-    print(f"Found {len(diffs)} schema differences:")
+    print(t("migrate.found_differences", count=len(diffs)))
     for diff in diffs:
         if diff[0] == "add_column":
-            print(f"  + ADD COLUMN {diff[2]}.{diff[3].name}")
+            print(f"  + {t('migrate.add_column')} {diff[2]}.{diff[3].name}")
 
     migration_path = _generate_fix_migration(diffs)
     if migration_path:
-        print(f"\nGenerated fix migration: {migration_path.name}")
+        print(f"\n{t('migrate.generated_migration', name=migration_path.name)}")
     else:
-        print("\nNo fixable differences found.")
+        print(f"\n{t('migrate.no_fixable_differences')}")
         sys.exit(0)
 
 

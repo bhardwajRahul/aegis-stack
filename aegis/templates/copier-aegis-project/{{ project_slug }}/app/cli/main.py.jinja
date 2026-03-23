@@ -10,19 +10,45 @@ import inspect
 import sys
 from typing import TYPE_CHECKING
 
+import app.cli._i18n_click  # noqa: F401 — translate Click's built-in --help text
 import click
 import typer
 
 from app.cli import docs, health
+from app.i18n import detect_locale, lazy_t, set_locale, t
+from app.i18n.locales import AVAILABLE_LOCALES
 
 if TYPE_CHECKING:
     pass
 
 app = typer.Typer(
     name="{{ project_slug }}",
-    help="{{ project_slug }} management CLI",
+    help=lazy_t("main.help"),
     no_args_is_help=True,
+    context_settings={"help_option_names": ["-h", "--help"]},
+    add_completion=False,
 )
+
+
+@app.callback()
+def main_callback(
+    lang: str | None = typer.Option(
+        None,
+        "--lang",
+        help=lazy_t("main.opt_lang"),
+        envvar="{{ project_slug | upper | replace('-', '_') }}_LANG",
+    ),
+) -> None:
+    normalized = lang.lower().replace("-", "_").split("_")[0] if lang else None
+    if normalized and normalized not in AVAILABLE_LOCALES:
+        typer.secho(
+            t("main.unsupported_lang", lang=lang, available=", ".join(sorted(AVAILABLE_LOCALES))),
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(1)
+    set_locale(lang if lang else detect_locale())
+
 
 # Register sub-commands
 app.add_typer(health.app, name="health")

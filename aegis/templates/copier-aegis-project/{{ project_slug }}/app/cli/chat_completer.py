@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
+from app.i18n import t
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
 
@@ -81,7 +82,7 @@ class ChatCompleter(Completer):
                     "off",
                     start_position=-len(collection_part),
                     display="off",
-                    display_meta="Disable RAG",
+                    display_meta=t("chat.disable_rag"),
                 )
 
             for collection in self.command_handler.get_collection_completions():
@@ -97,8 +98,8 @@ class ChatCompleter(Completer):
         if text.startswith("/sources "):
             arg_part = text[9:]  # After "/sources "
             options = [
-                ("enable", "Show source references"),
-                ("disable", "Hide source references"),
+                ("enable", t("chat.show_source_references")),
+                ("disable", t("chat.hide_source_references")),
             ]
             for opt, desc in options:
                 if opt.startswith(arg_part.lower()):

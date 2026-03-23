@@ -6,12 +6,11 @@ Displays documentation URLs for installed components and services.
 from pathlib import Path
 
 import typer
+from app.i18n import lazy_t, t
 from rich.console import Console
 from rich.panel import Panel
 
-app = typer.Typer(
-    name="docs", help="Show documentation links", invoke_without_command=True
-)
+app = typer.Typer(name="docs", help=lazy_t("docs.help"), invoke_without_command=True)
 console = Console()
 
 # Base URL for Aegis Stack documentation
@@ -115,31 +114,32 @@ def _format_docs_section(
 
         aegis_path, external_url, description = docs_config[item]
         lines.append(f"  [bold]{item}[/bold] ({description})")
-        lines.append(f"    Guide: {AEGIS_BASE}{aegis_path}")
+        lines.append(f"    {t('docs.guide_label')} {AEGIS_BASE}{aegis_path}")
         if external_url:
-            lines.append(f"    Docs:  {external_url}")
+            lines.append(f"    {t('docs.docs_label')}  {external_url}")
         lines.append("")
 
     return lines
 
 
-@app.callback()
+@app.callback(help=lazy_t("docs.help_show"))
 def show() -> None:
-    """Display documentation links for installed components and services."""
     components, services = _detect_installed()
 
     lines: list[str] = []
 
     # Components section
     if components:
-        lines.extend(_format_docs_section("Components", components, COMPONENT_DOCS))
+        lines.extend(
+            _format_docs_section(t("docs.components"), components, COMPONENT_DOCS)
+        )
 
     # Services section
     if services:
-        lines.extend(_format_docs_section("Services", services, SERVICE_DOCS))
+        lines.extend(_format_docs_section(t("docs.services"), services, SERVICE_DOCS))
 
     if not lines:
-        console.print("[yellow]No components or services detected.[/yellow]")
+        console.print(f"[yellow]{t('docs.no_detected')}[/yellow]")
         return
 
     # Get project name from directory
@@ -147,7 +147,7 @@ def show() -> None:
 
     panel = Panel(
         "\n".join(lines).rstrip(),
-        title=f"[bold]{project_name} Documentation[/bold]",
+        title=f"[bold]{project_name} {t('docs.documentation')}[/bold]",
         border_style="cyan",
     )
     console.print(panel)

@@ -6,6 +6,7 @@ and non-streaming modes using marko markdown parser with terminal rendering.
 """
 
 from app.cli.marko_terminal_renderer import TerminalRenderer
+from app.i18n import t
 from marko import Markdown
 from marko.ext.gfm import GFM
 from rich.console import Console
@@ -142,9 +143,9 @@ def render_ai_header(console: Console, inline: bool = True) -> None:
         >>> render_ai_header(console, inline=False) # Outputs: "Illiana:"
     """
     if inline:
-        console.print("Illiana: ", style="bright_magenta", end="")
+        console.print(t("ai.header_inline"), style="bright_magenta", end="")
     else:
-        console.print("Illiana:", style="bright_magenta bold")
+        console.print(t("ai.header"), style="bright_magenta bold")
 
 
 def render_markdown_response(console: Console, content: str) -> None:
@@ -163,7 +164,7 @@ def render_markdown_response(console: Console, content: str) -> None:
         >>> render_markdown_response(console, "```python\\nprint('hi')\\n```")
     """
     if not content or not content.strip():
-        console.print("(No response content)", style="dim italic")
+        console.print(t("ai.no_response_content"), style="dim italic")
         return
 
     # Clean up excessive whitespace from AI responses
@@ -242,11 +243,13 @@ def render_conversation_metadata(
         ... )
     """
     console.print()  # Blank line for spacing
-    console.print(f"Conversation: {conversation_id}", style="dim")
+    console.print(f"{t('ai.conversation_label')} {conversation_id}", style="dim")
     if message_count:
-        console.print(f"Messages: {message_count}", style="dim")
+        console.print(f"{t('ai.messages_label')} {message_count}", style="dim")
     if response_time:
-        console.print(f"Response time: {response_time:.1f}ms", style="dim")
+        console.print(
+            f"{t('ai.response_time_label')} {response_time:.1f}ms", style="dim"
+        )
 
 
 def render_error_message(
@@ -264,9 +267,9 @@ def render_error_message(
         >>> render_error_message(console, "Connection failed")
         >>> render_error_message(console, "API key invalid", "Check your .env file")
     """
-    console.print(f"Error: {error}", style="red")
+    console.print(f"{t('shared.error')} {error}", style="red")
     if suggestion:
-        console.print(f"Tip: {suggestion}", style="yellow dim")
+        console.print(f"{t('ai.tip_label')} {suggestion}", style="yellow dim")
 
 
 def render_thinking_spinner(console: Console) -> tuple:
@@ -285,6 +288,6 @@ def render_thinking_spinner(console: Console) -> tuple:
     from rich.live import Live
     from rich.spinner import Spinner
 
-    spinner = Spinner("dots", text="Thinking...", style="bright_blue")
+    spinner = Spinner("dots", text=t("ai.thinking"), style="bright_blue")
     live = Live(spinner, console=console, refresh_per_second=12)
     return spinner, live
