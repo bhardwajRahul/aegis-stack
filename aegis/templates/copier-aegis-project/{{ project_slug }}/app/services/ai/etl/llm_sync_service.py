@@ -33,13 +33,9 @@ from sqlmodel import Session, select
 
 try:
     from app.services.ai.ollama import OllamaClient, OllamaModel
-except ModuleNotFoundError:
-    # Ollama module not generated (ollama_mode is "none")
-    OllamaClient = None  # type: ignore[assignment, misc]
-    OllamaModel = None  # type: ignore[assignment, misc]
-except ImportError as exc:
-    # Unexpected import error (e.g., missing dependency inside Ollama module)
-    logger.warning("Failed to import Ollama module: %s", exc)
+except (ModuleNotFoundError, ImportError):
+    # Ollama module not generated or empty (ollama_mode is "none"),
+    # or missing dependency — either way, gracefully degrade
     OllamaClient = None  # type: ignore[assignment, misc]
     OllamaModel = None  # type: ignore[assignment, misc]
 
