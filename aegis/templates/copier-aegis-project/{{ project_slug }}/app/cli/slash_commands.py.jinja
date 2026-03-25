@@ -19,6 +19,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from app.i18n import t
+
 if TYPE_CHECKING:
     from app.services.ai.service import AIService
     from app.cli.status_line import ChatSessionState
@@ -100,44 +102,44 @@ class SlashCommandHandler:
         self.commands: dict[SlashCommandName, SlashCommand] = {
             SlashCommandName.HELP: SlashCommand(
                 name=SlashCommandName.HELP,
-                description="Show available commands",
+                description=t("slash.help_desc"),
                 usage="/help",
             ),
             SlashCommandName.CLEAR: SlashCommand(
                 name=SlashCommandName.CLEAR,
-                description="Clear the screen",
+                description=t("slash.clear_desc"),
                 usage="/clear",
             ),
             SlashCommandName.NEW: SlashCommand(
                 name=SlashCommandName.NEW,
-                description="Start a new conversation",
+                description=t("slash.new_desc"),
                 usage="/new",
             ),
             SlashCommandName.MODEL: SlashCommand(
                 name=SlashCommandName.MODEL,
-                description="Switch AI model (auto-detects provider)",
+                description=t("slash.model_desc"),
                 usage="/model [name]",
             ),
             SlashCommandName.STATUS: SlashCommand(
                 name=SlashCommandName.STATUS,
-                description="Show current configuration",
+                description=t("slash.status_desc"),
                 usage="/status",
             ),
 {% if ai_rag %}
             SlashCommandName.RAG: SlashCommand(
                 name=SlashCommandName.RAG,
-                description="Manage RAG mode",
+                description=t("slash.rag_desc"),
                 usage="/rag [off|<collection>]",
             ),
             SlashCommandName.SOURCES: SlashCommand(
                 name=SlashCommandName.SOURCES,
-                description="Toggle source references in output",
+                description=t("slash.sources_desc"),
                 usage="/sources [enable|disable]",
             ),
 {% endif %}
             SlashCommandName.EXIT: SlashCommand(
                 name=SlashCommandName.EXIT,
-                description="Exit the chat session",
+                description=t("slash.exit_desc"),
                 usage="/exit",
             ),
         }
@@ -281,7 +283,7 @@ class SlashCommandHandler:
             command_name = self._alias_map[command_name]
 
         if command_name not in self.commands:
-            msg = f"Unknown command: /{command_name}. Type /help for commands."
+            msg = t("slash.unknown_command", name=command_name)
             return CommandResult(success=False, message=msg)
 
         # Dispatch to handler method
@@ -308,7 +310,7 @@ class SlashCommandHandler:
         for name, cmd in sorted(self.commands.items()):
             table.add_row(f"/{name}", cmd.description)
 
-        self.console.print(Panel(table, title="Commands", border_style="dim"))
+        self.console.print(Panel(table, title=t("slash.commands_panel"), border_style="dim"))
         return CommandResult(success=True)
 
     async def _cmd_clear(self, args: list[str]) -> CommandResult:
@@ -322,7 +324,7 @@ class SlashCommandHandler:
         self.current_conversation_id = None
         return CommandResult(
             success=True,
-            message="[green]Started new conversation[/green]",
+            message=f"[green]{t('slash.new_conversation')}[/green]",
             new_conversation_id="new",  # Signal to reset
         )
 
@@ -332,12 +334,12 @@ class SlashCommandHandler:
         if not args:
             current = self.ai_service.config
             content = Text()
-            content.append("Provider: ", style="dim")
+            content.append(t("ai.provider_label") + " ", style="dim")
             content.append(f"{current.provider.value}\n", style="cyan")
-            content.append("Model: ", style="dim")
+            content.append(t("ai.model_label") + " ", style="dim")
             content.append(f"{current.model}\n", style="cyan")
-            content.append("Use /model <name> to switch", style="dim")
-            self.console.print(Panel(content, title="Current", border_style="dim"))
+            content.append(t("slash.use_model_hint"), style="dim")
+            self.console.print(Panel(content, title=t("slash.current_panel"), border_style="dim"))
             return CommandResult(success=True)
 
         model = args[0]
@@ -357,7 +359,7 @@ class SlashCommandHandler:
 
         # Build message
         if result.provider_updated:
-            msg = f"[green]Switched to {result.vendor}/{model}[/green]"
+            msg = f"[green]{t('slash.switched_to', provider=result.vendor, model=model)}[/green]"
             return CommandResult(
                 success=True,
                 message=msg,
@@ -367,7 +369,7 @@ class SlashCommandHandler:
         else:
             return CommandResult(
                 success=True,
-                message=f"[green]Switched to model: {model}[/green]",
+                message=f"[green]{t('slash.switched_model', model=model)}[/green]",
                 update_model=model,
             )
 {% else %}
@@ -423,14 +425,14 @@ class SlashCommandHandler:
         if provider:
             return CommandResult(
                 success=True,
-                message=f"[green]Switched to {provider}/{model}[/green]",
+                message=f"[green]{t('slash.switched_to', provider=provider, model=model)}[/green]",
                 update_provider=provider,
                 update_model=model,
             )
         else:
             return CommandResult(
                 success=True,
-                message=f"[green]Switched to model: {model}[/green]",
+                message=f"[green]{t('slash.switched_model', model=model)}[/green]",
                 update_model=model,
             )
 {% endif %}
@@ -443,13 +445,13 @@ class SlashCommandHandler:
 {% endif %}
 
         content = Text()
-        content.append("Provider: ", style="dim")
+        content.append(t("ai.provider_label") + " ", style="dim")
         content.append(f"{current.provider.value}\n", style="cyan")
-        content.append("Model: ", style="dim")
+        content.append(t("ai.model_label") + " ", style="dim")
         content.append(f"{current.model}\n", style="cyan")
-        content.append("Temperature: ", style="dim")
+        content.append(t("ai.temperature_label") + " ", style="dim")
         content.append(f"{current.temperature}\n")
-        content.append("Max Tokens: ", style="dim")
+        content.append(t("ai.max_tokens_label") + " ", style="dim")
         content.append(f"{current.max_tokens}")
 {% if ai_rag %}
         content.append("\nRAG: ", style="dim")
@@ -458,7 +460,7 @@ class SlashCommandHandler:
             content.append(f" ({self.rag_collection})", style="cyan")
 {% endif %}
 
-        self.console.print(Panel(content, title="Status", border_style="dim"))
+        self.console.print(Panel(content, title=t("slash.status_panel"), border_style="dim"))
         return CommandResult(success=True)
 
 {% if ai_rag %}
@@ -470,19 +472,19 @@ class SlashCommandHandler:
         if not args:
             # Show current status
             content = Text()
-            content.append("Status: ", style="dim")
+            content.append(t("ai.status_label") + " ", style="dim")
             content.append("ON" if self.rag_enabled else "OFF",
                           style="green" if self.rag_enabled else "dim")
             if self.rag_collection:
-                content.append(f"\nCollection: ", style="dim")
+                content.append(f"\n{t('ai.opt_collection')}: ", style="dim")
                 content.append(self.rag_collection, style="cyan")
             if collections:
-                content.append(f"\nAvailable: {', '.join(collections[:5])}", style="dim")
-                content.append("\nUse /rag off or /rag <collection>", style="dim")
+                content.append(f"\n{t('slash.available_collections', list=', '.join(collections[:5]))}", style="dim")
+                content.append(f"\n{t('slash.rag_use_hint')}", style="dim")
             else:
-                content.append("\nNo collections indexed yet", style="dim")
-                content.append("\nIndex documents: {{ project_slug }} rag index <path>", style="dim")
-            self.console.print(Panel(content, title="RAG", border_style="dim"))
+                content.append(f"\n{t('slash.no_collections_indexed')}", style="dim")
+                content.append(f"\n{t('slash.index_documents_hint', app='{{ project_slug }}')}", style="dim")
+            self.console.print(Panel(content, title=t("slash.rag_panel"), border_style="dim"))
             return CommandResult(success=True)
 
         arg = args[0].lower()
@@ -491,7 +493,7 @@ class SlashCommandHandler:
             self.rag_enabled = False
             return CommandResult(
                 success=True,
-                message="[yellow]RAG disabled[/yellow]",
+                message=f"[yellow]{t('slash.rag_disabled')}[/yellow]",
                 update_rag=False,
             )
 
@@ -499,18 +501,18 @@ class SlashCommandHandler:
         if arg not in collections:
             if collections:
                 avail = ", ".join(collections[:5])
-                msg = f"[red]Collection '{arg}' not found.[/red]\n"
-                msg += f"[dim]Available: {avail}[/dim]"
+                msg = f"[red]{t('slash.collection_not_found', name=arg)}[/red]\n"
+                msg += f"[dim]{t('slash.available_collections', list=avail)}[/dim]"
             else:
-                msg = f"[red]Collection '{arg}' not found.[/red]\n"
-                msg += "[dim]No collections exist. Index documents first.[/dim]"
+                msg = f"[red]{t('slash.collection_not_found', name=arg)}[/red]\n"
+                msg += f"[dim]{t('slash.no_collections')}[/dim]"
             return CommandResult(success=False, message=msg)
 
         self.rag_collection = arg
         self.rag_enabled = True
         return CommandResult(
             success=True,
-            message=f"[green]RAG enabled with collection: {arg}[/green]",
+            message=f"[green]{t('slash.rag_enabled', name=arg)}[/green]",
             update_rag=True,
             update_rag_collection=arg,
         )
@@ -521,18 +523,20 @@ class SlashCommandHandler:
         if not self.rag_enabled:
             return CommandResult(
                 success=False,
-                message="[red]Sources require RAG to be enabled.[/red]\n"
-                "[dim]Enable RAG first with /rag <collection>[/dim]",
+                message=f"[red]{t('slash.sources_require_rag')}[/red]\n"
+                f"[dim]{t('slash.enable_rag_first')}[/dim]",
             )
 
         if not args:
             # Toggle current state
             self.show_sources = not self.show_sources
-            status = "enabled" if self.show_sources else "disabled"
-            color = "green" if self.show_sources else "yellow"
+            if self.show_sources:
+                msg = f"[green]{t('slash.sources_enabled')}[/green]"
+            else:
+                msg = f"[yellow]{t('slash.sources_disabled')}[/yellow]"
             return CommandResult(
                 success=True,
-                message=f"[{color}]Source references {status}[/{color}]",
+                message=msg,
                 update_show_sources=self.show_sources,
             )
 
@@ -541,21 +545,21 @@ class SlashCommandHandler:
             self.show_sources = True
             return CommandResult(
                 success=True,
-                message="[green]Source references enabled[/green]",
+                message=f"[green]{t('slash.sources_enabled')}[/green]",
                 update_show_sources=True,
             )
         elif arg in ("off", "disable"):
             self.show_sources = False
             return CommandResult(
                 success=True,
-                message="[yellow]Source references disabled[/yellow]",
+                message=f"[yellow]{t('slash.sources_disabled')}[/yellow]",
                 update_show_sources=False,
             )
         else:
             return CommandResult(
                 success=False,
-                message=f"[red]Unknown option: {arg}[/red]\n"
-                "[dim]Usage: /sources [enable|disable][/dim]",
+                message=f"[red]{t('slash.unknown_option', arg=arg)}[/red]\n"
+                f"[dim]{t('slash.sources_usage')}[/dim]",
             )
 {% endif %}
 
@@ -563,6 +567,6 @@ class SlashCommandHandler:
         """Exit the chat session."""
         return CommandResult(
             success=True,
-            message="[yellow]Goodbye![/yellow]",
+            message=f"[yellow]{t('ai.goodbye')}[/yellow]",
             should_exit=True,
         )

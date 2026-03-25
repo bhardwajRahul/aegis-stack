@@ -18,6 +18,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
+from app.i18n import lazy_t, t
 from app.cli.chat_completer import ChatCompleter
 from app.cli.slash_commands import SlashCommandHandler
 from app.cli.status_line import ChatSessionState, create_toolbar_callback
@@ -48,46 +49,45 @@ def get_provider_display_name(provider: AIProvider | str) -> str:
     return PROVIDER_DISPLAY_NAMES.get(value, value)
 
 
-app = typer.Typer(help="AI service management and chat commands")
+app = typer.Typer(help=lazy_t("ai.help"))
 console = Console()
 
 
-@app.command()
+@app.command(help=lazy_t("ai.help_status"))
 def status() -> None:
-    """Show AI service status, configuration, and validation."""
     ai_config = get_ai_config(settings)
 
-    typer.secho("AI Service Status", fg=typer.colors.BLUE, bold=True)
+    typer.secho(t("ai.status_title"), fg=typer.colors.BLUE, bold=True)
     typer.secho("=" * 40, dim=True)
 
     # Basic info
     typer.echo(
-        typer.style("Engine: ", fg=typer.colors.CYAN) + "{{ ai_framework }}"
+        typer.style(t("ai.engine_label") + " ", fg=typer.colors.CYAN) + "{{ ai_framework }}"
     )
     status_color = typer.colors.GREEN if ai_config.enabled else typer.colors.RED
-    status_text = "Enabled" if ai_config.enabled else "Disabled"
+    status_text = t("ai.enabled") if ai_config.enabled else t("ai.disabled")
     typer.echo(
-        typer.style("Status: ", fg=typer.colors.CYAN)
+        typer.style(t("ai.status_label") + " ", fg=typer.colors.CYAN)
         + typer.style(status_text, fg=status_color)
     )
     typer.echo(
-        typer.style("Provider: ", fg=typer.colors.CYAN) + get_provider_display_name(ai_config.provider)
+        typer.style(t("ai.provider_label") + " ", fg=typer.colors.CYAN) + get_provider_display_name(ai_config.provider)
     )
-    typer.echo(typer.style("Model: ", fg=typer.colors.CYAN) + str(ai_config.model))
+    typer.echo(typer.style(t("ai.model_label") + " ", fg=typer.colors.CYAN) + str(ai_config.model))
     typer.echo(
-        typer.style("Temperature: ", fg=typer.colors.CYAN)
+        typer.style(t("ai.temperature_label") + " ", fg=typer.colors.CYAN)
         + str(ai_config.temperature)
     )
     typer.echo(
-        typer.style("Max Tokens: ", fg=typer.colors.CYAN) + str(ai_config.max_tokens)
+        typer.style(t("ai.max_tokens_label") + " ", fg=typer.colors.CYAN) + str(ai_config.max_tokens)
     )
 
     # API Key status
     provider_config = ai_config.get_provider_config(settings)
     api_key_color = typer.colors.GREEN if provider_config.api_key else typer.colors.RED
-    api_key_text = "Set" if provider_config.api_key else "Not set"
+    api_key_text = t("shared.yes") if provider_config.api_key else t("shared.no")
     typer.echo(
-        typer.style("API Key: ", fg=typer.colors.CYAN)
+        typer.style(t("ai.api_key_label") + " ", fg=typer.colors.CYAN)
         + typer.style(api_key_text, fg=api_key_color)
     )
 
@@ -95,14 +95,14 @@ def status() -> None:
     typer.echo("")
     errors = ai_config.validate_configuration(settings)
     if not errors:
-        typer.secho("✓ Configuration valid", fg=typer.colors.GREEN)
+        typer.secho(f"✓ {t('ai.config_valid')}", fg=typer.colors.GREEN)
         capabilities = get_provider_capabilities(ai_config.provider)
         if capabilities.free_tier_available:
-            typer.echo("  " + typer.style("Free tier", fg=typer.colors.CYAN))
+            typer.echo("  " + typer.style(t("ai.free_tier"), fg=typer.colors.CYAN))
         if capabilities.supports_streaming:
-            typer.echo("  " + typer.style("Streaming supported", fg=typer.colors.CYAN))
+            typer.echo("  " + typer.style(t("ai.streaming_supported"), fg=typer.colors.CYAN))
     else:
-        typer.secho("✗ Configuration issues:", fg=typer.colors.RED)
+        typer.secho(f"✗ {t('ai.config_issues')}", fg=typer.colors.RED)
         for error in errors:
             typer.echo("  " + typer.style("•", fg=typer.colors.RED) + f" {error}")
 
@@ -113,37 +113,40 @@ def status() -> None:
                 providers_list = ", ".join(p.value for p in free_providers)
                 typer.echo("")
                 typer.echo(
-                    typer.style("Tip: ", fg=typer.colors.YELLOW)
-                    + f"Try free providers: {providers_list}"
+                    typer.style(t("ai.tip_label") + " ", fg=typer.colors.YELLOW)
+                    + f"{providers_list}"
                 )
 
     # Available providers count
     available = ai_config.get_available_providers(settings)
     typer.echo("")
     typer.echo(
-        typer.style("Available providers: ", fg=typer.colors.CYAN)
-        + f"{len(available)} (run 'ai providers' to list)"
+        typer.style(t("ai.available_providers") + " ", fg=typer.colors.CYAN)
+        + f"{len(available)}"
     )
 
 
-@app.command()
+@app.command(help=lazy_t("ai.help_providers"))
 def providers() -> None:
-    """List all available AI providers with installation status."""
     from ..services.ai.provider_management import check_provider_dependency_installed
 
     ai_config = get_ai_config(settings)
     available = ai_config.get_available_providers(settings)
     free_providers = get_free_providers()
 
-    table = Table(title="AI Providers", width=115)
-    table.add_column("Provider", style="cyan", width=10)
-    table.add_column("Installed", width=9)
-    table.add_column("API Key", width=8)
-    table.add_column("Status", style="green", width=26, no_wrap=True)
-    table.add_column("Free", style="yellow", width=4)
-    table.add_column("Stream", width=6, justify="center")
-    table.add_column("Functions", width=9, justify="center")
-    table.add_column("Vision", width=6, justify="center")
+    _yes = f"[green]{t('ai.prov_yes')}[/green]"
+    _no = f"[red]{t('ai.prov_no')}[/red]"
+    _no_dim = f"[dim]{t('ai.prov_no')}[/dim]"
+
+    table = Table(title=t("ai.providers_title"), width=115)
+    table.add_column(t("ai.col_provider"), style="cyan", width=10)
+    table.add_column(t("ai.col_installed"), width=9)
+    table.add_column(t("ai.col_api_key"), width=8)
+    table.add_column(t("ai.col_status"), style="green", width=26, no_wrap=True)
+    table.add_column(t("ai.col_free"), style="yellow", width=4)
+    table.add_column(t("ai.col_stream"), width=6, justify="center")
+    table.add_column(t("ai.col_functions"), width=9, justify="center")
+    table.add_column(t("ai.col_vision"), width=6, justify="center")
 
     for provider in AIProvider:
         capabilities = get_provider_capabilities(provider)
@@ -156,35 +159,35 @@ def providers() -> None:
         local_providers = {AIProvider.PUBLIC, AIProvider.OLLAMA}
         if provider in local_providers:
             has_api_key = True  # Local providers don't need API keys
-            api_key_display = "[dim]N/A[/dim]"
+            api_key_display = f"[dim]{t('ai.prov_na')}[/dim]"
         else:
             env_var = f"{provider.value.upper()}_API_KEY"
             has_api_key = bool(getattr(settings, env_var, None))
-            api_key_display = "[green]Yes[/green]" if has_api_key else "[red]No[/red]"
+            api_key_display = _yes if has_api_key else _no
 
         # Determine status
         if is_current:
             if not is_installed:
-                status = "[bold red]Current (Not installed)[/bold red]"
+                status = f"[bold red]{t('ai.prov_current_not_installed')}[/bold red]"
             elif not has_api_key and provider not in local_providers:
-                status = "[bold yellow]Current (Need API key)[/bold yellow]"
+                status = f"[bold yellow]{t('ai.prov_current_need_key')}[/bold yellow]"
             elif provider == AIProvider.OLLAMA:
-                status = "[bold green]Current (Local)[/bold green]"
+                status = f"[bold green]{t('ai.prov_current_local')}[/bold green]"
             else:
-                status = "[bold green]Current[/bold green]"
+                status = f"[bold green]{t('ai.prov_current')}[/bold green]"
         elif is_available:
-            status = "Ready" if provider not in local_providers else "Local"
+            status = t("ai.prov_ready") if provider not in local_providers else t("ai.prov_local")
         elif is_installed and not has_api_key:
-            status = "[yellow]Need API key[/yellow]"
+            status = f"[yellow]{t('ai.prov_need_key')}[/yellow]"
         elif is_installed and provider == AIProvider.OLLAMA:
-            status = "[cyan]Local[/cyan]"
+            status = f"[cyan]{t('ai.prov_local')}[/cyan]"
         elif not is_installed:
-            status = "[red]Not installed[/red]"
+            status = f"[red]{t('ai.prov_not_installed')}[/red]"
         else:
-            status = "[red]Error[/red]"
+            status = f"[red]{t('ai.prov_error')}[/red]"
 
-        installed_display = "[green]Yes[/green]" if is_installed else "[red]No[/red]"
-        free_tier = "Yes" if provider in free_providers else "No"
+        installed_display = _yes if is_installed else _no
+        free_tier = t("ai.prov_yes") if provider in free_providers else t("ai.prov_no")
 
         table.add_row(
             get_provider_display_name(provider),
@@ -192,52 +195,41 @@ def providers() -> None:
             api_key_display,
             status,
             free_tier,
-            "[green]Yes[/green]" if capabilities.supports_streaming else "[dim]No[/dim]",
-            "[green]Yes[/green]" if capabilities.supports_function_calling else "[dim]No[/dim]",
-            "[green]Yes[/green]" if capabilities.supports_vision else "[dim]No[/dim]",
+            _yes if capabilities.supports_streaming else _no_dim,
+            _yes if capabilities.supports_function_calling else _no_dim,
+            _yes if capabilities.supports_vision else _no_dim,
         )
 
     console.print(table)
     console.print()
     console.print(
-        "[dim]Tip: Run '{{ project_slug }} ai add-provider <name>' "
-        "to install missing providers.[/dim]"
+        f"[dim]{t('ai.providers_tip', app='{{ project_slug }}')}[/dim]"
     )
 
 
-@app.command("add-provider")
+@app.command("add-provider", help=lazy_t("ai.help_add_provider"))
 def add_provider(
     provider: str = typer.Argument(
         ...,
-        help="Provider name (openai, anthropic, google, groq, mistral, cohere)",
+        help=lazy_t("ai.arg_provider"),
     ),
     set_default: bool = typer.Option(
         True,
         "--set-default/--no-set-default",
-        help="Set as default provider after adding",
+        help=lazy_t("ai.opt_set_default"),
     ),
     skip_api_key: bool = typer.Option(
         False,
         "--skip-api-key",
-        help="Skip API key configuration",
+        help=lazy_t("ai.opt_skip_api_key"),
     ),
     yes: bool = typer.Option(
         False,
         "--yes",
         "-y",
-        help="Skip confirmation prompts",
+        help=lazy_t("ai.opt_yes"),
     ),
 ) -> None:
-    """
-    Add a new AI provider to your project.
-
-    Installs required dependencies and optionally configures the API key.
-
-    Examples:
-        ai add-provider google           # Add Google with API key prompt
-        ai add-provider groq --skip-api-key  # Just install dependencies
-        ai add-provider anthropic -y     # Install without prompts
-    """
     from rich.progress import Progress, SpinnerColumn, TextColumn
 
     from ..services.ai.provider_management import (
@@ -255,28 +247,28 @@ def add_provider(
     provider_enum = validate_provider_name(provider)
     if not provider_enum:
         valid_names = ", ".join(get_valid_provider_names())
-        console.print(f"[red]Invalid provider: {provider}[/red]")
-        console.print(f"[dim]Valid providers: {valid_names}[/dim]")
+        console.print(f"[red]{t('ai.invalid_provider', provider=provider)}[/red]")
+        console.print(f"[dim]{t('ai.valid_providers', names=valid_names)}[/dim]")
         raise typer.Exit(1)
 
     console.print()
-    console.print(f"[bold cyan]Adding {provider} provider...[/bold cyan]")
+    console.print(f"[bold cyan]{t('ai.adding_provider', provider=provider)}[/bold cyan]")
     console.print()
 
     # Check if dependency is installed
     missing_dep = get_missing_dependency(provider)
     if missing_dep:
-        console.print(f"  [dim]>[/dim] Checking dependencies...")
+        console.print(f"  [dim]>[/dim] {t('ai.checking_deps')}")
         # Escape brackets for Rich (otherwise [google] is interpreted as style)
         display_dep = missing_dep.replace("[", r"\[")
-        console.print(f"    [yellow]{display_dep} not installed[/yellow]")
+        console.print(f"    [yellow]{display_dep}[/yellow]")
         console.print()
 
         # Prompt for installation unless --yes
         if not yes:
-            confirm = typer.confirm(f"Install {missing_dep}?", default=True)
+            confirm = typer.confirm(t("ai.install_dep", dep=missing_dep), default=True)
             if not confirm:
-                console.print("[yellow]Installation cancelled[/yellow]")
+                console.print(f"[yellow]{t('ai.install_cancelled')}[/yellow]")
                 raise typer.Exit(0)
 
         # Install with progress spinner
@@ -286,7 +278,7 @@ def add_provider(
             console=console,
             transient=True,
         ) as progress:
-            progress.add_task(description="Installing...", total=None)
+            progress.add_task(description=t("ai.installing"), total=None)
             success, message = install_provider_dependency(provider)
 
         if success:
@@ -294,13 +286,13 @@ def add_provider(
         else:
             console.print(f"  [red]✗[/red] {message}")
             console.print()
-            console.print("[yellow]Try installing manually:[/yellow]")
+            console.print(f"[yellow]{t('ai.install_failed_hint')}[/yellow]")
             console.print(f"  [cyan]uv add {missing_dep}[/cyan]")
             console.print("  [dim]or[/dim]")
             console.print(f"  [cyan]pip install {missing_dep}[/cyan]")
             raise typer.Exit(1)
     else:
-        console.print(f"  [green]✓[/green] Dependencies already installed")
+        console.print(f"  [green]✓[/green] {t('ai.deps_installed')}")
 
     # Handle API key configuration
     if provider_enum != AIProvider.PUBLIC and not skip_api_key:
@@ -309,67 +301,57 @@ def add_provider(
 
         console.print()
         if existing_key:
-            console.print(f"  [green]✓[/green] {env_var_name} already set")
+            console.print(f"  [green]✓[/green] {env_var_name}")
         else:
             api_key_url = PROVIDER_API_KEY_URLS.get(provider.lower())
-            console.print(f"  [dim]>[/dim] Checking API key...")
-            console.print(f"    [yellow]No {env_var_name} found[/yellow]")
+            console.print(f"  [dim]>[/dim] {t('ai.checking_api_key')}")
+            console.print(f"    [yellow]{t('ai.no_api_key', var=env_var_name)}[/yellow]")
             console.print()
 
             if api_key_url:
-                console.print(f"  Get your API key at: [cyan]{api_key_url}[/cyan]")
+                console.print(f"  {t('ai.get_api_key_at')} [cyan]{api_key_url}[/cyan]")
                 console.print()
 
             # Prompt for API key
             try:
                 api_key = Prompt.ask(
-                    f"  Enter your {provider.upper()} API key (or press Enter to skip)",
+                    f"  {t('ai.enter_api_key', provider=provider.upper())}",
                     console=console,
                     password=True,
                     default="",
                 )
             except (KeyboardInterrupt, EOFError):
-                console.print("\n[yellow]Skipped API key configuration[/yellow]")
+                console.print(f"\n[yellow]{t('ai.api_key_skipped')}[/yellow]")
                 api_key = ""
 
             if api_key:
                 update_env_file({env_var_name: api_key})
-                console.print(f"  [green]✓[/green] {env_var_name} saved to .env")
+                console.print(f"  [green]✓[/green] {env_var_name} → .env")
             else:
                 console.print(
-                    f"  [yellow]![/yellow] Remember to set {env_var_name} in .env"
+                    f"  [yellow]![/yellow] {env_var_name} → .env"
                 )
 
     # Set as default provider
     if set_default:
         update_env_file({"AI_PROVIDER": provider.lower()})
         console.print()
-        console.print(f"  [green]✓[/green] AI_PROVIDER set to [cyan]{provider}[/cyan]")
+        console.print(f"  [green]✓[/green] {t('ai.provider_set', provider=provider)}")
 
     # Success message
     console.print()
-    console.print("[bold green]Provider added successfully![/bold green]")
+    console.print(f"[bold green]{t('ai.provider_added')}[/bold green]")
     console.print()
-    console.print(f"[dim]Test with: {{ project_slug }} ai chat \"Hello\"[/dim]")
+    console.print(f"[dim]{t('ai.test_with', app='{{ project_slug }}')}[/dim]")
 
 
-@app.command("use-provider")
+@app.command("use-provider", help=lazy_t("ai.help_use_provider"))
 def use_provider(
     provider: str = typer.Argument(
         ...,
-        help="Provider name to switch to",
+        help=lazy_t("ai.arg_provider_switch"),
     ),
 ) -> None:
-    """
-    Switch to a different AI provider.
-
-    Validates that dependencies are installed and API key is configured.
-
-    Examples:
-        ai use-provider google    # Switch to Google
-        ai use-provider openai    # Switch to OpenAI
-        ai use-provider public    # Switch to free PUBLIC provider
-    """
     from ..services.ai.provider_management import (
         check_provider_dependency_installed,
         get_env_var_name,
@@ -383,25 +365,25 @@ def use_provider(
     provider_enum = validate_provider_name(provider)
     if not provider_enum:
         valid_names = ", ".join(get_valid_provider_names())
-        console.print(f"[red]Invalid provider: {provider}[/red]")
-        console.print(f"[dim]Valid providers: {valid_names}[/dim]")
+        console.print(f"[red]{t('ai.invalid_provider', provider=provider)}[/red]")
+        console.print(f"[dim]{t('ai.valid_providers', names=valid_names)}[/dim]")
         raise typer.Exit(1)
 
     console.print()
-    console.print(f"[bold cyan]Switching to {provider} provider...[/bold cyan]")
+    console.print(f"[bold cyan]{t('ai.switching_to', provider=provider)}[/bold cyan]")
     console.print()
 
     # Check if dependency is installed
     if not check_provider_dependency_installed(provider):
-        console.print(f"  [red]✗[/red] Dependencies not installed for {provider}")
+        console.print(f"  [red]✗[/red] {t('ai.deps_not_installed', provider=provider)}")
         console.print()
-        console.print("[yellow]Run this command first:[/yellow]")
+        console.print(f"[yellow]{t('ai.run_first')}[/yellow]")
         console.print(
             f"  [cyan]{{ project_slug }} ai add-provider {provider}[/cyan]"
         )
         raise typer.Exit(1)
 
-    console.print(f"  [green]✓[/green] Dependencies installed")
+    console.print(f"  [green]✓[/green] {t('ai.deps_ok')}")
 
     # Check API key (except for PUBLIC)
     if provider_enum != AIProvider.PUBLIC:
@@ -409,76 +391,62 @@ def use_provider(
         existing_key = get_existing_api_key(provider)
 
         if not existing_key:
-            console.print(f"  [yellow]![/yellow] No {env_var_name} configured")
+            console.print(f"  [yellow]![/yellow] {t('ai.no_api_key_configured', var=env_var_name)}")
             console.print()
-            console.print("[yellow]Consider running:[/yellow]")
+            console.print(f"[yellow]{t('ai.consider_running')}[/yellow]")
             console.print(
                 f"  [cyan]{{ project_slug }} ai add-provider {provider}[/cyan]"
             )
-            console.print("[dim]to configure your API key[/dim]")
+            console.print(f"[dim]{t('ai.to_configure_key')}[/dim]")
             console.print()
 
             # Still allow switching, just warn
-            confirm = typer.confirm("Switch anyway?", default=False)
+            confirm = typer.confirm(t("ai.switch_anyway"), default=False)
             if not confirm:
                 raise typer.Exit(0)
         else:
-            console.print(f"  [green]✓[/green] {env_var_name} configured")
+            console.print(f"  [green]✓[/green] {env_var_name}")
 
     # Update AI_PROVIDER in .env
     update_env_file({"AI_PROVIDER": provider.lower()})
 
     console.print()
-    console.print(f"[bold green]Switched to {provider}![/bold green]")
+    console.print(f"[bold green]{t('ai.switched_to', provider=provider)}[/bold green]")
     console.print()
-    console.print(f"[dim]Current provider: {provider}[/dim]")
+    console.print(f"[dim]{t('ai.current_provider', provider=provider)}[/dim]")
 
 
-@app.command()
+@app.command(help=lazy_t("ai.help_chat"))
 def chat(
-    message: str | None = typer.Argument(None, help="Message to send to AI"),
+    message: str | None = typer.Argument(None, help=lazy_t("ai.arg_message")),
     stream: bool = typer.Option(
-        True, "--stream/--no-stream", help="Enable streaming output"
+        True, "--stream/--no-stream", help=lazy_t("ai.opt_stream")
     ),
     conversation_id: str | None = typer.Option(
-        None, "--conversation-id", "-c", help="Continue existing conversation"
+        None, "--conversation-id", "-c", help=lazy_t("ai.opt_conversation_id")
     ),
     new: bool = typer.Option(
-        False, "--new", "-n", help="Start a fresh conversation (don't resume)"
+        False, "--new", "-n", help=lazy_t("ai.opt_new")
     ),
-    user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
+    user_id: str = typer.Option("cli-user", "--user-id", "-u", help=lazy_t("ai.opt_user_id")),
     verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Show conversation metadata"
+        False, "--verbose", "-v", help=lazy_t("ai.opt_verbose")
     ),
 {% if ai_rag %}
     use_rag: bool | None = typer.Option(
-        None, "--rag/--no-rag", help="Enable RAG (auto-enables if collections exist)"
+        None, "--rag/--no-rag", help=lazy_t("ai.opt_rag")
     ),
     collection: str | None = typer.Option(
-        None, "--collection", help="RAG collection to search"
+        None, "--collection", help=lazy_t("ai.opt_collection")
     ),
     top_k: int | None = typer.Option(
-        None, "--top-k", "-k", help="Number of RAG results to use"
+        None, "--top-k", "-k", help=lazy_t("ai.opt_top_k")
     ),
     show_sources: bool = typer.Option(
-        False, "--sources/--no-sources", help="Show source references in output"
+        False, "--sources/--no-sources", help=lazy_t("ai.opt_sources")
     ),
 {% endif %}
 ) -> None:
-    """Send a chat message or start interactive session.
-
-    By default, resumes the most recent conversation. Use --new for a fresh start.
-
-    Examples:
-        ai chat "What is Python?"     - Send message (resumes last conversation)
-        ai chat                       - Interactive session (resumes last conversation)
-        ai chat --new                 - Start fresh conversation
-        ai chat -c abc123 "Continue"  - Continue a specific conversation
-{% if ai_rag %}
-        ai chat --rag "How does auth work?" - Query with RAG context
-        ai chat --rag -k 10 --collection my-codebase "Explain the API"
-{% endif %}
-    """
     import asyncio
 
     from app.services.ai.service import AIService
@@ -564,33 +532,32 @@ def chat(
             # Provide helpful guidance for RAG collection errors
             if "No RAG collection specified" in error_str:
                 console.print()
-                console.print("[yellow]RAG requires indexed content.[/yellow]")
+                console.print(f"[yellow]{t('ai.rag_requires_content')}[/yellow]")
                 console.print()
-                console.print("To get started:")
+                console.print(t("ai.rag_get_started"))
                 console.print()
-                console.print("  1. Index your codebase:")
+                console.print(f"  {t('ai.rag_step_index')}")
                 console.print("     [cyan]{{ project_slug }} rag index . --collection my-code[/cyan]")
                 console.print()
-                console.print("  2. Query with the collection:")
+                console.print(f"  {t('ai.rag_step_query')}")
                 console.print('     [cyan]{{ project_slug }} ai chat --rag --collection my-code "Your question"[/cyan]')
                 console.print()
-                console.print("  [dim]Tip: Run '{{ project_slug }} rag list' to see existing collections.[/dim]")
+                console.print(f"  [dim]{t('ai.rag_list_hint', app='{{ project_slug }}')}[/dim]")
                 raise typer.Exit(1)
 {% endif %}
-            typer.echo(f"Error: {e}", err=True)
+            typer.echo(f"{t('shared.error')} {e}", err=True)
             raise typer.Exit(1)
 
     asyncio.run(run_chat())
 
 
-@app.command()
+@app.command(help=lazy_t("ai.help_conversations"))
 def conversations(
-    user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
+    user_id: str = typer.Option("cli-user", "--user-id", "-u", help=lazy_t("ai.opt_user_id")),
     limit: int = typer.Option(
-        10, "--limit", "-l", help="Number of conversations to show"
+        10, "--limit", "-l", help=lazy_t("ai.opt_limit")
     ),
 ) -> None:
-    """List conversations for a user."""
     from app.services.ai.service import AIService
 
     with suppress_logs():
@@ -598,10 +565,10 @@ def conversations(
     convos = ai_service.list_conversations(user_id)[:limit]
 
     if not convos:
-        typer.echo(f"No conversations found for user: {user_id}")
+        typer.echo(t("ai.no_conversations", user_id=user_id))
         return
 
-    typer.echo(f"Conversations for {user_id}:")
+    typer.echo(t("ai.conversations_for", user_id=user_id))
     typer.echo("")
 
     for conv in convos:
@@ -610,16 +577,15 @@ def conversations(
         updated = conv.updated_at.strftime("%Y-%m-%d %H:%M")
 
         typer.echo(f"• {conv.id[:8]}... - {title}")
-        typer.echo(f"  {messages} messages | {updated}")
+        typer.echo(f"  {t('ai.messages_count', count=messages)} | {updated}")
         typer.echo("")
 
 
-@app.command()
+@app.command(help=lazy_t("ai.help_history"))
 def history(
-    conversation_id: str = typer.Argument(..., help="Conversation ID"),
-    user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
+    conversation_id: str = typer.Argument(..., help=lazy_t("ai.arg_conversation_id")),
+    user_id: str = typer.Option("cli-user", "--user-id", "-u", help=lazy_t("ai.opt_user_id")),
 ) -> None:
-    """View conversation history."""
     from app.services.ai.service import AIService
 
     with suppress_logs():
@@ -627,19 +593,19 @@ def history(
     conversation = ai_service.get_conversation(conversation_id)
 
     if not conversation:
-        typer.echo(f"Error: Conversation not found: {conversation_id}")
+        typer.echo(f"{t('shared.error')} {t('ai.conversation_not_found', id=conversation_id)}")
         raise typer.Exit(1)
 
     # Check if user owns conversation
     if conversation.metadata.get("user_id") != user_id:
-        typer.echo("Error: Access denied: You don't own this conversation")
+        typer.echo(f"{t('shared.error')} {t('ai.access_denied')}")
         raise typer.Exit(1)
 
-    typer.echo(f"Conversation: {conversation_id}")
+    typer.echo(t("ai.conversation_id_label", id=conversation_id))
     if conversation.title:
-        typer.echo(f"Title: {conversation.title}")
-    typer.echo(f"Provider: {get_provider_display_name(conversation.provider)}")
-    typer.echo(f"Messages: {conversation.get_message_count()}")
+        typer.echo(t("ai.title_label", title=conversation.title))
+    typer.echo(t("ai.provider_info", provider=get_provider_display_name(conversation.provider)))
+    typer.echo(t("ai.messages_info", count=conversation.get_message_count()))
     typer.echo("")
 
     for i, msg in enumerate(conversation.messages):
@@ -651,43 +617,28 @@ def history(
             typer.echo("")
 
 
-@app.command()
+@app.command(help=lazy_t("ai.help_voice"))
 def voice(
-    audio_file: str = typer.Argument(..., help="Path to audio file"),
+    audio_file: str = typer.Argument(..., help=lazy_t("ai.arg_audio_file")),
     conversation_id: str | None = typer.Option(
-        None, "--conversation-id", "-c", help="Continue existing conversation"
+        None, "--conversation-id", "-c", help=lazy_t("ai.opt_conversation_id")
     ),
     voice_mode: bool = typer.Option(
-        False, "--voice", "-v", help="Summarize response for spoken output"
+        False, "--voice", "-v", help=lazy_t("ai.opt_voice_mode")
     ),
-    user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
+    user_id: str = typer.Option("cli-user", "--user-id", "-u", help=lazy_t("ai.opt_user_id")),
 {% if ai_rag %}
     use_rag: bool = typer.Option(
-        False, "--rag", help="Enable RAG context injection"
+        False, "--rag", help=lazy_t("ai.opt_rag_inject")
     ),
     collection: str | None = typer.Option(
-        None, "--collection", help="RAG collection to search"
+        None, "--collection", help=lazy_t("ai.opt_collection")
     ),
     top_k: int | None = typer.Option(
-        None, "--top-k", "-k", help="Number of RAG results to use"
+        None, "--top-k", "-k", help=lazy_t("ai.opt_top_k")
     ),
 {% endif %}
 ) -> None:
-    """
-    Send voice input to AI agent.
-
-    Transcribes audio file and sends the transcription to the AI chat.
-    Supported formats: wav, mp3, m4a, webm, ogg, flac, mp4
-
-    \b
-    Examples:
-        my-app ai voice recording.wav
-        my-app ai voice recording.mp3 --voice
-        my-app ai voice recording.wav -c abc123
-{% if ai_rag %}
-        my-app ai voice recording.wav --rag
-{% endif %}
-    """
     import asyncio
     from pathlib import Path
 
@@ -699,7 +650,7 @@ def voice(
             # Validate file exists
             audio_path = Path(audio_file)
             if not audio_path.exists():
-                console.print(f"[red]Error:[/red] File not found: {audio_file}")
+                console.print(f"[red]{t('shared.error')}[/red] {t('ai.file_not_found', path=audio_file)}")
                 raise typer.Exit(1)
 
             # Determine audio format
@@ -708,8 +659,8 @@ def voice(
                 audio_format = AudioFormat(ext)
             except ValueError:
                 supported = ", ".join(f.value for f in AudioFormat)
-                console.print(f"[red]Error:[/red] Unsupported format: {ext}")
-                console.print(f"[dim]Supported formats: {supported}[/dim]")
+                console.print(f"[red]{t('shared.error')}[/red] {t('ai.unsupported_format', ext=ext)}")
+                console.print(f"[dim]{t('ai.supported_formats', formats=supported)}[/dim]")
                 raise typer.Exit(1)
 
             # Read audio file
@@ -733,7 +684,7 @@ def voice(
                 console=console,
                 transient=True,
             ) as progress:
-                progress.add_task(description="Transcribing audio...", total=None)
+                progress.add_task(description=t("ai.transcribing_audio"), total=None)
 
                 # Transcribe and chat
                 result = await ai_service.voice_chat(
@@ -750,23 +701,23 @@ def voice(
 
             # Display results
             console.print()
-            console.print("[bold cyan]Transcription:[/bold cyan]")
+            console.print(f"[bold cyan]{t('ai.transcription_label')}[/bold cyan]")
             console.print(f"  {result.transcription.text}")
 
             if result.transcription.language:
-                console.print(f"  [dim]Language: {result.transcription.language}[/dim]")
+                console.print(f"  [dim]{t('ai.language_label', lang=result.transcription.language)}[/dim]")
             if result.transcription.duration_seconds:
                 console.print(
-                    f"  [dim]Duration: {result.transcription.duration_seconds:.1f}s[/dim]"
+                    f"  [dim]{t('ai.speech_duration', duration=f'{result.transcription.duration_seconds:.1f}')}[/dim]"
                 )
 
             console.print()
-            console.print("[bold green]Response:[/bold green]")
+            console.print(f"[bold green]{t('ai.response_label')}[/bold green]")
             if voice_mode:
                 console.print(f"  {result.voice_response}")
                 if result.voice_response != result.full_response:
                     console.print()
-                    console.print("[dim]Full response available with --no-voice flag[/dim]")
+                    console.print(f"[dim]{t('ai.voice_hint')}[/dim]")
             else:
                 # Render as markdown for full response
                 from app.cli.ai_rendering import render_markdown_response
@@ -776,59 +727,41 @@ def voice(
             if result.conversation_id:
                 console.print()
                 console.print(
-                    f"[dim]Conversation: {result.conversation_id[:8]}...[/dim]"
+                    f"[dim]{t('ai.conversation_id_label', id=result.conversation_id[:8])}...[/dim]"
                 )
 
         except KeyboardInterrupt:
-            typer.echo("\nVoice chat interrupted", err=True)
+            typer.echo(f"\n{t('ai.cancelled')}", err=True)
             raise typer.Exit(1)
         except Exception as e:
-            console.print(f"[red]Error:[/red] {e}")
+            console.print(f"[red]{t('shared.error')}[/red] {e}")
             raise typer.Exit(1)
 
     asyncio.run(run_voice())
 
 
-@app.command()
+@app.command(help=lazy_t("ai.help_record"))
 def record(
     send: bool = typer.Option(
-        False, "--send", "-s", help="Send transcription to AI agent"
+        False, "--send", "-s", help=lazy_t("ai.opt_send")
     ),
     voice_response: bool = typer.Option(
-        False, "--voice", "-v", help="Play TTS response (requires --send)"
+        False, "--voice", "-v", help=lazy_t("ai.opt_voice_response")
     ),
     conversation_id: str | None = typer.Option(
-        None, "--conversation-id", "-c", help="Continue existing conversation"
+        None, "--conversation-id", "-c", help=lazy_t("ai.opt_conversation_id")
     ),
-    user_id: str = typer.Option("cli-user", "--user-id", "-u", help="User identifier"),
+    user_id: str = typer.Option("cli-user", "--user-id", "-u", help=lazy_t("ai.opt_user_id")),
     output: str | None = typer.Option(
-        None, "--output", "-o", help="Save recording to file (default: temp file)"
+        None, "--output", "-o", help=lazy_t("ai.opt_output_recording")
     ),
     use_rag: bool = typer.Option(
-        False, "--rag", help="Enable RAG context injection (requires --send)"
+        False, "--rag", help=lazy_t("ai.opt_rag_send")
     ),
     collection: str | None = typer.Option(
-        None, "--collection", help="RAG collection to search"
+        None, "--collection", help=lazy_t("ai.opt_collection")
     ),
 ) -> None:
-    """
-    Record audio from microphone, transcribe, and optionally chat.
-
-    Requires sounddevice and soundfile packages for audio recording.
-    Install with: pip install sounddevice soundfile
-
-    \b
-    Examples:
-        {{ project_slug }} ai record                    # Record and transcribe
-        {{ project_slug }} ai record --send             # Record, transcribe, send to agent
-        {{ project_slug }} ai record --send --voice     # Record, transcribe, agent, TTS response
-        {{ project_slug }} ai record -o meeting.wav     # Save recording to file
-
-    \b
-    Controls:
-        Press ENTER to stop recording
-        Press Ctrl+C to cancel
-    """
     import asyncio
     import subprocess
     import tempfile
@@ -840,15 +773,15 @@ def record(
         import sounddevice as sd
         import soundfile as sf
     except ImportError:
-        console.print("[red]Error:[/red] Audio recording requires sounddevice and soundfile packages.")
+        console.print(f"[red]{t('shared.error')}[/red] {t('ai.recording_requires')}")
         console.print()
-        console.print("Install with:")
+        console.print(f"{t('ai.install_with')}")
         console.print("  [cyan]pip install sounddevice soundfile[/cyan]")
         console.print()
-        console.print("On macOS, you may also need PortAudio:")
+        console.print(f"{t('ai.macos_portaudio')}")
         console.print("  [cyan]brew install portaudio[/cyan]")
         console.print()
-        console.print("On Linux:")
+        console.print(f"{t('ai.linux_deps')}")
         console.print("  [cyan]apt install portaudio19-dev[/cyan]")
         raise typer.Exit(1)
 
@@ -862,7 +795,7 @@ def record(
             sample_rate = int(device_info['default_samplerate'])
             channels = 1  # Mono
 
-            console.print(f"[dim]Using microphone: {device_info['name']} @ {sample_rate}Hz[/dim]")
+            console.print(f"[dim]{t('ai.using_mic', name=device_info['name'], rate=sample_rate)}[/dim]")
 
             # Determine output path
             if output:
@@ -874,8 +807,8 @@ def record(
                 audio_path = Path(temp_path)
 
             console.print()
-            console.print("[bold cyan]Recording...[/bold cyan]")
-            console.print("[dim]Press ENTER to stop recording, Ctrl+C to cancel[/dim]")
+            console.print(f"[bold cyan]{t('ai.recording')}[/bold cyan]")
+            console.print(f"[dim]{t('ai.recording_hint')}[/dim]")
             console.print()
 
             # Storage for recorded audio
@@ -884,7 +817,7 @@ def record(
             def audio_callback(indata, frames, time_info, status) -> None:
                 """Callback to capture audio data."""
                 if status:
-                    console.print(f"[yellow]Audio status: {status}[/yellow]", end="")
+                    console.print(f"[yellow]{t('ai.audio_status', status=status)}[/yellow]", end="")
                 audio_chunks.append(indata.copy())
 
             # Track duration
@@ -926,7 +859,7 @@ def record(
                         await asyncio.sleep(0.1)
             except KeyboardInterrupt:
                 print()  # New line after recording indicator
-                console.print("[yellow]Recording cancelled[/yellow]")
+                console.print(f"[yellow]{t('ai.recording_cancelled')}[/yellow]")
                 if not output and audio_path.exists():
                     audio_path.unlink()
                 raise typer.Exit(0)
@@ -937,8 +870,8 @@ def record(
 
             # Check if we captured any audio
             if not audio_chunks:
-                console.print("[red]Error:[/red] Recording failed - no audio captured")
-                console.print("[dim]Check your microphone permissions and try again[/dim]")
+                console.print(f"[red]{t('shared.error')}[/red] {t('ai.recording_failed')}")
+                console.print(f"[dim]{t('ai.check_mic')}[/dim]")
                 raise typer.Exit(1)
 
             # Concatenate all audio chunks
@@ -948,7 +881,7 @@ def record(
             # Save to WAV file
             sf.write(str(audio_path), audio_data, sample_rate)
 
-            console.print(f"[dim]Audio saved: {audio_path} ({audio_path.stat().st_size:,} bytes)[/dim]")
+            console.print(f"[dim]{t('ai.audio_saved', path=str(audio_path), size=f'{audio_path.stat().st_size:,}')}[/dim]")
 
             # Read audio file
             with open(audio_path, "rb") as f:
@@ -979,15 +912,15 @@ def record(
                 console=console,
                 transient=True,
             ) as progress:
-                progress.add_task(description="Transcribing...", total=None)
+                progress.add_task(description=t("ai.transcribing"), total=None)
                 result = await ai_service.stt.transcribe(audio_input)
 
             console.print()
-            console.print("[bold cyan]Transcription:[/bold cyan]")
+            console.print(f"[bold cyan]{t('ai.transcription_label')}[/bold cyan]")
             console.print(f"  {result.text}")
 
             if result.language:
-                console.print(f"  [dim]Language: {result.language}[/dim]")
+                console.print(f"  [dim]{t('ai.language_label', lang=result.language)}[/dim]")
 
             # Send to agent if requested
             if send and result.text.strip():
@@ -999,7 +932,7 @@ def record(
                     console=console,
                     transient=True,
                 ) as progress:
-                    progress.add_task(description="Sending to agent...", total=None)
+                    progress.add_task(description=t("ai.sending_to_agent"), total=None)
 
                     chat_result = await ai_service.chat(
                         message=result.text,
@@ -1009,14 +942,14 @@ def record(
                         rag_collection=collection,
                     )
 
-                console.print("[bold green]Response:[/bold green]")
+                console.print(f"[bold green]{t('ai.response_label')}[/bold green]")
                 from app.cli.ai_rendering import render_markdown_response
                 render_markdown_response(console, chat_result.content)
 
                 if chat_result.metadata.get("conversation_id"):
                     console.print()
                     console.print(
-                        f"[dim]Conversation: {chat_result.metadata['conversation_id'][:8]}...[/dim]"
+                        f"[dim]{t('ai.conversation_id_label', id=chat_result.metadata['conversation_id'][:8])}...[/dim]"
                     )
 
                 # Play TTS response if requested
@@ -1036,7 +969,7 @@ def record(
                         console=console,
                         transient=True,
                     ) as progress:
-                        progress.add_task(description="Preparing voice response...", total=None)
+                        progress.add_task(description=t("ai.preparing_voice"), total=None)
                         tts_text = await ai_service.prepare_for_voice(chat_result.content, max_chars=max_chars)
 
                     with Progress(
@@ -1045,7 +978,7 @@ def record(
                         console=console,
                         transient=True,
                     ) as progress:
-                        progress.add_task(description="Generating speech...", total=None)
+                        progress.add_task(description=t("ai.generating_speech"), total=None)
 
                         speech_request = SpeechRequest(text=tts_text)
                         speech_result = await ai_service.tts.synthesize(speech_request)
@@ -1073,7 +1006,7 @@ def record(
                         played = True
 
                     if not played:
-                        console.print(f"[dim]Speech saved to: {speech_path}[/dim]")
+                        console.print(f"[dim]{t('ai.speech_saved', path=str(speech_path))}[/dim]")
                     else:
                         speech_path.unlink(missing_ok=True)
 
@@ -1082,37 +1015,25 @@ def record(
                 audio_path.unlink()
 
         except KeyboardInterrupt:
-            console.print("\n[yellow]Cancelled[/yellow]")
+            console.print(f"\n[yellow]{t('ai.cancelled')}[/yellow]")
             raise typer.Exit(0)
         except Exception as e:
-            console.print(f"[red]Error:[/red] {e}")
+            console.print(f"[red]{t('shared.error')}[/red] {e}")
             raise typer.Exit(1)
 
     asyncio.run(run_record())
 
 
-@app.command()
+@app.command(help=lazy_t("ai.help_transcribe"))
 def transcribe(
-    audio_file: str = typer.Argument(..., help="Path to audio file"),
+    audio_file: str = typer.Argument(..., help=lazy_t("ai.arg_audio_file")),
     language: str | None = typer.Option(
-        None, "--language", "-l", help="Language code (e.g., 'en', 'es')"
+        None, "--language", "-l", help=lazy_t("ai.opt_language")
     ),
     json_output: bool = typer.Option(
-        False, "--json", "-j", help="Output raw JSON"
+        False, "--json", "-j", help=lazy_t("ai.opt_json")
     ),
 ) -> None:
-    """
-    Transcribe audio to text (without chat).
-
-    Use this when you only need speech-to-text transcription.
-    Supported formats: wav, mp3, m4a, webm, ogg, flac, mp4
-
-    \b
-    Examples:
-        my-app ai transcribe recording.wav
-        my-app ai transcribe recording.mp3 -l en
-        my-app ai transcribe recording.wav --json
-    """
     import asyncio
     import json
     from pathlib import Path
@@ -1125,7 +1046,7 @@ def transcribe(
             # Validate file exists
             audio_path = Path(audio_file)
             if not audio_path.exists():
-                console.print(f"[red]Error:[/red] File not found: {audio_file}")
+                console.print(f"[red]{t('shared.error')}[/red] {t('ai.file_not_found', path=audio_file)}")
                 raise typer.Exit(1)
 
             # Determine audio format
@@ -1134,8 +1055,8 @@ def transcribe(
                 audio_format = AudioFormat(ext)
             except ValueError:
                 supported = ", ".join(f.value for f in AudioFormat)
-                console.print(f"[red]Error:[/red] Unsupported format: {ext}")
-                console.print(f"[dim]Supported formats: {supported}[/dim]")
+                console.print(f"[red]{t('shared.error')}[/red] {t('ai.unsupported_format', ext=ext)}")
+                console.print(f"[dim]{t('ai.supported_formats', formats=supported)}[/dim]")
                 raise typer.Exit(1)
 
             # Read audio file
@@ -1160,7 +1081,7 @@ def transcribe(
                 console=console,
                 transient=True,
             ) as progress:
-                progress.add_task(description="Transcribing...", total=None)
+                progress.add_task(description=t("ai.transcribing"), total=None)
                 result = await ai_service.stt.transcribe(audio_input)
 
             if json_output:
@@ -1192,28 +1113,27 @@ def transcribe(
                 # Metadata
                 meta_parts = []
                 if result.language:
-                    meta_parts.append(f"Language: {result.language}")
+                    meta_parts.append(t("ai.language_label", lang=result.language))
                 if result.duration_seconds:
-                    meta_parts.append(f"Duration: {result.duration_seconds:.1f}s")
+                    meta_parts.append(t("ai.speech_duration", duration=f"{result.duration_seconds:.1f}"))
                 if result.confidence:
                     meta_parts.append(f"Confidence: {result.confidence:.1%}")
-                meta_parts.append(f"Provider: {result.provider.value}")
+                meta_parts.append(t("ai.provider_info", provider=result.provider.value))
 
                 console.print(f"[dim]{' | '.join(meta_parts)}[/dim]")
 
         except KeyboardInterrupt:
-            typer.echo("\nTranscription interrupted", err=True)
+            typer.echo(f"\n{t('ai.cancelled')}", err=True)
             raise typer.Exit(1)
         except Exception as e:
-            console.print(f"[red]Error:[/red] {e}")
+            console.print(f"[red]{t('shared.error')}[/red] {e}")
             raise typer.Exit(1)
 
     asyncio.run(run_transcribe())
 
 
-@app.command("stt-status")
+@app.command("stt-status", help=lazy_t("ai.help_stt_status"))
 def stt_status() -> None:
-    """Show STT (Speech-to-Text) service status."""
     from app.services.ai.service import AIService
 
     with suppress_logs():
@@ -1221,47 +1141,36 @@ def stt_status() -> None:
 
     status = ai_service.stt.get_status()
 
-    typer.secho("STT Service Status", fg=typer.colors.BLUE, bold=True)
+    typer.secho(t("ai.stt_status_title"), fg=typer.colors.BLUE, bold=True)
     typer.secho("=" * 40, dim=True)
 
     typer.echo(
-        typer.style("Provider: ", fg=typer.colors.CYAN) + status.get("provider", "unknown")
+        typer.style(t("ai.provider_label") + " ", fg=typer.colors.CYAN) + status.get("provider", "unknown")
     )
     typer.echo(
-        typer.style("Model: ", fg=typer.colors.CYAN) + str(status.get("model", "default"))
+        typer.style(t("ai.model_label") + " ", fg=typer.colors.CYAN) + str(status.get("model", "default"))
     )
 
     initialized = status.get("initialized", False)
     status_color = typer.colors.GREEN if initialized else typer.colors.YELLOW
-    status_text = "Initialized" if initialized else "Not initialized (lazy-loaded)"
+    status_text = t("ai.svc_initialized") if initialized else t("ai.svc_not_initialized")
     typer.echo(
-        typer.style("Status: ", fg=typer.colors.CYAN)
+        typer.style(t("ai.status_label") + " ", fg=typer.colors.CYAN)
         + typer.style(status_text, fg=status_color)
     )
 
 
-@app.command()
+@app.command(help=lazy_t("ai.help_speak"))
 def speak(
-    text: str = typer.Argument(..., help="Text to synthesize into speech"),
-    output: str = typer.Option("speech.mp3", "--output", "-o", help="Output file path"),
+    text: str = typer.Argument(..., help=lazy_t("ai.arg_text")),
+    output: str = typer.Option("speech.mp3", "--output", "-o", help=lazy_t("ai.opt_output_file")),
     voice: str | None = typer.Option(
-        None, "--voice", "-v", help="Voice to use (alloy, echo, fable, onyx, nova, shimmer)"
+        None, "--voice", "-v", help=lazy_t("ai.opt_voice")
     ),
     speed: float = typer.Option(
-        1.0, "--speed", "-s", min=0.25, max=4.0, help="Speech speed (0.25-4.0)"
+        1.0, "--speed", "-s", min=0.25, max=4.0, help=lazy_t("ai.opt_speed")
     ),
 ) -> None:
-    """
-    Synthesize speech from text.
-
-    Converts text to speech audio using the configured TTS provider.
-
-    \b
-    Examples:
-        my-app ai speak "Hello, world!"
-        my-app ai speak "Hello" --voice nova --output hello.mp3
-        my-app ai speak "Fast speech" --speed 1.5
-    """
     import asyncio
     from pathlib import Path
 
@@ -1282,7 +1191,7 @@ def speak(
                 console=console,
                 transient=True,
             ) as progress:
-                progress.add_task(description="Synthesizing speech...", total=None)
+                progress.add_task(description=t("ai.synthesizing"), total=None)
 
                 request = SpeechRequest(text=text, voice=voice, speed=speed)
                 result = await ai_service.tts.synthesize(request)
@@ -1293,26 +1202,25 @@ def speak(
                 f.write(result.audio)
 
             console.print()
-            console.print(f"[green]✓[/green] Audio saved to [cyan]{output_path}[/cyan]")
-            console.print(f"  [dim]Format: {result.format.value}[/dim]")
-            console.print(f"  [dim]Size: {len(result.audio):,} bytes[/dim]")
+            console.print(f"[green]✓[/green] {t('ai.speech_saved', path=str(output_path))}")
+            console.print(f"  [dim]{t('ai.speech_format', format=result.format.value)}[/dim]")
+            console.print(f"  [dim]{t('ai.speech_size', size=f'{len(result.audio):,}')}[/dim]")
 
             if result.duration_seconds:
-                console.print(f"  [dim]Duration: {result.duration_seconds:.1f}s[/dim]")
+                console.print(f"  [dim]{t('ai.speech_duration', duration=f'{result.duration_seconds:.1f}')}[/dim]")
 
         except KeyboardInterrupt:
-            typer.echo("\nSpeech synthesis interrupted", err=True)
+            typer.echo(f"\n{t('ai.cancelled')}", err=True)
             raise typer.Exit(1)
         except Exception as e:
-            console.print(f"[red]Error:[/red] {e}")
+            console.print(f"[red]{t('shared.error')}[/red] {e}")
             raise typer.Exit(1)
 
     asyncio.run(run_speak())
 
 
-@app.command("tts-status")
+@app.command("tts-status", help=lazy_t("ai.help_tts_status"))
 def tts_status() -> None:
-    """Show TTS (Text-to-Speech) service status."""
     from app.services.ai.service import AIService
 
     with suppress_logs():
@@ -1320,33 +1228,33 @@ def tts_status() -> None:
 
     status = ai_service.tts.get_status()
 
-    typer.secho("TTS Service Status", fg=typer.colors.BLUE, bold=True)
+    typer.secho(t("ai.tts_status_title"), fg=typer.colors.BLUE, bold=True)
     typer.secho("=" * 40, dim=True)
 
     typer.echo(
-        typer.style("Provider: ", fg=typer.colors.CYAN) + status.get("provider", "unknown")
+        typer.style(t("ai.provider_label") + " ", fg=typer.colors.CYAN) + status.get("provider", "unknown")
     )
     typer.echo(
-        typer.style("Model: ", fg=typer.colors.CYAN) + str(status.get("model", "default"))
+        typer.style(t("ai.model_label") + " ", fg=typer.colors.CYAN) + str(status.get("model", "default"))
     )
     typer.echo(
-        typer.style("Voice: ", fg=typer.colors.CYAN) + str(status.get("voice", "default"))
+        typer.style(t("ai.voice_label") + " ", fg=typer.colors.CYAN) + str(status.get("voice", "default"))
     )
     typer.echo(
-        typer.style("Speed: ", fg=typer.colors.CYAN) + str(status.get("speed", 1.0))
+        typer.style(t("ai.speed_label") + " ", fg=typer.colors.CYAN) + str(status.get("speed", 1.0))
     )
 
     initialized = status.get("initialized", False)
     status_color = typer.colors.GREEN if initialized else typer.colors.YELLOW
-    status_text = "Initialized" if initialized else "Not initialized (lazy-loaded)"
+    status_text = t("ai.svc_initialized") if initialized else t("ai.svc_not_initialized")
     typer.echo(
-        typer.style("Status: ", fg=typer.colors.CYAN)
+        typer.style(t("ai.status_label") + " ", fg=typer.colors.CYAN)
         + typer.style(status_text, fg=status_color)
     )
 
     # Show available voices
     typer.echo()
-    typer.echo(typer.style("OpenAI Voices: ", fg=typer.colors.CYAN) + "alloy, echo, fable, onyx, nova, shimmer")
+    typer.echo(typer.style(t("ai.openai_voices") + " ", fg=typer.colors.CYAN) + "alloy, echo, fable, onyx, nova, shimmer")
 
 
 
@@ -1356,24 +1264,24 @@ def tts_status() -> None:
 # ============================================================================
 
 
-@app.command()
+@app.command(help=lazy_t("ai.help_usage"))
 def usage(
     url: str = typer.Option(
         None,
         "--url",
         "-u",
-        help="API base URL (default: localhost:8000)",
+        help=lazy_t("ai.opt_url"),
     ),
     user_id: str | None = typer.Option(
         None,
         "--user-id",
-        help="Filter by user ID",
+        help=lazy_t("ai.opt_filter_user_id"),
     ),
     recent: int = typer.Option(
         10,
         "--recent",
         "-r",
-        help="Number of recent activities to show",
+        help=lazy_t("ai.opt_recent"),
         min=1,
         max=50,
     ),
@@ -1381,20 +1289,9 @@ def usage(
         False,
         "--json",
         "-j",
-        help="Output raw JSON",
+        help=lazy_t("ai.opt_json"),
     ),
 ) -> None:
-    """
-    Show AI usage statistics.
-
-    Displays comprehensive LLM usage analytics including token counts,
-    costs, model breakdown, and recent activity.
-
-    Examples:
-        ai usage              - Show full usage report
-        ai usage --json       - Output raw JSON data
-        ai usage -r 20        - Show 20 recent activities
-    """
     import asyncio
     import json
     import sys
@@ -1483,15 +1380,15 @@ def usage(
     def display_token_breakdown(stats: UsageStatsResponse) -> None:
         total = stats.total_tokens
         if total == 0:
-            console.print("\n[dim]No token usage recorded.[/dim]")
+            console.print(f"\n[dim]{t('ai.no_token_usage')}[/dim]")
             return
         input_pct = (stats.input_tokens / total) * 100
         output_pct = (stats.output_tokens / total) * 100
-        console.print("\n[bold blue]Token Breakdown[/bold blue]")
+        console.print(f"\n[bold blue]{t('ai.token_breakdown')}[/bold blue]")
         input_str = format_number(stats.input_tokens)
         output_str = format_number(stats.output_tokens)
-        console.print(f"  [cyan]Input:[/cyan]  {input_str:>12} ({input_pct:.0f}%)")
-        console.print(f"  [cyan]Output:[/cyan] {output_str:>12} ({output_pct:.0f}%)")
+        console.print(f"  [cyan]{t('ai.input_tokens')}[/cyan]  {input_str:>12} ({input_pct:.0f}%)")
+        console.print(f"  [cyan]{t('ai.output_tokens')}[/cyan] {output_str:>12} ({output_pct:.0f}%)")
         bar_width = 40
         input_bars = int((input_pct / 100) * bar_width)
         output_bars = bar_width - input_bars
@@ -1505,9 +1402,9 @@ def usage(
 
     def display_model_usage(stats: UsageStatsResponse) -> None:
         if not stats.models:
-            console.print("\n[dim]No model usage data available.[/dim]")
+            console.print(f"\n[dim]{t('ai.no_model_usage')}[/dim]")
             return
-        console.print("\n[bold blue]Model Usage[/bold blue]")
+        console.print(f"\n[bold blue]{t('ai.model_usage')}[/bold blue]")
         table = Table(show_header=True, header_style="bold magenta", box=None)
         table.add_column("Model", style="cyan", no_wrap=True)
         table.add_column("Vendor", style="dim")
@@ -1530,9 +1427,9 @@ def usage(
 
     def display_recent_activity(stats: UsageStatsResponse) -> None:
         if not stats.recent_activity:
-            console.print("\n[dim]No recent activity.[/dim]")
+            console.print(f"\n[dim]{t('ai.no_recent_activity')}[/dim]")
             return
-        console.print("\n[bold blue]Recent Activity[/bold blue]")
+        console.print(f"\n[bold blue]{t('ai.recent_activity')}[/bold blue]")
         table = Table(show_header=True, header_style="bold magenta", box=None)
         table.add_column("Time", style="dim")
         table.add_column("Model", style="cyan")
@@ -1600,13 +1497,13 @@ def usage(
         display_model_usage(stats)
         display_recent_activity(stats)
     except ConnectionError as e:
-        console.print(f"[red]Connection Error:[/red] {e}")
+        console.print(f"[red]{t('ai.connection_error', error=str(e))}[/red]")
         sys.exit(1)
     except TimeoutError as e:
-        console.print(f"[red]Timeout Error:[/red] {e}")
+        console.print(f"[red]{t('ai.timeout_label', error=str(e))}[/red]")
         sys.exit(1)
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
+        console.print(f"[red]{t('shared.error')}[/red] {e}")
         sys.exit(1)
 {% endif %}
 
@@ -1655,7 +1552,7 @@ async def _send_message(
         from rich.live import Live
         from rich.spinner import Spinner
 
-        spinner = Spinner("dots", text="Thinking...", style="bright_blue")
+        spinner = Spinner("dots", text=t("ai.thinking"), style="bright_blue")
         spinner_live = Live(
             spinner, console=console, refresh_per_second=20, transient=True
         )
@@ -1686,9 +1583,9 @@ async def _send_message(
         conv_id = response.metadata.get("conversation_id", "unknown")
         conversation = ai_service.get_conversation(conv_id)
         if verbose and conversation:
-            typer.echo(f"Conversation: {conversation.id}")
+            typer.echo(t("ai.conversation_id_label", id=conversation.id))
             if conversation.title:
-                typer.echo(f"Title: {conversation.title}")
+                typer.echo(t("ai.title_label", title=conversation.title))
             console.print()
 
         # Render response
@@ -1701,7 +1598,7 @@ async def _send_message(
         if show_sources and response.metadata.get("rag_sources"):
             console.print()
             console.print("---", style="dim")
-            console.print("[bold]Sources:[/bold]", style="cyan")
+            console.print(f"[bold]{t('ai.sources_label')}[/bold]", style="cyan")
             for i, source in enumerate(response.metadata["rag_sources"], 1):
                 file_name = source.get("file", "Unknown")
                 start_line = source.get("start_line")
@@ -1752,17 +1649,17 @@ async def _interactive_chat_session(
     console.print()
 
     # Boot steps with brief delays for effect
-    console.print("  [dim]>[/dim] Initializing...", end="")
+    console.print(f"  [dim]>[/dim] {t('ai.initializing')}", end="")
     await asyncio.sleep(0.15)
-    console.print(" [green]OK[/green]")
+    console.print(f" [green]{t('ai.ok')}[/green]")
 
-    console.print(f"  [dim]>[/dim] Connecting to [cyan]{get_provider_display_name(ai_config.provider)}[/cyan]...", end="")
+    console.print(f"  [dim]>[/dim] {t('ai.connecting_to', provider=get_provider_display_name(ai_config.provider))}", end="")
     # Warm up the agent (lazy imports, model initialization)
     from app.services.ai.providers import get_agent
     _ = get_agent(ai_config, settings)
-    console.print(" [green]OK[/green]")
+    console.print(f" [green]{t('ai.ok')}[/green]")
 
-    console.print(f"  [dim]>[/dim] Model: [cyan]{ai_config.model}[/cyan]")
+    console.print(f"  [dim]>[/dim] {t('ai.model_label')} [cyan]{ai_config.model}[/cyan]")
 
 {% if ai_rag %}
     # Check RAG status - verify collections exist if RAG is enabled
@@ -1786,25 +1683,25 @@ async def _interactive_chat_session(
 {% endif %}
 
     # Fetch and display health status
-    console.print("  [dim]>[/dim] Health: ", end="")
+    console.print(f"  [dim]>[/dim] {t('ai.health_label')} ", end="")
     try:
         from app.services.system.health import get_system_status
 
         status = await get_system_status()
         health_pct = status.health_percentage
         if status.overall_healthy:
-            console.print(f"[green]OK[/green] [dim]({health_pct:.0f}%)[/dim]")
+            console.print(f"[green]{t('ai.health_ok', pct=health_pct)}[/green]")
         else:
             unhealthy_count = len(status.unhealthy_components)
-            console.print(f"[yellow]DEGRADED[/yellow] [dim]({health_pct:.0f}%, {unhealthy_count} issues)[/dim]")
+            console.print(f"[yellow]{t('ai.health_degraded', pct=health_pct, count=unhealthy_count)}[/yellow]")
     except Exception:
-        console.print("[dim]N/A[/dim]")
+        console.print(f"[dim]{t('ai.health_na')}[/dim]")
 
     await asyncio.sleep(0.1)
     console.print()
-    console.print("  [bold green]Online[/bold green]")
+    console.print(f"  [bold green]{t('ai.online')}[/bold green]")
     console.print()
-    console.print("[dim]Type /help for commands • Esc then Enter to insert newline • 'exit' to quit[/dim]")
+    console.print(f"[dim]{t('ai.chat_hints')}[/dim]")
     console.print()
 
     # Track conversation for context
@@ -1909,7 +1806,7 @@ async def _interactive_chat_session(
             try:
                 user_message = await prompt_session.prompt_async()
             except (KeyboardInterrupt, EOFError):
-                console.print("\n[yellow]Chat session ended[/yellow]")
+                console.print(f"\n[yellow]{t('ai.chat_ended')}[/yellow]")
                 break
 
             # Handle slash commands first
@@ -1947,11 +1844,11 @@ async def _interactive_chat_session(
 
             # Check for exit commands (kept for backwards compatibility)
             if user_message.lower().strip() in ["exit", "quit", "bye", "q"]:
-                console.print("[yellow]Goodbye![/yellow]")
+                console.print(f"[yellow]{t('ai.goodbye')}[/yellow]")
                 break
 
             if not user_message.strip():
-                console.print("[dim]Please enter a message or type /help.[/dim]")
+                console.print(f"[dim]{t('ai.enter_message_hint')}[/dim]")
                 continue
 
             console.print()  # Blank line between You: and Illiana:
@@ -1987,7 +1884,7 @@ async def _interactive_chat_session(
                     from rich.spinner import Spinner
 
                     spinner = Spinner(
-                        "dots", text="Thinking...", style="bright_blue"
+                        "dots", text=t("ai.thinking"), style="bright_blue"
                     )
                     spinner_live = Live(
                         spinner,
@@ -2025,7 +1922,7 @@ async def _interactive_chat_session(
                     if show_sources and response.metadata.get("rag_sources"):
                         console.print()
                         console.print("---", style="dim")
-                        console.print("[bold]Sources:[/bold]", style="cyan")
+                        console.print(f"[bold]{t('ai.sources_label')}[/bold]", style="cyan")
                         for i, source in enumerate(response.metadata["rag_sources"], 1):
                             file_name = source.get("file", "Unknown")
                             start_line = source.get("start_line")
@@ -2050,12 +1947,12 @@ async def _interactive_chat_session(
             except ProviderNotInstalledError as e:
                 # Clean display for missing provider
                 console.print()
-                console.print(f"[yellow]Provider not installed:[/yellow] {e.provider}")
+                console.print(f"[yellow]{t('ai.provider_not_installed', provider=e.provider)}[/yellow]")
                 console.print()
-                console.print(f"Run [green]'{e.cli_command}'[/green] to install it.")
+                console.print(f"[green]{t('ai.run_to_install', command=e.cli_command)}[/green]")
                 console.print()
             except Exception as stream_error:
-                console.print(f"[red]Error: {stream_error}[/red]")
+                console.print(f"[red]{t('shared.error')} {stream_error}[/red]")
                 console.print(
                     "[dim]Try a different provider or check your connection.[/dim]"
                 )
@@ -2063,7 +1960,7 @@ async def _interactive_chat_session(
             console.print()  # Add space after response
 
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
+            console.print(f"[red]{t('shared.error')} {e}[/red]")
             console.print(
                 "[dim]You can continue chatting or type 'exit' to quit.[/dim]"
             )
@@ -2117,7 +2014,7 @@ async def _stream_chat_response(
         import asyncio
 
         # Show thinking spinner initially
-        spinner = Spinner("dots", text="Thinking...", style="bright_blue")
+        spinner = Spinner("dots", text=t("ai.thinking"), style="bright_blue")
         spinner_live = Live(
             spinner, console=console, refresh_per_second=20, transient=True
         )
@@ -2160,7 +2057,7 @@ async def _stream_chat_response(
                     if chunk.is_delta and chunk.content:
                         if not header_shown:
                             spinner_live.stop()
-                            console.print("Illiana: ", style="bright_magenta", end="")
+                            console.print(t("ai.header_inline"), style="bright_magenta", end="")
                             header_shown = True
                         renderer.add_delta(chunk.content)
 
@@ -2199,7 +2096,7 @@ async def _stream_chat_response(
         except TimeoutError:
             spinner_live.stop()
             console.print(
-                "\nError: Request timed out. Try a faster model or increase AI_TIMEOUT_SECONDS.",
+                f"\n{t('shared.error')} {t('ai.timeout_error')}",
                 style="red",
             )
             return None
@@ -2225,7 +2122,7 @@ async def _stream_chat_response(
             # Display source references if RAG was used
             if show_sources and rag_sources:
                 console.print("---", style="dim")
-                console.print("[bold]Sources:[/bold]", style="cyan")
+                console.print(f"[bold]{t('ai.sources_label')}[/bold]", style="cyan")
                 for i, source in enumerate(rag_sources, 1):
                     file_name = source.get("file", "Unknown")
                     start_line = source.get("start_line")
@@ -2246,21 +2143,21 @@ async def _stream_chat_response(
             if verbose and conversation_info:
                 conversation = ai_service.get_conversation(conversation_info)
                 if conversation:
-                    console.print(f"Conversation: {conversation.id}", style="dim")
+                    console.print(f"{t('ai.conversation_label')} {conversation.id}", style="dim")
                     console.print(
-                        f"Messages: {conversation.get_message_count()}", style="dim"
+                        f"{t('ai.messages_label')} {conversation.get_message_count()}", style="dim"
                     )
                     if response_time:
                         console.print(
-                            f"Response time: {response_time:.1f}ms", style="dim"
+                            f"{t('ai.response_time_label')} {response_time:.1f}ms", style="dim"
                         )
 
     except ProviderNotInstalledError as e:
         # Clean display for missing provider - no need to re-raise
         console.print()
-        console.print(f"[yellow]Provider not installed:[/yellow] {e.provider}")
+        console.print(f"[yellow]{t('ai.provider_not_installed', provider=e.provider)}[/yellow]")
         console.print()
-        console.print(f"Run [green]'{e.cli_command}'[/green] to install it.")
+        console.print(f"[green]{t('ai.run_to_install', command=e.cli_command)}[/green]")
         console.print()
         return None
 

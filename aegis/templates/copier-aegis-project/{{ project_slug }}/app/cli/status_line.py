@@ -11,6 +11,7 @@ import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from app.i18n import t
 from prompt_toolkit.formatted_text import HTML
 
 
@@ -58,18 +59,18 @@ class ChatSessionState:
         if self.provider:
             model_str = f"{self.provider}/{self.model}"
         else:
-            model_str = "not connected"
+            model_str = t("status.not_connected")
 
         if self.rag_enabled and self.rag_collection:
-            rag_str = f"RAG: ON ({self.rag_collection})"
+            rag_str = f"{t('status.rag_on')} ({self.rag_collection})"
         elif self.rag_enabled:
-            rag_str = "RAG: ON"
+            rag_str = t("status.rag_on")
         else:
-            rag_str = "RAG: OFF"
+            rag_str = t("status.rag_off")
 
-        sources_str = "SRC: ON" if self.show_sources else "SRC: OFF"
+        sources_str = t("status.src_on") if self.show_sources else t("status.src_off")
 
-        tokens_str = f"{self.cumulative_tokens:,} tokens"
+        tokens_str = f"{self.cumulative_tokens:,} {t('status.tokens')}"
         cost_str = f"${self.cumulative_cost:.4f}"
         version_str = f"v{self.version}"
 
@@ -94,7 +95,7 @@ class ChatSessionState:
         if term_width < 60:
             # Abbreviated format: model | tokens | cost
             parts = [
-                f"<style fg='ansicyan'>{self.model or 'n/a'}</style>",
+                f"<style fg='ansicyan'>{self.model or t('status.na')}</style>",
                 f"<style fg='ansiyellow'>{tokens_str}</style>",
                 f"<style fg='ansigreen'>{cost_str}</style>",
             ]

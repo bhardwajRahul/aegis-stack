@@ -12,6 +12,7 @@ from typing import Annotated
 import typer
 from app.core.config import settings
 from app.core.log import suppress_logs
+from app.i18n import lazy_t, t
 from app.services.rag.config import get_rag_config
 from app.services.rag.service import RAGService
 from rich.console import Console
@@ -25,7 +26,7 @@ from rich.progress import (
 )
 from rich.table import Table
 
-app = typer.Typer(help="RAG service commands for document indexing and search")
+app = typer.Typer(help=lazy_t("rag.help"))
 console = Console()
 
 
@@ -78,10 +79,8 @@ def _ensure_model_ready() -> None:
         api_key = getattr(settings, "OPENAI_API_KEY", None)
         if not api_key:
             console.print()
-            console.print("[red]OpenAI API key not configured.[/red]")
-            console.print(
-                "[dim]Set OPENAI_API_KEY environment variable to use OpenAI embeddings.[/dim]"
-            )
+            console.print(f"[red]{t('rag.openai_key_missing')}[/red]")
+            console.print(f"[dim]{t('rag.openai_key_hint')}[/dim]")
             raise typer.Exit(code=1)
         return
 
@@ -93,16 +92,14 @@ def _ensure_model_ready() -> None:
     cache_dir = settings.RAG_MODEL_CACHE_DIR
 
     console.print()
-    console.print("[yellow]Embedding model not found locally.[/yellow]")
-    console.print(f"[dim]Model: {model_name} (~400MB download)[/dim]")
+    console.print(f"[yellow]{t('rag.model_not_found')}[/yellow]")
+    console.print(f"[dim]{t('rag.model_info', model=model_name)}[/dim]")
     console.print()
 
     try:
         from sentence_transformers import SentenceTransformer
 
-        console.print(
-            "[bold cyan]Downloading embedding model (first-time setup)...[/bold cyan]"
-        )
+        console.print(f"[bold cyan]{t('rag.downloading_model')}[/bold cyan]")
         console.print()  # Blank line before tqdm progress bars
 
         if cache_dir:
@@ -111,44 +108,29 @@ def _ensure_model_ready() -> None:
             SentenceTransformer(model_name)
 
         console.print()  # Blank line after progress bars
-        console.print("[green]✓ Model downloaded successfully[/green]")
+        console.print(f"[green]{t('rag.model_downloaded')}[/green]")
         console.print()
     except Exception as e:
-        console.print(f"[red]Failed to download model: {e}[/red]")
-        console.print("[dim]Try running: rag install-model[/dim]")
+        console.print(f"[red]{t('rag.model_download_failed', error=e)}[/red]")
+        console.print(f"[dim]{t('rag.model_download_hint')}[/dim]")
         raise typer.Exit(code=1)
 
 
-@app.command("index")
+@app.command("index", help=lazy_t("rag.help_index"))
 def index_documents(
     path: Annotated[
         str,
-        typer.Argument(help="File or directory path to index"),
+        typer.Argument(help=lazy_t("rag.arg_path")),
     ],
     collection: Annotated[
         str,
-        typer.Option("--collection", "-c", help="Collection name"),
+        typer.Option("--collection", "-c", help=lazy_t("rag.opt_collection")),
     ] = "default",
     extensions: Annotated[
         str | None,
-        typer.Option(
-            "--extensions", "-e", help="Comma-separated file extensions (e.g., .py,.md)"
-        ),
+        typer.Option("--extensions", "-e", help=lazy_t("rag.opt_extensions")),
     ] = None,
 ) -> None:
-    """
-    Index documents from a path into a collection.
-
-    Loads files from the specified path, chunks them, and indexes
-    them into ChromaDB for semantic search.
-
-    Examples:
-        # Index current directory
-        rag index . --collection my-codebase
-
-        # Index specific directory with extensions
-        rag index ./app --collection code --extensions .py,.ts
-    """
     # Ensure embedding model is available (download if needed)
     if settings.RAG_EMBEDDING_PROVIDER == "sentence-transformers":
         _ensure_model_ready()
@@ -162,10 +144,12 @@ def index_documents(
         # Ensure extensions start with dot
         ext_list = [e if e.startswith(".") else f".{e}" for e in ext_list]
 
-    console.print(f"\n[bold blue]Indexing:[/bold blue] {path}")
-    console.print(f"[bold blue]Collection:[/bold blue] {collection}")
+    console.print(f"\n[bold blue]{t('rag.indexing_label')}[/bold blue] {path}")
+    console.print(f"[bold blue]{t('rag.collection_label')}[/bold blue] {collection}")
     if ext_list:
-        console.print(f"[bold blue]Extensions:[/bold blue] {', '.join(ext_list)}")
+        console.print(
+            f"[bold blue]{t('rag.extensions_label')}[/bold blue] {', '.join(ext_list)}"
+        )
     console.print()
 
     try:
@@ -181,9 +165,9 @@ def index_documents(
             ) as progress,
         ):
             task = progress.add_task(
-                "Indexing...",
+                t("rag.indexing_progress"),
                 total=None,
-                status="Loading documents...",
+                status=t("rag.loading_documents"),
             )
 
             def on_progress(batch: int, total: int, chunks: int) -> None:
@@ -191,7 +175,9 @@ def index_documents(
                     task,
                     total=total,
                     completed=batch,
-                    status=f"Batch {batch}/{total} ({chunks} chunks)",
+                    status=t(
+                        "rag.batch_progress", batch=batch, total=total, chunks=chunks
+                    ),
                 )
 
             stats = asyncio.run(
@@ -217,68 +203,59 @@ def index_documents(
             return f"{(phase_ms / total_ms) * 100:.0f}%"
 
         # Format extensions for display
-        ext_display = ", ".join(stats.extensions) if stats.extensions else "none"
+        ext_display = (
+            ", ".join(stats.extensions) if stats.extensions else t("shared.none")
+        )
 
         # Display results with phase breakdown
         console.print(
             Panel(
-                f"[green]Successfully indexed {stats.documents_added:,} chunks "
-                f"from {stats.source_files:,} files[/green]\n\n"
-                f"[bold]Extensions:[/bold] {ext_display}\n"
-                f"[bold]Duration:[/bold] {total_str}\n"
-                f"  [dim]Loading:[/dim]  {format_duration(stats.load_ms)} ({pct(stats.load_ms)})\n"
-                f"  [dim]Chunking:[/dim] {format_duration(stats.chunk_ms)} ({pct(stats.chunk_ms)})\n"
-                f"  [dim]Indexing:[/dim] {format_duration(stats.duration_ms)} ({pct(stats.duration_ms)})\n"
-                f"[bold]Throughput:[/bold] {chunks_per_sec:.1f} chunks/sec\n"
-                f"[bold]Collection size:[/bold] {stats.total_documents:,} chunks",
-                title=f"Collection: {collection}",
+                f"[green]{t('rag.index_success', chunks=f'{stats.documents_added:,}', files=f'{stats.source_files:,}')}[/green]\n\n"
+                f"[bold]{t('rag.extensions_label')}[/bold] {ext_display}\n"
+                f"[bold]{t('rag.duration_label')}[/bold] {total_str}\n"
+                f"  [dim]{t('rag.loading_phase')}[/dim]  {format_duration(stats.load_ms)} ({pct(stats.load_ms)})\n"
+                f"  [dim]{t('rag.chunking_phase')}[/dim] {format_duration(stats.chunk_ms)} ({pct(stats.chunk_ms)})\n"
+                f"  [dim]{t('rag.indexing_phase')}[/dim] {format_duration(stats.duration_ms)} ({pct(stats.duration_ms)})\n"
+                f"[bold]{t('rag.throughput_label')}[/bold] {chunks_per_sec:.1f} {t('rag.chunks_per_sec')}\n"
+                f"[bold]{t('rag.collection_size_label')}[/bold] {stats.total_documents:,} {t('rag.chunks_unit')}",
+                title=f"{t('rag.collection_title')}: {collection}",
                 border_style="green",
             )
         )
 
     except FileNotFoundError as e:
-        console.print(f"[bold red]Error:[/bold red] Path not found: {e}")
+        console.print(
+            f"[bold red]{t('shared.error')}[/bold red] {t('rag.path_not_found', path=getattr(e, 'filename', str(e)))}"
+        )
         raise typer.Exit(code=1)
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
+        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
         raise typer.Exit(code=1)
 
 
-@app.command("add")
+@app.command("add", help=lazy_t("rag.help_add"))
 def add_file(
     path: Annotated[
         str,
-        typer.Argument(help="File path to add/update"),
+        typer.Argument(help=lazy_t("rag.arg_file_path")),
     ],
     collection: Annotated[
         str,
-        typer.Option("--collection", "-c", help="Collection name"),
+        typer.Option("--collection", "-c", help=lazy_t("rag.opt_collection")),
     ] = "default",
     show_ids: Annotated[
         bool,
-        typer.Option("--show-ids", help="Show chunk IDs in output"),
+        typer.Option("--show-ids", help=lazy_t("rag.opt_show_ids")),
     ] = False,
 ) -> None:
-    """
-    Add or update a single file in the collection.
-
-    Uses upsert semantics: re-adding a file updates its chunks.
-
-    Examples:
-        # Add a single file
-        rag add app/services/auth.py --collection my-code
-
-        # Show the chunk IDs
-        rag add app/services/auth.py -c my-code --show-ids
-    """
     # Ensure embedding model is available (download if needed)
     if settings.RAG_EMBEDDING_PROVIDER == "sentence-transformers":
         _ensure_model_ready()
 
     rag_service = get_rag_service()
 
-    console.print(f"\n[bold blue]Adding:[/bold blue] {path}")
-    console.print(f"[bold blue]Collection:[/bold blue] {collection}")
+    console.print(f"\n[bold blue]{t('rag.adding_label')}[/bold blue] {path}")
+    console.print(f"[bold blue]{t('rag.collection_label')}[/bold blue] {collection}")
     console.print()
 
     try:
@@ -292,67 +269,56 @@ def add_file(
         # Display result
         file_name = Path(result.file_path).name
         output = (
-            f"[green]Added/updated:[/green] {file_name}\n"
-            f"Chunks: {result.chunk_count}\n"
-            f"Hash: {result.file_hash}"
+            f"[green]{t('rag.added_updated')}[/green] {file_name}\n"
+            f"{t('rag.chunks_label')} {result.chunk_count}\n"
+            f"{t('rag.hash_label')} {result.file_hash}"
         )
 
         if show_ids and result.chunk_ids:
-            output += f"\nIDs: {', '.join(result.chunk_ids)}"
+            output += f"\n{t('rag.ids_label')} {', '.join(result.chunk_ids)}"
 
         console.print(
             Panel(
                 output,
-                title=f"Collection: {collection}",
+                title=f"{t('rag.collection_title')}: {collection}",
                 border_style="green",
             )
         )
 
     except FileNotFoundError as e:
-        console.print(f"[bold red]Error:[/bold red] File not found: {e}")
+        console.print(
+            f"[bold red]{t('shared.error')}[/bold red] {t('rag.file_not_found', path=e)}"
+        )
         raise typer.Exit(code=1)
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
+        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
         raise typer.Exit(code=1)
 
 
-@app.command("remove")
+@app.command("remove", help=lazy_t("rag.help_remove"))
 def remove_file(
     source_path: Annotated[
         str,
-        typer.Argument(help="Source path of file to remove (as stored in metadata)"),
+        typer.Argument(help=lazy_t("rag.arg_source_path")),
     ],
     collection: Annotated[
         str,
-        typer.Option("--collection", "-c", help="Collection name"),
+        typer.Option("--collection", "-c", help=lazy_t("rag.opt_collection")),
     ] = "default",
     force: Annotated[
         bool,
-        typer.Option("--force", "-f", help="Skip confirmation prompt"),
+        typer.Option("--force", "-f", help=lazy_t("rag.opt_force")),
     ] = False,
 ) -> None:
-    """
-    Remove a file's chunks from the collection.
-
-    Uses the source path as stored in the collection metadata.
-    Use 'rag files' to see the exact paths stored.
-
-    Examples:
-        # Remove a file
-        rag remove /path/to/app/services/auth.py --collection my-code
-
-        # Skip confirmation
-        rag remove /path/to/file.py -c my-code --force
-    """
     rag_service = get_rag_service()
 
     # Confirm deletion
     if not force:
         confirm = typer.confirm(
-            f"Remove all chunks for '{source_path}' from '{collection}'?"
+            t("rag.confirm_remove", source=source_path, collection=collection)
         )
         if not confirm:
-            console.print("[yellow]Cancelled.[/yellow]")
+            console.print(f"[yellow]{t('shared.cancelled')}[/yellow]")
             return
 
     try:
@@ -365,34 +331,24 @@ def remove_file(
 
         if result.chunk_count > 0:
             console.print(
-                f"[green]Removed {result.chunk_count} chunks[/green] for: {source_path}"
+                f"[green]{t('rag.removed_chunks', count=result.chunk_count)}[/green] {source_path}"
             )
         else:
-            console.print(f"[yellow]No chunks found for:[/yellow] {source_path}")
-            console.print(
-                "[dim]Tip: Use 'rag files --collection <name>' to see indexed paths.[/dim]"
-            )
+            console.print(f"[yellow]{t('rag.no_chunks_found')}[/yellow] {source_path}")
+            console.print(f"[dim]{t('rag.files_hint')}[/dim]")
 
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
+        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
         raise typer.Exit(code=1)
 
 
-@app.command("files")
+@app.command("files", help=lazy_t("rag.help_files"))
 def list_files(
     collection: Annotated[
         str,
-        typer.Option("--collection", "-c", help="Collection name"),
+        typer.Option("--collection", "-c", help=lazy_t("rag.opt_collection")),
     ] = "default",
 ) -> None:
-    """
-    List all indexed files in a collection.
-
-    Shows file paths and chunk counts.
-
-    Examples:
-        rag files --collection my-code
-    """
     rag_service = get_rag_service()
 
     try:
@@ -400,21 +356,18 @@ def list_files(
 
         if not files:
             console.print(
-                f"[yellow]No files indexed in collection:[/yellow] {collection}"
+                f"[yellow]{t('rag.no_files_in_collection')}[/yellow] {collection}"
             )
-            console.print(
-                "\n[dim]Tip: Use 'rag index <path> --collection <name>' or "
-                "'rag add <file> --collection <name>' to index content.[/dim]"
-            )
+            console.print(f"\n[dim]{t('rag.index_hint')}[/dim]")
             return
 
         # Create table
         table = Table(
-            title=f"Indexed Files: {collection}",
+            title=t("rag.indexed_files_title", collection=collection),
             show_header=True,
         )
-        table.add_column("File", style="cyan")
-        table.add_column("Chunks", justify="right", style="green")
+        table.add_column(t("rag.file_column"), style="cyan")
+        table.add_column(t("rag.chunks_column"), justify="right", style="green")
 
         total_chunks = 0
         for file in files:
@@ -424,55 +377,42 @@ def list_files(
         console.print()
         console.print(table)
         console.print(
-            f"\n[bold]Total:[/bold] {len(files)} files, {total_chunks} chunks"
+            f"\n[bold]{t('rag.total_label')}[/bold] {t('rag.files_and_chunks', files=len(files), chunks=total_chunks)}"
         )
         console.print()
 
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
+        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
         raise typer.Exit(code=1)
 
 
-@app.command("search")
+@app.command("search", help=lazy_t("rag.help_search"))
 def search_documents(
     query: Annotated[
         str,
-        typer.Argument(help="Search query"),
+        typer.Argument(help=lazy_t("rag.arg_query")),
     ],
     collection: Annotated[
         str,
-        typer.Option("--collection", "-c", help="Collection to search"),
+        typer.Option("--collection", "-c", help=lazy_t("rag.opt_collection_search")),
     ] = "default",
     top_k: Annotated[
         int,
-        typer.Option("--top-k", "-k", help="Number of results"),
+        typer.Option("--top-k", "-k", help=lazy_t("rag.opt_top_k")),
     ] = 5,
     show_content: Annotated[
         bool,
-        typer.Option("--content", help="Show full content of results"),
+        typer.Option("--content", help=lazy_t("rag.opt_content")),
     ] = False,
 ) -> None:
-    """
-    Search for documents in a collection.
-
-    Performs semantic search using the query text against the
-    specified collection.
-
-    Examples:
-        # Basic search
-        rag search "how does authentication work" --collection my-codebase
-
-        # Show full content
-        rag search "database connection" -c code --content
-    """
     # Ensure embedding model is available (download if needed)
     if settings.RAG_EMBEDDING_PROVIDER == "sentence-transformers":
         _ensure_model_ready()
 
     rag_service = get_rag_service()
 
-    console.print(f"\n[bold blue]Searching:[/bold blue] {query}")
-    console.print(f"[bold blue]Collection:[/bold blue] {collection}")
+    console.print(f"\n[bold blue]{t('rag.searching_label')}[/bold blue] {query}")
+    console.print(f"[bold blue]{t('rag.collection_label')}[/bold blue] {collection}")
     console.print()
 
     try:
@@ -485,17 +425,15 @@ def search_documents(
         )
 
         if not results:
-            console.print("[yellow]No results found.[/yellow]")
-            console.print(
-                "\n[dim]Tip: Make sure the collection exists and contains documents.[/dim]"
-            )
+            console.print(f"[yellow]{t('rag.no_results')}[/yellow]")
+            console.print(f"\n[dim]{t('rag.search_hint')}[/dim]")
             return
 
         # Display results
-        console.print(f"[green]Found {len(results)} results:[/green]\n")
+        console.print(f"[green]{t('rag.found_results', count=len(results))}[/green]\n")
 
         for result in results:
-            source = result.metadata.get("source", "Unknown")
+            source = result.metadata.get("source", t("shared.unknown"))
             file_name = result.metadata.get("file_name", Path(source).name)
             score = result.score
 
@@ -504,12 +442,16 @@ def search_documents(
                 content = result.content
                 if len(content) > 500:
                     content = content[:500] + "..."
-                panel_content = f"[dim]Score: {score:.4f}[/dim]\n\n{content}"
+                panel_content = (
+                    f"[dim]{t('rag.score_label')} {score:.4f}[/dim]\n\n{content}"
+                )
             else:
                 preview = result.content[:200].replace("\n", " ")
                 if len(result.content) > 200:
                     preview += "..."
-                panel_content = f"[dim]Score: {score:.4f}[/dim]\n\n{preview}"
+                panel_content = (
+                    f"[dim]{t('rag.score_label')} {score:.4f}[/dim]\n\n{preview}"
+                )
 
             console.print(
                 Panel(
@@ -522,33 +464,26 @@ def search_documents(
             console.print()
 
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
+        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
         raise typer.Exit(code=1)
 
 
-@app.command("list")
+@app.command("list", help=lazy_t("rag.help_list"))
 def list_collections() -> None:
-    """
-    List all collections in the vector store.
-
-    Shows collection names and document counts.
-    """
     rag_service = get_rag_service()
 
     try:
         collections = asyncio.run(rag_service.list_collections())
 
         if not collections:
-            console.print("[yellow]No collections found.[/yellow]")
-            console.print(
-                "\n[dim]Tip: Use 'rag index <path> --collection <name>' to create a collection.[/dim]"
-            )
+            console.print(f"[yellow]{t('rag.no_collections')}[/yellow]")
+            console.print(f"\n[dim]{t('rag.create_collection_hint')}[/dim]")
             return
 
         # Create table
-        table = Table(title="RAG Collections", show_header=True)
-        table.add_column("Collection", style="cyan")
-        table.add_column("Documents", justify="right", style="green")
+        table = Table(title=t("rag.collections_title"), show_header=True)
+        table.add_column(t("rag.collection_column"), style="cyan")
+        table.add_column(t("rag.documents_column"), justify="right", style="green")
 
         for name in collections:
             stats = asyncio.run(rag_service.get_collection_stats(name))
@@ -560,55 +495,47 @@ def list_collections() -> None:
         console.print()
 
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
+        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
         raise typer.Exit(code=1)
 
 
-@app.command("delete")
+@app.command("delete", help=lazy_t("rag.help_delete"))
 def delete_collection(
     collection: Annotated[
         str,
-        typer.Argument(help="Collection name to delete"),
+        typer.Argument(help=lazy_t("rag.arg_collection")),
     ],
     force: Annotated[
         bool,
-        typer.Option("--force", "-f", help="Skip confirmation prompt"),
+        typer.Option("--force", "-f", help=lazy_t("rag.opt_force")),
     ] = False,
 ) -> None:
-    """
-    Delete a collection from the vector store.
-
-    Permanently removes the collection and all its documents.
-    """
     rag_service = get_rag_service()
 
     # Confirm deletion
     if not force:
-        confirm = typer.confirm(
-            f"Are you sure you want to delete collection '{collection}'?"
-        )
+        confirm = typer.confirm(t("rag.confirm_delete", collection=collection))
         if not confirm:
-            console.print("[yellow]Cancelled.[/yellow]")
+            console.print(f"[yellow]{t('shared.cancelled')}[/yellow]")
             return
 
     try:
         deleted = asyncio.run(rag_service.delete_collection(collection))
 
         if deleted:
-            console.print(f"[green]Deleted collection:[/green] {collection}")
+            console.print(f"[green]{t('rag.deleted_collection')}[/green] {collection}")
         else:
-            console.print(f"[yellow]Collection not found:[/yellow] {collection}")
+            console.print(
+                f"[yellow]{t('rag.collection_not_found')}[/yellow] {collection}"
+            )
 
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
+        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
         raise typer.Exit(code=1)
 
 
-@app.command("status")
+@app.command("status", help=lazy_t("rag.help_status"))
 def show_status() -> None:
-    """
-    Show RAG service status and configuration.
-    """
     rag_service = get_rag_service()
 
     try:
@@ -618,52 +545,51 @@ def show_status() -> None:
         # Check if embedding model is installed
         model_cached = _is_model_cached()
         if model_cached:
-            model_status = "[green]Installed[/green]"
+            model_status = f"[green]{t('rag.model_installed')}[/green]"
         else:
-            model_status = (
-                "[yellow]Not installed[/yellow] [dim](run: rag install-model)[/dim]"
-            )
+            model_status = f"[yellow]{t('rag.model_not_installed')}[/yellow] [dim]({t('rag.run_install_model')})[/dim]"
 
         # Create status panel
+        yes_no = t("shared.yes") if status.get("enabled") else t("shared.no")
         status_lines = [
-            f"[bold]Enabled:[/bold] {'Yes' if status.get('enabled') else 'No'}",
-            f"[bold]Persist Directory:[/bold] {status.get('persist_directory')}",
-            f"[bold]Embedding Model:[/bold] {status.get('embedding_model')}",
-            f"[bold]Model Status:[/bold] {model_status}",
-            f"[bold]Chunk Size:[/bold] {status.get('chunk_size')}",
-            f"[bold]Chunk Overlap:[/bold] {status.get('chunk_overlap')}",
-            f"[bold]Default Top K:[/bold] {status.get('default_top_k')}",
-            f"[bold]Collections:[/bold] {len(collections)}",
+            f"[bold]{t('rag.enabled_label')}[/bold] {yes_no}",
+            f"[bold]{t('rag.persist_dir_label')}[/bold] {status.get('persist_directory')}",
+            f"[bold]{t('rag.embedding_model_label')}[/bold] {status.get('embedding_model')}",
+            f"[bold]{t('rag.model_status_label')}[/bold] {model_status}",
+            f"[bold]{t('rag.chunk_size_label')}[/bold] {status.get('chunk_size')}",
+            f"[bold]{t('rag.chunk_overlap_label')}[/bold] {status.get('chunk_overlap')}",
+            f"[bold]{t('rag.default_top_k_label')}[/bold] {status.get('default_top_k')}",
+            f"[bold]{t('rag.collections_count_label')}[/bold] {len(collections)}",
         ]
 
         if status.get("last_activity"):
             status_lines.append(
-                f"[bold]Last Activity:[/bold] {status.get('last_activity')}"
+                f"[bold]{t('rag.last_activity_label')}[/bold] {status.get('last_activity')}"
             )
 
         console.print()
         console.print(
             Panel(
                 "\n".join(status_lines),
-                title="RAG Service Status",
+                title=t("rag.status_title"),
                 border_style="blue",
             )
         )
         console.print()
 
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
+        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
         raise typer.Exit(code=1)
 
 
-@app.command("install-model")
+@app.command("install-model", help=lazy_t("rag.help_install_model"))
 def install_model(
     cache_dir: Annotated[
         str | None,
         typer.Option(
             "--cache-dir",
             "-d",
-            help="Directory to cache the model (default: system HuggingFace cache)",
+            help=lazy_t("rag.opt_cache_dir"),
         ),
     ] = None,
     model: Annotated[
@@ -671,32 +597,14 @@ def install_model(
         typer.Option(
             "--model",
             "-m",
-            help="Model name to download (default: from settings)",
+            help=lazy_t("rag.opt_model"),
         ),
     ] = None,
 ) -> None:
-    """
-    Pre-download the embedding model for offline/air-gapped operation.
-
-    Downloads the sentence-transformers model to a local cache directory
-    so RAG operations work without network access.
-
-    Examples:
-        # Download to default location (system HuggingFace cache)
-        rag install-model
-
-        # Download to custom location
-        rag install-model --cache-dir /path/to/models
-
-        # Download a specific model
-        rag install-model --model sentence-transformers/all-MiniLM-L6-v2
-    """
     # OpenAI embeddings don't require local model download
     if settings.RAG_EMBEDDING_PROVIDER == "openai":
-        console.print(
-            "\n[yellow]OpenAI embeddings don't require local model downloads.[/yellow]"
-        )
-        console.print("[dim]Ensure OPENAI_API_KEY is set in your environment.[/dim]\n")
+        console.print(f"\n[yellow]{t('rag.openai_no_download')}[/yellow]")
+        console.print(f"[dim]{t('rag.openai_key_hint')}[/dim]\n")
         return
 
     from sentence_transformers import SentenceTransformer
@@ -710,14 +618,14 @@ def install_model(
     # Check if model is already cached before downloading
     was_cached = _is_model_cached()
 
-    console.print(f"\n[bold blue]Model:[/bold blue] {model_name}")
+    console.print(f"\n[bold blue]{t('rag.model_label')}[/bold blue] {model_name}")
     if target_dir:
         console.print(
-            f"[bold blue]Cache directory:[/bold blue] {Path(target_dir).resolve()}"
+            f"[bold blue]{t('rag.cache_dir_label')}[/bold blue] {Path(target_dir).resolve()}"
         )
     else:
         console.print(
-            "[bold blue]Cache directory:[/bold blue] [dim](system HuggingFace cache)[/dim]"
+            f"[bold blue]{t('rag.cache_dir_label')}[/bold blue] [dim]({t('rag.system_hf_cache')})[/dim]"
         )
     console.print()
 
@@ -729,9 +637,11 @@ def install_model(
 
         # Download/load model with appropriate messaging
         if was_cached:
-            console.print("[dim]Loading model from cache...[/dim]")
+            console.print(f"[dim]{t('rag.loading_from_cache')}[/dim]")
         else:
-            console.print(f"[bold cyan]Downloading {model_name}...[/bold cyan]")
+            console.print(
+                f"[bold cyan]{t('rag.downloading_named_model', model=model_name)}[/bold cyan]"
+            )
             console.print()  # Blank line before tqdm progress bars
 
         if target_dir:
@@ -744,25 +654,25 @@ def install_model(
 
         # Build result message
         if was_cached:
-            status_msg = "[green]Model found in cache[/green]"
-            title = "Model Ready"
+            status_msg = f"[green]{t('rag.model_found_in_cache')}[/green]"
+            title = t("rag.model_ready_title")
         else:
-            status_msg = "[green]Model downloaded successfully[/green]"
-            title = "Model Installation Complete"
+            status_msg = f"[green]{t('rag.model_downloaded')}[/green]"
+            title = t("rag.model_install_complete_title")
 
         if target_dir:
-            location_msg = f"[bold]Location:[/bold] {Path(target_dir).resolve()}"
-            hint_msg = f"\n\n[dim]To use this cache, set RAG_MODEL_CACHE_DIR={target_dir}[/dim]"
-        else:
             location_msg = (
-                "[bold]Location:[/bold] [dim](system HuggingFace cache)[/dim]"
+                f"[bold]{t('rag.location_label')}[/bold] {Path(target_dir).resolve()}"
             )
+            hint_msg = f"\n\n[dim]{t('rag.cache_dir_hint', dir=target_dir)}[/dim]"
+        else:
+            location_msg = f"[bold]{t('rag.location_label')}[/bold] [dim]({t('rag.system_hf_cache')})[/dim]"
             hint_msg = ""
 
         console.print(
             Panel(
                 f"{status_msg}\n\n"
-                f"[bold]Model:[/bold] {model_name}\n"
+                f"[bold]{t('rag.model_label')}[/bold] {model_name}\n"
                 f"{location_msg}{hint_msg}",
                 title=title,
                 border_style="green",
@@ -770,5 +680,7 @@ def install_model(
         )
 
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] Failed to download model: {e}")
+        console.print(
+            f"[bold red]{t('shared.error')}[/bold red] {t('rag.model_download_failed', error=e)}"
+        )
         raise typer.Exit(code=1)
