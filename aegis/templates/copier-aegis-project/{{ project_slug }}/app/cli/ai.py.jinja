@@ -463,8 +463,7 @@ def chat(
                     if convos:
                         conversation_id = convos[0].id
                         typer.echo(
-                            f"Resuming conversation {conversation_id[:8]}... "
-                            "(use --new for fresh start)",
+                            t("ai.resuming_conversation", id=conversation_id[:8]),
                             err=True,
                         )
 
@@ -1362,16 +1361,16 @@ def usage(
     def display_summary_panel(stats: UsageStatsResponse) -> None:
         success_color = get_success_color(stats.success_rate)
         summary_lines = [
-            f"[bold cyan]Total Tokens:[/bold cyan]   {format_number(stats.total_tokens)}",
-            f"[bold cyan]Total Cost:[/bold cyan]     {format_cost(stats.total_cost)}",
-            f"[bold cyan]Total Requests:[/bold cyan] {format_number(stats.total_requests)}",
-            f"[bold cyan]Success Rate:[/bold cyan]   "
+            f"[bold cyan]{t('ai.usage_total_tokens')}[/bold cyan]   {format_number(stats.total_tokens)}",
+            f"[bold cyan]{t('ai.usage_total_cost')}[/bold cyan]     {format_cost(stats.total_cost)}",
+            f"[bold cyan]{t('ai.usage_total_requests')}[/bold cyan] {format_number(stats.total_requests)}",
+            f"[bold cyan]{t('ai.usage_success_rate')}[/bold cyan]   "
             f"[{success_color}]{format_percentage(stats.success_rate)}[/{success_color}]",
         ]
         console.print(
             Panel(
                 "\n".join(summary_lines),
-                title="[bold magenta]AI Usage Summary[/bold magenta]",
+                title=f"[bold magenta]{t('ai.usage_title')}[/bold magenta]",
                 border_style="magenta",
                 padding=(1, 2),
             )

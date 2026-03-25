@@ -25,16 +25,6 @@ app = typer.Typer(
 console = Console()
 
 
-def _translate_job_name(job_id: str, stored_name: str | None) -> str:
-    """Translate known job names at display time, fall back to stored name."""
-    key = f"tasks.job.{job_id}"
-    translated = t(key)
-    # If t() returns the key itself, no translation exists — use stored name
-    if translated == key:
-        return stored_name or job_id
-    return translated
-
-
 @app.command("list", help=lazy_t("tasks.help_list"))
 def list_jobs() -> None:
     rprint(f"[bold blue]{t('tasks.listing_jobs')}[/bold blue]")
@@ -67,7 +57,7 @@ def list_jobs() -> None:
 
             table.add_row(
                 task.job_id,
-                _translate_job_name(task.job_id, task.name),
+                task.name or task.job_id,
                 (
                     f"[{status_color}]"
                     f"{t('tasks.active') if task.is_active else t('tasks.paused')}"

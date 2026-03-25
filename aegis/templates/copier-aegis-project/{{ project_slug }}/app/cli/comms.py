@@ -27,11 +27,20 @@ _WARNING_KEYS: dict[str, str] = {
     "TWILIO_PHONE_NUMBER": "comms.warn.twilio_phone",
 }
 
+# ConfigurationError messages from send/call functions
+_CONFIG_ERROR_KEYS: dict[str, str] = {
+    "Twilio credentials not set": "comms.warn.twilio_creds",
+    "RESEND_API_KEY is not set. Sign up": "comms.warn.resend_api_key_send",
+}
+
 
 def _translate_warning(warning: str) -> str:
-    """Translate known service-layer warnings at display time."""
+    """Translate known service-layer warnings and errors at display time."""
     for env_var, key in _WARNING_KEYS.items():
         if env_var in warning:
+            return t(key)
+    for prefix, key in _CONFIG_ERROR_KEYS.items():
+        if warning.startswith(prefix):
             return t(key)
     return warning
 
@@ -217,7 +226,10 @@ async def _email_send(
         )
 
     except EmailConfigurationError as e:
-        typer.secho(t("comms.configuration_error", error=e), fg=typer.colors.RED)
+        typer.secho(
+            t("comms.configuration_error", error=_translate_warning(str(e))),
+            fg=typer.colors.RED,
+        )
         raise typer.Exit(1)
     except EmailError as e:
         typer.secho(t("comms.email_send_failed", error=e), fg=typer.colors.RED)
@@ -251,7 +263,10 @@ async def _sms_send(to: str, body: str) -> None:
         )
 
     except SMSConfigurationError as e:
-        typer.secho(t("comms.configuration_error", error=e), fg=typer.colors.RED)
+        typer.secho(
+            t("comms.configuration_error", error=_translate_warning(str(e))),
+            fg=typer.colors.RED,
+        )
         raise typer.Exit(1)
     except SMSError as e:
         typer.secho(t("comms.sms_send_failed", error=e), fg=typer.colors.RED)
@@ -292,7 +307,10 @@ async def _call_make(to: str, twiml_url: str, timeout: int) -> None:
         )
 
     except CallConfigurationError as e:
-        typer.secho(t("comms.configuration_error", error=e), fg=typer.colors.RED)
+        typer.secho(
+            t("comms.configuration_error", error=_translate_warning(str(e))),
+            fg=typer.colors.RED,
+        )
         raise typer.Exit(1)
     except CallError as e:
         typer.secho(t("comms.call_failed", error=e), fg=typer.colors.RED)

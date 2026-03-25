@@ -37,6 +37,11 @@ except ModuleNotFoundError:
     # Ollama module not generated (ollama_mode is "none")
     OllamaClient = None  # type: ignore[assignment, misc]
     OllamaModel = None  # type: ignore[assignment, misc]
+except ImportError as exc:
+    # Unexpected import error (e.g., missing dependency inside Ollama module)
+    logger.warning("Failed to import Ollama module: %s", exc)
+    OllamaClient = None  # type: ignore[assignment, misc]
+    OllamaModel = None  # type: ignore[assignment, misc]
 
 
 @dataclass
