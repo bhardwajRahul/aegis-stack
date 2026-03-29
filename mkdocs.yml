@@ -59,6 +59,7 @@ nav:
     - Overview: services/index.md
     - Authentication:
       - Getting Started: services/auth/index.md
+      - Auth Levels: services/auth/levels.md
       - API Reference: services/auth/api.md
       - Service Layer: services/auth/integration.md
       - CLI Commands: services/auth/cli.md

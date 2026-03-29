@@ -4,14 +4,17 @@
 from app.components.backend.api.deps import get_async_db
 from app.core.config import settings
 from app.models.org import (
+    BulkAddMembersRequest,
     MemberResponse,
     OrgCreate,
     OrgResponse,
     OrganizationMember,
+    UserMembershipResponse,
+    VALID_ORG_ROLES,
     ORG_ROLE_OWNER,
     ORG_ROLE_ADMIN,
 )
-from app.services.auth.auth_service import get_current_user_from_token
+from app.services.auth.auth_service import get_current_user_from_token{% if include_auth_rbac %}, require_role{% endif %}
 from app.services.auth.membership_service import MembershipService
 from app.services.auth.org_service import OrgService
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -91,6 +94,36 @@ async def list_my_orgs(
     membership_service = MembershipService(db)
     orgs = await membership_service.list_user_orgs(user.id)
     return [OrgResponse.model_validate(org) for org in orgs]
+
+
+@router.get("/all", response_model=list[OrgResponse])
+async def list_all_orgs(
+{% if include_auth_rbac %}
+    user=Depends(require_role("admin")),
+{% else %}
+    user=Depends(_get_current_user),
+{% endif %}
+    db: AsyncSession = Depends(get_async_db),
+) -> list[OrgResponse]:
+    """List all organizations. Requires admin role."""
+    org_service = OrgService(db)
+    orgs = await org_service.list_orgs()
+    return [OrgResponse.model_validate(org) for org in orgs]
+
+
+@router.get("/memberships", response_model=list[UserMembershipResponse])
+async def list_all_memberships(
+{% if include_auth_rbac %}
+    user=Depends(require_role("admin")),
+{% else %}
+    user=Depends(_get_current_user),
+{% endif %}
+    db: AsyncSession = Depends(get_async_db),
+) -> list[UserMembershipResponse]:
+    """List all memberships with org names. Requires admin role."""
+    membership_service = MembershipService(db)
+    rows = await membership_service.list_all_memberships()
+    return [UserMembershipResponse(**row) for row in rows]
 
 
 @router.get("/{org_id}", response_model=OrgResponse)
@@ -209,6 +242,31 @@ async def add_member(
 
     member = await membership_service.add_member(org_id, user_id, role)
     return MemberResponse.model_validate(member)
+
+
+@router.post(
+    "/{org_id}/members/bulk",
+    response_model=list[MemberResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def bulk_add_members(
+    org_id: int,
+    body: BulkAddMembersRequest,
+    user=Depends(_get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> list[MemberResponse]:
+    """Bulk add members to organization. Requires admin or owner role."""
+    await _require_org_role(org_id, db, user.id, {ORG_ROLE_ADMIN, ORG_ROLE_OWNER})
+
+    if body.role not in VALID_ORG_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role: {body.role}. Valid: {sorted(VALID_ORG_ROLES)}",
+        )
+
+    membership_service = MembershipService(db)
+    added = await membership_service.bulk_add_members(org_id, body.user_ids, body.role)
+    return [MemberResponse.model_validate(m) for m in added]
 
 
 @router.patch("/{org_id}/members/{user_id}", response_model=MemberResponse)

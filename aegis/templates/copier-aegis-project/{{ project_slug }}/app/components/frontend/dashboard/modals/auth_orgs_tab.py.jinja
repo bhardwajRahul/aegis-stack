@@ -139,7 +139,7 @@ class AuthOrgsTab(ft.Container):
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"http://localhost:{settings.PORT}/api/v1/orgs",
+                    f"http://localhost:{settings.PORT}/api/v1/orgs/all",
                     timeout=10.0,
                 )
 

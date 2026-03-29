@@ -71,6 +71,49 @@ class MembershipService:
         await self.db.refresh(member)
         return member
 
+    async def bulk_add_members(
+        self,
+        org_id: int,
+        user_ids: list[int],
+        role: str = "member",
+    ) -> list[OrganizationMember]:
+        """Add multiple users to an organization in a single transaction.
+
+        Fetches existing members for the org once, diffs in Python, then
+        bulk-inserts. Scales to any input size — no IN clause.
+        Returns only newly added members.
+        """
+        if role not in VALID_ORG_ROLES:
+            raise ValueError(f"Invalid org role: {role}. Valid: {VALID_ORG_ROLES}")
+
+        # One query: all existing member user_ids for this org
+        statement = select(OrganizationMember.user_id).where(
+            OrganizationMember.organization_id == org_id
+        )
+        result = await self.db.exec(statement)
+        existing_ids = set(result.all())
+
+        # De-duplicate input, then diff against existing — O(n)
+        new_ids = [uid for uid in dict.fromkeys(user_ids) if uid not in existing_ids]
+
+        now = datetime.now(UTC).replace(tzinfo=None)
+        added: list[OrganizationMember] = []
+        for uid in new_ids:
+            member = OrganizationMember(
+                organization_id=org_id,
+                user_id=uid,
+                role=role,
+                joined_at=now,
+            )
+            self.db.add(member)
+            added.append(member)
+
+        if added:
+            await self.db.flush()
+            await self.db.commit()
+
+        return added
+
     async def list_org_members(self, org_id: int) -> list[OrganizationMember]:
         """List all members of an organization."""
         statement = select(OrganizationMember).where(
@@ -91,6 +134,27 @@ class MembershipService:
         )
         result = await self.db.exec(statement)
         return list(result.all())
+
+    async def list_all_memberships(
+        self,
+    ) -> list[dict[str, int | str]]:
+        """List all memberships with org names (single JOIN query)."""
+        statement = select(
+            OrganizationMember.user_id,
+            Organization.name.label("org_name"),
+            Organization.slug.label("org_slug"),
+            OrganizationMember.role,
+        ).join(Organization, OrganizationMember.organization_id == Organization.id)
+        result = await self.db.exec(statement)
+        return [
+            {
+                "user_id": row.user_id,
+                "org_name": row.org_name,
+                "org_slug": row.org_slug,
+                "role": row.role,
+            }
+            for row in result.all()
+        ]
 {% else %}
 # Membership service not included (auth_level != org)
 {% endif %}

@@ -439,6 +439,19 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/models/test_user.py")
         # Note: alembic removal is handled below based on whether ANY service needs migrations
 
+    # Remove auth org files if org level not selected (but auth is enabled)
+    if is_enabled(AnswerKeys.AUTH) and not is_enabled(AnswerKeys.AUTH_ORG):
+        remove_file(project_path, "app/models/org.py")
+        remove_file(project_path, "app/services/auth/org_service.py")
+        remove_file(project_path, "app/services/auth/membership_service.py")
+        remove_dir(project_path, "app/components/backend/api/orgs")
+        remove_file(
+            project_path,
+            "app/components/frontend/dashboard/modals/auth_orgs_tab.py",
+        )
+        remove_file(project_path, "tests/services/test_org_integration.py")
+        remove_file(project_path, "tests/api/test_org_endpoints.py")
+
     # Remove AI service if not selected
     if not is_enabled(AnswerKeys.AI):
         remove_dir(project_path, "app/components/backend/api/ai")
