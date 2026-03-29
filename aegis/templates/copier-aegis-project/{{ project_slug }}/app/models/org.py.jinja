@@ -68,6 +68,22 @@ class MemberResponse(SQLModel):
     user_id: int
     role: str
     joined_at: datetime
+
+
+class BulkAddMembersRequest(SQLModel):
+    """Request body for bulk adding members to an organization."""
+
+    user_ids: list[int]
+    role: str = "member"
+
+
+class UserMembershipResponse(SQLModel):
+    """Membership info for dashboard user display."""
+
+    user_id: int
+    org_name: str
+    org_slug: str
+    role: str
 {% else %}
 # Organization models not included (auth_level != org)
 {% endif %}

@@ -3,10 +3,10 @@
 
 from datetime import UTC, datetime
 
-from sqlmodel import select
+from sqlmodel import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.models.org import OrgCreate, Organization
+from app.models.org import OrgCreate, Organization, OrganizationMember
 
 
 class OrgService:
@@ -48,10 +48,15 @@ class OrgService:
         return org
 
     async def delete_org(self, org_id: int) -> bool:
-        """Delete an organization."""
+        """Delete an organization and all its memberships."""
         org = await self.get_org_by_id(org_id)
         if not org:
             return False
+        await self.db.exec(
+            delete(OrganizationMember).where(
+                OrganizationMember.organization_id == org_id
+            )
+        )
         await self.db.delete(org)
         await self.db.commit()
         return True

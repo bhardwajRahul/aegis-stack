@@ -62,6 +62,9 @@ class UsersTableSection(ft.Container):
         users: list[dict[str, Any]],
         on_toggle: Any,
         on_delete: Any,
+{% if include_auth_org %}
+        user_orgs: dict[int, list[str]] | None = None,
+{% endif %}
     ) -> None:
         super().__init__()
 
@@ -70,6 +73,9 @@ class UsersTableSection(ft.Container):
             DataTableColumn("Name", width=140, style="secondary"),
             DataTableColumn("Status", width=45, style=None),
             DataTableColumn("Verified", width=55, style=None),
+{% if include_auth_org %}
+            DataTableColumn("Org", width=120, style=None),
+{% endif %}
             DataTableColumn("Created", width=80, style="secondary"),
             DataTableColumn("Actions", width=80, alignment="right", style=None),
         ]
@@ -88,6 +94,22 @@ class UsersTableSection(ft.Container):
                 color=Theme.Colors.SUCCESS if is_verified else Theme.Colors.WARNING,
             )
 
+{% if include_auth_org %}
+            # Org membership display
+            org_names = (user_orgs or {}).get(user.get("id"), [])
+            if org_names:
+                org_display = ft.Row(
+                    [
+                        Tag(text=name, color=Theme.Colors.INFO)
+                        for name in org_names
+                    ],
+                    spacing=4,
+                    wrap=True,
+                )
+            else:
+                org_display = SecondaryText("-")
+
+{% endif %}
             # Action buttons
             action_buttons = ft.Row(
                 [
@@ -115,6 +137,9 @@ class UsersTableSection(ft.Container):
                     user.get("full_name") or "-",
                     status_tag,
                     verified_tag,
+{% if include_auth_org %}
+                    org_display,
+{% endif %}
                     _format_relative_time(user.get("created_at", "")),
                     action_buttons,
                 ]
@@ -180,7 +205,12 @@ class AuthUsersTab(ft.Container):
 
                 if response.status_code == 200:
                     users = response.json()
+{% if include_auth_org %}
+                    user_orgs = await self._load_user_orgs(client)
+                    self._render_users(users, user_orgs=user_orgs)
+{% else %}
                     self._render_users(users)
+{% endif %}
                 elif response.status_code == 401:
                     self._render_error("Authentication required")
                 else:
@@ -193,7 +223,35 @@ class AuthUsersTab(ft.Container):
         except Exception as e:
             self._render_error(str(e))
 
-    def _render_users(self, users: list[dict[str, Any]]) -> None:
+{% if include_auth_org %}
+    async def _load_user_orgs(
+        self, client: httpx.AsyncClient
+    ) -> dict[int, list[str]]:
+        """Fetch all memberships and build user_id -> [org_name] mapping."""
+        try:
+            response = await client.get(
+                f"http://localhost:{settings.PORT}/api/v1/orgs/memberships",
+                timeout=10.0,
+            )
+            if response.status_code == 200:
+                memberships = response.json()
+                user_orgs: dict[int, list[str]] = {}
+                for m in memberships:
+                    uid = m["user_id"]
+                    user_orgs.setdefault(uid, []).append(m["org_name"])
+                return user_orgs
+        except Exception:
+            pass
+        return {}
+
+{% endif %}
+    def _render_users(
+        self,
+        users: list[dict[str, Any]],
+{% if include_auth_org %}
+        user_orgs: dict[int, list[str]] | None = None,
+{% endif %}
+    ) -> None:
         """Render the users table with loaded data."""
         refresh_row = ft.Row(
             [
@@ -214,6 +272,9 @@ class AuthUsersTab(ft.Container):
                 users,
                 on_toggle=self._on_toggle_user,
                 on_delete=self._on_delete_user,
+{% if include_auth_org %}
+                user_orgs=user_orgs,
+{% endif %}
             ),
         ]
         self._content_column.scroll = ft.ScrollMode.AUTO

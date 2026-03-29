@@ -1,0 +1,188 @@
+"""
+Tests for organization API endpoints.
+
+Tests the org CRUD and membership management endpoints,
+including bulk member operations.
+"""
+{% if include_auth_org %}
+
+from fastapi import status
+from fastapi.testclient import TestClient
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.security import create_access_token
+from app.models.org import OrgCreate, ORG_ROLE_OWNER
+from app.models.user import UserCreate
+from app.services.auth.membership_service import MembershipService
+from app.services.auth.org_service import OrgService
+from app.services.auth.user_service import UserService
+
+
+class TestBulkAddMembersEndpoint:
+    """Test POST /{org_id}/members/bulk endpoint."""
+
+    async def _setup_org_with_owner(
+        self, db: AsyncSession
+    ) -> tuple:
+        """Create a user, org, and make the user the owner. Returns (user, org, token)."""
+        user_service = UserService(db)
+        user = await user_service.create_user(
+            UserCreate(email="owner@test.com", full_name="Owner", password="password123")
+        )
+        org_service = OrgService(db)
+        org = await org_service.create_org(OrgCreate(name="Test Org", slug="test-org"))
+        membership_service = MembershipService(db)
+        await membership_service.add_member(org.id, user.id, role=ORG_ROLE_OWNER)
+        token = create_access_token(data={"sub": user.email})
+        return user, org, token
+
+    async def _create_users(
+        self, db: AsyncSession, count: int, prefix: str = "member"
+    ) -> list:
+        """Create multiple test users."""
+        user_service = UserService(db)
+        users = []
+        for i in range(count):
+            user = await user_service.create_user(
+                UserCreate(
+                    email=f"{prefix}{i}@test.com",
+                    full_name=f"User {i}",
+                    password="password123",
+                )
+            )
+            users.append(user)
+        return users
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Test bulk adding multiple users to an organization."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+        users = await self._create_users(async_db_session, 3)
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/members/bulk",
+            json={"user_ids": [u.id for u in users]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        assert len(data) == 3
+        added_user_ids = {m["user_id"] for m in data}
+        for u in users:
+            assert u.id in added_user_ids
+        assert all(m["role"] == "member" for m in data)
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_with_role(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Test bulk adding members with a custom role."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+        users = await self._create_users(async_db_session, 2, prefix="admin")
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/members/bulk",
+            json={"user_ids": [u.id for u in users], "role": "admin"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        assert len(data) == 2
+        assert all(m["role"] == "admin" for m in data)
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_skips_existing(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Test that bulk add skips users who are already members."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+        users = await self._create_users(async_db_session, 4, prefix="skip")
+
+        # Add first two individually
+        membership_service = MembershipService(async_db_session)
+        await membership_service.add_member(org.id, users[0].id)
+        await membership_service.add_member(org.id, users[1].id)
+
+        # Bulk add all four
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/members/bulk",
+            json={"user_ids": [u.id for u in users]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        assert len(data) == 2
+        added_user_ids = {m["user_id"] for m in data}
+        assert users[2].id in added_user_ids
+        assert users[3].id in added_user_ids
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_empty_list(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Test bulk add with empty user_ids returns empty list."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/members/bulk",
+            json={"user_ids": []},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.json() == []
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_invalid_role(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Test bulk add with invalid role returns 400."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/members/bulk",
+            json={"user_ids": [1], "role": "superadmin"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Invalid role" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_delete_org_with_members(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Test deleting an org with members cascades to remove members."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+        users = await self._create_users(async_db_session, 3, prefix="delapi")
+
+        # Add members
+        async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/members/bulk",
+            json={"user_ids": [u.id for u in users]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # Delete org
+        response = async_client_with_db.delete(
+            f"/api/v1/orgs/{org.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+
+        # Org should be gone
+        response = async_client_with_db.get(
+            f"/api/v1/orgs/{org.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+{% else %}
+# Organization endpoint tests not included (auth_level != org)
+{% endif %}

@@ -87,6 +87,43 @@ class TestOrgServiceIntegration:
         assert await org_service.get_org_by_id(org.id) is None
 
     @pytest.mark.asyncio
+    async def test_delete_org_with_members(self, async_db_session: AsyncSession) -> None:
+        """Test deleting an org that has members cascades to remove members too."""
+        org_service = OrgService(async_db_session)
+        org = await org_service.create_org(
+            OrgCreate(name="Has Members", slug="has-members")
+        )
+
+        # Add some members
+        user_service = UserService(async_db_session)
+        users = [
+            await user_service.create_user(
+                UserCreate(
+                    email=f"deltest{i}@test.com",
+                    full_name=f"Del Test {i}",
+                    password="password123",
+                )
+            )
+            for i in range(3)
+        ]
+        membership_service = MembershipService(async_db_session)
+        for u in users:
+            await membership_service.add_member(org.id, u.id)
+
+        # Verify members exist
+        members = await membership_service.list_org_members(org.id)
+        assert len(members) == 3
+
+        # Delete org — should succeed and remove members
+        success = await org_service.delete_org(org.id)
+        assert success is True
+        assert await org_service.get_org_by_id(org.id) is None
+
+        # Members should be gone too
+        members = await membership_service.list_org_members(org.id)
+        assert len(members) == 0
+
+    @pytest.mark.asyncio
     async def test_delete_nonexistent_org(self, async_db_session: AsyncSession) -> None:
         """Test deleting a nonexistent organization returns False."""
         org_service = OrgService(async_db_session)
@@ -245,6 +282,109 @@ class TestMembershipServiceIntegration:
         slugs = {o.slug for o in orgs}
         assert "user-org-1" in slugs
         assert "user-org-2" in slugs
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members(self, async_db_session: AsyncSession) -> None:
+        """Test bulk-adding multiple users to an organization."""
+        users = [
+            await self._create_user(async_db_session, f"bulk{i}@test.com")
+            for i in range(5)
+        ]
+        org = await self._create_org(async_db_session, "bulk-test")
+
+        membership_service = MembershipService(async_db_session)
+        user_ids = [u.id for u in users]
+        added = await membership_service.bulk_add_members(org.id, user_ids)
+
+        assert len(added) == 5
+        members = await membership_service.list_org_members(org.id)
+        assert len(members) == 5
+        assert all(m.role == ORG_ROLE_MEMBER for m in members)
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_with_role(self, async_db_session: AsyncSession) -> None:
+        """Test bulk-adding members with a specific role."""
+        users = [
+            await self._create_user(async_db_session, f"bulkrole{i}@test.com")
+            for i in range(3)
+        ]
+        org = await self._create_org(async_db_session, "bulk-role-test")
+
+        membership_service = MembershipService(async_db_session)
+        user_ids = [u.id for u in users]
+        added = await membership_service.bulk_add_members(
+            org.id, user_ids, role=ORG_ROLE_ADMIN
+        )
+
+        assert len(added) == 3
+        assert all(m.role == ORG_ROLE_ADMIN for m in added)
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_skips_existing(self, async_db_session: AsyncSession) -> None:
+        """Test that bulk add skips users who are already members."""
+        users = [
+            await self._create_user(async_db_session, f"bulkskip{i}@test.com")
+            for i in range(4)
+        ]
+        org = await self._create_org(async_db_session, "bulk-skip-test")
+
+        membership_service = MembershipService(async_db_session)
+
+        # Add first two individually
+        await membership_service.add_member(org.id, users[0].id, role=ORG_ROLE_OWNER)
+        await membership_service.add_member(org.id, users[1].id)
+
+        # Bulk add all four — should only add the last two
+        all_ids = [u.id for u in users]
+        added = await membership_service.bulk_add_members(org.id, all_ids)
+
+        assert len(added) == 2
+        added_ids = {m.user_id for m in added}
+        assert users[2].id in added_ids
+        assert users[3].id in added_ids
+
+        # Verify existing members kept their original roles
+        owner = await membership_service.get_member(org.id, users[0].id)
+        assert owner is not None
+        assert owner.role == ORG_ROLE_OWNER
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_empty_list(self, async_db_session: AsyncSession) -> None:
+        """Test bulk add with empty list returns empty."""
+        org = await self._create_org(async_db_session, "bulk-empty-test")
+
+        membership_service = MembershipService(async_db_session)
+        added = await membership_service.bulk_add_members(org.id, [])
+
+        assert added == []
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_invalid_role(self, async_db_session: AsyncSession) -> None:
+        """Test bulk add with invalid role raises ValueError."""
+        org = await self._create_org(async_db_session, "bulk-invalid-test")
+
+        membership_service = MembershipService(async_db_session)
+        with pytest.raises(ValueError, match="Invalid org role"):
+            await membership_service.bulk_add_members(org.id, [1], role="superadmin")
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_all_existing(self, async_db_session: AsyncSession) -> None:
+        """Test bulk add when all users are already members returns empty."""
+        users = [
+            await self._create_user(async_db_session, f"bulkall{i}@test.com")
+            for i in range(3)
+        ]
+        org = await self._create_org(async_db_session, "bulk-all-existing")
+
+        membership_service = MembershipService(async_db_session)
+        for u in users:
+            await membership_service.add_member(org.id, u.id)
+
+        # Bulk add the same users — should add none
+        all_ids = [u.id for u in users]
+        added = await membership_service.bulk_add_members(org.id, all_ids)
+
+        assert added == []
 {% else %}
 # Organization tests not included (auth_level != org)
 {% endif %}
