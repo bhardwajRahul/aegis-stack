@@ -101,6 +101,10 @@ AUTH_MIGRATION = ServiceMigrationSpec(
                 ),
                 ColumnSpec("hashed_password", "sa.String()", nullable=False),
                 ColumnSpec("last_login", "sa.DateTime()", nullable=True),
+                ColumnSpec(
+                    "failed_login_attempts", "sa.Integer()", nullable=False, default="0"
+                ),
+                ColumnSpec("locked_until", "sa.DateTime()", nullable=True),
                 ColumnSpec("created_at", "sa.DateTime()", nullable=False),
                 ColumnSpec("updated_at", "sa.DateTime()", nullable=True),
             ],
@@ -138,7 +142,10 @@ ORG_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec("created_at", "sa.DateTime()", nullable=False),
                 ColumnSpec("updated_at", "sa.DateTime()", nullable=True),
             ],
-            indexes=[IndexSpec("ix_organization_slug", ["slug"], unique=True)],
+            indexes=[
+                IndexSpec("ix_organization_name", ["name"]),
+                IndexSpec("ix_organization_slug", ["slug"], unique=True),
+            ],
         ),
         TableSpec(
             name="organization_member",
@@ -167,6 +174,30 @@ ORG_MIGRATION = ServiceMigrationSpec(
             foreign_keys=[
                 ForeignKeySpec(["organization_id"], "organization", ["id"]),
                 ForeignKeySpec(["user_id"], "user", ["id"]),
+            ],
+        ),
+        TableSpec(
+            name="org_invite",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=False),
+                ColumnSpec("email", "sa.String()", nullable=False),
+                ColumnSpec("role", "sa.String()", nullable=False, default="'member'"),
+                ColumnSpec("invited_by", "sa.Integer()", nullable=False),
+                ColumnSpec(
+                    "status", "sa.String()", nullable=False, default="'pending'"
+                ),
+                ColumnSpec("token", "sa.String()", nullable=False),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_org_invite_email", ["email"]),
+                IndexSpec("ix_org_invite_org_id", ["organization_id"]),
+                IndexSpec("ix_org_invite_token", ["token"], unique=True),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["organization_id"], "organization", ["id"]),
+                ForeignKeySpec(["invited_by"], "user", ["id"]),
             ],
         ),
     ],
@@ -378,6 +409,47 @@ AI_MIGRATION = ServiceMigrationSpec(
     ],
 )
 
+AUTH_TOKENS_MIGRATION = ServiceMigrationSpec(
+    service_name="auth_tokens",
+    description="Auth token tables (password reset, email verification)",
+    tables=[
+        TableSpec(
+            name="password_reset_token",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("token", "sa.String()", nullable=False),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("used", "sa.Boolean()", nullable=False, default="'false'"),
+            ],
+            indexes=[
+                IndexSpec("ix_password_reset_token_user_id", ["user_id"]),
+                IndexSpec("ix_password_reset_token_token", ["token"], unique=True),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["user_id"], "user", ["id"]),
+            ],
+        ),
+        TableSpec(
+            name="email_verification_token",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("token", "sa.String()", nullable=False),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("used", "sa.Boolean()", nullable=False, default="'false'"),
+            ],
+            indexes=[
+                IndexSpec("ix_email_verification_token_user_id", ["user_id"]),
+                IndexSpec("ix_email_verification_token_token", ["token"], unique=True),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["user_id"], "user", ["id"]),
+            ],
+        ),
+    ],
+)
+
 VOICE_MIGRATION = ServiceMigrationSpec(
     service_name="ai_voice",
     description="AI voice service table (TTS and STT usage tracking)",
@@ -442,6 +514,7 @@ MIGRATION_SPECS: dict[str, ServiceMigrationSpec] = {
     "auth": AUTH_MIGRATION,
     "auth_rbac": AUTH_RBAC_MIGRATION,
     "auth_org": ORG_MIGRATION,
+    "auth_tokens": AUTH_TOKENS_MIGRATION,
     "ai": AI_MIGRATION,
     "ai_voice": VOICE_MIGRATION,
 }
@@ -766,6 +839,10 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     include_auth = context.get("include_auth")
     if include_auth == "yes" or include_auth is True:
         services.append("auth")
+
+    # Auth token tables (password reset, email verification) - always with auth
+    if include_auth == "yes" or include_auth is True:
+        services.append("auth_tokens")
 
     # Auth RBAC columns (rbac or org level)
     include_auth_rbac = context.get("include_auth_rbac")

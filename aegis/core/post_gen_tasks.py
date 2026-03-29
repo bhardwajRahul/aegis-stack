@@ -444,6 +444,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/models/org.py")
         remove_file(project_path, "app/services/auth/org_service.py")
         remove_file(project_path, "app/services/auth/membership_service.py")
+        remove_file(project_path, "app/services/auth/invite_service.py")
         remove_dir(project_path, "app/components/backend/api/orgs")
         remove_file(
             project_path,

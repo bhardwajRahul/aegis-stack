@@ -1,25 +1,43 @@
 """Organization API routes."""
 {% if include_auth_org %}
 
-from app.components.backend.api.deps import get_async_db
-from app.core.config import settings
-from app.models.org import (
-    BulkAddMembersRequest,
-    MemberResponse,
-    OrgCreate,
-    OrgResponse,
-    OrganizationMember,
-    UserMembershipResponse,
-    VALID_ORG_ROLES,
-    ORG_ROLE_OWNER,
-    ORG_ROLE_ADMIN,
-)
-from app.services.auth.auth_service import get_current_user_from_token{% if include_auth_rbac %}, require_role{% endif %}
-from app.services.auth.membership_service import MembershipService
-from app.services.auth.org_service import OrgService
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, status
+
+SLUG_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
 from fastapi.security import OAuth2PasswordBearer
 from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.components.backend.api.deps import (
+    get_async_db,
+    get_audit,
+    get_invite_service,
+    get_membership_service,
+    get_org_service,
+)
+from app.components.backend.api.utils import raise_bad_request, raise_not_found, validate_role
+from app.core.audit import AuditEmitter
+from app.core.config import settings
+from app.models.org import (
+    ORG_ROLE_ADMIN,
+    ORG_ROLE_MEMBER,
+    ORG_ROLE_OWNER,
+    VALID_ORG_ROLES,
+    BulkAddMembersRequest,
+    InviteCreate,
+    InviteResponse,
+    MemberResponse,
+    OrganizationMember,
+    OrgCreate,
+    OrgResponse,
+    UserMembershipResponse,
+)
+from app.services.auth.auth_service import get_current_user_from_token{% if include_auth_rbac %}, require_role{% endif %}
+
+from app.services.auth.invite_service import InviteService
+from app.services.auth.membership_service import MembershipService
+from app.services.auth.org_service import OrgService
 
 router = APIRouter(prefix="/orgs", tags=["organizations"])
 
@@ -35,15 +53,14 @@ async def _get_current_user(
 
 
 async def _require_org_role(
+    membership_service: MembershipService,
     org_id: int,
-    db: AsyncSession,
     user_id: int,
     allowed_roles: set[str],
 ) -> OrganizationMember | None:
     """Check user has required org role. Raises 403 if not."""
     if not settings.AUTH_ENABLED:
         return None  # Skip org membership check in dev mode
-    membership_service = MembershipService(db)
     member = await membership_service.get_member(org_id, user_id)
     if not member or member.role not in allowed_roles:
         raise HTTPException(
@@ -51,6 +68,24 @@ async def _require_org_role(
             detail="Insufficient organization permissions",
         )
     return member
+
+
+async def _require_admin_access(
+    membership_service: MembershipService, org_id: int, user_id: int
+) -> OrganizationMember | None:
+    """Require admin or owner role."""
+    return await _require_org_role(
+        membership_service, org_id, user_id, {ORG_ROLE_ADMIN, ORG_ROLE_OWNER}
+    )
+
+
+async def _require_member_access(
+    membership_service: MembershipService, org_id: int, user_id: int
+) -> OrganizationMember | None:
+    """Require any membership (owner, admin, or member)."""
+    return await _require_org_role(
+        membership_service, org_id, user_id, {ORG_ROLE_OWNER, ORG_ROLE_ADMIN, ORG_ROLE_MEMBER}
+    )
 
 
 # =============================================================================
@@ -62,10 +97,17 @@ async def _require_org_role(
 async def create_org(
     org_data: OrgCreate,
     user=Depends(_get_current_user),
-    db: AsyncSession = Depends(get_async_db),
+    org_service: OrgService = Depends(get_org_service),
+    membership_service: MembershipService = Depends(get_membership_service),
+    audit: AuditEmitter = Depends(get_audit),
 ) -> OrgResponse:
     """Create a new organization. Creator becomes owner."""
-    org_service = OrgService(db)
+    # Validate slug format
+    if not SLUG_PATTERN.match(org_data.slug):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid slug format. Must be lowercase alphanumeric with hyphens, cannot start or end with a hyphen.",
+        )
 
     # Check slug uniqueness
     existing = await org_service.get_org_by_slug(org_data.slug)
@@ -79,8 +121,9 @@ async def create_org(
 
     # Add creator as owner (skip when auth disabled — dev user has no real DB row)
     if settings.AUTH_ENABLED:
-        membership_service = MembershipService(db)
         await membership_service.add_member(org.id, user.id, role=ORG_ROLE_OWNER)
+
+    await audit.emit("auth.org_created", actor_id=user.id, target_type="org", target_id=org.id)
 
     return OrgResponse.model_validate(org)
 
@@ -88,10 +131,9 @@ async def create_org(
 @router.get("", response_model=list[OrgResponse])
 async def list_my_orgs(
     user=Depends(_get_current_user),
-    db: AsyncSession = Depends(get_async_db),
+    membership_service: MembershipService = Depends(get_membership_service),
 ) -> list[OrgResponse]:
     """List organizations the current user belongs to."""
-    membership_service = MembershipService(db)
     orgs = await membership_service.list_user_orgs(user.id)
     return [OrgResponse.model_validate(org) for org in orgs]
 
@@ -103,10 +145,9 @@ async def list_all_orgs(
 {% else %}
     user=Depends(_get_current_user),
 {% endif %}
-    db: AsyncSession = Depends(get_async_db),
+    org_service: OrgService = Depends(get_org_service),
 ) -> list[OrgResponse]:
     """List all organizations. Requires admin role."""
-    org_service = OrgService(db)
     orgs = await org_service.list_orgs()
     return [OrgResponse.model_validate(org) for org in orgs]
 
@@ -118,10 +159,9 @@ async def list_all_memberships(
 {% else %}
     user=Depends(_get_current_user),
 {% endif %}
-    db: AsyncSession = Depends(get_async_db),
+    membership_service: MembershipService = Depends(get_membership_service),
 ) -> list[UserMembershipResponse]:
     """List all memberships with org names. Requires admin role."""
-    membership_service = MembershipService(db)
     rows = await membership_service.list_all_memberships()
     return [UserMembershipResponse(**row) for row in rows]
 
@@ -130,16 +170,14 @@ async def list_all_memberships(
 async def get_org(
     org_id: int,
     user=Depends(_get_current_user),
-    db: AsyncSession = Depends(get_async_db),
+    org_service: OrgService = Depends(get_org_service),
+    membership_service: MembershipService = Depends(get_membership_service),
 ) -> OrgResponse:
-    """Get organization details."""
-    org_service = OrgService(db)
+    """Get organization details. Requires membership."""
     org = await org_service.get_org_by_id(org_id)
     if not org:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organization not found",
-        )
+        raise_not_found("Organization")
+    await _require_member_access(membership_service, org_id, user.id)
     return OrgResponse.model_validate(org)
 
 
@@ -149,10 +187,11 @@ async def update_org(
     name: str | None = None,
     description: str | None = None,
     user=Depends(_get_current_user),
-    db: AsyncSession = Depends(get_async_db),
+    org_service: OrgService = Depends(get_org_service),
+    membership_service: MembershipService = Depends(get_membership_service),
 ) -> OrgResponse:
     """Update organization. Requires admin or owner role."""
-    await _require_org_role(org_id, db, user.id, {ORG_ROLE_ADMIN, ORG_ROLE_OWNER})
+    await _require_admin_access(membership_service, org_id, user.id)
 
     updates: dict[str, str] = {}
     if name is not None:
@@ -161,18 +200,11 @@ async def update_org(
         updates["description"] = description
 
     if not updates:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No fields to update",
-        )
+        raise_bad_request("No fields to update")
 
-    org_service = OrgService(db)
     org = await org_service.update_org(org_id, **updates)
     if not org:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organization not found",
-        )
+        raise_not_found("Organization")
     return OrgResponse.model_validate(org)
 
 
@@ -180,18 +212,18 @@ async def update_org(
 async def delete_org(
     org_id: int,
     user=Depends(_get_current_user),
-    db: AsyncSession = Depends(get_async_db),
+    org_service: OrgService = Depends(get_org_service),
+    membership_service: MembershipService = Depends(get_membership_service),
+    audit: AuditEmitter = Depends(get_audit),
 ) -> None:
     """Delete organization. Requires owner role."""
-    await _require_org_role(org_id, db, user.id, {ORG_ROLE_OWNER})
+    await _require_org_role(membership_service, org_id, user.id, {ORG_ROLE_OWNER})
 
-    org_service = OrgService(db)
     success = await org_service.delete_org(org_id)
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organization not found",
-        )
+        raise_not_found("Organization")
+
+    await audit.emit("auth.org_deleted", actor_id=user.id, target_type="org", target_id=org_id)
 
 
 # =============================================================================
@@ -203,14 +235,11 @@ async def delete_org(
 async def list_members(
     org_id: int,
     user=Depends(_get_current_user),
-    db: AsyncSession = Depends(get_async_db),
+    membership_service: MembershipService = Depends(get_membership_service),
 ) -> list[MemberResponse]:
     """List organization members. Requires membership."""
-    await _require_org_role(
-        org_id, db, user.id, {ORG_ROLE_OWNER, ORG_ROLE_ADMIN, "member"}
-    )
+    await _require_member_access(membership_service, org_id, user.id)
 
-    membership_service = MembershipService(db)
     members = await membership_service.list_org_members(org_id)
     return [MemberResponse.model_validate(m) for m in members]
 
@@ -225,12 +254,11 @@ async def add_member(
     user_id: int,
     role: str = "member",
     user=Depends(_get_current_user),
-    db: AsyncSession = Depends(get_async_db),
+    membership_service: MembershipService = Depends(get_membership_service),
+    audit: AuditEmitter = Depends(get_audit),
 ) -> MemberResponse:
     """Add a member to organization. Requires admin or owner role."""
-    await _require_org_role(org_id, db, user.id, {ORG_ROLE_ADMIN, ORG_ROLE_OWNER})
-
-    membership_service = MembershipService(db)
+    await _require_admin_access(membership_service, org_id, user.id)
 
     # Check if already a member
     existing = await membership_service.get_member(org_id, user_id)
@@ -241,6 +269,7 @@ async def add_member(
         )
 
     member = await membership_service.add_member(org_id, user_id, role)
+    await audit.emit("auth.member_added", actor_id=user.id, org_id=org_id, target_type="user", target_id=user_id)
     return MemberResponse.model_validate(member)
 
 
@@ -253,19 +282,16 @@ async def bulk_add_members(
     org_id: int,
     body: BulkAddMembersRequest,
     user=Depends(_get_current_user),
-    db: AsyncSession = Depends(get_async_db),
+    membership_service: MembershipService = Depends(get_membership_service),
+    audit: AuditEmitter = Depends(get_audit),
 ) -> list[MemberResponse]:
     """Bulk add members to organization. Requires admin or owner role."""
-    await _require_org_role(org_id, db, user.id, {ORG_ROLE_ADMIN, ORG_ROLE_OWNER})
+    await _require_admin_access(membership_service, org_id, user.id)
 
-    if body.role not in VALID_ORG_ROLES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid role: {body.role}. Valid: {sorted(VALID_ORG_ROLES)}",
-        )
+    validate_role(body.role, VALID_ORG_ROLES)
 
-    membership_service = MembershipService(db)
     added = await membership_service.bulk_add_members(org_id, body.user_ids, body.role)
+    await audit.emit("auth.members_bulk_added", actor_id=user.id, org_id=org_id, detail=f"Added {len(added)} members")
     return [MemberResponse.model_validate(m) for m in added]
 
 
@@ -275,18 +301,18 @@ async def update_member_role(
     user_id: int,
     role: str,
     user=Depends(_get_current_user),
-    db: AsyncSession = Depends(get_async_db),
+    membership_service: MembershipService = Depends(get_membership_service),
+    audit: AuditEmitter = Depends(get_audit),
 ) -> MemberResponse:
     """Update a member's role. Requires admin or owner role."""
-    await _require_org_role(org_id, db, user.id, {ORG_ROLE_ADMIN, ORG_ROLE_OWNER})
+    await _require_admin_access(membership_service, org_id, user.id)
 
-    membership_service = MembershipService(db)
+    validate_role(role, VALID_ORG_ROLES)
+
     member = await membership_service.update_member_role(org_id, user_id, role)
     if not member:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Member not found",
-        )
+        raise_not_found("Member")
+    await audit.emit("auth.member_role_updated", actor_id=user.id, org_id=org_id, target_type="user", target_id=user_id, detail=f"Role changed to {role}")
     return MemberResponse.model_validate(member)
 
 
@@ -297,19 +323,16 @@ async def remove_member(
     org_id: int,
     user_id: int,
     user=Depends(_get_current_user),
-    db: AsyncSession = Depends(get_async_db),
+    membership_service: MembershipService = Depends(get_membership_service),
+    audit: AuditEmitter = Depends(get_audit),
 ) -> None:
     """Remove a member from organization. Owner cannot be removed."""
-    await _require_org_role(org_id, db, user.id, {ORG_ROLE_ADMIN, ORG_ROLE_OWNER})
+    await _require_admin_access(membership_service, org_id, user.id)
 
     # Prevent removing the owner
-    membership_service = MembershipService(db)
     target = await membership_service.get_member(org_id, user_id)
     if not target:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Member not found",
-        )
+        raise_not_found("Member")
     if target.role == ORG_ROLE_OWNER:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -317,6 +340,55 @@ async def remove_member(
         )
 
     await membership_service.remove_member(org_id, user_id)
+    await audit.emit("auth.member_removed", actor_id=user.id, org_id=org_id, target_type="user", target_id=user_id)
+
+
+# =============================================================================
+# Invitations
+# =============================================================================
+
+
+@router.post(
+    "/{org_id}/invites",
+    response_model=InviteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_invite(
+    org_id: int,
+    body: InviteCreate,
+    user=Depends(_get_current_user),
+    membership_service: MembershipService = Depends(get_membership_service),
+    invite_service: InviteService = Depends(get_invite_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> InviteResponse:
+    """Invite a user by email. Requires admin or owner role."""
+    await _require_admin_access(membership_service, org_id, user.id)
+
+    try:
+        invite = await invite_service.create_invite(
+            org_id, body.email, body.role, user.id
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    await audit.emit("auth.invite_created", actor_id=user.id, org_id=org_id, detail=body.email)
+    return InviteResponse.model_validate(invite)
+
+
+@router.get("/{org_id}/invites", response_model=list[InviteResponse])
+async def list_invites(
+    org_id: int,
+    user=Depends(_get_current_user),
+    membership_service: MembershipService = Depends(get_membership_service),
+    invite_service: InviteService = Depends(get_invite_service),
+) -> list[InviteResponse]:
+    """List pending invites for an organization. Requires admin or owner role."""
+    await _require_admin_access(membership_service, org_id, user.id)
+
+    invites = await invite_service.list_pending_invites(org_id)
+    return [InviteResponse.model_validate(inv) for inv in invites]
 {% else %}
 # Organization endpoints not included (auth_level != org)
 {% endif %}

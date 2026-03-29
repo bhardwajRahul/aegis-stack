@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.models.user import User
 from app.models.org import (
     VALID_ORG_ROLES,
     Organization,
@@ -71,6 +72,24 @@ class MembershipService:
         await self.db.refresh(member)
         return member
 
+    async def transfer_ownership(
+        self, org_id: int, current_owner_id: int, new_owner_id: int
+    ) -> None:
+        """Transfer org ownership. New owner must be an existing member."""
+        new_owner = await self.get_member(org_id, new_owner_id)
+        if not new_owner:
+            raise ValueError("Target user is not a member of this organization")
+
+        current_owner = await self.get_member(org_id, current_owner_id)
+        if not current_owner:
+            raise ValueError("Current owner membership not found")
+
+        new_owner.role = "owner"
+        current_owner.role = "admin"
+        self.db.add(new_owner)
+        self.db.add(current_owner)
+        await self.db.commit()
+
     async def bulk_add_members(
         self,
         org_id: int,
@@ -121,6 +140,33 @@ class MembershipService:
         )
         result = await self.db.exec(statement)
         return list(result.all())
+
+    async def list_org_members_with_details(
+        self, org_id: int
+    ) -> list[dict[str, int | str | None]]:
+        """List org members with user details (email, name). Single JOIN query."""
+        statement = (
+            select(
+                OrganizationMember.user_id,
+                User.email,
+                User.full_name,
+                OrganizationMember.role,
+                OrganizationMember.joined_at,
+            )
+            .join(User, OrganizationMember.user_id == User.id)
+            .where(OrganizationMember.organization_id == org_id)
+        )
+        result = await self.db.exec(statement)
+        return [
+            {
+                "user_id": row.user_id,
+                "email": row.email,
+                "full_name": row.full_name,
+                "role": row.role,
+                "joined_at": row.joined_at,
+            }
+            for row in result.all()
+        ]
 
     async def list_user_orgs(self, user_id: int) -> list[Organization]:
         """List all organizations a user belongs to."""

@@ -15,6 +15,7 @@ from app.models.org import (
     ORG_ROLE_OWNER,
 )
 from app.models.user import UserCreate
+from app.services.auth.invite_service import InviteService
 from app.services.auth.membership_service import MembershipService
 from app.services.auth.org_service import OrgService
 from app.services.auth.user_service import UserService
@@ -385,6 +386,115 @@ class TestMembershipServiceIntegration:
         added = await membership_service.bulk_add_members(org.id, all_ids)
 
         assert added == []
+
+
+class TestInviteServiceIntegration:
+    """Test invite service operations (AUTH-013)."""
+
+    async def _create_user(self, db: AsyncSession, email: str) -> "User":
+        from app.models.user import User
+        user_service = UserService(db)
+        return await user_service.create_user(
+            UserCreate(email=email, full_name="Test", password="password123")
+        )
+
+    async def _create_org(self, db: AsyncSession, slug: str) -> Organization:
+        org_service = OrgService(db)
+        return await org_service.create_org(OrgCreate(name=slug.title(), slug=slug))
+
+    @pytest.mark.asyncio
+    async def test_invite_new_user(self, async_db_session: AsyncSession) -> None:
+        """Inviting an email that doesn't exist creates a pending invite."""
+        owner = await self._create_user(async_db_session, "inv-owner@test.com")
+        org = await self._create_org(async_db_session, "inv-test")
+
+        invite_service = InviteService(async_db_session)
+        invite = await invite_service.create_invite(
+            org.id, "newuser@test.com", "member", owner.id
+        )
+
+        assert invite.status == "pending"
+        assert invite.email == "newuser@test.com"
+        assert invite.organization_id == org.id
+
+    @pytest.mark.asyncio
+    async def test_invite_existing_user_auto_adds(self, async_db_session: AsyncSession) -> None:
+        """Inviting an existing user immediately adds them to the org."""
+        owner = await self._create_user(async_db_session, "inv-owner2@test.com")
+        target = await self._create_user(async_db_session, "existing@test.com")
+        org = await self._create_org(async_db_session, "inv-existing")
+
+        invite_service = InviteService(async_db_session)
+        invite = await invite_service.create_invite(
+            org.id, "existing@test.com", "admin", owner.id
+        )
+
+        assert invite.status == "accepted"
+
+        membership_service = MembershipService(async_db_session)
+        member = await membership_service.get_member(org.id, target.id)
+        assert member is not None
+        assert member.role == "admin"
+
+    @pytest.mark.asyncio
+    async def test_pending_invite_accepted_on_registration(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Pending invite is accepted when the user registers."""
+        owner = await self._create_user(async_db_session, "inv-owner3@test.com")
+        org = await self._create_org(async_db_session, "inv-register")
+
+        invite_service = InviteService(async_db_session)
+        await invite_service.create_invite(
+            org.id, "future@test.com", "member", owner.id
+        )
+
+        new_user = await self._create_user(async_db_session, "future@test.com")
+        count = await invite_service.accept_pending_invites("future@test.com", new_user.id)
+
+        assert count == 1
+
+        membership_service = MembershipService(async_db_session)
+        member = await membership_service.get_member(org.id, new_user.id)
+        assert member is not None
+        assert member.role == "member"
+
+    @pytest.mark.asyncio
+    async def test_duplicate_invite_raises(self, async_db_session: AsyncSession) -> None:
+        """Cannot create duplicate pending invite for same email + org."""
+        owner = await self._create_user(async_db_session, "inv-owner4@test.com")
+        org = await self._create_org(async_db_session, "inv-dup")
+
+        invite_service = InviteService(async_db_session)
+        await invite_service.create_invite(org.id, "dup@test.com", "member", owner.id)
+
+        with pytest.raises(ValueError, match="Pending invite already exists"):
+            await invite_service.create_invite(org.id, "dup@test.com", "member", owner.id)
+
+    @pytest.mark.asyncio
+    async def test_list_pending_invites(self, async_db_session: AsyncSession) -> None:
+        """List only pending invites for an org."""
+        owner = await self._create_user(async_db_session, "inv-owner5@test.com")
+        org = await self._create_org(async_db_session, "inv-list")
+
+        invite_service = InviteService(async_db_session)
+        await invite_service.create_invite(org.id, "pending1@test.com", "member", owner.id)
+        await invite_service.create_invite(org.id, "pending2@test.com", "admin", owner.id)
+
+        pending = await invite_service.list_pending_invites(org.id)
+        assert len(pending) == 2
+        emails = {inv.email for inv in pending}
+        assert "pending1@test.com" in emails
+        assert "pending2@test.com" in emails
+
+    @pytest.mark.asyncio
+    async def test_no_pending_invites_returns_zero(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """accept_pending_invites returns 0 when no invites exist."""
+        invite_service = InviteService(async_db_session)
+        count = await invite_service.accept_pending_invites("nobody@test.com", 999)
+        assert count == 0
 {% else %}
 # Organization tests not included (auth_level != org)
 {% endif %}

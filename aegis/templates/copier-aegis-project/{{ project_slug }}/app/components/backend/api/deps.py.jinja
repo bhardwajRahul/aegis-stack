@@ -3,12 +3,23 @@
 
 from collections.abc import AsyncGenerator, Generator
 
-from app.core.db import AsyncSessionLocal, SessionLocal
+from fastapi import Depends
 from sqlmodel import Session
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.audit import AuditEmitter, audit_emitter
+from app.core.db import AsyncSessionLocal, SessionLocal
+{% if include_auth %}
+from app.services.auth.user_service import UserService
+{% endif %}
+{% if include_auth_org %}
+from app.services.auth.invite_service import InviteService
+from app.services.auth.membership_service import MembershipService
+from app.services.auth.org_service import OrgService
+{% endif %}
 
-def get_db() -> Generator[Session, None, None]:
+
+def get_db() -> Generator[Session]:
     """
     Database dependency that provides a database session.
 
@@ -32,7 +43,7 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
+async def get_async_db() -> AsyncGenerator[AsyncSession]:
     """
     Async database dependency that provides an async database session.
 
@@ -57,4 +68,41 @@ async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+{% if include_auth %}
+
+
+async def get_user_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> UserService:
+    """Provide a UserService instance."""
+    return UserService(db)
+{% endif %}
+{% if include_auth_org %}
+
+
+async def get_org_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> OrgService:
+    """Provide an OrgService instance."""
+    return OrgService(db)
+
+
+async def get_membership_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> MembershipService:
+    """Provide a MembershipService instance."""
+    return MembershipService(db)
+
+
+async def get_invite_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> InviteService:
+    """Provide an InviteService instance."""
+    return InviteService(db)
+{% endif %}
+
+
+def get_audit() -> AuditEmitter:
+    """Provide the audit emitter singleton."""
+    return audit_emitter
 {% endif %}
