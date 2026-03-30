@@ -11,6 +11,7 @@ from aegis.core.migration_generator import (
     AI_MIGRATION,
     AUTH_MIGRATION,
     AUTH_RBAC_MIGRATION,
+    AUTH_TOKENS_MIGRATION,
     MIGRATION_SPECS,
     ORG_MIGRATION,
     VOICE_MIGRATION,
@@ -35,13 +36,13 @@ class TestGetServicesNeedingMigrations:
         """Test auth service needs migrations."""
         context = {"include_auth": True, "include_ai": False, "ai_backend": "memory"}
         result = get_services_needing_migrations(context)
-        assert result == ["auth"]
+        assert result == ["auth", "auth_tokens"]
 
     def test_auth_with_yes_string(self) -> None:
         """Test auth service with 'yes' string (cookiecutter format)."""
         context = {"include_auth": "yes", "include_ai": "no", "ai_backend": "memory"}
         result = get_services_needing_migrations(context)
-        assert result == ["auth"]
+        assert result == ["auth", "auth_tokens"]
 
     def test_ai_with_sqlite(self) -> None:
         """Test AI service with sqlite backend needs migrations."""
@@ -59,7 +60,7 @@ class TestGetServicesNeedingMigrations:
         """Test both auth and AI services need migrations."""
         context = {"include_auth": True, "include_ai": True, "ai_backend": "sqlite"}
         result = get_services_needing_migrations(context)
-        assert result == ["auth", "ai"]
+        assert result == ["auth", "auth_tokens", "ai"]
 
     def test_neither_service(self) -> None:
         """Test no services need migrations."""
@@ -404,6 +405,8 @@ class TestMigrationSpecs:
         assert "hashed_password" in column_names
         assert "is_verified" in column_names
         assert "last_login" in column_names
+        assert "failed_login_attempts" in column_names
+        assert "locked_until" in column_names
         # Only role is in RBAC migration
         assert "role" not in column_names
 
@@ -455,9 +458,9 @@ class TestOrgMigrationSpec:
         assert "auth_org" in MIGRATION_SPECS
         assert ORG_MIGRATION.service_name == "auth_org"
 
-    def test_org_has_two_tables(self) -> None:
-        """Organization migration should have two tables."""
-        assert len(ORG_MIGRATION.tables) == 2
+    def test_org_has_three_tables(self) -> None:
+        """Organization migration should have three tables."""
+        assert len(ORG_MIGRATION.tables) == 3
 
     def test_organization_table_columns(self) -> None:
         """Organization table should have expected columns."""
@@ -493,6 +496,137 @@ class TestOrgMigrationSpec:
         ref_tables = {fk.ref_table for fk in member_table.foreign_keys}
         assert "organization" in ref_tables
         assert "user" in ref_tables
+
+
+class TestAuthLockoutColumns:
+    """Test auth migration lockout columns."""
+
+    def test_auth_migration_has_lockout_columns(self) -> None:
+        """Verify failed_login_attempts and locked_until in user table columns."""
+        column_names = [col.name for col in AUTH_MIGRATION.tables[0].columns]
+        assert "failed_login_attempts" in column_names
+        assert "locked_until" in column_names
+
+        # Check types and defaults
+        lockout_col = next(
+            c
+            for c in AUTH_MIGRATION.tables[0].columns
+            if c.name == "failed_login_attempts"
+        )
+        assert lockout_col.type == "sa.Integer()"
+        assert lockout_col.nullable is False
+        assert lockout_col.default == "0"
+
+        locked_col = next(
+            c for c in AUTH_MIGRATION.tables[0].columns if c.name == "locked_until"
+        )
+        assert locked_col.type == "sa.DateTime()"
+        assert locked_col.nullable is True
+
+
+class TestAuthTokensMigrationSpec:
+    """Test auth_tokens migration specification."""
+
+    def test_auth_tokens_spec_exists(self) -> None:
+        """Verify auth_tokens is in MIGRATION_SPECS with 2 tables."""
+        assert "auth_tokens" in MIGRATION_SPECS
+        assert AUTH_TOKENS_MIGRATION.service_name == "auth_tokens"
+        assert len(AUTH_TOKENS_MIGRATION.tables) == 2
+        table_names = [t.name for t in AUTH_TOKENS_MIGRATION.tables]
+        assert "password_reset_token" in table_names
+        assert "email_verification_token" in table_names
+
+    def test_auth_tokens_password_reset_table(self) -> None:
+        """Verify password_reset_token table has correct columns."""
+        table = next(
+            t for t in AUTH_TOKENS_MIGRATION.tables if t.name == "password_reset_token"
+        )
+        column_names = [col.name for col in table.columns]
+        assert "id" in column_names
+        assert "user_id" in column_names
+        assert "token" in column_names
+        assert "created_at" in column_names
+        assert "used" in column_names
+
+    def test_auth_tokens_email_verification_table(self) -> None:
+        """Verify email_verification_token table has correct columns."""
+        table = next(
+            t
+            for t in AUTH_TOKENS_MIGRATION.tables
+            if t.name == "email_verification_token"
+        )
+        column_names = [col.name for col in table.columns]
+        assert "id" in column_names
+        assert "user_id" in column_names
+        assert "token" in column_names
+        assert "created_at" in column_names
+        assert "used" in column_names
+
+
+class TestOrgInviteTable:
+    """Test org_invite table in organization migration."""
+
+    def test_org_invite_table_columns(self) -> None:
+        """Verify org_invite table has correct columns."""
+        invite_table = next(t for t in ORG_MIGRATION.tables if t.name == "org_invite")
+        column_names = [col.name for col in invite_table.columns]
+        assert "id" in column_names
+        assert "organization_id" in column_names
+        assert "email" in column_names
+        assert "role" in column_names
+        assert "invited_by" in column_names
+        assert "status" in column_names
+        assert "token" in column_names
+        assert "created_at" in column_names
+
+    def test_org_invite_foreign_keys(self) -> None:
+        """Verify org_invite has FKs to organization and user."""
+        invite_table = next(t for t in ORG_MIGRATION.tables if t.name == "org_invite")
+        assert len(invite_table.foreign_keys) == 2
+        ref_tables = {fk.ref_table for fk in invite_table.foreign_keys}
+        assert "organization" in ref_tables
+        assert "user" in ref_tables
+
+
+class TestGenerateAuthTokensMigration:
+    """Test auth_tokens migration file generation."""
+
+    def test_generates_auth_tokens_migration(self, tmp_path: Path) -> None:
+        """Generate auth_tokens migration, verify file content has both tables."""
+        result = generate_migration(tmp_path, "auth_tokens")
+
+        assert result is not None
+        assert result.exists()
+        assert result.name == "001_auth_tokens.py"
+
+        content = result.read_text()
+        assert "'password_reset_token'" in content
+        assert "'email_verification_token'" in content
+        assert "op.create_table" in content
+        assert "op.create_index" in content
+
+    def test_auth_rbac_org_full_chain(self, tmp_path: Path) -> None:
+        """Generate auth + auth_tokens + auth_rbac + auth_org, verify 4 files with correct revision chain."""
+        result = generate_migrations_for_services(
+            tmp_path, ["auth", "auth_tokens", "auth_rbac", "auth_org"]
+        )
+
+        assert len(result) == 4
+        assert result[0].name == "001_auth.py"
+        assert result[1].name == "002_auth_tokens.py"
+        assert result[2].name == "003_auth_rbac.py"
+        assert result[3].name == "004_auth_org.py"
+
+        # Verify revision chain
+        content_0 = result[0].read_text()
+        content_1 = result[1].read_text()
+        content_2 = result[2].read_text()
+        content_3 = result[3].read_text()
+
+        assert "down_revision = None" in content_0
+        assert "down_revision = '001'" in content_1
+        assert "down_revision = '002'" in content_2
+        assert "down_revision = '003'" in content_3
 
 
 class TestDataclasses:
@@ -657,7 +791,7 @@ class TestGetServicesNeedingMigrationsVoice:
             "ai_voice": True,
         }
         result = get_services_needing_migrations(context)
-        assert result == ["auth", "ai", "ai_voice"]
+        assert result == ["auth", "auth_tokens", "ai", "ai_voice"]
 
 
 class TestGenerateVoiceMigration:

@@ -6,6 +6,53 @@ from pydantic import EmailStr
 from sqlmodel import Field, SQLModel
 
 
+class PasswordResetToken(SQLModel, table=True):
+    """Token for password reset requests."""
+
+    __tablename__ = "password_reset_token"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    token: str = Field(unique=True, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+    used: bool = Field(default=False)
+
+
+class EmailVerificationToken(SQLModel, table=True):
+    """Token for email verification after registration."""
+
+    __tablename__ = "email_verification_token"
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    token: str = Field(unique=True, index=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+    used: bool = Field(default=False)
+
+
+class EmailVerifyRequest(SQLModel):
+    """Request body for email verification endpoint."""
+
+    token: str
+
+
+class PasswordResetRequest(SQLModel):
+    """Request body for password reset request endpoint."""
+
+    email: str
+
+
+class PasswordResetConfirm(SQLModel):
+    """Request body for password reset confirmation endpoint."""
+
+    token: str
+    new_password: str = Field(min_length=8)
+
+
 class UserBase(SQLModel):
     """Base user model with shared fields."""
 
@@ -28,6 +75,8 @@ class User(UserBase, table=True):
         default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
     updated_at: datetime | None = None
+    failed_login_attempts: int = Field(default=0)
+    locked_until: datetime | None = None
 
 
 class UserCreate(UserBase):

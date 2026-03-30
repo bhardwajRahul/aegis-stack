@@ -14,24 +14,25 @@ from app.components.backend.api.deps import get_async_db
 from app.core.security import VALID_ROLES
 {% endif %}
 
-# Synthetic user returned when AUTH_ENABLED=false (dev mode)
-_DEV_USER = User(
-    id=0,
-    email="dev@localhost",
-    full_name="Development User",
-    hashed_password="",
-    is_active=True,
-    is_verified=True,
+def _build_dev_user() -> User:
+    """Build a synthetic dev user with role from settings."""
+    return User(
+        id=0,
+        email="dev@localhost.dev",
+        full_name="Development User",
+        hashed_password="",
+        is_active=True,
+        is_verified=True,
 {% if include_auth_rbac %}
-    role="admin",
+        role=settings.DEV_USER_ROLE,
 {% endif %}
-)
+    )
 
 
 async def get_current_user_from_token(token: str | None, db: AsyncSession) -> User:
     """Get current user from JWT token."""
     if not settings.AUTH_ENABLED:
-        return _DEV_USER
+        return _build_dev_user()
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -46,6 +47,14 @@ async def get_current_user_from_token(token: str | None, db: AsyncSession) -> Us
     payload = verify_token(token)
     if payload is None:
         raise credentials_exception
+
+    # Check if token has been revoked (graceful: skip if no jti present)
+    jti = payload.get("jti")
+    if jti is not None:
+        from app.services.auth.token_blacklist import token_blacklist
+
+        if token_blacklist.is_revoked(jti):
+            raise credentials_exception
 
     # Get user email from token
     email = payload.get("sub")
@@ -92,7 +101,7 @@ def require_role(*required_roles: str):
         db: AsyncSession = Depends(get_async_db),
     ) -> User:
         if not settings.AUTH_ENABLED:
-            return _DEV_USER
+            return _build_dev_user()
         user = await get_current_user_from_token(token, db)
         if user.role not in required_roles:
             raise HTTPException(
