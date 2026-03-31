@@ -14,7 +14,17 @@ from ..cli.validation import (
     validate_copier_project,
     validate_git_repository,
 )
-from ..constants import AnswerKeys, ComponentNames, Messages, StorageBackends
+from ..constants import (
+    AnswerKeys,
+    AuthLevels,
+    ComponentNames,
+    Messages,
+    StorageBackends,
+)
+from ..core.auth_service_parser import (
+    is_auth_service_with_options,
+    parse_auth_service_config,
+)
 from ..core.component_utils import (
     extract_base_component_name,
     extract_base_service_name,
@@ -26,6 +36,7 @@ from ..core.migration_generator import (
     MIGRATION_SPECS,
     bootstrap_alembic,
     generate_migration,
+    get_services_needing_migrations,
     service_has_migration,
 )
 from ..core.project_map import render_project_map
@@ -162,6 +173,24 @@ def add_service_command(
         base_service = service_base_map[service]
         include_key = AnswerKeys.include_key(base_service)
         if existing_answers.get(include_key) is True:
+            # Special case: auth level upgrades (basic → rbac → org)
+            if base_service == AnswerKeys.SERVICE_AUTH and is_auth_service_with_options(
+                service
+            ):
+                auth_config = parse_auth_service_config(service)
+                current_level = existing_answers.get(
+                    AnswerKeys.AUTH_LEVEL, AuthLevels.BASIC
+                )
+                level_order = {
+                    AuthLevels.BASIC: 0,
+                    AuthLevels.RBAC: 1,
+                    AuthLevels.ORG: 2,
+                }
+                if level_order.get(auth_config.level, 0) > level_order.get(
+                    current_level, 0
+                ):
+                    # Upgrading auth level — don't skip
+                    continue
             already_enabled.append(service)
 
     if already_enabled:
@@ -362,6 +391,18 @@ def add_service_command(
             # Get base service name (strips variant syntax like [langchain,sqlite])
             base_service = service_base_map[service]
 
+            # For auth service, pass auth level data
+            if base_service == AnswerKeys.SERVICE_AUTH and is_auth_service_with_options(
+                service
+            ):
+                auth_config = parse_auth_service_config(service)
+                service_data[AnswerKeys.AUTH_LEVEL] = auth_config.level
+                service_data[AnswerKeys.AUTH_RBAC] = auth_config.level in (
+                    AuthLevels.RBAC,
+                    AuthLevels.ORG,
+                )
+                service_data[AnswerKeys.AUTH_ORG] = auth_config.level == AuthLevels.ORG
+
             # For AI service, use the captured configuration
             if base_service == AnswerKeys.SERVICE_AI:
                 # Use providers from interactive config, or default to openai
@@ -435,6 +476,21 @@ def add_service_command(
 
             if not service_has_migration(target_path, base_service):
                 migration_path = generate_migration(target_path, base_service)
+                if migration_path:
+                    typer.secho(
+                        f"   {t('add_service.generated_migration', name=migration_path.name)}",
+                        fg="green",
+                    )
+
+        # For auth level upgrades, generate any missing level-specific migrations
+        # (e.g., auth_rbac, auth_org, auth_tokens)
+        updated_answers = updater.answers
+        needed_migrations = get_services_needing_migrations(updated_answers)
+        for migration_service in needed_migrations:
+            if migration_service in MIGRATION_SPECS and not service_has_migration(
+                target_path, migration_service
+            ):
+                migration_path = generate_migration(target_path, migration_service)
                 if migration_path:
                     typer.secho(
                         f"   {t('add_service.generated_migration', name=migration_path.name)}",

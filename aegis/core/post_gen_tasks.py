@@ -129,6 +129,13 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             # Frontend dashboard files
             "app/components/frontend/dashboard/cards/auth_card.py",
             "app/components/frontend/dashboard/modals/auth_modal.py",
+            "app/components/frontend/dashboard/modals/auth_users_tab.py",
+            # Org-level files (cleaned up by post_gen if org not selected)
+            "app/models/org.py",
+            "app/components/backend/api/orgs",
+            "app/components/frontend/dashboard/modals/auth_orgs_tab.py",
+            "tests/services/test_org_integration.py",
+            "tests/api/test_org_endpoints.py",
         ],
         AnswerKeys.SERVICE_AI: [
             "app/components/backend/api/ai",

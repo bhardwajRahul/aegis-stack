@@ -38,6 +38,18 @@ REGENERATE_ON_COMPONENT_CHANGE = {
     "app/components/backend/api/deps.py",
 }
 
+# Files with Jinja conditionals that depend on auth level (basic/rbac/org).
+# Must be regenerated when upgrading auth level.
+REGENERATE_ON_AUTH_LEVEL_CHANGE = {
+    "app/models/user.py",
+    "app/core/security.py",
+    "app/services/auth/auth_service.py",
+    "app/components/backend/api/auth/router.py",
+    "app/components/backend/api/deps.py",
+    "app/components/frontend/dashboard/modals/auth_modal.py",
+    "app/components/frontend/dashboard/modals/auth_users_tab.py",
+}
+
 
 class UpdateResult(BaseModel):
     """Result of a component update operation."""
@@ -142,7 +154,14 @@ class ManualUpdater:
             # Check if already enabled
             include_key = AnswerKeys.include_key(component)
             if self.answers.get(include_key) is True:
-                raise ValueError(f"Component '{component}' is already enabled")
+                # Allow auth level upgrades (basic → rbac → org)
+                is_auth_upgrade = (
+                    component == AnswerKeys.SERVICE_AUTH
+                    and additional_data
+                    and AnswerKeys.AUTH_LEVEL in additional_data
+                )
+                if not is_auth_upgrade:
+                    raise ValueError(f"Component '{component}' is already enabled")
 
             # Merge additional data
             update_data = additional_data or {}
@@ -204,7 +223,15 @@ class ManualUpdater:
                     # Check for conflicts
                     if output_path.exists():
                         # Some files have conditional content and must be regenerated
-                        if relative_path in REGENERATE_ON_COMPONENT_CHANGE:
+                        is_auth_upgrade = (
+                            additional_data
+                            and AnswerKeys.AUTH_LEVEL in additional_data
+                            and relative_path in REGENERATE_ON_AUTH_LEVEL_CHANGE
+                        )
+                        if (
+                            relative_path in REGENERATE_ON_COMPONENT_CHANGE
+                            or is_auth_upgrade
+                        ):
                             output_path.write_text(content)
                             verbose_print(f"   Regenerated: {relative_path}")
                             files_modified.append(relative_path)
