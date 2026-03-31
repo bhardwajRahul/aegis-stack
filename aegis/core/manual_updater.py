@@ -42,12 +42,21 @@ REGENERATE_ON_COMPONENT_CHANGE = {
 # Must be regenerated when upgrading auth level.
 REGENERATE_ON_AUTH_LEVEL_CHANGE = {
     "app/models/user.py",
+    "app/models/org.py",
     "app/core/security.py",
     "app/services/auth/auth_service.py",
+    "app/services/auth/org_service.py",
+    "app/services/auth/membership_service.py",
+    "app/services/auth/invite_service.py",
     "app/components/backend/api/auth/router.py",
+    "app/components/backend/api/orgs/router.py",
+    "app/components/backend/api/orgs/__init__.py",
     "app/components/backend/api/deps.py",
     "app/components/frontend/dashboard/modals/auth_modal.py",
     "app/components/frontend/dashboard/modals/auth_users_tab.py",
+    "app/components/frontend/dashboard/modals/auth_orgs_tab.py",
+    "tests/services/test_org_integration.py",
+    "tests/api/test_org_endpoints.py",
 }
 
 

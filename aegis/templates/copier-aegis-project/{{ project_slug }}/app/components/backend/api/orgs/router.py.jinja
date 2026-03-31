@@ -27,10 +27,12 @@ from app.models.org import (
     BulkAddMembersRequest,
     InviteCreate,
     InviteResponse,
+    MemberDetailResponse,
     MemberResponse,
     OrganizationMember,
     OrgCreate,
     OrgResponse,
+    TransferOwnershipRequest,
     UserMembershipResponse,
 )
 from app.services.auth.auth_service import get_current_user_from_token{% if include_auth_rbac %}, require_role{% endif %}
@@ -226,6 +228,28 @@ async def delete_org(
     await audit.emit("auth.org_deleted", actor_id=user.id, target_type="org", target_id=org_id)
 
 
+@router.post("/{org_id}/transfer-ownership")
+async def transfer_ownership(
+    org_id: int,
+    body: TransferOwnershipRequest,
+    user=Depends(_get_current_user),
+    membership_service: MembershipService = Depends(get_membership_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> dict[str, str]:
+    """Transfer org ownership to another member. Requires owner role."""
+    await _require_org_role(
+        membership_service, org_id, user.id, {ORG_ROLE_OWNER}
+    )
+    if body.user_id == user.id:
+        raise_bad_request("Cannot transfer ownership to yourself")
+    try:
+        await membership_service.transfer_ownership(org_id, user.id, body.user_id)
+    except ValueError as e:
+        raise_bad_request(str(e))
+    await audit.emit("auth.org_ownership_transferred", actor_id=user.id, org_id=org_id, target_type="user", target_id=body.user_id)
+    return {"detail": "Ownership transferred"}
+
+
 # =============================================================================
 # Membership Management
 # =============================================================================
@@ -242,6 +266,19 @@ async def list_members(
 
     members = await membership_service.list_org_members(org_id)
     return [MemberResponse.model_validate(m) for m in members]
+
+
+@router.get("/{org_id}/members/details", response_model=list[MemberDetailResponse])
+async def list_member_details(
+    org_id: int,
+    user=Depends(_get_current_user),
+    membership_service: MembershipService = Depends(get_membership_service),
+) -> list[MemberDetailResponse]:
+    """List org members with user details (email, name). Requires membership."""
+    await _require_member_access(membership_service, org_id, user.id)
+
+    rows = await membership_service.list_org_members_with_details(org_id)
+    return [MemberDetailResponse(**row) for row in rows]
 
 
 @router.post(

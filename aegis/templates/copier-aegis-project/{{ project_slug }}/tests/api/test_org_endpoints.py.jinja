@@ -390,6 +390,144 @@ class TestInviteEndpoints:
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.usefixtures("_enable_auth")
+class TestMemberDetails:
+    """Test GET /orgs/{org_id}/members/details."""
+
+    @pytest.mark.asyncio
+    async def test_org_admin_can_get_member_details(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession,
+        setup_org_with_owner, create_user,
+    ) -> None:
+        """Org admin can see member emails and names."""
+        _, org, token = await setup_org_with_owner(
+            email="det-owner@test.com", slug="det-org"
+        )
+        member = await create_user("det-member@test.com")
+        membership_service = MembershipService(async_db_session)
+        await membership_service.add_member(org.id, member.id)
+
+        response = async_client_with_db.get(
+            f"/api/v1/orgs/{org.id}/members/details",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data) >= 2
+        emails = {m["email"] for m in data}
+        assert "det-member@test.com" in emails
+
+    @pytest.mark.asyncio
+    async def test_non_member_cannot_get_member_details(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession,
+        setup_org_with_owner, create_user_with_token,
+    ) -> None:
+        """Non-member cannot see org member details."""
+        _, org, _ = await setup_org_with_owner(
+            email="det2-owner@test.com", slug="det2-org"
+        )
+        _, outsider_token = await create_user_with_token("det2-outsider@test.com")
+
+        response = async_client_with_db.get(
+            f"/api/v1/orgs/{org.id}/members/details",
+            headers={"Authorization": f"Bearer {outsider_token}"},
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.usefixtures("_enable_auth")
+class TestOwnershipTransfer:
+    """Test POST /orgs/{org_id}/transfer-ownership."""
+
+    @pytest.mark.asyncio
+    async def test_owner_can_transfer(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession,
+        setup_org_with_owner, create_user,
+    ) -> None:
+        """Owner transfers ownership to an admin member."""
+        owner, org, token = await setup_org_with_owner(
+            email="xfer-owner@test.com", slug="xfer-org"
+        )
+        admin = await create_user("xfer-admin@test.com")
+        membership_service = MembershipService(async_db_session)
+        await membership_service.add_member(org.id, admin.id, role="admin")
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/transfer-ownership",
+            json={"user_id": admin.id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        new_owner = await membership_service.get_member(org.id, admin.id)
+        assert new_owner.role == "owner"
+
+        old_owner = await membership_service.get_member(org.id, owner.id)
+        assert old_owner.role == "admin"
+
+    @pytest.mark.asyncio
+    async def test_non_owner_cannot_transfer(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession,
+        setup_org_with_owner, create_user_with_token,
+    ) -> None:
+        """Admin cannot transfer ownership."""
+        _, org, _ = await setup_org_with_owner(
+            email="xfer2-owner@test.com", slug="xfer2-org"
+        )
+        admin, admin_token = await create_user_with_token("xfer2-admin@test.com")
+        membership_service = MembershipService(async_db_session)
+        await membership_service.add_member(org.id, admin.id, role="admin")
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/transfer-ownership",
+            json={"user_id": admin.id},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_transfer_to_non_member_fails(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession,
+        setup_org_with_owner, create_user,
+    ) -> None:
+        """Cannot transfer to someone who isn't a member."""
+        _, org, token = await setup_org_with_owner(
+            email="xfer3-owner@test.com", slug="xfer3-org"
+        )
+        outsider = await create_user("xfer3-outsider@test.com")
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/transfer-ownership",
+            json={"user_id": outsider.id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    @pytest.mark.asyncio
+    async def test_self_transfer_fails(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession,
+        setup_org_with_owner,
+    ) -> None:
+        """Cannot transfer ownership to yourself."""
+        owner, org, token = await setup_org_with_owner(
+            email="xfer4-owner@test.com", slug="xfer4-org"
+        )
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/transfer-ownership",
+            json={"user_id": owner.id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "yourself" in response.json()["detail"].lower()
 {% else %}
 # Organization endpoint tests not included (auth_level != org)
 {% endif %}
