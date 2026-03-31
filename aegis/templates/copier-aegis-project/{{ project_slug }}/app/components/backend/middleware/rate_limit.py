@@ -55,11 +55,17 @@ class RateLimiter:
 
 # Shared instances for auth endpoints
 login_limiter = RateLimiter(
-    max_requests=5, window_seconds=60, trust_proxy_headers=settings.TRUST_PROXY_HEADERS
+    max_requests=settings.RATE_LIMIT_LOGIN_MAX,
+    window_seconds=settings.RATE_LIMIT_LOGIN_WINDOW,
+    trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
 )
 register_limiter = RateLimiter(
-    max_requests=3, window_seconds=60, trust_proxy_headers=settings.TRUST_PROXY_HEADERS
+    max_requests=settings.RATE_LIMIT_REGISTER_MAX,
+    window_seconds=settings.RATE_LIMIT_REGISTER_WINDOW,
+    trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
 )
 password_reset_limiter = RateLimiter(
-    max_requests=3, window_seconds=60, trust_proxy_headers=settings.TRUST_PROXY_HEADERS
+    max_requests=settings.RATE_LIMIT_REGISTER_MAX,
+    window_seconds=settings.RATE_LIMIT_REGISTER_WINDOW,
+    trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
 )
