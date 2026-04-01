@@ -469,6 +469,7 @@ MESSAGES: dict[str, str] = {
     ),
     "migrate.no_existing_migrations": "未找到现有迁移记录，请先运行 'make migrate'。",
     "migrate.checking_schema": "正在检查数据库结构与模型的一致性...",
+    "migrate.applying_pending": "正在先执行待处理的迁移...",
     "migrate.schema_up_to_date": "数据库结构已是最新，无需修复。",
     "migrate.found_differences": "发现 {count} 处结构差异：",
     "migrate.add_column": "新增列",
