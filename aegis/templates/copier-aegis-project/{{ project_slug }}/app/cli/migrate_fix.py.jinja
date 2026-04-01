@@ -77,12 +77,9 @@ def _get_additive_diffs() -> list[tuple]:
                 additive_diffs.append(diff)
 
         elif op_type == "add_table":
-            # Missing tables need a full migration — too complex for auto-fix
             table = diff[1]
             if table.name in managed_tables:
-                print(
-                    t("migrate.table_missing_warning", table=table.name)
-                )
+                additive_diffs.append(diff)
 
         # Skip: add_index, remove_table, remove_column, remove_index,
         # modify_type, modify_nullable, modify_default, etc.
@@ -122,7 +119,45 @@ def _generate_fix_migration(diffs: list[tuple]) -> Path | None:
     for diff in diffs:
         op_type = diff[0]
 
-        if op_type == "add_column":
+        if op_type == "add_table":
+            table = diff[1]
+            # Build CREATE TABLE with columns
+            cols = []
+            for col in table.columns:
+                col_str = f"sa.Column('{col.name}', {_sa_type_str(col.type)}"
+                col_str += f", nullable={col.nullable}"
+                if col.primary_key:
+                    col_str += ", primary_key=True"
+                if col.server_default is not None:
+                    col_str += f", server_default=sa.text('{col.server_default.arg}')"
+                col_str += ")"
+                cols.append(f"        {col_str},")
+            cols_block = "\n".join(cols)
+            upgrade_lines.append(
+                f"    op.create_table(\n        '{table.name}',\n{cols_block}\n    )"
+            )
+            # Add foreign keys
+            for fk in table.foreign_key_constraints:
+                local_cols = [c.name for c in fk.columns]
+                ref_table = fk.referred_table.name
+                ref_cols = [c.name for c in fk.referred_table.primary_key.columns]
+                fk_name = fk.name or f"fk_{table.name}_{'_'.join(local_cols)}_{ref_table}"
+                upgrade_lines.append(
+                    f"    op.create_foreign_key('{fk_name}', '{table.name}', '{ref_table}', {local_cols}, {ref_cols})"
+                )
+                downgrade_lines.append(
+                    f"    op.drop_constraint('{fk_name}', '{table.name}', type_='foreignkey')"
+                )
+            # Add indexes
+            for idx in table.indexes:
+                idx_cols = [c.name for c in idx.columns]
+                unique_str = ", unique=True" if idx.unique else ""
+                upgrade_lines.append(
+                    f"    op.create_index('{idx.name}', '{table.name}', {idx_cols}{unique_str})"
+                )
+            downgrade_lines.append(f"    op.drop_table('{table.name}')")
+
+        elif op_type == "add_column":
             table_name = diff[2]
             column = diff[3]
             col_str = f"sa.Column('{column.name}', {_sa_type_str(column.type)}"
@@ -212,10 +247,23 @@ def main() -> None:
     for diff in diffs:
         if diff[0] == "add_column":
             print(f"  + {t('migrate.add_column')} {diff[2]}.{diff[3].name}")
+        elif diff[0] == "add_table":
+            print(f"  + {t('migrate.add_table')} {diff[1].name}")
 
     migration_path = _generate_fix_migration(diffs)
     if migration_path:
         print(f"\n{t('migrate.generated_migration', name=migration_path.name)}")
+
+        # Prompt to apply
+        apply = input(f"\n{t('migrate.apply_now')} [Y/n] ").strip().lower()
+        if apply in ("", "y", "yes"):
+            from alembic import command as alembic_command
+
+            alembic_cfg = Config("alembic/alembic.ini")
+            alembic_command.upgrade(alembic_cfg, "head")
+            print(t("migrate.applied_migration"))
+        else:
+            print(t("migrate.apply_later"))
     else:
         print(f"\n{t('migrate.no_fixable_differences')}")
         sys.exit(0)

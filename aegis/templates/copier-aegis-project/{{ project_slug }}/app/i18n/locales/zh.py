@@ -472,7 +472,11 @@ MESSAGES: dict[str, str] = {
     "migrate.schema_up_to_date": "数据库结构已是最新，无需修复。",
     "migrate.found_differences": "发现 {count} 处结构差异：",
     "migrate.add_column": "新增列",
+    "migrate.add_table": "新增表",
     "migrate.generated_migration": "已生成修复迁移：{name}",
+    "migrate.apply_now": "是否立即执行迁移？",
+    "migrate.applied_migration": "迁移已成功执行",
+    "migrate.apply_later": "迁移已保存。可稍后运行 'make migrate' 执行",
     "migrate.no_fixable_differences": "没有可自动修复的差异。",
     # ── AI ───────────────────────────────────────────────────────────
     "ai.header_inline": "Illiana：",

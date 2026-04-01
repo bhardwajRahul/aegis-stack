@@ -473,7 +473,11 @@ MESSAGES: dict[str, str] = {
     "migrate.schema_up_to_date": "Schema is up to date. No fix needed.",
     "migrate.found_differences": "Found {count} schema differences:",
     "migrate.add_column": "ADD COLUMN",
+    "migrate.add_table": "ADD TABLE",
     "migrate.generated_migration": "Generated fix migration: {name}",
+    "migrate.apply_now": "Apply migration now?",
+    "migrate.applied_migration": "Migration applied successfully.",
+    "migrate.apply_later": "Migration saved. Run 'make migrate' to apply later.",
     "migrate.no_fixable_differences": "No fixable differences found.",
     # ── AI ───────────────────────────────────────────────────────────
     "ai.header_inline": "Illiana: ",
