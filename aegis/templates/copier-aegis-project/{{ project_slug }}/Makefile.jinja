@@ -189,11 +189,7 @@ migrate-history: ## Show migration history
 	@docker compose exec webserver uv run alembic -c alembic/alembic.ini history --verbose
 
 migrate-fix: ## Auto-fix schema mismatches after upgrade (safe: only adds, never drops)
-	@echo "Checking for schema mismatches..."
 	@docker compose exec webserver uv run python -m app.cli.migrate_fix
-	@echo "Applying fix migration..."
-	@docker compose exec webserver uv run alembic -c alembic/alembic.ini upgrade head
-	@echo "Schema fix complete"
 
 migrate-reset: ## Reset database (WARNING: destructive)
 	@echo "WARNING: This will destroy all data in the database!"

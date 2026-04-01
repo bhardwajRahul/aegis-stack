@@ -195,3 +195,158 @@ class TestMigrateFixDetection:
         # Missing tables
         assert "password_reset_token" in added_table_names
         assert "email_verification_token" in added_table_names
+
+
+class TestMigrateFixMigrationRendering:
+    """Test that add_table diffs render correct migration content."""
+
+    def _render_add_table_upgrade(self, table: sa.Table) -> tuple[list[str], list[str]]:
+        """Simulate the migration rendering logic from migrate_fix.py."""
+
+        def _sa_type_str(col_type: object) -> str:
+            type_name = type(col_type).__name__
+            return f"sa.{type_name}()"
+
+        upgrade_lines: list[str] = []
+        downgrade_lines: list[str] = []
+
+        cols = []
+        for col in table.columns:
+            col_str = f"sa.Column('{col.name}', {_sa_type_str(col.type)}"
+            col_str += f", nullable={col.nullable}"
+            if col.primary_key:
+                col_str += ", primary_key=True"
+            if col.server_default is not None:
+                col_str += f", server_default=sa.text('{col.server_default.arg}')"  # type: ignore[union-attr]
+            col_str += ")"
+            cols.append(f"        {col_str},")
+        cols_block = "\n".join(cols)
+        upgrade_lines.append(
+            f"    op.create_table(\n        '{table.name}',\n{cols_block}\n    )"
+        )
+
+        for fk in table.foreign_key_constraints:
+            local_cols = [c.name for c in fk.columns]
+            ref_table = fk.referred_table.name
+            ref_cols = [c.name for c in fk.referred_table.primary_key.columns]
+            fk_name = fk.name or f"fk_{table.name}_{'_'.join(local_cols)}_{ref_table}"
+            upgrade_lines.append(
+                f"    op.create_foreign_key('{fk_name}', '{table.name}', '{ref_table}', {local_cols}, {ref_cols})"
+            )
+            downgrade_lines.append(
+                f"    op.drop_constraint('{fk_name}', '{table.name}', type_='foreignkey')"
+            )
+
+        for idx in table.indexes:
+            idx_cols = [c.name for c in idx.columns]
+            unique_str = ", unique=True" if idx.unique else ""
+            upgrade_lines.append(
+                f"    op.create_index('{idx.name}', '{table.name}', {idx_cols}{unique_str})"
+            )
+
+        downgrade_lines.append(f"    op.drop_table('{table.name}')")
+
+        return upgrade_lines, downgrade_lines
+
+    def test_renders_create_table(self) -> None:
+        """add_table diff renders op.create_table with all columns."""
+        metadata = sa.MetaData()
+        table = sa.Table(
+            "password_reset_token",
+            metadata,
+            sa.Column("id", sa.Integer(), primary_key=True),
+            sa.Column("user_id", sa.Integer(), nullable=False),
+            sa.Column("token", sa.String(), nullable=False),
+            sa.Column(
+                "used", sa.Boolean(), nullable=False, server_default=sa.text("0")
+            ),
+        )
+
+        upgrade, downgrade = self._render_add_table_upgrade(table)
+
+        # Should have create_table
+        create_line = upgrade[0]
+        assert "op.create_table(" in create_line
+        assert "'password_reset_token'" in create_line
+        assert "'id'" in create_line
+        assert "'user_id'" in create_line
+        assert "'token'" in create_line
+        assert "'used'" in create_line
+        assert "primary_key=True" in create_line
+        assert "server_default=sa.text('0')" in create_line
+
+        # Downgrade drops the table
+        assert "op.drop_table('password_reset_token')" in downgrade[-1]
+
+    def test_renders_foreign_keys(self) -> None:
+        """add_table diff with FKs renders op.create_foreign_key."""
+        metadata = sa.MetaData()
+        sa.Table(
+            "user",
+            metadata,
+            sa.Column("id", sa.Integer(), primary_key=True),
+        )
+        sa.Table(
+            "password_reset_token",
+            metadata,
+            sa.Column("id", sa.Integer(), primary_key=True),
+            sa.Column(
+                "user_id",
+                sa.Integer(),
+                sa.ForeignKey("user.id"),
+                nullable=False,
+            ),
+            sa.Column("token", sa.String(), nullable=False),
+        )
+
+        token_table = metadata.tables["password_reset_token"]
+        upgrade, downgrade = self._render_add_table_upgrade(token_table)
+
+        # Should have create_foreign_key
+        fk_lines = [line for line in upgrade if "create_foreign_key" in line]
+        assert len(fk_lines) == 1
+        assert "'password_reset_token'" in fk_lines[0]
+        assert "'user'" in fk_lines[0]
+        assert "['user_id']" in fk_lines[0]
+        assert "['id']" in fk_lines[0]
+
+        # Downgrade should drop the constraint
+        drop_fk_lines = [line for line in downgrade if "drop_constraint" in line]
+        assert len(drop_fk_lines) == 1
+        assert "type_='foreignkey'" in drop_fk_lines[0]
+
+    def test_renders_indexes(self) -> None:
+        """add_table diff with indexes renders op.create_index."""
+        metadata = sa.MetaData()
+        table = sa.Table(
+            "org_invite",
+            metadata,
+            sa.Column("id", sa.Integer(), primary_key=True),
+            sa.Column("email", sa.String(), nullable=False),
+            sa.Column("token", sa.String(), nullable=False),
+        )
+        sa.Index("ix_org_invite_token", table.c.token, unique=True)
+
+        upgrade, _ = self._render_add_table_upgrade(table)
+
+        idx_lines = [line for line in upgrade if "create_index" in line]
+        assert len(idx_lines) == 1
+        assert "'ix_org_invite_token'" in idx_lines[0]
+        assert "'org_invite'" in idx_lines[0]
+        assert "unique=True" in idx_lines[0]
+
+    def test_empty_table_renders(self) -> None:
+        """Table with only a PK column still renders correctly."""
+        metadata = sa.MetaData()
+        table = sa.Table(
+            "simple",
+            metadata,
+            sa.Column("id", sa.Integer(), primary_key=True),
+        )
+
+        upgrade, downgrade = self._render_add_table_upgrade(table)
+
+        assert "op.create_table(" in upgrade[0]
+        assert "'simple'" in upgrade[0]
+        assert len(upgrade) == 1  # No FKs or indexes
+        assert "op.drop_table('simple')" in downgrade[-1]
