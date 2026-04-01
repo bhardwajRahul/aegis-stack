@@ -1,6 +1,6 @@
 [project]
 name = "aegis-stack"
-version = "0.6.8rc2"
+version = "0.6.8rc3"
 description = "A production-ready FastAPI platform with modular components and a built-in control plane. Try: uvx aegis-stack init my-project"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
@@ -46,7 +46,6 @@ dependencies = [
     "packaging>=24.0",
     "filelock>=3.20.1",
     "urllib3>=2.6.3",
-    "pygments>=2.20.0",
 ]
 
 [project.urls]
@@ -71,7 +70,8 @@ docs = [
     "mkdocs-material>=9.5.0",
     "mkdocstrings[python]>=0.24.0",
     "mkdocs-gen-files>=0.5.0",
-    "pymdown-extensions>=10.0.0",
+    "pygments>=2.20.0",
+    "pymdown-extensions>=10.21.0",
     "mkdocs-mermaid2-plugin>=1.1.0",
     "mkdocs-glightbox>=0.3.0",
 ]
