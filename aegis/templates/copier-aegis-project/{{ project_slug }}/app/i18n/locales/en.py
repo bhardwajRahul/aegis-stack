@@ -470,6 +470,7 @@ MESSAGES: dict[str, str] = {
     ),
     "migrate.no_existing_migrations": "No existing migrations found. Run 'make migrate' first.",
     "migrate.checking_schema": "Checking schema against models...",
+    "migrate.applying_pending": "Applying pending migrations first...",
     "migrate.schema_up_to_date": "Schema is up to date. No fix needed.",
     "migrate.found_differences": "Found {count} schema differences:",
     "migrate.add_column": "ADD COLUMN",

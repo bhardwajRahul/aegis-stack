@@ -196,6 +196,65 @@ class TestMigrateFixDetection:
         assert "password_reset_token" in added_table_names
         assert "email_verification_token" in added_table_names
 
+    def test_fk_ref_columns_resolved_in_diff_context(self) -> None:
+        """FK referenced columns are accessible from add_table diffs."""
+        engine = create_engine("sqlite:///:memory:")
+
+        # Create only the user table (referenced by FK)
+        old_metadata = sa.MetaData()
+        sa.Table(
+            "user",
+            old_metadata,
+            sa.Column("id", sa.Integer(), primary_key=True),
+            sa.Column("email", sa.String(), nullable=False),
+        )
+        old_metadata.create_all(engine)
+
+        # New metadata adds a table with FK to user
+        new_metadata = sa.MetaData()
+        sa.Table(
+            "user",
+            new_metadata,
+            sa.Column("id", sa.Integer(), primary_key=True),
+            sa.Column("email", sa.String(), nullable=False),
+        )
+        sa.Table(
+            "password_reset_token",
+            new_metadata,
+            sa.Column("id", sa.Integer(), primary_key=True),
+            sa.Column(
+                "user_id",
+                sa.Integer(),
+                sa.ForeignKey("user.id"),
+                nullable=False,
+            ),
+            sa.Column("token", sa.String(), nullable=False),
+        )
+
+        with engine.connect() as conn:
+            migration_ctx = MigrationContext.configure(conn)
+            diffs = compare_metadata(migration_ctx, new_metadata)
+
+        # Get the add_table diff
+        add_table_diffs = [d for d in diffs if d[0] == "add_table"]
+        assert len(add_table_diffs) == 1
+
+        table = add_table_diffs[0][1]
+        assert table.name == "password_reset_token"
+
+        # Verify FK ref columns are resolvable (the bug was empty ref_cols)
+        fks = list(table.foreign_key_constraints)
+        assert len(fks) == 1
+        fk = fks[0]
+
+        # Try element-based extraction (our fix)
+        ref_cols = [
+            el.column.name
+            for el in fk.elements
+            if hasattr(el, "column") and el.column is not None
+        ]
+        assert ref_cols == ["id"], f"FK ref_cols should be ['id'], got {ref_cols}"
+
 
 class TestMigrateFixMigrationRendering:
     """Test that add_table diffs render correct migration content."""
@@ -210,7 +269,7 @@ class TestMigrateFixMigrationRendering:
         upgrade_lines: list[str] = []
         downgrade_lines: list[str] = []
 
-        cols = []
+        items = []
         for col in table.columns:
             col_str = f"sa.Column('{col.name}', {_sa_type_str(col.type)}"
             col_str += f", nullable={col.nullable}"
@@ -219,23 +278,28 @@ class TestMigrateFixMigrationRendering:
             if col.server_default is not None:
                 col_str += f", server_default=sa.text('{col.server_default.arg}')"  # type: ignore[union-attr]
             col_str += ")"
-            cols.append(f"        {col_str},")
-        cols_block = "\n".join(cols)
-        upgrade_lines.append(
-            f"    op.create_table(\n        '{table.name}',\n{cols_block}\n    )"
-        )
-
+            items.append(f"        {col_str},")
+        # Inline FK constraints
         for fk in table.foreign_key_constraints:
             local_cols = [c.name for c in fk.columns]
             ref_table = fk.referred_table.name
-            ref_cols = [c.name for c in fk.referred_table.primary_key.columns]
-            fk_name = fk.name or f"fk_{table.name}_{'_'.join(local_cols)}_{ref_table}"
-            upgrade_lines.append(
-                f"    op.create_foreign_key('{fk_name}', '{table.name}', '{ref_table}', {local_cols}, {ref_cols})"
+            # Match production: prefer fk.elements, fall back to PK
+            ref_cols = [
+                el.column.name
+                for el in fk.elements
+                if hasattr(el, "column") and el.column is not None
+            ]
+            if not ref_cols:
+                ref_cols = [c.name for c in fk.referred_table.primary_key.columns]
+            ref_col_strs = [f"'{ref_table}.{rc}'" for rc in ref_cols]
+            local_col_strs = [f"'{lc}'" for lc in local_cols]
+            items.append(
+                f"        sa.ForeignKeyConstraint([{', '.join(local_col_strs)}], [{', '.join(ref_col_strs)}]),"
             )
-            downgrade_lines.append(
-                f"    op.drop_constraint('{fk_name}', '{table.name}', type_='foreignkey')"
-            )
+        items_block = "\n".join(items)
+        upgrade_lines.append(
+            f"    op.create_table(\n        '{table.name}',\n{items_block}\n    )"
+        )
 
         for idx in table.indexes:
             idx_cols = [c.name for c in idx.columns]
@@ -278,8 +342,8 @@ class TestMigrateFixMigrationRendering:
         # Downgrade drops the table
         assert "op.drop_table('password_reset_token')" in downgrade[-1]
 
-    def test_renders_foreign_keys(self) -> None:
-        """add_table diff with FKs renders op.create_foreign_key."""
+    def test_renders_foreign_keys_inline(self) -> None:
+        """add_table diff with FKs renders inline sa.ForeignKeyConstraint."""
         metadata = sa.MetaData()
         sa.Table(
             "user",
@@ -302,18 +366,15 @@ class TestMigrateFixMigrationRendering:
         token_table = metadata.tables["password_reset_token"]
         upgrade, downgrade = self._render_add_table_upgrade(token_table)
 
-        # Should have create_foreign_key
-        fk_lines = [line for line in upgrade if "create_foreign_key" in line]
-        assert len(fk_lines) == 1
-        assert "'password_reset_token'" in fk_lines[0]
-        assert "'user'" in fk_lines[0]
-        assert "['user_id']" in fk_lines[0]
-        assert "['id']" in fk_lines[0]
+        # FK should be inline in create_table, not separate
+        create_line = upgrade[0]
+        assert "ForeignKeyConstraint" in create_line
+        assert "'user_id'" in create_line
+        assert "'user.id'" in create_line
 
-        # Downgrade should drop the constraint
-        drop_fk_lines = [line for line in downgrade if "drop_constraint" in line]
-        assert len(drop_fk_lines) == 1
-        assert "type_='foreignkey'" in drop_fk_lines[0]
+        # No separate create_foreign_key calls
+        fk_lines = [line for line in upgrade if "create_foreign_key" in line]
+        assert len(fk_lines) == 0
 
     def test_renders_indexes(self) -> None:
         """add_table diff with indexes renders op.create_index."""
