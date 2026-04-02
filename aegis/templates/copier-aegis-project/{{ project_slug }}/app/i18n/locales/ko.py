@@ -13,7 +13,7 @@ MESSAGES: dict[str, str] = {
     "main.unsupported_lang": "지원하지 않는 언어입니다: '{lang}'. 사용 가능: {available}",
     # Help text
     "main.help": "프로젝트 관리 CLI",
-    "main.opt_lang": "출력 언어 (en, ja, ko, zh, zh_Hant). 기본값: 자동 감지",
+    "main.opt_lang": "출력 언어 (en, fr, ja, ko, zh, zh_Hant). 기본값: 자동 감지",
     # ── Health ────────────────────────────────────────────────────────
     "health.count_healthy": "{count}개 정상",
     "health.count_warning": "{count}개 경고",

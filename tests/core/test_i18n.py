@@ -53,7 +53,6 @@ class TestLocaleNormalization:
 
     def test_unsupported_falls_back_to_english(self) -> None:
         """Unsupported locales fall back to 'en'."""
-        assert _normalize_locale("fr") == "en"
         assert _normalize_locale("de_DE") == "en"
         assert _normalize_locale("xx") == "en"
         assert _normalize_locale("es_MX.UTF-8") == "en"
@@ -64,6 +63,14 @@ class TestLocaleNormalization:
         assert _normalize_locale("zh_TW.Big5") == "zh_Hant"
         assert _normalize_locale("en_US.UTF-8@euro") == "en"
 
+    def test_french_variants(self) -> None:
+        """French locale variants normalize to 'fr'."""
+        assert _normalize_locale("fr") == "fr"
+        assert _normalize_locale("fr_FR") == "fr"
+        assert _normalize_locale("fr-FR") == "fr"
+        assert _normalize_locale("fr_FR.UTF-8") == "fr"
+        assert _normalize_locale("fr_CA") == "fr"
+
 
 class TestMessageCompleteness:
     """Test that all locale catalogs have the same keys as English."""
@@ -71,10 +78,20 @@ class TestMessageCompleteness:
     def test_all_locales_registered(self) -> None:
         """All expected locales are in AVAILABLE_LOCALES."""
         assert "en" in AVAILABLE_LOCALES
+        assert "fr" in AVAILABLE_LOCALES
         assert "zh" in AVAILABLE_LOCALES
         assert "zh_Hant" in AVAILABLE_LOCALES
         assert "ja" in AVAILABLE_LOCALES
         assert "ko" in AVAILABLE_LOCALES
+
+    def test_fr_has_all_keys(self) -> None:
+        """French has all English keys."""
+        from aegis.i18n.locales.fr import MESSAGES as FR
+
+        missing = set(EN_MESSAGES) - set(FR)
+        extra = set(FR) - set(EN_MESSAGES)
+        assert not missing, f"Keys in en but not fr: {missing}"
+        assert not extra, f"Keys in fr but not en: {extra}"
 
     def test_zh_has_all_keys(self) -> None:
         """Simplified Chinese has all English keys."""
@@ -114,12 +131,14 @@ class TestMessageCompleteness:
 
     def test_no_empty_values(self) -> None:
         """No locale has empty string values."""
+        from aegis.i18n.locales.fr import MESSAGES as FR
         from aegis.i18n.locales.ja import MESSAGES as JA
         from aegis.i18n.locales.ko import MESSAGES as KO
         from aegis.i18n.locales.zh import MESSAGES as ZH
         from aegis.i18n.locales.zh_hant import MESSAGES as ZH_HANT
 
         for name, messages in [
+            ("fr", FR),
             ("zh", ZH),
             ("zh_Hant", ZH_HANT),
             ("ja", JA),
