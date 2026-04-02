@@ -65,6 +65,10 @@ def _load_locale(locale: str) -> None:
         from .locales.zh import MESSAGES
 
         _messages["zh"] = MESSAGES
+    elif locale == "ko":
+        from .locales.ko import MESSAGES
+
+        _messages["ko"] = MESSAGES
 
     # Always ensure English is available as fallback
     if "en" not in _messages:

@@ -121,6 +121,8 @@ def update_with_copier_native(
         # We must edit the file directly, then Copier detects the change and regenerates
         answers = load_copier_answers(project_path)
         answers.update(update_data)
+        # Point _src_path to the template root (copier 9.14+ reads src from answers)
+        answers["_src_path"] = f"git+file://{template_root}"
 
         # Save updated answers
         import yaml
@@ -163,9 +165,9 @@ def update_with_copier_native(
         # 5. Use git diff to merge changes
         # 6. Handle conflicts with .rej files or inline markers
         # NOTE: _tasks removed from copier.yml - we run them ourselves below
+        # copier 9.14+ reads _src_path from .copier-answers.yml (set above)
         run_update(
             dst_path=str(project_path),
-            src_path=str(template_root),  # Point to repo root, not subdirectory
             defaults=True,  # Use existing answers as defaults
             overwrite=True,  # Allow overwriting files
             conflict="rej",  # Create .rej files for conflicts

@@ -67,6 +67,10 @@ def _ensure_loaded(locale: str) -> None:
         from .locales.zh import MESSAGES
 
         _messages["zh"] = MESSAGES
+    elif locale == "ko":
+        from .locales.ko import MESSAGES
+
+        _messages["ko"] = MESSAGES
 
 
 def translate(key: str, **kwargs: object) -> str:
