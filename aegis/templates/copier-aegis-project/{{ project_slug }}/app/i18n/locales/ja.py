@@ -13,7 +13,7 @@ MESSAGES: dict[str, str] = {
     "main.unsupported_lang": "未対応の言語 '{lang}'。利用可能：{available}",
     # ヘルプ
     "main.help": "プロジェクト管理CLI",
-    "main.opt_lang": "出力言語（en、ja、ko、zh、zh_Hant）。デフォルト：自動検出",
+    "main.opt_lang": "出力言語（en、fr、ja、ko、zh、zh_Hant）。デフォルト：自動検出",
     # ── ヘルスチェック ─────────────────────────────────────────────────
     "health.count_healthy": "{count} 件正常",
     "health.count_warning": "{count} 件警告",
