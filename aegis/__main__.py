@@ -65,19 +65,26 @@ def main(
     lang: str | None = typer.Option(
         None,
         "--lang",
-        help="Output language (en, ja, ko, zh). Default: auto-detect from AEGIS_LANG or system locale",
+        help="Output language (en, ja, ko, zh, zh_Hant). Default: auto-detect from AEGIS_LANG or system locale",
         envvar="AEGIS_LANG",
     ),
 ) -> None:
     """Aegis Stack CLI - Global options and configuration."""
     set_verbose(verbose)
-    if lang and lang.lower() not in AVAILABLE_LOCALES:
-        typer.secho(
-            f"Unsupported language '{lang}'. Available: {', '.join(sorted(AVAILABLE_LOCALES))}",
-            fg="red",
-            err=True,
-        )
-        raise typer.Exit(1)
+    if lang:
+        from .i18n.registry import _normalize_locale
+
+        resolved = _normalize_locale(lang)
+        # _normalize_locale falls back to "en" for unknown inputs,
+        # so check if the input actually maps to a real locale
+        base = lang.lower().replace("-", "_").split(".")[0].split("@")[0]
+        if resolved == "en" and not base.startswith("en"):
+            typer.secho(
+                f"Unsupported language '{lang}'. Available: {', '.join(sorted(AVAILABLE_LOCALES))}",
+                fg="red",
+                err=True,
+            )
+            raise typer.Exit(1)
     set_locale(lang if lang else detect_locale())
 
 

@@ -1,0 +1,1383 @@
+Source,Key,English,Traditional Chinese
+CLI,add.added_files,Added {count} files,添加了 {count} 個檔案
+CLI,add.adding,Adding {component}...,正在添加 {component}……
+CLI,add.all_enabled,All requested components are already enabled!,所有請求的組件均已啟用！
+CLI,add.already_enabled,Already enabled: {components},已啟用：{components}
+CLI,add.auto_added_db,Auto-added database component for scheduler persistence,已自動添加數據庫組件用於調度器持久化
+CLI,add.auto_added_deps,Auto-added dependencies: {deps},已自動補充依賴：{deps}
+CLI,add.bracket_override,Bracket syntax 'scheduler[{engine}]' overrides --backend {backend},括號語法 scheduler[{engine}] 將覆蓋 --backend {backend}
+CLI,add.components_to_add,Components to add:,將添加的組件：
+CLI,add.confirm,Add these components?,確認添加？
+CLI,add.error_no_args,Error: components argument is required (or use --interactive),請指定組件名稱，或使用 --interactive 模式
+CLI,add.failed,Failed to add components: {error},組件添加失敗：{error}
+CLI,add.failed_component,Failed to add {component}: {error},添加 {component} 失敗：{error}
+CLI,add.interactive_hint,Or: aegis add --interactive,或：aegis add --interactive
+CLI,add.invalid_format,Invalid component format: {error},組件格式不正確：{error}
+CLI,add.invalid_scheduler_backend,Invalid scheduler backend: '{backend}',調度器後端不合法：「{backend}」
+CLI,add.load_config_failed,Failed to load project configuration: {error},加載項目設定失敗：{error}
+CLI,add.postgres_coming,Note: PostgreSQL support coming in future release,注：PostgreSQL 支援將在後續版本提供
+CLI,add.project,Project: {path},項目：{path}
+CLI,add.scheduler_backend,Scheduler backend: {backend},調度器後端：{backend}
+CLI,add.skipped_files,Skipped {count} existing files,跳過了 {count} 個已有檔案
+CLI,add.success,Components added successfully!,組件已添加
+CLI,add.title,Aegis Stack - Add Components,Aegis Stack — 添加組件
+CLI,add.updating,Updating project...,正在更新項目……
+CLI,add.usage_hint,"Usage: aegis add scheduler,worker","用法：aegis add scheduler,worker"
+CLI,add.valid_backends,Valid options: {options},可選項：{options}
+CLI,add.validation_failed,Component validation failed: {error},組件校驗失敗：{error}
+CLI,add_service.added_files,Added {count} files,添加了 {count} 個檔案
+CLI,add_service.adding_component,Adding required component: {component}...,正在添加所需組件：{component}……
+CLI,add_service.adding_service,Adding service: {service}...,正在添加服務：{service}……
+CLI,add_service.ai_set_api_key,"   2. Set provider API key ({env_var}, etc.)",   2. 設置供應商 API 密鑰（{env_var} 等）
+CLI,add_service.ai_set_provider,"   1. Set {env_var} in .env (openai, anthropic, google, groq)",   1. 在 .env 中設置 {env_var}（openai、anthropic、google、groq）
+CLI,add_service.ai_setup,AI Service Setup:,AI 服務設定：
+CLI,add_service.ai_test_cli,   3. Test with CLI: {cmd},   3. 通過 CLI 測試：{cmd}
+CLI,add_service.all_enabled,All requested services are already enabled!,所有請求的服務已全部啟用
+CLI,add_service.already_enabled,Already enabled: {services},已啟用：{services}
+CLI,add_service.already_have_components,Already have required components: {components},已具備所需組件：{components}
+CLI,add_service.applying_migrations,Applying database migrations...,正在執行數據庫遷移……
+CLI,add_service.auth_create_users,   1. Create test users: {cmd},   1. 創建測試用戶：{cmd}
+CLI,add_service.auth_setup,Auth Service Setup:,認證服務設定：
+CLI,add_service.auth_view_routes,   2. View auth routes: {url},   2. 查看認證路由：{url}
+CLI,add_service.bootstrap_alembic,Bootstrapping alembic infrastructure...,正在初始化 Alembic 基礎設施……
+CLI,add_service.confirm,Add these services?,確認添加？
+CLI,add_service.created_file,Created: {file},已創建：{file}
+CLI,add_service.error_no_args,Error: services argument is required (or use --interactive),請指定服務名稱，或使用 --interactive 模式
+CLI,add_service.failed,Failed to add services: {error},服務添加失敗：{error}
+CLI,add_service.failed_component,Failed to add component {component}: {error},添加組件 {component} 失敗：{error}
+CLI,add_service.failed_service,Failed to add service {service}: {error},添加服務 {service} 失敗：{error}
+CLI,add_service.generated_migration,Generated migration: {name},已生成遷移：{name}
+CLI,add_service.interactive_hint,Or: aegis add-service --interactive,或：aegis add-service --interactive
+CLI,add_service.interactive_ignores_args,Warning: --interactive flag ignores service arguments,提示：--interactive 模式將忽略服務參數
+CLI,add_service.load_config_failed,Failed to load project configuration: {error},加載項目設定失敗：{error}
+CLI,add_service.migration_failed,Warning: Auto-migration failed. Run 'make migrate' manually.,提示：自動遷移未成功，請手動執行 make migrate
+CLI,add_service.no_selected,No services selected,未選擇任何服務
+CLI,add_service.project,Project: {path},項目：{path}
+CLI,add_service.required_components,Required components (will be auto-added):,所需組件（將自動添加）：
+CLI,add_service.resolve_failed,Failed to resolve service dependencies: {error},服務依賴解析失敗：{error}
+CLI,add_service.services_to_add,Services to add:,將添加的服務：
+CLI,add_service.skipped_files,Skipped {count} existing files,跳過了 {count} 個已有檔案
+CLI,add_service.success,Services added successfully!,服務已添加成功
+CLI,add_service.title,Aegis Stack - Add Services,Aegis Stack — 添加服務
+CLI,add_service.usage_hint,"Usage: aegis add-service auth,ai","用法：aegis add-service auth,ai"
+CLI,add_service.validation_failed,Service validation failed: {error},服務校驗失敗：{error}
+CLI,component.backend,FastAPI backend server,FastAPI 後端服務
+CLI,component.database,Database with SQLModel ORM (SQLite or PostgreSQL),數據庫，基於 SQLModel ORM（SQLite 或 PostgreSQL）
+CLI,component.frontend,Flet frontend interface,Flet 前端界面
+CLI,component.ingress,Traefik reverse proxy and load balancer,Traefik 反向代理與負載均衡
+CLI,component.observability,"Logfire observability, tracing, and metrics",Logfire 可觀測性、鏈路追蹤與指標監控
+CLI,component.redis,Redis cache and message broker,Redis 緩存與消息代理
+CLI,component.scheduler,Scheduled task execution infrastructure,定時任務調度
+CLI,component.worker,"Background task processing (arq, Dramatiq, or TaskIQ)",後臺任務處理（arq、Dramatiq 或 TaskIQ）
+CLI,components.backend_desc,  backend      - FastAPI backend server (always included),  backend      - FastAPI 後端服務（始終包含）
+CLI,components.core_title,CORE COMPONENTS,核心組件
+CLI,components.frontend_desc,  frontend     - Flet frontend interface (always included),  frontend     - Flet 前端界面（始終包含）
+CLI,components.infra_title,INFRASTRUCTURE COMPONENTS,基礎設施組件
+CLI,components.recommends,Recommends: {deps},推薦：{deps}
+CLI,components.requires,Requires: {deps},依賴：{deps}
+CLI,components.usage_hint,"Use 'aegis init PROJECT_NAME --components redis,worker' to select components","用法：aegis init 項目名 --components redis,worker"
+CLI,deploy.adding_host_key,Adding server to known_hosts...,正在添加服務器到 known_hosts……
+CLI,deploy.app_running,   Application running at: http://{host},   訪問地址：http://{host}
+CLI,deploy.auto_rollback,Auto-rolling back to previous version...,正在自動回滾到上一版本……
+CLI,deploy.backup_complete,Backup complete!,備份完成
+CLI,deploy.backup_created,Backup created: {timestamp},備份已創建：{timestamp}
+CLI,deploy.backup_db,Backing up PostgreSQL database...,正在備份 PostgreSQL 數據庫……
+CLI,deploy.backup_db_failed,"Warning: Database backup failed, continuing without it",提示：數據庫備份失敗，繼續執行
+CLI,deploy.backup_failed,Failed to create backup: {error},創建備份失敗：{error}
+CLI,deploy.backup_pruned,Pruned old backup: {name},已清理舊備份：{name}
+CLI,deploy.backups_header,Backups on {host} ({count} total):,服務器 {host} 的備份列表（共 {count} 個）：
+CLI,deploy.building,Building and starting services on server...,正在構建並啟動服務……
+CLI,deploy.check_status,   Check status: aegis deploy-status,   查看狀態：aegis deploy-status
+CLI,deploy.checking_ssh,Checking SSH connectivity...,正在檢查 SSH 連接……
+CLI,deploy.col_database,Database,數據庫
+CLI,deploy.col_size,Size,大小
+CLI,deploy.col_timestamp,Timestamp,時間戳
+CLI,deploy.complete,Deployment complete!,部署完成
+CLI,deploy.copy_failed,Failed to copy setup script,復制安裝腳本失敗
+CLI,deploy.copying_env,Copying {file} to server as .env...,正在將 {file} 上傳為服務器環境變量檔案（.env）……
+CLI,deploy.copying_script,Copying setup script to server...,正在將安裝腳本復制到服務器……
+CLI,deploy.creating_backup,Creating backup {timestamp}...,正在創建備份 {timestamp}……
+CLI,deploy.creating_backup_on,Creating backup on {host}...,正在 {host} 上創建備份……
+CLI,deploy.deploying,Deploying to {host}...,正在部署到 {host}……
+CLI,deploy.env_copy_failed,Failed to copy .env file,復制 .env 檔案失敗
+CLI,deploy.health_all_failed,All health check attempts failed,所有健康檢查均失敗
+CLI,deploy.health_attempt,Health check attempt {n}/{total}...,健康檢查（{n}/{total}）……
+CLI,deploy.health_failed_hint,Deploy completed but health check failed. Check logs with: aegis deploy-logs,部署完成但健康檢查失敗，請查看日志：aegis deploy-logs
+CLI,deploy.health_passed,Health check passed,健康檢查通過
+CLI,deploy.health_retry,"Health check failed, retrying in {interval}s...",健康檢查失敗，{interval} 秒後重試……
+CLI,deploy.health_waiting,Waiting for containers to stabilize...,等待容器穩定……
+CLI,deploy.init_docker_context,   Docker Context: {context},   Docker 上下文：{context}
+CLI,deploy.init_gitignore,Note: Consider adding .aegis/ to .gitignore to avoid committing deploy config,提示：建議將 .aegis/ 添加到 .gitignore，避免提交部署設定
+CLI,deploy.init_host,   Host: {host},   主機：{host}
+CLI,deploy.init_path,   Path: {path},   路徑：{path}
+CLI,deploy.init_saved,Deploy configuration saved to {file},部署設定已保存至 {file}
+CLI,deploy.init_user,   User: {user},   用戶：{user}
+CLI,deploy.mkdir_failed,Failed to create remote directory '{path}',創建遠程目錄「{path}」失敗
+CLI,deploy.no_backups,No backups found.,未找到備份。
+CLI,deploy.no_backups_available,No backups available.,沒有可用的備份。
+CLI,deploy.no_config,No deploy configuration found. Run 'aegis deploy-init' first.,未找到部署設定，請先執行 aegis deploy-init。
+CLI,deploy.no_existing,"No existing deployment found, skipping backup",未找到已有部署，跳過備份
+CLI,deploy.overseer,   Overseer dashboard: http://{host}/dashboard/,   控制臺：http://{host}/dashboard/
+CLI,deploy.prompt_host,Server IP or hostname,服務器 IP 或主機名
+CLI,deploy.restart_failed,Failed to restart services,重啟服務失敗
+CLI,deploy.restart_restarting,Restarting services...,正在重啟服務……
+CLI,deploy.restart_success,Services restarted,服務已重啟
+CLI,deploy.rollback_complete,Rollback complete!,回滾完成
+CLI,deploy.rollback_db,Restoring database...,正在恢復數據庫……
+CLI,deploy.rollback_db_failed,Warning: Database restore failed,提示：數據庫恢復失敗
+CLI,deploy.rollback_failed,Rollback failed! Manual intervention required.,回滾失敗，需要手動處理。
+CLI,deploy.rollback_failed_final,Rollback failed!,回滾失敗！
+CLI,deploy.rollback_hint,Rollback with: aegis deploy-rollback --backup <timestamp>,回滾命令：aegis deploy-rollback --backup <時間戳>
+CLI,deploy.rollback_not_found,Backup not found: {timestamp},未找到備份：{timestamp}
+CLI,deploy.rollback_pg_timeout,"PostgreSQL did not become ready, attempting restore anyway",PostgreSQL 未就緒，仍嘗試恢復
+CLI,deploy.rollback_pg_wait,Waiting for PostgreSQL to be ready...,等待 PostgreSQL 就緒……
+CLI,deploy.rollback_restore_failed,Failed to restore files: {error},恢復檔案失敗：{error}
+CLI,deploy.rollback_restoring,Restoring files from backup {timestamp}...,正在從備份 {timestamp} 恢復檔案……
+CLI,deploy.rollback_start_failed,Failed to start services after rollback,回滾後啟動服務失敗
+CLI,deploy.rollback_starting,Starting services...,正在啟動服務……
+CLI,deploy.rollback_stopping,Stopping services...,正在停止服務……
+CLI,deploy.rolled_back,Rolled back to backup {timestamp},已回滾到備份 {timestamp}
+CLI,deploy.rolling_back,Rolling back to backup {backup} on {host}...,正在回滾到備份 {backup}（{host}）……
+CLI,deploy.running_setup,Running server setup (this may take a few minutes)...,正在執行服務器初始化（可能需要幾分鍾）……
+CLI,deploy.setup_complete,Server setup complete!,服務器初始化完成
+CLI,deploy.setup_failed,Server setup failed,服務器初始化失敗
+CLI,deploy.setup_next,Next: Run 'aegis deploy' to deploy your application,接下來執行 aegis deploy 部署應用
+CLI,deploy.setup_script_hint,Make sure your project was created with the ingress component.,請確保項目已添加 ingress 組件。
+CLI,deploy.setup_script_missing,Server setup script not found: {path},未找到服務器安裝腳本：{path}
+CLI,deploy.setup_title,Setting up server at {target}...,正在初始化服務器（{target}）……
+CLI,deploy.setup_verify,Verifying installation:,安裝驗證：
+CLI,deploy.setup_verify_app_dir,  App Directory: {path},  應用目錄：{path}
+CLI,deploy.setup_verify_compose,  Docker Compose: {version},  Docker Compose：{version}
+CLI,deploy.setup_verify_docker,  Docker: {version},  Docker：{version}
+CLI,deploy.setup_verify_uv,  uv: {version},  uv：{version}
+CLI,deploy.ssh_failed,SSH connection failed: {error},SSH 連接失敗：{error}
+CLI,deploy.ssh_keyscan_failed,Failed to scan SSH host key: {error},SSH 主機密鑰掃描失敗：{error}
+CLI,deploy.start_failed,Failed to start services,啟動服務失敗
+CLI,deploy.status_header,Service status on {host}:,服務器 {host} 服務狀態：
+CLI,deploy.stop_failed,Failed to stop services,停止服務失敗
+CLI,deploy.stop_stopping,Stopping services...,正在停止服務……
+CLI,deploy.stop_success,Services stopped,服務已停止
+CLI,deploy.stopping,Stopping existing services...,正在停止現有服務……
+CLI,deploy.sync_failed,Failed to sync files,檔案同步失敗
+CLI,deploy.syncing,Syncing files to server...,正在同步檔案到服務器……
+CLI,deploy.view_logs,   View logs: aegis deploy-logs,   查看日志：aegis deploy-logs
+CLI,ingress.acme_email,   ACME email: {email},   ACME 郵箱：{email}
+CLI,ingress.add_confirm,Add the ingress component?,確認添加 Ingress 組件？
+CLI,ingress.add_failed,Failed to add ingress component: {error},添加 Ingress 組件失敗：{error}
+CLI,ingress.added,Ingress component added.,Ingress 組件已添加
+CLI,ingress.available_at,   Your app will be available at: https://{domain},   應用地址：https://{domain}
+CLI,ingress.created_file,   Created: {file},   已創建：{file}
+CLI,ingress.domain_label,   Domain: {domain},   域名：{domain}
+CLI,ingress.domain_none,   Domain: (none - IP/PathPrefix routing),   域名：（無 — 使用 IP/路徑前綴路由）
+CLI,ingress.domain_prompt,"Domain name (e.g., example.com, or empty for IP-based routing)",域名（如 example.com，留空則使用 IP 路由）
+CLI,ingress.email_prompt,Email for Let's Encrypt notifications,Let's Encrypt 通知郵箱
+CLI,ingress.email_required,Error: --email is required for TLS (needed for Let's Encrypt),啟用 TLS 需要指定 --email（用於 Let's Encrypt）
+CLI,ingress.email_reuse,Using existing email for ACME: {email},使用已有郵箱用於 ACME：{email}
+CLI,ingress.enabling,Enabling TLS...,正在啟用 TLS……
+CLI,ingress.https_configured,   HTTPS is now configured with Let's Encrypt,   已通過 Let's Encrypt 設定 HTTPS
+CLI,ingress.next_certs,   Certificates will be auto-provisioned on first request,   證書將在首次訪問時自動籤發
+CLI,ingress.next_deploy,   1. Deploy with: aegis deploy,   1. 部署：aegis deploy
+CLI,ingress.next_dns,   3. Point your DNS A record for {domain} to your server IP,   3. 將 {domain} 的 DNS A 記錄指向服務器 IP
+CLI,ingress.next_ports,   2. Ensure ports 80 and 443 are open on your server,   2. 確保服務器已開放 80 和 443 端口
+CLI,ingress.next_steps,Next steps:,下一步：
+CLI,ingress.not_found,Ingress component not found. Adding it first...,未找到 Ingress 組件，將先添加……
+CLI,ingress.project,Project: {path},項目：{path}
+CLI,ingress.success,TLS enabled successfully!,TLS 已成功啟用
+CLI,ingress.title,Aegis Stack - Enable Ingress TLS,Aegis Stack — 啟用 Ingress TLS
+CLI,ingress.tls_already,TLS is already enabled on this project.,該項目已啟用 TLS
+CLI,ingress.tls_config,TLS Configuration:,TLS 設定訊息：
+CLI,ingress.tls_confirm,Enable TLS with this configuration?,使用此設定啟用 TLS？
+CLI,ingress.updated_file,   Updated: {file},   已更新：{file}
+CLI,init.auto_added_by_services,Auto-added by services:,因服務需要，已自動添加：
+CLI,init.auto_added_deps,Auto-added dependencies: {deps},已自動補充依賴：{deps}
+CLI,init.auto_detected_scheduler,Auto-detected: Scheduler with {backend} persistence,已自動識別：調度器將使用 {backend} 持久化
+CLI,init.cancelled,Project creation cancelled,已取消項目創建
+CLI,init.compat_errors,Service-component compatibility errors:,服務與組件兼容性檢查未通過：
+CLI,init.component_files,Component Files:,將生成的組件檔案：
+CLI,init.config_core,Core:,核心組件：
+CLI,init.config_infra,Infrastructure:,基礎設施：
+CLI,init.config_name,Name:,名稱：
+CLI,init.config_services,Services:,業務服務：
+CLI,init.config_title,Project Configuration,項目概覽
+CLI,init.confirm_create,Create this project?,確認創建？
+CLI,init.creating,Creating project: {name},正在創建項目：{name}
+CLI,init.dependencies,Dependencies to be installed:,將安裝的依賴包：
+CLI,init.dir_exists,Directory '{path}' already exists,目錄「{path}」已存在
+CLI,init.dir_exists_hint,Use --force to overwrite or choose a different name,可使用 --force 覆蓋，或換一個名稱
+CLI,init.entrypoints,Entrypoints:,入口檔案：
+CLI,init.error,Error creating project: {error},項目創建失敗：{error}
+CLI,init.location,Location:,目標路徑：
+CLI,init.overwriting,Overwriting existing directory: {path},即將覆蓋目錄：{path}
+CLI,init.removing_dir,Removing existing directory: {path},正在清理已有目錄：{path}
+CLI,init.required_by,required by {services},（{services} 需要此組件）
+CLI,init.services_require,Services require components: {components},以下服務依賴這些組件：{components}
+CLI,init.suggestion_add,Suggestion: Add missing components --components {components},建議補充組件：--components {components}
+CLI,init.suggestion_interactive,"Alternatively, use interactive mode to auto-add service dependencies.",或者使用交互模式，系統會自動處理服務依賴。
+CLI,init.suggestion_remove,Or remove --components to let services auto-add dependencies.,也可以去掉 --components，讓服務自動添加所需依賴。
+CLI,init.template_version,Template Version:,模板版本：
+CLI,init.title,Aegis Stack Project Initialization,Aegis Stack 項目初始化
+CLI,init.worker_queues,Worker Queues:,任務隊列：
+CLI,interactive.add_prompt,Add {description}?,添加{description}？
+CLI,interactive.add_with_redis,Add {description}? (will auto-add Redis),添加{description}？（將自動加入 Redis）
+CLI,interactive.ai_configured,AI service configured,AI 服務設定完成
+CLI,interactive.ai_db_added,Database ({backend}) added for usage tracking,已添加 {backend} 數據庫用於用量追蹤
+CLI,interactive.ai_db_already,Database already selected - usage tracking enabled,數據庫已添加，用量追蹤已開啟
+CLI,interactive.ai_deps_optimized,Dependencies will be optimized for your selection,依賴將根據您的選擇進行優化
+CLI,interactive.ai_framework_intro,Choose your AI framework:,請選擇 AI 框架：
+CLI,interactive.ai_framework_label,AI Framework Selection:,AI 框架選擇：
+CLI,interactive.ai_header,AI & Machine Learning Services:,AI 與機器學習服務：
+CLI,interactive.ai_langchain,LangChain - Popular framework with extensive integrations,LangChain — 生態豐富，集成能力強
+CLI,interactive.ai_no_providers,"No providers selected, adding recommended defaults...",未選擇任何供應商，將使用推薦的默認設定……
+CLI,interactive.ai_ollama_docker,Docker - Run Ollama in a Docker container (Linux/Deploy),Docker — 在容器中運行 Ollama（Linux / 部署環境）
+CLI,interactive.ai_ollama_docker_hint,Note: First startup may take time to download models,首次啟動可能需要較長時間下載模型
+CLI,interactive.ai_ollama_docker_ok,Ollama service will be added to docker-compose.yml,Ollama 服務將寫入 docker-compose.yml
+CLI,interactive.ai_ollama_host,Host - Connect to Ollama running on your machine (Mac/Windows),本機 — 連接宿主機上運行的 Ollama（Mac / Windows）
+CLI,interactive.ai_ollama_host_hint,Make sure Ollama is running: ollama serve,請確保 Ollama 正在運行：ollama serve
+CLI,interactive.ai_ollama_host_ok,Ollama will connect to host.docker.internal:11434,Ollama 將通過 host.docker.internal:11434 連接
+CLI,interactive.ai_ollama_host_prompt,Connect to host Ollama? (recommended for Mac/Windows),連接本機 Ollama？（Mac / Windows 推薦此方式）
+CLI,interactive.ai_ollama_intro,How do you want to run Ollama?,您希望如何運行 Ollama？
+CLI,interactive.ai_ollama_label,Ollama Deployment Mode:,Ollama 部署方式：
+CLI,interactive.ai_provider.anthropic,Anthropic - Claude models (Paid),Anthropic — Claude 系列（付費）
+CLI,interactive.ai_provider.cohere,Cohere - Enterprise focus (Limited free),Cohere — 企業級（有限免費）
+CLI,interactive.ai_provider.google,Google - Gemini models (Free tier),Google — Gemini 系列（免費額度）
+CLI,interactive.ai_provider.groq,Groq - Fast inference (Free tier),Groq — 高速推理（免費額度）
+CLI,interactive.ai_provider.mistral,Mistral - Open models (Mostly paid),Mistral — 開源模型（多數付費）
+CLI,interactive.ai_provider.ollama,Ollama - Local inference (Free),Ollama — 本地推理（免費）
+CLI,interactive.ai_provider.openai,OpenAI - GPT models (Paid),OpenAI — GPT 系列（付費）
+CLI,interactive.ai_provider_intro,Choose AI providers to include (multiple selection supported),請選擇要集成的供應商（支援多選）
+CLI,interactive.ai_provider_label,AI Provider Selection:,AI 供應商選擇：
+CLI,interactive.ai_provider_options,Provider Options:,可選供應商：
+CLI,interactive.ai_provider_recommended,(Recommended),（推薦）
+CLI,interactive.ai_pydanticai,"PydanticAI - Type-safe, Pythonic AI framework (recommended)",PydanticAI — 類型安全，Pythonic 風格（推薦）
+CLI,interactive.ai_rag_compat_note,Enabling RAG will generate a project requiring Python 3.11-3.13,啟用 RAG 後，項目將要求 Python 3.11–3.13
+CLI,interactive.ai_rag_compat_prompt,Enable RAG despite Python 3.14 incompatibility?,盡管如此，仍要啟用 RAG？
+CLI,interactive.ai_rag_enabled,RAG enabled with ChromaDB vector store,已啟用 RAG，向量存儲使用 ChromaDB
+CLI,interactive.ai_rag_label,RAG (Retrieval-Augmented Generation):,RAG（檢索增強生成）：
+CLI,interactive.ai_rag_prompt,Enable RAG for document indexing and semantic search?,啟用 RAG？（文檔索引與語義檢索）
+CLI,interactive.ai_rag_warning,Warning: RAG requires Python <3.14 (chromadb/onnxruntime limitation),注意：RAG 暫不支援 Python 3.14（chromadb / onnxruntime 限制）
+CLI,interactive.ai_selected_framework,Selected framework: {framework},已選擇框架：{framework}
+CLI,interactive.ai_selected_providers,Selected providers: {providers},已選供應商：{providers}
+CLI,interactive.ai_sync_desc,Syncing fetches latest model data from OpenRouter/LiteLLM APIs,同步將從 OpenRouter / LiteLLM API 獲取最新模型數據
+CLI,interactive.ai_sync_label,LLM Catalog Sync:,LLM 模型目錄同步：
+CLI,interactive.ai_sync_prompt,Sync LLM catalog during project generation?,在項目生成時同步模型目錄？
+CLI,interactive.ai_sync_skipped,LLM sync skipped - static fixture data will be available,已跳過同步，將使用內置的靜態數據
+CLI,interactive.ai_sync_time,This requires network access and takes ~30-60 seconds,需要聯網，耗時約 30–60 秒
+CLI,interactive.ai_sync_will,LLM catalog will be synced after project generation,項目生成後將自動同步 LLM 目錄
+CLI,interactive.ai_tracking_context,AI Usage Tracking,AI 用量追蹤
+CLI,interactive.ai_tracking_label,LLM Usage Tracking:,LLM 用量追蹤：
+CLI,interactive.ai_tracking_prompt,"Enable usage tracking? (token counts, costs, conversation history)",開啟用量追蹤？（Token 消耗、費用統計、對話歷史）
+CLI,interactive.ai_use_pydanticai,Use PydanticAI? (recommended),使用 PydanticAI？（推薦）
+CLI,interactive.ai_voice_enabled,Voice enabled with TTS and STT support,已啟用語音功能，支援 TTS 與 STT
+CLI,interactive.ai_voice_label,Voice (Text-to-Speech & Speech-to-Text):,語音功能（TTS 語音合成 & STT 語音識別）：
+CLI,interactive.ai_voice_prompt,Enable voice capabilities? (TTS and STT for voice interactions),啟用語音交互？（支援語音輸入與語音回復）
+CLI,interactive.auth_basic,Basic - Email/password login,基礎認證 — 郵箱 + 密碼登錄
+CLI,interactive.auth_cancelled,Authentication service cancelled,已取消認證服務
+CLI,interactive.auth_db_already,Database component already selected,數據庫組件已添加
+CLI,interactive.auth_db_configured,Authentication + Database configured,認證服務 + 數據庫已就緒
+CLI,interactive.auth_db_confirm,Continue and add database component?,繼續並添加數據庫組件？
+CLI,interactive.auth_db_details,"(user accounts, sessions, JWT tokens)",（用戶賬戶、會話、JWT 令牌）
+CLI,interactive.auth_db_reason,Authentication requires a database for user storage,認證服務需要數據庫來存儲用戶數據
+CLI,interactive.auth_db_required,Database Required:,需要數據庫：
+CLI,interactive.auth_header,Authentication Services:,認證服務：
+CLI,interactive.auth_level_label,Authentication Level:,認證級別：
+CLI,interactive.auth_org,With Organizations - + multi-tenant support (experimental),多租戶 — 組織級別的權限隔離（實驗性）
+CLI,interactive.auth_rbac,With Roles - + role-based access control (experimental),角色權限 — 基於角色的訪問控制（實驗性）
+CLI,interactive.auth_select,What type of authentication?,需要哪種認證方式？
+CLI,interactive.auth_selected,Selected auth level: {level},認證級別：{level}
+CLI,interactive.backup_desc,Scheduled daily database backup job included (runs at 2 AM),已包含每日定時備份（凌晨 2 點執行）
+CLI,interactive.bonus_backup,Bonus: Adding database backup job,額外福利：自動添加數據庫備份任務
+CLI,interactive.component_selection,Component Selection,組件選擇
+CLI,interactive.core_included,Core components ({components}) included automatically,核心組件（{components}）已默認包含
+CLI,interactive.db_engine_label,{context} Database Engine:,{context} 數據庫引擎：
+CLI,interactive.db_postgres,"PostgreSQL - Production-ready, multi-container support",PostgreSQL — 生產就緒，支援多容器部署
+CLI,interactive.db_reuse,Using previously selected database: {engine},沿用之前的選擇：{engine}
+CLI,interactive.db_select,Select database engine:,請選擇數據庫引擎：
+CLI,interactive.db_sqlite,"SQLite - Simple, file-based (good for development)",SQLite — 單檔案，適合開發階段
+CLI,interactive.infra_header,Infrastructure Components:,基礎設施組件：
+CLI,interactive.persist_prompt,"Do you want to persist scheduled jobs? (Enables job history, recovery after restarts)",是否持久化調度任務？（開啟後支援任務歷史記錄與重啟恢復）
+CLI,interactive.scheduler_db_configured,Scheduler + {engine} database configured,調度器已設定，使用 {engine} 數據庫
+CLI,interactive.scheduler_persistence,Scheduler Persistence:,調度器持久化：
+CLI,interactive.service_selection,Service Selection,服務選擇
+CLI,interactive.services_intro,Services provide business logic functionality for your application.,服務為應用提供具體的業務能力。
+CLI,interactive.worker_arq,"arq - Async, lightweight (default)",arq — 異步，輕量級（默認）
+CLI,interactive.worker_configured,Worker with {backend} backend configured,已設定 Worker，後端為 {backend}
+CLI,interactive.worker_dramatiq,"Dramatiq - Process-based, ideal for CPU-bound work",Dramatiq — 進程模型，適合 CPU 密集型任務
+CLI,interactive.worker_label,Worker Backend:,Worker 後端：
+CLI,interactive.worker_select,Select worker backend:,請選擇 Worker 後端：
+CLI,interactive.worker_taskiq,"TaskIQ - Async, framework-style with per-queue brokers",TaskIQ — 異步，支援按隊列分配 Broker
+CLI,postgen.db_alembic_hint,Skipping database migration. Please ensure the config file exists and run 'alembic upgrade head' manually.,跳過數據庫遷移，請確認設定檔案存在後手動執行 alembic upgrade head
+CLI,postgen.db_alembic_missing,Warning: Alembic config file not found at {path},提示：未找到 Alembic 設定檔案 {path}
+CLI,postgen.db_error,Warning: Migration setup failed: {error},提示：數據庫遷移失敗 — {error}
+CLI,postgen.db_failed,Warning: Database migration setup failed,提示：數據庫遷移未成功
+CLI,postgen.db_manual,Run 'alembic upgrade head' manually after project creation,可手動執行 alembic upgrade head
+CLI,postgen.db_setup,Setting up database schema...,正在初始化數據庫……
+CLI,postgen.db_success,Database tables created successfully,數據庫表創建完成
+CLI,postgen.db_timeout,Warning: Migration setup timeout - run 'alembic upgrade head' manually,提示：數據庫遷移超時，請手動執行 alembic upgrade head
+CLI,postgen.deps_failed,Project generation failed: dependency installation failed,項目生成失敗：依賴安裝未成功
+CLI,postgen.deps_failed_detail,"The generated project files remain in place, but the project is not usable.",項目檔案已生成，但當前無法正常使用。
+CLI,postgen.deps_failed_hint,Fix the dependency issue (check Python version compatibility) and try again.,請檢查 Python 版本兼容性，修復後重試。
+CLI,postgen.deps_installing,Installing dependencies with uv...,正在通過 uv 安裝依賴……
+CLI,postgen.deps_manual,Run 'uv sync' manually after project creation,可稍後手動執行 uv sync
+CLI,postgen.deps_success,Dependencies installed successfully,依賴安裝完成
+CLI,postgen.deps_timeout,Warning: Dependency installation timeout - run 'uv sync' manually,提示：依賴安裝超時，請手動執行 uv sync
+CLI,postgen.deps_uv_install,Install uv first: https://github.com/astral-sh/uv,安裝 uv：https://github.com/astral-sh/uv
+CLI,postgen.deps_uv_missing,Warning: uv not found in PATH,提示：未在 PATH 中找到 uv
+CLI,postgen.deps_warn_error,Warning: Dependency installation failed: {error},提示：依賴安裝失敗 — {error}
+CLI,postgen.deps_warn_failed,Warning: Dependency installation failed,提示：依賴安裝未成功
+CLI,postgen.docs_link,Docs: https://lbedner.github.io/aegis-stack,文檔：https://lbedner.github.io/aegis-stack
+CLI,postgen.env_created,Environment file created from .env.example,已從 .env.example 生成 .env 檔案
+CLI,postgen.env_error,Warning: Environment setup failed: {error},提示：環境設定失敗 — {error}
+CLI,postgen.env_exists,Environment file already exists,.env 檔案已存在
+CLI,postgen.env_manual,Copy .env.example to .env manually,可手動復制 .env.example 為 .env
+CLI,postgen.env_missing,Warning: No .env.example file found,提示：未找到 .env.example
+CLI,postgen.env_setup,Setting up environment configuration...,正在設定環境變量……
+CLI,postgen.format_error,Warning: Auto-formatting skipped: {error},提示：跳過自動格式化 — {error}
+CLI,postgen.format_error_manual,Run 'make fix' manually to format code,可手動執行 make fix 格式化代碼
+CLI,postgen.format_hint,Run 'make fix' to format code when ready,準備好後可執行 make fix 格式化代碼
+CLI,postgen.format_manual,Run 'make fix' manually to resolve remaining issues,可執行 make fix 修復剩餘格式問題
+CLI,postgen.format_partial,"Some formatting issues detected, but project created successfully",存在少量格式問題（不影響使用）
+CLI,postgen.format_start,Auto-formatting generated code...,正在格式化生成的代碼……
+CLI,postgen.format_success,Code formatting completed successfully,代碼格式化完成
+CLI,postgen.format_timeout,Warning: Formatting timeout - run 'make fix' manually when ready,提示：格式化超時，可稍後執行 make fix
+CLI,postgen.llm_fixtures_fallback,Static fixture data is available but may be outdated,靜態數據可用，但可能不是最新版本
+CLI,postgen.llm_fixtures_outdated,Static fixture data loaded (may be outdated),已加載靜態數據（可能不是最新）
+CLI,postgen.llm_seed_error,Warning: LLM fixture seeding failed: {error},提示：LLM 數據加載失敗 — {error}
+CLI,postgen.llm_seed_failed,Warning: LLM fixture seeding failed,提示：LLM 數據加載未成功
+CLI,postgen.llm_seed_manual,You can seed fixtures manually by running the fixture loader,可手動運行數據加載腳本
+CLI,postgen.llm_seed_success,LLM fixtures seeded successfully,LLM 基礎數據加載完成
+CLI,postgen.llm_seed_timeout,Warning: LLM fixture seeding timeout,提示：LLM 數據加載超時
+CLI,postgen.llm_seeding,Seeding LLM fixtures...,正在加載 LLM 基礎數據……
+CLI,postgen.llm_sync_error,Warning: LLM catalog sync failed: {error},提示：LLM 目錄同步失敗 — {error}
+CLI,postgen.llm_sync_failed,Warning: LLM catalog sync failed,提示：LLM 目錄同步未成功
+CLI,postgen.llm_sync_hint,Run '{slug} llm sync' later to get latest model data,之後可運行 {slug} llm sync 獲取最新模型數據
+CLI,postgen.llm_sync_manual,Run '{slug} llm sync' manually to populate the catalog,可手動執行 {slug} llm sync 獲取目錄數據
+CLI,postgen.llm_sync_skipped,LLM catalog sync skipped,已跳過 LLM 目錄同步
+CLI,postgen.llm_sync_success,LLM catalog synced successfully,LLM 目錄同步完成
+CLI,postgen.llm_sync_timeout,Warning: LLM catalog sync timeout,提示：LLM 目錄同步超時
+CLI,postgen.llm_syncing,Syncing LLM catalog from external APIs...,正在從外部 API 同步 LLM 目錄……
+CLI,postgen.next_cd,   cd {path},   cd {path}
+CLI,postgen.next_dashboard,   Open Overseer: http://localhost:8000/dashboard/,   訪問：http://localhost:8000/dashboard/
+CLI,postgen.next_serve,   make serve,   make serve
+CLI,postgen.next_steps,Next steps:,接下來：
+CLI,postgen.ready,Project ready to run!,項目已就緒！
+CLI,postgen.setup_start,Setting up your project environment...,正在初始化環境……
+CLI,postgen.star_prompt,"If Aegis Stack made your life easier, consider leaving a star:",如果對你有幫助，歡迎點個 Star：
+CLI,projectmap.ai,AI conversations,AI 對話
+CLI,projectmap.auth,Authentication,認證
+CLI,projectmap.cli,CLI commands,命令行工具
+CLI,projectmap.comms,Communications,通信
+CLI,projectmap.components,Components,組件
+CLI,projectmap.docs,Documentation,文檔
+CLI,projectmap.entrypoints,Run targets,啟動入口
+CLI,projectmap.migrations,Migrations,數據庫遷移
+CLI,projectmap.models,Database models,數據模型
+CLI,projectmap.new,NEW,新增
+CLI,projectmap.services,Business logic,業務邏輯
+CLI,projectmap.tests,Test suite,測試
+CLI,projectmap.title,Project Structure:,項目結構：
+CLI,remove.auto_remove_redis,"Auto-removing redis (no standalone functionality, only used by worker)",自動移除 Redis（僅由 Worker 使用，無獨立功能）
+CLI,remove.cannot_remove_core,Cannot remove core component: {component},無法移除核心組件：{component}
+CLI,remove.commit_hint,Make sure you have committed your changes to git.,建議先提交當前變更（git commit）
+CLI,remove.components_to_remove,Components to remove:,將移除的組件：
+CLI,remove.confirm,Remove these components?,確認移除？
+CLI,remove.error_no_args,Error: components argument is required (or use --interactive),請指定組件名稱，或使用 --interactive 模式
+CLI,remove.failed,Failed to remove components: {error},組件移除失敗：{error}
+CLI,remove.failed_component,Failed to remove {component}: {error},移除 {component} 失敗：{error}
+CLI,remove.interactive_hint,Or: aegis remove --interactive,或：aegis remove --interactive
+CLI,remove.load_config_failed,Failed to load project configuration: {error},加載項目設定失敗：{error}
+CLI,remove.no_selected,No components selected for removal,未選擇要移除的組件
+CLI,remove.not_enabled,Not enabled: {components},未啟用：{components}
+CLI,remove.nothing_to_remove,No components to remove!,沒有可移除的組件
+CLI,remove.project,Project: {path},項目：{path}
+CLI,remove.removed_files,Removed {count} files,移除了 {count} 個檔案
+CLI,remove.removing,Removing {component}...,正在移除 {component}……
+CLI,remove.removing_all,Removing components...,正在移除組件……
+CLI,remove.scheduler_db_remains,The database file at data/scheduler.db will remain.,數據檔案 data/scheduler.db 將保留。
+CLI,remove.scheduler_keep_hint,To keep your job history: Leave the database component,如需保留任務歷史：請保留數據庫組件
+CLI,remove.scheduler_persistence_detail,Your scheduler uses SQLite for job persistence.,調度器當前使用 SQLite 進行任務持久化。
+CLI,remove.scheduler_persistence_warn,IMPORTANT: Scheduler Persistence Warning,重要提示：調度器持久化數據
+CLI,remove.scheduler_remove_hint,To remove all data: Also remove the database component,如需清除所有數據：同時移除數據庫組件
+CLI,remove.success,Components removed successfully!,組件已移除
+CLI,remove.title,Aegis Stack - Remove Components,Aegis Stack — 移除組件
+CLI,remove.usage_hint,"Usage: aegis remove scheduler,worker","用法：aegis remove scheduler,worker"
+CLI,remove.validation_failed,Component validation failed: {error},組件校驗失敗：{error}
+CLI,remove.warning_delete,WARNING: This will DELETE component files from your project!,注意：此操作將刪除該組件的相關檔案！
+CLI,remove_service.auth_db_note,Note: Database tables and alembic migrations are NOT deleted.,注意：數據庫表和 Alembic 遷移檔案不會被刪除。
+CLI,remove_service.auth_delete_endpoints,User authentication API endpoints,用戶認證 API 端點
+CLI,remove_service.auth_delete_intro,Removing auth service will delete:,移除認證服務將刪除以下內容：
+CLI,remove_service.auth_delete_jwt,JWT token handling code,JWT 令牌處理代碼
+CLI,remove_service.auth_delete_models,User model and authentication services,用戶模型與認證服務
+CLI,remove_service.auth_warning,IMPORTANT: Auth Service Warning,重要提示：移除認證服務將產生影響
+CLI,remove_service.confirm,Remove these services?,確認移除？
+CLI,remove_service.deps_not_removed,"Note: Service dependencies (database, etc.) were NOT removed.",注意：服務依賴的組件（數據庫等）未被移除。
+CLI,remove_service.deps_remove_hint,Use 'aegis remove <component>' to remove components separately.,可使用 aegis remove <組件名> 單獨移除組件。
+CLI,remove_service.error_no_args,Error: services argument is required (or use --interactive),請指定服務名稱，或使用 --interactive 模式
+CLI,remove_service.failed,Failed to remove services: {error},服務移除失敗：{error}
+CLI,remove_service.failed_service,Failed to remove service {service}: {error},移除服務 {service} 失敗：{error}
+CLI,remove_service.interactive_hint,Or: aegis remove-service --interactive,或：aegis remove-service --interactive
+CLI,remove_service.interactive_ignores_args,Warning: --interactive flag ignores service arguments,提示：--interactive 模式將忽略服務參數
+CLI,remove_service.load_config_failed,Failed to load project configuration: {error},加載項目設定失敗：{error}
+CLI,remove_service.no_selected,No services selected for removal,未選擇要移除的服務
+CLI,remove_service.not_enabled,Not enabled: {services},未啟用：{services}
+CLI,remove_service.nothing_to_remove,No services to remove!,當前沒有可移除的服務
+CLI,remove_service.project,Project: {path},項目：{path}
+CLI,remove_service.removed_files,Removed {count} files,移除了 {count} 個檔案
+CLI,remove_service.removing,Removing service: {service}...,正在移除 {service}……
+CLI,remove_service.services_to_remove,Services to remove:,將移除的服務：
+CLI,remove_service.success,Services removed successfully!,服務已移除成功
+CLI,remove_service.title,Aegis Stack - Remove Services,Aegis Stack — 移除服務
+CLI,remove_service.usage_hint,"Usage: aegis remove-service auth,ai","用法：aegis remove-service auth,ai"
+CLI,remove_service.validation_failed,Service validation failed: {error},服務校驗失敗：{error}
+CLI,remove_service.warning_delete,WARNING: This will DELETE service files from your project!,注意：此操作將刪除該服務的相關檔案！
+CLI,service.ai,AI chatbot service with multi-framework support,AI 對話服務，支援多框架
+CLI,service.auth,User authentication and authorization with JWT tokens,用戶認證與授權（JWT）
+CLI,service.comms,"Communications service with email, SMS and voice",通信服務（郵件、短信、語音）
+CLI,services.none_available,  No services available yet.,  暫無可用服務。
+CLI,services.recommends_components,Recommends components: {deps},推薦組件：{deps}
+CLI,services.requires_components,Requires components: {deps},依賴組件：{deps}
+CLI,services.requires_services,Requires services: {deps},依賴服務：{deps}
+CLI,services.title,AVAILABLE SERVICES,可用服務
+CLI,services.type_ai,AI & Machine Learning Services,AI 與機器學習服務
+CLI,services.type_analytics,Analytics Services,數據分析服務
+CLI,services.type_auth,Authentication Services,認證服務
+CLI,services.type_notification,Notification Services,通知服務
+CLI,services.type_payment,Payment Services,支付服務
+CLI,services.type_storage,Storage Services,存儲服務
+CLI,services.usage_hint,Use 'aegis init PROJECT_NAME --services auth' to add services,用法：aegis init 項目名 --services auth
+CLI,shared.copier_only,The 'aegis {command}' command only works with Copier-generated projects.,aegis {command} 命令僅適用於 Copier 生成的項目。
+CLI,shared.empty_component,Empty component name is not allowed,組件名稱不能為空
+CLI,shared.empty_service,Empty service name is not allowed,服務名稱不能為空
+CLI,shared.git_init_hint,Projects created with 'aegis init' should have git initialized automatically,通過 aegis init 創建的項目應已自動初始化 Git
+CLI,shared.git_manual_init,"If you created this project manually, run: git init && git add . && git commit -m 'Initial commit'",如手動創建項目，請執行：git init && git add . && git commit -m 'Initial commit'
+CLI,shared.git_not_initialized,Project is not in a git repository,項目未初始化 Git 倉庫
+CLI,shared.git_required,Copier updates require git for change tracking,Copier 更新依賴 Git 進行變更追蹤
+CLI,shared.interactive_ignores_args,Warning: --interactive flag ignores component arguments,提示：--interactive 模式將忽略組件參數
+CLI,shared.next_commit,   3. Commit the changes with: git add . && git commit,   3. 提交變更：git add . && git commit
+CLI,shared.next_make_check,   1. Run 'make check' to verify the update,   1. 執行 make check 驗證更新
+CLI,shared.next_steps,Next steps:,下一步：
+CLI,shared.next_test,   2. Test your application,   2. 測試應用
+CLI,shared.no_components_selected,No components selected,未選擇任何組件
+CLI,shared.no_services_selected,No services selected,未選擇任何服務
+CLI,shared.not_copier_project,Project at {path} was not generated with Copier.,項目 {path} 不是通過 Copier 生成的。
+CLI,shared.operation_cancelled,Operation cancelled,操作已取消
+CLI,shared.regenerate_hint,"To add components, regenerate the project with the new components included.",如需添加組件，請重新生成項目並包含所需組件。
+CLI,shared.review_docker,   git diff docker-compose.yml,   git diff docker-compose.yml
+CLI,shared.review_header,Review changes:,查看變更（如有）：
+CLI,shared.review_pyproject,   git diff pyproject.toml,   git diff pyproject.toml
+CLI,update.already_at_commit,Project is already at the target commit,項目已是目標提交
+CLI,update.already_at_version,Project is already at the requested version,項目已是目標版本
+CLI,update.backup_created,   Backup created: {tag},   備份已創建：{tag}
+CLI,update.backup_failed,Could not create backup point,無法創建備份點
+CLI,update.cancelled,Update cancelled,更新已取消
+CLI,update.changelog,Changelog:,變更日志：
+CLI,update.changelog_breaking,Breaking Changes:,破壞性變更：
+CLI,update.changelog_features,New Features:,新增功能：
+CLI,update.changelog_fixes,Bug Fixes:,問題修復：
+CLI,update.changelog_other,Other Changes:,其他變更：
+CLI,update.clean_required,Copier requires a clean git tree to safely merge changes.,Copier 需要幹淨的 Git 工作區才能安全合並變更。
+CLI,update.commit_or_stash,Commit or stash your changes before running 'aegis update'.,請先提交或暫存變更，再執行 aegis update。
+CLI,update.confirm,Apply this update?,確認更新？
+CLI,update.copier_only,The 'aegis update' command only works with Copier-generated projects.,aegis update 命令僅適用於 Copier 生成的項目。
+CLI,update.creating_backup,Creating backup point...,正在創建備份點……
+CLI,update.current_cli,   Current CLI:      {version},   當前 CLI：     {version}
+CLI,update.current_commit,   Current: {commit}...,   當前：{commit}...
+CLI,update.current_template,   Current Template: {version},   當前模板：{version}
+CLI,update.current_template_commit,   Current Template: {commit}... (commit),   當前模板：{commit}...（提交）
+CLI,update.current_template_unknown,   Current Template: unknown,   當前模板：未知
+CLI,update.custom_template,Using custom template ({source}): {path},使用自定義模板（{source}）：{path}
+CLI,update.dirty_tree,Git tree has uncommitted changes,Git 工作區存在未提交的變更
+CLI,update.downgrade_blocked,Downgrade not supported,不支援降級
+CLI,update.downgrade_reason,Copier does not support downgrading to older template versions.,Copier 不支援降級到舊版本模板。
+CLI,update.dry_run,DRY RUN MODE - No changes will be applied,試運行模式 — 不會應用任何變更
+CLI,update.dry_run_hint,"To apply this update, run:",要應用此更新，請執行：
+CLI,update.failed,Update failed: {error},更新失敗：{error}
+CLI,update.git_clean,Git tree is clean,Git 工作區是幹淨的
+CLI,update.manual_rollback,Manual rollback: git reset --hard {tag},手動回滾：git reset --hard {tag}
+CLI,update.merge_conflicts,   {count} file(s) have merge conflicts (search for <<<<<<< to resolve):,   {count} 個檔案存在合並衝突（搜索 <<<<<<< 解決）：
+CLI,update.moved_files,   Moved {count} new files from nested directory,   已從嵌套目錄移動 {count} 個新檔案
+CLI,update.need_regen,Projects generated before v0.2.0 need to be regenerated.,v0.2.0 之前生成的項目需要重新生成。
+CLI,update.next_commit,   4. Commit changes: git add . && git commit,   4. 提交變更：git add . && git commit
+CLI,update.next_conflicts,   2. Check for conflicts (*.rej files),   2. 檢查衝突（*.rej 檔案）
+CLI,update.next_review,   1. Review changes: git diff,   1. 查看變更：git diff
+CLI,update.next_steps,Next Steps:,下一步：
+CLI,update.next_test,   3. Run tests: make check,   3. 運行測試：make check
+CLI,update.not_copier,Project at {path} was not generated with Copier.,項目 {path} 不是通過 Copier 生成的。
+CLI,update.partial_detail,   Some setup tasks failed. See details above.,   部分任務失敗，詳情見上方。
+CLI,update.partial_success,Update completed with some post-generation task failures,更新完成，但部分生成後任務失敗
+CLI,update.project,Project: {path},項目：{path}
+CLI,update.rollback_prompt,Rollback to previous state?,回滾到之前的狀態？
+CLI,update.running_postgen,Running post-generation tasks...,正在執行生成後任務……
+CLI,update.success,Update completed successfully!,更新完成
+CLI,update.synced_files,   Synced {count} template changes,   已同步 {count} 處模板變更
+CLI,update.target_commit,   Target:  {commit}...,   目標：{commit}...
+CLI,update.target_template,   Target Template:  {version},   目標模板：{version}
+CLI,update.title,Aegis Stack - Update Template,Aegis Stack — 更新模板
+CLI,update.troubleshoot_clean,   - Ensure you have a clean git tree,   - 確保 Git 工作區是幹淨的
+CLI,update.troubleshoot_docs,   - Review Copier documentation for update issues,   - 參考 Copier 文檔排查更新問題
+CLI,update.troubleshoot_version,   - Check that the version/commit exists,   - 確認版本/提交存在
+CLI,update.troubleshooting,Troubleshooting:,故障排查：
+CLI,update.unknown_version,Warning: Cannot determine current template version,提示：無法確定當前模板版本
+CLI,update.untagged_commit,Project may have been generated from an untagged commit,項目可能是從未打標籤的提交生成的
+CLI,update.updating,Updating project...,正在更新項目……
+CLI,update.updating_to,Updating to template version {version},正在更新至模板版本 {version}
+CLI,update.version_info,Version Information:,版本訊息：
+CLI,update.version_updated,   Updated __aegis_version__ to {version},   已更新 __aegis_version__ 至 {version}
+CLI,updater.code_formatted,Code formatted (make fix),代碼已格式化（make fix）
+CLI,updater.deps_synced,Dependencies synced (uv sync),依賴已同步（uv sync）
+CLI,updater.processing_files,Processing {count} component files...,正在處理 {count} 個檔案……
+CLI,updater.running_postgen,Running post-generation tasks...,正在執行生成後任務……
+CLI,updater.updating_shared,Updating shared template files...,正在更新共享模板檔案……
+CLI,validation.invalid_name,"Invalid project name. Only letters, numbers, hyphens, and underscores are allowed.",项目名称不合法，仅支援英文字母、数字、连字符和下划线。
+CLI,validation.invalid_python,Invalid Python version '{version}'. Must be one of: {supported},Python 版本「{version}」不受支援，可選版本：{supported}
+CLI,validation.name_too_long,Project name too long. Maximum 50 characters allowed.,項目名稱過長，最多 50 個字符。
+CLI,validation.reserved_name,'{name}' is a reserved name.,「{name}」是系統保留名稱，請換一個。
+CLI,validation.unknown_component,Unknown component: {name},未知組件：{name}
+CLI,validation.unknown_service,Unknown service: {name},未知服務：{name}
+CLI,validation.unknown_services,Unknown services: {names},未知服務：{names}
+CLI,version.info,Aegis Stack CLI v{version},Aegis Stack CLI v{version}
+Template,ai.access_denied,Access denied: You don't own this conversation,無權訪問：該對話不屬於你
+Template,ai.adding_provider,Adding {provider} provider...,正在添加 {provider} 服務商...
+Template,ai.api_key_label,API Key:,API 密鑰：
+Template,ai.api_key_skipped,Skipped API key configuration,已跳過 API 密鑰設定
+Template,ai.arg_audio_file,Path to audio file,音頻檔案路徑
+Template,ai.arg_conversation_id,Conversation ID,對話 ID
+Template,ai.arg_message,Message to send to AI,發送給 AI 的消息
+Template,ai.arg_provider,"Provider name (openai, anthropic, google, groq, mistral, cohere)",供應商名稱（openai、anthropic、google、groq、mistral、cohere）
+Template,ai.arg_provider_switch,Provider name to switch to,要切換到的供應商名稱
+Template,ai.arg_text,Text to synthesize into speech,要合成為語音的文本
+Template,ai.audio_saved,Audio saved: {path} ({size} bytes),音頻已保存：{path}（{size} 字節）
+Template,ai.audio_status,Audio status: {status},音頻狀態：{status}
+Template,ai.available_providers,Available providers:,可用服務商：
+Template,ai.cancelled,Cancelled,已取消
+Template,ai.chat_ended,Chat session ended,聊天會話已結束
+Template,ai.chat_hints,Type /help for commands • Esc then Enter to insert newline • 'exit' to quit,輸入 /help 查看命令 • Esc 後回車換行 • 輸入 exit 退出
+Template,ai.check_mic,Check your microphone permissions and try again,請檢查麥克風權限後重試
+Template,ai.checking_api_key,Checking API key...,正在檢查 API 密鑰...
+Template,ai.checking_deps,Checking dependencies...,正在檢查依賴...
+Template,ai.col_api_key,API Key,API 密鑰
+Template,ai.col_free,Free,免費
+Template,ai.col_functions,Functions,函數調用
+Template,ai.col_installed,Installed,已安裝
+Template,ai.col_provider,Provider,服務商
+Template,ai.col_status,Status,狀態
+Template,ai.col_stream,Stream,流式
+Template,ai.col_vision,Vision,視覺
+Template,ai.config_issues,Configuration issues:,設定問題：
+Template,ai.config_valid,Configuration valid,設定有效
+Template,ai.connecting_to,Connecting to {provider}...,連接 {provider}...
+Template,ai.connection_error,Connection Error: {error},連接錯誤：{error}
+Template,ai.consider_running,Consider running:,建議運行：
+Template,ai.conversation_id_label,Conversation: {id},對話：{id}
+Template,ai.conversation_label,Conversation:,對話：
+Template,ai.conversation_not_found,Conversation not found: {id},未找到對話：{id}
+Template,ai.conversations_for,Conversations for {user_id}:,{user_id} 的對話列表：
+Template,ai.current_provider,Current provider: {provider},當前服務商：{provider}
+Template,ai.deps_installed,Dependencies already installed,依賴已安裝
+Template,ai.deps_not_installed,Dependencies not installed for {provider},{provider} 的依賴未安裝
+Template,ai.deps_ok,Dependencies installed,依賴已安裝
+Template,ai.disabled,Disabled,已禁用
+Template,ai.enabled,Enabled,已啟用
+Template,ai.engine_label,Engine:,引擎：
+Template,ai.enter_api_key,Enter your {provider} API key (or press Enter to skip),輸入 {provider} API 密鑰（按回車跳過）
+Template,ai.enter_message_hint,Please enter a message or type /help.,請輸入消息或輸入 /help 查看命令。
+Template,ai.file_not_found,File not found: {path},檔案未找到：{path}
+Template,ai.free_tier,Free tier,免費方案
+Template,ai.generating_speech,Generating speech...,正在生成語音...
+Template,ai.get_api_key_at,Get your API key at:,獲取 API 密鑰：
+Template,ai.goodbye,Goodbye!,再見！
+Template,ai.header,Illiana:,Illiana：
+Template,ai.header_inline,Illiana: ,Illiana：
+Template,ai.health_degraded,"DEGRADED ({pct:.0f}%, {count} issues)",異常（{pct:.0f}%，{count} 個問題）
+Template,ai.health_label,Health:,健康狀態：
+Template,ai.health_na,N/A,不可用
+Template,ai.health_ok,OK ({pct:.0f}%),正常（{pct:.0f}%）
+Template,ai.help,AI service management and chat commands,AI 服務管理與對話相關命令
+Template,ai.help_add_provider,Add a new AI provider — installs dependencies and configures API key.,添加新的 AI 供應商——安裝依賴並設定 API 密鑰。
+Template,ai.help_chat,Send a chat message or start an interactive session. Resumes the most recent conversation by default.,發送消息或啟動交互式對話。默認恢復最近的對話。
+Template,ai.help_conversations,List conversations for a user.,列出用戶的對話記錄。
+Template,ai.help_history,View conversation history.,查看對話歷史。
+Template,ai.help_providers,List all available AI providers with installation status.,列出所有可用 AI 供應商及安裝狀態。
+Template,ai.help_record,"Record audio from microphone, transcribe, and optionally chat with AI.",錄制麥克風音頻，轉錄文本，並可選擇與 AI 對話。
+Template,ai.help_speak,Synthesize speech from text using the configured TTS provider.,使用設定的 TTS 供應商將文本合成為語音。
+Template,ai.help_status,"Show AI service status, configuration, and validation.",查看 AI 服務狀態、設定和驗證訊息。
+Template,ai.help_stt_status,Show STT (Speech-to-Text) service status.,查看語音轉文字（STT）服務狀態。
+Template,ai.help_transcribe,Transcribe audio to text without chat.,將音頻轉錄為文本（不進行對話）。
+Template,ai.help_tts_status,Show TTS (Text-to-Speech) service status.,查看文字轉語音（TTS）服務狀態。
+Template,ai.help_usage,"Show AI usage statistics including token counts, costs, and recent activity.",查看 AI 使用統計，包括 token 用量、費用和近期活動。
+Template,ai.help_use_provider,Switch to a different AI provider.,切換到其他 AI 供應商。
+Template,ai.help_voice,Send voice input to AI agent. Transcribes audio and sends to chat.,發送語音輸入給 AI，自動轉錄音頻並發送到對話。
+Template,ai.initializing,Initializing...,初始化中...
+Template,ai.input_tokens,Input:,輸入：
+Template,ai.install_cancelled,Installation cancelled,安裝已取消
+Template,ai.install_dep,Install {dep}?,安裝 {dep}？
+Template,ai.install_failed_hint,Try installing manually:,請嘗試手動安裝：
+Template,ai.install_with,Install with:,安裝命令：
+Template,ai.installing,Installing...,安裝中...
+Template,ai.invalid_provider,Invalid provider: {provider},無效的服務商：{provider}
+Template,ai.language_label,Language: {lang},語言：{lang}
+Template,ai.linux_deps,On Linux:,Linux：
+Template,ai.macos_portaudio,"On macOS, you may also need PortAudio:",macOS 可能還需要 PortAudio：
+Template,ai.max_tokens_label,Max Tokens:,最大 Token 數：
+Template,ai.messages_count,{count} messages,{count} 條消息
+Template,ai.messages_info,Messages: {count},消息數：{count}
+Template,ai.messages_label,Messages:,消息數：
+Template,ai.model_label,Model:,模型：
+Template,ai.model_usage,Model Usage,模型用量
+Template,ai.no_api_key,No {var} found,未找到 {var}
+Template,ai.no_api_key_configured,No {var} configured,未設定 {var}
+Template,ai.no_conversations,No conversations found for user: {user_id},未找到用戶 {user_id} 的對話
+Template,ai.no_model_usage,No model usage data available.,暫無模型用量數據。
+Template,ai.no_recent_activity,No recent activity.,暫無最近活動。
+Template,ai.no_response_content,(No response content),（無響應內容）
+Template,ai.no_token_usage,No token usage recorded.,暫無 Token 用量記錄。
+Template,ai.ok,OK,OK
+Template,ai.online,Online,已上線
+Template,ai.openai_voices,OpenAI Voices:,OpenAI 語音：
+Template,ai.opt_collection,RAG collection to search,要搜索的 RAG 集合
+Template,ai.opt_conversation_id,Continue existing conversation,繼續已有對話
+Template,ai.opt_filter_user_id,Filter by user ID,按用戶 ID 篩選
+Template,ai.opt_json,Output raw JSON,以 JSON 格式輸出
+Template,ai.opt_language,"Language code (e.g., 'en', 'es')",語言代碼（如 'en'、'es'）
+Template,ai.opt_limit,Number of conversations to show,顯示的對話數量
+Template,ai.opt_new,Start a fresh conversation (don't resume),開始新對話（不恢復上次）
+Template,ai.opt_output_file,Output file path,輸出檔案路徑
+Template,ai.opt_output_recording,Save recording to file (default: temp file),保存錄音到檔案（默認：臨時檔案）
+Template,ai.opt_rag,Enable RAG (auto-enables if collections exist),啟用 RAG（有集合時自動啟用）
+Template,ai.opt_rag_inject,Enable RAG context injection,啟用 RAG 上下文注入
+Template,ai.opt_rag_send,Enable RAG context injection (requires --send),啟用 RAG 上下文注入（需配合 --send）
+Template,ai.opt_recent,Number of recent activities to show,顯示的最近活動數量
+Template,ai.opt_send,Send transcription to AI agent,將轉錄文本發送給 AI
+Template,ai.opt_set_default,Set as default provider after adding,添加後設為默認供應商
+Template,ai.opt_skip_api_key,Skip API key configuration,跳過 API 密鑰設定
+Template,ai.opt_sources,Show source references in output,在輸出中顯示引用來源
+Template,ai.opt_speed,Speech speed (0.25-4.0),語速（0.25-4.0）
+Template,ai.opt_stream,Enable streaming output,啟用流式輸出
+Template,ai.opt_top_k,Number of RAG results to use,使用的 RAG 結果數量
+Template,ai.opt_url,API base URL (default: localhost:8000),API 基礎 URL（默認：localhost:8000）
+Template,ai.opt_user_id,User identifier,用戶標識
+Template,ai.opt_verbose,Show conversation metadata,顯示對話元數據
+Template,ai.opt_voice,"Voice to use (alloy, echo, fable, onyx, nova, shimmer)",使用的語音（alloy、echo、fable、onyx、nova、shimmer）
+Template,ai.opt_voice_mode,Summarize response for spoken output,將響應摘要化以便語音播放
+Template,ai.opt_voice_response,Play TTS response (requires --send),播放 TTS 語音響應（需配合 --send）
+Template,ai.opt_yes,Skip confirmation prompts,跳過確認提示
+Template,ai.output_tokens,Output:,輸出：
+Template,ai.preparing_voice,Preparing voice response...,準備語音回復...
+Template,ai.prov_current,Current,當前
+Template,ai.prov_current_local,Current (Local),當前（本地）
+Template,ai.prov_current_need_key,Current (Need API key),當前（需要 API 密鑰）
+Template,ai.prov_current_not_installed,Current (Not installed),當前（未安裝）
+Template,ai.prov_error,Error,錯誤
+Template,ai.prov_local,Local,本地
+Template,ai.prov_na,N/A,不適用
+Template,ai.prov_need_key,Need API key,需要 API 密鑰
+Template,ai.prov_no,No,否
+Template,ai.prov_not_installed,Not installed,未安裝
+Template,ai.prov_ready,Ready,就緒
+Template,ai.prov_yes,Yes,是
+Template,ai.provider_added,Provider added successfully!,服務商添加成功！
+Template,ai.provider_info,Provider: {provider},服務商：{provider}
+Template,ai.provider_label,Provider:,服務商：
+Template,ai.provider_not_installed,Provider not installed: {provider},服務商未安裝：{provider}
+Template,ai.provider_set,AI_PROVIDER set to {provider},AI_PROVIDER 已設置為 {provider}
+Template,ai.providers_tip,Tip: Run '{app} ai add-provider <name>' to install missing providers.,提示：運行 '{app} ai add-provider <名稱>' 安裝缺少的服務商。
+Template,ai.providers_title,AI Providers,AI 服務商
+Template,ai.rag_get_started,To get started:,快速開始：
+Template,ai.rag_list_hint,Tip: Run '{app} rag list' to see existing collections.,提示：運行 '{app} rag list' 查看現有集合。
+Template,ai.rag_requires_content,RAG requires indexed content.,RAG 需要已索引的內容。
+Template,ai.rag_step_index,1. Index your codebase:,1. 索引代碼庫：
+Template,ai.rag_step_query,2. Query with the collection:,2. 使用集合查詢：
+Template,ai.recent_activity,Recent Activity,最近活動
+Template,ai.recording,Recording...,錄音中...
+Template,ai.recording_cancelled,Recording cancelled,錄音已取消
+Template,ai.recording_failed,Recording failed - no audio captured,錄音失敗——未捕獲到音頻
+Template,ai.recording_hint,"Press ENTER to stop recording, Ctrl+C to cancel",按回車停止錄音，Ctrl+C 取消
+Template,ai.recording_requires,Audio recording requires sounddevice and soundfile packages.,錄音功能需要 sounddevice 和 soundfile 包。
+Template,ai.response_label,Response:,回復：
+Template,ai.response_time_label,Response time:,響應時間：
+Template,ai.resuming_conversation,Resuming conversation {id}... (use --new for fresh start),恢復對話 {id}...（使用 --new 開始新對話）
+Template,ai.run_first,Run this command first:,請先運行：
+Template,ai.run_to_install,Run '{command}' to install it.,運行 '{command}' 安裝。
+Template,ai.sending_to_agent,Sending to agent...,正在發送給 AI...
+Template,ai.sources_label,Sources:,引用來源：
+Template,ai.speech_duration,Duration: {duration}s,時長：{duration}秒
+Template,ai.speech_format,Format: {format},格式：{format}
+Template,ai.speech_saved,Speech saved to: {path},語音已保存至：{path}
+Template,ai.speech_size,Size: {size} bytes,大小：{size} 字節
+Template,ai.speed_label,Speed:,速度：
+Template,ai.status_label,Status:,狀態：
+Template,ai.status_title,AI Service Status,AI 服務狀態
+Template,ai.streaming_supported,Streaming supported,支援流式輸出
+Template,ai.stt_status_title,STT Service Status,STT 語音轉文字服務狀態
+Template,ai.supported_formats,Supported formats: {formats},支援的格式：{formats}
+Template,ai.svc_initialized,Initialized,已初始化
+Template,ai.svc_not_initialized,Not initialized (lazy-loaded),未初始化（延遲加載）
+Template,ai.switch_anyway,Switch anyway?,仍然切換？
+Template,ai.switched_to,Switched to {provider}!,已切換到 {provider}！
+Template,ai.switching_to,Switching to {provider} provider...,正在切換到 {provider}...
+Template,ai.synthesizing,Synthesizing speech...,正在合成語音...
+Template,ai.temperature_label,Temperature:,溫度：
+Template,ai.test_with,"Test with: {app} ai chat ""Hello""","測試命令：{app} ai chat ""你好"""
+Template,ai.thinking,Thinking...,思考中...
+Template,ai.timeout_error,Request timed out. Try a faster model or increase AI_TIMEOUT_SECONDS.,請求超時。請嘗試更快的模型或增大 AI_TIMEOUT_SECONDS。
+Template,ai.timeout_label,Timeout Error: {error},超時錯誤：{error}
+Template,ai.tip_label,Tip:,提示：
+Template,ai.title_label,Title: {title},標題：{title}
+Template,ai.to_configure_key,to configure your API key,設定 API 密鑰
+Template,ai.token_breakdown,Token Breakdown,Token 用量明細
+Template,ai.transcribing,Transcribing...,轉寫中...
+Template,ai.transcribing_audio,Transcribing audio...,正在轉寫音頻...
+Template,ai.transcription_label,Transcription:,轉寫結果：
+Template,ai.tts_status_title,TTS Service Status,TTS 文字轉語音服務狀態
+Template,ai.unsupported_format,Unsupported format: {ext},不支援的格式：{ext}
+Template,ai.usage_success_rate,Success Rate:,成功率：
+Template,ai.usage_title,AI Usage Summary,AI 用量概覽
+Template,ai.usage_total_cost,Total Cost:,總費用：
+Template,ai.usage_total_requests,Total Requests:,請求總數：
+Template,ai.usage_total_tokens,Total Tokens:,Token 總量：
+Template,ai.using_mic,Using microphone: {name} @ {rate}Hz,使用麥克風：{name} @ {rate}Hz
+Template,ai.valid_providers,Valid providers: {names},有效服務商：{names}
+Template,ai.voice_hint,Full response available with --no-voice flag,完整回復請使用 --no-voice 參數
+Template,ai.voice_label,Voice:,語音：
+Template,auth.auto_generated_email,Auto-generated email: {email} (next in sequence),自動生成郵箱：{email}（按序遞增）
+Template,auth.count_must_be_positive,Error: Count must be greater than 0,錯誤：數量必須大於 0
+Template,auth.create_user_failed,Error: Failed to create test user: {error},錯誤：創建測試用戶失敗：{error}
+Template,auth.create_users_failed,Error: Failed to create test users: {error},錯誤：批量創建測試用戶失敗：{error}
+Template,auth.created_column,Created,創建時間
+Template,auth.created_label,Created:,已創建：
+Template,auth.creating_users,Creating {count} test users with prefix '{prefix}'...,正在創建 {count} 個測試用戶，前綴為 '{prefix}'...
+Template,auth.email_label,Email,郵箱
+Template,auth.found_users,Found {count} user(s):,找到 {count} 個用戶：
+Template,auth.help,Authentication management commands,認證管理命令
+Template,auth.help_create_test_user,Create a test user for development and testing.,創建測試用戶，用於開發和測試
+Template,auth.help_create_test_users,Create multiple test users for development and testing.,批量創建測試用戶，用於開發和測試
+Template,auth.help_list_users,List all users in the system.,列出所有用戶
+Template,auth.list_users_failed,Error: Failed to list users: {error},錯誤：獲取用戶列表失敗：{error}
+Template,auth.name_label,Name,姓名
+Template,auth.no_users_found,No users found.,未找到任何用戶。
+Template,auth.opt_count,Number of test users to create,創建數量
+Template,auth.opt_domain,Email domain for auto-generated emails,自動生成郵箱的域名
+Template,auth.opt_email,"User email address (auto-increment: test@example.com, test1@example.com, etc.)",用戶郵箱（自動遞增，如 test@、test1@ 等）
+Template,auth.opt_full_name,User full name,用戶全名
+Template,auth.opt_password,User password (generated if not provided),用戶密碼（不指定則自動生成）
+Template,auth.opt_prefix,Email prefix for auto-generated emails,自動生成郵箱的前綴
+Template,auth.opt_shared_password,Shared password (generated if not provided),共享密碼（不指定則自動生成）
+Template,auth.password_auto_generated,Password was auto-generated. Save it for testing!,密碼為自動生成，請妥善保存以便測試！
+Template,auth.password_label,Password,密碼
+Template,auth.ready_to_test,Ready to test auth endpoints at http://localhost:8000/docs,可以在 http://localhost:8000/docs 測試認證接口了
+Template,auth.shared_password,Shared password:,共享密碼：
+Template,auth.user_already_exists,Error: User with email '{email}' already exists,錯誤：郵箱 '{email}' 對應的用戶已存在
+Template,auth.user_created,Test user created successfully!,測試用戶創建成功！
+Template,auth.user_details_title,User Details,用戶詳情
+Template,auth.user_id_label,User ID,用戶 ID
+Template,auth.users_created,Successfully created {count} test users!,成功創建 {count} 個測試用戶！
+Template,auth.users_title,Users,用戶列表
+Template,chat.disable_rag,Disable RAG,關閉 RAG
+Template,chat.hide_source_references,Hide source references,隱藏引用來源
+Template,chat.show_source_references,Show source references,顯示引用來源
+Template,comms.account_sid_label,Account SID:,賬戶 SID：
+Template,comms.api_key_label,API Key:,API 密鑰：
+Template,comms.arg_body,SMS message body,短信內容
+Template,comms.arg_to_email,Recipient email address,收件人郵箱地址
+Template,comms.arg_to_phone,Recipient phone number (E.164 format),收件人電話號碼（E.164 格式）
+Template,comms.arg_twiml_url,URL returning TwiML instructions,返回 TwiML 指令的 URL
+Template,comms.auth_token_label,Auth Token:,認證令牌：
+Template,comms.call_failed,Failed to make call: {error},通話發起失敗：{error}
+Template,comms.call_initiated,Call initiated successfully!,通話已發起！
+Template,comms.call_sid_label,Call SID:,通話 SID：
+Template,comms.call_status_label,Status:,狀態：
+Template,comms.channel_column,Channel,渠道
+Template,comms.configuration_error,Configuration error: {error},設定錯誤：{error}
+Template,comms.configured,Configured,已設定
+Template,comms.email,Email,郵件
+Template,comms.email_resend_header,Email (Resend),郵件 (Resend)
+Template,comms.email_send_failed,Failed to send email: {error},郵件發送失敗：{error}
+Template,comms.email_sent,Email sent successfully!,郵件發送成功！
+Template,comms.email_signup_hint,Email: Sign up at https://resend.com (free tier available),郵件：前往 https://resend.com 注冊（有免費額度）
+Template,comms.free_tier_100_day,100/day,100 封/天
+Template,comms.free_tier_15_trial,$15 trial,$15 試用
+Template,comms.free_tier_column,Free Tier,免費額度
+Template,comms.from_email_label,From Email:,發件人郵箱：
+Template,comms.help,"Communications service commands (email, SMS, voice)",通信服務相關命令（郵件、短信、語音）
+Template,comms.help_call,Voice call commands using Twilio,語音通話相關命令（Twilio）
+Template,comms.help_call_make,Make a voice call via Twilio.,通過 Twilio 發起語音通話。
+Template,comms.help_email,Email commands using Resend,郵件相關命令（Resend）
+Template,comms.help_email_send,Send an email via Resend.,通過 Resend 發送郵件。
+Template,comms.help_providers,Show available communications providers.,查看可用的通信服務供應商。
+Template,comms.help_sms,SMS commands using Twilio,短信相關命令（Twilio）
+Template,comms.help_sms_send,Send an SMS via Twilio.,通過 Twilio 發送短信。
+Template,comms.help_status,Show communications service configuration status.,查看通信服務設定狀態。
+Template,comms.message_id_label,Message ID:,消息 ID：
+Template,comms.message_sid_label,Message SID:,消息 SID：
+Template,comms.messaging_service_label,Messaging Service:,消息服務：
+Template,comms.not_configured,Not configured,未設定
+Template,comms.not_set,Not set,未設置
+Template,comms.notes_column,Notes,備注
+Template,comms.opt_html,HTML body,HTML 正文
+Template,comms.opt_subject,Email subject,郵件主題
+Template,comms.opt_text,Plain text body,純文本正文
+Template,comms.opt_timeout,Seconds to wait for answer,等待接聽的秒數
+Template,comms.phone_number_label,Phone Number:,電話號碼：
+Template,comms.provider_column,Provider,供應商
+Template,comms.providers_title,Communications Providers,通信服務供應商
+Template,comms.quick_start,Quick start:,快速開始：
+Template,comms.resend_notes,"Modern email API, great DX",現代郵件 API，開發體驗好
+Template,comms.segments_label,Segments:,分段數：
+Template,comms.service_status_title,Communications Service Status,通信服務狀態
+Template,comms.services_configured_summary,{count}/3 services configured,{count}/3 個服務已設定
+Template,comms.set,Set,已設置
+Template,comms.signup_links,Sign up links:,注冊鏈接：
+Template,comms.sms,SMS,短信
+Template,comms.sms_send_failed,Failed to send SMS: {error},短信發送失敗：{error}
+Template,comms.sms_sent,SMS sent successfully!,短信發送成功！
+Template,comms.sms_twilio_header,SMS (Twilio),短信 (Twilio)
+Template,comms.status_label,Status:,狀態：
+Template,comms.subject_label,Subject:,主題：
+Template,comms.text_or_html_required,Error: Either --text or --html is required,錯誤：必須提供 --text 或 --html 參數
+Template,comms.to_label,To:,收件人：
+Template,comms.twilio_signup_hint,SMS/Voice: Sign up at https://twilio.com/try-twilio (free trial),短信/語音：前往 https://twilio.com/try-twilio 注冊（免費試用）
+Template,comms.twilio_sms_notes,Pay per message after trial,試用後按條計費
+Template,comms.twilio_voice_notes,Pay per minute after trial,試用後按分鍾計費
+Template,comms.voice,Voice,語音
+Template,comms.voice_twilio_header,Voice (Twilio),語音 (Twilio)
+Template,comms.warn.resend_api_key,RESEND_API_KEY is not set. Sign up at https://resend.com to get your API key.,未設置 RESEND_API_KEY，請前往 https://resend.com 注冊並獲取 API 密鑰
+Template,comms.warn.resend_api_key_send,RESEND_API_KEY is not set. Sign up at https://resend.com and set your API key.,未設置 RESEND_API_KEY，請前往 https://resend.com 注冊並設定 API 密鑰。
+Template,comms.warn.resend_from_email,RESEND_FROM_EMAIL is not set. This should be a verified sender email in your Resend account.,未設置 RESEND_FROM_EMAIL，請設定已驗證的發件郵箱
+Template,comms.warn.twilio_account_sid,TWILIO_ACCOUNT_SID is not set. Find it in your Twilio Console dashboard.,未設置 TWILIO_ACCOUNT_SID，請在 Twilio 控制臺查看
+Template,comms.warn.twilio_auth_token,TWILIO_AUTH_TOKEN is not set. Find it in your Twilio Console dashboard.,未設置 TWILIO_AUTH_TOKEN，請在 Twilio 控制臺查看
+Template,comms.warn.twilio_creds,Twilio credentials not set. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables.,未設置 Twilio 憑據。請設置 TWILIO_ACCOUNT_SID 和 TWILIO_AUTH_TOKEN 環境變量。
+Template,comms.warn.twilio_messaging_sid,TWILIO_MESSAGING_SERVICE_SID or TWILIO_PHONE_NUMBER must be set. Messaging Service SID is required for toll-free numbers.,TWILIO_MESSAGING_SERVICE_SID 或 TWILIO_PHONE_NUMBER 必須設置。免費號碼需設定 Messaging Service SID
+Template,comms.warn.twilio_phone,TWILIO_PHONE_NUMBER is not set. This should be a Twilio phone number capable of making calls.,未設置 TWILIO_PHONE_NUMBER，請設定支援撥號的 Twilio 號碼
+Template,comms.warning,Warning: {message},警告：{message}
+Template,docs.components,Components,組件
+Template,docs.docs_label,Docs:,文檔：
+Template,docs.documentation,Documentation,文檔
+Template,docs.guide_label,Guide:,指南：
+Template,docs.help,Show documentation links,查看已安裝組件和服務的文檔鏈接
+Template,docs.help_show,Display documentation links for installed components and services.,查看已安裝組件和服務的文檔鏈接
+Template,docs.no_detected,No components or services detected.,未檢測到任何組件或服務。
+Template,docs.services,Services,服務
+Template,health.api_error,API returned error {status}: {text},API 返回錯誤 {status}：{text}
+Template,health.component_service_tree,Component & Service Tree,組件與服務樹
+Template,health.component_tree,Component Tree,組件樹
+Template,health.components_label,Components:,組件：
+Template,health.connect_error,Cannot connect to API server at {url}. Make sure the application is running with 'make serve' or 'make run-dev'.,無法連接到 API 服務器 {url}。請確保應用正在運行，使用 'make serve' 或 'make run-dev' 啟動。
+Template,health.count_healthy,{count} healthy,{count} 個正常
+Template,health.count_info,{count} info,{count} 個訊息
+Template,health.count_unhealthy,{count} unhealthy,{count} 個異常
+Template,health.count_warning,{count} warning,{count} 個警告
+Template,health.count_warnings,{count} warnings,{count} 個警告
+Template,health.health_pct_label,Health: {pct},健康度：{pct}
+Template,health.health_percentage,Health Percentage:,健康百分比：
+Template,health.healthy,Healthy,正常
+Template,health.help,System health monitoring commands,系統健康相關命令
+Template,health.help_probe,Health probe for monitoring — exits 1 if unhealthy (like k8s probes).,健康探測——異常時返回 1（類似 k8s 探針）
+Template,health.help_status,Show system health status (always exits 0 for inspection). Use --detailed for component metadata and response times.,查看系統健康狀態（始終返回 0，用於健康檢查）。使用 --detailed 查看組件詳情和響應時間
+Template,health.more_tasks,... and {count} more {word},... 還有 {count} 個{word}
+Template,health.msg.aegis_issues,Aegis Stack has issues,Aegis Stack 存在問題
+Template,health.msg.aegis_ok,Aegis Stack application,Aegis Stack 運行正常
+Template,health.msg.ai_disabled,AI service is disabled,AI 服務已禁用
+Template,health.msg.ai_ready,AI service ready,AI 服務就緒
+Template,health.msg.auth_ok,Auth service configured and ready,認證服務已設定且就緒
+Template,health.msg.backend_active,FastAPI backend active,FastAPI 後端運行中
+Template,health.msg.cache_not_installed,Cache library not installed,緩存庫未安裝
+Template,health.msg.cache_ok,Redis cache connection and operations successful,Redis 緩存連接和操作正常
+Template,health.msg.comms_none,No communication providers configured,未設定通信服務
+Template,health.msg.comms_ok,Communications service fully configured,通信服務已全部設定
+Template,health.msg.comms_partial,Comms service partially configured,通信服務部分設定
+Template,health.msg.completed,{count} completed,{count} 個已完成
+Template,health.msg.components_issues,Some components have issues,部分組件存在問題
+Template,health.msg.components_ok,{count} components available,{count} 個組件正常
+Template,health.msg.cpu_usage,CPU usage: {pct}%,CPU 使用：{pct}%
+Template,health.msg.db_auth_failed,PostgreSQL authentication failed,PostgreSQL 認證失敗
+Template,health.msg.db_failed,Database connection failed,數據庫連接失敗
+Template,health.msg.db_module_missing,Database module not available,數據庫模塊不可用
+Template,health.msg.db_not_accessible,Database file not accessible,數據庫檔案不可訪問
+Template,health.msg.db_not_exist,PostgreSQL database does not exist,PostgreSQL 數據庫不存在
+Template,health.msg.db_not_init,Database not initialized - file does not exist,數據庫未初始化——檔案不存在
+Template,health.msg.db_not_reachable,PostgreSQL server not reachable,PostgreSQL 服務器無法連接
+Template,health.msg.db_ok,Database connection successful,數據庫連接成功
+Template,health.msg.disk_usage,Disk usage: {pct}%,磁盤使用：{pct}%
+Template,health.msg.failed,{count} failed ({pct}%),{count} 個失敗（{pct}%）
+Template,health.msg.idle,idle,空閒
+Template,health.msg.memory_usage,Memory usage: {pct}%,內存使用：{pct}%
+Template,health.msg.no_active_workers,No active workers,無活躍 Worker
+Template,health.msg.no_functions,configured - no functions defined,已設定——未定義任務函數
+Template,health.msg.ollama_no_models,Ollama running but no models installed,Ollama 運行中但未安裝模型
+Template,health.msg.ollama_not_reachable,Ollama server not reachable,Ollama 服務器無法連接
+Template,health.msg.processing,{count} processing,{count} 個處理中
+Template,health.msg.queue.load_test,Load testing and performance testing,壓力測試與性能測試
+Template,health.msg.queue.media,Image and file processing,圖片與檔案處理
+Template,health.msg.queue.system,System maintenance and monitoring tasks,系統維護與監控任務
+Template,health.msg.queued,{count} queued,{count} 個排隊中
+Template,health.msg.queues_active,({count} active),（{count} 個活躍）
+Template,health.msg.queues_configured,{count} functional queues configured,{count} 個功能隊列已設定
+Template,health.msg.scheduler_running,Scheduler running with {count} tasks,調度器運行中，{count} 個任務
+Template,health.msg.services_issues,Some services have issues,部分服務存在問題
+Template,health.msg.services_ok,{count} services available,{count} 個服務正常
+Template,health.msg.system_issues,System container has issues,系統容器存在問題
+Template,health.msg.system_ok,System container metrics,系統容器指標正常
+Template,health.msg.worker_infra,{backend} worker infrastructure,{backend} Worker 基礎設施
+Template,health.msg.worker_offline,worker offline - no health check data,Worker 離線——無健康檢查數據
+Template,health.msg.workers_active,{active}/{total} workers active,{active}/{total} 個 Worker 活躍
+Template,health.no_upcoming_tasks,No upcoming tasks scheduled,沒有即將執行的任務
+Template,health.opt_detailed,Show detailed component information,顯示詳細組件訊息
+Template,health.opt_json,Output as JSON,以 JSON 格式輸出
+Template,health.overall_status,Overall Status:,整體狀態：
+Template,health.probe_failed,Health probe failed: {error},健康探測失敗：{error}
+Template,health.services_label,Services:,服務：
+Template,health.status_failed,Health status failed: {error},健康狀態查詢失敗：{error}
+Template,health.sysinfo.containerized,Containerized,容器環境
+Template,health.sysinfo.platform,Platform,平臺
+Template,health.sysinfo.python_version,Python Version,Python 版本
+Template,health.system_healthy,System is healthy,系統正常
+Template,health.system_info,System Information,系統訊息
+Template,health.system_unhealthy,System is unhealthy,系統不健康
+Template,health.system_unhealthy_msg,System is unhealthy,系統不健康
+Template,health.task_next_run,{name} - Next: {time},{name} - 下次執行：{time}
+Template,health.task_statistics,Task Statistics:,任務統計：
+Template,health.task_stats_line,"Total: {total}, Active: {active}, Paused: {paused}",總計：{total}，活躍：{active}，暫停：{paused}
+Template,health.task_word,task,任務
+Template,health.tasks_word,tasks,任務
+Template,health.timeout_error,API request to {url} timed out after {timeout} seconds.,API 請求 {url} 在 {timeout} 秒後超時。
+Template,health.timestamp_label,Timestamp:,時間戳：
+Template,health.title,System Health,系統健康狀態
+Template,health.unhealthy,Unhealthy,不健康
+Template,health.unhealthy_label,Unhealthy: {components},異常組件：{components}
+Template,health.upcoming_tasks,Upcoming Tasks:,即將執行的任務：
+Template,health.zero_components,0 components,0 個組件
+Template,llm.and_more_errors,... and {count} more,... 還有 {count} 條
+Template,llm.arg_model_id_info,Model ID to get information about,要查看詳情的模型 ID
+Template,llm.arg_model_id_use,"Model ID to set as active (e.g., gpt-4o, claude-sonnet-4-20250514)",要設為當前模型的 ID（如 gpt-4o、claude-sonnet-4-20250514）
+Template,llm.arg_pattern,Search pattern for model ID or title (case-insensitive),模型 ID 或名稱的搜索關鍵詞（不區分大小寫）
+Template,llm.catalog_summary,LLM Catalog Summary,LLM 目錄概覽
+Template,llm.context_column,Context,上下文
+Template,llm.context_window_label,Context Window:,上下文窗口：
+Template,llm.count_column,Count,數量
+Template,llm.current_config,Current LLM Configuration,當前 LLM 設定
+Template,llm.deployments_row,Deployments,部署
+Template,llm.deployments_synced,Deployments Synced,已同步部署
+Template,llm.description_label,Description:,描述：
+Template,llm.dry_run_mode,Dry run mode - no changes will be saved,試運行模式 - 不會保存任何更改
+Template,llm.duration_row,Duration,耗時
+Template,llm.enabled_label,Enabled:,已啟用：
+Template,llm.errors_header,Errors:,錯誤詳情：
+Template,llm.errors_row,Errors,錯誤
+Template,llm.help,LLM catalog and model management commands,LLM 目錄與模型管理相關命令
+Template,llm.help_current,"Show current LLM configuration from .env, enriched with catalog data.",查看當前 .env 中的 LLM 設定，結合目錄數據顯示。
+Template,llm.help_info,Show detailed information about a specific LLM model.,查看指定 LLM 模型的詳細訊息。
+Template,llm.help_list,List LLM models from catalog. Requires a search pattern or filter.,搜索 LLM 目錄中的模型。需提供搜索關鍵詞或篩選條件。
+Template,llm.help_modalities,List all modalities in the catalog with model counts.,列出目錄中所有能力類型及模型數。
+Template,llm.help_status,"Show LLM catalog statistics (vendors, models, deployments, prices).",查看 LLM 目錄統計（供應商、模型、部署、定價）。
+Template,llm.help_sync,Sync LLM catalog from cloud APIs or local Ollama into the local database.,從雲端 API 或本地 Ollama 同步 LLM 目錄到本地數據庫。
+Template,llm.help_use,Switch to a different LLM model. Updates AI_MODEL in .env.,切換到其他 LLM 模型，更新 .env 中的 AI_MODEL。
+Template,llm.help_vendors,List all LLM vendors in the catalog with model counts.,列出目錄中所有 LLM 供應商及模型數。
+Template,llm.input_label,Input:,輸入：
+Template,llm.input_price_column,Input $/1M,輸入 $/百萬
+Template,llm.input_price_label,Input Price:,輸入費用：
+Template,llm.max_tokens_label,Max Tokens:,最大 token 數：
+Template,llm.metric_column,Metric,指標
+Template,llm.modalities_label,Modalities:,能力類型：
+Template,llm.modalities_synced,Modalities Synced,已同步能力類型
+Template,llm.modalities_title,LLM Modalities ({count} total),LLM 能力類型（共 {count} 個）
+Template,llm.modality_column,Modality,能力類型
+Template,llm.model_details,Model Details (from catalog),模型詳情（來自目錄）
+Template,llm.model_id_column,Model ID,模型 ID
+Template,llm.model_id_label,Model ID:,模型 ID：
+Template,llm.model_label,Model:,模型：
+Template,llm.model_not_found,Model '{model_id}' not found in catalog.,目錄中未找到模型 '{model_id}'。
+Template,llm.model_not_in_catalog,Model not found in catalog. Run 'llm sync' to populate.,目錄中未找到該模型，請運行 'llm sync' 導入數據。
+Template,llm.models_added,Models Added,新增模型
+Template,llm.models_column,Models,模型數
+Template,llm.models_row,Models,模型
+Template,llm.models_title,LLM Models ({count} results),LLM 模型（{count} 條結果）
+Template,llm.models_updated,Models Updated,更新模型
+Template,llm.no_modalities,No modalities found. Run 'llm sync' first.,未找到能力類型，請先運行 'llm sync'。
+Template,llm.no_models_found,No models found matching your criteria.,沒有找到匹配的模型。
+Template,llm.no_vendors,No vendors found. Run 'llm sync' first.,未找到供應商，請先運行 'llm sync'。
+Template,llm.opt_all,Include disabled models,包含已禁用的模型
+Template,llm.opt_dry_run,Preview changes without modifying the database,預覽變更，不修改數據庫
+Template,llm.opt_force,Skip catalog validation and allow any model string,跳過目錄驗證，允許任意模型字符串
+Template,llm.opt_limit,Maximum number of results,最大返回結果數
+Template,llm.opt_mode,"Mode filter: 'chat', 'embedding', or 'all'",模式篩選：'chat'、'embedding' 或 'all'
+Template,llm.opt_refresh,Truncate all LLM tables before syncing (full refresh),同步前清空所有 LLM 數據表（完整刷新）
+Template,llm.opt_source,"Data source: 'cloud' (OpenRouter/LiteLLM), 'ollama', or 'all'",數據來源：'cloud'（OpenRouter/LiteLLM）、'ollama' 或 'all'
+Template,llm.output_label,Output:,輸出：
+Template,llm.output_price_column,Output $/1M,輸出 $/百萬
+Template,llm.output_price_label,Output Price:,輸出費用：
+Template,llm.per_million_tokens,/ 1M tokens,/ 百萬 token
+Template,llm.prices_row,Prices,定價
+Template,llm.prices_synced,Prices Synced,已同步定價
+Template,llm.pricing_header,Pricing (per 1M tokens),定價（每百萬 token）
+Template,llm.provide_filter,Please provide a search pattern or filter.,請提供搜索關鍵詞或篩選條件。
+Template,llm.provider_label,Provider:,供應商：
+Template,llm.refresh_dry_run,Refresh requested - would truncate all LLM tables,已請求刷新 - 將清空所有 LLM 數據表
+Template,llm.released_column,Released,發布日期
+Template,llm.released_label,Released:,發布日期：
+Template,llm.run_sync_hint,Run 'llm sync' to populate the catalog.,請運行 'llm sync' 導入模型目錄。
+Template,llm.streamable_label,Streamable:,支援流式：
+Template,llm.switching_model,Switching to {model_id},正在切換到 {model_id}
+Template,llm.sync_results,Sync Results,同步結果
+Template,llm.sync_results_dry_run,Sync Results (Dry Run),同步結果（試運行）
+Template,llm.syncing_catalog,Syncing LLM catalog (mode={mode}),正在同步 LLM 目錄（模式={mode}）
+Template,llm.syncing_catalog_all,"Syncing LLM catalog (mode={mode}, source=all)",正在同步 LLM 目錄（模式={mode}，來源=全部）
+Template,llm.syncing_ollama,Syncing Ollama models,正在同步 Ollama 模型
+Template,llm.temperature_label,Temperature:,溫度：
+Template,llm.tokens_unit,tokens,token
+Template,llm.top_vendors,Top Vendors by Model Count,模型數量最多的供應商
+Template,llm.vendor_column,Vendor,供應商
+Template,llm.vendor_label,Vendor:,供應商：
+Template,llm.vendors_added,Vendors Added,新增供應商
+Template,llm.vendors_row,Vendors,供應商
+Template,llm.vendors_title,LLM Vendors ({count} total),LLM 供應商（共 {count} 個）
+Template,llm.vendors_updated,Vendors Updated,更新供應商
+Template,loadtest.analysis_panel,Load Test Analysis,壓力測試分析
+Template,loadtest.arg_task_id,Load test task ID,壓力測試任務 ID
+Template,loadtest.arg_test_type,Specific test type to show info for,要查看的測試類型
+Template,loadtest.aspect_column,Aspect,維度
+Template,loadtest.aspect_efficiency,Efficiency,效率
+Template,loadtest.aspect_queue_pressure,Queue Pressure,隊列壓力
+Template,loadtest.aspect_throughput,Throughput,吞吐量
+Template,loadtest.available_types,Available Load Test Types,可用的壓力測試類型
+Template,loadtest.available_types_list,Available types:,可用類型：
+Template,loadtest.check_results,Check results:,查看結果：
+Template,loadtest.check_results_later,Use this command to check results later:,稍後查看結果：
+Template,loadtest.check_results_manual,Check results manually:,手動查看結果：
+Template,loadtest.check_task_hint,Check that the task ID is correct and the test has completed,請確認任務 ID 正確且測試已完成
+Template,loadtest.completed,Load test completed!,測試完成！
+Template,loadtest.completed_progress,Load test completed!,測試完成！
+Template,loadtest.config_batch_detail,{size} tasks per batch,每批 {size} 個任務
+Template,loadtest.config_batching,Batching:,批次：
+Template,loadtest.config_delay,Delay:,延遲：
+Template,loadtest.config_delay_detail,{ms}ms between batches,批次間隔 {ms}ms
+Template,loadtest.config_queue,Queue:,隊列：
+Template,loadtest.config_tasks,Tasks:,任務數：
+Template,loadtest.config_tasks_detail,{count} {type} tasks,{count} 個 {type} 任務
+Template,loadtest.config_title,Test Configuration,測試設定
+Template,loadtest.cpu_failed,CPU test failed:,CPU 測試失敗：
+Template,loadtest.cpu_started,CPU test started!,CPU 測試已啟動！
+Template,loadtest.desc_efficiency,Task completion rate,任務完成率
+Template,loadtest.desc_queue_pressure,Queue saturation level,隊列飽和程度
+Template,loadtest.desc_throughput,Task processing speed,任務處理速度
+Template,loadtest.description_column,Description,說明
+Template,loadtest.detail_duration,Total test duration,總耗時
+Template,loadtest.detail_failure_rate,Percentage of failed tasks,失敗任務百分比
+Template,loadtest.detail_status,Test execution status,測試執行狀態
+Template,loadtest.detail_tasks_completed,Successfully completed,成功完成
+Template,loadtest.detail_tasks_failed,Failed during execution,執行失敗
+Template,loadtest.detail_tasks_sent,Total tasks enqueued,入隊任務總數
+Template,loadtest.detail_throughput,Average task completion rate,平均任務完成速率
+Template,loadtest.details_column,Details,說明
+Template,loadtest.enqueued,Load test enqueued successfully!,壓力測試已入隊！
+Template,loadtest.error_label,Error:,錯誤：
+Template,loadtest.examples_label,Examples:,示例：
+Template,loadtest.failed_title,Load Test Failed,壓力測試失敗
+Template,loadtest.help,Load testing commands for worker performance analysis,Worker 性能壓力測試相關命令
+Template,loadtest.help_cpu,Quick CPU-intensive load test with optimized defaults.,使用優化默認值的 CPU 密集型快速壓力測試。
+Template,loadtest.help_info,Display information about available load test types and their characteristics.,查看可用的壓力測試類型及其特性說明。
+Template,loadtest.help_io,Quick I/O simulation load test with optimized defaults.,使用優化默認值的 I/O 模擬快速壓力測試。
+Template,loadtest.help_memory,Quick memory allocation load test with optimized defaults.,使用優化默認值的內存分配快速壓力測試。
+Template,loadtest.help_results,Display results and analysis for a completed load test.,查看已完成壓力測試的結果和分析。
+Template,loadtest.help_run,Run a customizable load test with full control over configuration.,運行自定義壓力測試，完全控制設定參數。
+Template,loadtest.io_failed,I/O test failed:,I/O 測試失敗：
+Template,loadtest.io_started,I/O test started!,I/O 測試已啟動！
+Template,loadtest.memory_failed,Memory test failed:,內存測試失敗：
+Template,loadtest.memory_started,Memory test started!,內存測試已啟動！
+Template,loadtest.metric_column,Metric,指標
+Template,loadtest.metric_duration,Duration,耗時
+Template,loadtest.metric_failure_rate,Failure Rate,失敗率
+Template,loadtest.metric_status,Status,狀態
+Template,loadtest.metric_tasks_completed,Tasks Completed,已完成任務
+Template,loadtest.metric_tasks_failed,Tasks Failed,失敗任務
+Template,loadtest.metric_tasks_sent,Tasks Sent,已發送任務
+Template,loadtest.metric_throughput,Throughput,吞吐量
+Template,loadtest.next_steps,Next steps:,後續操作：
+Template,loadtest.no_results,No results found for task ID:,未找到該任務 ID 的結果：
+Template,loadtest.no_summary,No summary available,暫無概要訊息
+Template,loadtest.opt_batch_size,Tasks per batch,每批任務數
+Template,loadtest.opt_cpu_tasks,Number of CPU tasks,CPU 測試任務數量
+Template,loadtest.opt_delay,Delay between batches (ms),批次間延遲（毫秒）
+Template,loadtest.opt_detailed,Show detailed analysis and metrics,顯示詳細分析和指標
+Template,loadtest.opt_io_tasks,Number of I/O tasks,I/O 測試任務數量
+Template,loadtest.opt_json,Output results in JSON format,以 JSON 格式輸出結果
+Template,loadtest.opt_memory_tasks,Number of memory tasks,內存測試任務數量
+Template,loadtest.opt_num_tasks,Number of tasks to spawn,要生成的任務數量
+Template,loadtest.opt_queue,Target queue for testing,目標測試隊列
+Template,loadtest.opt_queue_results,Queue where test was run,測試運行的隊列
+Template,loadtest.opt_task_type,Type of load test to run,壓力測試類型
+Template,loadtest.opt_timeout,Timeout for waiting (seconds),等待超時時間（秒）
+Template,loadtest.opt_wait,Wait for test completion and show results,等待測試完成並顯示結果
+Template,loadtest.opt_wait_short,Wait for completion,等待完成
+Template,loadtest.panel_setup,Load Test Setup,壓力測試設定
+Template,loadtest.perf_analysis_title,Performance Analysis,性能分析
+Template,loadtest.perf_summary,Performance Summary,性能概要
+Template,loadtest.pressure.high,high,高
+Template,loadtest.pressure.low,low,低
+Template,loadtest.pressure.medium,medium,中
+Template,loadtest.quick_cpu_tasks,{count} CPU-intensive tasks,{count} 個 CPU 密集型任務
+Template,loadtest.quick_cpu_title,Quick CPU Load Test,CPU 快速壓力測試
+Template,loadtest.quick_cpu_work,Fibonacci + math operations + prime checking,斐波那契 + 數學運算 + 素數檢測
+Template,loadtest.quick_io_tasks,{count} I/O simulation tasks,{count} 個 I/O 模擬任務
+Template,loadtest.quick_io_title,Quick I/O Load Test,I/O 快速壓力測試
+Template,loadtest.quick_io_work,Network delays + concurrent async + file operations,網絡延遲 + 異步並發 + 檔案操作
+Template,loadtest.quick_memory_tasks,{count} memory allocation tasks,{count} 個內存分配任務
+Template,loadtest.quick_memory_title,Quick Memory Load Test,內存快速壓力測試
+Template,loadtest.quick_memory_work,Data structures + allocation patterns + GC testing,數據結構 + 內存分配模式 + GC 測試
+Template,loadtest.rating.excellent,excellent,優秀
+Template,loadtest.rating.fair,fair,一般
+Template,loadtest.rating.good,good,良好
+Template,loadtest.rating.poor,poor,較低
+Template,loadtest.rating.unknown,unknown,未知
+Template,loadtest.rating_column,Rating,評級
+Template,loadtest.rec.high_failure,High failure rate ({rate}%). Check worker logs for error patterns.,失敗率較高（{rate}%）。建議查看 Worker 日志排查錯誤模式。
+Template,loadtest.rec.long_execution,Long execution time for relatively few tasks suggests queue saturation. Consider testing with smaller batches or different queues.,任務較少但執行時間過長，可能存在隊列擁堵。建議減小批次或更換隊列。
+Template,loadtest.rec.low_throughput,Low throughput detected. Consider reducing task complexity or increasing worker concurrency.,檢測到吞吐量較低。建議降低任務復雜度或提高 Worker 並發數。
+Template,loadtest.recommendations,Recommendations,建議
+Template,loadtest.results_failed,Failed to retrieve results:,獲取結果失敗：
+Template,loadtest.results_title,Load Test Results Summary,壓力測試結果概要
+Template,loadtest.start_failed,Failed to start load test:,壓力測試啟動失敗：
+Template,loadtest.starting,Starting load test...,正在啟動壓力測試...
+Template,loadtest.status.completed,completed,已完成
+Template,loadtest.status.failed,failed,失敗
+Template,loadtest.status.timed_out,timed out,超時
+Template,loadtest.status.unknown,unknown,未知
+Template,loadtest.task_id_label,Task ID:,任務 ID：
+Template,loadtest.tasks_label,Tasks:,任務數：
+Template,loadtest.tasks_per_sec,tasks/sec,任務/秒
+Template,loadtest.test_id_label,Test ID:,測試 ID：
+Template,loadtest.test_validation,Test Validation,測試驗證
+Template,loadtest.timed_out_title,Load Test Timed Out,壓力測試超時
+Template,loadtest.timeout_explanation,"The orchestrator task timed out, but individual worker tasks may have completed successfully. This often happens with large load tests that exceed the queue timeout.",調度任務超時，但各 Worker 子任務可能已完成。大規模測試超出隊列超時限制時常見此情況。
+Template,loadtest.timeout_progress,Timeout reached,等待超時
+Template,loadtest.timeout_reached,Timeout reached after {timeout}s,等待超時（{timeout}秒）
+Template,loadtest.tip_check_logs,Check worker logs for individual task completion,查看 Worker 日志確認子任務完成情況
+Template,loadtest.tip_check_metrics,Check queue metrics for actual task completion counts,查看隊列指標確認實際完成數
+Template,loadtest.tip_check_worker_logs,Check worker logs for detailed error information,查看 Worker 日志獲取詳細錯誤訊息
+Template,loadtest.tip_smaller_batch,Consider using smaller batch sizes for large tests,大規模測試建議使用更小的批次
+Template,loadtest.tip_try_smaller,Try a smaller test to isolate the issue,先運行小規模測試定位問題
+Template,loadtest.tip_verify_queue,Verify queue connectivity and worker status,確認隊列連接和 Worker 狀態
+Template,loadtest.to_investigate,To investigate:,排查方式：
+Template,loadtest.troubleshoot_1,Check worker container logs: docker compose logs worker,查看 Worker 容器日志：docker compose logs worker
+Template,loadtest.troubleshoot_2,Verify system health: {app} health check,檢查系統健康狀態：{app} health check
+Template,loadtest.troubleshoot_3,Try a smaller load test first: {app} load-test cpu --tasks 10,先運行小規模測試：{app} load-test cpu --tasks 10
+Template,loadtest.troubleshooting,Troubleshooting Tips,排查建議
+Template,loadtest.type.cpu_intensive.concurrency,"Limited by CPU cores, benefits from parallel processing",受限於 CPU 核心數，可通過並行處理提升
+Template,loadtest.type.cpu_intensive.description,Tests worker CPU processing with fibonacci calculations,使用斐波那契計算測試 Worker CPU 處理能力
+Template,loadtest.type.cpu_intensive.duration,1-10ms per task,每個任務 1-10ms
+Template,loadtest.type.cpu_intensive.name,CPU Intensive,CPU 密集型
+Template,loadtest.type.cpu_intensive.signature,CPU bound - should show computation time scaling with problem size,CPU 密集——計算時間隨問題規模增長
+Template,loadtest.type.failure_testing.concurrency,Tests worker recovery and error isolation,測試 Worker 恢復能力和錯誤隔離
+Template,loadtest.type.failure_testing.description,Tests error handling with ~20% random failures,測試錯誤處理能力，約 20% 隨機失敗
+Template,loadtest.type.failure_testing.duration,1-10ms per task (when successful),每個任務 1-10ms（成功時）
+Template,loadtest.type.failure_testing.name,Failure Testing,故障測試
+Template,loadtest.type.failure_testing.signature,Mixed - tests resilience and error handling paths,混合型——測試容錯和錯誤處理路徑
+Template,loadtest.type.io_simulation.concurrency,Excellent with async - many tasks can run concurrently,異步表現優異——大量任務可並發執行
+Template,loadtest.type.io_simulation.description,Tests async I/O handling with simulated delays,使用模擬延遲測試異步 I/O 處理能力
+Template,loadtest.type.io_simulation.duration,5-30ms per task (includes simulated delays),每個任務 5-30ms（含模擬延遲）
+Template,loadtest.type.io_simulation.name,I/O Simulation,I/O 模擬
+Template,loadtest.type.io_simulation.signature,I/O bound - should show async concurrency benefits,I/O 密集——可體現異步並發優勢
+Template,loadtest.type.memory_operations.concurrency,Moderate - limited by memory bandwidth and GC pressure,中等——受限於內存帶寬和 GC 壓力
+Template,loadtest.type.memory_operations.description,Tests memory allocation and data structure operations,測試內存分配和數據結構操作
+Template,loadtest.type.memory_operations.duration,1-5ms per task,每個任務 1-5ms
+Template,loadtest.type.memory_operations.name,Memory Operations,內存操作
+Template,loadtest.type.memory_operations.signature,Memory bound - should show allocation/deallocation patterns,內存密集——可觀察分配/釋放模式
+Template,loadtest.type_concurrency,Concurrency:,並發表現：
+Template,loadtest.type_description,Description:,說明：
+Template,loadtest.type_details_title,Test Type Details,測試類型詳情
+Template,loadtest.type_name,Name:,名稱：
+Template,loadtest.type_performance,Performance:,性能特徵：
+Template,loadtest.typical_duration,Typical duration:,典型耗時：
+Template,loadtest.unknown_type,Unknown test type:,未知測試類型：
+Template,loadtest.use_help_hint,Use --help with specific commands for more details,使用 --help 查看各命令詳情
+Template,loadtest.validation.no,No,否
+Template,loadtest.validation.unknown,unknown,未知
+Template,loadtest.validation.verified,verified,已驗證
+Template,loadtest.validation.yes,Yes,是
+Template,loadtest.validation_metrics,Expected metrics present:,預期指標已存在：
+Template,loadtest.validation_signature,Performance signature match:,性能特徵匹配：
+Template,loadtest.validation_type,Test type verified:,測試類型已驗證：
+Template,loadtest.value_column,Value,值
+Template,loadtest.waiting,Waiting for load test completion (timeout: {timeout}s)...,等待測試完成（超時：{timeout} 秒）...
+Template,loadtest.waiting_elapsed,Waiting for completion... ({elapsed}s),等待中... ({elapsed} 秒)
+Template,loadtest.waiting_progress,Waiting for load test to complete...,等待測試完成...
+Template,loadtest.what_this_means,What this means:,說明：
+Template,loadtest.work_type_label,Work type:,測試內容：
+Template,main.help,Project management CLI,項目命令行工具
+Template,main.opt_lang,"Output language (en, ja, ko, zh, zh_Hant). Default: auto-detect",輸出語言（en、ja、ko、zh、zh_Hant），默認自動檢測系統語言
+Template,main.unsupported_lang,Unsupported language '{lang}'. Available: {available},不支援的语言 '{lang}'。可用語言：{available}
+Template,migrate.add_column,ADD COLUMN,新增列
+Template,migrate.add_table,ADD TABLE,新增表
+Template,migrate.applied_migration,Migration applied successfully.,遷移已成功執行
+Template,migrate.apply_later,Migration saved. Run 'make migrate' to apply later.,遷移已保存。可稍後運行 'make migrate' 執行
+Template,migrate.apply_now,Apply migration now?,是否立即執行遷移？
+Template,migrate.applying_pending,Applying pending migrations first...,正在先執行待處理的遷移...
+Template,migrate.checking_schema,Checking schema against models...,正在檢查數據庫結構與模型的一致性...
+Template,migrate.found_differences,Found {count} schema differences:,發現 {count} 處結構差異：
+Template,migrate.generated_migration,Generated fix migration: {name},已生成修復遷移：{name}
+Template,migrate.no_existing_migrations,No existing migrations found. Run 'make migrate' first.,未找到現有遷移記錄，請先運行 'make migrate'。
+Template,migrate.no_fixable_differences,No fixable differences found.,沒有可自動修復的差異。
+Template,migrate.schema_up_to_date,Schema is up to date. No fix needed.,數據庫結構已是最新，無需修復。
+Template,migrate.table_missing_warning,  WARNING: Table '{table}' is missing entirely. Create a manual migration with: alembic revision --autogenerate -m 'add {table}',  警告：表 '{table}' 完全缺失。請手動創建遷移：alembic revision --autogenerate -m 'add {table}'
+Template,rag.added_updated,Added/updated:,已添加/更新：
+Template,rag.adding_label,Adding:,添加：
+Template,rag.arg_collection,Collection name to delete,要刪除的集合名稱
+Template,rag.arg_file_path,File path to add/update,要添加/更新的檔案路徑
+Template,rag.arg_path,File or directory path to index,要索引的檔案或目錄路徑
+Template,rag.arg_query,Search query,搜索查詢內容
+Template,rag.arg_source_path,Source path of file to remove (as stored in metadata),要移除的檔案源路徑（按元數據中存儲的路徑）
+Template,rag.batch_progress,Batch {batch}/{total} ({chunks} chunks),批次 {batch}/{total}（{chunks} 個片段）
+Template,rag.cache_dir_hint,"To use this cache, set RAG_MODEL_CACHE_DIR={dir}",如需使用此緩存，請設置 RAG_MODEL_CACHE_DIR={dir}
+Template,rag.cache_dir_label,Cache directory:,緩存目錄：
+Template,rag.chunk_overlap_label,Chunk Overlap:,片段重疊：
+Template,rag.chunk_size_label,Chunk Size:,片段大小：
+Template,rag.chunking_phase,Chunking:,切片：
+Template,rag.chunks_column,Chunks,片段數
+Template,rag.chunks_label,Chunks:,片段數：
+Template,rag.chunks_per_sec,chunks/sec,片段/秒
+Template,rag.chunks_unit,chunks,個片段
+Template,rag.collection_column,Collection,集合
+Template,rag.collection_label,Collection:,集合：
+Template,rag.collection_not_found,Collection not found:,未找到集合：
+Template,rag.collection_size_label,Collection size:,集合大小：
+Template,rag.collection_title,Collection,集合
+Template,rag.collections_count_label,Collections:,集合數：
+Template,rag.collections_title,RAG Collections,RAG 集合
+Template,rag.confirm_delete,Are you sure you want to delete collection '{collection}'?,確定要刪除集合 '{collection}' 嗎？
+Template,rag.confirm_remove,Remove all chunks for '{source}' from '{collection}'?,確定要從集合 '{collection}' 中移除 '{source}' 的所有片段嗎？
+Template,rag.create_collection_hint,Tip: Use 'rag index <path> --collection <name>' to create a collection.,提示：使用 'rag index <路徑> --collection <名稱>' 創建集合。
+Template,rag.default_top_k_label,Default Top K:,默認 Top K：
+Template,rag.deleted_collection,Deleted collection:,已刪除集合：
+Template,rag.documents_column,Documents,文檔數
+Template,rag.downloading_model,Downloading embedding model (first-time setup)...,正在下載嵌入模型（首次設定）...
+Template,rag.downloading_named_model,Downloading {model}...,正在下載 {model}...
+Template,rag.duration_label,Duration:,耗時：
+Template,rag.embedding_model_label,Embedding Model:,嵌入模型：
+Template,rag.enabled_label,Enabled:,啟用：
+Template,rag.extensions_label,Extensions:,擴展名：
+Template,rag.file_column,File,檔案
+Template,rag.file_not_found,File not found: {path},檔案不存在：{path}
+Template,rag.files_and_chunks,"{files} files, {chunks} chunks",{files} 個檔案，{chunks} 個片段
+Template,rag.files_hint,Tip: Use 'rag files --collection <name>' to see indexed paths.,提示：使用 'rag files --collection <名稱>' 查看已索引的檔案路徑。
+Template,rag.found_results,Found {count} results:,找到 {count} 條結果：
+Template,rag.hash_label,Hash:,哈希值：
+Template,rag.help,RAG service commands for document indexing and search,RAG 文檔索引與搜索相關命令
+Template,rag.help_add,Add or update a single file in the collection (upsert semantics).,添加或更新集合中的單個檔案（覆蓋更新）。
+Template,rag.help_delete,Delete a collection and all its documents from the vector store.,刪除向量存儲中的集合及其全部文檔。
+Template,rag.help_files,List all indexed files in a collection with chunk counts.,列出集合中所有已索引檔案及片段數。
+Template,rag.help_index,Index documents from a path into a collection for semantic search.,將指定路徑下的文檔索引到集合中，用於語義搜索。
+Template,rag.help_install_model,Pre-download the embedding model for offline/air-gapped operation.,預下載嵌入模型，用於離線或隔離環境。
+Template,rag.help_list,List all collections in the vector store with document counts.,列出向量存儲中所有集合及文檔數。
+Template,rag.help_remove,Remove a file's chunks from the collection.,從集合中移除指定檔案的片段。
+Template,rag.help_search,Search for documents in a collection using semantic search.,在集合中進行語義搜索。
+Template,rag.help_status,Show RAG service status and configuration.,查看 RAG 服務狀態和設定。
+Template,rag.ids_label,IDs:,ID：
+Template,rag.index_hint,Tip: Use 'rag index <path> --collection <name>' or 'rag add <file> --collection <name>' to index content.,提示：使用 'rag index <路徑> --collection <名稱>' 或 'rag add <檔案> --collection <名稱>' 來索引內容。
+Template,rag.index_success,Successfully indexed {chunks} chunks from {files} files,成功索引了 {chunks} 個片段，來自 {files} 個檔案
+Template,rag.indexed_files_title,Indexed Files: {collection},已索引檔案：{collection}
+Template,rag.indexing_label,Indexing:,索引：
+Template,rag.indexing_phase,Indexing:,索引：
+Template,rag.indexing_progress,Indexing...,索引中...
+Template,rag.last_activity_label,Last Activity:,最近活動：
+Template,rag.loading_documents,Loading documents...,正在加載文檔...
+Template,rag.loading_from_cache,Loading model from cache...,正在從緩存加載模型...
+Template,rag.loading_phase,Loading:,加載：
+Template,rag.location_label,Location:,位置：
+Template,rag.model_download_failed,Failed to download model: {error},模型下載失敗：{error}
+Template,rag.model_download_hint,Try running: rag install-model,請嘗試運行：rag install-model
+Template,rag.model_downloaded,Model downloaded successfully,模型下載完成
+Template,rag.model_found_in_cache,Model found in cache,模型已在緩存中
+Template,rag.model_info,Model: {model} (~400MB download),模型：{model}（約 400MB 下載）
+Template,rag.model_install_complete_title,Model Installation Complete,模型安裝完成
+Template,rag.model_installed,Installed,已安裝
+Template,rag.model_label,Model:,模型：
+Template,rag.model_not_found,Embedding model not found locally.,本地未找到嵌入模型。
+Template,rag.model_not_installed,Not installed,未安裝
+Template,rag.model_ready_title,Model Ready,模型就緒
+Template,rag.model_status_label,Model Status:,模型狀態：
+Template,rag.no_chunks_found,No chunks found for:,未找到相關片段：
+Template,rag.no_collections,No collections found.,未找到任何集合。
+Template,rag.no_files_in_collection,No files indexed in collection:,該集合中沒有已索引的檔案：
+Template,rag.no_results,No results found.,未找到結果。
+Template,rag.openai_key_hint,Set OPENAI_API_KEY environment variable to use OpenAI embeddings.,請設置 OPENAI_API_KEY 環境變量以使用 OpenAI 嵌入模型。
+Template,rag.openai_key_missing,OpenAI API key not configured.,未設定 OpenAI API 密鑰。
+Template,rag.openai_no_download,OpenAI embeddings don't require local model downloads.,OpenAI 嵌入模型無需本地下載。
+Template,rag.opt_cache_dir,Directory to cache the model (default: system HuggingFace cache),模型緩存目錄（默認：系統 HuggingFace 緩存）
+Template,rag.opt_collection,Collection name,集合名稱
+Template,rag.opt_collection_search,Collection to search,要搜索的集合
+Template,rag.opt_content,Show full content of results,顯示結果的完整內容
+Template,rag.opt_extensions,"Comma-separated file extensions (e.g., .py,.md)","逗號分隔的檔案擴展名（如 .py,.md）"
+Template,rag.opt_force,Skip confirmation prompt,跳過確認提示
+Template,rag.opt_model,Model name to download (default: from settings),要下載的模型名稱（默認：使用設定值）
+Template,rag.opt_show_ids,Show chunk IDs in output,在輸出中顯示片段 ID
+Template,rag.opt_top_k,Number of results,返回結果數量
+Template,rag.path_not_found,Path not found: {path},路徑不存在：{path}
+Template,rag.persist_dir_label,Persist Directory:,持久化目錄：
+Template,rag.removed_chunks,Removed {count} chunks for:,已移除 {count} 個片段：
+Template,rag.run_install_model,run: rag install-model,運行：rag install-model
+Template,rag.score_label,Score:,得分：
+Template,rag.search_hint,Tip: Make sure the collection exists and contains documents.,提示：請確認集合存在且包含文檔。
+Template,rag.searching_label,Searching:,搜索：
+Template,rag.status_title,RAG Service Status,RAG 服務狀態
+Template,rag.system_hf_cache,system HuggingFace cache,系統 HuggingFace 緩存
+Template,rag.throughput_label,Throughput:,吞吐量：
+Template,rag.total_label,Total:,合計：
+Template,shared.cancelled,Cancelled.,已取消。
+Template,shared.error,Error:,错误：
+Template,shared.no,No,否
+Template,shared.none,none,无
+Template,shared.show_help_exit,Show this message and exit.,显示帮助訊息并退出。
+Template,shared.unknown,Unknown,未知
+Template,shared.yes,Yes,是
+Template,slash.available_collections,Available: {list},可用集合：{list}
+Template,slash.clear_desc,Clear the screen,清屏
+Template,slash.collection_not_found,Collection '{name}' not found.,未找到集合 '{name}'。
+Template,slash.commands_panel,Commands,命令
+Template,slash.current_panel,Current,當前
+Template,slash.enable_rag_first,Enable RAG first with /rag <collection>,請先使用 /rag <集合名> 開啟 RAG
+Template,slash.exit_desc,Exit the chat session,退出聊天會話
+Template,slash.help_desc,Show available commands,查看可用命令
+Template,slash.index_documents_hint,Index documents: {app} rag index <path>,索引文檔：{app} rag index <路徑>
+Template,slash.model_desc,Switch AI model (auto-detects provider),切換 AI 模型（自動檢測服務商）
+Template,slash.new_conversation,Started new conversation,已開始新對話
+Template,slash.new_desc,Start a new conversation,開始新對話
+Template,slash.no_collections,No collections exist. Index documents first.,暫無集合，請先索引文檔。
+Template,slash.no_collections_indexed,No collections indexed yet,暫無已索引的集合
+Template,slash.rag_desc,Manage RAG mode,管理 RAG 模式
+Template,slash.rag_disabled,RAG disabled,RAG 已關閉
+Template,slash.rag_enabled,RAG enabled with collection: {name},RAG 已開啟，使用集合：{name}
+Template,slash.rag_panel,RAG,RAG
+Template,slash.rag_use_hint,Use /rag off or /rag <collection>,使用 /rag off 或 /rag <集合名>
+Template,slash.sources_desc,Toggle source references in output,切換輸出中的引用來源顯示
+Template,slash.sources_disabled,Source references disabled,引用來源已關閉
+Template,slash.sources_enabled,Source references enabled,引用來源已開啟
+Template,slash.sources_require_rag,Sources require RAG to be enabled.,引用來源需要先開啟 RAG。
+Template,slash.sources_status,Source references {status},引用來源已{status}
+Template,slash.sources_usage,Usage: /sources [enable|disable],用法：/sources [enable|disable]
+Template,slash.status_desc,Show current configuration,查看當前設定
+Template,slash.status_panel,Status,狀態
+Template,slash.switched_model,Switched to model: {model},已切換模型：{model}
+Template,slash.switched_to,Switched to {provider}/{model},已切換到 {provider}/{model}
+Template,slash.unknown_command,Unknown command: /{name}. Type /help for commands.,未知命令：/{name}。輸入 /help 查看命令。
+Template,slash.unknown_option,Unknown option: {arg},未知選項：{arg}
+Template,slash.use_model_hint,Use /model <name> to switch,使用 /model <名稱> 切換
+Template,status.na,n/a,無
+Template,status.not_connected,not connected,未連接
+Template,status.rag_off,RAG: OFF,RAG：關
+Template,status.rag_on,RAG: ON,RAG：開
+Template,status.src_off,SRC: OFF,引用：關
+Template,status.src_on,SRC: ON,引用：開
+Template,status.tokens,tokens,token
+Template,tasks.active,Active,運行中
+Template,tasks.help,Scheduled task management commands,定時任務管理命令
+Template,tasks.help_list,List all scheduled jobs with their current status and details.,列出所有已調度任務及狀態訊息。
+Template,tasks.job_id_column,Job ID,任務 ID
+Template,tasks.list_failed,Failed to list jobs:,獲取任務列表失敗：
+Template,tasks.listing_jobs,Listing Scheduled Jobs,已調度任務列表
+Template,tasks.name_column,Name,任務名稱
+Template,tasks.next_run_column,Next Run,下次運行時間
+Template,tasks.no_jobs_found,No scheduled jobs found,沒有已調度的任務
+Template,tasks.not_scheduled,Not scheduled,未調度
+Template,tasks.paused,Paused,已暫停
+Template,tasks.scheduled_jobs_title,Scheduled Jobs,已調度任務
+Template,tasks.status_column,Status,狀態
+Template,tasks.total_jobs,Total jobs:,任務總數：
+Template,tasks.trigger_column,Trigger,觸發類型
