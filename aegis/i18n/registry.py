@@ -44,13 +44,19 @@ def detect_locale() -> str:
 def _normalize_locale(raw: str) -> str:
     """Normalize locale string to a supported code.
 
-    Maps zh_CN, zh-Hans, zh_TW, zh -> 'zh'
+    Maps zh_CN, zh-Hans, zh -> 'zh' (Simplified)
+    Maps zh_TW, zh_HK, zh-Hant -> 'zh_Hant' (Traditional)
     Maps en_US, en-GB, en -> 'en'
     Unsupported locales fall back to 'en'
     """
-    code = raw.lower().replace("-", "_").split("_")[0]
+    normalized = raw.lower().replace("-", "_").split(".")[0].split("@")[0]
     from .locales import AVAILABLE_LOCALES
 
+    # Traditional Chinese variants
+    if normalized in ("zh_tw", "zh_hk", "zh_hant", "zh_mo"):
+        return "zh_Hant"
+
+    code = normalized.split("_")[0]
     if code in AVAILABLE_LOCALES:
         return code
     return "en"
@@ -73,6 +79,10 @@ def _load_locale(locale: str) -> None:
         from .locales.ko import MESSAGES
 
         _messages["ko"] = MESSAGES
+    elif locale == "zh_Hant":
+        from .locales.zh_hant import MESSAGES
+
+        _messages["zh_Hant"] = MESSAGES
 
     # Always ensure English is available as fallback
     if "en" not in _messages:

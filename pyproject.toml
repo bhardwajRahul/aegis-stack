@@ -64,6 +64,7 @@ dev = [
     "pip-audit>=2.6.0",
     "sqlalchemy>=2.0.0",  # For migrate-fix integration tests
     "alembic>=1.13.0",    # For migrate-fix integration tests
+    "opencc-python-reimplemented>=0.1.7",  # Simplified → Traditional Chinese conversion
 ]
 docs = [
     "mkdocs>=1.5.0",
