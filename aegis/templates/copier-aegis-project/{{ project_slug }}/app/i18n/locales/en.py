@@ -13,7 +13,7 @@ MESSAGES: dict[str, str] = {
     "main.unsupported_lang": "Unsupported language '{lang}'. Available: {available}",
     # Help text
     "main.help": "Project management CLI",
-    "main.opt_lang": "Output language (en, fr, ja, ko, zh, zh_Hant). Default: auto-detect",
+    "main.opt_lang": "Output language (de, en, fr, ja, ko, ru, zh, zh_Hant). Default: auto-detect",
     # ── Health ────────────────────────────────────────────────────────
     "health.count_healthy": "{count} healthy",
     "health.count_warning": "{count} warning",

@@ -51,17 +51,35 @@ class TestLocaleNormalization:
         assert _normalize_locale("ko_KR.UTF-8") == "ko"
         assert _normalize_locale("ko-KR") == "ko"
 
+    def test_german_variants(self) -> None:
+        """German locale variants normalize to 'de'."""
+        assert _normalize_locale("de") == "de"
+        assert _normalize_locale("de_DE") == "de"
+        assert _normalize_locale("de-DE") == "de"
+        assert _normalize_locale("de_AT") == "de"
+        assert _normalize_locale("de_CH") == "de"
+        assert _normalize_locale("de_DE.UTF-8") == "de"
+
+    def test_russian_variants(self) -> None:
+        """Russian locale variants normalize to 'ru'."""
+        assert _normalize_locale("ru") == "ru"
+        assert _normalize_locale("ru_RU") == "ru"
+        assert _normalize_locale("ru-RU") == "ru"
+        assert _normalize_locale("ru_RU.UTF-8") == "ru"
+
     def test_unsupported_falls_back_to_english(self) -> None:
         """Unsupported locales fall back to 'en'."""
-        assert _normalize_locale("de_DE") == "en"
         assert _normalize_locale("xx") == "en"
         assert _normalize_locale("es_MX.UTF-8") == "en"
+        assert _normalize_locale("pt_BR") == "en"
 
     def test_encoding_and_modifier_stripped(self) -> None:
         """Encoding suffixes and modifiers are stripped."""
         assert _normalize_locale("ja_JP.EUC-JP") == "ja"
         assert _normalize_locale("zh_TW.Big5") == "zh_Hant"
         assert _normalize_locale("en_US.UTF-8@euro") == "en"
+        assert _normalize_locale("de_DE.UTF-8@euro") == "de"
+        assert _normalize_locale("ru_RU.KOI8-R") == "ru"
 
     def test_french_variants(self) -> None:
         """French locale variants normalize to 'fr'."""
@@ -77,12 +95,32 @@ class TestMessageCompleteness:
 
     def test_all_locales_registered(self) -> None:
         """All expected locales are in AVAILABLE_LOCALES."""
+        assert "de" in AVAILABLE_LOCALES
         assert "en" in AVAILABLE_LOCALES
         assert "fr" in AVAILABLE_LOCALES
-        assert "zh" in AVAILABLE_LOCALES
-        assert "zh_Hant" in AVAILABLE_LOCALES
         assert "ja" in AVAILABLE_LOCALES
         assert "ko" in AVAILABLE_LOCALES
+        assert "ru" in AVAILABLE_LOCALES
+        assert "zh" in AVAILABLE_LOCALES
+        assert "zh_Hant" in AVAILABLE_LOCALES
+
+    def test_de_has_all_keys(self) -> None:
+        """German has all English keys."""
+        from aegis.i18n.locales.de import MESSAGES as DE
+
+        missing = set(EN_MESSAGES) - set(DE)
+        extra = set(DE) - set(EN_MESSAGES)
+        assert not missing, f"Keys in en but not de: {missing}"
+        assert not extra, f"Keys in de but not en: {extra}"
+
+    def test_ru_has_all_keys(self) -> None:
+        """Russian has all English keys."""
+        from aegis.i18n.locales.ru import MESSAGES as RU
+
+        missing = set(EN_MESSAGES) - set(RU)
+        extra = set(RU) - set(EN_MESSAGES)
+        assert not missing, f"Keys in en but not ru: {missing}"
+        assert not extra, f"Keys in ru but not en: {extra}"
 
     def test_fr_has_all_keys(self) -> None:
         """French has all English keys."""
@@ -131,18 +169,22 @@ class TestMessageCompleteness:
 
     def test_no_empty_values(self) -> None:
         """No locale has empty string values."""
+        from aegis.i18n.locales.de import MESSAGES as DE
         from aegis.i18n.locales.fr import MESSAGES as FR
         from aegis.i18n.locales.ja import MESSAGES as JA
         from aegis.i18n.locales.ko import MESSAGES as KO
+        from aegis.i18n.locales.ru import MESSAGES as RU
         from aegis.i18n.locales.zh import MESSAGES as ZH
         from aegis.i18n.locales.zh_hant import MESSAGES as ZH_HANT
 
         for name, messages in [
+            ("de", DE),
             ("fr", FR),
-            ("zh", ZH),
-            ("zh_Hant", ZH_HANT),
             ("ja", JA),
             ("ko", KO),
+            ("ru", RU),
+            ("zh", ZH),
+            ("zh_Hant", ZH_HANT),
         ]:
             empty = [k for k, v in messages.items() if not v.strip()]
             assert not empty, f"{name} has empty values: {empty}"

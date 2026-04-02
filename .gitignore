@@ -140,3 +140,6 @@ demos/recordings
 
 # Typical generated stack folders
 my-app/
+
+# Translation review artifacts
+aegis_*_review.csv
