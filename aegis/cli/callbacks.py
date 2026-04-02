@@ -219,6 +219,6 @@ def validate_and_resolve_services(
 
     # Show what components were added by services
     if service_added:
-        typer.echo(f"Services require components: {', '.join(service_added)}")
+        typer.echo(t("init.services_require", components=", ".join(service_added)))
 
     return selected_services

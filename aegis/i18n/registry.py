@@ -65,6 +65,10 @@ def _load_locale(locale: str) -> None:
         from .locales.zh import MESSAGES
 
         _messages["zh"] = MESSAGES
+    elif locale == "ja":
+        from .locales.ja import MESSAGES
+
+        _messages["ja"] = MESSAGES
     elif locale == "ko":
         from .locales.ko import MESSAGES
 
