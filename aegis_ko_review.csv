@@ -1,0 +1,1383 @@
+Source,Key,English,Korean
+CLI,add.added_files,Added {count} files,{count}개 파일 추가됨
+CLI,add.adding,Adding {component}...,{component} 추가 중...
+CLI,add.all_enabled,All requested components are already enabled!,요청한 모든 컴포넌트가 이미 활성화됨!
+CLI,add.already_enabled,Already enabled: {components},이미 활성화됨: {components}
+CLI,add.auto_added_db,Auto-added database component for scheduler persistence,스케줄러 영속화를 위해 데이터베이스 컴포넌트가 자동 추가됨
+CLI,add.auto_added_deps,Auto-added dependencies: {deps},자동 추가된 의존성: {deps}
+CLI,add.bracket_override,Bracket syntax 'scheduler[{engine}]' overrides --backend {backend},대괄호 구문 'scheduler[{engine}]'이(가) --backend {backend}을(를) 덮어씁니다
+CLI,add.components_to_add,Components to add:,추가할 컴포넌트:
+CLI,add.confirm,Add these components?,이 컴포넌트를 추가하시겠습니까?
+CLI,add.error_no_args,Error: components argument is required (or use --interactive),오류: components 인수가 필요합니다 (또는 --interactive 사용)
+CLI,add.failed,Failed to add components: {error},컴포넌트 추가 실패: {error}
+CLI,add.failed_component,Failed to add {component}: {error},{component} 추가 실패: {error}
+CLI,add.interactive_hint,Or: aegis add --interactive,또는: aegis add --interactive
+CLI,add.invalid_format,Invalid component format: {error},잘못된 컴포넌트 형식: {error}
+CLI,add.invalid_scheduler_backend,Invalid scheduler backend: '{backend}',잘못된 스케줄러 백엔드: '{backend}'
+CLI,add.load_config_failed,Failed to load project configuration: {error},프로젝트 설정 로드 실패: {error}
+CLI,add.postgres_coming,Note: PostgreSQL support coming in future release,참고: PostgreSQL 지원은 향후 릴리스에서 제공 예정
+CLI,add.project,Project: {path},프로젝트: {path}
+CLI,add.scheduler_backend,Scheduler backend: {backend},스케줄러 백엔드: {backend}
+CLI,add.skipped_files,Skipped {count} existing files,{count}개 기존 파일 건너뜀
+CLI,add.success,Components added successfully!,컴포넌트가 추가 완료!
+CLI,add.title,Aegis Stack - Add Components,Aegis Stack - 컴포넌트 추가
+CLI,add.updating,Updating project...,프로젝트 업데이트 중...
+CLI,add.usage_hint,"Usage: aegis add scheduler,worker","사용법: aegis add scheduler,worker"
+CLI,add.valid_backends,Valid options: {options},사용 가능한 옵션: {options}
+CLI,add.validation_failed,Component validation failed: {error},컴포넌트 유효성 검사 실패: {error}
+CLI,add_service.added_files,Added {count} files,{count}개 파일 추가됨
+CLI,add_service.adding_component,Adding required component: {component}...,필수 컴포넌트 추가 중: {component}...
+CLI,add_service.adding_service,Adding service: {service}...,서비스 추가 중: {service}...
+CLI,add_service.ai_set_api_key,"   2. Set provider API key ({env_var}, etc.)",   2. 프로바이더 API 키 설정 ({env_var} 등)
+CLI,add_service.ai_set_provider,"   1. Set {env_var} in .env (openai, anthropic, google, groq)","   1. .env에 {env_var} 설정 (openai, anthropic, google, groq)"
+CLI,add_service.ai_setup,AI Service Setup:,AI 서비스 설정:
+CLI,add_service.ai_test_cli,   3. Test with CLI: {cmd},   3. CLI로 테스트: {cmd}
+CLI,add_service.all_enabled,All requested services are already enabled!,요청한 모든 서비스가 이미 활성화됨!
+CLI,add_service.already_enabled,Already enabled: {services},이미 활성화됨: {services}
+CLI,add_service.already_have_components,Already have required components: {components},이미 포함된 필수 컴포넌트: {components}
+CLI,add_service.applying_migrations,Applying database migrations...,데이터베이스 마이그레이션 적용 중...
+CLI,add_service.auth_create_users,   1. Create test users: {cmd},   1. 테스트 사용자 생성: {cmd}
+CLI,add_service.auth_setup,Auth Service Setup:,인증 서비스 설정:
+CLI,add_service.auth_view_routes,   2. View auth routes: {url},   2. 인증 라우트 확인: {url}
+CLI,add_service.bootstrap_alembic,Bootstrapping alembic infrastructure...,Alembic 인프라를 부트스트랩하는 중...
+CLI,add_service.confirm,Add these services?,이 서비스를 추가하시겠습니까?
+CLI,add_service.created_file,Created: {file},생성됨: {file}
+CLI,add_service.error_no_args,Error: services argument is required (or use --interactive),오류: services 인수가 필요합니다 (또는 --interactive 사용)
+CLI,add_service.failed,Failed to add services: {error},서비스 추가 실패: {error}
+CLI,add_service.failed_component,Failed to add component {component}: {error},컴포넌트 {component} 추가 실패: {error}
+CLI,add_service.failed_service,Failed to add service {service}: {error},서비스 {service} 추가 실패: {error}
+CLI,add_service.generated_migration,Generated migration: {name},마이그레이션 생성됨: {name}
+CLI,add_service.interactive_hint,Or: aegis add-service --interactive,또는: aegis add-service --interactive
+CLI,add_service.interactive_ignores_args,Warning: --interactive flag ignores service arguments,경고: --interactive 플래그를 사용하면 서비스 인수가 무시됩니다
+CLI,add_service.load_config_failed,Failed to load project configuration: {error},프로젝트 설정 로드 실패: {error}
+CLI,add_service.migration_failed,Warning: Auto-migration failed. Run 'make migrate' manually.,경고: 자동 마이그레이션 실패. 'make migrate'를 수동으로 실행하세요.
+CLI,add_service.no_selected,No services selected,선택된 서비스가 없습니다
+CLI,add_service.project,Project: {path},프로젝트: {path}
+CLI,add_service.required_components,Required components (will be auto-added):,필수 컴포넌트 (자동 추가됨):
+CLI,add_service.resolve_failed,Failed to resolve service dependencies: {error},서비스 의존성 해결 실패: {error}
+CLI,add_service.services_to_add,Services to add:,추가할 서비스:
+CLI,add_service.skipped_files,Skipped {count} existing files,{count}개 기존 파일 건너뜀
+CLI,add_service.success,Services added successfully!,서비스가 추가 완료!
+CLI,add_service.title,Aegis Stack - Add Services,Aegis Stack - 서비스 추가
+CLI,add_service.usage_hint,"Usage: aegis add-service auth,ai","사용법: aegis add-service auth,ai"
+CLI,add_service.validation_failed,Service validation failed: {error},서비스 유효성 검사 실패: {error}
+CLI,component.backend,FastAPI backend server,FastAPI 백엔드 서버
+CLI,component.database,Database with SQLModel ORM (SQLite or PostgreSQL),SQLModel ORM 기반 데이터베이스 (SQLite 또는 PostgreSQL)
+CLI,component.frontend,Flet frontend interface,Flet 프론트엔드 인터페이스
+CLI,component.ingress,Traefik reverse proxy and load balancer,Traefik 리버스 프록시 및 로드 밸런서
+CLI,component.observability,"Logfire observability, tracing, and metrics","Logfire 관측성, 추적 및 메트릭"
+CLI,component.redis,Redis cache and message broker,Redis 캐시 및 메시지 브로커
+CLI,component.scheduler,Scheduled task execution infrastructure,예약 작업 실행 인프라
+CLI,component.worker,"Background task processing (arq, Dramatiq, or TaskIQ)","백그라운드 작업 처리 (arq, Dramatiq 또는 TaskIQ)"
+CLI,components.backend_desc,  backend      - FastAPI backend server (always included),  backend      - FastAPI 백엔드 서버 (항상 포함)
+CLI,components.core_title,CORE COMPONENTS,핵심 컴포넌트
+CLI,components.frontend_desc,  frontend     - Flet frontend interface (always included),  frontend     - Flet 프론트엔드 인터페이스 (항상 포함)
+CLI,components.infra_title,INFRASTRUCTURE COMPONENTS,인프라 컴포넌트
+CLI,components.recommends,Recommends: {deps},권장: {deps}
+CLI,components.requires,Requires: {deps},필수: {deps}
+CLI,components.usage_hint,"Use 'aegis init PROJECT_NAME --components redis,worker' to select components","컴포넌트를 선택하려면 'aegis init PROJECT_NAME --components redis,worker'를 사용하세요"
+CLI,deploy.adding_host_key,Adding server to known_hosts...,서버를 known_hosts에 추가하는 중...
+CLI,deploy.app_running,   Application running at: http://{host},   애플리케이션 실행 중: http://{host}
+CLI,deploy.auto_rollback,Auto-rolling back to previous version...,이전 버전으로 자동 롤백하는 중...
+CLI,deploy.backup_complete,Backup complete!,백업이 완료되었습니다!
+CLI,deploy.backup_created,Backup created: {timestamp},백업 생성됨: {timestamp}
+CLI,deploy.backup_db,Backing up PostgreSQL database...,PostgreSQL 데이터베이스 백업 중...
+CLI,deploy.backup_db_failed,"Warning: Database backup failed, continuing without it","경고: 데이터베이스 백업 실패, 백업 없이 계속 진행합니다"
+CLI,deploy.backup_failed,Failed to create backup: {error},백업 생성 실패: {error}
+CLI,deploy.backup_pruned,Pruned old backup: {name},오래된 백업 삭제됨: {name}
+CLI,deploy.backups_header,Backups on {host} ({count} total):,{host}의 백업 ({count}개):
+CLI,deploy.building,Building and starting services on server...,서버에서 서비스를 빌드하고 시작하는 중...
+CLI,deploy.check_status,   Check status: aegis deploy-status,   상태 확인: aegis deploy-status
+CLI,deploy.checking_ssh,Checking SSH connectivity...,SSH 연결을 확인하는 중...
+CLI,deploy.col_database,Database,데이터베이스
+CLI,deploy.col_size,Size,크기
+CLI,deploy.col_timestamp,Timestamp,타임스탬프
+CLI,deploy.complete,Deployment complete!,배포가 완료되었습니다!
+CLI,deploy.copy_failed,Failed to copy setup script,설정 스크립트 복사 실패
+CLI,deploy.copying_env,Copying {file} to server as .env...,{file}을(를) 서버에 .env로 복사하는 중...
+CLI,deploy.copying_script,Copying setup script to server...,설정 스크립트를 서버로 복사하는 중...
+CLI,deploy.creating_backup,Creating backup {timestamp}...,백업 {timestamp} 생성 중...
+CLI,deploy.creating_backup_on,Creating backup on {host}...,{host}에서 백업을 생성하는 중...
+CLI,deploy.deploying,Deploying to {host}...,{host}에 배포하는 중...
+CLI,deploy.env_copy_failed,Failed to copy .env file,.env 파일 복사 실패
+CLI,deploy.health_all_failed,All health check attempts failed,모든 헬스 체크 시도가 실패했습니다
+CLI,deploy.health_attempt,Health check attempt {n}/{total}...,헬스 체크 시도 {n}/{total}...
+CLI,deploy.health_failed_hint,Deploy completed but health check failed. Check logs with: aegis deploy-logs,배포는 완료되었지만 헬스 체크에 실패했습니다. 로그를 확인하세요: aegis deploy-logs
+CLI,deploy.health_passed,Health check passed,헬스 체크 통과
+CLI,deploy.health_retry,"Health check failed, retrying in {interval}s...","헬스 체크 실패, {interval}초 후 재시도..."
+CLI,deploy.health_waiting,Waiting for containers to stabilize...,컨테이너가 안정화될 때까지 대기 중...
+CLI,deploy.init_docker_context,   Docker Context: {context},   Docker 컨텍스트: {context}
+CLI,deploy.init_gitignore,Note: Consider adding .aegis/ to .gitignore to avoid committing deploy config,참고: 배포 설정 커밋을 방지하려면 .aegis/를 .gitignore에 추가하세요
+CLI,deploy.init_host,   Host: {host},   호스트: {host}
+CLI,deploy.init_path,   Path: {path},   경로: {path}
+CLI,deploy.init_saved,Deploy configuration saved to {file},배포 설정이 {file}에 저장되었습니다
+CLI,deploy.init_user,   User: {user},   사용자: {user}
+CLI,deploy.mkdir_failed,Failed to create remote directory '{path}',원격 디렉토리 '{path}' 생성 실패
+CLI,deploy.no_backups,No backups found.,백업이 없습니다.
+CLI,deploy.no_backups_available,No backups available.,사용 가능한 백업이 없습니다.
+CLI,deploy.no_config,No deploy configuration found. Run 'aegis deploy-init' first.,배포 설정을 찾을 수 없습니다. 먼저 'aegis deploy-init'을 실행하세요.
+CLI,deploy.no_existing,"No existing deployment found, skipping backup",기존 배포를 찾을 수 없어 백업을 건너뜁니다
+CLI,deploy.overseer,   Overseer dashboard: http://{host}/dashboard/,   Overseer 대시보드: http://{host}/dashboard/
+CLI,deploy.prompt_host,Server IP or hostname,서버 IP 또는 호스트명
+CLI,deploy.restart_failed,Failed to restart services,서비스 재시작 실패
+CLI,deploy.restart_restarting,Restarting services...,서비스를 재시작하는 중...
+CLI,deploy.restart_success,Services restarted,서비스가 재시작되었습니다
+CLI,deploy.rollback_complete,Rollback complete!,롤백이 완료되었습니다!
+CLI,deploy.rollback_db,Restoring database...,데이터베이스를 복원하는 중...
+CLI,deploy.rollback_db_failed,Warning: Database restore failed,경고: 데이터베이스 복원 실패
+CLI,deploy.rollback_failed,Rollback failed! Manual intervention required.,롤백 실패! 수동 조치가 필요합니다.
+CLI,deploy.rollback_failed_final,Rollback failed!,롤백에 실패했습니다!
+CLI,deploy.rollback_hint,Rollback with: aegis deploy-rollback --backup <timestamp>,롤백 명령: aegis deploy-rollback --backup <timestamp>
+CLI,deploy.rollback_not_found,Backup not found: {timestamp},백업을 찾을 수 없습니다: {timestamp}
+CLI,deploy.rollback_pg_timeout,"PostgreSQL did not become ready, attempting restore anyway",PostgreSQL이 준비되지 않았습니다. 복원을 시도합니다
+CLI,deploy.rollback_pg_wait,Waiting for PostgreSQL to be ready...,PostgreSQL이 준비될 때까지 대기 중...
+CLI,deploy.rollback_restore_failed,Failed to restore files: {error},파일 복원 실패: {error}
+CLI,deploy.rollback_restoring,Restoring files from backup {timestamp}...,백업 {timestamp}에서 파일을 복원하는 중...
+CLI,deploy.rollback_start_failed,Failed to start services after rollback,롤백 후 서비스 시작 실패
+CLI,deploy.rollback_starting,Starting services...,서비스를 시작하는 중...
+CLI,deploy.rollback_stopping,Stopping services...,서비스를 중지하는 중...
+CLI,deploy.rolled_back,Rolled back to backup {timestamp},백업 {timestamp}(으)로 롤백되었습니다
+CLI,deploy.rolling_back,Rolling back to backup {backup} on {host}...,{host}에서 백업 {backup}(으)로 롤백하는 중...
+CLI,deploy.running_setup,Running server setup (this may take a few minutes)...,서버 설정을 실행하는 중 (몇 분 걸릴 수 있습니다)...
+CLI,deploy.setup_complete,Server setup complete!,서버 설정이 완료되었습니다!
+CLI,deploy.setup_failed,Server setup failed,서버 설정 실패
+CLI,deploy.setup_next,Next: Run 'aegis deploy' to deploy your application,다음: 'aegis deploy'를 실행하여 애플리케이션을 배포하세요
+CLI,deploy.setup_script_hint,Make sure your project was created with the ingress component.,프로젝트가 ingress 컴포넌트와 함께 생성되었는지 확인하세요.
+CLI,deploy.setup_script_missing,Server setup script not found: {path},서버 설정 스크립트를 찾을 수 없습니다: {path}
+CLI,deploy.setup_title,Setting up server at {target}...,{target}에 서버를 설정하는 중...
+CLI,deploy.setup_verify,Verifying installation:,설치 확인:
+CLI,deploy.setup_verify_app_dir,  App Directory: {path},  앱 디렉토리: {path}
+CLI,deploy.setup_verify_compose,  Docker Compose: {version},  Docker Compose: {version}
+CLI,deploy.setup_verify_docker,  Docker: {version},  Docker: {version}
+CLI,deploy.setup_verify_uv,  uv: {version},  uv: {version}
+CLI,deploy.ssh_failed,SSH connection failed: {error},SSH 연결 실패: {error}
+CLI,deploy.ssh_keyscan_failed,Failed to scan SSH host key: {error},SSH 호스트 키 스캔 실패: {error}
+CLI,deploy.start_failed,Failed to start services,서비스 시작 실패
+CLI,deploy.status_header,Service status on {host}:,{host}의 서비스 상태:
+CLI,deploy.stop_failed,Failed to stop services,서비스 중지 실패
+CLI,deploy.stop_stopping,Stopping services...,서비스를 중지하는 중...
+CLI,deploy.stop_success,Services stopped,서비스가 중지되었습니다
+CLI,deploy.stopping,Stopping existing services...,기존 서비스를 중지하는 중...
+CLI,deploy.sync_failed,Failed to sync files,파일 동기화 실패
+CLI,deploy.syncing,Syncing files to server...,서버로 파일을 동기화하는 중...
+CLI,deploy.view_logs,   View logs: aegis deploy-logs,   로그 확인: aegis deploy-logs
+CLI,ingress.acme_email,   ACME email: {email},   ACME 이메일: {email}
+CLI,ingress.add_confirm,Add the ingress component?,Ingress 컴포넌트를 추가하시겠습니까?
+CLI,ingress.add_failed,Failed to add ingress component: {error},Ingress 컴포넌트 추가 실패: {error}
+CLI,ingress.added,Ingress component added.,Ingress 컴포넌트가 추가되었습니다.
+CLI,ingress.available_at,   Your app will be available at: https://{domain},   앱 접근 주소: https://{domain}
+CLI,ingress.created_file,   Created: {file},   생성됨: {file}
+CLI,ingress.domain_label,   Domain: {domain},   도메인: {domain}
+CLI,ingress.domain_none,   Domain: (none - IP/PathPrefix routing),   도메인: (없음 - IP/PathPrefix 라우팅)
+CLI,ingress.domain_prompt,"Domain name (e.g., example.com, or empty for IP-based routing)","도메인 이름 (예: example.com, IP 기반 라우팅의 경우 비워두세요)"
+CLI,ingress.email_prompt,Email for Let's Encrypt notifications,Let's Encrypt 알림용 이메일
+CLI,ingress.email_required,Error: --email is required for TLS (needed for Let's Encrypt),오류: TLS에는 --email이 필요합니다 (Let's Encrypt에 필요)
+CLI,ingress.email_reuse,Using existing email for ACME: {email},ACME에 기존 이메일 사용: {email}
+CLI,ingress.enabling,Enabling TLS...,TLS 활성화 중...
+CLI,ingress.https_configured,   HTTPS is now configured with Let's Encrypt,   Let's Encrypt로 HTTPS가 설정되었습니다
+CLI,ingress.next_certs,   Certificates will be auto-provisioned on first request,   첫 요청 시 인증서가 자동으로 발급됩니다
+CLI,ingress.next_deploy,   1. Deploy with: aegis deploy,   1. 배포: aegis deploy
+CLI,ingress.next_dns,   3. Point your DNS A record for {domain} to your server IP,   3. {domain}의 DNS A 레코드를 서버 IP로 지정하세요
+CLI,ingress.next_ports,   2. Ensure ports 80 and 443 are open on your server,"   2. 서버에서 80번, 443번 포트가 열려 있는지 확인하세요"
+CLI,ingress.next_steps,Next steps:,다음 단계:
+CLI,ingress.not_found,Ingress component not found. Adding it first...,Ingress 컴포넌트를 찾을 수 없습니다. 먼저 추가합니다...
+CLI,ingress.project,Project: {path},프로젝트: {path}
+CLI,ingress.success,TLS enabled successfully!,TLS가 활성화 완료!
+CLI,ingress.title,Aegis Stack - Enable Ingress TLS,Aegis Stack - Ingress TLS 활성화
+CLI,ingress.tls_already,TLS is already enabled on this project.,이 프로젝트에는 TLS가 이미 활성화됨.
+CLI,ingress.tls_config,TLS Configuration:,TLS 설정:
+CLI,ingress.tls_confirm,Enable TLS with this configuration?,이 설정으로 TLS를 활성화하시겠습니까?
+CLI,ingress.updated_file,   Updated: {file},   업데이트됨: {file}
+CLI,init.auto_added_by_services,Auto-added by services:,서비스에 의해 자동 추가됨:
+CLI,init.auto_added_deps,Auto-added dependencies: {deps},자동 추가된 의존성: {deps}
+CLI,init.auto_detected_scheduler,Auto-detected: Scheduler with {backend} persistence,자동 감지: 스케줄러가 {backend} 영속화를 사용합니다
+CLI,init.cancelled,Project creation cancelled,프로젝트 생성이 취소되었습니다
+CLI,init.compat_errors,Service-component compatibility errors:,서비스-컴포넌트 호환성 오류:
+CLI,init.component_files,Component Files:,컴포넌트 파일:
+CLI,init.config_core,Core:,핵심:
+CLI,init.config_infra,Infrastructure:,인프라:
+CLI,init.config_name,Name:,이름:
+CLI,init.config_services,Services:,서비스:
+CLI,init.config_title,Project Configuration,프로젝트 설정
+CLI,init.confirm_create,Create this project?,이 프로젝트를 생성하시겠습니까?
+CLI,init.creating,Creating project: {name},프로젝트 생성 중: {name}
+CLI,init.dependencies,Dependencies to be installed:,설치할 의존성:
+CLI,init.dir_exists,Directory '{path}' already exists,디렉토리 '{path}'이(가) 이미 존재함
+CLI,init.dir_exists_hint,Use --force to overwrite or choose a different name,--force로 덮어쓰거나 다른 이름을 사용하세요
+CLI,init.entrypoints,Entrypoints:,진입점:
+CLI,init.error,Error creating project: {error},프로젝트 생성 오류: {error}
+CLI,init.location,Location:,경로:
+CLI,init.overwriting,Overwriting existing directory: {path},기존 디렉토리 덮어쓰는 중: {path}
+CLI,init.removing_dir,Removing existing directory: {path},기존 디렉토리 삭제 중: {path}
+CLI,init.required_by,required by {services},{services}에서 필요
+CLI,init.services_require,Services require components: {components},서비스에 필요한 컴포넌트: {components}
+CLI,init.suggestion_add,Suggestion: Add missing components --components {components},제안: 누락된 컴포넌트를 추가하세요 --components {components}
+CLI,init.suggestion_interactive,"Alternatively, use interactive mode to auto-add service dependencies.",대화형 모드를 사용하면 서비스 의존성이 자동으로 처리됩니다.
+CLI,init.suggestion_remove,Or remove --components to let services auto-add dependencies.,또는 --components를 생략하면 서비스가 필요한 의존성을 자동으로 추가합니다.
+CLI,init.template_version,Template Version:,템플릿 버전:
+CLI,init.title,Aegis Stack Project Initialization,Aegis Stack 프로젝트 초기화
+CLI,init.worker_queues,Worker Queues:,워커 큐:
+CLI,interactive.add_prompt,Add {description}?,{description}을(를) 추가하시겠습니까?
+CLI,interactive.add_with_redis,Add {description}? (will auto-add Redis),{description}을(를) 추가하시겠습니까? (Redis 자동 추가)
+CLI,interactive.ai_configured,AI service configured,AI 서비스가 구성 완료
+CLI,interactive.ai_db_added,Database ({backend}) added for usage tracking,사용량 추적을 위해 데이터베이스({backend}) 추가됨
+CLI,interactive.ai_db_already,Database already selected - usage tracking enabled,데이터베이스가 이미 선택됨 - 사용량 추적 활성화됨
+CLI,interactive.ai_deps_optimized,Dependencies will be optimized for your selection,선택한 항목에 맞게 의존성이 최적화됩니다
+CLI,interactive.ai_framework_intro,Choose your AI framework:,AI 프레임워크를 선택하세요:
+CLI,interactive.ai_framework_label,AI Framework Selection:,AI 프레임워크 선택:
+CLI,interactive.ai_header,AI & Machine Learning Services:,AI 및 머신러닝 서비스:
+CLI,interactive.ai_langchain,LangChain - Popular framework with extensive integrations,LangChain - 광범위한 통합을 지원하는 인기 프레임워크
+CLI,interactive.ai_no_providers,"No providers selected, adding recommended defaults...",선택된 프로바이더가 없어 권장 기본값을 추가합니다...
+CLI,interactive.ai_ollama_docker,Docker - Run Ollama in a Docker container (Linux/Deploy),Docker - Docker 컨테이너에서 Ollama 실행 (Linux/배포)
+CLI,interactive.ai_ollama_docker_hint,Note: First startup may take time to download models,참고: 첫 실행 시 모델 다운로드에 시간이 걸릴 수 있습니다
+CLI,interactive.ai_ollama_docker_ok,Ollama service will be added to docker-compose.yml,Ollama 서비스가 docker-compose.yml에 추가됩니다
+CLI,interactive.ai_ollama_host,Host - Connect to Ollama running on your machine (Mac/Windows),호스트 - 로컬 머신에서 실행 중인 Ollama에 연결 (Mac/Windows)
+CLI,interactive.ai_ollama_host_hint,Make sure Ollama is running: ollama serve,Ollama가 실행 중인지 확인하세요: ollama serve
+CLI,interactive.ai_ollama_host_ok,Ollama will connect to host.docker.internal:11434,Ollama가 host.docker.internal:11434에 연결됩니다
+CLI,interactive.ai_ollama_host_prompt,Connect to host Ollama? (recommended for Mac/Windows),호스트 Ollama에 연결하시겠습니까? (Mac/Windows 권장)
+CLI,interactive.ai_ollama_intro,How do you want to run Ollama?,Ollama를 어떻게 실행하시겠습니까?
+CLI,interactive.ai_ollama_label,Ollama Deployment Mode:,Ollama 배포 모드:
+CLI,interactive.ai_provider.anthropic,Anthropic - Claude models (Paid),Anthropic - Claude 모델 (유료)
+CLI,interactive.ai_provider.cohere,Cohere - Enterprise focus (Limited free),Cohere - 엔터프라이즈 특화 (제한적 무료)
+CLI,interactive.ai_provider.google,Google - Gemini models (Free tier),Google - Gemini 모델 (무료 티어)
+CLI,interactive.ai_provider.groq,Groq - Fast inference (Free tier),Groq - 고속 추론 (무료 티어)
+CLI,interactive.ai_provider.mistral,Mistral - Open models (Mostly paid),Mistral - 오픈 모델 (대부분 유료)
+CLI,interactive.ai_provider.ollama,Ollama - Local inference (Free),Ollama - 로컬 추론 (무료)
+CLI,interactive.ai_provider.openai,OpenAI - GPT models (Paid),OpenAI - GPT 모델 (유료)
+CLI,interactive.ai_provider_intro,Choose AI providers to include (multiple selection supported),포함할 AI 프로바이더를 선택하세요 (복수 선택 가능)
+CLI,interactive.ai_provider_label,AI Provider Selection:,AI 프로바이더 선택:
+CLI,interactive.ai_provider_options,Provider Options:,프로바이더 옵션:
+CLI,interactive.ai_provider_recommended,(Recommended),(권장)
+CLI,interactive.ai_pydanticai,"PydanticAI - Type-safe, Pythonic AI framework (recommended)","PydanticAI - 타입 안전, Pythonic AI 프레임워크 (권장)"
+CLI,interactive.ai_rag_compat_note,Enabling RAG will generate a project requiring Python 3.11-3.13,RAG를 활성화하면 Python 3.11-3.13이 필요한 프로젝트가 생성됩니다
+CLI,interactive.ai_rag_compat_prompt,Enable RAG despite Python 3.14 incompatibility?,Python 3.14 비호환에도 불구하고 RAG를 활성화하시겠습니까?
+CLI,interactive.ai_rag_enabled,RAG enabled with ChromaDB vector store,RAG가 ChromaDB 벡터 스토어와 함께 활성화되었습니다
+CLI,interactive.ai_rag_label,RAG (Retrieval-Augmented Generation):,RAG (검색 증강 생성):
+CLI,interactive.ai_rag_prompt,Enable RAG for document indexing and semantic search?,문서 인덱싱 및 시맨틱 검색을 위해 RAG를 활성화하시겠습니까?
+CLI,interactive.ai_rag_warning,Warning: RAG requires Python <3.14 (chromadb/onnxruntime limitation),경고: RAG는 Python <3.14가 필요합니다 (chromadb/onnxruntime 제한)
+CLI,interactive.ai_selected_framework,Selected framework: {framework},선택된 프레임워크: {framework}
+CLI,interactive.ai_selected_providers,Selected providers: {providers},선택된 프로바이더: {providers}
+CLI,interactive.ai_sync_desc,Syncing fetches latest model data from OpenRouter/LiteLLM APIs,동기화는 OpenRouter/LiteLLM API에서 최신 모델 데이터를 가져옵니다
+CLI,interactive.ai_sync_label,LLM Catalog Sync:,LLM 카탈로그 동기화:
+CLI,interactive.ai_sync_prompt,Sync LLM catalog during project generation?,프로젝트 생성 시 LLM 카탈로그를 동기화하시겠습니까?
+CLI,interactive.ai_sync_skipped,LLM sync skipped - static fixture data will be available,LLM 동기화를 건너뛰었습니다 - 정적 픽스처 데이터를 사용합니다
+CLI,interactive.ai_sync_time,This requires network access and takes ~30-60 seconds,네트워크 접속이 필요하며 약 30~60초 소요됩니다
+CLI,interactive.ai_sync_will,LLM catalog will be synced after project generation,프로젝트 생성 후 LLM 카탈로그가 동기화됩니다
+CLI,interactive.ai_tracking_context,AI Usage Tracking,AI 사용량 추적
+CLI,interactive.ai_tracking_label,LLM Usage Tracking:,LLM 사용량 추적:
+CLI,interactive.ai_tracking_prompt,"Enable usage tracking? (token counts, costs, conversation history)","사용량 추적을 활성화하시겠습니까? (토큰 수, 비용, 대화 이력)"
+CLI,interactive.ai_use_pydanticai,Use PydanticAI? (recommended),PydanticAI를 사용하시겠습니까? (권장)
+CLI,interactive.ai_voice_enabled,Voice enabled with TTS and STT support,음성 기능이 TTS 및 STT 지원과 함께 활성화되었습니다
+CLI,interactive.ai_voice_label,Voice (Text-to-Speech & Speech-to-Text):,음성 (텍스트 음성 변환 및 음성 텍스트 변환):
+CLI,interactive.ai_voice_prompt,Enable voice capabilities? (TTS and STT for voice interactions),음성 기능을 활성화하시겠습니까? (음성 상호작용을 위한 TTS 및 STT)
+CLI,interactive.auth_basic,Basic - Email/password login,기본 - 이메일/비밀번호 로그인
+CLI,interactive.auth_cancelled,Authentication service cancelled,인증 서비스가 취소되었습니다
+CLI,interactive.auth_db_already,Database component already selected,데이터베이스 컴포넌트가 이미 선택됨
+CLI,interactive.auth_db_configured,Authentication + Database configured,인증 + 데이터베이스 구성 완료
+CLI,interactive.auth_db_confirm,Continue and add database component?,계속 진행하고 데이터베이스 컴포넌트를 추가하시겠습니까?
+CLI,interactive.auth_db_details,"(user accounts, sessions, JWT tokens)","(사용자 계정, 세션, JWT 토큰)"
+CLI,interactive.auth_db_reason,Authentication requires a database for user storage,인증 기능은 사용자 정보 저장을 위해 데이터베이스가 필요합니다
+CLI,interactive.auth_db_required,Database Required:,데이터베이스 필요:
+CLI,interactive.auth_header,Authentication Services:,인증 서비스:
+CLI,interactive.auth_level_label,Authentication Level:,인증 수준:
+CLI,interactive.auth_org,With Organizations - + multi-tenant support (experimental),조직 기반 - + 멀티 테넌트 지원 (실험적)
+CLI,interactive.auth_rbac,With Roles - + role-based access control (experimental),역할 기반 - + 역할 기반 접근 제어 (실험적)
+CLI,interactive.auth_select,What type of authentication?,어떤 유형의 인증을 사용하시겠습니까?
+CLI,interactive.auth_selected,Selected auth level: {level},선택된 인증 수준: {level}
+CLI,interactive.backup_desc,Scheduled daily database backup job included (runs at 2 AM),일일 데이터베이스 백업 작업이 포함됩니다 (매일 오전 2시 실행)
+CLI,interactive.bonus_backup,Bonus: Adding database backup job,보너스: 데이터베이스 백업 작업 추가
+CLI,interactive.component_selection,Component Selection,컴포넌트 선택
+CLI,interactive.core_included,Core components ({components}) included automatically,핵심 컴포넌트({components})는 자동으로 포함됩니다
+CLI,interactive.db_engine_label,{context} Database Engine:,{context} 데이터베이스 엔진:
+CLI,interactive.db_postgres,"PostgreSQL - Production-ready, multi-container support","PostgreSQL - 프로덕션급, 멀티 컨테이너 지원"
+CLI,interactive.db_reuse,Using previously selected database: {engine},이전에 선택한 데이터베이스 사용: {engine}
+CLI,interactive.db_select,Select database engine:,데이터베이스 엔진을 선택하세요:
+CLI,interactive.db_sqlite,"SQLite - Simple, file-based (good for development)",SQLite - 간단한 파일 기반 (개발용으로 적합)
+CLI,interactive.infra_header,Infrastructure Components:,인프라 컴포넌트:
+CLI,interactive.persist_prompt,"Do you want to persist scheduled jobs? (Enables job history, recovery after restarts)","예약 작업을 영속화하시겠습니까? (작업 이력 저장, 재시작 후 복구 지원)"
+CLI,interactive.scheduler_db_configured,Scheduler + {engine} database configured,스케줄러 + {engine} 데이터베이스 구성 완료
+CLI,interactive.scheduler_persistence,Scheduler Persistence:,스케줄러 영속화:
+CLI,interactive.service_selection,Service Selection,서비스 선택
+CLI,interactive.services_intro,Services provide business logic functionality for your application.,서비스는 애플리케이션에 비즈니스 로직 기능을 제공합니다.
+CLI,interactive.worker_arq,"arq - Async, lightweight (default)","arq - 비동기, 경량 (기본값)"
+CLI,interactive.worker_configured,Worker with {backend} backend configured,워커가 {backend} 백엔드로 구성 완료
+CLI,interactive.worker_dramatiq,"Dramatiq - Process-based, ideal for CPU-bound work","Dramatiq - 프로세스 기반, CPU 집약적 작업에 적합"
+CLI,interactive.worker_label,Worker Backend:,워커 백엔드:
+CLI,interactive.worker_select,Select worker backend:,워커 백엔드를 선택하세요:
+CLI,interactive.worker_taskiq,"TaskIQ - Async, framework-style with per-queue brokers","TaskIQ - 비동기, 프레임워크 스타일, 큐별 브로커 지원"
+CLI,postgen.db_alembic_hint,Skipping database migration. Please ensure the config file exists and run 'alembic upgrade head' manually.,데이터베이스 마이그레이션을 건너뜁니다. 설정 파일이 존재하는지 확인하고 'alembic upgrade head'를 수동으로 실행하세요.
+CLI,postgen.db_alembic_missing,Warning: Alembic config file not found at {path},경고: {path}에서 Alembic 설정 파일을 찾을 수 없습니다
+CLI,postgen.db_error,Warning: Migration setup failed: {error},경고: 마이그레이션 설정 실패: {error}
+CLI,postgen.db_failed,Warning: Database migration setup failed,경고: 데이터베이스 마이그레이션 설정 실패
+CLI,postgen.db_manual,Run 'alembic upgrade head' manually after project creation,프로젝트 생성 후 'alembic upgrade head'를 수동으로 실행하세요
+CLI,postgen.db_setup,Setting up database schema...,데이터베이스 스키마를 설정하는 중...
+CLI,postgen.db_success,Database tables created successfully,데이터베이스 테이블이 생성 완료
+CLI,postgen.db_timeout,Warning: Migration setup timeout - run 'alembic upgrade head' manually,경고: 마이그레이션 설정 시간 초과 - 'alembic upgrade head'를 수동으로 실행하세요
+CLI,postgen.deps_failed,Project generation failed: dependency installation failed,프로젝트 생성 실패: 의존성 설치 실패
+CLI,postgen.deps_failed_detail,"The generated project files remain in place, but the project is not usable.",생성된 프로젝트 파일은 남아있지만 프로젝트를 사용할 수 없습니다.
+CLI,postgen.deps_failed_hint,Fix the dependency issue (check Python version compatibility) and try again.,의존성 문제를 해결하고 (Python 버전 호환성 확인) 다시 시도하세요.
+CLI,postgen.deps_installing,Installing dependencies with uv...,uv로 의존성을 설치하는 중...
+CLI,postgen.deps_manual,Run 'uv sync' manually after project creation,프로젝트 생성 후 'uv sync'를 수동으로 실행하세요
+CLI,postgen.deps_success,Dependencies installed successfully,의존성이 설치 완료
+CLI,postgen.deps_timeout,Warning: Dependency installation timeout - run 'uv sync' manually,경고: 의존성 설치 시간 초과 - 'uv sync'를 수동으로 실행하세요
+CLI,postgen.deps_uv_install,Install uv first: https://github.com/astral-sh/uv,먼저 uv를 설치하세요: https://github.com/astral-sh/uv
+CLI,postgen.deps_uv_missing,Warning: uv not found in PATH,경고: PATH에서 uv를 찾을 수 없습니다
+CLI,postgen.deps_warn_error,Warning: Dependency installation failed: {error},경고: 의존성 설치 실패: {error}
+CLI,postgen.deps_warn_failed,Warning: Dependency installation failed,경고: 의존성 설치 실패
+CLI,postgen.docs_link,Docs: https://lbedner.github.io/aegis-stack,문서: https://lbedner.github.io/aegis-stack
+CLI,postgen.env_created,Environment file created from .env.example,.env.example로부터 환경 파일이 생성되었습니다
+CLI,postgen.env_error,Warning: Environment setup failed: {error},경고: 환경 설정 실패: {error}
+CLI,postgen.env_exists,Environment file already exists,환경 파일이 이미 존재함
+CLI,postgen.env_manual,Copy .env.example to .env manually,.env.example을 .env로 수동 복사하세요
+CLI,postgen.env_missing,Warning: No .env.example file found,경고: .env.example 파일을 찾을 수 없습니다
+CLI,postgen.env_setup,Setting up environment configuration...,환경 설정을 구성하는 중...
+CLI,postgen.format_error,Warning: Auto-formatting skipped: {error},경고: 자동 포맷팅 건너뜀: {error}
+CLI,postgen.format_error_manual,Run 'make fix' manually to format code,코드를 포맷팅하려면 'make fix'를 수동으로 실행하세요
+CLI,postgen.format_hint,Run 'make fix' to format code when ready,준비되면 'make fix'를 실행하여 코드를 포맷팅하세요
+CLI,postgen.format_manual,Run 'make fix' manually to resolve remaining issues,남은 문제를 해결하려면 'make fix'를 수동으로 실행하세요
+CLI,postgen.format_partial,"Some formatting issues detected, but project created successfully",일부 포맷팅 문제가 감지되었지만 프로젝트는 생성 완료
+CLI,postgen.format_start,Auto-formatting generated code...,생성된 코드를 자동 포맷팅하는 중...
+CLI,postgen.format_success,Code formatting completed successfully,코드 포맷팅이 성공적으로 완료되었습니다
+CLI,postgen.format_timeout,Warning: Formatting timeout - run 'make fix' manually when ready,경고: 포맷팅 시간 초과 - 준비되면 'make fix'를 수동으로 실행하세요
+CLI,postgen.llm_fixtures_fallback,Static fixture data is available but may be outdated,정적 픽스처 데이터를 사용할 수 있지만 오래되었을 수 있습니다
+CLI,postgen.llm_fixtures_outdated,Static fixture data loaded (may be outdated),정적 픽스처 데이터가 로드되었습니다 (오래되었을 수 있음)
+CLI,postgen.llm_seed_error,Warning: LLM fixture seeding failed: {error},경고: LLM 픽스처 시딩 실패: {error}
+CLI,postgen.llm_seed_failed,Warning: LLM fixture seeding failed,경고: LLM 픽스처 시딩 실패
+CLI,postgen.llm_seed_manual,You can seed fixtures manually by running the fixture loader,픽스처 로더를 실행하여 수동으로 픽스처를 시딩할 수 있습니다
+CLI,postgen.llm_seed_success,LLM fixtures seeded successfully,LLM 픽스처가 시딩 완료
+CLI,postgen.llm_seed_timeout,Warning: LLM fixture seeding timeout,경고: LLM 픽스처 시딩 시간 초과
+CLI,postgen.llm_seeding,Seeding LLM fixtures...,LLM 픽스처를 시딩하는 중...
+CLI,postgen.llm_sync_error,Warning: LLM catalog sync failed: {error},경고: LLM 카탈로그 동기화 실패: {error}
+CLI,postgen.llm_sync_failed,Warning: LLM catalog sync failed,경고: LLM 카탈로그 동기화 실패
+CLI,postgen.llm_sync_hint,Run '{slug} llm sync' later to get latest model data,최신 모델 데이터를 가져오려면 나중에 '{slug} llm sync'를 실행하세요
+CLI,postgen.llm_sync_manual,Run '{slug} llm sync' manually to populate the catalog,카탈로그를 채우려면 '{slug} llm sync'를 수동으로 실행하세요
+CLI,postgen.llm_sync_skipped,LLM catalog sync skipped,LLM 카탈로그 동기화를 건너뛰었습니다
+CLI,postgen.llm_sync_success,LLM catalog synced successfully,LLM 카탈로그가 동기화 완료
+CLI,postgen.llm_sync_timeout,Warning: LLM catalog sync timeout,경고: LLM 카탈로그 동기화 시간 초과
+CLI,postgen.llm_syncing,Syncing LLM catalog from external APIs...,외부 API에서 LLM 카탈로그를 동기화하는 중...
+CLI,postgen.next_cd,   cd {path},   cd {path}
+CLI,postgen.next_dashboard,   Open Overseer: http://localhost:8000/dashboard/,   Overseer 열기: http://localhost:8000/dashboard/
+CLI,postgen.next_serve,   make serve,   make serve
+CLI,postgen.next_steps,Next steps:,다음 단계:
+CLI,postgen.ready,Project ready to run!,프로젝트가 실행 준비되었습니다!
+CLI,postgen.setup_start,Setting up your project environment...,프로젝트 환경을 설정하는 중...
+CLI,postgen.star_prompt,"If Aegis Stack made your life easier, consider leaving a star:",Aegis Stack이 도움이 되셨다면 별표를 남겨주세요:
+CLI,projectmap.ai,AI conversations,AI 대화
+CLI,projectmap.auth,Authentication,인증
+CLI,projectmap.cli,CLI commands,CLI 명령
+CLI,projectmap.comms,Communications,통신
+CLI,projectmap.components,Components,컴포넌트
+CLI,projectmap.docs,Documentation,문서
+CLI,projectmap.entrypoints,Run targets,실행 대상
+CLI,projectmap.migrations,Migrations,마이그레이션
+CLI,projectmap.models,Database models,데이터베이스 모델
+CLI,projectmap.new,NEW,신규
+CLI,projectmap.services,Business logic,비즈니스 로직
+CLI,projectmap.tests,Test suite,테스트 스위트
+CLI,projectmap.title,Project Structure:,프로젝트 구조:
+CLI,remove.auto_remove_redis,"Auto-removing redis (no standalone functionality, only used by worker)","Redis를 자동 제거합니다 (독립 기능 없음, 워커에서만 사용)"
+CLI,remove.cannot_remove_core,Cannot remove core component: {component},핵심 컴포넌트는 제거할 수 없습니다: {component}
+CLI,remove.commit_hint,Make sure you have committed your changes to git.,git에 변경 사항을 커밋했는지 확인하세요.
+CLI,remove.components_to_remove,Components to remove:,제거할 컴포넌트:
+CLI,remove.confirm,Remove these components?,이 컴포넌트를 제거하시겠습니까?
+CLI,remove.error_no_args,Error: components argument is required (or use --interactive),오류: components 인수가 필요합니다 (또는 --interactive 사용)
+CLI,remove.failed,Failed to remove components: {error},컴포넌트 제거 실패: {error}
+CLI,remove.failed_component,Failed to remove {component}: {error},{component} 제거 실패: {error}
+CLI,remove.interactive_hint,Or: aegis remove --interactive,또는: aegis remove --interactive
+CLI,remove.load_config_failed,Failed to load project configuration: {error},프로젝트 설정 로드 실패: {error}
+CLI,remove.no_selected,No components selected for removal,제거할 컴포넌트가 선택되지 않았습니다
+CLI,remove.not_enabled,Not enabled: {components},활성화되지 않음: {components}
+CLI,remove.nothing_to_remove,No components to remove!,제거할 컴포넌트가 없습니다!
+CLI,remove.project,Project: {path},프로젝트: {path}
+CLI,remove.removed_files,Removed {count} files,{count}개 파일 제거됨
+CLI,remove.removing,Removing {component}...,{component} 제거 중...
+CLI,remove.removing_all,Removing components...,컴포넌트 제거 중...
+CLI,remove.scheduler_db_remains,The database file at data/scheduler.db will remain.,data/scheduler.db의 데이터베이스 파일은 유지됩니다.
+CLI,remove.scheduler_keep_hint,To keep your job history: Leave the database component,작업 이력을 유지하려면 데이터베이스 컴포넌트를 남겨두세요
+CLI,remove.scheduler_persistence_detail,Your scheduler uses SQLite for job persistence.,스케줄러가 작업 영속화에 SQLite를 사용하고 있습니다.
+CLI,remove.scheduler_persistence_warn,IMPORTANT: Scheduler Persistence Warning,중요: 스케줄러 영속화 경고
+CLI,remove.scheduler_remove_hint,To remove all data: Also remove the database component,모든 데이터를 삭제하려면 데이터베이스 컴포넌트도 제거하세요
+CLI,remove.success,Components removed successfully!,컴포넌트가 제거 완료!
+CLI,remove.title,Aegis Stack - Remove Components,Aegis Stack - 컴포넌트 제거
+CLI,remove.usage_hint,"Usage: aegis remove scheduler,worker","사용법: aegis remove scheduler,worker"
+CLI,remove.validation_failed,Component validation failed: {error},컴포넌트 유효성 검사 실패: {error}
+CLI,remove.warning_delete,WARNING: This will DELETE component files from your project!,경고: 프로젝트에서 컴포넌트 파일이 삭제됩니다!
+CLI,remove_service.auth_db_note,Note: Database tables and alembic migrations are NOT deleted.,참고: 데이터베이스 테이블과 Alembic 마이그레이션은 삭제되지 않습니다.
+CLI,remove_service.auth_delete_endpoints,User authentication API endpoints,사용자 인증 API 엔드포인트
+CLI,remove_service.auth_delete_intro,Removing auth service will delete:,인증 서비스를 제거하면 다음이 삭제됩니다:
+CLI,remove_service.auth_delete_jwt,JWT token handling code,JWT 토큰 처리 코드
+CLI,remove_service.auth_delete_models,User model and authentication services,사용자 모델 및 인증 서비스
+CLI,remove_service.auth_warning,IMPORTANT: Auth Service Warning,중요: 인증 서비스 경고
+CLI,remove_service.confirm,Remove these services?,이 서비스를 제거하시겠습니까?
+CLI,remove_service.deps_not_removed,"Note: Service dependencies (database, etc.) were NOT removed.",참고: 서비스 의존성(데이터베이스 등)은 제거되지 않았습니다.
+CLI,remove_service.deps_remove_hint,Use 'aegis remove <component>' to remove components separately.,컴포넌트를 별도로 제거하려면 'aegis remove <component>'를 사용하세요.
+CLI,remove_service.error_no_args,Error: services argument is required (or use --interactive),오류: services 인수가 필요합니다 (또는 --interactive 사용)
+CLI,remove_service.failed,Failed to remove services: {error},서비스 제거 실패: {error}
+CLI,remove_service.failed_service,Failed to remove service {service}: {error},서비스 {service} 제거 실패: {error}
+CLI,remove_service.interactive_hint,Or: aegis remove-service --interactive,또는: aegis remove-service --interactive
+CLI,remove_service.interactive_ignores_args,Warning: --interactive flag ignores service arguments,경고: --interactive 플래그를 사용하면 서비스 인수가 무시됩니다
+CLI,remove_service.load_config_failed,Failed to load project configuration: {error},프로젝트 설정 로드 실패: {error}
+CLI,remove_service.no_selected,No services selected for removal,제거할 서비스가 선택되지 않았습니다
+CLI,remove_service.not_enabled,Not enabled: {services},활성화되지 않음: {services}
+CLI,remove_service.nothing_to_remove,No services to remove!,제거할 서비스가 없습니다!
+CLI,remove_service.project,Project: {path},프로젝트: {path}
+CLI,remove_service.removed_files,Removed {count} files,{count}개 파일 제거됨
+CLI,remove_service.removing,Removing service: {service}...,서비스 제거 중: {service}...
+CLI,remove_service.services_to_remove,Services to remove:,제거할 서비스:
+CLI,remove_service.success,Services removed successfully!,서비스가 제거 완료!
+CLI,remove_service.title,Aegis Stack - Remove Services,Aegis Stack - 서비스 제거
+CLI,remove_service.usage_hint,"Usage: aegis remove-service auth,ai","사용법: aegis remove-service auth,ai"
+CLI,remove_service.validation_failed,Service validation failed: {error},서비스 유효성 검사 실패: {error}
+CLI,remove_service.warning_delete,WARNING: This will DELETE service files from your project!,경고: 프로젝트에서 서비스 파일이 삭제됩니다!
+CLI,service.ai,AI chatbot service with multi-framework support,멀티 프레임워크 지원 AI 챗봇 서비스
+CLI,service.auth,User authentication and authorization with JWT tokens,JWT 토큰 기반 사용자 인증 및 권한 관리
+CLI,service.comms,"Communications service with email, SMS and voice","이메일, SMS, 음성 통신 서비스"
+CLI,services.none_available,  No services available yet.,  아직 사용 가능한 서비스가 없습니다.
+CLI,services.recommends_components,Recommends components: {deps},권장 컴포넌트: {deps}
+CLI,services.requires_components,Requires components: {deps},필수 컴포넌트: {deps}
+CLI,services.requires_services,Requires services: {deps},필수 서비스: {deps}
+CLI,services.title,AVAILABLE SERVICES,사용 가능한 서비스
+CLI,services.type_ai,AI & Machine Learning Services,AI 및 머신러닝 서비스
+CLI,services.type_analytics,Analytics Services,분석 서비스
+CLI,services.type_auth,Authentication Services,인증 서비스
+CLI,services.type_notification,Notification Services,알림 서비스
+CLI,services.type_payment,Payment Services,결제 서비스
+CLI,services.type_storage,Storage Services,스토리지 서비스
+CLI,services.usage_hint,Use 'aegis init PROJECT_NAME --services auth' to add services,서비스를 추가하려면 'aegis init PROJECT_NAME --services auth'를 사용하세요
+CLI,shared.copier_only,The 'aegis {command}' command only works with Copier-generated projects.,'aegis {command}' 명령은 Copier로 생성된 프로젝트에서만 사용할 수 있습니다.
+CLI,shared.empty_component,Empty component name is not allowed,빈 컴포넌트 이름은 허용되지 않습니다
+CLI,shared.empty_service,Empty service name is not allowed,빈 서비스 이름은 허용되지 않습니다
+CLI,shared.git_init_hint,Projects created with 'aegis init' should have git initialized automatically,'aegis init'으로 생성된 프로젝트는 git이 자동으로 초기화되어야 합니다
+CLI,shared.git_manual_init,"If you created this project manually, run: git init && git add . && git commit -m 'Initial commit'",수동으로 생성한 프로젝트의 경우 다음을 실행하세요: git init && git add . && git commit -m 'Initial commit'
+CLI,shared.git_not_initialized,Project is not in a git repository,프로젝트가 git 저장소 안에 있지 않습니다
+CLI,shared.git_required,Copier updates require git for change tracking,Copier 업데이트는 변경 사항 추적을 위해 git이 필요합니다
+CLI,shared.interactive_ignores_args,Warning: --interactive flag ignores component arguments,경고: --interactive 플래그를 사용하면 컴포넌트 인수가 무시됩니다
+CLI,shared.next_commit,   3. Commit the changes with: git add . && git commit,   3. 변경 사항을 커밋하세요: git add . && git commit
+CLI,shared.next_make_check,   1. Run 'make check' to verify the update,   1. 'make check'를 실행하여 업데이트를 검증하세요
+CLI,shared.next_steps,Next steps:,다음 단계:
+CLI,shared.next_test,   2. Test your application,   2. 애플리케이션을 테스트하세요
+CLI,shared.no_components_selected,No components selected,선택된 컴포넌트가 없습니다
+CLI,shared.no_services_selected,No services selected,선택된 서비스가 없습니다
+CLI,shared.not_copier_project,Project at {path} was not generated with Copier.,{path}의 프로젝트는 Copier로 생성되지 않았습니다.
+CLI,shared.operation_cancelled,Operation cancelled,작업이 취소되었습니다
+CLI,shared.regenerate_hint,"To add components, regenerate the project with the new components included.",컴포넌트를 추가하려면 새 컴포넌트를 포함하여 프로젝트를 재생성하세요.
+CLI,shared.review_docker,   git diff docker-compose.yml,   git diff docker-compose.yml
+CLI,shared.review_header,Review changes:,변경 사항 확인:
+CLI,shared.review_pyproject,   git diff pyproject.toml,   git diff pyproject.toml
+CLI,update.already_at_commit,Project is already at the target commit,프로젝트가 이미 대상 커밋 상태입니다
+CLI,update.already_at_version,Project is already at the requested version,프로젝트가 이미 요청한 버전입니다
+CLI,update.backup_created,   Backup created: {tag},   백업 생성됨: {tag}
+CLI,update.backup_failed,Could not create backup point,백업 포인트를 생성할 수 없습니다
+CLI,update.cancelled,Update cancelled,업데이트가 취소되었습니다
+CLI,update.changelog,Changelog:,변경 로그:
+CLI,update.changelog_breaking,Breaking Changes:,호환성 변경 사항:
+CLI,update.changelog_features,New Features:,새로운 기능:
+CLI,update.changelog_fixes,Bug Fixes:,버그 수정:
+CLI,update.changelog_other,Other Changes:,기타 변경 사항:
+CLI,update.clean_required,Copier requires a clean git tree to safely merge changes.,Copier가 안전하게 변경 사항을 병합하려면 깨끗한 git 트리가 필요합니다.
+CLI,update.commit_or_stash,Commit or stash your changes before running 'aegis update'.,'aegis update'를 실행하기 전에 변경 사항을 커밋하거나 스태시하세요.
+CLI,update.confirm,Apply this update?,이 업데이트를 적용하시겠습니까?
+CLI,update.copier_only,The 'aegis update' command only works with Copier-generated projects.,'aegis update' 명령은 Copier로 생성된 프로젝트에서만 사용할 수 있습니다.
+CLI,update.creating_backup,Creating backup point...,백업 포인트를 생성하는 중...
+CLI,update.current_cli,   Current CLI:      {version},   현재 CLI:      {version}
+CLI,update.current_commit,   Current: {commit}...,   현재: {commit}...
+CLI,update.current_template,   Current Template: {version},   현재 템플릿: {version}
+CLI,update.current_template_commit,   Current Template: {commit}... (commit),   현재 템플릿: {commit}... (커밋)
+CLI,update.current_template_unknown,   Current Template: unknown,   현재 템플릿: 알 수 없음
+CLI,update.custom_template,Using custom template ({source}): {path},사용자 지정 템플릿 ({source}): {path}
+CLI,update.dirty_tree,Git tree has uncommitted changes,git 트리에 커밋되지 않은 변경 사항이 있습니다
+CLI,update.downgrade_blocked,Downgrade not supported,다운그레이드가 지원되지 않습니다
+CLI,update.downgrade_reason,Copier does not support downgrading to older template versions.,Copier는 이전 템플릿 버전으로의 다운그레이드를 지원하지 않습니다.
+CLI,update.dry_run,DRY RUN MODE - No changes will be applied,시뮬레이션 모드 - 변경 사항이 적용되지 않습니다
+CLI,update.dry_run_hint,"To apply this update, run:",이 업데이트를 적용하려면 다음을 실행하세요:
+CLI,update.failed,Update failed: {error},업데이트 실패: {error}
+CLI,update.git_clean,Git tree is clean,git 트리가 깨끗합니다
+CLI,update.manual_rollback,Manual rollback: git reset --hard {tag},수동 롤백: git reset --hard {tag}
+CLI,update.merge_conflicts,   {count} file(s) have merge conflicts (search for <<<<<<< to resolve):,   {count}개 파일에 병합 충돌이 있습니다 (<<<<<<< 검색으로 해결하세요):
+CLI,update.moved_files,   Moved {count} new files from nested directory,   중첩 디렉토리에서 {count}개의 새 파일 이동됨
+CLI,update.need_regen,Projects generated before v0.2.0 need to be regenerated.,v0.2.0 이전에 생성된 프로젝트는 재생성이 필요합니다.
+CLI,update.next_commit,   4. Commit changes: git add . && git commit,   4. 변경 사항 커밋: git add . && git commit
+CLI,update.next_conflicts,   2. Check for conflicts (*.rej files),   2. 충돌 확인 (*.rej 파일)
+CLI,update.next_review,   1. Review changes: git diff,   1. 변경 사항 확인: git diff
+CLI,update.next_steps,Next Steps:,다음 단계:
+CLI,update.next_test,   3. Run tests: make check,   3. 테스트 실행: make check
+CLI,update.not_copier,Project at {path} was not generated with Copier.,{path}의 프로젝트는 Copier로 생성되지 않았습니다.
+CLI,update.partial_detail,   Some setup tasks failed. See details above.,   일부 설정 작업이 실패했습니다. 위의 세부 사항을 확인하세요.
+CLI,update.partial_success,Update completed with some post-generation task failures,업데이트가 완료되었지만 일부 후처리 작업이 실패했습니다
+CLI,update.project,Project: {path},프로젝트: {path}
+CLI,update.rollback_prompt,Rollback to previous state?,이전 상태로 롤백하시겠습니까?
+CLI,update.running_postgen,Running post-generation tasks...,후처리 작업 실행 중...
+CLI,update.success,Update completed successfully!,업데이트가 완료!
+CLI,update.synced_files,   Synced {count} template changes,   {count}개의 템플릿 변경 사항 동기화됨
+CLI,update.target_commit,   Target:  {commit}...,   대상: {commit}...
+CLI,update.target_template,   Target Template:  {version},   대상 템플릿:  {version}
+CLI,update.title,Aegis Stack - Update Template,Aegis Stack - 템플릿 업데이트
+CLI,update.troubleshoot_clean,   - Ensure you have a clean git tree,   - 깨끗한 git 트리인지 확인하세요
+CLI,update.troubleshoot_docs,   - Review Copier documentation for update issues,   - 업데이트 문제에 관한 Copier 문서를 참조하세요
+CLI,update.troubleshoot_version,   - Check that the version/commit exists,   - 버전/커밋이 존재하는지 확인하세요
+CLI,update.troubleshooting,Troubleshooting:,문제 해결:
+CLI,update.unknown_version,Warning: Cannot determine current template version,경고: 현재 템플릿 버전을 확인할 수 없습니다
+CLI,update.untagged_commit,Project may have been generated from an untagged commit,프로젝트가 태그되지 않은 커밋에서 생성되었을 수 있습니다
+CLI,update.updating,Updating project...,프로젝트 업데이트 중...
+CLI,update.updating_to,Updating to template version {version},템플릿 버전 {version}(으)로 업데이트 중
+CLI,update.version_info,Version Information:,버전 정보:
+CLI,update.version_updated,   Updated __aegis_version__ to {version},   __aegis_version__이(가) {version}(으)로 업데이트됨
+CLI,updater.code_formatted,Code formatted (make fix),코드 포맷팅 완료 (make fix)
+CLI,updater.deps_synced,Dependencies synced (uv sync),의존성 동기화 완료 (uv sync)
+CLI,updater.processing_files,Processing {count} component files...,컴포넌트 파일 {count}개 처리 중...
+CLI,updater.running_postgen,Running post-generation tasks...,후처리 작업 실행 중...
+CLI,updater.updating_shared,Updating shared template files...,공유 템플릿 파일 업데이트 중...
+CLI,validation.invalid_name,"Invalid project name. Only letters, numbers, hyphens, and underscores are allowed.","잘못된 프로젝트 이름입니다. 영문자, 숫자, 하이픈, 밑줄만 사용할 수 있습니다."
+CLI,validation.invalid_python,Invalid Python version '{version}'. Must be one of: {supported},잘못된 Python 버전 '{version}'입니다. 다음 중 하나여야 합니다: {supported}
+CLI,validation.name_too_long,Project name too long. Maximum 50 characters allowed.,프로젝트 이름이 너무 깁니다. 최대 50자까지 허용됩니다.
+CLI,validation.reserved_name,'{name}' is a reserved name.,'{name}'은(는) 예약된 이름입니다.
+CLI,validation.unknown_component,Unknown component: {name},알 수 없는 컴포넌트: {name}
+CLI,validation.unknown_service,Unknown service: {name},알 수 없는 서비스: {name}
+CLI,validation.unknown_services,Unknown services: {names},알 수 없는 서비스: {names}
+CLI,version.info,Aegis Stack CLI v{version},Aegis Stack CLI v{version}
+Template,ai.access_denied,Access denied: You don't own this conversation,접근 거부: 이 대화의 소유자가 아닙니다
+Template,ai.adding_provider,Adding {provider} provider...,{provider} 제공자 추가 중...
+Template,ai.api_key_label,API Key:,API 키:
+Template,ai.api_key_skipped,Skipped API key configuration,API 키 설정을 건너뛰었습니다
+Template,ai.arg_audio_file,Path to audio file,오디오 파일 경로
+Template,ai.arg_conversation_id,Conversation ID,대화 ID
+Template,ai.arg_message,Message to send to AI,AI에 보낼 메시지
+Template,ai.arg_provider,"Provider name (openai, anthropic, google, groq, mistral, cohere)","제공자 이름 (openai, anthropic, google, groq, mistral, cohere)"
+Template,ai.arg_provider_switch,Provider name to switch to,전환할 제공자 이름
+Template,ai.arg_text,Text to synthesize into speech,음성으로 합성할 텍스트
+Template,ai.audio_saved,Audio saved: {path} ({size} bytes),오디오 저장됨: {path} ({size} 바이트)
+Template,ai.audio_status,Audio status: {status},오디오 상태: {status}
+Template,ai.available_providers,Available providers:,사용 가능한 제공자:
+Template,ai.cancelled,Cancelled,취소됨
+Template,ai.chat_ended,Chat session ended,채팅 세션이 종료되었습니다
+Template,ai.chat_hints,Type /help for commands • Esc then Enter to insert newline • 'exit' to quit,/help로 명령어 확인 • Esc 후 Enter로 줄바꿈 • 'exit'로 종료
+Template,ai.check_mic,Check your microphone permissions and try again,마이크 권한을 확인하고 다시 시도하세요
+Template,ai.checking_api_key,Checking API key...,API 키 확인 중...
+Template,ai.checking_deps,Checking dependencies...,의존성 확인 중...
+Template,ai.col_api_key,API Key,API 키
+Template,ai.col_free,Free,무료
+Template,ai.col_functions,Functions,함수 호출
+Template,ai.col_installed,Installed,설치됨
+Template,ai.col_provider,Provider,제공자
+Template,ai.col_status,Status,상태
+Template,ai.col_stream,Stream,스트리밍
+Template,ai.col_vision,Vision,비전
+Template,ai.config_issues,Configuration issues:,설정 문제:
+Template,ai.config_valid,Configuration valid,설정 유효
+Template,ai.connecting_to,Connecting to {provider}...,{provider}에 연결 중...
+Template,ai.connection_error,Connection Error: {error},연결 오류: {error}
+Template,ai.consider_running,Consider running:,다음 실행을 고려하세요:
+Template,ai.conversation_id_label,Conversation: {id},대화: {id}
+Template,ai.conversation_label,Conversation:,대화:
+Template,ai.conversation_not_found,Conversation not found: {id},대화를 찾을 수 없습니다: {id}
+Template,ai.conversations_for,Conversations for {user_id}:,{user_id}의 대화:
+Template,ai.current_provider,Current provider: {provider},현재 제공자: {provider}
+Template,ai.deps_installed,Dependencies already installed,의존성이 이미 설치되어 있습니다
+Template,ai.deps_not_installed,Dependencies not installed for {provider},{provider}의 의존성이 설치되지 않았습니다
+Template,ai.deps_ok,Dependencies installed,의존성 설치됨
+Template,ai.disabled,Disabled,비활성화됨
+Template,ai.enabled,Enabled,활성화됨
+Template,ai.engine_label,Engine:,엔진:
+Template,ai.enter_api_key,Enter your {provider} API key (or press Enter to skip),{provider} API 키를 입력하세요 (건너뛰려면 Enter)
+Template,ai.enter_message_hint,Please enter a message or type /help.,메시지를 입력하거나 /help를 입력하세요.
+Template,ai.file_not_found,File not found: {path},파일을 찾을 수 없습니다: {path}
+Template,ai.free_tier,Free tier,무료 플랜
+Template,ai.generating_speech,Generating speech...,음성 생성 중...
+Template,ai.get_api_key_at,Get your API key at:,API 키를 받으세요:
+Template,ai.goodbye,Goodbye!,안녕히 가세요!
+Template,ai.header,Illiana:,Illiana:
+Template,ai.header_inline,Illiana: ,Illiana: 
+Template,ai.health_degraded,"DEGRADED ({pct:.0f}%, {count} issues)","저하됨 ({pct:.0f}%, {count}개 문제)"
+Template,ai.health_label,Health:,상태:
+Template,ai.health_na,N/A,해당 없음
+Template,ai.health_ok,OK ({pct:.0f}%),정상 ({pct:.0f}%)
+Template,ai.help,AI service management and chat commands,AI 서비스 관리 및 채팅 명령어
+Template,ai.help_add_provider,Add a new AI provider — installs dependencies and configures API key.,새 AI 제공자를 추가합니다 — 의존성 설치 및 API 키를 설정합니다.
+Template,ai.help_chat,Send a chat message or start an interactive session. Resumes the most recent conversation by default.,채팅 메시지를 보내거나 대화형 세션을 시작합니다. 기본적으로 가장 최근 대화를 이어갑니다.
+Template,ai.help_conversations,List conversations for a user.,사용자의 대화 목록을 표시합니다.
+Template,ai.help_history,View conversation history.,대화 기록을 확인합니다.
+Template,ai.help_providers,List all available AI providers with installation status.,설치 상태와 함께 사용 가능한 모든 AI 제공자를 표시합니다.
+Template,ai.help_record,"Record audio from microphone, transcribe, and optionally chat with AI.","마이크로 오디오를 녹음하고, 텍스트로 변환하며, 선택적으로 AI와 대화합니다."
+Template,ai.help_speak,Synthesize speech from text using the configured TTS provider.,구성된 TTS 제공자를 사용하여 텍스트에서 음성을 합성합니다.
+Template,ai.help_status,"Show AI service status, configuration, and validation.","AI 서비스 상태, 설정, 검증 결과를 표시합니다."
+Template,ai.help_stt_status,Show STT (Speech-to-Text) service status.,STT (음성-텍스트 변환) 서비스 상태를 표시합니다.
+Template,ai.help_transcribe,Transcribe audio to text without chat.,채팅 없이 오디오를 텍스트로 변환합니다.
+Template,ai.help_tts_status,Show TTS (Text-to-Speech) service status.,TTS (텍스트-음성 변환) 서비스 상태를 표시합니다.
+Template,ai.help_usage,"Show AI usage statistics including token counts, costs, and recent activity.","토큰 수, 비용, 최근 활동 등 AI 사용 통계를 표시합니다."
+Template,ai.help_use_provider,Switch to a different AI provider.,다른 AI 제공자로 전환합니다.
+Template,ai.help_voice,Send voice input to AI agent. Transcribes audio and sends to chat.,음성 입력을 AI 에이전트에 전송합니다. 오디오를 텍스트로 변환 후 채팅에 전달합니다.
+Template,ai.initializing,Initializing...,초기화 중...
+Template,ai.input_tokens,Input:,입력:
+Template,ai.install_cancelled,Installation cancelled,설치가 취소되었습니다
+Template,ai.install_dep,Install {dep}?,{dep}을(를) 설치하시겠습니까?
+Template,ai.install_failed_hint,Try installing manually:,수동 설치를 시도하세요:
+Template,ai.install_with,Install with:,설치 방법:
+Template,ai.installing,Installing...,설치 중...
+Template,ai.invalid_provider,Invalid provider: {provider},잘못된 제공자: {provider}
+Template,ai.language_label,Language: {lang},언어: {lang}
+Template,ai.linux_deps,On Linux:,Linux에서:
+Template,ai.macos_portaudio,"On macOS, you may also need PortAudio:",macOS에서는 PortAudio도 필요할 수 있습니다:
+Template,ai.max_tokens_label,Max Tokens:,최대 토큰:
+Template,ai.messages_count,{count} messages,{count}개 메시지
+Template,ai.messages_info,Messages: {count},메시지: {count}
+Template,ai.messages_label,Messages:,메시지:
+Template,ai.model_label,Model:,모델:
+Template,ai.model_usage,Model Usage,모델 사용량
+Template,ai.no_api_key,No {var} found,{var}을(를) 찾을 수 없습니다
+Template,ai.no_api_key_configured,No {var} configured,{var}이(가) 설정되지 않았습니다
+Template,ai.no_conversations,No conversations found for user: {user_id},사용자의 대화를 찾을 수 없습니다: {user_id}
+Template,ai.no_model_usage,No model usage data available.,사용 가능한 모델 사용 데이터가 없습니다.
+Template,ai.no_recent_activity,No recent activity.,최근 활동이 없습니다.
+Template,ai.no_response_content,(No response content),(응답 내용 없음)
+Template,ai.no_token_usage,No token usage recorded.,기록된 토큰 사용량이 없습니다.
+Template,ai.ok,OK,확인
+Template,ai.online,Online,온라인
+Template,ai.openai_voices,OpenAI Voices:,OpenAI 음성:
+Template,ai.opt_collection,RAG collection to search,검색할 RAG 컬렉션
+Template,ai.opt_conversation_id,Continue existing conversation,기존 대화 계속하기
+Template,ai.opt_filter_user_id,Filter by user ID,사용자 ID로 필터링
+Template,ai.opt_json,Output raw JSON,JSON 원본 출력
+Template,ai.opt_language,"Language code (e.g., 'en', 'es')","언어 코드 (예: 'en', 'es')"
+Template,ai.opt_limit,Number of conversations to show,표시할 대화 수
+Template,ai.opt_new,Start a fresh conversation (don't resume),새 대화 시작 (이어가지 않음)
+Template,ai.opt_output_file,Output file path,출력 파일 경로
+Template,ai.opt_output_recording,Save recording to file (default: temp file),녹음 파일 저장 (기본값: 임시 파일)
+Template,ai.opt_rag,Enable RAG (auto-enables if collections exist),RAG 활성화 (컬렉션이 있으면 자동 활성화)
+Template,ai.opt_rag_inject,Enable RAG context injection,RAG 컨텍스트 주입 활성화
+Template,ai.opt_rag_send,Enable RAG context injection (requires --send),RAG 컨텍스트 주입 활성화 (--send 필요)
+Template,ai.opt_recent,Number of recent activities to show,표시할 최근 활동 수
+Template,ai.opt_send,Send transcription to AI agent,텍스트 변환 결과를 AI 에이전트에 전송
+Template,ai.opt_set_default,Set as default provider after adding,추가 후 기본 제공자로 설정
+Template,ai.opt_skip_api_key,Skip API key configuration,API 키 설정 건너뛰기
+Template,ai.opt_sources,Show source references in output,출력에 출처 참조 표시
+Template,ai.opt_speed,Speech speed (0.25-4.0),음성 속도 (0.25-4.0)
+Template,ai.opt_stream,Enable streaming output,스트리밍 출력 활성화
+Template,ai.opt_top_k,Number of RAG results to use,사용할 RAG 결과 수
+Template,ai.opt_url,API base URL (default: localhost:8000),API 기본 URL (기본값: localhost:8000)
+Template,ai.opt_user_id,User identifier,사용자 식별자
+Template,ai.opt_verbose,Show conversation metadata,대화 메타데이터 표시
+Template,ai.opt_voice,"Voice to use (alloy, echo, fable, onyx, nova, shimmer)","사용할 음성 (alloy, echo, fable, onyx, nova, shimmer)"
+Template,ai.opt_voice_mode,Summarize response for spoken output,음성 출력용으로 응답 요약
+Template,ai.opt_voice_response,Play TTS response (requires --send),TTS 응답 재생 (--send 필요)
+Template,ai.opt_yes,Skip confirmation prompts,확인 프롬프트 건너뛰기
+Template,ai.output_tokens,Output:,출력:
+Template,ai.preparing_voice,Preparing voice response...,음성 응답 준비 중...
+Template,ai.prov_current,Current,현재 사용 중
+Template,ai.prov_current_local,Current (Local),현재 사용 중 (로컬)
+Template,ai.prov_current_need_key,Current (Need API key),현재 사용 중 (API 키 필요)
+Template,ai.prov_current_not_installed,Current (Not installed),현재 사용 중 (미설치)
+Template,ai.prov_error,Error,오류
+Template,ai.prov_local,Local,로컬
+Template,ai.prov_na,N/A,해당 없음
+Template,ai.prov_need_key,Need API key,API 키 필요
+Template,ai.prov_no,No,아니오
+Template,ai.prov_not_installed,Not installed,미설치
+Template,ai.prov_ready,Ready,준비됨
+Template,ai.prov_yes,Yes,예
+Template,ai.provider_added,Provider added successfully!,제공자가 추가되었습니다!
+Template,ai.provider_info,Provider: {provider},제공자: {provider}
+Template,ai.provider_label,Provider:,제공자:
+Template,ai.provider_not_installed,Provider not installed: {provider},제공자가 설치되지 않았습니다: {provider}
+Template,ai.provider_set,AI_PROVIDER set to {provider},AI_PROVIDER가 {provider}(으)로 설정되었습니다
+Template,ai.providers_tip,Tip: Run '{app} ai add-provider <name>' to install missing providers.,팁: '{app} ai add-provider <이름>'을 실행하여 누락된 제공자를 설치하세요.
+Template,ai.providers_title,AI Providers,AI 제공자
+Template,ai.rag_get_started,To get started:,시작하려면:
+Template,ai.rag_list_hint,Tip: Run '{app} rag list' to see existing collections.,팁: '{app} rag list'로 기존 컬렉션을 확인하세요.
+Template,ai.rag_requires_content,RAG requires indexed content.,RAG를 사용하려면 인덱싱된 콘텐츠가 필요합니다.
+Template,ai.rag_step_index,1. Index your codebase:,1. 코드베이스를 인덱싱하세요:
+Template,ai.rag_step_query,2. Query with the collection:,2. 컬렉션으로 쿼리하세요:
+Template,ai.recent_activity,Recent Activity,최근 활동
+Template,ai.recording,Recording...,녹음 중...
+Template,ai.recording_cancelled,Recording cancelled,녹음이 취소되었습니다
+Template,ai.recording_failed,Recording failed - no audio captured,녹음 실패 — 오디오가 캡처되지 않았습니다
+Template,ai.recording_hint,"Press ENTER to stop recording, Ctrl+C to cancel","Enter를 눌러 녹음 중지, Ctrl+C로 취소"
+Template,ai.recording_requires,Audio recording requires sounddevice and soundfile packages.,오디오 녹음에는 sounddevice 및 soundfile 패키지가 필요합니다.
+Template,ai.response_label,Response:,응답:
+Template,ai.response_time_label,Response time:,응답 시간:
+Template,ai.resuming_conversation,Resuming conversation {id}... (use --new for fresh start),대화 {id}을(를) 이어갑니다... (새 대화는 --new 사용)
+Template,ai.run_first,Run this command first:,먼저 이 명령어를 실행하세요:
+Template,ai.run_to_install,Run '{command}' to install it.,'{command}'를 실행하여 설치하세요.
+Template,ai.sending_to_agent,Sending to agent...,에이전트에 전송 중...
+Template,ai.sources_label,Sources:,출처:
+Template,ai.speech_duration,Duration: {duration}s,길이: {duration}초
+Template,ai.speech_format,Format: {format},형식: {format}
+Template,ai.speech_saved,Speech saved to: {path},음성 저장됨: {path}
+Template,ai.speech_size,Size: {size} bytes,크기: {size} 바이트
+Template,ai.speed_label,Speed:,속도:
+Template,ai.status_label,Status:,상태:
+Template,ai.status_title,AI Service Status,AI 서비스 상태
+Template,ai.streaming_supported,Streaming supported,스트리밍 지원
+Template,ai.stt_status_title,STT Service Status,STT 서비스 상태
+Template,ai.supported_formats,Supported formats: {formats},지원 형식: {formats}
+Template,ai.svc_initialized,Initialized,초기화됨
+Template,ai.svc_not_initialized,Not initialized (lazy-loaded),미초기화 (지연 로딩)
+Template,ai.switch_anyway,Switch anyway?,그래도 전환하시겠습니까?
+Template,ai.switched_to,Switched to {provider}!,{provider}(으)로 전환했습니다!
+Template,ai.switching_to,Switching to {provider} provider...,{provider} 제공자로 전환 중...
+Template,ai.synthesizing,Synthesizing speech...,음성 합성 중...
+Template,ai.temperature_label,Temperature:,온도:
+Template,ai.test_with,"Test with: {app} ai chat ""Hello""","다음으로 테스트하세요: {app} ai chat ""안녕하세요"""
+Template,ai.thinking,Thinking...,생각 중...
+Template,ai.timeout_error,Request timed out. Try a faster model or increase AI_TIMEOUT_SECONDS.,요청 시간이 초과되었습니다. 더 빠른 모델을 사용하거나 AI_TIMEOUT_SECONDS를 늘려보세요.
+Template,ai.timeout_label,Timeout Error: {error},시간 초과 오류: {error}
+Template,ai.tip_label,Tip:,팁:
+Template,ai.title_label,Title: {title},제목: {title}
+Template,ai.to_configure_key,to configure your API key,API 키를 설정하려면
+Template,ai.token_breakdown,Token Breakdown,토큰 내역
+Template,ai.transcribing,Transcribing...,텍스트 변환 중...
+Template,ai.transcribing_audio,Transcribing audio...,오디오 텍스트 변환 중...
+Template,ai.transcription_label,Transcription:,텍스트 변환:
+Template,ai.tts_status_title,TTS Service Status,TTS 서비스 상태
+Template,ai.unsupported_format,Unsupported format: {ext},지원하지 않는 형식: {ext}
+Template,ai.usage_success_rate,Success Rate:,성공률:
+Template,ai.usage_title,AI Usage Summary,AI 사용량 요약
+Template,ai.usage_total_cost,Total Cost:,총 비용:
+Template,ai.usage_total_requests,Total Requests:,총 요청:
+Template,ai.usage_total_tokens,Total Tokens:,총 토큰:
+Template,ai.using_mic,Using microphone: {name} @ {rate}Hz,마이크 사용 중: {name} @ {rate}Hz
+Template,ai.valid_providers,Valid providers: {names},유효한 제공자: {names}
+Template,ai.voice_hint,Full response available with --no-voice flag,--no-voice 플래그로 전체 응답을 확인할 수 있습니다
+Template,ai.voice_label,Voice:,음성:
+Template,auth.auto_generated_email,Auto-generated email: {email} (next in sequence),자동 생성된 이메일: {email} (다음 순번)
+Template,auth.count_must_be_positive,Error: Count must be greater than 0,오류: 수량은 0보다 커야 합니다
+Template,auth.create_user_failed,Error: Failed to create test user: {error},오류: 테스트 사용자 생성 실패: {error}
+Template,auth.create_users_failed,Error: Failed to create test users: {error},오류: 테스트 사용자 일괄 생성 실패: {error}
+Template,auth.created_column,Created,생성일
+Template,auth.created_label,Created:,생성됨:
+Template,auth.creating_users,Creating {count} test users with prefix '{prefix}'...,'{prefix}' 접두사로 테스트 사용자 {count}명 생성 중...
+Template,auth.email_label,Email,이메일
+Template,auth.found_users,Found {count} user(s):,{count}명의 사용자를 찾았습니다:
+Template,auth.help,Authentication management commands,인증 관리 명령어
+Template,auth.help_create_test_user,Create a test user for development and testing.,개발 및 테스트용 테스트 사용자를 생성합니다.
+Template,auth.help_create_test_users,Create multiple test users for development and testing.,개발 및 테스트용 테스트 사용자를 여러 명 생성합니다.
+Template,auth.help_list_users,List all users in the system.,시스템의 모든 사용자를 표시합니다.
+Template,auth.list_users_failed,Error: Failed to list users: {error},오류: 사용자 목록 조회 실패: {error}
+Template,auth.name_label,Name,이름
+Template,auth.no_users_found,No users found.,사용자를 찾을 수 없습니다.
+Template,auth.opt_count,Number of test users to create,생성할 테스트 사용자 수
+Template,auth.opt_domain,Email domain for auto-generated emails,자동 생성 이메일의 도메인
+Template,auth.opt_email,"User email address (auto-increment: test@example.com, test1@example.com, etc.)","사용자 이메일 주소 (자동 증가: test@example.com, test1@example.com 등)"
+Template,auth.opt_full_name,User full name,사용자 전체 이름
+Template,auth.opt_password,User password (generated if not provided),사용자 비밀번호 (미지정 시 자동 생성)
+Template,auth.opt_prefix,Email prefix for auto-generated emails,자동 생성 이메일의 접두사
+Template,auth.opt_shared_password,Shared password (generated if not provided),공용 비밀번호 (미지정 시 자동 생성)
+Template,auth.password_auto_generated,Password was auto-generated. Save it for testing!,비밀번호가 자동 생성되었습니다. 테스트용으로 저장해 두세요!
+Template,auth.password_label,Password,비밀번호
+Template,auth.ready_to_test,Ready to test auth endpoints at http://localhost:8000/docs,http://localhost:8000/docs 에서 인증 엔드포인트를 테스트할 수 있습니다
+Template,auth.shared_password,Shared password:,공용 비밀번호:
+Template,auth.user_already_exists,Error: User with email '{email}' already exists,오류: '{email}' 이메일의 사용자가 이미 존재함
+Template,auth.user_created,Test user created successfully!,테스트 사용자가 생성되었습니다!
+Template,auth.user_details_title,User Details,사용자 정보
+Template,auth.user_id_label,User ID,사용자 ID
+Template,auth.users_created,Successfully created {count} test users!,테스트 사용자 {count}명을 생성했습니다!
+Template,auth.users_title,Users,사용자
+Template,chat.disable_rag,Disable RAG,RAG 비활성화
+Template,chat.hide_source_references,Hide source references,출처 참조 숨기기
+Template,chat.show_source_references,Show source references,출처 참조 표시
+Template,comms.account_sid_label,Account SID:,계정 SID:
+Template,comms.api_key_label,API Key:,API 키:
+Template,comms.arg_body,SMS message body,SMS 메시지 본문
+Template,comms.arg_to_email,Recipient email address,수신자 이메일 주소
+Template,comms.arg_to_phone,Recipient phone number (E.164 format),수신자 전화번호 (E.164 형식)
+Template,comms.arg_twiml_url,URL returning TwiML instructions,TwiML 지침을 반환하는 URL
+Template,comms.auth_token_label,Auth Token:,인증 토큰:
+Template,comms.call_failed,Failed to make call: {error},통화 실패: {error}
+Template,comms.call_initiated,Call initiated successfully!,통화 시작됨!
+Template,comms.call_sid_label,Call SID:,통화 SID:
+Template,comms.call_status_label,Status:,상태:
+Template,comms.channel_column,Channel,채널
+Template,comms.configuration_error,Configuration error: {error},설정 오류: {error}
+Template,comms.configured,Configured,구성됨
+Template,comms.email,Email,이메일
+Template,comms.email_resend_header,Email (Resend),이메일 (Resend)
+Template,comms.email_send_failed,Failed to send email: {error},이메일 발송 실패: {error}
+Template,comms.email_sent,Email sent successfully!,이메일 발송 완료!
+Template,comms.email_signup_hint,Email: Sign up at https://resend.com (free tier available),이메일: https://resend.com 에서 가입하세요 (무료 플랜 제공)
+Template,comms.free_tier_100_day,100/day,일 100건
+Template,comms.free_tier_15_trial,$15 trial,$15 체험
+Template,comms.free_tier_column,Free Tier,무료 플랜
+Template,comms.from_email_label,From Email:,발신 이메일:
+Template,comms.help,"Communications service commands (email, SMS, voice)","통신 서비스 명령어 (이메일, SMS, 음성)"
+Template,comms.help_call,Voice call commands using Twilio,Twilio를 사용하는 음성 통화 명령어
+Template,comms.help_call_make,Make a voice call via Twilio.,Twilio를 통해 음성 통화를 합니다.
+Template,comms.help_email,Email commands using Resend,Resend를 사용하는 이메일 명령어
+Template,comms.help_email_send,Send an email via Resend.,Resend를 통해 이메일을 발송합니다.
+Template,comms.help_providers,Show available communications providers.,사용 가능한 통신 제공자를 표시합니다.
+Template,comms.help_sms,SMS commands using Twilio,Twilio를 사용하는 SMS 명령어
+Template,comms.help_sms_send,Send an SMS via Twilio.,Twilio를 통해 SMS를 발송합니다.
+Template,comms.help_status,Show communications service configuration status.,통신 서비스 설정 상태를 표시합니다.
+Template,comms.message_id_label,Message ID:,메시지 ID:
+Template,comms.message_sid_label,Message SID:,메시지 SID:
+Template,comms.messaging_service_label,Messaging Service:,메시징 서비스:
+Template,comms.not_configured,Not configured,미구성
+Template,comms.not_set,Not set,미설정
+Template,comms.notes_column,Notes,비고
+Template,comms.opt_html,HTML body,HTML 본문
+Template,comms.opt_subject,Email subject,이메일 제목
+Template,comms.opt_text,Plain text body,일반 텍스트 본문
+Template,comms.opt_timeout,Seconds to wait for answer,응답 대기 시간 (초)
+Template,comms.phone_number_label,Phone Number:,전화번호:
+Template,comms.provider_column,Provider,제공자
+Template,comms.providers_title,Communications Providers,통신 제공자
+Template,comms.quick_start,Quick start:,빠른 시작:
+Template,comms.resend_notes,"Modern email API, great DX","모던 이메일 API, 우수한 개발자 경험"
+Template,comms.segments_label,Segments:,세그먼트:
+Template,comms.service_status_title,Communications Service Status,통신 서비스 상태
+Template,comms.services_configured_summary,{count}/3 services configured,{count}/3개 서비스 구성됨
+Template,comms.set,Set,설정됨
+Template,comms.signup_links,Sign up links:,가입 링크:
+Template,comms.sms,SMS,SMS
+Template,comms.sms_send_failed,Failed to send SMS: {error},SMS 발송 실패: {error}
+Template,comms.sms_sent,SMS sent successfully!,SMS 발송 완료!
+Template,comms.sms_twilio_header,SMS (Twilio),SMS (Twilio)
+Template,comms.status_label,Status:,상태:
+Template,comms.subject_label,Subject:,제목:
+Template,comms.text_or_html_required,Error: Either --text or --html is required,오류: --text 또는 --html 중 하나는 필수입니다
+Template,comms.to_label,To:,수신:
+Template,comms.twilio_signup_hint,SMS/Voice: Sign up at https://twilio.com/try-twilio (free trial),SMS/음성: https://twilio.com/try-twilio 에서 가입하세요 (무료 체험)
+Template,comms.twilio_sms_notes,Pay per message after trial,체험 이후 메시지당 과금
+Template,comms.twilio_voice_notes,Pay per minute after trial,체험 이후 분당 과금
+Template,comms.voice,Voice,음성
+Template,comms.voice_twilio_header,Voice (Twilio),음성 (Twilio)
+Template,comms.warn.resend_api_key,RESEND_API_KEY is not set. Sign up at https://resend.com to get your API key.,RESEND_API_KEY가 설정되지 않았습니다. https://resend.com 에서 가입하여 API 키를 받으세요.
+Template,comms.warn.resend_api_key_send,RESEND_API_KEY is not set. Sign up at https://resend.com and set your API key.,RESEND_API_KEY가 설정되지 않았습니다. https://resend.com 에서 가입하여 API 키를 설정하세요.
+Template,comms.warn.resend_from_email,RESEND_FROM_EMAIL is not set. This should be a verified sender email in your Resend account.,RESEND_FROM_EMAIL이 설정되지 않았습니다. Resend 계정에서 인증된 발신자 이메일이어야 합니다.
+Template,comms.warn.twilio_account_sid,TWILIO_ACCOUNT_SID is not set. Find it in your Twilio Console dashboard.,TWILIO_ACCOUNT_SID가 설정되지 않았습니다. Twilio Console 대시보드에서 확인하세요.
+Template,comms.warn.twilio_auth_token,TWILIO_AUTH_TOKEN is not set. Find it in your Twilio Console dashboard.,TWILIO_AUTH_TOKEN이 설정되지 않았습니다. Twilio Console 대시보드에서 확인하세요.
+Template,comms.warn.twilio_creds,Twilio credentials not set. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables.,Twilio 인증 정보가 설정되지 않았습니다. TWILIO_ACCOUNT_SID 및 TWILIO_AUTH_TOKEN 환경 변수를 설정하세요.
+Template,comms.warn.twilio_messaging_sid,TWILIO_MESSAGING_SERVICE_SID or TWILIO_PHONE_NUMBER must be set. Messaging Service SID is required for toll-free numbers.,TWILIO_MESSAGING_SERVICE_SID 또는 TWILIO_PHONE_NUMBER를 설정해야 합니다. 수신자부담 번호는 Messaging Service SID가 필요합니다.
+Template,comms.warn.twilio_phone,TWILIO_PHONE_NUMBER is not set. This should be a Twilio phone number capable of making calls.,TWILIO_PHONE_NUMBER가 설정되지 않았습니다. 통화 기능이 있는 Twilio 전화번호여야 합니다.
+Template,comms.warning,Warning: {message},경고: {message}
+Template,docs.components,Components,컴포넌트
+Template,docs.docs_label,Docs:,문서:
+Template,docs.documentation,Documentation,문서
+Template,docs.guide_label,Guide:,가이드:
+Template,docs.help,Show documentation links,문서 링크 표시
+Template,docs.help_show,Display documentation links for installed components and services.,설치된 컴포넌트 및 서비스의 문서 링크를 표시합니다.
+Template,docs.no_detected,No components or services detected.,감지된 컴포넌트나 서비스가 없습니다.
+Template,docs.services,Services,서비스
+Template,health.api_error,API returned error {status}: {text},API 오류 {status}: {text}
+Template,health.component_service_tree,Component & Service Tree,컴포넌트 및 서비스 트리
+Template,health.component_tree,Component Tree,컴포넌트 트리
+Template,health.components_label,Components:,컴포넌트:
+Template,health.connect_error,Cannot connect to API server at {url}. Make sure the application is running with 'make serve' or 'make run-dev'.,{url}의 API 서버에 연결할 수 없습니다. 'make serve' 또는 'make run-dev'로 애플리케이션이 실행 중인지 확인하세요.
+Template,health.count_healthy,{count} healthy,{count}개 정상
+Template,health.count_info,{count} info,{count}개 정보
+Template,health.count_unhealthy,{count} unhealthy,{count}개 비정상
+Template,health.count_warning,{count} warning,{count}개 경고
+Template,health.count_warnings,{count} warnings,{count}개 경고
+Template,health.health_pct_label,Health: {pct},상태: {pct}
+Template,health.health_percentage,Health Percentage:,정상 비율:
+Template,health.healthy,Healthy,정상
+Template,health.help,System health monitoring commands,시스템 상태 모니터링 명령어
+Template,health.help_probe,Health probe for monitoring — exits 1 if unhealthy (like k8s probes).,모니터링용 상태 프로브 — 비정상이면 종료 코드 1 (k8s 프로브와 동일).
+Template,health.help_status,Show system health status (always exits 0 for inspection). Use --detailed for component metadata and response times.,시스템 상태를 표시합니다 (검사용으로 항상 종료 코드 0). --detailed로 컴포넌트 메타데이터와 응답 시간을 확인할 수 있습니다.
+Template,health.more_tasks,... and {count} more {word},... 외 {count}개 {word}
+Template,health.msg.aegis_issues,Aegis Stack has issues,Aegis Stack에 문제가 있습니다
+Template,health.msg.aegis_ok,Aegis Stack application,Aegis Stack 애플리케이션
+Template,health.msg.ai_disabled,AI service is disabled,AI 서비스 비활성화됨
+Template,health.msg.ai_ready,AI service ready,AI 서비스 준비됨
+Template,health.msg.auth_ok,Auth service configured and ready,인증 서비스 구성 완료 및 준비됨
+Template,health.msg.backend_active,FastAPI backend active,FastAPI 백엔드 활성
+Template,health.msg.cache_not_installed,Cache library not installed,캐시 라이브러리가 설치되지 않았습니다
+Template,health.msg.cache_ok,Redis cache connection and operations successful,Redis 캐시 연결 및 작업 성공
+Template,health.msg.comms_none,No communication providers configured,구성된 통신 제공자 없음
+Template,health.msg.comms_ok,Communications service fully configured,통신 서비스 전체 구성 완료
+Template,health.msg.comms_partial,Comms service partially configured,통신 서비스 부분 구성됨
+Template,health.msg.completed,{count} completed,{count}개 완료
+Template,health.msg.components_issues,Some components have issues,일부 컴포넌트에 문제가 있습니다
+Template,health.msg.components_ok,{count} components available,{count}개 컴포넌트 사용 가능
+Template,health.msg.cpu_usage,CPU usage: {pct}%,CPU 사용량: {pct}%
+Template,health.msg.db_auth_failed,PostgreSQL authentication failed,PostgreSQL 인증 실패
+Template,health.msg.db_failed,Database connection failed,데이터베이스 연결 실패
+Template,health.msg.db_module_missing,Database module not available,데이터베이스 모듈을 사용할 수 없습니다
+Template,health.msg.db_not_accessible,Database file not accessible,데이터베이스 파일에 접근할 수 없습니다
+Template,health.msg.db_not_exist,PostgreSQL database does not exist,PostgreSQL 데이터베이스가 존재하지 않습니다
+Template,health.msg.db_not_init,Database not initialized - file does not exist,데이터베이스가 초기화되지 않았습니다 — 파일이 존재하지 않습니다
+Template,health.msg.db_not_reachable,PostgreSQL server not reachable,PostgreSQL 서버에 연결할 수 없습니다
+Template,health.msg.db_ok,Database connection successful,데이터베이스 연결 성공
+Template,health.msg.disk_usage,Disk usage: {pct}%,디스크 사용량: {pct}%
+Template,health.msg.failed,{count} failed ({pct}%),{count}개 실패 ({pct}%)
+Template,health.msg.idle,idle,대기 중
+Template,health.msg.memory_usage,Memory usage: {pct}%,메모리 사용량: {pct}%
+Template,health.msg.no_active_workers,No active workers,활성 워커 없음
+Template,health.msg.no_functions,configured - no functions defined,구성됨 — 정의된 함수 없음
+Template,health.msg.ollama_no_models,Ollama running but no models installed,Ollama 실행 중이지만 설치된 모델이 없습니다
+Template,health.msg.ollama_not_reachable,Ollama server not reachable,Ollama 서버에 연결할 수 없습니다
+Template,health.msg.processing,{count} processing,{count}개 처리 중
+Template,health.msg.queue.load_test,Load testing and performance testing,부하 테스트 및 성능 테스트
+Template,health.msg.queue.media,Image and file processing,이미지 및 파일 처리
+Template,health.msg.queue.system,System maintenance and monitoring tasks,시스템 유지보수 및 모니터링 작업
+Template,health.msg.queued,{count} queued,{count}개 대기 중
+Template,health.msg.queues_active,({count} active),({count}개 활성)
+Template,health.msg.queues_configured,{count} functional queues configured,{count}개 기능 큐 구성됨
+Template,health.msg.scheduler_running,Scheduler running with {count} tasks,스케줄러 실행 중 — {count}개 작업
+Template,health.msg.services_issues,Some services have issues,일부 서비스에 문제가 있습니다
+Template,health.msg.services_ok,{count} services available,{count}개 서비스 사용 가능
+Template,health.msg.system_issues,System container has issues,시스템 컨테이너에 문제가 있습니다
+Template,health.msg.system_ok,System container metrics,시스템 컨테이너 메트릭
+Template,health.msg.worker_infra,{backend} worker infrastructure,{backend} 워커 인프라
+Template,health.msg.worker_offline,worker offline - no health check data,워커 오프라인 — 상태 확인 데이터 없음
+Template,health.msg.workers_active,{active}/{total} workers active,{active}/{total} 워커 활성
+Template,health.no_upcoming_tasks,No upcoming tasks scheduled,예정된 작업이 없습니다
+Template,health.opt_detailed,Show detailed component information,상세 컴포넌트 정보 표시
+Template,health.opt_json,Output as JSON,JSON 형식으로 출력
+Template,health.overall_status,Overall Status:,전체 상태:
+Template,health.probe_failed,Health probe failed: {error},상태 프로브 실패: {error}
+Template,health.services_label,Services:,서비스:
+Template,health.status_failed,Health status failed: {error},상태 확인 실패: {error}
+Template,health.sysinfo.containerized,Containerized,컨테이너화
+Template,health.sysinfo.platform,Platform,플랫폼
+Template,health.sysinfo.python_version,Python Version,Python 버전
+Template,health.system_healthy,System is healthy,시스템이 정상입니다
+Template,health.system_info,System Information,시스템 정보
+Template,health.system_unhealthy,System is unhealthy,시스템이 비정상입니다
+Template,health.system_unhealthy_msg,System is unhealthy,시스템이 비정상입니다
+Template,health.task_next_run,{name} - Next: {time},{name} - 다음 실행: {time}
+Template,health.task_statistics,Task Statistics:,작업 통계:
+Template,health.task_stats_line,"Total: {total}, Active: {active}, Paused: {paused}","전체: {total}, 활성: {active}, 일시정지: {paused}"
+Template,health.task_word,task,작업
+Template,health.tasks_word,tasks,작업
+Template,health.timeout_error,API request to {url} timed out after {timeout} seconds.,{url}에 대한 API 요청이 {timeout}초 후 시간 초과되었습니다.
+Template,health.timestamp_label,Timestamp:,시간:
+Template,health.title,System Health,시스템 상태
+Template,health.unhealthy,Unhealthy,비정상
+Template,health.unhealthy_label,Unhealthy: {components},비정상: {components}
+Template,health.upcoming_tasks,Upcoming Tasks:,예정된 작업:
+Template,health.zero_components,0 components,컴포넌트 0개
+Template,llm.and_more_errors,... and {count} more,... 외 {count}개
+Template,llm.arg_model_id_info,Model ID to get information about,정보를 조회할 모델 ID
+Template,llm.arg_model_id_use,"Model ID to set as active (e.g., gpt-4o, claude-sonnet-4-20250514)","활성화할 모델 ID (예: gpt-4o, claude-sonnet-4-20250514)"
+Template,llm.arg_pattern,Search pattern for model ID or title (case-insensitive),모델 ID 또는 제목 검색 패턴 (대소문자 무시)
+Template,llm.catalog_summary,LLM Catalog Summary,LLM 카탈로그 요약
+Template,llm.context_column,Context,컨텍스트
+Template,llm.context_window_label,Context Window:,컨텍스트 윈도우:
+Template,llm.count_column,Count,수량
+Template,llm.current_config,Current LLM Configuration,현재 LLM 설정
+Template,llm.deployments_row,Deployments,배포
+Template,llm.deployments_synced,Deployments Synced,동기화된 배포
+Template,llm.description_label,Description:,설명:
+Template,llm.dry_run_mode,Dry run mode - no changes will be saved,드라이런 모드 — 변경 사항이 저장되지 않습니다
+Template,llm.duration_row,Duration,소요 시간
+Template,llm.enabled_label,Enabled:,활성화:
+Template,llm.errors_header,Errors:,오류:
+Template,llm.errors_row,Errors,오류
+Template,llm.help,LLM catalog and model management commands,LLM 카탈로그 및 모델 관리 명령어
+Template,llm.help_current,"Show current LLM configuration from .env, enriched with catalog data.",.env의 현재 LLM 설정을 카탈로그 데이터와 함께 표시합니다.
+Template,llm.help_info,Show detailed information about a specific LLM model.,특정 LLM 모델의 상세 정보를 표시합니다.
+Template,llm.help_list,List LLM models from catalog. Requires a search pattern or filter.,카탈로그에서 LLM 모델을 조회합니다. 검색 패턴 또는 필터가 필요합니다.
+Template,llm.help_modalities,List all modalities in the catalog with model counts.,카탈로그의 모든 모달리티와 모델 수를 표시합니다.
+Template,llm.help_status,"Show LLM catalog statistics (vendors, models, deployments, prices).","LLM 카탈로그 통계를 표시합니다 (벤더, 모델, 배포, 가격)."
+Template,llm.help_sync,Sync LLM catalog from cloud APIs or local Ollama into the local database.,클라우드 API 또는 로컬 Ollama에서 LLM 카탈로그를 로컬 데이터베이스에 동기화합니다.
+Template,llm.help_use,Switch to a different LLM model. Updates AI_MODEL in .env.,다른 LLM 모델로 전환합니다. .env의 AI_MODEL을 업데이트합니다.
+Template,llm.help_vendors,List all LLM vendors in the catalog with model counts.,카탈로그의 모든 LLM 벤더와 모델 수를 표시합니다.
+Template,llm.input_label,Input:,입력:
+Template,llm.input_price_column,Input $/1M,입력 $/1M
+Template,llm.input_price_label,Input Price:,입력 가격:
+Template,llm.max_tokens_label,Max Tokens:,최대 토큰:
+Template,llm.metric_column,Metric,지표
+Template,llm.modalities_label,Modalities:,모달리티:
+Template,llm.modalities_synced,Modalities Synced,동기화된 모달리티
+Template,llm.modalities_title,LLM Modalities ({count} total),LLM 모달리티 (총 {count}개)
+Template,llm.modality_column,Modality,모달리티
+Template,llm.model_details,Model Details (from catalog),모델 상세 정보 (카탈로그 기준)
+Template,llm.model_id_column,Model ID,모델 ID
+Template,llm.model_id_label,Model ID:,모델 ID:
+Template,llm.model_label,Model:,모델:
+Template,llm.model_not_found,Model '{model_id}' not found in catalog.,카탈로그에서 '{model_id}' 모델을 찾을 수 없습니다.
+Template,llm.model_not_in_catalog,Model not found in catalog. Run 'llm sync' to populate.,카탈로그에서 모델을 찾을 수 없습니다. 'llm sync'를 실행하여 카탈로그를 채우세요.
+Template,llm.models_added,Models Added,추가된 모델
+Template,llm.models_column,Models,모델
+Template,llm.models_row,Models,모델
+Template,llm.models_title,LLM Models ({count} results),LLM 모델 ({count}개 결과)
+Template,llm.models_updated,Models Updated,업데이트된 모델
+Template,llm.no_modalities,No modalities found. Run 'llm sync' first.,모달리티를 찾을 수 없습니다. 먼저 'llm sync'를 실행하세요.
+Template,llm.no_models_found,No models found matching your criteria.,조건에 맞는 모델을 찾을 수 없습니다.
+Template,llm.no_vendors,No vendors found. Run 'llm sync' first.,벤더를 찾을 수 없습니다. 먼저 'llm sync'를 실행하세요.
+Template,llm.opt_all,Include disabled models,비활성화된 모델 포함
+Template,llm.opt_dry_run,Preview changes without modifying the database,데이터베이스를 수정하지 않고 변경 사항을 미리 봅니다
+Template,llm.opt_force,Skip catalog validation and allow any model string,카탈로그 검증을 건너뛰고 모든 모델 문자열 허용
+Template,llm.opt_limit,Maximum number of results,최대 결과 수
+Template,llm.opt_mode,"Mode filter: 'chat', 'embedding', or 'all'","모드 필터: 'chat', 'embedding', 또는 'all'"
+Template,llm.opt_refresh,Truncate all LLM tables before syncing (full refresh),동기화 전 모든 LLM 테이블을 초기화합니다 (전체 새로고침)
+Template,llm.opt_source,"Data source: 'cloud' (OpenRouter/LiteLLM), 'ollama', or 'all'","데이터 소스: 'cloud' (OpenRouter/LiteLLM), 'ollama', 또는 'all'"
+Template,llm.output_label,Output:,출력:
+Template,llm.output_price_column,Output $/1M,출력 $/1M
+Template,llm.output_price_label,Output Price:,출력 가격:
+Template,llm.per_million_tokens,/ 1M tokens,/ 100만 토큰
+Template,llm.prices_row,Prices,가격
+Template,llm.prices_synced,Prices Synced,동기화된 가격
+Template,llm.pricing_header,Pricing (per 1M tokens),가격 (100만 토큰 기준)
+Template,llm.provide_filter,Please provide a search pattern or filter.,검색 패턴 또는 필터를 입력하세요.
+Template,llm.provider_label,Provider:,제공자:
+Template,llm.refresh_dry_run,Refresh requested - would truncate all LLM tables,새로고침 요청됨 — 모든 LLM 테이블을 비울 예정입니다
+Template,llm.released_column,Released,출시일
+Template,llm.released_label,Released:,출시일:
+Template,llm.run_sync_hint,Run 'llm sync' to populate the catalog.,'llm sync'를 실행하여 카탈로그를 채우세요.
+Template,llm.streamable_label,Streamable:,스트리밍:
+Template,llm.switching_model,Switching to {model_id},{model_id}(으)로 전환 중
+Template,llm.sync_results,Sync Results,동기화 결과
+Template,llm.sync_results_dry_run,Sync Results (Dry Run),동기화 결과 (드라이런)
+Template,llm.syncing_catalog,Syncing LLM catalog (mode={mode}),LLM 카탈로그 동기화 중 (mode={mode})
+Template,llm.syncing_catalog_all,"Syncing LLM catalog (mode={mode}, source=all)","LLM 카탈로그 동기화 중 (mode={mode}, source=all)"
+Template,llm.syncing_ollama,Syncing Ollama models,Ollama 모델 동기화 중
+Template,llm.temperature_label,Temperature:,온도:
+Template,llm.tokens_unit,tokens,토큰
+Template,llm.top_vendors,Top Vendors by Model Count,모델 수 기준 상위 벤더
+Template,llm.vendor_column,Vendor,벤더
+Template,llm.vendor_label,Vendor:,벤더:
+Template,llm.vendors_added,Vendors Added,추가된 벤더
+Template,llm.vendors_row,Vendors,벤더
+Template,llm.vendors_title,LLM Vendors ({count} total),LLM 벤더 (총 {count}개)
+Template,llm.vendors_updated,Vendors Updated,업데이트된 벤더
+Template,loadtest.analysis_panel,Load Test Analysis,부하 테스트 분석
+Template,loadtest.arg_task_id,Load test task ID,부하 테스트 작업 ID
+Template,loadtest.arg_test_type,Specific test type to show info for,정보를 표시할 특정 테스트 유형
+Template,loadtest.aspect_column,Aspect,항목
+Template,loadtest.aspect_efficiency,Efficiency,효율성
+Template,loadtest.aspect_queue_pressure,Queue Pressure,큐 부하
+Template,loadtest.aspect_throughput,Throughput,처리량
+Template,loadtest.available_types,Available Load Test Types,사용 가능한 부하 테스트 유형
+Template,loadtest.available_types_list,Available types:,사용 가능한 유형:
+Template,loadtest.check_results,Check results:,결과 확인:
+Template,loadtest.check_results_later,Use this command to check results later:,나중에 결과를 확인하려면:
+Template,loadtest.check_results_manual,Check results manually:,수동으로 결과를 확인하세요:
+Template,loadtest.check_task_hint,Check that the task ID is correct and the test has completed,작업 ID가 정확하고 테스트가 완료되었는지 확인하세요
+Template,loadtest.completed,Load test completed!,부하 테스트 완료!
+Template,loadtest.completed_progress,Load test completed!,부하 테스트 완료!
+Template,loadtest.config_batch_detail,{size} tasks per batch,배치당 {size}개 작업
+Template,loadtest.config_batching,Batching:,배치:
+Template,loadtest.config_delay,Delay:,지연:
+Template,loadtest.config_delay_detail,{ms}ms between batches,배치 간 {ms}ms
+Template,loadtest.config_queue,Queue:,큐:
+Template,loadtest.config_tasks,Tasks:,작업:
+Template,loadtest.config_tasks_detail,{count} {type} tasks,{count}개 {type} 작업
+Template,loadtest.config_title,Test Configuration,테스트 설정
+Template,loadtest.cpu_failed,CPU test failed:,CPU 테스트 실패:
+Template,loadtest.cpu_started,CPU test started!,CPU 테스트 시작됨!
+Template,loadtest.desc_efficiency,Task completion rate,작업 완료율
+Template,loadtest.desc_queue_pressure,Queue saturation level,큐 포화 수준
+Template,loadtest.desc_throughput,Task processing speed,작업 처리 속도
+Template,loadtest.description_column,Description,설명
+Template,loadtest.detail_duration,Total test duration,전체 테스트 소요 시간
+Template,loadtest.detail_failure_rate,Percentage of failed tasks,실패한 작업 비율
+Template,loadtest.detail_status,Test execution status,테스트 실행 상태
+Template,loadtest.detail_tasks_completed,Successfully completed,성공적으로 완료됨
+Template,loadtest.detail_tasks_failed,Failed during execution,실행 중 실패
+Template,loadtest.detail_tasks_sent,Total tasks enqueued,큐에 추가된 전체 작업
+Template,loadtest.detail_throughput,Average task completion rate,평균 작업 완료 속도
+Template,loadtest.details_column,Details,세부사항
+Template,loadtest.enqueued,Load test enqueued successfully!,부하 테스트가 큐에 추가되었습니다!
+Template,loadtest.error_label,Error:,오류:
+Template,loadtest.examples_label,Examples:,예시:
+Template,loadtest.failed_title,Load Test Failed,부하 테스트 실패
+Template,loadtest.help,Load testing commands for worker performance analysis,워커 성능 분석을 위한 부하 테스트 명령어
+Template,loadtest.help_cpu,Quick CPU-intensive load test with optimized defaults.,최적화된 기본값으로 CPU 집약적 빠른 부하 테스트를 실행합니다.
+Template,loadtest.help_info,Display information about available load test types and their characteristics.,사용 가능한 부하 테스트 유형과 특성 정보를 표시합니다.
+Template,loadtest.help_io,Quick I/O simulation load test with optimized defaults.,최적화된 기본값으로 I/O 시뮬레이션 빠른 부하 테스트를 실행합니다.
+Template,loadtest.help_memory,Quick memory allocation load test with optimized defaults.,최적화된 기본값으로 메모리 할당 빠른 부하 테스트를 실행합니다.
+Template,loadtest.help_results,Display results and analysis for a completed load test.,완료된 부하 테스트의 결과와 분석을 표시합니다.
+Template,loadtest.help_run,Run a customizable load test with full control over configuration.,설정을 완전히 제어하여 커스텀 부하 테스트를 실행합니다.
+Template,loadtest.io_failed,I/O test failed:,I/O 테스트 실패:
+Template,loadtest.io_started,I/O test started!,I/O 테스트 시작됨!
+Template,loadtest.memory_failed,Memory test failed:,메모리 테스트 실패:
+Template,loadtest.memory_started,Memory test started!,메모리 테스트 시작됨!
+Template,loadtest.metric_column,Metric,지표
+Template,loadtest.metric_duration,Duration,소요 시간
+Template,loadtest.metric_failure_rate,Failure Rate,실패율
+Template,loadtest.metric_status,Status,상태
+Template,loadtest.metric_tasks_completed,Tasks Completed,완료된 작업
+Template,loadtest.metric_tasks_failed,Tasks Failed,실패한 작업
+Template,loadtest.metric_tasks_sent,Tasks Sent,전송된 작업
+Template,loadtest.metric_throughput,Throughput,처리량
+Template,loadtest.next_steps,Next steps:,다음 단계:
+Template,loadtest.no_results,No results found for task ID:,작업 ID에 대한 결과를 찾을 수 없습니다:
+Template,loadtest.no_summary,No summary available,요약 정보 없음
+Template,loadtest.opt_batch_size,Tasks per batch,배치당 작업 수
+Template,loadtest.opt_cpu_tasks,Number of CPU tasks,CPU 작업 수
+Template,loadtest.opt_delay,Delay between batches (ms),배치 간 지연 시간 (ms)
+Template,loadtest.opt_detailed,Show detailed analysis and metrics,상세 분석 및 메트릭 표시
+Template,loadtest.opt_io_tasks,Number of I/O tasks,I/O 작업 수
+Template,loadtest.opt_json,Output results in JSON format,JSON 형식으로 결과 출력
+Template,loadtest.opt_memory_tasks,Number of memory tasks,메모리 작업 수
+Template,loadtest.opt_num_tasks,Number of tasks to spawn,생성할 작업 수
+Template,loadtest.opt_queue,Target queue for testing,테스트 대상 큐
+Template,loadtest.opt_queue_results,Queue where test was run,테스트가 실행된 큐
+Template,loadtest.opt_task_type,Type of load test to run,실행할 부하 테스트 유형
+Template,loadtest.opt_timeout,Timeout for waiting (seconds),대기 시간 초과 (초)
+Template,loadtest.opt_wait,Wait for test completion and show results,테스트 완료를 기다리고 결과 표시
+Template,loadtest.opt_wait_short,Wait for completion,완료 대기
+Template,loadtest.panel_setup,Load Test Setup,부하 테스트 설정
+Template,loadtest.perf_analysis_title,Performance Analysis,성능 분석
+Template,loadtest.perf_summary,Performance Summary,성능 요약
+Template,loadtest.pressure.high,high,높음
+Template,loadtest.pressure.low,low,낮음
+Template,loadtest.pressure.medium,medium,보통
+Template,loadtest.quick_cpu_tasks,{count} CPU-intensive tasks,{count}개 CPU 집약적 작업
+Template,loadtest.quick_cpu_title,Quick CPU Load Test,빠른 CPU 부하 테스트
+Template,loadtest.quick_cpu_work,Fibonacci + math operations + prime checking,피보나치 + 수학 연산 + 소수 판별
+Template,loadtest.quick_io_tasks,{count} I/O simulation tasks,{count}개 I/O 시뮬레이션 작업
+Template,loadtest.quick_io_title,Quick I/O Load Test,빠른 I/O 부하 테스트
+Template,loadtest.quick_io_work,Network delays + concurrent async + file operations,네트워크 지연 + 동시 비동기 + 파일 작업
+Template,loadtest.quick_memory_tasks,{count} memory allocation tasks,{count}개 메모리 할당 작업
+Template,loadtest.quick_memory_title,Quick Memory Load Test,빠른 메모리 부하 테스트
+Template,loadtest.quick_memory_work,Data structures + allocation patterns + GC testing,자료 구조 + 할당 패턴 + GC 테스트
+Template,loadtest.rating.excellent,excellent,우수
+Template,loadtest.rating.fair,fair,보통
+Template,loadtest.rating.good,good,양호
+Template,loadtest.rating.poor,poor,미흡
+Template,loadtest.rating.unknown,unknown,알 수 없음
+Template,loadtest.rating_column,Rating,등급
+Template,loadtest.rec.high_failure,High failure rate ({rate}%). Check worker logs for error patterns.,높은 실패율 ({rate}%). 워커 로그에서 오류 패턴을 확인하세요.
+Template,loadtest.rec.long_execution,Long execution time for relatively few tasks suggests queue saturation. Consider testing with smaller batches or different queues.,상대적으로 적은 작업 수에 비해 긴 실행 시간은 큐 포화를 시사합니다. 더 작은 배치나 다른 큐로 테스트해 보세요.
+Template,loadtest.rec.low_throughput,Low throughput detected. Consider reducing task complexity or increasing worker concurrency.,낮은 처리량이 감지되었습니다. 작업 복잡도를 줄이거나 워커 동시성을 높여보세요.
+Template,loadtest.recommendations,Recommendations,권장 사항
+Template,loadtest.results_failed,Failed to retrieve results:,결과 조회 실패:
+Template,loadtest.results_title,Load Test Results Summary,부하 테스트 결과 요약
+Template,loadtest.start_failed,Failed to start load test:,부하 테스트 시작 실패:
+Template,loadtest.starting,Starting load test...,부하 테스트 시작 중...
+Template,loadtest.status.completed,completed,완료
+Template,loadtest.status.failed,failed,실패
+Template,loadtest.status.timed_out,timed out,시간 초과
+Template,loadtest.status.unknown,unknown,알 수 없음
+Template,loadtest.task_id_label,Task ID:,작업 ID:
+Template,loadtest.tasks_label,Tasks:,작업:
+Template,loadtest.tasks_per_sec,tasks/sec,작업/초
+Template,loadtest.test_id_label,Test ID:,테스트 ID:
+Template,loadtest.test_validation,Test Validation,테스트 검증
+Template,loadtest.timed_out_title,Load Test Timed Out,부하 테스트 시간 초과
+Template,loadtest.timeout_explanation,"The orchestrator task timed out, but individual worker tasks may have completed successfully. This often happens with large load tests that exceed the queue timeout.","오케스트레이터 작업이 시간 초과되었지만, 개별 워커 작업은 성공적으로 완료되었을 수 있습니다. 큐 시간 초과를 넘는 대규모 부하 테스트에서 자주 발생합니다."
+Template,loadtest.timeout_progress,Timeout reached,시간 초과됨
+Template,loadtest.timeout_reached,Timeout reached after {timeout}s,{timeout}초 후 시간 초과됨
+Template,loadtest.tip_check_logs,Check worker logs for individual task completion,워커 로그에서 개별 작업 완료를 확인하세요
+Template,loadtest.tip_check_metrics,Check queue metrics for actual task completion counts,큐 메트릭에서 실제 작업 완료 수를 확인하세요
+Template,loadtest.tip_check_worker_logs,Check worker logs for detailed error information,워커 로그에서 상세 오류 정보를 확인하세요
+Template,loadtest.tip_smaller_batch,Consider using smaller batch sizes for large tests,대규모 테스트에는 더 작은 배치 크기를 사용해 보세요
+Template,loadtest.tip_try_smaller,Try a smaller test to isolate the issue,문제를 파악하려면 더 작은 테스트를 시도하세요
+Template,loadtest.tip_verify_queue,Verify queue connectivity and worker status,큐 연결 및 워커 상태를 확인하세요
+Template,loadtest.to_investigate,To investigate:,조사하려면:
+Template,loadtest.troubleshoot_1,Check worker container logs: docker compose logs worker,워커 컨테이너 로그 확인: docker compose logs worker
+Template,loadtest.troubleshoot_2,Verify system health: {app} health check,시스템 상태 확인: {app} health check
+Template,loadtest.troubleshoot_3,Try a smaller load test first: {app} load-test cpu --tasks 10,먼저 작은 부하 테스트 시도: {app} load-test cpu --tasks 10
+Template,loadtest.troubleshooting,Troubleshooting Tips,문제 해결 팁
+Template,loadtest.type.cpu_intensive.concurrency,"Limited by CPU cores, benefits from parallel processing","CPU 코어 수에 의해 제한되며, 병렬 처리의 이점이 있습니다"
+Template,loadtest.type.cpu_intensive.description,Tests worker CPU processing with fibonacci calculations,피보나치 계산으로 워커 CPU 처리를 테스트합니다
+Template,loadtest.type.cpu_intensive.duration,1-10ms per task,작업당 1-10ms
+Template,loadtest.type.cpu_intensive.name,CPU Intensive,CPU 집약적
+Template,loadtest.type.cpu_intensive.signature,CPU bound - should show computation time scaling with problem size,CPU 바운드 — 문제 크기에 따라 계산 시간이 증가합니다
+Template,loadtest.type.failure_testing.concurrency,Tests worker recovery and error isolation,워커 복구와 오류 격리를 테스트합니다
+Template,loadtest.type.failure_testing.description,Tests error handling with ~20% random failures,약 20% 무작위 실패로 오류 처리를 테스트합니다
+Template,loadtest.type.failure_testing.duration,1-10ms per task (when successful),작업당 1-10ms (성공 시)
+Template,loadtest.type.failure_testing.name,Failure Testing,실패 테스트
+Template,loadtest.type.failure_testing.signature,Mixed - tests resilience and error handling paths,혼합 — 복원력과 오류 처리 경로를 테스트합니다
+Template,loadtest.type.io_simulation.concurrency,Excellent with async - many tasks can run concurrently,비동기 처리에 우수 — 많은 작업이 동시에 실행 가능
+Template,loadtest.type.io_simulation.description,Tests async I/O handling with simulated delays,시뮬레이션된 지연으로 비동기 I/O 처리를 테스트합니다
+Template,loadtest.type.io_simulation.duration,5-30ms per task (includes simulated delays),작업당 5-30ms (시뮬레이션 지연 포함)
+Template,loadtest.type.io_simulation.name,I/O Simulation,I/O 시뮬레이션
+Template,loadtest.type.io_simulation.signature,I/O bound - should show async concurrency benefits,I/O 바운드 — 비동기 동시성의 이점이 드러납니다
+Template,loadtest.type.memory_operations.concurrency,Moderate - limited by memory bandwidth and GC pressure,보통 — 메모리 대역폭과 GC 부하에 의해 제한됨
+Template,loadtest.type.memory_operations.description,Tests memory allocation and data structure operations,메모리 할당 및 자료 구조 연산을 테스트합니다
+Template,loadtest.type.memory_operations.duration,1-5ms per task,작업당 1-5ms
+Template,loadtest.type.memory_operations.name,Memory Operations,메모리 연산
+Template,loadtest.type.memory_operations.signature,Memory bound - should show allocation/deallocation patterns,메모리 바운드 — 할당/해제 패턴이 드러납니다
+Template,loadtest.type_concurrency,Concurrency:,동시성:
+Template,loadtest.type_description,Description:,설명:
+Template,loadtest.type_details_title,Test Type Details,테스트 유형 상세
+Template,loadtest.type_name,Name:,이름:
+Template,loadtest.type_performance,Performance:,성능:
+Template,loadtest.typical_duration,Typical duration:,일반적인 소요 시간:
+Template,loadtest.unknown_type,Unknown test type:,알 수 없는 테스트 유형:
+Template,loadtest.use_help_hint,Use --help with specific commands for more details,자세한 내용은 특정 명령어에 --help를 사용하세요
+Template,loadtest.validation.no,No,아니오
+Template,loadtest.validation.unknown,unknown,알 수 없음
+Template,loadtest.validation.verified,verified,검증됨
+Template,loadtest.validation.yes,Yes,예
+Template,loadtest.validation_metrics,Expected metrics present:,예상 메트릭 존재:
+Template,loadtest.validation_signature,Performance signature match:,성능 시그니처 일치:
+Template,loadtest.validation_type,Test type verified:,테스트 유형 확인됨:
+Template,loadtest.value_column,Value,값
+Template,loadtest.waiting,Waiting for load test completion (timeout: {timeout}s)...,부하 테스트 완료 대기 중 (시간 초과: {timeout}초)...
+Template,loadtest.waiting_elapsed,Waiting for completion... ({elapsed}s),완료 대기 중... ({elapsed}초)
+Template,loadtest.waiting_progress,Waiting for load test to complete...,부하 테스트 완료 대기 중...
+Template,loadtest.what_this_means,What this means:,이것이 의미하는 것:
+Template,loadtest.work_type_label,Work type:,작업 유형:
+Template,main.help,Project management CLI,프로젝트 관리 CLI
+Template,main.opt_lang,"Output language (en, ko, zh). Default: auto-detect","출력 언어 (en, ko, zh). 기본값: 자동 감지"
+Template,main.unsupported_lang,Unsupported language '{lang}'. Available: {available},지원하지 않는 언어입니다: '{lang}'. 사용 가능: {available}
+Template,migrate.add_column,ADD COLUMN,컬럼 추가
+Template,migrate.add_table,ADD TABLE,테이블 추가
+Template,migrate.applied_migration,Migration applied successfully.,마이그레이션이 적용되었습니다.
+Template,migrate.apply_later,Migration saved. Run 'make migrate' to apply later.,마이그레이션이 저장되었습니다. 'make migrate'로 나중에 적용하세요.
+Template,migrate.apply_now,Apply migration now?,지금 마이그레이션을 적용하시겠습니까?
+Template,migrate.applying_pending,Applying pending migrations first...,보류 중인 마이그레이션을 먼저 적용합니다...
+Template,migrate.checking_schema,Checking schema against models...,모델 대비 스키마 확인 중...
+Template,migrate.found_differences,Found {count} schema differences:,{count}개 스키마 차이 발견:
+Template,migrate.generated_migration,Generated fix migration: {name},수정 마이그레이션 생성됨: {name}
+Template,migrate.no_existing_migrations,No existing migrations found. Run 'make migrate' first.,기존 마이그레이션을 찾을 수 없습니다. 먼저 'make migrate'를 실행하세요.
+Template,migrate.no_fixable_differences,No fixable differences found.,수정 가능한 차이를 찾을 수 없습니다.
+Template,migrate.schema_up_to_date,Schema is up to date. No fix needed.,스키마가 최신 상태입니다. 수정이 필요 없습니다.
+Template,migrate.table_missing_warning,  WARNING: Table '{table}' is missing entirely. Create a manual migration with: alembic revision --autogenerate -m 'add {table}',  경고: '{table}' 테이블이 누락되어 있습니다. 수동 마이그레이션을 생성하세요: alembic revision --autogenerate -m 'add {table}'
+Template,rag.added_updated,Added/updated:,추가/업데이트:
+Template,rag.adding_label,Adding:,추가:
+Template,rag.arg_collection,Collection name to delete,삭제할 컬렉션 이름
+Template,rag.arg_file_path,File path to add/update,추가/업데이트할 파일 경로
+Template,rag.arg_path,File or directory path to index,인덱싱할 파일 또는 디렉터리 경로
+Template,rag.arg_query,Search query,검색 쿼리
+Template,rag.arg_source_path,Source path of file to remove (as stored in metadata),제거할 파일의 소스 경로 (메타데이터에 저장된 경로)
+Template,rag.batch_progress,Batch {batch}/{total} ({chunks} chunks),배치 {batch}/{total} ({chunks}개 청크)
+Template,rag.cache_dir_hint,"To use this cache, set RAG_MODEL_CACHE_DIR={dir}",이 캐시를 사용하려면 RAG_MODEL_CACHE_DIR={dir} 을 설정하세요
+Template,rag.cache_dir_label,Cache directory:,캐시 디렉터리:
+Template,rag.chunk_overlap_label,Chunk Overlap:,청크 중첩:
+Template,rag.chunk_size_label,Chunk Size:,청크 크기:
+Template,rag.chunking_phase,Chunking:,청킹:
+Template,rag.chunks_column,Chunks,청크
+Template,rag.chunks_label,Chunks:,청크:
+Template,rag.chunks_per_sec,chunks/sec,청크/초
+Template,rag.chunks_unit,chunks,청크
+Template,rag.collection_column,Collection,컬렉션
+Template,rag.collection_label,Collection:,컬렉션:
+Template,rag.collection_not_found,Collection not found:,컬렉션을 찾을 수 없습니다:
+Template,rag.collection_size_label,Collection size:,컬렉션 크기:
+Template,rag.collection_title,Collection,컬렉션
+Template,rag.collections_count_label,Collections:,컬렉션:
+Template,rag.collections_title,RAG Collections,RAG 컬렉션
+Template,rag.confirm_delete,Are you sure you want to delete collection '{collection}'?,'{collection}' 컬렉션을 정말 삭제하시겠습니까?
+Template,rag.confirm_remove,Remove all chunks for '{source}' from '{collection}'?,'{collection}'에서 '{source}'의 모든 청크를 삭제하시겠습니까?
+Template,rag.create_collection_hint,Tip: Use 'rag index <path> --collection <name>' to create a collection.,팁: 'rag index <경로> --collection <이름>'으로 컬렉션을 생성하세요.
+Template,rag.default_top_k_label,Default Top K:,기본 Top K:
+Template,rag.deleted_collection,Deleted collection:,컬렉션 삭제 완료:
+Template,rag.documents_column,Documents,문서
+Template,rag.downloading_model,Downloading embedding model (first-time setup)...,임베딩 모델 다운로드 중 (최초 설정)...
+Template,rag.downloading_named_model,Downloading {model}...,{model} 다운로드 중...
+Template,rag.duration_label,Duration:,소요 시간:
+Template,rag.embedding_model_label,Embedding Model:,임베딩 모델:
+Template,rag.enabled_label,Enabled:,활성화:
+Template,rag.extensions_label,Extensions:,확장자:
+Template,rag.file_column,File,파일
+Template,rag.file_not_found,File not found: {path},파일을 찾을 수 없습니다: {path}
+Template,rag.files_and_chunks,"{files} files, {chunks} chunks","{files}개 파일, {chunks}개 청크"
+Template,rag.files_hint,Tip: Use 'rag files --collection <name>' to see indexed paths.,팁: 'rag files --collection <이름>'으로 인덱싱된 경로를 확인하세요.
+Template,rag.found_results,Found {count} results:,{count}개 결과를 찾았습니다:
+Template,rag.hash_label,Hash:,해시:
+Template,rag.help,RAG service commands for document indexing and search,문서 인덱싱 및 검색을 위한 RAG 서비스 명령어
+Template,rag.help_add,Add or update a single file in the collection (upsert semantics).,컬렉션에 단일 파일을 추가하거나 업데이트합니다 (upsert 방식).
+Template,rag.help_delete,Delete a collection and all its documents from the vector store.,컬렉션과 모든 문서를 벡터 저장소에서 삭제합니다.
+Template,rag.help_files,List all indexed files in a collection with chunk counts.,컬렉션의 모든 인덱싱된 파일과 청크 수를 표시합니다.
+Template,rag.help_index,Index documents from a path into a collection for semantic search.,시맨틱 검색을 위해 경로의 문서를 컬렉션에 인덱싱합니다.
+Template,rag.help_install_model,Pre-download the embedding model for offline/air-gapped operation.,오프라인/에어갭 환경을 위해 임베딩 모델을 미리 다운로드합니다.
+Template,rag.help_list,List all collections in the vector store with document counts.,벡터 저장소의 모든 컬렉션과 문서 수를 표시합니다.
+Template,rag.help_remove,Remove a file's chunks from the collection.,컬렉션에서 파일의 청크를 제거합니다.
+Template,rag.help_search,Search for documents in a collection using semantic search.,시맨틱 검색으로 컬렉션의 문서를 검색합니다.
+Template,rag.help_status,Show RAG service status and configuration.,RAG 서비스 상태 및 설정을 표시합니다.
+Template,rag.ids_label,IDs:,ID:
+Template,rag.index_hint,Tip: Use 'rag index <path> --collection <name>' or 'rag add <file> --collection <name>' to index content.,팁: 'rag index <경로> --collection <이름>' 또는 'rag add <파일> --collection <이름>'으로 콘텐츠를 인덱싱하세요.
+Template,rag.index_success,Successfully indexed {chunks} chunks from {files} files,{files}개 파일에서 {chunks}개 청크를 인덱싱했습니다
+Template,rag.indexed_files_title,Indexed Files: {collection},인덱싱된 파일: {collection}
+Template,rag.indexing_label,Indexing:,인덱싱:
+Template,rag.indexing_phase,Indexing:,인덱싱:
+Template,rag.indexing_progress,Indexing...,인덱싱 중...
+Template,rag.last_activity_label,Last Activity:,최근 활동:
+Template,rag.loading_documents,Loading documents...,문서 로딩 중...
+Template,rag.loading_from_cache,Loading model from cache...,캐시에서 모델 로딩 중...
+Template,rag.loading_phase,Loading:,로딩:
+Template,rag.location_label,Location:,위치:
+Template,rag.model_download_failed,Failed to download model: {error},모델 다운로드 실패: {error}
+Template,rag.model_download_hint,Try running: rag install-model,다음을 실행해 보세요: rag install-model
+Template,rag.model_downloaded,Model downloaded successfully,모델 다운로드 완료
+Template,rag.model_found_in_cache,Model found in cache,캐시에서 모델 발견
+Template,rag.model_info,Model: {model} (~400MB download),모델: {model} (약 400MB 다운로드)
+Template,rag.model_install_complete_title,Model Installation Complete,모델 설치 완료
+Template,rag.model_installed,Installed,설치됨
+Template,rag.model_label,Model:,모델:
+Template,rag.model_not_found,Embedding model not found locally.,임베딩 모델이 로컬에 없습니다.
+Template,rag.model_not_installed,Not installed,미설치
+Template,rag.model_ready_title,Model Ready,모델 준비 완료
+Template,rag.model_status_label,Model Status:,모델 상태:
+Template,rag.no_chunks_found,No chunks found for:,청크를 찾을 수 없습니다:
+Template,rag.no_collections,No collections found.,컬렉션을 찾을 수 없습니다.
+Template,rag.no_files_in_collection,No files indexed in collection:,컬렉션에 인덱싱된 파일이 없습니다:
+Template,rag.no_results,No results found.,결과를 찾을 수 없습니다.
+Template,rag.openai_key_hint,Set OPENAI_API_KEY environment variable to use OpenAI embeddings.,OpenAI 임베딩을 사용하려면 OPENAI_API_KEY 환경 변수를 설정하세요.
+Template,rag.openai_key_missing,OpenAI API key not configured.,OpenAI API 키가 설정되지 않았습니다.
+Template,rag.openai_no_download,OpenAI embeddings don't require local model downloads.,OpenAI 임베딩은 로컬 모델 다운로드가 필요 없습니다.
+Template,rag.opt_cache_dir,Directory to cache the model (default: system HuggingFace cache),모델 캐시 디렉터리 (기본값: 시스템 HuggingFace 캐시)
+Template,rag.opt_collection,Collection name,컬렉션 이름
+Template,rag.opt_collection_search,Collection to search,검색할 컬렉션
+Template,rag.opt_content,Show full content of results,결과의 전체 내용 표시
+Template,rag.opt_extensions,"Comma-separated file extensions (e.g., .py,.md)","쉼표로 구분된 파일 확장자 (예: .py,.md)"
+Template,rag.opt_force,Skip confirmation prompt,확인 프롬프트 건너뛰기
+Template,rag.opt_model,Model name to download (default: from settings),다운로드할 모델 이름 (기본값: 설정에서 지정)
+Template,rag.opt_show_ids,Show chunk IDs in output,출력에 청크 ID 표시
+Template,rag.opt_top_k,Number of results,결과 수
+Template,rag.path_not_found,Path not found: {path},경로를 찾을 수 없습니다: {path}
+Template,rag.persist_dir_label,Persist Directory:,저장 디렉터리:
+Template,rag.removed_chunks,Removed {count} chunks for:,{count}개 청크 삭제 완료:
+Template,rag.run_install_model,run: rag install-model,실행: rag install-model
+Template,rag.score_label,Score:,점수:
+Template,rag.search_hint,Tip: Make sure the collection exists and contains documents.,팁: 컬렉션이 존재하고 문서가 포함되어 있는지 확인하세요.
+Template,rag.searching_label,Searching:,검색:
+Template,rag.status_title,RAG Service Status,RAG 서비스 상태
+Template,rag.system_hf_cache,system HuggingFace cache,시스템 HuggingFace 캐시
+Template,rag.throughput_label,Throughput:,처리량:
+Template,rag.total_label,Total:,합계:
+Template,shared.cancelled,Cancelled.,취소되었습니다.
+Template,shared.error,Error:,오류:
+Template,shared.no,No,아니오
+Template,shared.none,none,없음
+Template,shared.show_help_exit,Show this message and exit.,도움말을 표시하고 종료합니다.
+Template,shared.unknown,Unknown,알 수 없음
+Template,shared.yes,Yes,예
+Template,slash.available_collections,Available: {list},사용 가능: {list}
+Template,slash.clear_desc,Clear the screen,화면 지우기
+Template,slash.collection_not_found,Collection '{name}' not found.,'{name}' 컬렉션을 찾을 수 없습니다.
+Template,slash.commands_panel,Commands,명령어
+Template,slash.current_panel,Current,현재
+Template,slash.enable_rag_first,Enable RAG first with /rag <collection>,먼저 /rag <컬렉션>으로 RAG를 활성화하세요
+Template,slash.exit_desc,Exit the chat session,채팅 세션 종료
+Template,slash.help_desc,Show available commands,사용 가능한 명령어 표시
+Template,slash.index_documents_hint,Index documents: {app} rag index <path>,문서 인덱싱: {app} rag index <경로>
+Template,slash.model_desc,Switch AI model (auto-detects provider),AI 모델 전환 (제공자 자동 감지)
+Template,slash.new_conversation,Started new conversation,새 대화를 시작했습니다
+Template,slash.new_desc,Start a new conversation,새 대화 시작
+Template,slash.no_collections,No collections exist. Index documents first.,컬렉션이 없습니다. 먼저 문서를 인덱싱하세요.
+Template,slash.no_collections_indexed,No collections indexed yet,아직 인덱싱된 컬렉션이 없습니다
+Template,slash.rag_desc,Manage RAG mode,RAG 모드 관리
+Template,slash.rag_disabled,RAG disabled,RAG 비활성화됨
+Template,slash.rag_enabled,RAG enabled with collection: {name},RAG 활성화됨 — 컬렉션: {name}
+Template,slash.rag_panel,RAG,RAG
+Template,slash.rag_use_hint,Use /rag off or /rag <collection>,/rag off 또는 /rag <컬렉션>을 사용하세요
+Template,slash.sources_desc,Toggle source references in output,출처 참조 표시 전환
+Template,slash.sources_disabled,Source references disabled,출처 참조 비활성화됨
+Template,slash.sources_enabled,Source references enabled,출처 참조 활성화됨
+Template,slash.sources_require_rag,Sources require RAG to be enabled.,출처 표시를 사용하려면 RAG가 활성화되어야 합니다.
+Template,slash.sources_status,Source references {status},출처 참조 {status}
+Template,slash.sources_usage,Usage: /sources [enable|disable],사용법: /sources [enable|disable]
+Template,slash.status_desc,Show current configuration,현재 설정 표시
+Template,slash.status_panel,Status,상태
+Template,slash.switched_model,Switched to model: {model},모델 전환됨: {model}
+Template,slash.switched_to,Switched to {provider}/{model},{provider}/{model}(으)로 전환했습니다
+Template,slash.unknown_command,Unknown command: /{name}. Type /help for commands.,알 수 없는 명령어: /{name}. /help로 명령어를 확인하세요.
+Template,slash.unknown_option,Unknown option: {arg},알 수 없는 옵션: {arg}
+Template,slash.use_model_hint,Use /model <name> to switch,/model <이름>으로 전환
+Template,status.na,n/a,해당 없음
+Template,status.not_connected,not connected,연결 안 됨
+Template,status.rag_off,RAG: OFF,RAG: 꺼짐
+Template,status.rag_on,RAG: ON,RAG: 켜짐
+Template,status.src_off,SRC: OFF,출처: 꺼짐
+Template,status.src_on,SRC: ON,출처: 켜짐
+Template,status.tokens,tokens,토큰
+Template,tasks.active,Active,활성
+Template,tasks.help,Scheduled task management commands,예약 작업 관리 명령어
+Template,tasks.help_list,List all scheduled jobs with their current status and details.,모든 예약된 작업의 현재 상태와 세부 정보를 표시합니다.
+Template,tasks.job_id_column,Job ID,작업 ID
+Template,tasks.list_failed,Failed to list jobs:,작업 목록 조회 실패:
+Template,tasks.listing_jobs,Listing Scheduled Jobs,예약된 작업 목록
+Template,tasks.name_column,Name,이름
+Template,tasks.next_run_column,Next Run,다음 실행
+Template,tasks.no_jobs_found,No scheduled jobs found,예약된 작업을 찾을 수 없습니다
+Template,tasks.not_scheduled,Not scheduled,미예약
+Template,tasks.paused,Paused,일시정지
+Template,tasks.scheduled_jobs_title,Scheduled Jobs,예약된 작업
+Template,tasks.status_column,Status,상태
+Template,tasks.total_jobs,Total jobs:,전체 작업:
+Template,tasks.trigger_column,Trigger,트리거

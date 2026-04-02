@@ -7,7 +7,7 @@ during the migration period.
 """
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import typer
 import yaml
@@ -457,7 +457,7 @@ def load_copier_answers(project_path: Path) -> dict[str, Any]:
 def update_with_copier(
     project_path: Path,
     additional_data: dict[str, Any] | None = None,
-    conflict_mode: str = "rej",
+    conflict_mode: Literal["inline", "rej"] = "rej",
 ) -> None:
     """
     Update an existing Copier-generated project with new data.
