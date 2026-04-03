@@ -75,6 +75,10 @@ def _load_locale(locale: str) -> None:
         from .locales.de import MESSAGES
 
         _messages["de"] = MESSAGES
+    elif locale == "es":
+        from .locales.es import MESSAGES
+
+        _messages["es"] = MESSAGES
     elif locale == "fr":
         from .locales.fr import MESSAGES
 

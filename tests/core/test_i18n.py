@@ -51,6 +51,14 @@ class TestLocaleNormalization:
         assert _normalize_locale("ko_KR.UTF-8") == "ko"
         assert _normalize_locale("ko-KR") == "ko"
 
+    def test_spanish_variants(self) -> None:
+        """Spanish locale variants normalize to 'es'."""
+        assert _normalize_locale("es") == "es"
+        assert _normalize_locale("es_ES") == "es"
+        assert _normalize_locale("es-MX") == "es"
+        assert _normalize_locale("es_AR") == "es"
+        assert _normalize_locale("es_ES.UTF-8") == "es"
+
     def test_german_variants(self) -> None:
         """German locale variants normalize to 'de'."""
         assert _normalize_locale("de") == "de"
@@ -70,8 +78,8 @@ class TestLocaleNormalization:
     def test_unsupported_falls_back_to_english(self) -> None:
         """Unsupported locales fall back to 'en'."""
         assert _normalize_locale("xx") == "en"
-        assert _normalize_locale("es_MX.UTF-8") == "en"
         assert _normalize_locale("pt_BR") == "en"
+        assert _normalize_locale("sv_SE") == "en"
 
     def test_encoding_and_modifier_stripped(self) -> None:
         """Encoding suffixes and modifiers are stripped."""
@@ -97,12 +105,22 @@ class TestMessageCompleteness:
         """All expected locales are in AVAILABLE_LOCALES."""
         assert "de" in AVAILABLE_LOCALES
         assert "en" in AVAILABLE_LOCALES
+        assert "es" in AVAILABLE_LOCALES
         assert "fr" in AVAILABLE_LOCALES
         assert "ja" in AVAILABLE_LOCALES
         assert "ko" in AVAILABLE_LOCALES
         assert "ru" in AVAILABLE_LOCALES
         assert "zh" in AVAILABLE_LOCALES
         assert "zh_Hant" in AVAILABLE_LOCALES
+
+    def test_es_has_all_keys(self) -> None:
+        """Spanish has all English keys."""
+        from aegis.i18n.locales.es import MESSAGES as ES
+
+        missing = set(EN_MESSAGES) - set(ES)
+        extra = set(ES) - set(EN_MESSAGES)
+        assert not missing, f"Keys in en but not es: {missing}"
+        assert not extra, f"Keys in es but not en: {extra}"
 
     def test_de_has_all_keys(self) -> None:
         """German has all English keys."""
@@ -170,6 +188,7 @@ class TestMessageCompleteness:
     def test_no_empty_values(self) -> None:
         """No locale has empty string values."""
         from aegis.i18n.locales.de import MESSAGES as DE
+        from aegis.i18n.locales.es import MESSAGES as ES
         from aegis.i18n.locales.fr import MESSAGES as FR
         from aegis.i18n.locales.ja import MESSAGES as JA
         from aegis.i18n.locales.ko import MESSAGES as KO
@@ -179,6 +198,7 @@ class TestMessageCompleteness:
 
         for name, messages in [
             ("de", DE),
+            ("es", ES),
             ("fr", FR),
             ("ja", JA),
             ("ko", KO),

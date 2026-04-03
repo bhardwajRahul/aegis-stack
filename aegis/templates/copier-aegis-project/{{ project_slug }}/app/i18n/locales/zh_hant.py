@@ -13,7 +13,7 @@ MESSAGES: dict[str, str] = {
     "main.unsupported_lang": "不支援的语言 '{lang}'。可用語言：{available}",
     # 幫助文本
     "main.help": "項目命令行工具",
-    "main.opt_lang": "輸出語言（de、en、fr、ja、ko、ru、zh、zh_Hant），默認自動檢測系統語言",
+    "main.opt_lang": "輸出語言（de、en、es、fr、ja、ko、ru、zh、zh_Hant），默認自動檢測系統語言",
     # ── 健康檢查 ──────────────────────────────────────────────────────
     "health.count_healthy": "{count} 個正常",
     "health.count_warning": "{count} 個警告",
