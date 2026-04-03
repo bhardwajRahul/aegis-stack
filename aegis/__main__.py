@@ -65,7 +65,7 @@ def main(
     lang: str | None = typer.Option(
         None,
         "--lang",
-        help="Output language (de, en, fr, ja, ko, ru, zh, zh_Hant). Default: auto-detect from AEGIS_LANG or system locale",
+        help="Output language (de, en, es, fr, ja, ko, ru, zh, zh_Hant). Default: auto-detect from AEGIS_LANG or system locale",
         envvar="AEGIS_LANG",
     ),
 ) -> None:

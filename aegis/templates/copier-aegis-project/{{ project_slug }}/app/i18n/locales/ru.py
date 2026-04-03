@@ -13,7 +13,7 @@ MESSAGES: dict[str, str] = {
     "main.unsupported_lang": "Язык '{lang}' не поддерживается. Доступные: {available}",
     # Справка
     "main.help": "CLI управления проектом",
-    "main.opt_lang": "Язык вывода (de, en, fr, ja, ko, ru, zh, zh_Hant). По умолчанию: автоопределение",
+    "main.opt_lang": "Язык вывода (de, en, es, fr, ja, ko, ru, zh, zh_Hant). По умолчанию: автоопределение",
     # ── Здоровье ─────────────────────────────────────────────────────
     "health.count_healthy": "{count} в норме",
     "health.count_warning": "{count} предупреждение",
