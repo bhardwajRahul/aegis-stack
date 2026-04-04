@@ -114,6 +114,11 @@ def get_component_display_info(
 
     elif component_name == "service_comms":
         return ("Comms Service", "Resend + Twilio")
+{% if include_insights %}
+
+    elif component_name == "service_insights":
+        return ("Insights", get_component_subtitle("service_insights", metadata))
+{% endif %}
 {% if include_ingress %}
 
     elif component_name == "ingress":

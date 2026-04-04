@@ -17,6 +17,10 @@ from app.services.auth.invite_service import InviteService
 from app.services.auth.membership_service import MembershipService
 from app.services.auth.org_service import OrgService
 {% endif %}
+{% if include_insights %}
+from app.services.insights.collector_service import CollectorService
+from app.services.insights.insight_service import InsightService
+{% endif %}
 
 
 def get_db() -> Generator[Session]:
@@ -99,6 +103,24 @@ async def get_invite_service(
 ) -> InviteService:
     """Provide an InviteService instance."""
     return InviteService(db)
+{% endif %}
+
+
+{% if include_insights %}
+
+
+async def get_insight_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> InsightService:
+    """Provide an InsightService instance."""
+    return InsightService(db)
+
+
+async def get_collector_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> CollectorService:
+    """Provide a CollectorService instance."""
+    return CollectorService(db)
 {% endif %}
 
 

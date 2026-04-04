@@ -21,6 +21,17 @@ from app.services.system.backup import backup_database_job
 {% if include_ai and ai_backend != "memory" %}
 from app.services.ai.jobs import sync_llm_catalog_job
 {% endif %}
+{% if include_insights %}
+{% if insights_github %}
+from app.services.insights.jobs import collect_github_events_job, collect_github_stars_job, collect_github_traffic_job
+{% endif %}
+{% if insights_pypi %}
+from app.services.insights.jobs import collect_pypi_job
+{% endif %}
+{% if insights_plausible %}
+from app.services.insights.jobs import collect_plausible_job
+{% endif %}
+{% endif %}
 
 from app.core.config import settings
 from app.core.log import logger
@@ -208,6 +219,194 @@ def create_scheduler() -> AsyncIOScheduler:
             f"Job '{job_id}' exists, preserving current configuration: "
             f"{existing_job.trigger}"
         )
+{% endif %}
+{% endif %}
+
+{% if include_insights %}
+{% if insights_github %}
+    # Insight: GitHub traffic collection
+    job_id = "insight_github_traffic"
+{% if scheduler_backend != "memory" %}
+    job_exists = _job_exists_in_database(job_id)
+{% else %}
+    existing_job = scheduler.get_job(job_id)
+    job_exists = existing_job is not None
+{% endif %}
+
+    if not job_exists or force_update:
+        if job_exists and force_update:
+            logger.info(f"Force updating job '{job_id}' from code configuration")
+        else:
+            logger.info(f"Adding new job '{job_id}'")
+
+        scheduler.add_job(
+            collect_github_traffic_job,
+            trigger="interval",
+            hours=settings.INSIGHT_COLLECTION_GITHUB_HOURS,
+            id=job_id,
+            name="Insight: GitHub Traffic",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+        )
+    else:
+{% if scheduler_backend != "memory" %}
+        msg = f"Job '{job_id}' exists in database, preserving current configuration"
+        logger.info(msg)
+{% else %}
+        logger.info(
+            f"Job '{job_id}' exists, preserving current configuration: "
+            f"{existing_job.trigger}"
+        )
+{% endif %}
+
+    # Insight: GitHub stars collection (daily)
+    job_id = "insight_github_stars"
+{% if scheduler_backend != "memory" %}
+    job_exists = _job_exists_in_database(job_id)
+{% else %}
+    existing_job = scheduler.get_job(job_id)
+    job_exists = existing_job is not None
+{% endif %}
+
+    if not job_exists or force_update:
+        if job_exists and force_update:
+            logger.info(f"Force updating job '{job_id}' from code configuration")
+        else:
+            logger.info(f"Adding new job '{job_id}'")
+
+        scheduler.add_job(
+            collect_github_stars_job,
+            trigger="interval",
+            hours=24,
+            id=job_id,
+            name="Insight: GitHub Stars",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+        )
+    else:
+{% if scheduler_backend != "memory" %}
+        msg = f"Job '{job_id}' exists in database, preserving current configuration"
+        logger.info(msg)
+{% else %}
+        logger.info(
+            f"Job '{job_id}' exists, preserving current configuration: "
+            f"{existing_job.trigger}"
+        )
+{% endif %}
+
+    # Insight: GitHub events collection (daily via ClickHouse)
+    job_id = "insight_github_events"
+{% if scheduler_backend != "memory" %}
+    job_exists = _job_exists_in_database(job_id)
+{% else %}
+    existing_job = scheduler.get_job(job_id)
+    job_exists = existing_job is not None
+{% endif %}
+
+    if not job_exists or force_update:
+        if job_exists and force_update:
+            logger.info(f"Force updating job '{job_id}' from code configuration")
+        else:
+            logger.info(f"Adding new job '{job_id}'")
+
+        scheduler.add_job(
+            collect_github_events_job,
+            trigger="interval",
+            hours=24,
+            id=job_id,
+            name="Insight: GitHub Events",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+        )
+    else:
+{% if scheduler_backend != "memory" %}
+        msg = f"Job '{job_id}' exists in database, preserving current configuration"
+        logger.info(msg)
+{% else %}
+        logger.info(
+            f"Job '{job_id}' exists, preserving current configuration: "
+            f"{existing_job.trigger}"
+        )
+{% endif %}
+{% endif %}
+
+{% if insights_pypi %}
+    # Insight: PyPI downloads collection
+    job_id = "insight_pypi"
+{% if scheduler_backend != "memory" %}
+    job_exists = _job_exists_in_database(job_id)
+{% else %}
+    existing_job = scheduler.get_job(job_id)
+    job_exists = existing_job is not None
+{% endif %}
+
+    if not job_exists or force_update:
+        if job_exists and force_update:
+            logger.info(f"Force updating job '{job_id}' from code configuration")
+        else:
+            logger.info(f"Adding new job '{job_id}'")
+
+        scheduler.add_job(
+            collect_pypi_job,
+            trigger="interval",
+            hours=settings.INSIGHT_COLLECTION_PYPI_HOURS,
+            id=job_id,
+            name="Insight: PyPI Downloads",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+        )
+    else:
+{% if scheduler_backend != "memory" %}
+        msg = f"Job '{job_id}' exists in database, preserving current configuration"
+        logger.info(msg)
+{% else %}
+        logger.info(
+            f"Job '{job_id}' exists, preserving current configuration: "
+            f"{existing_job.trigger}"
+        )
+{% endif %}
+{% endif %}
+
+{% if insights_plausible %}
+    # Insight: Plausible analytics collection
+    job_id = "insight_plausible"
+{% if scheduler_backend != "memory" %}
+    job_exists = _job_exists_in_database(job_id)
+{% else %}
+    existing_job = scheduler.get_job(job_id)
+    job_exists = existing_job is not None
+{% endif %}
+
+    if not job_exists or force_update:
+        if job_exists and force_update:
+            logger.info(f"Force updating job '{job_id}' from code configuration")
+        else:
+            logger.info(f"Adding new job '{job_id}'")
+
+        scheduler.add_job(
+            collect_plausible_job,
+            trigger="interval",
+            hours=settings.INSIGHT_COLLECTION_PLAUSIBLE_HOURS,
+            id=job_id,
+            name="Insight: Plausible Analytics",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+        )
+    else:
+{% if scheduler_backend != "memory" %}
+        msg = f"Job '{job_id}' exists in database, preserving current configuration"
+        logger.info(msg)
+{% else %}
+        logger.info(
+            f"Job '{job_id}' exists, preserving current configuration: "
+            f"{existing_job.trigger}"
+        )
+{% endif %}
 {% endif %}
 {% endif %}
 

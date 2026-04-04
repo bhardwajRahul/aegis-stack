@@ -125,11 +125,19 @@ class AnswerKeys:
     AUTH = "include_auth"
     AI = "include_ai"
     COMMS = "include_comms"
+    INSIGHTS = "include_insights"
 
     # Service names (used for selection/lookup)
     SERVICE_AUTH = "auth"
     SERVICE_AI = "ai"
     SERVICE_COMMS = "comms"
+    SERVICE_INSIGHTS = "insights"
+
+    # Insights source flags
+    INSIGHTS_GITHUB = "insights_github"
+    INSIGHTS_PYPI = "insights_pypi"
+    INSIGHTS_PLAUSIBLE = "insights_plausible"
+    INSIGHTS_REDDIT = "insights_reddit"
 
     # Configuration values
     SCHEDULER_BACKEND = "scheduler_backend"

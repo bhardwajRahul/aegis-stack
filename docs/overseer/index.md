@@ -23,14 +23,14 @@ You work with Datadog until management decides to migrate to New Relic. Or you'r
 The dashboard displays:
 
 - **Component Cards**: Backend, Database, Worker, Scheduler health
-- **Service Cards**: Auth, AI, Comms health (when included)
+- **Service Cards**: Auth, AI, Comms, Insights health (when included)
 - **Header**: Overall health summary and theme toggle
 - **Auto-refresh**: Polls health endpoint every 30 seconds
 
 ## Current Capabilities
 
 - Component health monitoring (Backend, Database, Worker, Scheduler)
-- Service health monitoring (Auth, AI, Comms)
+- Service health monitoring (Auth, AI, Comms, Insights)
 - System metrics (CPU, memory, disk usage)
 - Status hierarchy (Healthy, Warning, Unhealthy, Info)
 - Web dashboard with auto-refresh (30-second polling)

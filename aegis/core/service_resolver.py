@@ -11,6 +11,10 @@ from .ai_service_parser import is_ai_service_with_options, parse_ai_service_conf
 from .auth_service_parser import is_auth_service_with_options, parse_auth_service_config
 from .component_utils import extract_base_component_name, extract_base_service_name
 from .dependency_resolver import DependencyResolver
+from .insights_service_parser import (
+    is_insights_service_with_options,
+    parse_insights_service_config,
+)
 from .services import SERVICES, get_service_dependencies
 
 
@@ -125,6 +129,16 @@ class ServiceResolver:
                         )
                 except ValueError as e:
                     errors.append(f"Invalid AI service syntax: {e}")
+
+            # Validate insights service bracket syntax if provided
+            if (
+                base_service == AnswerKeys.SERVICE_INSIGHTS
+                and is_insights_service_with_options(service)
+            ):
+                try:
+                    parse_insights_service_config(service)
+                except ValueError as e:
+                    errors.append(f"Invalid insights service syntax: {e}")
 
             spec = SERVICES[base_service]
 

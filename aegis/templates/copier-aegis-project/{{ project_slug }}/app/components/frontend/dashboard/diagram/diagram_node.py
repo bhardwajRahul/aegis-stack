@@ -115,7 +115,7 @@ class DiagramNode(ft.Container):
             return get_ai_engine_display(metadata)
         elif component_name == "service_auth":
             return "JWT Authentication"
-        elif component_name in ("ingress", "worker"):
+        elif component_name in ("ingress", "worker", "service_insights"):
             return get_component_subtitle(component_name, metadata)
 
         # Fall back to static label

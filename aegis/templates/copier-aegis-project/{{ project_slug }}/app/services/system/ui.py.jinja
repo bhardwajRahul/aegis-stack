@@ -70,6 +70,9 @@ def get_component_title(component_name: str) -> str:
         {%- if include_comms %}
         "service_comms": "Communications",
         {%- endif %}
+        {%- if include_insights %}
+        "service_insights": "Insights",
+        {%- endif %}
         {%- if include_ingress %}
         "ingress": "Ingress",
         {%- endif %}
@@ -119,9 +122,38 @@ def get_component_subtitle(
     Uses the base label from ``get_component_label`` and appends the version
     from health-check metadata when available.
     """
+{% if include_insights %}
+    # Insights: build subtitle from enabled sources
+    if component_name == "service_insights" and metadata:
+        sources = metadata.get("sources", {})
+        if isinstance(sources, dict):
+            enabled = [
+                _format_source_name(key)
+                for key, detail in sources.items()
+                if isinstance(detail, dict) and detail.get("enabled")
+            ]
+            if enabled:
+                return ", ".join(enabled)
+        return "Adoption Analytics"
+{% endif %}
+
     label = get_component_label(component_name)
     if metadata:
         version = metadata.get("version", "")
         if version and version != "unknown":
             return f"{label} {version}"
     return label
+
+
+{% if include_insights %}
+def _format_source_name(key: str) -> str:
+    """Format source keys for display: github_traffic → GitHub, pypi → PyPI."""
+    display_map = {
+        "github_traffic": "GitHub",
+        "github_stars": "Stars",
+        "pypi": "PyPI",
+        "plausible": "Plausible",
+        "reddit": "Reddit",
+    }
+    return display_map.get(key, key.replace("_", " ").title())
+{% endif %}

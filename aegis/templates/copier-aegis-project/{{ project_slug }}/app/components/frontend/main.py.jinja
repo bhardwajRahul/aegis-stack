@@ -13,6 +13,9 @@ import httpx
 from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
+{% if include_insights %}
+from app.services.insights.constants import INSIGHT_COMPONENT_NAME
+{% endif %}
 from .dashboard.activity_feed import ActivityFeed
 from .dashboard.cards import (
 {% if include_ai %}
@@ -29,6 +32,9 @@ from .dashboard.cards import (
 {% endif %}
 {% if include_ingress %}
     IngressCard,
+{% endif %}
+{% if include_insights %}
+    InsightsCard,
 {% endif %}
 {% if include_observability %}
     ObservabilityCard,
@@ -781,6 +787,10 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
 {% if include_comms %}
                 elif component_name == "service_comms":
                     return CommsCard(component_data).build()
+{% endif %}
+{% if include_insights %}
+                elif component_name == f"{SERVICE_PREFIX}{INSIGHT_COMPONENT_NAME}":
+                    return InsightsCard(component_data).build()
 {% endif %}
 {% if include_auth or include_ai or include_comms %}
                 elif component_name.startswith("service_"):

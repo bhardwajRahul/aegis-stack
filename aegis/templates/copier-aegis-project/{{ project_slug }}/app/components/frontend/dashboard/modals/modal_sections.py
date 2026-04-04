@@ -28,6 +28,37 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.components.frontend.theme import DarkColorPalette
 
 
+def format_duration_ms(duration_ms: int | float | str | None) -> str:
+    """Format milliseconds to human-readable duration (e.g., '1.2s', '3m 45s')."""
+    if not duration_ms:
+        return "\u2014"
+    try:
+        ms = float(duration_ms)
+        if ms < 1000:
+            return f"{ms:.0f}ms"
+        s = ms / 1000
+        if s < 60:
+            return f"{s:.1f}s"
+        m = int(s // 60)
+        s = s % 60
+        return f"{m}m {s:.0f}s"
+    except (ValueError, TypeError):
+        return "\u2014"
+
+
+def format_timestamp(iso_str: str | None) -> str:
+    """Format ISO timestamp for display (HH:MM:SS)."""
+    if not iso_str:
+        return "\u2014"
+    try:
+        from datetime import datetime
+
+        dt = datetime.fromisoformat(iso_str)
+        return dt.strftime("%H:%M:%S")
+    except (ValueError, TypeError):
+        return "\u2014"
+
+
 class InfoCard(ft.Container):
     """Info card displaying a label and value with consistent card styling."""
 
@@ -88,6 +119,9 @@ class MetricCard(ft.Container):
         value: str,
         color: str,
         icon: str | None = None,
+        change_pct: float | None = None,
+        invert: bool = False,
+        prev_value: str | None = None,
     ) -> None:
         """
         Initialize metric card.
@@ -97,6 +131,9 @@ class MetricCard(ft.Container):
             value: Metric value to display
             color: Color for the value text
             icon: Optional icon name (e.g., ft.Icons.TOKEN)
+            change_pct: Optional period-over-period change percentage
+            invert: If True, down is good (green) and up is bad (red) — e.g., bounce rate
+            prev_value: Optional previous period value to display (e.g., "prev: 3,080")
         """
         super().__init__()
 
@@ -118,8 +155,47 @@ class MetricCard(ft.Container):
             weight=ft.FontWeight.W_600,
         )
 
+        # Value row: number + optional change arrow inline
+        value_items: list[ft.Control] = [self.value_text]
+        if change_pct is not None:
+            # When invert=True, up is bad (red) and down is good (green)
+            if change_pct > 0:
+                arrow_icon = ft.Icons.NORTH_EAST
+                arrow_color = Theme.Colors.ERROR if invert else Theme.Colors.SUCCESS
+            elif change_pct < 0:
+                arrow_icon = ft.Icons.SOUTH_EAST
+                arrow_color = Theme.Colors.SUCCESS if invert else Theme.Colors.ERROR
+            else:
+                arrow_icon = ft.Icons.EAST
+                arrow_color = ft.Colors.ON_SURFACE_VARIANT
+            value_items.append(
+                ft.Row(
+                    [
+                        ft.Icon(arrow_icon, size=14, color=arrow_color),
+                        ft.Text(
+                            f"{abs(change_pct):.0f}%",
+                            size=14,
+                            color=arrow_color,
+                            weight=ft.FontWeight.W_600,
+                        ),
+                    ],
+                    spacing=2,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                )
+            )
+
+        value_row = ft.Row(
+            value_items, spacing=6, vertical_alignment=ft.CrossAxisAlignment.END
+        )
+
+        column_items = [header_row, value_row]
+        if prev_value is not None:
+            column_items.append(
+                SecondaryText(f"prev: {prev_value}", size=Theme.Typography.BODY_SMALL)
+            )
+
         self.content = ft.Column(
-            [header_row, self.value_text],
+            column_items,
             spacing=Theme.Spacing.XS,
         )
         self.padding = Theme.Spacing.MD
@@ -133,6 +209,44 @@ class MetricCard(ft.Container):
         self.value_text.value = value
         if color is not None:
             self.value_text.color = color
+
+
+class MilestoneCard(ft.Container):
+    """Trophy-style card for key milestones with hero number."""
+
+    def __init__(
+        self,
+        label: str,
+        value: str,
+        date: str,
+        accent_color: str = "#9CA3AF",
+    ) -> None:
+        super().__init__()
+
+        items: list[ft.Control] = [SecondaryText(label)]
+        if value and value != "\u2014":
+            items.append(
+                ft.Text(
+                    value,
+                    size=28,
+                    weight=ft.FontWeight.W_700,
+                    color=accent_color,
+                )
+            )
+        items.append(SecondaryText(date, size=Theme.Typography.BODY_SMALL))
+
+        self.content = ft.Column(
+            items,
+            spacing=2,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+        )
+        self.padding = Theme.Spacing.MD
+        self.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
+        self.border_radius = Theme.Components.CARD_RADIUS
+        self.border = ft.border.all(0.5, ft.Colors.OUTLINE)
+        self.height = 130
+        self.expand = True
 
 
 class SectionHeader(ft.Row):

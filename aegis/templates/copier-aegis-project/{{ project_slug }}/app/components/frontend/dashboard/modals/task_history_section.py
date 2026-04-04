@@ -24,6 +24,8 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.core.config import settings
 from app.core.log import logger
 
+from .modal_sections import format_duration_ms, format_timestamp
+
 # Column widths
 COL_WIDTH_STATUS_ICON = 30
 COL_WIDTH_QUEUE = 90
@@ -55,37 +57,6 @@ _PILL_HEIGHT = 28
 _PILL_SELECTED_OPACITY = 0.15
 
 
-def _format_duration(duration_ms: str | None) -> str:
-    """Format duration in milliseconds to a human-readable string."""
-    if not duration_ms:
-        return "—"
-    try:
-        ms = float(duration_ms)
-        if ms < 1000:
-            return f"{ms:.0f}ms"
-        s = ms / 1000
-        if s < 60:
-            return f"{s:.1f}s"
-        m = int(s // 60)
-        s = s % 60
-        return f"{m}m {s:.0f}s"
-    except (ValueError, TypeError):
-        return "—"
-
-
-def _format_timestamp(iso_str: str | None) -> str:
-    """Format ISO timestamp for display."""
-    if not iso_str:
-        return "—"
-    try:
-        from datetime import datetime
-
-        dt = datetime.fromisoformat(iso_str)
-        return dt.strftime("%H:%M:%S")
-    except (ValueError, TypeError):
-        return "—"
-
-
 def _build_task_row(task: dict[str, str]) -> ExpandableRow:
     """Build a table row for a single task record."""
     status = task.get("status", "unknown")
@@ -111,11 +82,11 @@ def _build_task_row(task: dict[str, str]) -> ExpandableRow:
         ),
         BodyText(task.get("queue", "—"), text_align=ft.TextAlign.CENTER),
         BodyText(
-            _format_duration(task.get("duration_ms")),
+            format_duration_ms(task.get("duration_ms")),
             text_align=ft.TextAlign.CENTER,
         ),
         SecondaryText(
-            _format_timestamp(task.get("enqueued_at")),
+            format_timestamp(task.get("enqueued_at")),
             text_align=ft.TextAlign.CENTER,
         ),
         SecondaryText(
@@ -179,12 +150,12 @@ def _build_task_row(task: dict[str, str]) -> ExpandableRow:
                 SecondaryText(f"Job ID: {task.get('job_id', '—')}", size=11),
                 SecondaryText("|", size=11),
                 SecondaryText(
-                    f"Started: {_format_timestamp(task.get('started_at'))}",
+                    f"Started: {format_timestamp(task.get('started_at'))}",
                     size=11,
                 ),
                 SecondaryText("|", size=11),
                 SecondaryText(
-                    f"Finished: {_format_timestamp(task.get('finished_at'))}",
+                    f"Finished: {format_timestamp(task.get('finished_at'))}",
                     size=11,
                 ),
             ],

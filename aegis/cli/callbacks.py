@@ -21,6 +21,10 @@ from ..core.component_utils import (
     restore_engine_info,
 )
 from ..core.dependency_resolver import DependencyResolver
+from ..core.insights_service_parser import (
+    is_insights_service_with_options,
+    parse_insights_service_config,
+)
 from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES
 from ..i18n import t
@@ -210,6 +214,18 @@ def validate_and_resolve_services(
                 typer.echo(f"Auth service: level={auth_config.level}")
             except ValueError as e:
                 typer.secho(f"Invalid auth service syntax: {e}", fg="red", err=True)
+                raise typer.Exit(1)
+
+    # Parse Insights service bracket syntax
+    for service in selected_services:
+        if is_insights_service_with_options(service):
+            try:
+                insights_config = parse_insights_service_config(service)
+                typer.echo(
+                    f"Insights service: sources={','.join(insights_config.sources)}"
+                )
+            except ValueError as e:
+                typer.secho(f"Invalid insights service syntax: {e}", fg="red", err=True)
                 raise typer.Exit(1)
 
     # Resolve services to components

@@ -138,6 +138,21 @@ def generate_with_copier(
         AnswerKeys.AI_RAG: template_context.get(AnswerKeys.AI_RAG, "no") == "yes",
         AnswerKeys.AI_VOICE: template_context.get(AnswerKeys.AI_VOICE, "no") == "yes",
         AnswerKeys.OLLAMA_MODE: template_context.get(AnswerKeys.OLLAMA_MODE, "none"),
+        AnswerKeys.INSIGHTS: template_context.get(AnswerKeys.INSIGHTS, "no") == "yes",
+        AnswerKeys.INSIGHTS_GITHUB: template_context.get(
+            AnswerKeys.INSIGHTS_GITHUB, "no"
+        )
+        == "yes",
+        AnswerKeys.INSIGHTS_PYPI: template_context.get(AnswerKeys.INSIGHTS_PYPI, "no")
+        == "yes",
+        AnswerKeys.INSIGHTS_PLAUSIBLE: template_context.get(
+            AnswerKeys.INSIGHTS_PLAUSIBLE, "no"
+        )
+        == "yes",
+        AnswerKeys.INSIGHTS_REDDIT: template_context.get(
+            AnswerKeys.INSIGHTS_REDDIT, "no"
+        )
+        == "yes",
     }
 
     # Detect dev vs production mode for template sourcing
@@ -228,6 +243,7 @@ def generate_with_copier(
     # This ensures consistent behavior with Cookiecutter
     include_auth = copier_data.get(AnswerKeys.AUTH, False)
     include_ai = copier_data.get(AnswerKeys.AI, False)
+    include_insights = copier_data.get(AnswerKeys.INSIGHTS, False)
     ai_backend = copier_data.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
     database_engine = copier_data.get(
         AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE
@@ -240,8 +256,11 @@ def generate_with_copier(
     # Type narrowing: ai_backend should always be a string, but narrow from Any
     ai_backend_str: str = str(ai_backend) if ai_backend else StorageBackends.MEMORY
 
+    is_insights_included: bool = include_insights is True
     ai_needs_migrations = is_ai_included and ai_backend_str != StorageBackends.MEMORY
-    needs_migration_files = is_auth_included or ai_needs_migrations
+    needs_migration_files = (
+        is_auth_included or ai_needs_migrations or is_insights_included
+    )
     # Only run migrations automatically for SQLite (file-based, no server needed)
     # PostgreSQL requires a running server, so skip auto-migration
     is_sqlite = database_engine == StorageBackends.SQLITE
