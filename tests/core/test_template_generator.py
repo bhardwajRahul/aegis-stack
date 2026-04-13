@@ -480,3 +480,81 @@ class TestTemplateGeneratorAuthLevel:
         assert context["auth_level"] == AuthLevels.ORG
         assert context["include_auth_org"] == "yes"
         assert context["include_auth_rbac"] == "yes"
+
+
+class TestTemplateGeneratorInsightsService:
+    """Test insights service handling in template context."""
+
+    def test_insights_sets_include_flag(self) -> None:
+        """Insights service sets include_insights to 'yes'."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["insights"],
+        )
+        context = gen.get_template_context()
+        assert context["include_insights"] == "yes"
+
+    def test_no_insights_sets_flag_no(self) -> None:
+        """Without insights, include_insights is 'no'."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=[],
+        )
+        context = gen.get_template_context()
+        assert context["include_insights"] == "no"
+
+    def test_insights_default_sources(self) -> None:
+        """Plain 'insights' defaults to github + pypi sources."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["insights"],
+        )
+        context = gen.get_template_context()
+        assert context["insights_github"] == "yes"
+        assert context["insights_pypi"] == "yes"
+        assert context["insights_plausible"] == "no"
+        assert context["insights_reddit"] == "no"
+
+    def test_insights_bracket_all_sources(self) -> None:
+        """Bracket syntax enables specified sources."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["insights[github,pypi,plausible,reddit]"],
+        )
+        context = gen.get_template_context()
+        assert context["include_insights"] == "yes"
+        assert context["insights_github"] == "yes"
+        assert context["insights_pypi"] == "yes"
+        assert context["insights_plausible"] == "yes"
+        assert context["insights_reddit"] == "yes"
+
+    def test_insights_bracket_single_source(self) -> None:
+        """Bracket with single source only enables that one."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["insights[plausible]"],
+        )
+        context = gen.get_template_context()
+        assert context["include_insights"] == "yes"
+        assert context["insights_github"] == "no"
+        assert context["insights_pypi"] == "no"
+        assert context["insights_plausible"] == "yes"
+        assert context["insights_reddit"] == "no"
+
+    def test_insights_with_other_services(self) -> None:
+        """Insights alongside other services — all flags correct."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=["database"],
+            selected_services=["insights", "auth"],
+        )
+        context = gen.get_template_context()
+        assert context["include_insights"] == "yes"
+        assert context["include_auth"] == "yes"
+        assert context["insights_github"] == "yes"
+        assert context["insights_pypi"] == "yes"

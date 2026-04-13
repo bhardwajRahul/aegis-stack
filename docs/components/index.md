@@ -4,7 +4,7 @@ Components are the **infrastructure building blocks** of your Aegis Stack applic
 
 !!! info "Components vs Services"
     **Components** = Infrastructure capabilities (database, workers, scheduling)
-    **Services** = Business functionality (auth, payments, AI integrations)
+    **Services** = Business functionality (auth, AI, comms, insights)
 
     See **[Services Overview](../services/index.md)** for business-level features.
 

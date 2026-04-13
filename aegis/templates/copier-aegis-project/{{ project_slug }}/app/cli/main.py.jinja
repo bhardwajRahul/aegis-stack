@@ -94,6 +94,14 @@ except ImportError:
     # Comms service not available, skip comms commands
     pass
 
+# Conditionally register insights command if insights service is available
+try:
+    insights_module = importlib.import_module("app.cli.insights")
+    app.add_typer(insights_module.app, name="insights")
+except ImportError:
+    # Insights service not available, skip insights commands
+    pass
+
 # Conditionally register rag command if ai_rag is enabled
 try:
     rag_module = importlib.import_module("app.cli.rag")

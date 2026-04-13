@@ -8,6 +8,7 @@ and metadata used for project generation and validation.
 from dataclasses import dataclass, field
 from enum import Enum
 
+from ..constants import ComponentNames
 from ..i18n import t
 
 
@@ -51,7 +52,7 @@ SERVICES: dict[str, ServiceSpec] = {
         name="auth",
         type=ServiceType.AUTH,
         description="User authentication and authorization with JWT tokens",
-        required_components=["backend", "database"],
+        required_components=[ComponentNames.BACKEND, ComponentNames.DATABASE],
         pyproject_deps=[
             "python-jose[cryptography]==3.3.0",
             "passlib[bcrypt]==1.7.4",
@@ -69,7 +70,7 @@ SERVICES: dict[str, ServiceSpec] = {
         name="ai",
         type=ServiceType.AI,
         description="AI chatbot service with multi-framework support",
-        required_components=["backend"],
+        required_components=[ComponentNames.BACKEND],
         pyproject_deps=[
             "{AI_FRAMEWORK_DEPS}",  # Dynamic framework + provider deps
         ],
@@ -83,7 +84,7 @@ SERVICES: dict[str, ServiceSpec] = {
         name="comms",
         type=ServiceType.NOTIFICATION,
         description="Communications service with email (Resend), SMS and voice (Twilio)",
-        required_components=["backend"],
+        required_components=[ComponentNames.BACKEND],
         pyproject_deps=[
             "resend>=2.4.0",  # Email provider
             "twilio>=9.3.7",  # SMS/Voice provider
@@ -93,6 +94,25 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/services/comms/",
             "app/cli/comms.py",
             "app/components/backend/api/comms/",
+        ],
+    ),
+    "insights": ServiceSpec(
+        name="insights",
+        type=ServiceType.ANALYTICS,
+        description="Adoption metrics and analytics with automated data collection",
+        required_components=[
+            ComponentNames.BACKEND,
+            ComponentNames.DATABASE,
+            ComponentNames.SCHEDULER,
+        ],
+        recommended_components=[ComponentNames.WORKER],
+        pyproject_deps=[
+            "httpx>=0.27.0",  # HTTP client for API collectors
+        ],
+        template_files=[
+            "app/services/insights/",
+            "app/cli/insights.py",
+            "app/components/backend/api/insights/",
         ],
     ),
 }

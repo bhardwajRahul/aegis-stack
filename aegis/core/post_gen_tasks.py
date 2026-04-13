@@ -185,6 +185,17 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "tests/api/test_voice_endpoints.py",
             "app/components/frontend/dashboard/modals/voice_settings_tab.py",
         ],
+        AnswerKeys.SERVICE_INSIGHTS: [
+            "app/components/backend/api/insights",
+            "app/services/insights",
+            "app/cli/insights.py",
+            "tests/services/test_insights_service.py",
+            "tests/services/test_insights_collectors.py",
+            "tests/api/test_insights_endpoints.py",
+            # Frontend dashboard files
+            "app/components/frontend/dashboard/cards/insights_card.py",
+            "app/components/frontend/dashboard/modals/insights_modal.py",
+        ],
     }
 
 
@@ -559,6 +570,21 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
             project_path, "app/components/frontend/dashboard/modals/comms_modal.py"
         )
 
+    # Remove insights service if not selected
+    if not is_enabled(AnswerKeys.INSIGHTS):
+        remove_dir(project_path, "app/components/backend/api/insights")
+        remove_dir(project_path, "app/services/insights")
+        remove_file(project_path, "app/cli/insights.py")
+        remove_file(project_path, "tests/services/test_insights_service.py")
+        remove_file(project_path, "tests/services/test_insights_collectors.py")
+        remove_file(project_path, "tests/api/test_insights_endpoints.py")
+        remove_file(
+            project_path, "app/components/frontend/dashboard/cards/insights_card.py"
+        )
+        remove_file(
+            project_path, "app/components/frontend/dashboard/modals/insights_modal.py"
+        )
+
     # Remove auth service dashboard files if not selected
     if not is_enabled(AnswerKeys.AUTH):
         remove_file(
@@ -569,23 +595,25 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         )
 
     # Remove services_card.py only if NO services are enabled
-    # ServicesCard shows all services (auth, AI, comms), so keep if ANY service is enabled
+    # ServicesCard shows all services, so keep if ANY service is enabled
     if (
         not is_enabled(AnswerKeys.AUTH)
         and not is_enabled(AnswerKeys.AI)
         and not is_enabled(AnswerKeys.COMMS)
+        and not is_enabled(AnswerKeys.INSIGHTS)
     ):
         remove_file(
             project_path, "app/components/frontend/dashboard/cards/services_card.py"
         )
 
     # Remove Alembic directory only if NO service needs migrations
-    # Alembic is needed when: auth is enabled OR (AI is enabled AND backend is NOT memory)
+    # Alembic is needed when: auth, insights, or (AI with non-memory backend)
     include_auth = is_enabled(AnswerKeys.AUTH)
     include_ai = is_enabled(AnswerKeys.AI)
+    include_insights = is_enabled(AnswerKeys.INSIGHTS)
     ai_backend = context.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
     ai_needs_migrations = include_ai and ai_backend != StorageBackends.MEMORY
-    needs_migrations = include_auth or ai_needs_migrations
+    needs_migrations = include_auth or ai_needs_migrations or include_insights
 
     if not needs_migrations:
         remove_dir(project_path, "alembic")
@@ -632,6 +660,7 @@ def _render_jinja_template(src: Path, dst: Path, project_path: Path) -> None:
         "include_auth": True,
         "include_ai": True,
         "include_comms": True,
+        "include_insights": True,
         # Component flags - check what exists in project
         "include_scheduler": (project_path / "app/components/scheduler").exists(),
         "include_worker": (project_path / "app/components/worker").exists(),

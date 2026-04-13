@@ -82,6 +82,13 @@ nav:
       - Provider Setup: services/comms/setup.md
       - API Reference: services/comms/api.md
       - CLI Commands: services/comms/cli.md
+    - Insights (Experimental):
+      - Getting Started: services/insights/index.md
+      - Data Sources: services/insights/data-sources.md
+      - CLI Commands: services/insights/cli.md
+      - Dashboard: services/insights/dashboard.md
+      - Configuration: services/insights/configuration.md
+      - Examples: services/insights/examples.md
   - Overseer:
     - Overview: overseer/index.md
     - The Story: overseer/story.md

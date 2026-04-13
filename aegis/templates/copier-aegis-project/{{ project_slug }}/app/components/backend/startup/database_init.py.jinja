@@ -334,6 +334,19 @@ async def startup_database_init() -> None:
             logger.warning(f"Database verification failed: {e}")
             # Don't fail startup - let the app run and show clear errors
 
+{% if include_insights %}
+        # Seed insight lookup tables (idempotent)
+        try:
+            from app.core.db import db_session as get_db_session
+            from app.services.insights.seed import seed_insight_tables
+
+            with get_db_session() as session:
+                seed_insight_tables(session)
+            logger.info("Insight seed data verified")
+        except Exception as e:
+            logger.warning(f"Insight seed failed: {e}")
+{% endif %}
+
 {% if include_ai and database_engine == "postgres" %}
         # Sync LLM catalog (postgres only - SQLite syncs during generation)
         # Uses sync Session because sync_llm_catalog does sync DB ops (async is for HTTP calls)

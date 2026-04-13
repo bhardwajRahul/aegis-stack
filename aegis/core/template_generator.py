@@ -27,11 +27,16 @@ from .component_utils import (
     extract_engine_info,
 )
 from .components import COMPONENTS, CORE_COMPONENTS
+from .insights_service_parser import (
+    is_insights_service_with_options,
+    parse_insights_service_config,
+)
 from .services import SERVICES
 
 # Service names for bracket syntax detection
 SERVICE_AI = "ai"
 SERVICE_AUTH = "auth"
+SERVICE_INSIGHTS = "insights"
 
 
 class TemplateGenerator:
@@ -126,6 +131,17 @@ class TemplateGenerator:
                     auth_config = parse_auth_service_config(service)
                     self.auth_level = auth_config.level
                     self._user_specified_auth_level = True
+                break
+
+        # Extract insights sources from insights[sources] format in services
+        from .insights_service_parser import DEFAULT_SOURCES
+
+        self.insights_sources: list[str] = DEFAULT_SOURCES.copy()
+        for service in self.selected_services:
+            if extract_base_service_name(service) == SERVICE_INSIGHTS:
+                if is_insights_service_with_options(service):
+                    insights_config = parse_insights_service_config(service)
+                    self.insights_sources = insights_config.sources
                 break
 
         # Auto-detect: if AI service selected AND database available AND no explicit backend,
@@ -231,6 +247,25 @@ class TemplateGenerator:
                 extract_base_service_name(s) == AnswerKeys.SERVICE_COMMS
                 for s in self.selected_services
             )
+            else "no",
+            AnswerKeys.INSIGHTS: "yes"
+            if any(
+                extract_base_service_name(s) == AnswerKeys.SERVICE_INSIGHTS
+                for s in self.selected_services
+            )
+            else "no",
+            # Insights source flags
+            AnswerKeys.INSIGHTS_GITHUB: "yes"
+            if "github" in self.insights_sources
+            else "no",
+            AnswerKeys.INSIGHTS_PYPI: "yes"
+            if "pypi" in self.insights_sources
+            else "no",
+            AnswerKeys.INSIGHTS_PLAUSIBLE: "yes"
+            if "plausible" in self.insights_sources
+            else "no",
+            AnswerKeys.INSIGHTS_REDDIT: "yes"
+            if "reddit" in self.insights_sources
             else "no",
             # AI backend selection for conversation persistence
             AnswerKeys.AI_BACKEND: self.ai_backend,

@@ -548,6 +548,13 @@ async def startup_hook() -> None:
     logger.info("Comms service health check registered")
     {%- endif %}
 
+    {%- if include_insights %}
+    # Register insights service health check
+    from app.services.insights.health import check_insight_health
+    register_service_health_check("insights", check_insight_health)
+    logger.info("Insights service health check registered")
+    {%- endif %}
+
     # Future services will be registered here:
     # Example:
     #     from app.services.payment.health import check_payment_service_health

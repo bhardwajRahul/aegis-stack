@@ -431,3 +431,64 @@ class TestServiceResolverIntegration:
         assert ServiceResolver.validate_services([]) == []
         assert ServiceResolver.get_service_component_summary([]) == {}
         assert ServiceResolver.recommend_components_for_services([]) == []
+
+
+class TestInsightsServiceResolver:
+    """Test insights service resolution and bracket validation."""
+
+    def test_resolve_insights_dependencies(self):
+        """Insights requires backend, database, and scheduler."""
+        services = ["insights"]
+
+        resolved, auto_added = ServiceResolver.resolve_service_dependencies(services)
+
+        assert "backend" in resolved
+        assert "database" in resolved
+        assert "scheduler" in resolved
+
+    def test_resolve_insights_recommends_worker(self):
+        """Insights recommends worker component."""
+        recommendations = ServiceResolver.recommend_components_for_services(
+            ["insights"]
+        )
+        assert "worker" in recommendations
+
+    def test_validate_insights_plain(self):
+        """Plain 'insights' validates successfully."""
+        errors = ServiceResolver.validate_services(["insights"])
+        assert errors == []
+
+    def test_validate_insights_with_brackets(self):
+        """Bracket syntax validates successfully."""
+        errors = ServiceResolver.validate_services(
+            ["insights[github,pypi,plausible,reddit]"]
+        )
+        assert errors == []
+
+    def test_validate_insights_invalid_source(self):
+        """Invalid source in brackets fails validation."""
+        errors = ServiceResolver.validate_services(["insights[github,invalid]"])
+        assert len(errors) == 1
+        assert "Invalid insights" in errors[0]
+
+    def test_insights_full_resolution(self):
+        """Full resolution flow for insights service."""
+        services = ["insights"]
+
+        resolved, _ = ServiceResolver.resolve_service_dependencies(services)
+
+        errors = ServiceResolver.validate_service_component_compatibility(
+            services, resolved
+        )
+        assert errors == []
+
+    def test_insights_with_auth_merge(self):
+        """Insights + auth share backend and database — no duplication."""
+        services = ["insights", "auth"]
+
+        resolved, _ = ServiceResolver.resolve_service_dependencies(services)
+
+        # Both need backend/database, should appear once
+        assert resolved.count("backend") == 1
+        assert resolved.count("database") == 1
+        assert "scheduler" in resolved

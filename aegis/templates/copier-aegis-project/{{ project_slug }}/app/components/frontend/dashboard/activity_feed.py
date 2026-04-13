@@ -56,6 +56,8 @@ def format_relative_time(timestamp: datetime) -> str:
         hours = int(seconds / 3600)
         return f"{hours} hour{'s' if hours != 1 else ''} ago"
     else:
+        if timestamp.hour == 0 and timestamp.minute == 0:
+            return timestamp.strftime("%b %d")
         return timestamp.strftime("%b %d %H:%M")
 
 

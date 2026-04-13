@@ -240,6 +240,25 @@ class Settings(BaseSettings):
     TWILIO_MESSAGING_SERVICE_SID: str | None = None  # Required for toll-free SMS
 {% endif %}
 
+{% if include_insights %}
+    # Insights Service Configuration
+{% if insights_github %}
+    INSIGHT_GITHUB_TOKEN: str | None = None  # PAT with 'repo' scope
+    INSIGHT_GITHUB_OWNER: str = ""
+    INSIGHT_GITHUB_REPO: str = ""
+    INSIGHT_COLLECTION_GITHUB_HOURS: int = 6
+{% endif %}
+{% if insights_pypi %}
+    INSIGHT_PYPI_PACKAGE: str = ""
+    INSIGHT_COLLECTION_PYPI_HOURS: int = 24
+{% endif %}
+{% if insights_plausible %}
+    INSIGHT_PLAUSIBLE_API_KEY: str | None = None
+    INSIGHT_PLAUSIBLE_SITES: str = ""  # Comma-separated site IDs
+    INSIGHT_COLLECTION_PLAUSIBLE_HOURS: int = 24
+{% endif %}
+{% endif %}
+
 {% if include_observability %}
     # Observability (Logfire)
     # Set LOGFIRE_TOKEN to enable sending traces to Logfire cloud

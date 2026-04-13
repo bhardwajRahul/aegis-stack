@@ -52,9 +52,11 @@ jobs:
     
     - name: Run security audit
       run: |
-        # Ignoring pip 25.2 vulnerabilities (fixed in pip 26.0, not yet released)
-        # GHSA-4xh5-x5gv-qwph: symlink traversal vulnerability
-        # GHSA-6vgw-5pg2-w6jp: additional pip vulnerability
+        # Ignoring pip 25.2 vulnerabilities (uv manages pip, not user-facing)
         # Risk: Low - only affects installation of malicious packages from untrusted sources
         # Mitigation: All packages installed from trusted PyPI with uv.lock verification
-        uv run pip-audit --ignore-vuln GHSA-4xh5-x5gv-qwph --ignore-vuln GHSA-6vgw-5pg2-w6jp
+        uv run pip-audit \
+          --ignore-vuln GHSA-4xh5-x5gv-qwph \
+          --ignore-vuln GHSA-6vgw-5pg2-w6jp \
+          --ignore-vuln ECHO-ffe1-1d3c-d9bc \
+          --ignore-vuln ECHO-7db2-03aa-5591

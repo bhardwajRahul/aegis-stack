@@ -1,0 +1,321 @@
+"""
+Insights service CLI commands.
+
+Command-line interface for viewing adoption metrics, triggering collection,
+managing Reddit posts, and logging events.
+"""
+
+import asyncio
+
+from rich.console import Console
+from rich.table import Table
+import typer
+
+from app.i18n import lazy_t, t
+
+app = typer.Typer(help=lazy_t("insights.help"))
+console = Console()
+
+# Sub-groups
+reddit_app = typer.Typer(help=lazy_t("insights.help_reddit"))
+app.add_typer(reddit_app, name="reddit")
+
+
+@app.command(help=lazy_t("insights.help_status"))
+def status() -> None:
+    asyncio.run(_status())
+
+
+async def _status() -> None:
+    from app.core.db import get_async_session
+    from app.services.insights.insight_service import InsightService
+
+    async with get_async_session() as session:
+        service = InsightService(session)
+        summary = await service.get_status_summary()
+
+    typer.secho(t("insights.status_title"), fg=typer.colors.BLUE, bold=True)
+    typer.echo()
+
+    source_table = Table(title=t("insights.sources_title"), width=70)
+    source_table.add_column(t("insights.col_source"), style="cyan", width=20)
+    source_table.add_column(t("insights.col_enabled"), width=8)
+    source_table.add_column(t("insights.col_last_collected"), width=20)
+    source_table.add_column(t("insights.col_metrics"), width=10, justify="right")
+
+    for src in summary["sources"]:
+        enabled = f"[green]{t('insights.yes')}[/]" if src["enabled"] else f"[red]{t('insights.no')}[/]"
+        last = str(src["last_collected"])[:19] if src["last_collected"] else f"[dim]{t('insights.never')}[/]"
+        source_table.add_row(
+            src["display_name"], enabled, last, str(src["metric_count"])
+        )
+
+    console.print(source_table)
+
+    if summary["records"]:
+        typer.echo()
+        record_table = Table(title=t("insights.records_title"), width=70)
+        record_table.add_column(t("insights.col_metric"), style="cyan", width=20)
+        record_table.add_column(t("insights.col_value"), width=12, justify="right")
+        record_table.add_column(t("insights.col_date"), width=12)
+        record_table.add_column(t("insights.col_previous"), width=12, justify="right")
+
+        for rec in summary["records"]:
+            prev = str(rec["previous_value"]) if rec["previous_value"] else "—"
+            record_table.add_row(
+                str(rec["metric_type_id"]),
+                f"{rec['value']:.0f}",
+                str(rec["date_achieved"])[:10],
+                prev,
+            )
+
+        console.print(record_table)
+
+    typer.echo()
+    typer.secho(
+        t("insights.total_metrics", count=summary["total_metrics"]),
+        fg=typer.colors.GREEN,
+        bold=True,
+    )
+
+
+@app.command(help=lazy_t("insights.help_collect"))
+def collect(
+    source: str | None = typer.Argument(
+        None, help=lazy_t("insights.arg_source")
+    ),
+    lookback_days: int = typer.Option(
+        1, "--lookback-days", "-d", help="Days to fetch (for backfill). Default 1 = today only.",
+    ),
+) -> None:
+    asyncio.run(_collect(source, lookback_days))
+
+
+async def _collect(source: str | None, lookback_days: int = 1) -> None:
+    from app.core.db import get_async_session
+    from app.services.insights.collector_service import CollectorService
+
+    kwargs = {}
+    if lookback_days > 1:
+        kwargs["lookback_days"] = lookback_days
+
+    async with get_async_session() as session:
+        service = CollectorService(session)
+
+        if source:
+            typer.echo(t("insights.collecting_from", source=source))
+            result = await service.collect_source(source, **kwargs)
+            _print_collection_result(result)
+        else:
+            typer.echo(t("insights.collecting_all"))
+            results = await service.collect_all()
+            for _key, result in results.items():
+                _print_collection_result(result)
+
+
+def _print_collection_result(result: CollectionResult) -> None:  # noqa: F821
+    if result.success:
+        typer.secho(
+            t("insights.collect_success",
+              source=result.source_key,
+              written=result.rows_written,
+              skipped=result.rows_skipped),
+            fg=typer.colors.GREEN,
+        )
+        if result.records_broken:
+            typer.secho(
+                t("insights.collect_records", records=", ".join(result.records_broken)),
+                fg=typer.colors.YELLOW,
+                bold=True,
+            )
+    else:
+        typer.secho(
+            t("insights.collect_failed", source=result.source_key, error=result.error),
+            fg=typer.colors.RED,
+        )
+
+
+@app.command(help=lazy_t("insights.help_stars"))
+def stars(
+    limit: int = typer.Option(20, "--limit", "-n", help=lazy_t("insights.opt_limit")),
+) -> None:
+    asyncio.run(_stars(limit))
+
+
+async def _stars(limit: int) -> None:
+    from app.core.db import get_async_session
+    from app.services.insights.insight_service import InsightService
+
+    async with get_async_session() as session:
+        service = InsightService(session)
+        star_rows = await service.get_stars(limit=limit, offset=0)
+
+    if not star_rows:
+        typer.echo(t("insights.no_stars"))
+        return
+
+    table = Table(title=t("insights.stars_title"), width=90)
+    table.add_column(t("insights.col_star_num"), style="bold", width=5, justify="right")
+    table.add_column(t("insights.col_username"), style="cyan", width=20)
+    table.add_column(t("insights.col_name"), width=20)
+    table.add_column(t("insights.col_location"), width=20)
+    table.add_column(t("insights.col_company"), width=15)
+
+    for star in star_rows:
+        meta = star.metadata_ or {}
+        table.add_row(
+            f"{star.value:.0f}",
+            meta.get("username", "—"),
+            meta.get("name") or "—",
+            meta.get("location") or "—",
+            meta.get("company") or "—",
+        )
+
+    console.print(table)
+
+
+@app.command(help=lazy_t("insights.help_records"))
+def records() -> None:
+    asyncio.run(_records())
+
+
+async def _records() -> None:
+    from app.core.db import get_async_session
+    from app.services.insights.insight_service import InsightService
+
+    async with get_async_session() as session:
+        service = InsightService(session)
+        record_list = await service.get_records()
+
+    if not record_list:
+        typer.echo(t("insights.no_records"))
+        return
+
+    table = Table(title=t("insights.all_time_records_title"), width=70)
+    table.add_column(t("insights.col_metric"), style="cyan", width=20)
+    table.add_column(t("insights.col_value"), width=12, justify="right")
+    table.add_column(t("insights.col_date"), width=12)
+    table.add_column(t("insights.col_previous"), width=12, justify="right")
+    table.add_column(t("insights.col_prev_date"), width=12)
+
+    for rec in record_list:
+        prev_val = f"{rec.previous_value:.0f}" if rec.previous_value else "—"
+        prev_date = str(rec.previous_date)[:10] if rec.previous_date else "—"
+        table.add_row(
+            str(rec.metric_type_id),
+            f"{rec.value:.0f}",
+            str(rec.date_achieved)[:10],
+            prev_val,
+            prev_date,
+        )
+
+    console.print(table)
+
+
+@app.command(help=lazy_t("insights.help_sources"))
+def sources() -> None:
+    asyncio.run(_sources())
+
+
+async def _sources() -> None:
+    from app.core.db import get_async_session
+    from app.services.insights.insight_service import InsightService
+
+    async with get_async_session() as session:
+        service = InsightService(session)
+        source_list = await service.get_sources()
+
+    table = Table(title=t("insights.insight_sources_title"), width=70)
+    table.add_column(t("insights.col_key"), style="cyan", width=18)
+    table.add_column(t("insights.col_display_name"), width=18)
+    table.add_column(t("insights.col_interval"), width=10, justify="right")
+    table.add_column(t("insights.col_auth"), width=6)
+    table.add_column(t("insights.col_enabled"), width=8)
+
+    for src in source_list:
+        interval = f"{src.collection_interval_hours}h" if src.collection_interval_hours else t("insights.manual")
+        auth = f"[yellow]{t('insights.yes')}[/]" if src.requires_auth else t("insights.no")
+        enabled = f"[green]{t('insights.yes')}[/]" if src.enabled else f"[red]{t('insights.no')}[/]"
+        table.add_row(src.key, src.display_name, interval, auth, enabled)
+
+    console.print(table)
+
+
+@reddit_app.command("add", help=lazy_t("insights.help_reddit_add"))
+def reddit_add(
+    url: str = typer.Argument(..., help=lazy_t("insights.arg_url")),
+) -> None:
+    asyncio.run(_reddit_add(url))
+
+
+async def _reddit_add(url: str) -> None:
+    from app.core.db import get_async_session
+    from app.services.insights.collectors.reddit import RedditCollector
+
+    async with get_async_session() as session:
+        collector = RedditCollector(session)
+        result = await collector.add_post(url)
+
+    if result.success:
+        typer.secho(
+            t("insights.reddit_added", count=result.rows_written),
+            fg=typer.colors.GREEN,
+        )
+    else:
+        typer.secho(
+            t("insights.reddit_failed", error=result.error),
+            fg=typer.colors.RED,
+        )
+
+
+@app.command("event", help=lazy_t("insights.help_event"))
+def log_event(
+    event_type: str = typer.Argument(..., help=lazy_t("insights.arg_event_type")),
+    description: str = typer.Argument(..., help=lazy_t("insights.arg_description")),
+    date: str | None = typer.Option(None, "--date", help="Event date (YYYY-MM-DD). Defaults to today."),
+    category: str | None = typer.Option(None, "--category", help="Milestone category (e.g., daily_clones, pypi_daily)."),
+) -> None:
+    asyncio.run(_log_event(event_type, description, date, category))
+
+
+async def _log_event(
+    event_type: str,
+    description: str,
+    date_str: str | None = None,
+    category: str | None = None,
+) -> None:
+    from datetime import date as date_type
+    from app.core.db import get_async_session
+    from app.services.insights.insight_service import InsightService
+
+    event_date = None
+    if date_str:
+        try:
+            event_date = date_type.fromisoformat(date_str)
+        except ValueError:
+            typer.secho(f"Invalid date format: {date_str}. Use YYYY-MM-DD.", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+    metadata = {}
+    if category:
+        metadata["category"] = category
+
+    async with get_async_session() as session:
+        service = InsightService(session)
+        await service.add_event(
+            event_type=event_type,
+            description=description,
+            event_date=event_date,
+            metadata=metadata if metadata else None,
+        )
+        await session.commit()
+
+    date_display = date_str or "today"
+    typer.secho(
+        t("insights.event_logged", event_type=event_type, description=description) + f" ({date_display})",
+        fg=typer.colors.GREEN,
+    )
+
+
+if __name__ == "__main__":
+    app()

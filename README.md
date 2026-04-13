@@ -132,6 +132,7 @@ Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your S
 - **Auth** → JWT authentication
 - **AI** → PydanticAI / LangChain
 - **Comms** → Resend + Twilio
+- **Insights** → Adoption metrics (GitHub, PyPI, Plausible) *(experimental)*
 
 [Components Docs →](https://lbedner.github.io/aegis-stack/components/) | [Services Docs →](https://lbedner.github.io/aegis-stack/services/)
 

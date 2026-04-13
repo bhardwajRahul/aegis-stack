@@ -28,7 +28,7 @@ from .modal_sections import MetricCard
 
 
 class MiniMetricCard(ft.Container):
-    """Compact metric card for use in expanded row content."""
+    """Compact metric card for use in expanded row contents."""
 
     def __init__(self, label: str, value: str, color: str) -> None:
         super().__init__()
@@ -129,16 +129,6 @@ def _get_mock_recent_executions(job_id: str) -> list[dict]:
     ]
 
 
-def _format_duration(ms: int) -> str:
-    """Format milliseconds to human readable duration."""
-    if ms < 1000:
-        return f"{ms}ms"
-    elif ms < 60000:
-        return f"{ms / 1000:.1f}s"
-    else:
-        return f"{ms / 60000:.1f}m"
-
-
 def _build_job_expanded_content(task: dict) -> ft.Control:
     """Build expanded content for a scheduled job.
 
@@ -212,7 +202,7 @@ def _build_job_expanded_content(task: dict) -> ft.Control:
     #         MiniMetricCard("Total Runs", str(stats["total_runs"]), Theme.Colors.INFO),
     #         MiniMetricCard(
     #             "Avg Duration",
-    #             _format_duration(stats["avg_duration_ms"]),
+    #             format_duration_ms(stats["avg_duration_ms"]),
     #             ft.Colors.PURPLE_200,
     #         ),
     #         MiniMetricCard(
@@ -371,8 +361,16 @@ def _build_job_row(task: dict) -> ExpandableRow:
     schedule_display = format_schedule_human_readable(schedule)
 
     # Status icon and text
-    status_icon = "🟢" if status == "active" else "🟠"
-    status_text = "Active" if status == "active" else "Paused"
+    is_past_due = "Past due" in next_run_display
+    if status != "active":
+        status_icon = "🟠"
+        status_text = "Paused"
+    elif is_past_due:
+        status_icon = "🟡"
+        status_text = "Active"
+    else:
+        status_icon = "🟢"
+        status_text = "Active"
 
     cells = [
         TableNameText(f"{status_icon} {job_name}"),

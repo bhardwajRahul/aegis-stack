@@ -422,6 +422,24 @@ def add_service_command(
                 if isinstance(framework, str):
                     service_data[AnswerKeys.AI_FRAMEWORK] = framework
 
+            # For insights service, pass source flags
+            if base_service == AnswerKeys.SERVICE_INSIGHTS:
+                from ..core.insights_service_parser import (
+                    DEFAULT_SOURCES,
+                    is_insights_service_with_options,
+                    parse_insights_service_config,
+                )
+
+                if is_insights_service_with_options(service):
+                    insights_config = parse_insights_service_config(service)
+                    sources = insights_config.sources
+                else:
+                    sources = DEFAULT_SOURCES
+                service_data[AnswerKeys.INSIGHTS_GITHUB] = "github" in sources
+                service_data[AnswerKeys.INSIGHTS_PYPI] = "pypi" in sources
+                service_data[AnswerKeys.INSIGHTS_PLAUSIBLE] = "plausible" in sources
+                service_data[AnswerKeys.INSIGHTS_REDDIT] = "reddit" in sources
+
             # Add the service (services are added like components)
             # Use base_service for file lookup, not the full variant name
             result = updater.add_component(base_service, service_data)

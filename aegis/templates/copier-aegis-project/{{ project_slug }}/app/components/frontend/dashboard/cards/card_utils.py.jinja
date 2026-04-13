@@ -471,6 +471,9 @@ def create_modal_for_component(
         {%- if include_ingress %}
         IngressDetailDialog,
         {%- endif %}
+        {%- if include_insights %}
+        InsightsDetailDialog,
+        {%- endif %}
         {%- if include_observability %}
         ObservabilityDetailDialog,
         {%- endif %}
@@ -506,6 +509,9 @@ def create_modal_for_component(
         {%- if include_ingress %}
         "ingress": IngressDetailDialog,
         {%- endif %}
+        {%- if include_insights %}
+        "service_insights": InsightsDetailDialog,
+        {%- endif %}
         {%- if include_observability %}
         "observability": ObservabilityDetailDialog,
         {%- endif %}
@@ -538,6 +544,18 @@ def _open_modal(
 ) -> None:
     """Open a component detail modal, using cache for subsequent opens."""
     modal_cache: dict[str, ft.Container] = page.data.setdefault("_modal_cache", {})
+{% if include_insights %}
+
+    # Data-heavy modals: always recreate so they load fresh data
+    from app.services.insights.constants import INSIGHT_COMPONENT_NAME
+
+    no_cache = {f"service_{INSIGHT_COMPONENT_NAME}"}
+    if component_name in no_cache:
+        old = modal_cache.pop(component_name, None)
+        if old and old in page.overlay:
+            page.overlay.remove(old)
+{% endif %}
+
     popup = modal_cache.get(component_name)
     if popup is None:
         popup = create_modal_for_component(component_name, component_data, page)

@@ -114,6 +114,31 @@ class TestServicesRegistry:
         """Test that the SERVICES registry contains services."""
         assert len(SERVICES) > 0
         assert "auth" in SERVICES
+        assert "insights" in SERVICES
+
+    def test_insights_service_specification(self):
+        """Test the insights service specification is properly defined."""
+        spec = SERVICES["insights"]
+
+        assert spec.name == "insights"
+        assert spec.type == ServiceType.ANALYTICS
+        assert spec.description
+        assert "backend" in spec.required_components
+        assert "database" in spec.required_components
+        assert "scheduler" in spec.required_components
+        assert "worker" in spec.recommended_components
+        assert len(spec.pyproject_deps) > 0
+        assert len(spec.template_files) > 0
+
+    def test_insights_uses_component_constants(self):
+        """Test that insights spec uses ComponentNames, not magic strings."""
+        from aegis.constants import ComponentNames
+
+        spec = SERVICES["insights"]
+        assert ComponentNames.BACKEND in spec.required_components
+        assert ComponentNames.DATABASE in spec.required_components
+        assert ComponentNames.SCHEDULER in spec.required_components
+        assert ComponentNames.WORKER in spec.recommended_components
 
     def test_auth_service_specification(self):
         """Test the auth service specification is properly defined."""

@@ -246,6 +246,35 @@ include_comms:
   help: "Include communications service (email/SMS)?"
   default: false
 
+include_insights:
+  type: bool
+  help: "Include insights service (adoption metrics and analytics)?"
+  default: false
+
+insights_github:
+  type: bool
+  help: "Include GitHub Traffic + Stargazers data collection?"
+  default: true
+  when: "{{ include_insights }}"
+
+insights_pypi:
+  type: bool
+  help: "Include PyPI download stats collection?"
+  default: true
+  when: "{{ include_insights }}"
+
+insights_plausible:
+  type: bool
+  help: "Include Plausible docs analytics collection?"
+  default: false
+  when: "{{ include_insights }}"
+
+insights_reddit:
+  type: bool
+  help: "Include Reddit post tracking?"
+  default: false
+  when: "{{ include_insights }}"
+
 # Internal computed values (using Jinja2)
 _has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache or include_ingress or include_observability }}"
 _include_migrations: "{{ include_auth }}"
