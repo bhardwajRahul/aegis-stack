@@ -152,7 +152,7 @@ Available sources: `github`, `pypi`, `plausible`, `reddit`
 |-----------|----------|-----|
 | Database | Yes | Stores all metrics, events, and source configuration |
 | Scheduler | Yes | Automates collection at configured intervals |
-| Backend | Yes | API endpoints (coming soon) |
+| Backend | Yes | API endpoints for dashboard data |
 | Frontend | Recommended | Overseer dashboard visualization |
 
 ## Next Steps

@@ -122,6 +122,7 @@ class MetricCard(ft.Container):
         change_pct: float | None = None,
         invert: bool = False,
         prev_value: str | None = None,
+        tooltip: str | None = None,
     ) -> None:
         """
         Initialize metric card.
@@ -191,7 +192,7 @@ class MetricCard(ft.Container):
         column_items = [header_row, value_row]
         if prev_value is not None:
             column_items.append(
-                SecondaryText(f"prev: {prev_value}", size=Theme.Typography.BODY_SMALL)
+                SecondaryText(prev_value, size=Theme.Typography.BODY_SMALL)
             )
 
         self.content = ft.Column(
@@ -203,6 +204,8 @@ class MetricCard(ft.Container):
         self.border_radius = Theme.Components.CARD_RADIUS
         self.border = ft.border.all(0.5, ft.Colors.OUTLINE)
         self.expand = True
+        if tooltip:
+            self.tooltip = tooltip
 
     def set_value(self, value: str, color: str | None = None) -> None:
         """Update the displayed value (and optionally its color) in place."""

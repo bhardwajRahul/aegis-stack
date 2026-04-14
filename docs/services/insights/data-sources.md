@@ -68,7 +68,7 @@ Queries the public GitHub events dataset for repository-specific activity.
 
 | Metric | Period | Description |
 |--------|--------|-------------|
-| forks | Event | Individual fork events with actor name |
+| forks | Event | Individual fork events with actor name (from GitHub API for complete list, ClickHouse as fallback) |
 | releases | Event | Release events with tag, name, actor |
 | star_events | Daily | Daily star count from ClickHouse (separate from API stars) |
 | activity_summary | Daily | Breakdown by event type (push, issues, PRs, etc.) |

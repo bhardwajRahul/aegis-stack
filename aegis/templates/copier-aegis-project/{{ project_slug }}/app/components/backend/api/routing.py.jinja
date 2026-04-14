@@ -27,6 +27,9 @@ from app.components.backend.api.llm.router import router as llm_router
 {%- if include_comms %}
 from app.components.backend.api.comms.router import router as comms_router
 {%- endif %}
+{%- if include_insights %}
+from app.components.backend.api import insights
+{%- endif %}
 {%- if ai_rag %}
 from app.components.backend.api.rag.router import router as rag_router
 {%- endif %}
@@ -60,6 +63,9 @@ def include_routers(app: FastAPI) -> None:
     {%- endif %}
     {%- if include_comms %}
     app.include_router(comms_router, prefix="/api/v1")
+    {%- endif %}
+    {%- if include_insights %}
+    app.include_router(insights.router, prefix="/api/v1", tags=["insights"])
     {%- endif %}
     {%- if ai_rag %}
     app.include_router(rag_router, prefix="/api/v1")
