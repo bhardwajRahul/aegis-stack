@@ -1,180 +1,203 @@
 """
-Sync query layer for insight metrics.
+Query layer for insight metrics.
 
-Centralizes all DB queries used by the Overseer dashboard tabs.
-This will become the API endpoint layer when we migrate from direct DB access.
+Centralizes all DB queries used by the Overseer dashboard and API endpoints.
 """
 
 from datetime import datetime, timedelta
 from typing import Any
 
-from app.core.db import SessionLocal
-from sqlmodel import Session, select
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from .constants import Periods
 from .models import InsightEvent, InsightMetric, InsightMetricType, InsightSource
+from .schemas import BulkInsightsResponse
+
+# Metric keys grouped by query type
+DAILY_KEYS = [
+    "clones",
+    "unique_cloners",
+    "views",
+    "unique_visitors",
+    "star_events",
+    "activity_summary",
+    "downloads_daily",
+    "downloads_daily_human",
+    "downloads_by_installer",
+    "downloads_by_country",
+    "downloads_by_version",
+    "downloads_by_type",
+    "visitors",
+    "pageviews",
+    "avg_duration",
+    "bounce_rate",
+    "top_pages",
+    "top_countries",
+]
+EVENT_KEYS = ["new_star", "forks", "releases", "post_stats"]
+SNAPSHOT_KEYS = ["referrers", "popular_paths", "downloads_total"]
 
 
 class InsightQueryService:
-    """Sync query service for insight metrics. One session per service lifetime."""
+    """Async query service for insight metrics."""
 
-    def __init__(self, session: Session | None = None) -> None:
-        self.session = session or SessionLocal()
-        self._owns_session = session is None
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
         self._type_cache: dict[str, InsightMetricType | None] = {}
 
-    def close(self) -> None:
-        if self._owns_session:
-            self.session.close()
-
-    def __enter__(self) -> "InsightQueryService":
+    async def __aenter__(self) -> "InsightQueryService":
         return self
 
-    def __exit__(self, *args: Any) -> None:
-        self.close()
+    async def __aexit__(self, *args: Any) -> None:
+        pass  # Session lifecycle managed by caller (deps)
 
     # -- metric type lookup (cached) ------------------------------------------
 
-    def _get_type(self, key: str) -> InsightMetricType | None:
+    async def _get_type(self, key: str) -> InsightMetricType | None:
         if key not in self._type_cache:
-            self._type_cache[key] = self.session.exec(
+            result = await self.session.exec(
                 select(InsightMetricType).where(InsightMetricType.key == key)
-            ).first()
+            )
+            self._type_cache[key] = result.first()
         return self._type_cache[key]
 
     # -- core queries ---------------------------------------------------------
 
-    def get_daily(self, key: str, cutoff: datetime) -> list[InsightMetric]:
+    async def get_daily(self, key: str, cutoff: datetime) -> list[InsightMetric]:
         """Fetch daily metrics for a key from cutoff date onward."""
-        mt = self._get_type(key)
+        mt = await self._get_type(key)
         if not mt:
             return []
-        return list(
-            self.session.exec(
-                select(InsightMetric)
-                .where(
-                    InsightMetric.metric_type_id == mt.id,
-                    InsightMetric.period == Periods.DAILY,
-                    InsightMetric.date >= cutoff,
-                )
-                .order_by(InsightMetric.date.asc())
-            ).all()
+        result = await self.session.exec(
+            select(InsightMetric)
+            .where(
+                InsightMetric.metric_type_id == mt.id,
+                InsightMetric.period == Periods.DAILY,
+                InsightMetric.date >= cutoff,
+            )
+            .order_by(InsightMetric.date.asc())
         )
+        return list(result.all())
 
-    def get_daily_range(
-        self, key: str, start: datetime, end: datetime
+    async def get_daily_range(
+        self,
+        key: str,
+        start: datetime,
+        end: datetime,
     ) -> list[InsightMetric]:
         """Fetch daily metrics between start (inclusive) and end (exclusive)."""
-        mt = self._get_type(key)
+        mt = await self._get_type(key)
         if not mt:
             return []
-        return list(
-            self.session.exec(
-                select(InsightMetric).where(
-                    InsightMetric.metric_type_id == mt.id,
-                    InsightMetric.period == Periods.DAILY,
-                    InsightMetric.date >= start,
-                    InsightMetric.date < end,
-                )
-            ).all()
+        result = await self.session.exec(
+            select(InsightMetric).where(
+                InsightMetric.metric_type_id == mt.id,
+                InsightMetric.period == Periods.DAILY,
+                InsightMetric.date >= start,
+                InsightMetric.date < end,
+            )
         )
+        return list(result.all())
 
-    def get_latest(self, key: str) -> InsightMetric | None:
+    async def get_latest(self, key: str) -> InsightMetric | None:
         """Fetch the most recent metric row for a key."""
-        mt = self._get_type(key)
+        mt = await self._get_type(key)
         if not mt:
             return None
-        return self.session.exec(
+        result = await self.session.exec(
             select(InsightMetric)
             .where(InsightMetric.metric_type_id == mt.id)
             .order_by(InsightMetric.date.desc())
             .limit(1)
-        ).first()
+        )
+        return result.first()
 
-    def get_events(self, key: str, cutoff: datetime) -> list[InsightMetric]:
+    async def get_events(self, key: str, cutoff: datetime) -> list[InsightMetric]:
         """Fetch event-period metrics for a key from cutoff onward."""
-        mt = self._get_type(key)
+        mt = await self._get_type(key)
         if not mt:
             return []
-        return list(
-            self.session.exec(
-                select(InsightMetric)
-                .where(
-                    InsightMetric.metric_type_id == mt.id,
-                    InsightMetric.period == Periods.EVENT,
-                    InsightMetric.date >= cutoff,
-                )
-                .order_by(InsightMetric.date.desc())
-            ).all()
+        result = await self.session.exec(
+            select(InsightMetric)
+            .where(
+                InsightMetric.metric_type_id == mt.id,
+                InsightMetric.period == Periods.EVENT,
+                InsightMetric.date >= cutoff,
+            )
+            .order_by(InsightMetric.date.desc())
         )
+        return list(result.all())
 
-    def get_all_events(self, key: str) -> list[InsightMetric]:
+    async def get_all_events(self, key: str) -> list[InsightMetric]:
         """Fetch all event-period metrics for a key (no date filter)."""
-        mt = self._get_type(key)
+        mt = await self._get_type(key)
         if not mt:
             return []
-        return list(
-            self.session.exec(
-                select(InsightMetric)
-                .where(
-                    InsightMetric.metric_type_id == mt.id,
-                    InsightMetric.period == Periods.EVENT,
-                )
-                .order_by(InsightMetric.date.asc())
-            ).all()
+        result = await self.session.exec(
+            select(InsightMetric)
+            .where(
+                InsightMetric.metric_type_id == mt.id,
+                InsightMetric.period == Periods.EVENT,
+            )
+            .order_by(InsightMetric.date.asc())
         )
+        return list(result.all())
 
-    def get_events_in_range(
-        self, key: str, start: datetime, end: datetime
+    async def get_events_in_range(
+        self,
+        key: str,
+        start: datetime,
+        end: datetime,
     ) -> list[InsightMetric]:
         """Fetch event-period metrics between start (inclusive) and end (exclusive)."""
-        mt = self._get_type(key)
+        mt = await self._get_type(key)
         if not mt:
             return []
-        return list(
-            self.session.exec(
-                select(InsightMetric).where(
-                    InsightMetric.metric_type_id == mt.id,
-                    InsightMetric.period == Periods.EVENT,
-                    InsightMetric.date >= start,
-                    InsightMetric.date < end,
-                )
-            ).all()
+        result = await self.session.exec(
+            select(InsightMetric).where(
+                InsightMetric.metric_type_id == mt.id,
+                InsightMetric.period == Periods.EVENT,
+                InsightMetric.date >= start,
+                InsightMetric.date < end,
+            )
         )
+        return list(result.all())
 
-    def get_all_metrics(self, key: str) -> list[InsightMetric]:
+    async def get_all_metrics(self, key: str) -> list[InsightMetric]:
         """Fetch all metrics for a key (any period, ordered by date desc)."""
-        mt = self._get_type(key)
+        mt = await self._get_type(key)
         if not mt:
             return []
-        return list(
-            self.session.exec(
-                select(InsightMetric)
-                .where(InsightMetric.metric_type_id == mt.id)
-                .order_by(InsightMetric.date.desc())
-            ).all()
+        result = await self.session.exec(
+            select(InsightMetric)
+            .where(InsightMetric.metric_type_id == mt.id)
+            .order_by(InsightMetric.date.desc())
         )
+        return list(result.all())
 
-    def sum_range(self, key: str, start: datetime, end: datetime) -> int:
+    async def sum_range(self, key: str, start: datetime, end: datetime) -> int:
         """Sum daily metric values between start and end."""
-        rows = self.get_daily_range(key, start, end)
+        rows = await self.get_daily_range(key, start, end)
         return sum(int(r.value) for r in rows)
 
-    def sum_daily(self, key: str, cutoff: datetime) -> int:
+    async def sum_daily(self, key: str, cutoff: datetime) -> int:
         """Sum all daily metric values from cutoff onward."""
-        rows = self.get_daily(key, cutoff)
+        rows = await self.get_daily(key, cutoff)
         return sum(int(r.value) for r in rows)
 
     # -- insight events -------------------------------------------------------
 
-    def get_insight_events(
+    async def get_insight_events(
         self,
         cutoff: datetime | None = None,
         type_filter: set[str] | None = None,
     ) -> list[InsightEvent]:
         """Fetch InsightEvent rows with optional date and type filters."""
-        q = select(InsightEvent).order_by(InsightEvent.date.asc())
-        events = list(self.session.exec(q).all())
+        result = await self.session.exec(
+            select(InsightEvent).order_by(InsightEvent.date.asc())
+        )
+        events = list(result.all())
 
         if cutoff:
             cutoff_str = str(cutoff.date())
@@ -185,39 +208,96 @@ class InsightQueryService:
 
         return events
 
-    def get_recent_insight_events(self, limit: int = 15) -> list[InsightEvent]:
+    async def get_recent_insight_events(self, limit: int = 15) -> list[InsightEvent]:
         """Fetch most recent InsightEvent rows."""
-        return list(
-            self.session.exec(
-                select(InsightEvent).order_by(InsightEvent.date.desc()).limit(limit)
-            ).all()
+        result = await self.session.exec(
+            select(InsightEvent).order_by(InsightEvent.date.desc()).limit(limit)
         )
+        return list(result.all())
 
-    def get_milestone_events(self) -> list[InsightEvent]:
+    async def get_milestone_events(self) -> list[InsightEvent]:
         """Fetch all milestone and feature events."""
-        return list(
-            self.session.exec(
-                select(InsightEvent).where(
-                    InsightEvent.event_type.in_(
-                        ["milestone_github", "milestone_pypi", "feature"]
-                    )
+        result = await self.session.exec(
+            select(InsightEvent).where(
+                InsightEvent.event_type.in_(
+                    ["milestone_github", "milestone_pypi", "feature"]
                 )
-            ).all()
+            )
         )
+        return list(result.all())
 
-    def get_release_metrics(self) -> list[InsightMetric]:
+    async def get_release_metrics(self) -> list[InsightMetric]:
         """Fetch release metric rows."""
-        mt = self._get_type("releases")
+        mt = await self._get_type("releases")
         if not mt:
             return []
-        q = select(InsightMetric).where(InsightMetric.metric_type_id == mt.id)
-        return list(self.session.exec(q).all())
+        result = await self.session.exec(
+            select(InsightMetric).where(InsightMetric.metric_type_id == mt.id)
+        )
+        return list(result.all())
 
     # -- sources --------------------------------------------------------------
 
-    def get_sources(self) -> list[InsightSource]:
+    async def get_sources(self) -> list[InsightSource]:
         """Fetch all insight sources."""
-        return list(self.session.exec(select(InsightSource)).all())
+        result = await self.session.exec(select(InsightSource))
+        return list(result.all())
+
+    # -- bulk loader ----------------------------------------------------------
+
+    async def load_all(self) -> BulkInsightsResponse:
+        """Bulk-load all insight data in minimal queries."""
+        daily: dict[str, list[InsightMetric]] = {}
+        for key in DAILY_KEYS:
+            mt = await self._get_type(key)
+            if mt:
+                result = await self.session.exec(
+                    select(InsightMetric)
+                    .where(
+                        InsightMetric.metric_type_id == mt.id,
+                        InsightMetric.period == Periods.DAILY,
+                    )
+                    .order_by(InsightMetric.date.asc())
+                )
+                daily[key] = list(result.all())
+            else:
+                daily[key] = []
+
+        events: dict[str, list[InsightMetric]] = {}
+        for key in EVENT_KEYS:
+            mt = await self._get_type(key)
+            if mt:
+                result = await self.session.exec(
+                    select(InsightMetric)
+                    .where(
+                        InsightMetric.metric_type_id == mt.id,
+                        InsightMetric.period == Periods.EVENT,
+                    )
+                    .order_by(InsightMetric.date.asc())
+                )
+                events[key] = list(result.all())
+            else:
+                events[key] = []
+
+        result = await self.session.exec(
+            select(InsightEvent).order_by(InsightEvent.date.asc())
+        )
+        insight_events = list(result.all())
+
+        result = await self.session.exec(select(InsightSource))
+        sources = list(result.all())
+
+        latest: dict[str, InsightMetric | None] = {}
+        for key in SNAPSHOT_KEYS:
+            latest[key] = await self.get_latest(key)
+
+        return BulkInsightsResponse(
+            daily=daily,
+            events=events,
+            insight_events=insight_events,
+            sources=sources,
+            latest=latest,
+        )
 
     # -- convenience: date helpers --------------------------------------------
 

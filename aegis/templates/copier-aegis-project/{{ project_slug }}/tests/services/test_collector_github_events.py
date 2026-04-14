@@ -1,5 +1,5 @@
 """
-Tests for GitHubEventsCollector -- ClickHouse-based event collection.
+Tests for GitHubEventsCollector — ClickHouse-based event collection.
 """
 
 from datetime import datetime
@@ -125,6 +125,7 @@ class TestGitHubEventsCollectorSuccess:
             with patch(
                 "app.services.insights.collectors.github_events.settings"
             ) as mock_settings:
+                mock_settings.INSIGHT_GITHUB_TOKEN = ""
                 mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
                 mock_settings.INSIGHT_GITHUB_REPO = "aegis-stack"
 
@@ -174,6 +175,7 @@ class TestGitHubEventsCollectorSuccess:
             with patch(
                 "app.services.insights.collectors.github_events.settings"
             ) as mock_settings:
+                mock_settings.INSIGHT_GITHUB_TOKEN = ""
                 mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
                 mock_settings.INSIGHT_GITHUB_REPO = "aegis-stack"
 
@@ -233,6 +235,7 @@ class TestGitHubEventsCollectorSuccess:
             with patch(
                 "app.services.insights.collectors.github_events.settings"
             ) as mock_settings:
+                mock_settings.INSIGHT_GITHUB_TOKEN = ""
                 mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
                 mock_settings.INSIGHT_GITHUB_REPO = "aegis-stack"
 

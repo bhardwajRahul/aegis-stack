@@ -13,6 +13,8 @@ Usage:
     profile = StarProfileMetadata.model_validate(metric.metadata_)
 """
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
@@ -231,3 +233,54 @@ class ActivitySummaryMetadata(BaseModel):
     releases: int = 0
     creates: int = 0
     deletes: int = 0
+
+
+# ---------------------------------------------------------------------------
+# API response models
+# ---------------------------------------------------------------------------
+
+
+class BulkInsightsResponse(BaseModel):
+    """Full bulk response for /api/v1/insights/all.
+
+    When constructed from JSON (via model_validate), date strings are
+    coerced to datetime objects so downstream code can compare dates.
+    """
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    daily: dict[str, list["InsightMetric"]]
+    events: dict[str, list["InsightMetric"]]
+    insight_events: list["InsightEvent"]
+    sources: list["InsightSource"]
+    latest: dict[str, "InsightMetric | None"]
+
+    def model_post_init(self, __context: Any) -> None:
+        """Coerce date strings to datetime after construction from JSON."""
+        from datetime import datetime as dt
+
+        def _fix_date(obj: Any) -> None:
+            if hasattr(obj, "date") and isinstance(obj.date, str):
+                obj.date = dt.fromisoformat(obj.date)
+
+        for rows in self.daily.values():
+            for m in rows:
+                _fix_date(m)
+        for rows in self.events.values():
+            for m in rows:
+                _fix_date(m)
+        for ev in self.insight_events:
+            _fix_date(ev)
+        for _key, m in self.latest.items():
+            if m:
+                _fix_date(m)
+
+
+# Resolve forward references after models are defined
+from app.services.insights.models import (  # noqa: E402
+    InsightEvent,
+    InsightMetric,
+    InsightSource,
+)
+
+BulkInsightsResponse.model_rebuild()

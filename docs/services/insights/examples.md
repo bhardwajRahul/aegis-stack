@@ -91,6 +91,7 @@ Records are detected automatically after each collection. When a new all-time hi
 
 - GitHub 1-Day Clones, Unique, Views, Visitors
 - GitHub 14-Day Clones, Unique
+- Stars Best Day, Stars Best Month
 - PyPI Best Single Day
 - Plausible 1-Day Visitors, Pageviews
 

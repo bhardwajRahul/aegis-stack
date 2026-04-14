@@ -17,6 +17,7 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.insights.schemas import BulkInsightsResponse
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
 
@@ -109,7 +110,7 @@ def _pct(current: float, previous: float) -> float | None:
     """Compute period-over-period percentage change."""
     if previous > 0:
         return (current - previous) / previous * 100
-    return 100.0 if current > 0 else None
+    return None
 
 
 def _make_line_chart(
@@ -191,9 +192,10 @@ class InsightsTab(ft.Container):
 
     _default_days: int = 7  # Override in subclass
 
-    def __init__(self) -> None:
+    def __init__(self, bulk: BulkInsightsResponse | None = None) -> None:
         super().__init__()
 
+        self._bulk = bulk
         self._days = self._default_days
         self._data = self._load_data(self._days)
         self._show_events = False
@@ -286,8 +288,7 @@ class InsightsTab(ft.Container):
         """Override in subclass to build tab-specific content."""
         raise NotImplementedError
 
-    @staticmethod
-    def _load_data(days: int = 14) -> dict[str, Any]:
+    def _load_data(self, days: int = 14) -> dict[str, Any]:
         """Override in subclass to load tab-specific data."""
         raise NotImplementedError
 
@@ -365,142 +366,128 @@ class InsightsTab(ft.Container):
 # ---------------------------------------------------------------------------
 
 
-def _load_db() -> dict[str, Any]:
-    """Load all insight data from the database in one session.
-
-    Returns a dict with keys consumed by every tab:
-        traffic_daily   - list[dict] with keys date, clones, unique_cloners, views, unique_visitors
-        referrers       - list[dict] with keys domain, views, uniques
-        popular_paths   - list[dict] with keys path, views, uniques
-        stars_total     - int
-        stars_recent    - list[dict] latest 10 new_star events (username, location, company, date)
-        star_countries  - dict[str, int] country -> count
-        sources         - list[dict] enabled source statuses
-        pypi_total      - int
-    """
+def _build_db_from_bulk(bulk: BulkInsightsResponse) -> dict[str, Any]:
+    """Transform bulk-loaded data into the db dict consumed by OverviewTab and SettingsTab."""
     from app.services.insights.query_service import InsightQueryService
 
-    with InsightQueryService() as qs:
-        cutoff_14d, _ = qs.compute_cutoffs(14)
+    cutoff_14d, _ = InsightQueryService.compute_cutoffs(14)
 
-        # -- github_traffic ---------------------------------------------------
+    # -- github_traffic (filter to 14d from bulk) ----------------------------
 
-        clones_rows = qs.get_daily("clones", cutoff_14d)
-        unique_rows = qs.get_daily("unique_cloners", cutoff_14d)
-        views_rows = qs.get_daily("views", cutoff_14d)
-        visitors_rows = qs.get_daily("unique_visitors", cutoff_14d)
+    clones_rows = [r for r in bulk.daily.get("clones", []) if r.date >= cutoff_14d]
+    unique_rows = [
+        r for r in bulk.daily.get("unique_cloners", []) if r.date >= cutoff_14d
+    ]
+    views_rows = [r for r in bulk.daily.get("views", []) if r.date >= cutoff_14d]
+    visitors_rows = [
+        r for r in bulk.daily.get("unique_visitors", []) if r.date >= cutoff_14d
+    ]
 
-        unique_map = {str(r.date)[:10]: int(r.value) for r in unique_rows}
-        views_map = {str(r.date)[:10]: int(r.value) for r in views_rows}
-        visitors_map = {str(r.date)[:10]: int(r.value) for r in visitors_rows}
+    unique_map = {str(r.date)[:10]: int(r.value) for r in unique_rows}
+    views_map = {str(r.date)[:10]: int(r.value) for r in views_rows}
+    visitors_map = {str(r.date)[:10]: int(r.value) for r in visitors_rows}
 
-        traffic_daily: list[dict[str, Any]] = []
-        for r in clones_rows:
-            day = str(r.date)[:10]
-            traffic_daily.append(
+    traffic_daily: list[dict[str, Any]] = []
+    for r in clones_rows:
+        day = str(r.date)[:10]
+        traffic_daily.append(
+            {
+                "date": day,
+                "clones": int(r.value),
+                "unique_cloners": unique_map.get(day, 0),
+                "views": views_map.get(day, 0),
+                "unique_visitors": visitors_map.get(day, 0),
+            }
+        )
+
+    # -- referrers / paths (from latest snapshots) ---------------------------
+
+    referrers_row = bulk.latest.get("referrers")
+    referrers: list[dict[str, Any]] = []
+    if referrers_row and referrers_row.metadata_:
+        meta = referrers_row.metadata_
+        if isinstance(meta, dict) and not meta.get("referrers"):
+            for domain, counts in meta.items():
+                if isinstance(counts, dict):
+                    referrers.append(
+                        {
+                            "domain": domain,
+                            "views": counts.get("views", 0),
+                            "uniques": counts.get("uniques", 0),
+                        }
+                    )
+        else:
+            for ref in meta.get("referrers", []):
+                referrers.append(
+                    {
+                        "domain": ref.get("referrer", ref.get("domain", "unknown")),
+                        "views": ref.get("count", ref.get("views", 0)),
+                        "uniques": ref.get("uniques", 0),
+                    }
+                )
+        referrers.sort(key=lambda x: -x["views"])
+
+    paths_row = bulk.latest.get("popular_paths")
+    popular_paths: list[dict[str, Any]] = []
+    if paths_row and paths_row.metadata_:
+        for p in paths_row.metadata_.get("popular_paths", []):
+            popular_paths.append(
                 {
-                    "date": day,
-                    "clones": int(r.value),
-                    "unique_cloners": unique_map.get(day, 0),
-                    "views": views_map.get(day, 0),
-                    "unique_visitors": visitors_map.get(day, 0),
+                    "path": p.get("path", "unknown"),
+                    "views": p.get("count", p.get("views", 0)),
+                    "uniques": p.get("uniques", 0),
                 }
             )
 
-        # Referrers from latest referrers metric
-        referrers_row = qs.get_latest("referrers")
-        referrers: list[dict[str, Any]] = []
-        if referrers_row and referrers_row.metadata_:
-            meta = referrers_row.metadata_
-            if isinstance(meta, dict) and not meta.get("referrers"):
-                for domain, counts in meta.items():
-                    if isinstance(counts, dict):
-                        referrers.append(
-                            {
-                                "domain": domain,
-                                "views": counts.get("views", 0),
-                                "uniques": counts.get("uniques", 0),
-                            }
-                        )
-            else:
-                for ref in meta.get("referrers", []):
-                    referrers.append(
-                        {
-                            "domain": ref.get("referrer", ref.get("domain", "unknown")),
-                            "views": ref.get("count", ref.get("views", 0)),
-                            "uniques": ref.get("uniques", 0),
-                        }
-                    )
-            referrers.sort(key=lambda x: -x["views"])
+    # -- github_stars (from bulk events) ------------------------------------
 
-        # Popular paths from latest popular_paths metric
-        paths_row = qs.get_latest("popular_paths")
-        popular_paths: list[dict[str, Any]] = []
-        if paths_row and paths_row.metadata_:
-            for p in paths_row.metadata_.get("popular_paths", []):
-                popular_paths.append(
-                    {
-                        "path": p.get("path", "unknown"),
-                        "views": p.get("count", p.get("views", 0)),
-                        "uniques": p.get("uniques", 0),
-                    }
-                )
+    star_events = bulk.events.get("new_star", [])
+    stars_total = len(star_events)
 
-        # -- github_stars -----------------------------------------------------
+    stars_recent: list[dict[str, Any]] = []
+    star_countries: dict[str, int] = {}
+    for ev in star_events:
+        meta = ev.metadata_ or {}
+        country = meta.get("location", "Unknown")
+        if country and country != "Unknown":
+            parts = [p.strip() for p in country.split(",")]
+            country_key = parts[-1] if parts else "Unknown"
+        else:
+            country_key = "Unknown"
+        star_countries[country_key] = star_countries.get(country_key, 0) + 1
 
-        star_events = qs.get_all_events("new_star")
-        stars_total = len(star_events)
+        if len(stars_recent) < 10:
+            stars_recent.append(
+                {
+                    "username": meta.get("username", "unknown"),
+                    "location": meta.get("location", ""),
+                    "company": meta.get("company", ""),
+                    "date": str(ev.date)[:10],
+                }
+            )
 
-        stars_recent: list[dict[str, Any]] = []
-        star_countries: dict[str, int] = {}
-        for ev in star_events:
-            meta = ev.metadata_ or {}
-            country = meta.get("location", "Unknown")
-            if country and country != "Unknown":
-                parts = [p.strip() for p in country.split(",")]
-                country_key = parts[-1] if parts else "Unknown"
-            else:
-                country_key = "Unknown"
-            star_countries[country_key] = star_countries.get(country_key, 0) + 1
+    star_countries = dict(sorted(star_countries.items(), key=lambda x: -x[1]))
 
-            if len(stars_recent) < 10:
-                stars_recent.append(
-                    {
-                        "username": meta.get("username", "unknown"),
-                        "location": meta.get("location", ""),
-                        "company": meta.get("company", ""),
-                        "date": str(ev.date)[:10],
-                    }
-                )
+    # -- sources / pypi total ------------------------------------------------
 
-        star_countries = dict(sorted(star_countries.items(), key=lambda x: -x[1]))
+    sources = [
+        {"key": s.key, "display_name": s.display_name, "enabled": s.enabled}
+        for s in bulk.sources
+    ]
 
-        # -- sources ----------------------------------------------------------
+    pypi_total_row = bulk.latest.get("downloads_total")
+    pypi_total = int(pypi_total_row.value) if pypi_total_row else 0
 
-        sources = [
-            {
-                "key": s.key,
-                "display_name": s.display_name,
-                "enabled": s.enabled,
-            }
-            for s in qs.get_sources()
-        ]
-
-        # -- pypi_total -------------------------------------------------------
-
-        pypi_total_row = qs.get_latest("downloads_total")
-        pypi_total = int(pypi_total_row.value) if pypi_total_row else 0
-
-        return {
-            "traffic_daily": traffic_daily,
-            "referrers": referrers,
-            "popular_paths": popular_paths,
-            "stars_total": stars_total,
-            "stars_recent": stars_recent,
-            "star_countries": star_countries,
-            "sources": sources,
-            "pypi_total": pypi_total,
-        }
+    return {
+        "traffic_daily": traffic_daily,
+        "referrers": referrers,
+        "popular_paths": popular_paths,
+        "stars_total": stars_total,
+        "stars_recent": stars_recent,
+        "star_countries": star_countries,
+        "sources": sources,
+        "pypi_total": pypi_total,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -511,7 +498,12 @@ def _load_db() -> dict[str, Any]:
 class OverviewTab(ft.Container):
     """Overview: key metrics, milestones, recent events, source status."""
 
-    def __init__(self, metadata: dict[str, Any], db: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        metadata: dict[str, Any],
+        db: dict[str, Any],
+        bulk: BulkInsightsResponse | None = None,
+    ) -> None:
         super().__init__()
 
         daily = db["traffic_daily"]
@@ -521,99 +513,127 @@ class OverviewTab(ft.Container):
         total_unique = sum(d["unique_cloners"] for d in daily)
         total_views = sum(d["views"] for d in daily)
 
-        # Compute previous 14d for change arrows + load milestones/events
+        # Compute previous 14d for change arrows using bulk data (no DB)
         from datetime import datetime, timedelta
-
-        from app.services.insights.query_service import InsightQueryService
 
         stars_total = db["stars_total"]
 
-        with InsightQueryService() as qs:
-            now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            d14 = now - timedelta(days=14)
-            d28 = now - timedelta(days=28)
+        now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        d14 = now - timedelta(days=14)
+        d28 = now - timedelta(days=28)
 
-            prev_clones = qs.sum_range("clones", d28, d14)
-            prev_unique = qs.sum_range("unique_cloners", d28, d14)
-            prev_views = qs.sum_range("views", d28, d14)
+        def _sum_bulk_range(key: str, start: datetime, end: datetime) -> int:
+            rows = bulk.daily.get(key, []) if bulk else []
+            return sum(int(r.value) for r in rows if start <= r.date < end)
 
-            pypi_14d = qs.sum_range("downloads_daily", d14, now + timedelta(days=1))
-            pypi_prev14d = qs.sum_range("downloads_daily", d28, d14)
+        prev_clones = _sum_bulk_range("clones", d28, d14)
+        prev_unique = _sum_bulk_range("unique_cloners", d28, d14)
+        prev_views = _sum_bulk_range("views", d28, d14)
 
-            recent_stars = len(qs.get_events("new_star", d14))
-            prev_star_count = len(qs.get_events_in_range("new_star", d28, d14))
+        pypi_14d = _sum_bulk_range("downloads_daily", d14, now + timedelta(days=1))
+        pypi_prev14d = _sum_bulk_range("downloads_daily", d28, d14)
 
-            # Milestones - highest value per category (ATH per record type)
-            best_per_category: dict[str, dict[str, Any]] = {}
-            for ev in qs.get_milestone_events():
-                meta = ev.metadata_ if isinstance(ev.metadata_, dict) else {}
-                category = meta.get("category", ev.description)
+        # Stars in range from bulk events
+        star_events = bulk.events.get("new_star", []) if bulk else []
+        recent_stars = len([r for r in star_events if r.date >= d14])
+        prev_star_count = len([r for r in star_events if d28 <= r.date < d14])
 
-                hero_str = (
-                    _extract_max_number(ev.description)
-                    if ev.event_type != "feature"
-                    else ""
-                )
-                value = int(hero_str.replace(",", "")) if hero_str else 0
+        # Milestones - highest value per category (ATH per record type)
+        insight_events = bulk.insight_events if bulk else []
+        best_per_category: dict[str, dict[str, Any]] = {}
+        for ev in insight_events:
+            if ev.event_type not in ("milestone_github", "milestone_pypi", "feature"):
+                continue
+            meta = ev.metadata_ if isinstance(ev.metadata_, dict) else {}
+            category = meta.get("category", ev.description)
 
-                existing = best_per_category.get(category)
-                if existing is None or value > existing.get("_value", 0):
-                    best_per_category[category] = {
-                        "date": str(ev.date)[:10],
-                        "description": ev.description,
-                        "type": ev.event_type,
-                        "metadata": meta,
-                        "_value": value,
-                    }
+            hero_str = (
+                _extract_max_number(ev.description)
+                if ev.event_type != "feature"
+                else ""
+            )
+            value = int(hero_str.replace(",", "")) if hero_str else 0
 
-            milestones = sorted(
-                best_per_category.values(), key=lambda m: m["date"], reverse=True
+            existing = best_per_category.get(category)
+            if existing is None or value > existing.get("_value", 0):
+                best_per_category[category] = {
+                    "date": str(ev.date)[:10],
+                    "description": ev.description,
+                    "type": ev.event_type,
+                    "metadata": meta,
+                    "_value": value,
+                }
+
+        milestones = sorted(
+            best_per_category.values(), key=lambda m: m["date"], reverse=True
+        )
+
+        # Recent events of all types from bulk
+        recent_events: list[dict[str, Any]] = []
+        for ev in insight_events:
+            meta = ev.metadata_ if isinstance(ev.metadata_, dict) else {}
+            recent_events.append(
+                {
+                    "date": str(ev.date)[:10],
+                    "description": ev.description,
+                    "type": ev.event_type,
+                    "metadata": meta,
+                }
             )
 
-            # Recent events of all types
-            recent_events: list[dict[str, Any]] = []
-            for ev in qs.get_insight_events():
-                meta = ev.metadata_ if isinstance(ev.metadata_, dict) else {}
+        # Also add releases from bulk event metrics
+        for r in bulk.events.get("releases", []) if bulk else []:
+            meta = r.metadata_ or {}
+            tag = meta.get("tag", "")
+            if tag:
                 recent_events.append(
                     {
-                        "date": str(ev.date)[:10],
-                        "description": ev.description,
-                        "type": ev.event_type,
+                        "date": str(r.date)[:10],
+                        "description": tag,
+                        "type": "release",
                         "metadata": meta,
                     }
                 )
 
-            # Also add releases from metric rows
-            for r in qs.get_release_metrics():
-                meta = r.metadata_ or {}
-                tag = meta.get("tag", "")
-                if tag:
-                    recent_events.append(
-                        {
-                            "date": str(r.date)[:10],
-                            "description": tag,
-                            "type": "release",
-                            "metadata": meta,
-                        }
-                    )
+        # Enrich reddit posts with upvote/comment data from bulk
+        reddit_stats: dict[str, dict] = {}
+        for r in bulk.events.get("post_stats", []) if bulk else []:
+            meta = r.metadata_ or {}
+            pid = meta.get("post_id", "")
+            if pid:
+                reddit_stats[pid] = {
+                    "upvotes": int(r.value),
+                    "comments": meta.get("comments", 0),
+                    "subreddit": meta.get("subreddit", ""),
+                }
 
-            # Enrich reddit posts with upvote/comment data from post_stats
-            reddit_stats: dict[str, dict] = {}
-            for r in qs.get_all_metrics("post_stats"):
-                meta = r.metadata_ or {}
-                pid = meta.get("post_id", "")
-                if pid:
-                    reddit_stats[pid] = {
-                        "upvotes": int(r.value),
-                        "comments": meta.get("comments", 0),
-                        "subreddit": meta.get("subreddit", ""),
-                    }
+        # Sort by date desc, take 15
+        recent_events.sort(key=lambda x: x["date"], reverse=True)
+        recent_events = recent_events[:15]
 
-            # Sort by date desc, take 15
-            recent_events.sort(key=lambda x: x["date"], reverse=True)
-            recent_events = recent_events[:15]
+        # Latest day's deltas from bulk data (for "+X today/yesterday" subtitle)
+        def _latest_daily(key: str) -> tuple[int, str]:
+            """Get the most recent day's value and label ('today', 'yesterday', 'Xd ago')."""
+            rows = bulk.daily.get(key, []) if bulk else []
+            if not rows:
+                return 0, "today"
+            last = rows[-1]
+            val = int(last.value)
+            days_ago = (datetime.now() - last.date).days
+            if days_ago == 0:
+                return val, "today"
+            if days_ago == 1:
+                return val, "yesterday"
+            return val, f"{days_ago}d ago"
 
-        # Top-level metrics with change arrows + previous values
+        latest_clones, clones_label = _latest_daily("clones")
+        latest_unique, unique_label = _latest_daily("unique_cloners")
+        latest_views, views_label = _latest_daily("views")
+        latest_downloads, dl_label = _latest_daily("downloads_daily")
+        today_str = now.strftime("%Y-%m-%d")
+        today_stars = len([r for r in star_events if str(r.date)[:10] == today_str])
+
+        # Top-level metrics with change arrows + "+X today" subtitle
         metrics_row = ft.Row(
             [
                 MetricCard(
@@ -621,35 +641,35 @@ class OverviewTab(ft.Container):
                     str(stars_total),
                     "#FFD700",
                     change_pct=_pct(recent_stars, prev_star_count),
-                    prev_value=f"+{recent_stars} last 14d",
+                    prev_value=f"+{today_stars} today",
                 ),
                 MetricCard(
                     "PyPI Downloads",
                     f"{db['pypi_total']:,}",
                     "#FF69B4",
                     change_pct=_pct(pypi_14d, pypi_prev14d),
-                    prev_value=f"14d: {pypi_14d:,} (prev: {pypi_prev14d:,})",
+                    prev_value=f"+{latest_downloads:,} {dl_label}",
                 ),
                 MetricCard(
                     "14d Clones",
                     f"{total_clones:,}",
                     Theme.Colors.PRIMARY,
                     change_pct=_pct(total_clones, prev_clones),
-                    prev_value=f"{prev_clones:,}",
+                    prev_value=f"+{latest_clones:,} {clones_label}",
                 ),
                 MetricCard(
                     "14d Unique",
                     f"{total_unique:,}",
                     Theme.Colors.INFO,
                     change_pct=_pct(total_unique, prev_unique),
-                    prev_value=f"{prev_unique:,}",
+                    prev_value=f"+{latest_unique:,} {unique_label}",
                 ),
                 MetricCard(
                     "14d Views",
                     f"{total_views:,}",
                     Theme.Colors.SUCCESS,
                     change_pct=_pct(total_views, prev_views),
-                    prev_value=f"{prev_views:,}" if prev_views else None,
+                    prev_value=f"+{latest_views:,} {views_label}",
                 ),
             ],
             spacing=Theme.Spacing.MD,
@@ -700,7 +720,13 @@ class OverviewTab(ft.Container):
                     if len(usernames) > 10:
                         details += f" +{len(usernames) - 10} more"
             release_url = None
-            if ev["type"] == "release":
+            fork_url = None
+            if ev["type"] == "fork":
+                actor = meta.get("actor", "")
+                if actor:
+                    fork_url = f"https://github.com/{actor}"
+                    details = actor
+            elif ev["type"] == "release":
                 tag = meta.get("tag", ev["description"])
                 release_url = (
                     f"https://github.com/lbedner/aegis-stack/releases/tag/{tag}"
@@ -712,9 +738,12 @@ class OverviewTab(ft.Container):
                     details = cat.replace("_", " ").title()
 
             # For stars, show just the number in the title, name in details
+            # For forks, show just "Fork" in the title, name in details
             message = ev["description"][:80]
             if ev["type"] == "star" and " \u2014 " in message:
                 message = message.split(" \u2014 ")[0]  # "⭐ #99 — ncthuc" → "⭐ #99"
+            elif ev["type"] == "fork" and not message.startswith("Fork #"):
+                message = "Fork"
 
             event_obj = ActivityEvent(
                 component="insights",
@@ -748,6 +777,20 @@ class OverviewTab(ft.Container):
                         ),
                     ],
                     spacing=4,
+                )
+            elif fork_url:
+                row._details_container.content = ft.Container(
+                    content=ft.Text(
+                        fork_url,
+                        size=Theme.Typography.BODY_SMALL,
+                        style=ft.TextStyle(
+                            color=Theme.Colors.INFO,
+                            decoration=ft.TextDecoration.UNDERLINE,
+                        ),
+                        selectable=False,
+                    ),
+                    on_click=lambda e, u=fork_url: e.page.launch_url(u),
+                    ink=True,
                 )
             elif release_url:
                 row._details_container.content = ft.Container(
@@ -909,6 +952,7 @@ class GitHubTrafficTab(InsightsTab):
                         f"{total_unique:,}",
                         Theme.Colors.INFO,
                         change_pct=_pct(total_unique, prev_u),
+                        tooltip="Unique cloners per day, counted independently by GitHub. Not deduplicated across days.",
                     ),
                     MetricCard(
                         "Views",
@@ -956,7 +1000,22 @@ class GitHubTrafficTab(InsightsTab):
         releases_map = data.get("releases", {}) if self._show_events else {}
         highlighted = self._highlighted_dates
 
-        max_clone = max(d["clones"] for d in daily) if daily else 1
+        # Trim leading zero days separately for each chart
+        clone_daily = daily
+        for i, d in enumerate(daily):
+            if d["clones"] or d["unique_cloners"]:
+                clone_daily = daily[i:]
+                break
+
+        view_daily = daily
+        for i, d in enumerate(daily):
+            if d["views"] or d["unique_visitors"]:
+                view_daily = daily[i:]
+                break
+
+        # -- Clones + Unique chart --------------------------------------------
+
+        max_clone = max(d["clones"] for d in clone_daily) if clone_daily else 1
         clone_step = _smart_step(max_clone)
         clone_max_y = int((max_clone // clone_step + 1) * clone_step)
 
@@ -964,7 +1023,7 @@ class GitHubTrafficTab(InsightsTab):
         unique_points: list[ft.LineChartDataPoint] = []
         release_anno_points: list[ft.LineChartDataPoint] = []
 
-        for i, d in enumerate(daily):
+        for i, d in enumerate(clone_daily):
             is_hl = d["date"] in highlighted
             hl_point = (
                 ft.ChartCirclePoint(
@@ -1031,7 +1090,9 @@ class GitHubTrafficTab(InsightsTab):
                 )
             )
 
-        clone_chart = _make_line_chart(clone_series, clone_max_y, daily, clone_step)
+        clone_chart = _make_line_chart(
+            clone_series, clone_max_y, clone_daily, clone_step
+        )
         content.append(
             ft.Container(content=clone_chart, margin=ft.margin.only(right=20))
         )
@@ -1043,7 +1104,7 @@ class GitHubTrafficTab(InsightsTab):
 
         # -- Views + Visitors chart -------------------------------------------
 
-        max_view = max(d["views"] for d in daily) if daily else 1
+        max_view = max(d["views"] for d in view_daily) if view_daily else 1
         view_step = _smart_step(max_view)
         view_max_y = int((max_view // view_step + 1) * view_step)
 
@@ -1051,7 +1112,7 @@ class GitHubTrafficTab(InsightsTab):
         visitor_points: list[ft.LineChartDataPoint] = []
         release_anno2: list[ft.LineChartDataPoint] = []
 
-        for i, d in enumerate(daily):
+        for i, d in enumerate(view_daily):
             is_hl = d["date"] in highlighted
             hl_point = (
                 ft.ChartCirclePoint(
@@ -1116,7 +1177,7 @@ class GitHubTrafficTab(InsightsTab):
                 )
             )
 
-        views_chart = _make_line_chart(view_series, view_max_y, daily, view_step)
+        views_chart = _make_line_chart(view_series, view_max_y, view_daily, view_step)
         content.append(
             ft.Container(content=views_chart, margin=ft.margin.only(right=20))
         )
@@ -1335,166 +1396,198 @@ class GitHubTrafficTab(InsightsTab):
 
     # -- data loader ----------------------------------------------------------
 
-    @staticmethod
-    def _load_data(days: int = 14) -> dict[str, Any]:
-        """Load GitHub data from database with date cutoff."""
+    def _load_data(self, days: int = 14) -> dict[str, Any]:
+        """Load GitHub data from bulk pre-loaded data with date cutoff."""
         from app.services.insights.query_service import InsightQueryService
 
-        with InsightQueryService() as qs:
-            cutoff, prev_cutoff = qs.compute_cutoffs(days)
+        cutoff, prev_cutoff = InsightQueryService.compute_cutoffs(days)
 
-            # Traffic daily
-            clones_rows = qs.get_daily("clones", cutoff)
-            unique_rows = qs.get_daily("unique_cloners", cutoff)
-            views_rows = qs.get_daily("views", cutoff)
-            visitors_rows = qs.get_daily("unique_visitors", cutoff)
+        # Traffic daily
+        clones_rows = [
+            r for r in self._bulk.daily.get("clones", []) if r.date >= cutoff
+        ]
+        unique_rows = [
+            r for r in self._bulk.daily.get("unique_cloners", []) if r.date >= cutoff
+        ]
+        views_rows = [r for r in self._bulk.daily.get("views", []) if r.date >= cutoff]
+        visitors_rows = [
+            r for r in self._bulk.daily.get("unique_visitors", []) if r.date >= cutoff
+        ]
 
-            unique_map = {str(r.date)[:10]: int(r.value) for r in unique_rows}
-            views_map = {str(r.date)[:10]: int(r.value) for r in views_rows}
-            visitors_map = {str(r.date)[:10]: int(r.value) for r in visitors_rows}
+        unique_map = {str(r.date)[:10]: int(r.value) for r in unique_rows}
+        views_map = {str(r.date)[:10]: int(r.value) for r in views_rows}
+        visitors_map = {str(r.date)[:10]: int(r.value) for r in visitors_rows}
 
-            daily: list[dict[str, Any]] = []
-            for r in clones_rows:
-                day = str(r.date)[:10]
-                daily.append(
+        daily: list[dict[str, Any]] = []
+        for r in clones_rows:
+            day = str(r.date)[:10]
+            clones = int(r.value)
+            unique = unique_map.get(day, 0)
+            views = views_map.get(day, 0)
+            visitors = visitors_map.get(day, 0)
+            # Skip days with no activity to avoid dead space on chart
+            if clones == 0 and unique == 0 and views == 0 and visitors == 0:
+                continue
+            daily.append(
+                {
+                    "date": day,
+                    "clones": clones,
+                    "unique_cloners": unique,
+                    "views": views,
+                    "unique_visitors": visitors,
+                }
+            )
+
+        # Referrers (latest snapshot)
+        referrers_row = self._bulk.latest.get("referrers")
+        referrers: list[dict[str, Any]] = []
+        if referrers_row and referrers_row.metadata_:
+            meta = referrers_row.metadata_
+            if isinstance(meta, dict) and not meta.get("referrers"):
+                for domain, counts in meta.items():
+                    if isinstance(counts, dict):
+                        referrers.append(
+                            {
+                                "domain": domain,
+                                "views": counts.get("views", 0),
+                                "uniques": counts.get("uniques", 0),
+                            }
+                        )
+            else:
+                for ref in meta.get("referrers", []):
+                    referrers.append(
+                        {
+                            "domain": ref.get("referrer", ref.get("domain", "unknown")),
+                            "views": ref.get("count", ref.get("views", 0)),
+                            "uniques": ref.get("uniques", 0),
+                        }
+                    )
+            referrers.sort(key=lambda x: -x["views"])
+
+        # Popular paths (latest snapshot)
+        paths_row = self._bulk.latest.get("popular_paths")
+        popular_paths: list[dict[str, Any]] = []
+        if paths_row and paths_row.metadata_:
+            for p in paths_row.metadata_.get(
+                "paths", paths_row.metadata_.get("popular_paths", [])
+            ):
+                popular_paths.append(
                     {
-                        "date": day,
-                        "clones": int(r.value),
-                        "unique_cloners": unique_map.get(day, 0),
-                        "views": views_map.get(day, 0),
-                        "unique_visitors": visitors_map.get(day, 0),
+                        "path": p.get("path", "unknown"),
+                        "title": p.get("title", ""),
+                        "views": p.get("count", p.get("views", 0)),
+                        "uniques": p.get("uniques", 0),
                     }
                 )
 
-            # Referrers (latest snapshot)
-            referrers_row = qs.get_latest("referrers")
-            referrers: list[dict[str, Any]] = []
-            if referrers_row and referrers_row.metadata_:
-                meta = referrers_row.metadata_
-                if isinstance(meta, dict) and not meta.get("referrers"):
-                    for domain, counts in meta.items():
-                        if isinstance(counts, dict):
-                            referrers.append(
-                                {
-                                    "domain": domain,
-                                    "views": counts.get("views", 0),
-                                    "uniques": counts.get("uniques", 0),
-                                }
-                            )
-                else:
-                    for ref in meta.get("referrers", []):
-                        referrers.append(
-                            {
-                                "domain": ref.get(
-                                    "referrer", ref.get("domain", "unknown")
-                                ),
-                                "views": ref.get("count", ref.get("views", 0)),
-                                "uniques": ref.get("uniques", 0),
-                            }
-                        )
-                referrers.sort(key=lambda x: -x["views"])
+        # Fork events
+        fork_rows = [r for r in self._bulk.events.get("forks", []) if r.date >= cutoff]
+        forks: list[dict[str, str]] = []
+        for r in fork_rows:
+            meta = r.metadata_ or {}
+            forks.append(
+                {"actor": meta.get("actor", "unknown"), "date": str(r.date)[:10]}
+            )
 
-            # Popular paths (latest snapshot)
-            paths_row = qs.get_latest("popular_paths")
-            popular_paths: list[dict[str, Any]] = []
-            if paths_row and paths_row.metadata_:
-                for p in paths_row.metadata_.get(
-                    "paths", paths_row.metadata_.get("popular_paths", [])
-                ):
-                    popular_paths.append(
-                        {
-                            "path": p.get("path", "unknown"),
-                            "title": p.get("title", ""),
-                            "views": p.get("count", p.get("views", 0)),
-                            "uniques": p.get("uniques", 0),
-                        }
-                    )
+        # Star events daily
+        star_rows = [
+            r for r in self._bulk.daily.get("star_events", []) if r.date >= cutoff
+        ]
+        star_events_daily: list[dict[str, Any]] = []
+        for r in star_rows:
+            star_events_daily.append({"date": str(r.date)[:10], "stars": int(r.value)})
 
-            # Fork events
-            fork_rows = qs.get_events("forks", cutoff)
-            forks: list[dict[str, str]] = []
-            for r in fork_rows:
-                meta = r.metadata_ or {}
-                forks.append(
-                    {"actor": meta.get("actor", "unknown"), "date": str(r.date)[:10]}
-                )
-
-            # Star events daily
-            star_rows = qs.get_daily("star_events", cutoff)
-            star_events_daily: list[dict[str, Any]] = []
-            for r in star_rows:
-                star_events_daily.append(
-                    {"date": str(r.date)[:10], "stars": int(r.value)}
-                )
-
-            # Activity summary daily
-            activity_rows = qs.get_daily("activity_summary", cutoff)
-            activity_summary: list[dict[str, Any]] = []
-            for r in activity_rows:
-                meta = r.metadata_ or {}
-                entry: dict[str, Any] = {"date": str(r.date)[:10]}
-                for field in (
-                    "push",
-                    "issues",
-                    "pull_requests",
-                    "pull_request_reviews",
-                    "issue_comments",
-                    "forks",
-                    "stars",
-                    "releases",
-                    "creates",
-                    "deletes",
-                ):
-                    entry[field] = meta.get(field, 0)
-                activity_summary.append(entry)
-
-            # Build all_events list for chips
-            all_events: list[tuple[str, str, str]] = []
-
-            # Release events from metrics
-            release_rows = qs.get_events("releases", cutoff)
-            releases: dict[str, str] = {}
-            for r in release_rows:
-                meta = r.metadata_ or {}
-                tag = meta.get("tag", "")
-                day = str(r.date)[:10]
-                if tag:
-                    all_events.append((day, tag, "release"))
-                    if day in releases:
-                        releases[day] += f"\n{tag}"
-                    else:
-                        releases[day] = tag
-
-            for f in forks:
-                all_events.append((f["date"], f"Fork: {f['actor']}", "fork"))
-
-            # InsightEvent rows filtered to GitHub-relevant types
-            for ev in qs.get_insight_events(
-                cutoff=cutoff, type_filter=GITHUB_EVENT_TYPES
+        # Activity summary daily
+        activity_rows = [
+            r for r in self._bulk.daily.get("activity_summary", []) if r.date >= cutoff
+        ]
+        activity_summary: list[dict[str, Any]] = []
+        for r in activity_rows:
+            meta = r.metadata_ or {}
+            entry: dict[str, Any] = {"date": str(r.date)[:10]}
+            for field in (
+                "push",
+                "issues",
+                "pull_requests",
+                "pull_request_reviews",
+                "issue_comments",
+                "forks",
+                "stars",
+                "releases",
+                "creates",
+                "deletes",
             ):
-                day = str(ev.date)[:10]
-                all_events.append((day, ev.description[:60], ev.event_type))
+                entry[field] = meta.get(field, 0)
+            activity_summary.append(entry)
+
+        # Build all_events list for chips
+        all_events: list[tuple[str, str, str]] = []
+
+        # Release events from metrics
+        release_rows = [
+            r for r in self._bulk.events.get("releases", []) if r.date >= cutoff
+        ]
+        releases: dict[str, str] = {}
+        for r in release_rows:
+            meta = r.metadata_ or {}
+            tag = meta.get("tag", "")
+            day = str(r.date)[:10]
+            if tag:
+                all_events.append((day, tag, "release"))
                 if day in releases:
-                    releases[day] += f"\n{ev.description[:60]}"
+                    releases[day] += f"\n{tag}"
                 else:
-                    releases[day] = ev.description[:60]
+                    releases[day] = tag
 
-            all_events.sort(key=lambda x: x[0])
+        for f in forks:
+            all_events.append((f["date"], f"Fork: {f['actor']}", "fork"))
 
-            return {
-                "daily": daily,
-                "referrers": referrers,
-                "popular_paths": popular_paths,
-                "forks": forks,
-                "releases": releases,
-                "all_events": all_events,
-                "activity_summary": activity_summary,
-                "star_events_daily": star_events_daily,
-                "prev_clones": qs.sum_range("clones", prev_cutoff, cutoff),
-                "prev_unique": qs.sum_range("unique_cloners", prev_cutoff, cutoff),
-                "prev_views": qs.sum_range("views", prev_cutoff, cutoff),
-                "prev_visitors": qs.sum_range("unique_visitors", prev_cutoff, cutoff),
-            }
+        # InsightEvent rows filtered to GitHub-relevant types
+        cutoff_str = str(cutoff.date())
+        for ev in [
+            ev
+            for ev in self._bulk.insight_events
+            if str(ev.date)[:10] >= cutoff_str and ev.event_type in GITHUB_EVENT_TYPES
+        ]:
+            day = str(ev.date)[:10]
+            all_events.append((day, ev.description[:60], ev.event_type))
+            if day in releases:
+                releases[day] += f"\n{ev.description[:60]}"
+            else:
+                releases[day] = ev.description[:60]
+
+        all_events.sort(key=lambda x: x[0])
+
+        return {
+            "daily": daily,
+            "referrers": referrers,
+            "popular_paths": popular_paths,
+            "forks": forks,
+            "releases": releases,
+            "all_events": all_events,
+            "activity_summary": activity_summary,
+            "star_events_daily": star_events_daily,
+            "prev_clones": sum(
+                int(r.value)
+                for r in self._bulk.daily.get("clones", [])
+                if prev_cutoff <= r.date < cutoff
+            ),
+            "prev_unique": sum(
+                int(r.value)
+                for r in self._bulk.daily.get("unique_cloners", [])
+                if prev_cutoff <= r.date < cutoff
+            ),
+            "prev_views": sum(
+                int(r.value)
+                for r in self._bulk.daily.get("views", [])
+                if prev_cutoff <= r.date < cutoff
+            ),
+            "prev_visitors": sum(
+                int(r.value)
+                for r in self._bulk.daily.get("unique_visitors", [])
+                if prev_cutoff <= r.date < cutoff
+            ),
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -1639,96 +1732,95 @@ class StarsTab(InsightsTab):
 
         self._content_column.controls = content
 
-    @staticmethod
-    def _load_data(days: int = 9999) -> dict[str, Any]:
-        """Load star data from database with date cutoff."""
+    def _load_data(self, days: int = 9999) -> dict[str, Any]:
+        """Load star data from bulk pre-loaded data with date cutoff."""
         from app.services.insights.query_service import InsightQueryService
 
-        with InsightQueryService() as qs:
-            cutoff, _ = qs.compute_cutoffs(days)
+        cutoff, _ = InsightQueryService.compute_cutoffs(days)
 
-            # All stars (for total count)
-            all_rows = qs.get_all_events("new_star")
-            total_stars = len(all_rows)
+        # All stars (for total count)
+        all_rows = self._bulk.events.get("new_star", [])
+        total_stars = len(all_rows)
 
-            if not all_rows:
-                return {
-                    "star_history": [],
-                    "stars_recent": [],
-                    "total_stars": 0,
-                    "range_stars": 0,
-                    "all_events": [],
-                    "releases": {},
-                }
-
-            # Stars in range
-            range_rows = [r for r in all_rows if r.date >= cutoff]
-            range_stars = len(range_rows)
-
-            # Cumulative history - only days with stars, within range
-            by_date: dict[str, dict[str, Any]] = {}
-            for r in range_rows:
-                day = str(r.date)[:10]
-                meta = r.metadata_ if isinstance(r.metadata_, dict) else {}
-                if day not in by_date:
-                    by_date[day] = {"max_num": 0, "count": 0, "usernames": []}
-                by_date[day]["max_num"] = max(by_date[day]["max_num"], int(r.value))
-                by_date[day]["count"] += 1
-                by_date[day]["usernames"].append(meta.get("username", "unknown"))
-            star_history = [
-                {
-                    "date": d,
-                    "stars": info["max_num"],
-                    "count": info["count"],
-                    "usernames": info["usernames"],
-                }
-                for d, info in sorted(by_date.items())
-            ]
-
-            # Recent stars (last 20 in range)
-            stars_recent: list[dict[str, Any]] = []
-            for r in reversed(range_rows[-20:]):
-                meta = r.metadata_ if isinstance(r.metadata_, dict) else {}
-                stars_recent.append(
-                    {
-                        "number": int(r.value),
-                        "username": meta.get("username", "unknown"),
-                        "location": meta.get("location", ""),
-                        "company": meta.get("company", ""),
-                        "date": str(r.date)[:10],
-                    }
-                )
-
-            # Events for chips + chart annotations
-            all_events: list[tuple[str, str, str]] = []
-            for r in qs.get_release_metrics():
-                tag = (r.metadata_ or {}).get("tag", "")
-                if tag:
-                    all_events.append((str(r.date)[:10], tag, "release"))
-            for ev in qs.get_insight_events(
-                cutoff=cutoff, type_filter=GITHUB_EVENT_TYPES
-            ):
-                all_events.append(
-                    (str(ev.date)[:10], ev.description[:60], ev.event_type)
-                )
-
-            release_map: dict[str, str] = {}
-            for date, label, _ in all_events:
-                if date in release_map:
-                    release_map[date] += f"\n{label}"
-                else:
-                    release_map[date] = label
-
-            all_events.sort(key=lambda x: x[0])
-
+        if not all_rows:
             return {
-                "star_history": star_history,
-                "stars_recent": stars_recent,
-                "total_stars": total_stars,
-                "range_stars": range_stars,
-                "all_events": all_events,
-                "releases": release_map,
+                "star_history": [],
+                "stars_recent": [],
+                "total_stars": 0,
+                "range_stars": 0,
+                "all_events": [],
+                "releases": {},
             }
+
+        # Stars in range
+        range_rows = [r for r in all_rows if r.date >= cutoff]
+        range_stars = len(range_rows)
+
+        # Cumulative history - only days with stars, within range
+        by_date: dict[str, dict[str, Any]] = {}
+        for r in range_rows:
+            day = str(r.date)[:10]
+            meta = r.metadata_ if isinstance(r.metadata_, dict) else {}
+            if day not in by_date:
+                by_date[day] = {"max_num": 0, "count": 0, "usernames": []}
+            by_date[day]["max_num"] = max(by_date[day]["max_num"], int(r.value))
+            by_date[day]["count"] += 1
+            by_date[day]["usernames"].append(meta.get("username", "unknown"))
+        star_history = [
+            {
+                "date": d,
+                "stars": info["max_num"],
+                "count": info["count"],
+                "usernames": info["usernames"],
+            }
+            for d, info in sorted(by_date.items())
+        ]
+
+        # Recent stars (last 20 in range)
+        stars_recent: list[dict[str, Any]] = []
+        for r in reversed(range_rows[-20:]):
+            meta = r.metadata_ if isinstance(r.metadata_, dict) else {}
+            stars_recent.append(
+                {
+                    "number": int(r.value),
+                    "username": meta.get("username", "unknown"),
+                    "location": meta.get("location", ""),
+                    "company": meta.get("company", ""),
+                    "date": str(r.date)[:10],
+                }
+            )
+
+        # Events for chips + chart annotations
+        all_events: list[tuple[str, str, str]] = []
+        for r in self._bulk.events.get("releases", []):
+            tag = (r.metadata_ or {}).get("tag", "")
+            if tag:
+                all_events.append((str(r.date)[:10], tag, "release"))
+        cutoff_str = str(cutoff.date())
+        for ev in [
+            ev
+            for ev in self._bulk.insight_events
+            if str(ev.date)[:10] >= cutoff_str and ev.event_type in GITHUB_EVENT_TYPES
+        ]:
+            all_events.append((str(ev.date)[:10], ev.description[:60], ev.event_type))
+
+        release_map: dict[str, str] = {}
+        for date, label, _ in all_events:
+            if date in release_map:
+                release_map[date] += f"\n{label}"
+            else:
+                release_map[date] = label
+
+        all_events.sort(key=lambda x: x[0])
+
+        return {
+            "star_history": star_history,
+            "stars_recent": stars_recent,
+            "total_stars": total_stars,
+            "range_stars": range_stars,
+            "all_events": all_events,
+            "releases": release_map,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -1741,7 +1833,7 @@ class PyPITab(InsightsTab):
 
     _default_days = 7
 
-    def __init__(self) -> None:
+    def __init__(self, bulk: BulkInsightsResponse | None = None) -> None:
         self._include_ci = False
         self._toggle = ft.Switch(
             label="Include CI/Mirror downloads",
@@ -1749,7 +1841,7 @@ class PyPITab(InsightsTab):
             on_change=self._on_toggle,
             label_style=ft.TextStyle(size=12, color=ft.Colors.ON_SURFACE_VARIANT),
         )
-        super().__init__()
+        super().__init__(bulk=bulk)
 
     def _on_toggle(self, e: ft.ControlEvent) -> None:
         self._include_ci = e.control.value
@@ -2318,130 +2410,152 @@ class PyPITab(InsightsTab):
 
         self._content_column.controls = content
 
-    @staticmethod
-    def _load_data(days: int = 14) -> dict:
-        """Load PyPI data from database (sync)."""
+    def _load_data(self, days: int = 14) -> dict:
+        """Load PyPI data from bulk pre-loaded data."""
         from app.services.insights.query_service import InsightQueryService
 
-        with InsightQueryService() as qs:
-            cutoff, prev_cutoff = qs.compute_cutoffs(days)
+        cutoff, prev_cutoff = InsightQueryService.compute_cutoffs(days)
 
-            # Total
-            total_row = qs.get_latest("downloads_total")
-            total = int(total_row.value) if total_row else 0
+        # Total
+        total_row = self._bulk.latest.get("downloads_total")
+        total = int(total_row.value) if total_row else 0
 
-            # Daily total + human
-            daily_rows = qs.get_daily("downloads_daily", cutoff)
-            human_rows = qs.get_daily("downloads_daily_human", cutoff)
-            human_map = {str(r.date)[:10]: int(r.value) for r in human_rows}
+        # Daily total + human
+        daily_rows = [
+            r for r in self._bulk.daily.get("downloads_daily", []) if r.date >= cutoff
+        ]
+        human_rows = [
+            r
+            for r in self._bulk.daily.get("downloads_daily_human", [])
+            if r.date >= cutoff
+        ]
+        human_map = {str(r.date)[:10]: int(r.value) for r in human_rows}
 
-            daily = []
-            for r in daily_rows:
-                day = str(r.date)[:10]
-                t = int(r.value)
-                h = human_map.get(day, 0)
-                daily.append({"date": day, "total": t, "human": h})
+        daily = []
+        for r in daily_rows:
+            day = str(r.date)[:10]
+            t = int(r.value)
+            h = human_map.get(day, 0)
+            daily.append({"date": day, "total": t, "human": h})
 
-            today_total = daily[-1]["total"] if daily else 0
-            today_human = daily[-1]["human"] if daily else 0
+        today_total = daily[-1]["total"] if daily else 0
+        today_human = daily[-1]["human"] if daily else 0
 
-            # Bot % computed over entire selected range
-            range_total = sum(d["total"] for d in daily)
-            range_human = sum(d["human"] for d in daily)
-            bot_pct = (
-                ((range_total - range_human) / range_total * 100)
-                if range_total > 0
-                else 0
-            )
+        # Bot % computed over entire selected range
+        range_total = sum(d["total"] for d in daily)
+        range_human = sum(d["human"] for d in daily)
+        bot_pct = (
+            ((range_total - range_human) / range_total * 100) if range_total > 0 else 0
+        )
 
-            # Latest installer breakdown (aggregate from all days)
-            all_installers: dict[str, int] = {}
-            for r in qs.get_daily("downloads_by_installer", cutoff):
-                meta = r.metadata_ or {}
-                for name, count in meta.get("installers", {}).items():
-                    all_installers[name] = all_installers.get(name, 0) + count
-            installers = dict(sorted(all_installers.items(), key=lambda x: -x[1]))
+        # Latest installer breakdown (aggregate from all days)
+        all_installers: dict[str, int] = {}
+        for r in [
+            r
+            for r in self._bulk.daily.get("downloads_by_installer", [])
+            if r.date >= cutoff
+        ]:
+            meta = r.metadata_ or {}
+            for name, count in meta.get("installers", {}).items():
+                all_installers[name] = all_installers.get(name, 0) + count
+        installers = dict(sorted(all_installers.items(), key=lambda x: -x[1]))
 
-            # Latest country breakdown (aggregate)
-            all_countries: dict[str, int] = {}
-            for r in qs.get_daily("downloads_by_country", cutoff):
-                meta = r.metadata_ or {}
-                for code, count in meta.get("countries", {}).items():
-                    all_countries[code] = all_countries.get(code, 0) + count
-            countries = dict(sorted(all_countries.items(), key=lambda x: -x[1]))
+        # Latest country breakdown (aggregate)
+        all_countries: dict[str, int] = {}
+        for r in [
+            r
+            for r in self._bulk.daily.get("downloads_by_country", [])
+            if r.date >= cutoff
+        ]:
+            meta = r.metadata_ or {}
+            for code, count in meta.get("countries", {}).items():
+                all_countries[code] = all_countries.get(code, 0) + count
+        countries = dict(sorted(all_countries.items(), key=lambda x: -x[1]))
 
-            # Per-day per-version data
-            version_daily_rows = qs.get_daily("downloads_by_version", cutoff)
-            version_daily: dict[str, dict[str, int]] = {}
-            for r in version_daily_rows:
-                day = str(r.date)[:10]
-                meta = r.metadata_ or {}
-                day_versions = meta.get("versions", {})
-                version_daily[day] = {}
-                for ver, info in day_versions.items():
-                    if isinstance(info, dict):
-                        version_daily[day][ver] = info.get("total", 0)
-                    else:
-                        version_daily[day][ver] = info
-
-            # Version breakdown with real human/bot
-            versions: dict[str, dict[str, int]] = {}
-            for r in version_daily_rows:
-                meta = r.metadata_ or {}
-                for ver, info in meta.get("versions", {}).items():
-                    if ver not in versions:
-                        versions[ver] = {"total": 0, "human": 0}
-                    if isinstance(info, dict):
-                        versions[ver]["total"] += info.get("total", 0)
-                        versions[ver]["human"] += info.get("human", 0)
-                    else:
-                        versions[ver]["total"] += info
-            versions = dict(sorted(versions.items(), key=lambda x: -x[1]["total"]))
-
-            # Distribution type breakdown
-            all_types: dict[str, int] = {}
-            for r in qs.get_daily("downloads_by_type", cutoff):
-                meta = r.metadata_ or {}
-                for t, count in meta.get("types", {}).items():
-                    all_types[t] = all_types.get(t, 0) + count
-            dist_types = dict(sorted(all_types.items(), key=lambda x: -x[1]))
-
-            # Events for chart annotations
-            all_events: list[tuple[str, str, str]] = []
-            for r in qs.get_release_metrics():
-                tag = (r.metadata_ or {}).get("tag", "")
-                if tag:
-                    all_events.append((str(r.date)[:10], tag, "release"))
-            for ev in qs.get_insight_events(type_filter=PYPI_EVENT_TYPES):
-                all_events.append(
-                    (str(ev.date)[:10], ev.description[:60], ev.event_type)
-                )
-
-            release_map: dict[str, str] = {}
-            for date, label, _ in all_events:
-                if date in release_map:
-                    release_map[date] += f"\n{label}"
+        # Per-day per-version data
+        version_daily_rows = [
+            r
+            for r in self._bulk.daily.get("downloads_by_version", [])
+            if r.date >= cutoff
+        ]
+        version_daily: dict[str, dict[str, int]] = {}
+        for r in version_daily_rows:
+            day = str(r.date)[:10]
+            meta = r.metadata_ or {}
+            day_versions = meta.get("versions", {})
+            version_daily[day] = {}
+            for ver, info in day_versions.items():
+                if isinstance(info, dict):
+                    version_daily[day][ver] = info.get("total", 0)
                 else:
-                    release_map[date] = label
+                    version_daily[day][ver] = info
 
-            return {
-                "total": total,
-                "today_total": today_total,
-                "today_human": today_human,
-                "bot_percent": bot_pct,
-                "prev_total": qs.sum_range("downloads_daily", prev_cutoff, cutoff),
-                "prev_human": qs.sum_range(
-                    "downloads_daily_human", prev_cutoff, cutoff
-                ),
-                "daily": daily,
-                "version_daily": version_daily,
-                "installers": installers,
-                "countries": countries,
-                "versions": versions,
-                "types": dist_types,
-                "releases": release_map,
-                "all_events": all_events,
-            }
+        # Version breakdown with real human/bot
+        versions: dict[str, dict[str, int]] = {}
+        for r in version_daily_rows:
+            meta = r.metadata_ or {}
+            for ver, info in meta.get("versions", {}).items():
+                if ver not in versions:
+                    versions[ver] = {"total": 0, "human": 0}
+                if isinstance(info, dict):
+                    versions[ver]["total"] += info.get("total", 0)
+                    versions[ver]["human"] += info.get("human", 0)
+                else:
+                    versions[ver]["total"] += info
+        versions = dict(sorted(versions.items(), key=lambda x: -x[1]["total"]))
+
+        # Distribution type breakdown
+        all_types: dict[str, int] = {}
+        for r in [
+            r for r in self._bulk.daily.get("downloads_by_type", []) if r.date >= cutoff
+        ]:
+            meta = r.metadata_ or {}
+            for t, count in meta.get("types", {}).items():
+                all_types[t] = all_types.get(t, 0) + count
+        dist_types = dict(sorted(all_types.items(), key=lambda x: -x[1]))
+
+        # Events for chart annotations
+        all_events: list[tuple[str, str, str]] = []
+        for r in self._bulk.events.get("releases", []):
+            tag = (r.metadata_ or {}).get("tag", "")
+            if tag:
+                all_events.append((str(r.date)[:10], tag, "release"))
+        for ev in [
+            ev for ev in self._bulk.insight_events if ev.event_type in PYPI_EVENT_TYPES
+        ]:
+            all_events.append((str(ev.date)[:10], ev.description[:60], ev.event_type))
+
+        release_map: dict[str, str] = {}
+        for date, label, _ in all_events:
+            if date in release_map:
+                release_map[date] += f"\n{label}"
+            else:
+                release_map[date] = label
+
+        return {
+            "total": total,
+            "today_total": today_total,
+            "today_human": today_human,
+            "bot_percent": bot_pct,
+            "prev_total": sum(
+                int(r.value)
+                for r in self._bulk.daily.get("downloads_daily", [])
+                if prev_cutoff <= r.date < cutoff
+            ),
+            "prev_human": sum(
+                int(r.value)
+                for r in self._bulk.daily.get("downloads_daily_human", [])
+                if prev_cutoff <= r.date < cutoff
+            ),
+            "daily": daily,
+            "version_daily": version_daily,
+            "installers": installers,
+            "countries": countries,
+            "versions": versions,
+            "types": dist_types,
+            "releases": release_map,
+            "all_events": all_events,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -2745,115 +2859,143 @@ class DocsTab(InsightsTab):
 
         self._content_column.controls = content
 
-    @staticmethod
-    def _load_data(days: int = 30) -> dict[str, Any]:
-        """Load Plausible data from database."""
+    def _load_data(self, days: int = 30) -> dict[str, Any]:
+        """Load Plausible data from bulk pre-loaded data."""
         from app.services.insights.query_service import InsightQueryService
 
-        with InsightQueryService() as qs:
-            cutoff, prev_cutoff = qs.compute_cutoffs(days)
+        cutoff, prev_cutoff = InsightQueryService.compute_cutoffs(days)
 
-            # Daily metrics - current period
-            visitors_rows = qs.get_daily("visitors", cutoff)
-            pageviews_rows = qs.get_daily("pageviews", cutoff)
-            duration_rows = qs.get_daily("avg_duration", cutoff)
-            bounce_rows = qs.get_daily("bounce_rate", cutoff)
+        # Daily metrics - current period
+        visitors_rows = [
+            r for r in self._bulk.daily.get("visitors", []) if r.date >= cutoff
+        ]
+        pageviews_rows = [
+            r for r in self._bulk.daily.get("pageviews", []) if r.date >= cutoff
+        ]
+        duration_rows = [
+            r for r in self._bulk.daily.get("avg_duration", []) if r.date >= cutoff
+        ]
+        bounce_rows = [
+            r for r in self._bulk.daily.get("bounce_rate", []) if r.date >= cutoff
+        ]
 
-            # Previous period totals for comparison
-            prev_visitors = qs.sum_range("visitors", prev_cutoff, cutoff)
-            prev_pageviews = qs.sum_range("pageviews", prev_cutoff, cutoff)
-            prev_dur_rows = qs.get_daily_range("avg_duration", prev_cutoff, cutoff)
-            prev_duration = (
-                sum(float(r.value) for r in prev_dur_rows) / len(prev_dur_rows)
-                if prev_dur_rows
-                else 0
+        # Previous period totals for comparison
+        prev_visitors = sum(
+            int(r.value)
+            for r in self._bulk.daily.get("visitors", [])
+            if prev_cutoff <= r.date < cutoff
+        )
+        prev_pageviews = sum(
+            int(r.value)
+            for r in self._bulk.daily.get("pageviews", [])
+            if prev_cutoff <= r.date < cutoff
+        )
+        prev_dur_rows = [
+            r
+            for r in self._bulk.daily.get("avg_duration", [])
+            if prev_cutoff <= r.date < cutoff
+        ]
+        prev_duration = (
+            sum(float(r.value) for r in prev_dur_rows) / len(prev_dur_rows)
+            if prev_dur_rows
+            else 0
+        )
+        prev_bounce_rows = [
+            r
+            for r in self._bulk.daily.get("bounce_rate", [])
+            if prev_cutoff <= r.date < cutoff
+        ]
+        prev_bounce = (
+            sum(float(r.value) for r in prev_bounce_rows) / len(prev_bounce_rows)
+            if prev_bounce_rows
+            else 0
+        )
+
+        pv_map = {str(r.date)[:10]: int(r.value) for r in pageviews_rows}
+        dur_map = {str(r.date)[:10]: float(r.value) for r in duration_rows}
+        bounce_map = {str(r.date)[:10]: float(r.value) for r in bounce_rows}
+
+        daily: list[dict[str, Any]] = []
+        last_collected = ""
+        for r in visitors_rows:
+            day = str(r.date)[:10]
+            visitors = int(r.value)
+            pageviews = pv_map.get(day, 0)
+            # Skip days with no activity to avoid dead space on chart
+            if visitors == 0 and pageviews == 0:
+                continue
+            last_collected = day
+            daily.append(
+                {
+                    "date": day,
+                    "visitors": visitors,
+                    "pageviews": pageviews,
+                    "avg_duration": dur_map.get(day, 0),
+                    "bounce_rate": bounce_map.get(day, 0),
+                }
             )
-            prev_bounce_rows = qs.get_daily_range("bounce_rate", prev_cutoff, cutoff)
-            prev_bounce = (
-                sum(float(r.value) for r in prev_bounce_rows) / len(prev_bounce_rows)
-                if prev_bounce_rows
-                else 0
-            )
 
-            pv_map = {str(r.date)[:10]: int(r.value) for r in pageviews_rows}
-            dur_map = {str(r.date)[:10]: float(r.value) for r in duration_rows}
-            bounce_map = {str(r.date)[:10]: float(r.value) for r in bounce_rows}
+        # Top pages - aggregate per-day snapshots across selected range
+        all_pages: dict[str, dict[str, Any]] = {}
+        for r in [r for r in self._bulk.daily.get("top_pages", []) if r.date >= cutoff]:
+            meta = r.metadata_ if isinstance(r.metadata_, dict) else {}
+            for p in meta.get("pages", []):
+                url = p.get("url", "")
+                if url not in all_pages:
+                    all_pages[url] = {"url": url, "visitors": 0, "time_s": 0}
+                all_pages[url]["visitors"] += p.get("visitors", 0)
+                all_pages[url]["time_s"] += p.get("time_s") or 0
+        top_pages = sorted(all_pages.values(), key=lambda x: -x["visitors"])[:20]
 
-            daily: list[dict[str, Any]] = []
-            last_collected = ""
-            for r in visitors_rows:
-                day = str(r.date)[:10]
-                last_collected = day
-                daily.append(
-                    {
-                        "date": day,
-                        "visitors": int(r.value),
-                        "pageviews": pv_map.get(day, 0),
-                        "avg_duration": dur_map.get(day, 0),
-                        "bounce_rate": bounce_map.get(day, 0),
-                    }
-                )
+        # Countries - aggregate per-day snapshots across selected range
+        all_countries: dict[str, int] = {}
+        for r in [
+            r for r in self._bulk.daily.get("top_countries", []) if r.date >= cutoff
+        ]:
+            meta = r.metadata_ if isinstance(r.metadata_, dict) else {}
+            for c in meta.get("countries", []):
+                code = c.get("country", "")
+                all_countries[code] = all_countries.get(code, 0) + c.get("visitors", 0)
+        countries = [
+            {"country": code, "visitors": count}
+            for code, count in sorted(all_countries.items(), key=lambda x: -x[1])
+        ][:20]
 
-            # Top pages - aggregate per-day snapshots across selected range
-            all_pages: dict[str, dict[str, Any]] = {}
-            for r in qs.get_daily("top_pages", cutoff):
-                meta = r.metadata_ if isinstance(r.metadata_, dict) else {}
-                for p in meta.get("pages", []):
-                    url = p.get("url", "")
-                    if url not in all_pages:
-                        all_pages[url] = {"url": url, "visitors": 0, "time_s": 0}
-                    all_pages[url]["visitors"] += p.get("visitors", 0)
-                    all_pages[url]["time_s"] += p.get("time_s") or 0
-            top_pages = sorted(all_pages.values(), key=lambda x: -x["visitors"])[:20]
+        # Events
+        all_events: list[tuple[str, str, str]] = []
+        for r in self._bulk.events.get("releases", []):
+            tag = (r.metadata_ or {}).get("tag", "")
+            if tag:
+                all_events.append((str(r.date)[:10], tag, "release"))
+        cutoff_str = str(cutoff.date())
+        for ev in [
+            ev
+            for ev in self._bulk.insight_events
+            if str(ev.date)[:10] >= cutoff_str and ev.event_type in DOCS_EVENT_TYPES
+        ]:
+            all_events.append((str(ev.date)[:10], ev.description[:60], ev.event_type))
 
-            # Countries - aggregate per-day snapshots across selected range
-            all_countries: dict[str, int] = {}
-            for r in qs.get_daily("top_countries", cutoff):
-                meta = r.metadata_ if isinstance(r.metadata_, dict) else {}
-                for c in meta.get("countries", []):
-                    code = c.get("country", "")
-                    all_countries[code] = all_countries.get(code, 0) + c.get(
-                        "visitors", 0
-                    )
-            countries = [
-                {"country": code, "visitors": count}
-                for code, count in sorted(all_countries.items(), key=lambda x: -x[1])
-            ][:20]
+        release_map: dict[str, str] = {}
+        for date, label, _ in all_events:
+            if date in release_map:
+                release_map[date] += f"\n{label}"
+            else:
+                release_map[date] = label
 
-            # Events
-            all_events: list[tuple[str, str, str]] = []
-            for r in qs.get_release_metrics():
-                tag = (r.metadata_ or {}).get("tag", "")
-                if tag:
-                    all_events.append((str(r.date)[:10], tag, "release"))
-            for ev in qs.get_insight_events(
-                cutoff=cutoff, type_filter=DOCS_EVENT_TYPES
-            ):
-                all_events.append(
-                    (str(ev.date)[:10], ev.description[:60], ev.event_type)
-                )
+        all_events.sort(key=lambda x: x[0])
 
-            release_map: dict[str, str] = {}
-            for date, label, _ in all_events:
-                if date in release_map:
-                    release_map[date] += f"\n{label}"
-                else:
-                    release_map[date] = label
-
-            all_events.sort(key=lambda x: x[0])
-
-            return {
-                "daily": daily,
-                "top_pages": top_pages,
-                "countries": countries,
-                "all_events": all_events,
-                "releases": release_map,
-                "prev_visitors": prev_visitors,
-                "prev_pageviews": prev_pageviews,
-                "prev_bounce": prev_bounce,
-                "prev_duration": prev_duration,
-                "last_collected": last_collected,
-            }
+        return {
+            "daily": daily,
+            "top_pages": top_pages,
+            "countries": countries,
+            "all_events": all_events,
+            "releases": release_map,
+            "prev_visitors": prev_visitors,
+            "prev_pageviews": prev_pageviews,
+            "prev_bounce": prev_bounce,
+            "prev_duration": prev_duration,
+            "last_collected": last_collected,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -2864,8 +3006,9 @@ class DocsTab(InsightsTab):
 class RedditTab(ft.Container):
     """Reddit: tracked post stats from database."""
 
-    def __init__(self) -> None:
+    def __init__(self, bulk: BulkInsightsResponse | None = None) -> None:
         super().__init__()
+        self._bulk = bulk
 
         posts = self._load_posts()
 
@@ -2986,42 +3129,40 @@ class RedditTab(ft.Container):
         self.padding = Theme.Spacing.MD
         self.expand = True
 
-    @staticmethod
-    def _load_posts() -> list[dict]:
-        """Load Reddit posts from database (sync)."""
-        from app.services.insights.query_service import InsightQueryService
+    def _load_posts(self) -> list[dict]:
+        """Load Reddit posts from bulk pre-loaded data."""
+        rows = self._bulk.events.get("post_stats", [])
+        if not rows:
+            return []
 
-        with InsightQueryService() as qs:
-            rows = qs.get_all_metrics("post_stats")
-            if not rows:
-                return []
+        # Get original post dates from events
+        event_dates: dict[str, str] = {}
+        for ev in [
+            ev for ev in self._bulk.insight_events if ev.event_type in {"reddit_post"}
+        ]:
+            pid = (ev.metadata_ or {}).get("post_id", "")
+            if pid and pid not in event_dates:
+                event_dates[pid] = str(ev.date)[:10]
 
-            # Get original post dates from events
-            event_dates: dict[str, str] = {}
-            for ev in qs.get_insight_events(type_filter={"reddit_post"}):
-                pid = (ev.metadata_ or {}).get("post_id", "")
-                if pid and pid not in event_dates:
-                    event_dates[pid] = str(ev.date)[:10]
+        # Group by post_id, take latest snapshot per post
+        seen: set[str] = set()
+        posts = []
+        for r in rows:
+            meta = r.metadata_ or {}
+            post_id = meta.get("post_id", "")
+            if post_id in seen:
+                continue
+            seen.add(post_id)
+            original_date = event_dates.get(post_id, str(r.date)[:10])
+            posts.append(
+                {
+                    "upvotes": int(r.value),
+                    "date": original_date,
+                    "metadata": meta,
+                }
+            )
 
-            # Group by post_id, take latest snapshot per post
-            seen: set[str] = set()
-            posts = []
-            for r in rows:
-                meta = r.metadata_ or {}
-                post_id = meta.get("post_id", "")
-                if post_id in seen:
-                    continue
-                seen.add(post_id)
-                original_date = event_dates.get(post_id, str(r.date)[:10])
-                posts.append(
-                    {
-                        "upvotes": int(r.value),
-                        "date": original_date,
-                        "metadata": meta,
-                    }
-                )
-
-            return posts
+        return posts
 
 
 # ---------------------------------------------------------------------------
@@ -3219,18 +3360,59 @@ class InsightsDetailDialog(BaseDetailPopup):
     """Insights service detail modal with tabbed interface."""
 
     def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
-        metadata: dict[str, Any] = component_data.metadata or {}
+        self._metadata: dict[str, Any] = component_data.metadata or {}
+        self._tabs_container = ft.Container(
+            content=ft.Column(
+                [ft.ProgressBar()],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER,
+                expand=True,
+            ),
+            padding=ft.padding.symmetric(horizontal=60),
+            expand=True,
+        )
 
-        # Single DB load shared by Overview, GitHub, and Stars tabs
-        db = _load_db()
+        super().__init__(
+            page=page,
+            component_data=component_data,
+            title_text=get_component_title("service_insights"),
+            subtitle_text=get_component_subtitle(
+                "service_insights", metadata=self._metadata
+            ),
+            sections=[self._tabs_container],
+            scrollable=False,
+            status_detail=get_status_detail(component_data),
+            width=1500,
+            height=850,
+        )
+
+    def did_mount(self) -> None:
+        self.page.run_task(self._load_and_build)
+
+    async def _load_and_build(self) -> None:
+        """Fetch bulk data from API and build all tabs."""
+        from app.core.client import APIClient
+
+        client = APIClient()
+        raw = await client.get("/api/v1/insights/all")
+        if not raw:
+            self._tabs_container.content = SecondaryText(
+                "Failed to load insights data."
+            )
+            self._tabs_container.update()
+            return
+
+        bulk = BulkInsightsResponse.model_validate(raw)
+        db = _build_db_from_bulk(bulk)
+        metadata = self._metadata
 
         tabs_list = [
-            ft.Tab(text="Overview", content=OverviewTab(metadata, db)),
-            ft.Tab(text="GitHub", content=GitHubTrafficTab()),
-            ft.Tab(text="Stars", content=StarsTab()),
-            ft.Tab(text="PyPI", content=PyPITab()),
-            ft.Tab(text="Docs", content=DocsTab()),
-            ft.Tab(text="Reddit", content=RedditTab()),
+            ft.Tab(text="Overview", content=OverviewTab(metadata, db, bulk)),
+            ft.Tab(text="GitHub", content=GitHubTrafficTab(bulk=bulk)),
+            ft.Tab(text="Stars", content=StarsTab(bulk=bulk)),
+            ft.Tab(text="PyPI", content=PyPITab(bulk=bulk)),
+            ft.Tab(text="Docs", content=DocsTab(bulk=bulk)),
+            ft.Tab(text="Reddit", content=RedditTab(bulk=bulk)),
             ft.Tab(text="Settings", content=SettingsTab(metadata, db)),
         ]
 
@@ -3244,20 +3426,5 @@ class InsightsDetailDialog(BaseDetailPopup):
             indicator_color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
-        super().__init__(
-            page=page,
-            component_data=component_data,
-            title_text=get_component_title("service_insights"),
-            subtitle_text=get_component_subtitle("service_insights", metadata),
-            sections=[
-                ft.Container(
-                    content=tabs,
-                    padding=ft.padding.symmetric(horizontal=60),
-                    expand=True,
-                )
-            ],
-            scrollable=False,
-            status_detail=get_status_detail(component_data),
-            width=1500,
-            height=850,
-        )
+        self._tabs_container.content = tabs
+        self._tabs_container.update()

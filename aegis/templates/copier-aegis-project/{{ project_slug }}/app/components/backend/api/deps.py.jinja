@@ -20,6 +20,7 @@ from app.services.auth.org_service import OrgService
 {% if include_insights %}
 from app.services.insights.collector_service import CollectorService
 from app.services.insights.insight_service import InsightService
+from app.services.insights.query_service import InsightQueryService
 {% endif %}
 
 
@@ -121,6 +122,13 @@ async def get_collector_service(
 ) -> CollectorService:
     """Provide a CollectorService instance."""
     return CollectorService(db)
+
+
+async def get_query_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> InsightQueryService:
+    """Provide an InsightQueryService instance."""
+    return InsightQueryService(session=db)
 {% endif %}
 
 
