@@ -4,7 +4,7 @@ requires-python = ">=3.11, <3.15"
 
 [[package]]
 name = "aegis-stack"
-version = "0.6.9"
+version = "0.6.10rc1"
 source = { editable = "." }
 dependencies = [
     { name = "copier" },
