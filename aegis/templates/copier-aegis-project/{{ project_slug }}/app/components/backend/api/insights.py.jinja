@@ -30,7 +30,7 @@ async def get_all_insights(
 ) -> BulkInsightsResponse:
     """Bulk-load all insight data for the dashboard."""
     cached = cache.get(CACHE_KEY)
-    if cached:
+    if cached is not None:
         return cached
     result = await qs.load_all()
     cache.set(CACHE_KEY, result)

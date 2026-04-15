@@ -69,6 +69,31 @@ SHARED_TEMPLATE_FILES: dict[str, SharedFilePolicy] = {
         "backup": True,
         "warn": False,
     },  # Contains conditional router includes for services (auth, AI, etc.)
+    "app/components/backend/api/deps.py": {
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Contains conditional dependency providers for services
+    "app/services/system/health_db.py": {
+        "overwrite": True,
+        "backup": False,
+        "warn": False,
+    },  # Database health check dispatcher (conditional on database engine)
+    "app/services/system/health_db_sqlite.py": {
+        "overwrite": True,
+        "backup": False,
+        "warn": False,
+    },  # SQLite health check (conditional on include_database)
+    "app/services/system/health_db_postgres.py": {
+        "overwrite": True,
+        "backup": False,
+        "warn": False,
+    },  # Postgres health check (conditional on include_database)
+    "app/components/backend/startup/database_init.py": {
+        "overwrite": True,
+        "backup": False,
+        "warn": False,
+    },  # Database init hook (conditional on include_database)
     "app/components/backend/api/models.py": {
         "overwrite": True,
         "backup": True,
