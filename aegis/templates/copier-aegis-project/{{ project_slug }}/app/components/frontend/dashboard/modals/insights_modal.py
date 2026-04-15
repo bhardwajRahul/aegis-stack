@@ -17,6 +17,7 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.constants import COUNTRY_NAMES
 from app.services.insights.schemas import BulkInsightsResponse
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
@@ -91,6 +92,8 @@ CATEGORY_CONFIG: dict[str, dict[str, str]] = {
     "pypi_daily": {"label": "PyPI Best Single Day", "color": "#EF4444"},
     "plausible_daily_visitors": {"label": "Docs 1-Day Visitors", "color": "#6366F1"},
     "plausible_daily_pageviews": {"label": "Docs 1-Day Pageviews", "color": "#22C55E"},
+    "star_daily": {"label": "Stars Best Day", "color": "#FFD700"},
+    "star_monthly": {"label": "Stars Best Month", "color": "#FFD700"},
 }
 
 # Event type to status mapping (for activity feed dot colors)
@@ -930,12 +933,57 @@ class GitHubTrafficTab(InsightsTab):
         prev_v = data.get("prev_views", 0)
         prev_vis = data.get("prev_visitors", 0)
 
+        # Latest day's values for subtitle
+        last_day = daily[-1] if daily else {}
+        last_clones = last_day.get("clones", 0)
+        last_unique = last_day.get("unique_cloners", 0)
+        last_views = last_day.get("views", 0)
+        last_visitors = last_day.get("unique_visitors", 0)
+        last_date = last_day.get("date", "")
+
+        from datetime import datetime as _dt
+
+        _days_ago = (
+            (_dt.now() - _dt.strptime(last_date, "%Y-%m-%d")).days if last_date else 0
+        )
+        _day_label = (
+            "today"
+            if _days_ago == 0
+            else "yesterday"
+            if _days_ago == 1
+            else f"{_days_ago}d ago"
+        )
+
         # Metric cards — all on one row, always visible
         forks = data.get("forks", [])
         releases = data.get("releases", {})
         star_daily = data.get("star_events_daily", [])
         avg_stars = (
             sum(d["stars"] for d in star_daily) / len(star_daily) if star_daily else 0
+        )
+
+        # Previous period clone ratio
+        prev_ratio = prev_c / prev_u if prev_u > 0 else 0
+        prev_ratio_label = (
+            f"prev: {prev_ratio:.1f}:1" if prev_ratio > 0 else f"in {range_label}"
+        )
+
+        # Previous period avg stars (from bulk data)
+        from app.services.insights.query_service import InsightQueryService
+
+        cutoff, prev_cutoff = InsightQueryService.compute_cutoffs(self._days)
+        prev_star_rows = [
+            r
+            for r in self._bulk.daily.get("star_events", [])
+            if prev_cutoff <= r.date < cutoff
+        ]
+        prev_avg_stars = (
+            sum(int(r.value) for r in prev_star_rows) / len(prev_star_rows)
+            if prev_star_rows
+            else 0
+        )
+        prev_stars_label = (
+            f"prev: {prev_avg_stars:.1f}" if prev_star_rows else f"in {range_label}"
         )
 
         content.append(
@@ -946,12 +994,14 @@ class GitHubTrafficTab(InsightsTab):
                         f"{total_clones:,}",
                         Theme.Colors.PRIMARY,
                         change_pct=_pct(total_clones, prev_c),
+                        prev_value=f"+{last_clones:,} {_day_label}",
                     ),
                     MetricCard(
                         "Unique",
                         f"{total_unique:,}",
                         Theme.Colors.INFO,
                         change_pct=_pct(total_unique, prev_u),
+                        prev_value=f"+{last_unique:,} {_day_label}",
                         tooltip="Unique cloners per day, counted independently by GitHub. Not deduplicated across days.",
                     ),
                     MetricCard(
@@ -959,17 +1009,39 @@ class GitHubTrafficTab(InsightsTab):
                         f"{total_views:,}",
                         Theme.Colors.SUCCESS,
                         change_pct=_pct(total_views, prev_v),
+                        prev_value=f"+{last_views:,} {_day_label}",
                     ),
                     MetricCard(
                         "Visitors",
                         f"{total_visitors:,}",
                         Theme.Colors.WARNING,
                         change_pct=_pct(total_visitors, prev_vis),
+                        prev_value=f"+{last_visitors:,} {_day_label}",
                     ),
-                    MetricCard("Clone Ratio", f"{clone_ratio:.1f}:1", "#E91E63"),
-                    MetricCard("Forks", str(len(forks)), "#A855F7"),
-                    MetricCard("Releases", str(len(releases)), "#22C55E"),
-                    MetricCard("Avg Stars/Day", f"{avg_stars:.1f}", "#F59E0B"),
+                    MetricCard(
+                        "Clone Ratio",
+                        f"{clone_ratio:.1f}:1",
+                        "#E91E63",
+                        prev_value=prev_ratio_label,
+                    ),
+                    MetricCard(
+                        "Forks",
+                        str(len(forks)),
+                        "#A855F7",
+                        prev_value=f"in {range_label}",
+                    ),
+                    MetricCard(
+                        "Releases",
+                        str(len(releases)),
+                        "#22C55E",
+                        prev_value=f"in {range_label}",
+                    ),
+                    MetricCard(
+                        "Avg Stars/Day",
+                        f"{avg_stars:.1f}",
+                        "#F59E0B",
+                        prev_value=prev_stars_label,
+                    ),
                 ],
                 spacing=Theme.Spacing.MD,
             )
@@ -1539,9 +1611,6 @@ class GitHubTrafficTab(InsightsTab):
                 else:
                     releases[day] = tag
 
-        for f in forks:
-            all_events.append((f["date"], f"Fork: {f['actor']}", "fork"))
-
         # InsightEvent rows filtered to GitHub-relevant types
         cutoff_str = str(cutoff.date())
         for ev in [
@@ -1551,10 +1620,12 @@ class GitHubTrafficTab(InsightsTab):
         ]:
             day = str(ev.date)[:10]
             all_events.append((day, ev.description[:60], ev.event_type))
-            if day in releases:
-                releases[day] += f"\n{ev.description[:60]}"
-            else:
-                releases[day] = ev.description[:60]
+            # Only add release-type events to the releases annotation map
+            if ev.event_type == "release":
+                if day in releases:
+                    releases[day] += f"\n{ev.description[:60]}"
+                else:
+                    releases[day] = ev.description[:60]
 
         all_events.sort(key=lambda x: x[0])
 
@@ -1889,6 +1960,27 @@ class PyPITab(InsightsTab):
         prev_val = prev_total if include_ci else prev_human
         cur_val = range_all if include_ci else range_human
 
+        # Latest day's value for subtitle
+        last_day = daily[-1] if daily else {}
+        last_dl = (
+            last_day.get("human", 0) if not include_ci else last_day.get("total", 0)
+        )
+        last_dl_date = last_day.get("date", "")
+        from datetime import datetime as _dt
+
+        _dl_days_ago = (
+            (_dt.now() - _dt.strptime(last_dl_date, "%Y-%m-%d")).days
+            if last_dl_date
+            else 0
+        )
+        _dl_label = (
+            "today"
+            if _dl_days_ago == 0
+            else "yesterday"
+            if _dl_days_ago == 1
+            else f"{_dl_days_ago}d ago"
+        )
+
         # Metric cards
         metrics_row = ft.Row(
             [
@@ -1897,14 +1989,31 @@ class PyPITab(InsightsTab):
                     total_display,
                     "#FF69B4",
                     change_pct=_pct(cur_val, prev_val),
+                    prev_value=f"+{last_dl:,} {_dl_label}",
                 ),
-                MetricCard("Avg / Day", f"{avg_day:,}", Theme.Colors.INFO),
-                MetricCard("Avg / Week", f"{avg_week:,}", Theme.Colors.SUCCESS),
-                MetricCard("Avg / Month", f"{avg_month:,}", Theme.Colors.PRIMARY),
+                MetricCard(
+                    "Avg / Day",
+                    f"{avg_day:,}",
+                    Theme.Colors.INFO,
+                    prev_value=f"in {range_label}",
+                ),
+                MetricCard(
+                    "Avg / Week",
+                    f"{avg_week:,}",
+                    Theme.Colors.SUCCESS,
+                    prev_value=f"in {range_label}",
+                ),
+                MetricCard(
+                    "Avg / Month",
+                    f"{avg_month:,}",
+                    Theme.Colors.PRIMARY,
+                    prev_value=f"in {range_label}",
+                ),
                 MetricCard(
                     "Bot %",
                     f"{bot_pct:.0f}%",
                     Theme.Colors.WARNING if bot_pct > 50 else Theme.Colors.INFO,
+                    prev_value=f"in {range_label}",
                 ),
             ],
             spacing=Theme.Spacing.MD,
@@ -2643,6 +2752,160 @@ class DocsTab(InsightsTab):
             )
         )
 
+        # Insight cards: Most Read, Most Visited, Top Country
+        top_pages = data.get("top_pages", [])
+        countries = data.get("countries", [])
+        insight_cards: list[ft.Control] = []
+
+        if top_pages:
+
+            def _page_title(url: str) -> str:
+                parts = [p for p in url.strip("/").split("/") if p]
+                return parts[-1].replace("-", " ").title() if parts else "Home"
+
+            content_pages = [
+                p for p in top_pages if len(p["url"].strip("/").split("/")) >= 2
+            ]
+            read_pages = [p for p in content_pages if (p.get("time_s") or 0) > 0]
+            by_visitors = sorted(content_pages, key=lambda x: -x["visitors"])
+
+            # Card 1: Most Read (highest time_s)
+            if read_pages:
+                mr = read_pages[0]
+                mr_time = mr.get("time_s") or 0
+                mr_min = int(mr_time // 60)
+                mr_sec = int(mr_time % 60)
+                insight_cards.append(
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                SecondaryText("Most Read"),
+                                ft.Text(
+                                    _page_title(mr["url"]),
+                                    size=24,
+                                    weight=ft.FontWeight.W_600,
+                                ),
+                                SecondaryText(
+                                    f"{mr_min}m {mr_sec}s read time",
+                                    size=Theme.Typography.BODY_SMALL,
+                                ),
+                            ],
+                            spacing=Theme.Spacing.XS,
+                        ),
+                        padding=Theme.Spacing.MD,
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        border_radius=Theme.Components.CARD_RADIUS,
+                        border=ft.border.all(0.5, ft.Colors.OUTLINE),
+                        expand=True,
+                        tooltip=mr["url"],
+                    )
+                )
+
+            # Card 2: Most Visited (highest visitors, if different from Most Read)
+            most_read_url = read_pages[0]["url"] if read_pages else ""
+            if by_visitors and by_visitors[0]["url"] != most_read_url:
+                tv = by_visitors[0]
+                insight_cards.append(
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                SecondaryText("Most Visited"),
+                                ft.Text(
+                                    _page_title(tv["url"]),
+                                    size=24,
+                                    weight=ft.FontWeight.W_600,
+                                ),
+                                SecondaryText(
+                                    f"{tv['visitors']} visitors",
+                                    size=Theme.Typography.BODY_SMALL,
+                                ),
+                            ],
+                            spacing=Theme.Spacing.XS,
+                        ),
+                        padding=Theme.Spacing.MD,
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        border_radius=Theme.Components.CARD_RADIUS,
+                        border=ft.border.all(0.5, ft.Colors.OUTLINE),
+                        expand=True,
+                        tooltip=tv["url"],
+                    )
+                )
+
+        # Card 3: Top Country
+        if countries:
+            top_country = countries[0]
+            insight_cards.append(
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            SecondaryText("Top Country"),
+                            ft.Text(
+                                COUNTRY_NAMES.get(
+                                    top_country["country"], top_country["country"]
+                                ),
+                                size=24,
+                                weight=ft.FontWeight.W_600,
+                            ),
+                            SecondaryText(
+                                f"{top_country['visitors']} visitors",
+                                size=Theme.Typography.BODY_SMALL,
+                            ),
+                        ],
+                        spacing=Theme.Spacing.XS,
+                    ),
+                    padding=Theme.Spacing.MD,
+                    bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                    border_radius=Theme.Components.CARD_RADIUS,
+                    border=ft.border.all(0.5, ft.Colors.OUTLINE),
+                    expand=True,
+                )
+            )
+
+        # Card 4: Top 3 Countries
+        if len(countries) >= 2:
+            country_items: list[ft.Control] = []
+            for i, c in enumerate(countries[:3], 1):
+                country_items.append(
+                    ft.Container(
+                        content=ft.Row(
+                            [
+                                SecondaryText(
+                                    f"#{i}", size=Theme.Typography.BODY_SMALL
+                                ),
+                                BodyText(
+                                    COUNTRY_NAMES.get(c["country"], c["country"]),
+                                    size=Theme.Typography.BODY_SMALL,
+                                ),
+                                ft.Container(expand=True),
+                                SecondaryText(
+                                    f"{c['visitors']}", size=Theme.Typography.BODY_SMALL
+                                ),
+                            ],
+                            spacing=4,
+                        ),
+                    )
+                )
+            insight_cards.append(
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            SecondaryText("Top Countries"),
+                            *country_items,
+                        ],
+                        spacing=Theme.Spacing.XS,
+                    ),
+                    padding=Theme.Spacing.MD,
+                    bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                    border_radius=Theme.Components.CARD_RADIUS,
+                    border=ft.border.all(0.5, ft.Colors.OUTLINE),
+                    expand=True,
+                )
+            )
+
+        if insight_cards:
+            content.append(ft.Container(height=8))
+            content.append(ft.Row(insight_cards, spacing=Theme.Spacing.MD))
+
         # Date range
         date_range = (
             f"{_pretty_date(daily[0]['date'])} \u2014 {_pretty_date(daily[-1]['date'])}"
@@ -2945,7 +3208,9 @@ class DocsTab(InsightsTab):
                     all_pages[url] = {"url": url, "visitors": 0, "time_s": 0}
                 all_pages[url]["visitors"] += p.get("visitors", 0)
                 all_pages[url]["time_s"] += p.get("time_s") or 0
-        top_pages = sorted(all_pages.values(), key=lambda x: -x["visitors"])[:20]
+        top_pages = sorted(all_pages.values(), key=lambda x: -(x.get("time_s") or 0))[
+            :20
+        ]
 
         # Countries - aggregate per-day snapshots across selected range
         all_countries: dict[str, int] = {}

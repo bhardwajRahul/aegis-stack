@@ -56,6 +56,13 @@ def _truncate_stderr(stderr: str, max_lines: int = POST_GEN_STDERR_MAX_LINES) ->
     return "\n".join(result)
 
 
+# TODO: This entire file mapping + cleanup + shared_files approach needs to be
+# refactored. Every new template file requires manual registration in 3 places:
+# 1. get_component_file_mapping() below (for add/remove)
+# 2. cleanup_components() (for init-time removal)
+# 3. shared_files.py SHARED_TEMPLATE_FILES (for jinja regeneration on add-service)
+# This is fragile and unmaintainable. Should be auto-discovered from the template
+# directory structure or declared once in a single config.
 def get_component_file_mapping() -> dict[str, list[str]]:
     """
     Get mapping of components to their files.
@@ -76,6 +83,7 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/components/backend/api/scheduler.py",
             "tests/api/test_scheduler_endpoints.py",
             "app/components/frontend/dashboard/cards/scheduler_card.py",
+            "app/components/frontend/dashboard/modals/scheduler_modal.py",
             "tests/services/test_scheduled_task_manager.py",
         ],
         f"{ComponentNames.SCHEDULER}_persistence": [  # Only for sqlite backend
@@ -97,6 +105,8 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/components/backend/api/worker.py",
             "tests/api/test_worker_endpoints.py",
             "app/components/frontend/dashboard/cards/worker_card.py",
+            "app/components/frontend/dashboard/modals/worker_modal.py",
+            "app/components/frontend/dashboard/modals/task_history_section.py",
         ],
         ComponentNames.DATABASE: [
             "app/core/db.py",
@@ -158,6 +168,7 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/components/frontend/dashboard/cards/ai_card.py",
             "app/components/frontend/dashboard/modals/ai_modal.py",
             "app/components/frontend/dashboard/modals/ai_analytics_tab.py",
+            "app/components/frontend/dashboard/modals/llm_catalog_tab.py",
             "app/components/frontend/dashboard/modals/rag_tab.py",
             "tests/components/frontend/test_ai_analytics_utils.py",
         ],
@@ -186,12 +197,22 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/components/frontend/dashboard/modals/voice_settings_tab.py",
         ],
         AnswerKeys.SERVICE_INSIGHTS: [
-            "app/components/backend/api/insights",
+            "app/components/backend/api/insights.py",
             "app/services/insights",
             "app/cli/insights.py",
-            "tests/services/test_insights_service.py",
+            "tests/services/test_insight_service.py",
             "tests/services/test_insights_collectors.py",
+            "tests/services/test_query_service.py",
+            "tests/services/test_collector_service.py",
+            "tests/services/test_collector_github_traffic.py",
+            "tests/services/test_collector_github_events.py",
+            "tests/services/test_collector_github_stars.py",
+            "tests/services/test_collector_pypi.py",
+            "tests/services/test_collector_plausible.py",
+            "tests/services/test_collector_reddit.py",
             "tests/api/test_insights_endpoints.py",
+            "tests/test_bulk_response.py",
+            "tests/test_cache_integration.py",
             # Frontend dashboard files
             "app/components/frontend/dashboard/cards/insights_card.py",
             "app/components/frontend/dashboard/modals/insights_modal.py",
@@ -574,10 +595,22 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     if not is_enabled(AnswerKeys.INSIGHTS):
         remove_dir(project_path, "app/components/backend/api/insights")
         remove_dir(project_path, "app/services/insights")
+        remove_file(project_path, "app/components/backend/api/insights.py")
         remove_file(project_path, "app/cli/insights.py")
         remove_file(project_path, "tests/services/test_insights_service.py")
         remove_file(project_path, "tests/services/test_insights_collectors.py")
+        remove_file(project_path, "tests/services/test_insight_service.py")
+        remove_file(project_path, "tests/services/test_query_service.py")
+        remove_file(project_path, "tests/services/test_collector_service.py")
+        remove_file(project_path, "tests/services/test_collector_github_traffic.py")
+        remove_file(project_path, "tests/services/test_collector_github_events.py")
+        remove_file(project_path, "tests/services/test_collector_github_stars.py")
+        remove_file(project_path, "tests/services/test_collector_pypi.py")
+        remove_file(project_path, "tests/services/test_collector_plausible.py")
+        remove_file(project_path, "tests/services/test_collector_reddit.py")
         remove_file(project_path, "tests/api/test_insights_endpoints.py")
+        remove_file(project_path, "tests/test_bulk_response.py")
+        remove_file(project_path, "tests/test_cache_integration.py")
         remove_file(
             project_path, "app/components/frontend/dashboard/cards/insights_card.py"
         )

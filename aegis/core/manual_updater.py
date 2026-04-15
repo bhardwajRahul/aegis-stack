@@ -36,6 +36,7 @@ JINJA_EXTENSION = ".jinja"
 # which components/services are enabled.
 REGENERATE_ON_COMPONENT_CHANGE = {
     "app/components/backend/api/deps.py",
+    "app/components/backend/api/routing.py",
 }
 
 # Files with Jinja conditionals that depend on auth level (basic/rbac/org).

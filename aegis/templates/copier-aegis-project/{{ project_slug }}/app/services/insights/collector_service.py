@@ -15,7 +15,7 @@ from .collectors.github_traffic import GitHubTrafficCollector
 from .collectors.plausible import PlausibleCollector
 from .collectors.pypi import PyPICollector
 from .collectors.reddit import RedditCollector
-from .constants import SourceKeys
+from .constants import Periods, SourceKeys
 from .models import InsightSource
 
 logger = logging.getLogger(__name__)
@@ -193,10 +193,13 @@ class CollectorService:
                     "event_type": "milestone_pypi",
                 },
             ],
+            SourceKeys.GITHUB_STARS: [
+                # Uses new_star events grouped by day (not star_events which is ClickHouse 14d only)
+            ],
         }
 
         checks = record_checks.get(source_key, [])
-        if not checks:
+        if not checks and source_key != SourceKeys.GITHUB_STARS:
             return broken
 
         now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -356,6 +359,146 @@ class CollectorService:
                         rolling_total,
                         current_record,
                     )
+
+        # Star record checks (daily + monthly, from new_star events)
+        if source_key == SourceKeys.GITHUB_STARS:
+            from sqlalchemy import func as sa_func
+
+            star_mt = (
+                await self.db.exec(
+                    select(InsightMetricType).where(InsightMetricType.key == "new_star")
+                )
+            ).first()
+            if star_mt:
+                # Best day: GROUP BY date in SQL
+                daily_result = (
+                    await self.db.exec(
+                        select(
+                            InsightMetric.date,
+                            sa_func.count().label("cnt"),
+                        )
+                        .where(
+                            InsightMetric.metric_type_id == star_mt.id,
+                            InsightMetric.period == Periods.EVENT,
+                        )
+                        .group_by(InsightMetric.date)
+                        .order_by(sa_func.count().desc())
+                        .limit(1)
+                    )
+                ).first()
+
+                best_day_key = str(daily_result[0])[:10] if daily_result else None
+                best_day_val = daily_result[1] if daily_result else 0
+
+                # Best month: extract YYYY-MM, group in SQL
+                # SQLAlchemy strftime for SQLite, to_char for Postgres
+                month_expr = sa_func.strftime("%Y-%m", InsightMetric.date)
+                monthly_result = (
+                    await self.db.exec(
+                        select(
+                            month_expr.label("month"),
+                            sa_func.count().label("cnt"),
+                        )
+                        .where(
+                            InsightMetric.metric_type_id == star_mt.id,
+                            InsightMetric.period == Periods.EVENT,
+                        )
+                        .group_by(month_expr)
+                        .order_by(sa_func.count().desc())
+                        .limit(1)
+                    )
+                ).first()
+
+                best_month_key = monthly_result[0] if monthly_result else None
+                best_month_val = monthly_result[1] if monthly_result else 0
+
+                # Best Day check
+                if best_day_val > 0:
+                    existing = (
+                        await self.db.exec(
+                            select(InsightEvent).where(
+                                InsightEvent.event_type == "milestone_github"
+                            )
+                        )
+                    ).all()
+                    current_record = 0
+                    for ev in existing:
+                        meta = ev.metadata_ if isinstance(ev.metadata_, dict) else {}
+                        if meta.get("category") == "star_daily":
+                            import re
+
+                            numbers = re.findall(r"\d[\d,]*", ev.description)
+                            for n in numbers:
+                                current_record = max(
+                                    current_record, int(n.replace(",", ""))
+                                )
+
+                    if best_day_val > current_record:
+                        from datetime import datetime as dt
+
+                        desc = f"{best_day_val:,} (Stars Best Day)"
+                        event = InsightEvent(
+                            date=dt.strptime(best_day_key, "%Y-%m-%d"),
+                            event_type="milestone_github",
+                            description=desc,
+                            metadata_={"category": "star_daily"},
+                        )
+                        self.db.add(event)
+                        await self.db.commit()
+                        broken.append(
+                            f"Stars Best Day: {best_day_val:,} (was {current_record:,})"
+                        )
+                        logger.info(
+                            "New star daily record: %s on %s (prev: %s)",
+                            best_day_val,
+                            best_day_key,
+                            current_record,
+                        )
+
+                # Best Month check
+                if best_month_val > 0:
+                    existing = (
+                        await self.db.exec(
+                            select(InsightEvent).where(
+                                InsightEvent.event_type == "milestone_github"
+                            )
+                        )
+                    ).all()
+                    current_record = 0
+                    for ev in existing:
+                        meta = ev.metadata_ if isinstance(ev.metadata_, dict) else {}
+                        if meta.get("category") == "star_monthly":
+                            import re
+
+                            numbers = re.findall(r"\d[\d,]*", ev.description)
+                            for n in numbers:
+                                current_record = max(
+                                    current_record, int(n.replace(",", ""))
+                                )
+
+                    if best_month_val > current_record:
+                        from datetime import datetime as dt
+
+                        month_dt = dt.strptime(best_month_key, "%Y-%m")
+                        month_label = month_dt.strftime("%b %Y")
+                        desc = f"{best_month_val:,} (Stars Best Month)"
+                        event = InsightEvent(
+                            date=dt.strptime(f"{best_month_key}-01", "%Y-%m-%d"),
+                            event_type="milestone_github",
+                            description=desc,
+                            metadata_={"category": "star_monthly"},
+                        )
+                        self.db.add(event)
+                        await self.db.commit()
+                        broken.append(
+                            f"Stars Best Month: {best_month_val:,} in {month_label} (was {current_record:,})"
+                        )
+                        logger.info(
+                            "New star monthly record: %s in %s (prev: %s)",
+                            best_month_val,
+                            month_label,
+                            current_record,
+                        )
 
         return broken
 

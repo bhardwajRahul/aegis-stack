@@ -235,6 +235,57 @@ class TestCheckRecords:
         broken = await service._check_records(SourceKeys.REDDIT)
         assert broken == []
 
+    @pytest.mark.asyncio
+    async def test_star_daily_record(self, async_db_session: AsyncSession) -> None:
+        """_check_records detects new star daily ATH from new_star events."""
+        source = await _seed_source(async_db_session, SourceKeys.GITHUB_STARS)
+        mt = await _seed_metric_type(async_db_session, source, "new_star")
+
+        # 6 stars on the same day
+        for i in range(6):
+            async_db_session.add(
+                InsightMetric(
+                    date=datetime(2026, 4, 10),
+                    metric_type_id=mt.id,  # type: ignore[arg-type]
+                    value=float(i + 1),
+                    period=Periods.EVENT,
+                )
+            )
+        await async_db_session.flush()
+
+        service = CollectorService(async_db_session)
+        broken = await service._check_records(SourceKeys.GITHUB_STARS)
+
+        star_records = [b for b in broken if "Stars Best Day" in b]
+        assert len(star_records) == 1
+        assert "6" in star_records[0]
+
+    @pytest.mark.asyncio
+    async def test_star_monthly_record(self, async_db_session: AsyncSession) -> None:
+        """_check_records detects new star monthly ATH from new_star events."""
+        source = await _seed_source(async_db_session, SourceKeys.GITHUB_STARS)
+        mt = await _seed_metric_type(async_db_session, source, "new_star")
+
+        # Stars across multiple days in the same month: 3 + 2 + 5 = 10
+        for day, count in [(1, 3), (5, 2), (10, 5)]:
+            for i in range(count):
+                async_db_session.add(
+                    InsightMetric(
+                        date=datetime(2026, 4, day),
+                        metric_type_id=mt.id,  # type: ignore[arg-type]
+                        value=float(i + 1),
+                        period=Periods.EVENT,
+                    )
+                )
+        await async_db_session.flush()
+
+        service = CollectorService(async_db_session)
+        broken = await service._check_records(SourceKeys.GITHUB_STARS)
+
+        monthly_records = [b for b in broken if "Stars Best Month" in b]
+        assert len(monthly_records) == 1
+        assert "10" in monthly_records[0]
+
 
 # ---------------------------------------------------------------------------
 # Tests: get_registered_sources
