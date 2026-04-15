@@ -25,6 +25,7 @@ COMPONENT_CONFIG: dict[str, dict[str, str]] = {
     "service_ai": {"name": "AI Service", "modal_name": "ai"},
     "service_auth": {"name": "Auth Service", "modal_name": "auth"},
     "service_comms": {"name": "Comms Service", "modal_name": "comms"},
+    "service_payment": {"name": "Payment Service", "modal_name": "payment"},
     "frontend": {"name": "Frontend", "modal_name": "frontend"},
 }
 
@@ -115,7 +116,12 @@ class DiagramNode(ft.Container):
             return get_ai_engine_display(metadata)
         elif component_name == "service_auth":
             return "JWT Authentication"
-        elif component_name in ("ingress", "worker", "service_insights"):
+        elif component_name in (
+            "ingress",
+            "worker",
+            "service_insights",
+            "service_payment",
+        ):
             return get_component_subtitle(component_name, metadata)
 
         # Fall back to static label

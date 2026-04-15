@@ -57,13 +57,6 @@ nav:
     - Observability: components/observability.md
   - Services:
     - Overview: services/index.md
-    - Authentication:
-      - Getting Started: services/auth/index.md
-      - Auth Levels: services/auth/levels.md
-      - API Reference: services/auth/api.md
-      - Service Layer: services/auth/integration.md
-      - CLI Commands: services/auth/cli.md
-      - Examples: services/auth/examples.md
     - AI Service:
       - Getting Started: services/ai/index.md
       - Illiana: services/ai/illiana.md
@@ -77,6 +70,13 @@ nav:
       - Service Layer: services/ai/integration.md
       - CLI Commands: services/ai/cli.md
       - Examples: services/ai/examples.md
+    - Authentication:
+      - Getting Started: services/auth/index.md
+      - Auth Levels: services/auth/levels.md
+      - API Reference: services/auth/api.md
+      - Service Layer: services/auth/integration.md
+      - CLI Commands: services/auth/cli.md
+      - Examples: services/auth/examples.md
     - Communications:
       - Getting Started: services/comms/index.md
       - Provider Setup: services/comms/setup.md
@@ -89,6 +89,13 @@ nav:
       - Dashboard: services/insights/dashboard.md
       - Configuration: services/insights/configuration.md
       - Examples: services/insights/examples.md
+    - Payment (Experimental):
+      - Getting Started: services/payment/index.md
+      - Provider Setup: services/payment/setup.md
+      - Dashboard: services/payment/dashboard.md
+      - API Reference: services/payment/api.md
+      - CLI Commands: services/payment/cli.md
+      - Examples: services/payment/examples.md
   - Overseer:
     - Overview: overseer/index.md
     - The Story: overseer/story.md

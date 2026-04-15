@@ -10,11 +10,15 @@ import flet as ft
 from flet import PageDisconnectedException
 import httpx
 
+from app.core.config import settings
 from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 {% if include_insights %}
 from app.services.insights.constants import INSIGHT_COMPONENT_NAME
+{% endif %}
+{% if include_payment %}
+from app.services.payment.constants import PAYMENT_COMPONENT_NAME
 {% endif %}
 from .dashboard.activity_feed import ActivityFeed
 from .dashboard.cards import (
@@ -42,6 +46,9 @@ from .dashboard.cards import (
 {% if ollama_mode != "none" %}
     OllamaCard,
 {% endif %}
+{% if include_payment %}
+    PaymentCard,
+{% endif %}
 {% if include_redis %}
     RedisCard,
 {% endif %}
@@ -49,7 +56,7 @@ from .dashboard.cards import (
     SchedulerCard,
 {% endif %}
     ServerCard,
-{% if include_auth or include_ai or include_comms %}
+{% if include_auth or include_ai or include_comms or include_payment %}
     ServicesCard,
 {% endif %}
 {% if include_worker %}
@@ -771,7 +778,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 elif component_name == "scheduler":
                     return SchedulerCard(component_data).build()
 {% endif %}
-{% if include_auth or include_ai or include_comms %}
+{% if include_auth or include_ai or include_comms or include_payment %}
                 elif component_name == "services":
                     return ServicesCard(component_data).build()
 {% endif %}
@@ -792,7 +799,11 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 elif component_name == f"{SERVICE_PREFIX}{INSIGHT_COMPONENT_NAME}":
                     return InsightsCard(component_data).build()
 {% endif %}
-{% if include_auth or include_ai or include_comms %}
+{% if include_payment %}
+                elif component_name == f"{SERVICE_PREFIX}{PAYMENT_COMPONENT_NAME}":
+                    return PaymentCard(component_data).build()
+{% endif %}
+{% if include_auth or include_ai or include_comms or include_payment %}
                 elif component_name.startswith("service_"):
                     # For other services, use generic ServicesCard for now
                     return ServicesCard(component_data).build()
@@ -835,7 +846,9 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             """Refresh the stunning marketing-grade dashboard."""
             try:
                 # Use the single /health/ endpoint for all health data
-                response = await http_client.get("http://localhost:8000/health/")
+                response = await http_client.get(
+                    f"http://localhost:{settings.PORT}/health/"
+                )
                 data = response.json()
 
                 # Extract components from health API response (navigate structure)
@@ -1019,7 +1032,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
                 try:
                     logger.info("SSE: connecting to /events/worker/stream")
                     async with http_client.stream(
-                        "GET", "http://localhost:8000/events/worker/stream",
+                        "GET", f"http://localhost:{settings.PORT}/events/worker/stream",
                         timeout=httpx.Timeout(
                             connect=5.0, read=15.0, write=5.0, pool=5.0,
                         ),

@@ -1,0 +1,18 @@
+"""Auth dependencies for FastAPI route injection."""
+
+from app.components.backend.api.deps import get_async_db
+from app.models.user import User
+from app.services.auth.auth_service import get_current_user_from_token
+from fastapi import Depends
+from fastapi.security import OAuth2PasswordBearer
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
+
+
+async def get_current_active_user(
+    token: str | None = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_async_db),
+) -> User:
+    """Get the current authenticated user. Raises 401 if not authenticated."""
+    return await get_current_user_from_token(token, db)

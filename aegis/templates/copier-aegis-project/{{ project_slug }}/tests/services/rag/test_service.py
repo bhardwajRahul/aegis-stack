@@ -154,7 +154,8 @@ class TestRAGService:
         # Get stats
         stats = await rag_service.get_collection_stats("manage_test")
         assert stats is not None
-        assert stats["count"] > 0
+        assert stats["count"] > 0  # Total chunks
+        assert stats["doc_count"] > 0  # Unique documents
 
         # Delete collection
         deleted = await rag_service.delete_collection("manage_test")

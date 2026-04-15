@@ -140,4 +140,10 @@ asyncio_default_fixture_loop_scope = "function"
 
 [tool.ty.src]
 # Exclude template files and generated test projects from type checking
-exclude = ["aegis/templates/**", "test-project/**", "my-app/**", "test-*/**"]
+exclude = [
+    "aegis/templates/**",
+    "test-project/**",
+    "my-app/**",
+    "test-*/**",
+    "*-test/**",
+]

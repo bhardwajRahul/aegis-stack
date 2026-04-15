@@ -14,10 +14,24 @@ import os
 from typing import Any
 
 import httpx
+from openai import AsyncOpenAI
 from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 
 from app.core.log import logger
+
+# Re-exported so tests can patch ``app.services.ai.providers.<Name>``
+# directly — patch targets follow the import path, not the source path,
+# for clarity in test failure output.
+__all__ = [
+    "Agent",
+    "AsyncOpenAI",
+    "ModelSettings",
+    "OpenAIChatModel",
+    "OpenAIProvider",
+]
 
 from .config import AIServiceConfig
 from .models import AIProvider
@@ -313,12 +327,9 @@ def _create_ollama_agent(
         settings: Application settings for base URL
         system_prompt_override: Optional custom system prompt (for RAG mode)
     """
-    # Lazy imports - only needed for OLLAMA provider
-    from openai import AsyncOpenAI
-
-    from pydantic_ai.models.openai import OpenAIChatModel
-    from pydantic_ai.providers.openai import OpenAIProvider
-
+    # ``AsyncOpenAI``, ``OpenAIChatModel``, ``OpenAIProvider`` are
+    # imported at module level so tests can patch them on this module
+    # directly (``@patch("app.services.ai.providers.AsyncOpenAI")``).
     try:
         # Get Ollama base URL from settings (uses effective URL for Docker/local auto-detection)
         base_url = settings.ollama_base_url_effective
@@ -406,11 +417,18 @@ def _set_provider_env_var(provider: AIProvider, api_key: str) -> None:
 
 
 def validate_provider_support(provider: AIProvider) -> bool:
-    """Check if a provider is supported."""
+    """Check if a provider is supported in the current install.
+
+    Catches ``ImportError`` (thrown lazily by pydantic-ai when an
+    optional provider SDK isn't installed) in addition to our own
+    ``ProviderError`` — a user who didn't select that provider via
+    ``ai_providers`` at ``aegis init`` time has it effectively
+    unsupported, not crashing.
+    """
     try:
         _get_model_class(provider)
         return True
-    except ProviderError:
+    except (ProviderError, ImportError):
         return False
 
 

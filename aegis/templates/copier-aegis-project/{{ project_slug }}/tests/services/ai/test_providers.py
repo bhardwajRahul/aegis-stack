@@ -18,7 +18,15 @@ from app.services.ai.providers import (
 
 
 class TestGetModelClass:
-    """Tests for provider model class selection."""
+    """Tests for provider model class selection.
+
+    Each provider-specific test skips itself if the underlying SDK isn't
+    installed — generated projects only pull in the SDKs for providers
+    the user selected via ``ai_providers`` (default: ``openai``).
+    Running ``test_anthropic_returns_anthropic_model`` in an openai-only
+    project would otherwise surface as an ``ImportError`` from
+    pydantic-ai's dynamic provider imports rather than a skip.
+    """
 
     def test_ollama_returns_openai_model(self) -> None:
         """Verify Ollama provider uses OpenAIChatModel."""
@@ -33,16 +41,19 @@ class TestGetModelClass:
 
     def test_anthropic_returns_anthropic_model(self) -> None:
         """Verify Anthropic provider uses AnthropicModel."""
+        pytest.importorskip("anthropic")
         model_class = _get_model_class(AIProvider.ANTHROPIC)
         assert model_class.__name__ == "AnthropicModel"
 
     def test_google_returns_google_model(self) -> None:
         """Verify Google provider uses GoogleModel."""
+        pytest.importorskip("google.genai")
         model_class = _get_model_class(AIProvider.GOOGLE)
         assert model_class.__name__ == "GoogleModel"
 
     def test_groq_returns_groq_model(self) -> None:
         """Verify Groq provider uses GroqModel."""
+        pytest.importorskip("groq")
         model_class = _get_model_class(AIProvider.GROQ)
         assert model_class.__name__ == "GroqModel"
 
@@ -75,18 +86,37 @@ class TestValidateProviderSupport:
         assert validate_provider_support(AIProvider.OLLAMA) is True
 
     def test_all_standard_providers_supported(self) -> None:
-        """Verify all standard providers are supported."""
-        standard_providers = [
+        """Verify all standard providers with available SDKs are supported.
+
+        Generated projects only pull in the SDKs for providers the user
+        selected via ``ai_providers`` (default: ``openai``). Anthropic,
+        Google, Groq etc. are lazy-imported inside pydantic-ai; asking
+        for their model class without the SDK raises ``ImportError``.
+        This test checks only the always-available providers plus any
+        whose SDK is actually installed in the current env.
+        """
+        # Always-available (no extra SDK needed beyond openai-compatible):
+        always_available = [
             AIProvider.OPENAI,
-            AIProvider.ANTHROPIC,
-            AIProvider.GOOGLE,
-            AIProvider.GROQ,
             AIProvider.MISTRAL,
             AIProvider.COHERE,
             AIProvider.OLLAMA,
             AIProvider.PUBLIC,
         ]
-        for provider in standard_providers:
+        for provider in always_available:
+            assert validate_provider_support(provider) is True
+
+        # Optional providers: check only when their SDK is installed.
+        optional = {
+            "anthropic": AIProvider.ANTHROPIC,
+            "google.genai": AIProvider.GOOGLE,
+            "groq": AIProvider.GROQ,
+        }
+        for module_name, provider in optional.items():
+            try:
+                __import__(module_name)
+            except ImportError:
+                continue
             assert validate_provider_support(provider) is True
 
 

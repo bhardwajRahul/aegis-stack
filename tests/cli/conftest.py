@@ -73,6 +73,28 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
     "base_with_ai_service": ProjectTemplateSpec(services=("ai",)),
     "base_with_ai_sqlite_service": ProjectTemplateSpec(services=("ai[sqlite]",)),
     "base_with_auth_and_ai_services": ProjectTemplateSpec(services=("auth", "ai")),
+    # Full-stack matrix entries (mirror STACK_COMBINATIONS service rows so
+    # ``make test-stacks-build`` doesn't pay a 30-40s regeneration cost
+    # per slow test — per ``tests/CLAUDE.md``, every new stack MUST have
+    # a cache entry or the matrix explodes past 10 minutes.
+    "auth_basic": ProjectTemplateSpec(services=("auth",)),
+    "auth_org_with_database": ProjectTemplateSpec(
+        components=("database",), services=("auth[org]",)
+    ),
+    "ai_with_database": ProjectTemplateSpec(
+        components=("database",), services=("ai[sqlite]",)
+    ),
+    "insights_full": ProjectTemplateSpec(
+        components=("database", "scheduler"), services=("insights",)
+    ),
+    "payment_with_database": ProjectTemplateSpec(
+        components=("database",), services=("payment",)
+    ),
+    "comms_only": ProjectTemplateSpec(services=("comms",)),
+    "everything": ProjectTemplateSpec(
+        components=("database", "scheduler", "worker", "redis"),
+        services=("auth[org]", "ai[sqlite]", "insights", "payment", "comms"),
+    ),
 }
 
 
@@ -169,6 +191,7 @@ def generated_stacks(
             combination.project_name,
             combination.components,
             session_temp_dir,
+            services=combination.services or None,
         )
 
         if not result.success:

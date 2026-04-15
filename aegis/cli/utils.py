@@ -36,6 +36,12 @@ def detect_scheduler_backend(components: list[str]) -> str:
                 # Check if database is also present (legacy detection)
                 clean_names = clean_component_names(components)
                 if ComponentNames.DATABASE in clean_names:
+                    # Use the database engine if specified, otherwise sqlite
+                    for comp in components:
+                        if extract_base_component_name(comp) == ComponentNames.DATABASE:
+                            db_engine = extract_engine_info(comp)
+                            if db_engine:
+                                return db_engine
                     return StorageBackends.SQLITE  # Default database backend
     return StorageBackends.MEMORY  # Default to memory-only
 

@@ -16,6 +16,7 @@ from ..constants import (
     AuthLevels,
     ComponentNames,
     OllamaMode,
+    PaymentProviders,
     StorageBackends,
     WorkerBackends,
 )
@@ -254,6 +255,13 @@ class TemplateGenerator:
                 for s in self.selected_services
             )
             else "no",
+            AnswerKeys.PAYMENT: "yes"
+            if any(
+                extract_base_service_name(s) == AnswerKeys.SERVICE_PAYMENT
+                for s in self.selected_services
+            )
+            else "no",
+            AnswerKeys.PAYMENT_PROVIDER: PaymentProviders.DEFAULT,
             # Insights source flags
             AnswerKeys.INSIGHTS_GITHUB: "yes"
             if "github" in self.insights_sources

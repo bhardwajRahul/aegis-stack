@@ -5,11 +5,15 @@ This module tests all valid component combinations to ensure every possible
 stack configuration generates successfully and produces valid project structures.
 
 Test Matrix:
-1. base                    (backend + frontend only)
-2. base + redis           (adds Redis infrastructure)
-3. base + scheduler       (includes Redis + APScheduler)
-4. base + worker          (includes Redis + arq workers)
-5. base + worker + scheduler (full processing stack)
+1. base                       (backend + frontend only)
+2. base + scheduler           (APScheduler component)
+3. base + worker              (Redis + arq workers; covers redis component transitively)
+4. base + worker + scheduler  (full processing stack)
+5. service rows (auth_basic, auth_org, ai_service, insights, payment, comms)
+   each pair the service with the components it needs (database, scheduler,
+   etc.), so the database component is exercised through the service rows
+   rather than as its own row.
+6. everything                 (kitchen sink)
 
 Each combination must:
 - Generate without errors
@@ -41,9 +45,11 @@ class StackCombination:
         expected_files: list[str],
         expected_docker_services: list[str],
         expected_pyproject_deps: list[str],
+        services: list[str] | None = None,
     ):
         self.name = name
         self.components = components
+        self.services = services or []
         self.description = description
         self.expected_files = expected_files
         self.expected_docker_services = expected_docker_services
@@ -58,6 +64,20 @@ class StackCombination:
     def project_name(self) -> str:
         """Get project name for this combination."""
         return f"test-{self.name}"
+
+    @property
+    def project_slug(self) -> str:
+        """Get installed-script slug (``aegis init`` hyphenates underscores).
+
+        Combinations named with underscores (``auth_basic``, ``ai_service``)
+        produce ``test-auth_basic`` as a raw name, but the generated project's
+        ``[project.scripts]`` entry — and therefore the ``uv run <name>`` CLI
+        invocation — uses the hyphenated form (``test-auth-basic``). Tests
+        that spawn the installed script must use this property; tests that
+        refer to the raw name (e.g. as an ``aegis init`` argument) use
+        ``project_name``.
+        """
+        return self.project_name.replace("_", "-")
 
 
 # Define all valid stack combinations
@@ -77,19 +97,10 @@ STACK_COMBINATIONS = [
         expected_docker_services=["webserver"],
         expected_pyproject_deps=["fastapi", "flet", "uvicorn"],
     ),
-    StackCombination(
-        name="redis",
-        components=["redis"],
-        description="Base stack with Redis infrastructure",
-        expected_files=[
-            "app/components/backend/",
-            "app/components/frontend/",
-            "app/entrypoints/webserver.py",
-            "docker-compose.yml",
-        ],
-        expected_docker_services=["webserver", "redis"],
-        expected_pyproject_deps=["fastapi", "flet", "redis"],
-    ),
+    # ``redis`` stack dropped from the matrix — ``worker`` and ``full`` both
+    # pull redis transitively, so a redis-only row added no unique coverage.
+    # The ``base_with_redis`` cache entry in conftest.py is still used by
+    # tests/cli/test_add_worker.py, so it stays.
     StackCombination(
         name="scheduler",
         components=["scheduler"],
@@ -146,26 +157,113 @@ STACK_COMBINATIONS = [
         ],
         expected_pyproject_deps=["fastapi", "flet", "arq", "apscheduler", "redis"],
     ),
+    # ``database`` stack dropped from the matrix — every service-with-database
+    # row (auth_org, ai_service, insights, payment) already exercises the
+    # database component end-to-end. The ``base_with_database`` cache entry
+    # in conftest.py is still used by 6 other test files, so it stays.
     StackCombination(
-        name="database",
-        components=["database"],
-        description="Base stack with SQLite database",
+        name="auth_basic",
+        components=[],
+        services=["auth"],
+        description="Auth service only (smallest auth slice)",
         expected_files=[
-            "app/components/backend/",
-            "app/components/frontend/",
-            "app/core/db.py",  # Database-specific file
-            "app/entrypoints/webserver.py",
-            "docker-compose.yml",
-            "pyproject.toml",
-            "Makefile",
+            "app/services/auth/",
+            "app/components/backend/api/auth/",
         ],
-        expected_docker_services=["webserver"],  # No database service for SQLite
+        expected_docker_services=["webserver"],
+        expected_pyproject_deps=["fastapi", "flet"],
+    ),
+    StackCombination(
+        name="auth_org",
+        components=["database"],
+        services=["auth[org]"],
+        description="Auth with org/RBAC level + database",
+        expected_files=[
+            "app/services/auth/",
+            "app/core/db.py",
+            "app/models/org.py",
+            "app/services/auth/org_service.py",
+        ],
+        expected_docker_services=["webserver"],
+        expected_pyproject_deps=["fastapi", "flet", "sqlmodel"],
+    ),
+    StackCombination(
+        name="ai_service",
+        components=["database"],
+        services=["ai[sqlite]"],
+        description="AI service with sqlite backend + database",
+        expected_files=[
+            "app/services/ai/",
+            "app/core/db.py",
+        ],
+        expected_docker_services=["webserver"],
+        expected_pyproject_deps=["fastapi", "flet", "pydantic-ai"],
+    ),
+    StackCombination(
+        name="insights",
+        components=["database", "scheduler"],
+        services=["insights"],
+        description="Insights service + database + scheduler",
+        expected_files=[
+            "app/services/insights/",
+            "app/core/db.py",
+            "app/components/scheduler/",
+        ],
+        expected_docker_services=["webserver", "scheduler"],
+        expected_pyproject_deps=["fastapi", "flet", "apscheduler"],
+    ),
+    StackCombination(
+        name="payment",
+        components=["database"],
+        services=["payment"],
+        description="Payment service (Stripe) + database",
+        expected_files=[
+            "app/services/payment/",
+            "app/core/db.py",
+        ],
+        expected_docker_services=["webserver"],
+        expected_pyproject_deps=["fastapi", "flet", "stripe"],
+    ),
+    StackCombination(
+        name="comms",
+        components=[],
+        services=["comms"],
+        description="Communications service (Twilio/SendGrid) only",
+        expected_files=[
+            "app/services/comms/",
+        ],
+        expected_docker_services=["webserver"],
+        expected_pyproject_deps=["fastapi", "flet"],
+    ),
+    StackCombination(
+        name="everything",
+        components=["database", "scheduler", "worker", "redis"],
+        services=["auth[org]", "ai[sqlite]", "insights", "payment", "comms"],
+        description="Kitchen sink: all services + all processing infra",
+        expected_files=[
+            "app/services/auth/",
+            "app/services/ai/",
+            "app/services/insights/",
+            "app/services/payment/",
+            "app/services/comms/",
+            "app/core/db.py",
+            "app/components/scheduler/",
+            "app/components/worker/",
+        ],
+        expected_docker_services=[
+            "webserver",
+            "redis",
+            "scheduler",
+            "worker-system",
+        ],
         expected_pyproject_deps=[
             "fastapi",
             "flet",
             "sqlmodel",
-            "sqlalchemy",
-            "aiosqlite",
+            "stripe",
+            "apscheduler",
+            "arq",
+            "redis",
         ],
     ),
 ]
@@ -265,11 +363,29 @@ def test_stack_combinations_comprehensive() -> None:
     # Verify we have tests for basic patterns
     combination_names = {combo.name for combo in STACK_COMBINATIONS}
 
-    expected_combinations = {"base", "redis", "scheduler", "worker", "full", "database"}
-    assert combination_names == expected_combinations, (
-        f"Missing expected combinations. "
-        f"Expected: {expected_combinations}, "
-        f"Got: {combination_names}"
+    # ``must_have`` pins the minimum matrix (component stacks + per-service
+    # slices + kitchen sink). New combos can be added without breaking the
+    # assertion, but removing any of these is a deliberate regression.
+    # ``redis`` and ``database`` were intentionally dropped — both are
+    # exercised transitively by larger rows (worker pulls redis; every
+    # service-with-database row pulls database), so dedicated rows for
+    # them only added pipeline-execution cost without unique coverage.
+    must_have = {
+        "base",
+        "scheduler",
+        "worker",
+        "full",
+        "auth_basic",
+        "auth_org",
+        "ai_service",
+        "insights",
+        "payment",
+        "comms",
+        "everything",
+    }
+    missing = must_have - combination_names
+    assert not missing, (
+        f"Matrix missing required combinations: {missing}. Got: {combination_names}"
     )
 
 

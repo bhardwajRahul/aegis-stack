@@ -22,6 +22,9 @@ from app.services.insights.collector_service import CollectorService
 from app.services.insights.insight_service import InsightService
 from app.services.insights.query_service import InsightQueryService
 {% endif %}
+{% if include_payment %}
+from app.services.payment.payment_service import PaymentService
+{% endif %}
 
 
 def get_db() -> Generator[Session]:
@@ -129,6 +132,15 @@ async def get_query_service(
 ) -> InsightQueryService:
     """Provide an InsightQueryService instance."""
     return InsightQueryService(session=db)
+{% endif %}
+{% if include_payment %}
+
+
+async def get_payment_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> PaymentService:
+    """Provide a PaymentService instance."""
+    return PaymentService(db)
 {% endif %}
 
 

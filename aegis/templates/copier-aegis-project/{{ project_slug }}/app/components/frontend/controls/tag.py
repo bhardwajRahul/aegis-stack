@@ -18,18 +18,20 @@ class Tag(ft.Container):
     """
 
     def __init__(self, text: str, color: str = ft.Colors.AMBER) -> None:
+        # No ``alignment`` / ``width`` set — the container shrink-wraps the
+        # text so a "Won" tag isn't the same width as "NEEDS_RESPONSE".
+        # Callers that want the tag visually centered in a wider slot
+        # should wrap it in a Row/Column with alignment, not force it here.
         super().__init__(
             border=ft.border.all(1, color),
             border_radius=ft.border_radius.all(5),
             padding=ft.Padding(7.5, 2.5, 7.5, 2.5),
-            alignment=ft.alignment.center,
             content=ft.Text(
                 text,
                 weight=ft.FontWeight.W_700,
                 color=color,
                 font_family=FontConfig.FAMILY_PRIMARY,
                 size=FontConfig.SIZE_TERTIARY,
-                text_align=ft.TextAlign.CENTER,
             ),
         )
 
@@ -125,10 +127,12 @@ class StatusTag(ft.Container):
         else:
             content = status_row
 
+        # No ``alignment`` — the container shrink-wraps its children so
+        # short statuses ("Won") don't stretch to the width of long ones
+        # ("NEEDS_RESPONSE") when placed in the same table column.
         super().__init__(
             content=content,
             bgcolor=bg_color,
             border_radius=ft.border_radius.all(12),
             padding=ft.Padding(10, 4, 10, 4),
-            alignment=ft.alignment.center,
         )

@@ -7,6 +7,9 @@ Uses DataTable for consistent styling with other tables in the app.
 
 import flet as ft
 from app.components.frontend.controls import DataTable, DataTableColumn
+{% if include_payment %}
+from app.services.payment.constants import PAYMENT_COMPONENT_NAME
+{% endif %}
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle
 
@@ -118,6 +121,12 @@ def get_component_display_info(
 
     elif component_name == "service_insights":
         return ("Insights", get_component_subtitle("service_insights", metadata))
+{% endif %}
+{% if include_payment %}
+
+    elif component_name == f"service_{PAYMENT_COMPONENT_NAME}":
+        provider = metadata.get("provider_display_name", "") or "Stripe"
+        return ("Payment", provider)
 {% endif %}
 {% if include_ingress %}
 
@@ -247,6 +256,9 @@ class StatusOverviewPanel(ft.Container):
 {% endif %}
 {% if include_comms %}
             "service_comms",
+{% endif %}
+{% if include_payment %}
+            f"service_{PAYMENT_COMPONENT_NAME}",
 {% endif %}
 {% if include_ingress %}
             "ingress",

@@ -115,6 +115,24 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/components/backend/api/insights/",
         ],
     ),
+    "payment": ServiceSpec(
+        name="payment",
+        type=ServiceType.PAYMENT,
+        description="Payment processing with Stripe (checkout, subscriptions, webhooks)",
+        required_components=[
+            ComponentNames.BACKEND,
+            ComponentNames.DATABASE,
+        ],
+        recommended_components=[ComponentNames.WORKER],
+        pyproject_deps=[
+            "stripe>=11.0.0",  # Stripe Python SDK
+        ],
+        template_files=[
+            "app/services/payment/",
+            "app/cli/payment.py",
+            "app/components/backend/api/payment/",
+        ],
+    ),
 }
 
 

@@ -1,56 +1,42 @@
 # Overseer Dashboard
 
-The Insights service integrates with the Overseer dashboard as an interactive modal with 7 tabs.
+Insights exists because you shouldn't need seven browser tabs (GitHub, PyPI Stats, Plausible, Reddit, a spreadsheet, a terminal, and a Google search for last month's numbers) to answer the question "how is my project actually doing?" The Overseer modal pulls every signal that matters into one place, backfills historical data that the source APIs only retain for 14 days, and keeps it current without you lifting a finger.
 
 ## Overview Tab
 
 ![Insights Overview](../../images/insights_dashboard.png)
 
-The landing tab shows a high-level summary with metric cards, a recent activity feed, and a key milestones grid.
-
-Metric cards show period-over-period change arrows comparing the current 14-day window against the previous 14 days. Each card also shows the latest day's value (e.g., "+77 yesterday") for at-a-glance daily monitoring.
-
-The milestones grid shows all-time records for each tracked category, including Stars Best Day and Stars Best Month. Only the highest value per category is displayed.
-
-The activity feed uses the same expandable row pattern as the main Overseer activity panel. Expanding a release shows a link to the GitHub release page. Expanding a fork shows a link to the user's GitHub profile. Expanding a Reddit post shows upvotes, comments, and a link to the post.
+The single-screen daily check-in. Period-over-period arrows tell you whether the last two weeks were better or worse than the two before them, yesterday's numbers surface for daily tracking, and the milestones grid pins the all-time records worth celebrating. If a release drops, a fork happens, or a Reddit post takes off, it lands in the activity feed without you having to go look.
 
 ## GitHub Tab
 
-Interactive GitHub Traffic with full clone/view history going back as far as data has been collected.
-
 ![GitHub Clones](../../images/insights_clones.png)
 
-Full clone/view history going back as far as data has been collected. GitHub only retains 14 days of traffic data, but the collector persists it daily so nothing is lost. Metric cards show the latest day's values alongside period-over-period trends. Clones and views charts trim independently so neither shows dead space. Event chips are clickable and highlight the corresponding data point on the chart. Fork data comes from the GitHub API for completeness (ClickHouse misses some).
+GitHub only lets you see the last 14 days of traffic, which means every month you lose a fresh window of data forever unless something is recording it. This tab is that something. Years of clone and view history are preserved so you can answer "did that blog post actually drive traffic?" six months later. Event chips let you correlate a spike to a release, a Hacker News post, or a Reddit thread without squinting at raw numbers.
 
 ## Stars Tab
 
-Cumulative star history chart showing growth over time.
-
 ![Star History](../../images/insights_stars.png)
 
-Cumulative star history with one data point per day that had activity. The Y-axis scales dynamically at zoomed ranges, and event chips only appear on dates with star activity. Tooltips show star numbers, usernames, and any events that occurred on that date.
+The curve everyone looks at first when they're deciding whether to trust your project. See the shape of your growth over time, spot which events actually moved the needle, and know when momentum is building versus stalling. Tooltips name the users who starred on each date, which is the raw material for thank-you DMs and early community-building.
 
 ## PyPI Tab
 
-Download analytics with human vs bot separation.
-
 ![PyPI Downloads](../../images/insights_downloads.png)
 
-Download analytics with human vs bot separation. The CI/Mirror toggle switches between total downloads and human-only (pip + uv). Metric cards show the latest day's downloads alongside period-over-period trends. Donut charts break down downloads by installer, country, and distribution type.
+PyPI download counts are famously misleading because CI pipelines and package mirrors dominate the totals. This tab separates humans from bots so you can tell whether real developers are using your package, which installer they prefer, and which countries they're coming from. The difference between "100k downloads" (impressive) and "100k downloads, 5k of them human" (humbling but useful) lives here.
 
 ## Docs Tab (Plausible)
 
-Documentation site analytics from Plausible.
-
 ![Docs Analytics](../../images/insights_docs.png)
 
-Documentation site analytics from Plausible. Insight cards surface the most-read page, most-visited page, and top countries with flag emojis. The bounce rate arrow inverts (green when it decreases). All data is range-aware and updates with date selection.
+Which pages of your documentation are actually being read. If your quickstart gets 10x the traffic of your API reference, that tells you where to invest your writing time. The most-visited page, the top countries, and the bounce-rate trend answer "are people finding what they need, or bouncing?" without staring at a Plausible tab in another window.
 
 ## Reddit Tab
 
-Tracked Reddit post performance. Each post shows subreddit, title, upvotes, comments, upvote ratio, and a clickable link.
+When a Reddit post about your project takes off, you want to know about it while the thread is still live, not three days later. Track specific posts by URL, watch upvotes and comments climb in near-realtime, and decide whether to jump into the thread yourself to answer questions.
 
-Posts are added on-demand via the CLI:
+Add posts to track via the CLI:
 
 ```bash
 my-app insights reddit add https://reddit.com/r/FastAPI/comments/abc123/your-post
@@ -58,7 +44,7 @@ my-app insights reddit add https://reddit.com/r/FastAPI/comments/abc123/your-pos
 
 ## Settings Tab
 
-Data source status and configuration. Shows each source with Active/Stale/Disabled status and last collection timestamp.
+The "why aren't my numbers updating" debugger. Every data source is listed with its last collection timestamp and active/stale/disabled status, so you can tell in ten seconds whether a missing metric means "there's no news" or "the collector broke three days ago."
 
 ## API
 
@@ -76,8 +62,8 @@ The dashboard makes zero direct database queries. All data flows through the API
 
 All interactive tabs share a common base:
 
-- **Date range chips** - 7d, 14d, 1m, 3m, 6m, 1y, All
-- **Events toggle** - Show/hide event annotation chips
-- **Event grouping** - At wider ranges, same-type events are grouped (weekly at 3m, monthly at 6m+)
-- **Date highlighting** - Click an event chip to highlight all chart points in that date range
-- **Last updated** - Shows the most recent data point date
+- **Date range chips**: 7d, 14d, 1m, 3m, 6m, 1y, All
+- **Events toggle**: show/hide event annotation chips
+- **Event grouping**: at wider ranges, same-type events are grouped (weekly at 3m, monthly at 6m+)
+- **Date highlighting**: click an event chip to highlight all chart points in that date range
+- **Last updated**: shows the most recent data point date

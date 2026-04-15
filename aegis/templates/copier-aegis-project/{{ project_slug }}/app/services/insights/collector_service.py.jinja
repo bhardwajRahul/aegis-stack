@@ -23,7 +23,7 @@ from .collectors.plausible import PlausibleCollector
 {% if insights_reddit %}
 from .collectors.reddit import RedditCollector
 {% endif %}
-from .constants import SourceKeys
+from .constants import Periods, SourceKeys
 from .models import InsightSource
 
 logger = logging.getLogger(__name__)
@@ -112,12 +112,18 @@ class CollectorService:
             if result.success:
                 # Update last_collected_at on the source
                 from datetime import datetime
+
                 stmt = select(InsightSource).where(InsightSource.key == source_key)
                 source = (await self.db.exec(stmt)).first()
                 if source:
                     source.last_collected_at = datetime.now()
                     self.db.add(source)
                     await self.db.commit()
+
+                # Invalidate cached insights data
+                from app.core.cache import cache
+
+                cache.invalidate("insights:all")
 
                 # Check for new records
                 new_records = await self._check_records(source_key)
@@ -146,49 +152,100 @@ class CollectorService:
             )
 
     async def _check_records(self, source_key: str) -> list[str]:
-        """Check if any metrics set new all-time records after collection."""
+        """Check if any metrics set new all-time records after collection. Returns list of broken record descriptions."""
         from datetime import datetime, timedelta
-        import re
 
         from .models import InsightEvent, InsightMetric, InsightMetricType
 
         broken: list[str] = []
 
-        RECORD_CHECKS: dict[str, list[dict[str, str]]] = {
+        # Define which metrics to track records for, per source
+        record_checks: dict[str, list[dict[str, str]]] = {
 {% if insights_github %}
             SourceKeys.GITHUB_TRAFFIC: [
-                {"key": "clones", "category": "daily_clones", "label": "GitHub 1-Day Clones", "event_type": "milestone_github"},
-                {"key": "unique_cloners", "category": "daily_unique", "label": "GitHub 1-Day Unique", "event_type": "milestone_github"},
-                {"key": "views", "category": "daily_views", "label": "GitHub 1-Day Views", "event_type": "milestone_github"},
-                {"key": "unique_visitors", "category": "daily_visitors", "label": "GitHub 1-Day Visitors", "event_type": "milestone_github"},
+                {
+                    "key": "clones",
+                    "category": "daily_clones",
+                    "label": "GitHub 1-Day Clones",
+                    "event_type": "milestone_github",
+                },
+                {
+                    "key": "unique_cloners",
+                    "category": "daily_unique",
+                    "label": "GitHub 1-Day Unique",
+                    "event_type": "milestone_github",
+                },
+                {
+                    "key": "views",
+                    "category": "daily_views",
+                    "label": "GitHub 1-Day Views",
+                    "event_type": "milestone_github",
+                },
+                {
+                    "key": "unique_visitors",
+                    "category": "daily_visitors",
+                    "label": "GitHub 1-Day Visitors",
+                    "event_type": "milestone_github",
+                },
+            ],
+            SourceKeys.GITHUB_STARS: [
+                # Uses new_star events grouped by day (not star_events which is ClickHouse 14d only)
             ],
 {% endif %}
 {% if insights_pypi %}
             SourceKeys.PYPI: [
-                {"key": "downloads_daily", "category": "pypi_daily", "label": "PyPI Best Single Day", "event_type": "milestone_pypi"},
+                {
+                    "key": "downloads_daily",
+                    "category": "pypi_daily",
+                    "label": "PyPI Best Single Day",
+                    "event_type": "milestone_pypi",
+                },
             ],
 {% endif %}
 {% if insights_plausible %}
             SourceKeys.PLAUSIBLE: [
-                {"key": "visitors", "category": "plausible_daily_visitors", "label": "Docs 1-Day Visitors", "event_type": "milestone_pypi"},
-                {"key": "pageviews", "category": "plausible_daily_pageviews", "label": "Docs 1-Day Pageviews", "event_type": "milestone_pypi"},
+                {
+                    "key": "visitors",
+                    "category": "plausible_daily_visitors",
+                    "label": "Docs 1-Day Visitors",
+                    "event_type": "milestone_pypi",
+                },
+                {
+                    "key": "pageviews",
+                    "category": "plausible_daily_pageviews",
+                    "label": "Docs 1-Day Pageviews",
+                    "event_type": "milestone_pypi",
+                },
             ],
 {% endif %}
         }
 
-        checks = RECORD_CHECKS.get(source_key, [])
+        checks = record_checks.get(source_key, [])
+{% if insights_github %}
+        # GITHUB_STARS has no ``checks`` list but still runs the dedicated
+        # star-records section below (best day + best month derived from
+        # ``new_star`` events), so don't short-circuit on empty checks.
+        if not checks and source_key != SourceKeys.GITHUB_STARS:
+            return broken
+{% else %}
         if not checks:
             return broken
+{% endif %}
 
         now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
         for check in checks:
-            mt = (await self.db.exec(
-                select(InsightMetricType).where(InsightMetricType.key == check["key"])
-            )).first()
+            mt = (
+                await self.db.exec(
+                    select(InsightMetricType).where(
+                        InsightMetricType.key == check["key"]
+                    )
+                )
+            ).first()
             if not mt:
                 continue
 
+            # Find the all-time max daily value
             result = await self.db.exec(
                 select(InsightMetric.date, InsightMetric.value)
                 .where(
@@ -208,21 +265,29 @@ class CollectorService:
             if record_value == 0:
                 continue
 
-            existing = (await self.db.exec(
-                select(InsightEvent)
-                .where(InsightEvent.event_type == check["event_type"])
-            )).all()
+            # Check if we already have a milestone for this value or higher
+            existing = (
+                await self.db.exec(
+                    select(InsightEvent).where(
+                        InsightEvent.event_type == check["event_type"],
+                    )
+                )
+            ).all()
 
             current_record = 0
             for ev in existing:
                 meta = ev.metadata_ if isinstance(ev.metadata_, dict) else {}
                 if meta.get("category") == check["category"]:
+                    # Extract number from description
+                    import re
+
                     numbers = re.findall(r"\d[\d,]*", ev.description)
                     for n in numbers:
                         val = int(n.replace(",", ""))
                         current_record = max(current_record, val)
 
             if record_value > current_record:
+                # New record!
                 desc = f"{record_value:,} ({check['label']})"
                 event = InsightEvent(
                     date=datetime.strptime(record_date, "%Y-%m-%d"),
@@ -232,49 +297,75 @@ class CollectorService:
                 )
                 self.db.add(event)
                 await self.db.commit()
-                broken.append(f"{check['label']}: {record_value:,} (was {current_record:,})")
+                broken.append(
+                    f"{check['label']}: {record_value:,} (was {current_record:,})"
+                )
                 logger.info(
                     "New record: %s = %s on %s (prev: %s)",
-                    check["label"], record_value, record_date, current_record,
+                    check["label"],
+                    record_value,
+                    record_date,
+                    current_record,
                 )
 
 {% if insights_github %}
-        # 14-day rolling records for GitHub traffic
+        # Also check 14-day rolling records for GitHub traffic
         if source_key == SourceKeys.GITHUB_TRAFFIC:
             d14 = now - timedelta(days=14)
             rolling_checks = [
-                {"key": "clones", "category": "14d_clones", "label": "GitHub 14-Day Clones", "event_type": "milestone_github"},
-                {"key": "unique_cloners", "category": "14d_unique", "label": "GitHub 14-Day Unique", "event_type": "milestone_github"},
+                {
+                    "key": "clones",
+                    "category": "14d_clones",
+                    "label": "GitHub 14-Day Clones",
+                    "event_type": "milestone_github",
+                },
+                {
+                    "key": "unique_cloners",
+                    "category": "14d_unique",
+                    "label": "GitHub 14-Day Unique",
+                    "event_type": "milestone_github",
+                },
             ]
             for check in rolling_checks:
-                mt = (await self.db.exec(
-                    select(InsightMetricType).where(InsightMetricType.key == check["key"])
-                )).first()
+                mt = (
+                    await self.db.exec(
+                        select(InsightMetricType).where(
+                            InsightMetricType.key == check["key"]
+                        )
+                    )
+                ).first()
                 if not mt:
                     continue
 
-                rows = (await self.db.exec(
-                    select(InsightMetric).where(
-                        InsightMetric.metric_type_id == mt.id,
-                        InsightMetric.period == "daily",
-                        InsightMetric.date >= d14,
+                rows = (
+                    await self.db.exec(
+                        select(InsightMetric).where(
+                            InsightMetric.metric_type_id == mt.id,
+                            InsightMetric.period == "daily",
+                            InsightMetric.date >= d14,
+                        )
                     )
-                )).all()
+                ).all()
                 rolling_total = sum(int(r.value) for r in rows)
 
                 if rolling_total == 0:
                     continue
 
-                existing = (await self.db.exec(
-                    select(InsightEvent).where(
-                        InsightEvent.event_type == check["event_type"],
+                # Check existing record
+                existing = (
+                    await self.db.exec(
+                        select(InsightEvent).where(
+                            InsightEvent.event_type == check["event_type"],
+                        )
                     )
-                )).all()
+                ).all()
 
                 current_record = 0
                 for ev in existing:
                     meta = ev.metadata_ if isinstance(ev.metadata_, dict) else {}
                     if meta.get("category") == check["category"]:
+                        import re
+
                         numbers = re.findall(r"\d[\d,]*", ev.description)
                         for n in numbers:
                             val = int(n.replace(",", ""))
@@ -290,11 +381,155 @@ class CollectorService:
                     )
                     self.db.add(event)
                     await self.db.commit()
-                    broken.append(f"{check['label']}: {rolling_total:,} (was {current_record:,})")
+                    broken.append(
+                        f"{check['label']}: {rolling_total:,} (was {current_record:,})"
+                    )
                     logger.info(
                         "New 14-day record: %s = %s (prev: %s)",
-                        check["label"], rolling_total, current_record,
+                        check["label"],
+                        rolling_total,
+                        current_record,
                     )
+
+        # Star record checks (daily + monthly, from new_star events)
+        if source_key == SourceKeys.GITHUB_STARS:
+            from sqlalchemy import func as sa_func
+
+            star_mt = (
+                await self.db.exec(
+                    select(InsightMetricType).where(InsightMetricType.key == "new_star")
+                )
+            ).first()
+            if star_mt:
+                # Best day: GROUP BY date in SQL
+                daily_result = (
+                    await self.db.exec(
+                        select(
+                            InsightMetric.date,
+                            sa_func.count().label("cnt"),
+                        )
+                        .where(
+                            InsightMetric.metric_type_id == star_mt.id,
+                            InsightMetric.period == Periods.EVENT,
+                        )
+                        .group_by(InsightMetric.date)
+                        .order_by(sa_func.count().desc())
+                        .limit(1)
+                    )
+                ).first()
+
+                best_day_key = str(daily_result[0])[:10] if daily_result else None
+                best_day_val = daily_result[1] if daily_result else 0
+
+                # Best month: extract YYYY-MM, group in SQL
+                # SQLAlchemy strftime for SQLite, to_char for Postgres
+                month_expr = sa_func.strftime("%Y-%m", InsightMetric.date)
+                monthly_result = (
+                    await self.db.exec(
+                        select(
+                            month_expr.label("month"),
+                            sa_func.count().label("cnt"),
+                        )
+                        .where(
+                            InsightMetric.metric_type_id == star_mt.id,
+                            InsightMetric.period == Periods.EVENT,
+                        )
+                        .group_by(month_expr)
+                        .order_by(sa_func.count().desc())
+                        .limit(1)
+                    )
+                ).first()
+
+                best_month_key = monthly_result[0] if monthly_result else None
+                best_month_val = monthly_result[1] if monthly_result else 0
+
+                # Best Day check
+                if best_day_val > 0:
+                    existing = (
+                        await self.db.exec(
+                            select(InsightEvent).where(
+                                InsightEvent.event_type == "milestone_github"
+                            )
+                        )
+                    ).all()
+                    current_record = 0
+                    for ev in existing:
+                        meta = ev.metadata_ if isinstance(ev.metadata_, dict) else {}
+                        if meta.get("category") == "star_daily":
+                            import re
+
+                            numbers = re.findall(r"\d[\d,]*", ev.description)
+                            for n in numbers:
+                                current_record = max(
+                                    current_record, int(n.replace(",", ""))
+                                )
+
+                    if best_day_val > current_record:
+                        from datetime import datetime as dt
+
+                        desc = f"{best_day_val:,} (Stars Best Day)"
+                        event = InsightEvent(
+                            date=dt.strptime(best_day_key, "%Y-%m-%d"),
+                            event_type="milestone_github",
+                            description=desc,
+                            metadata_={"category": "star_daily"},
+                        )
+                        self.db.add(event)
+                        await self.db.commit()
+                        broken.append(
+                            f"Stars Best Day: {best_day_val:,} (was {current_record:,})"
+                        )
+                        logger.info(
+                            "New star daily record: %s on %s (prev: %s)",
+                            best_day_val,
+                            best_day_key,
+                            current_record,
+                        )
+
+                # Best Month check
+                if best_month_val > 0:
+                    existing = (
+                        await self.db.exec(
+                            select(InsightEvent).where(
+                                InsightEvent.event_type == "milestone_github"
+                            )
+                        )
+                    ).all()
+                    current_record = 0
+                    for ev in existing:
+                        meta = ev.metadata_ if isinstance(ev.metadata_, dict) else {}
+                        if meta.get("category") == "star_monthly":
+                            import re
+
+                            numbers = re.findall(r"\d[\d,]*", ev.description)
+                            for n in numbers:
+                                current_record = max(
+                                    current_record, int(n.replace(",", ""))
+                                )
+
+                    if best_month_val > current_record:
+                        from datetime import datetime as dt
+
+                        month_dt = dt.strptime(best_month_key, "%Y-%m")
+                        month_label = month_dt.strftime("%b %Y")
+                        desc = f"{best_month_val:,} (Stars Best Month)"
+                        event = InsightEvent(
+                            date=dt.strptime(f"{best_month_key}-01", "%Y-%m-%d"),
+                            event_type="milestone_github",
+                            description=desc,
+                            metadata_={"category": "star_monthly"},
+                        )
+                        self.db.add(event)
+                        await self.db.commit()
+                        broken.append(
+                            f"Stars Best Month: {best_month_val:,} in {month_label} (was {current_record:,})"
+                        )
+                        logger.info(
+                            "New star monthly record: %s in %s (prev: %s)",
+                            best_month_val,
+                            month_label,
+                            current_record,
+                        )
 {% endif %}
 
         return broken

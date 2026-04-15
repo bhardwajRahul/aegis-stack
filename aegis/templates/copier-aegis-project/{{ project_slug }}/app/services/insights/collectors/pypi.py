@@ -6,6 +6,9 @@ country, installer, version, distribution type, and human vs bot.
 No authentication required.
 """
 
+import logging
+from datetime import datetime
+
 import httpx
 from app.core.config import settings
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -18,25 +21,28 @@ from ..schemas import (
     PyPITypeBreakdown,
     PyPIVersionDetail,
 )
-from .base import BaseCollector, CollectionResult, clickhouse_query, parse_date, today
+from .base import BaseCollector, CollectionResult
+
+logger = logging.getLogger(__name__)
+
+CLICKHOUSE_URL = "https://sql-clickhouse.clickhouse.com"
+CLICKHOUSE_PARAMS = {"user": "play", "default_format": "JSONCompact"}
 
 # Pre-aggregated table with all dimensions
 FULL_TABLE = "pypi.pypi_downloads_per_day_by_version_by_installer_by_type_by_country"
 DAILY_TABLE = "pypi.pypi_downloads_per_day"
 
-# Known bot/mirror/scanner installers — NOT real humans
-# Real humans use: pip, uv. Everything else is automated.
+# Known bot/mirror installers — these are NOT real humans installing your package
 BOT_INSTALLERS = {
-    "bandersnatch",  # PyPI mirror tool
-    "z3c.pypimirror",  # PyPI mirror tool
-    "Nexus",  # Sonatype artifact proxy
-    "devpi",  # PyPI cache/proxy
-    "pep381client",  # PyPI mirror client
-    "requests",  # Scripts/automation
-    "OS",  # OS-level package managers
-    "Artifactory",  # JFrog artifact proxy
-    "Browser",  # Automated security scanners downloading every version
-    "",  # Empty user-agent = automated
+    "bandersnatch",
+    "z3c.pypimirror",
+    "Nexus",
+    "devpi",
+    "pep381client",
+    "requests",
+    "OS",
+    "Artifactory",
+    "",  # empty user-agent = automated
 }
 
 
@@ -50,12 +56,16 @@ class PyPICollector(BaseCollector):
     def source_key(self) -> str:
         return SourceKeys.PYPI
 
-    async def collect(self, lookback_days: int = 14) -> CollectionResult:
-        """Collect daily totals + per-day dimensional breakdowns."""
+    async def collect(self) -> CollectionResult:
+        """Collect daily totals + per-day dimensional breakdowns for last 14 days."""
         package = settings.INSIGHT_PYPI_PACKAGE
 
-        if err := self._validate_config(INSIGHT_PYPI_PACKAGE=package):
-            return err
+        if not package:
+            return CollectionResult(
+                source_key=self.source_key,
+                success=False,
+                error="Missing INSIGHT_PYPI_PACKAGE",
+            )
 
         rows_written = 0
         rows_skipped = 0
@@ -75,7 +85,7 @@ class PyPICollector(BaseCollector):
 
             async with httpx.AsyncClient(timeout=30.0) as client:
                 # All-time cumulative total
-                total_data = await clickhouse_query(
+                total_data = await self._query(
                     client,
                     f"""
                     SELECT sum(count) FROM {DAILY_TABLE}
@@ -83,10 +93,11 @@ class PyPICollector(BaseCollector):
                 """,
                 )
                 total = int(total_data[0][0]) if total_data else 0
+                today = _today()
 
                 _, created = await self.upsert_metric(
                     metric_type=total_type,
-                    date=today(),
+                    date=today,
                     value=float(total),
                     period=Periods.CUMULATIVE,
                 )
@@ -94,12 +105,12 @@ class PyPICollector(BaseCollector):
                 rows_skipped += 0 if created else 1
 
                 # Per-day data with installer for human/bot split
-                daily_installer_data = await clickhouse_query(
+                daily_installer_data = await self._query(
                     client,
                     f"""
                     SELECT date, installer, sum(count) as downloads
                     FROM {FULL_TABLE}
-                    WHERE project = '{package}' AND date >= today() - {lookback_days}
+                    WHERE project = '{package}' AND date >= today() - 14
                     GROUP BY date, installer
                     ORDER BY date
                 """,
@@ -126,7 +137,7 @@ class PyPICollector(BaseCollector):
 
                 # Write daily total + human rows
                 for day, total_count in daily_totals.items():
-                    date = parse_date(day)
+                    date = _parse_date(day)
 
                     _, created = await self.upsert_metric(
                         metric_type=daily_type,
@@ -149,7 +160,7 @@ class PyPICollector(BaseCollector):
 
                 # Write per-day installer breakdown
                 for day, installers in daily_installers.items():
-                    date = parse_date(day)
+                    date = _parse_date(day)
                     metadata = PyPIInstallerBreakdown(installers=installers)
                     _, created = await self.upsert_metric(
                         metric_type=installer_type,
@@ -162,12 +173,12 @@ class PyPICollector(BaseCollector):
                     rows_skipped += 0 if created else 1
 
                 # Per-day country breakdown
-                country_data = await clickhouse_query(
+                country_data = await self._query(
                     client,
                     f"""
                     SELECT date, country_code, sum(count) as downloads
                     FROM {FULL_TABLE}
-                    WHERE project = '{package}' AND date >= today() - {lookback_days}
+                    WHERE project = '{package}' AND date >= today() - 14
                     GROUP BY date, country_code
                     ORDER BY date
                 """,
@@ -182,7 +193,7 @@ class PyPICollector(BaseCollector):
                     daily_countries[day][country] = int(row[2])
 
                 for day, countries in daily_countries.items():
-                    date = parse_date(day)
+                    date = _parse_date(day)
                     metadata = PyPICountryBreakdown(countries=countries)
                     _, created = await self.upsert_metric(
                         metric_type=country_type,
@@ -194,33 +205,49 @@ class PyPICollector(BaseCollector):
                     rows_written += 1 if created else 0
                     rows_skipped += 0 if created else 1
 
-                # Per-day version breakdown with human/bot split
-                version_data = await clickhouse_query(
+                # Per-day version breakdown. Include ``installer`` as a
+                # dimension so we can split each version's downloads into
+                # total vs human (bot installers filtered out locally with
+                # the same ``BOT_INSTALLERS`` set used for daily_humans).
+                # One round-trip instead of two.
+                version_data = await self._query(
                     client,
                     f"""
-                    SELECT date, version,
-                        sum(count) as total,
-                        sumIf(count, installer NOT IN ('bandersnatch','z3c.pypimirror','Nexus','devpi','pep381client','requests','OS','Artifactory','Browser','')) as human
+                    SELECT date, version, installer, sum(count) as downloads
                     FROM {FULL_TABLE}
-                    WHERE project = '{package}' AND date >= today() - {lookback_days}
-                    GROUP BY date, version
+                    WHERE project = '{package}' AND date >= today() - 14
+                    GROUP BY date, version, installer
                     ORDER BY date
                 """,
                 )
 
-                daily_versions: dict[str, dict[str, PyPIVersionDetail]] = {}
+                daily_versions: dict[str, dict[str, dict[str, int]]] = {}
                 for row in version_data:
                     day = row[0]
-                    ver = row[1]
+                    version = row[1]
+                    installer = row[2]
+                    count = int(row[3])
+
                     if day not in daily_versions:
                         daily_versions[day] = {}
-                    daily_versions[day][ver] = PyPIVersionDetail(
-                        total=int(row[2]), human=int(row[3])
+                    bucket = daily_versions[day].setdefault(
+                        version, {"total": 0, "human": 0}
                     )
+                    bucket["total"] += count
+                    if installer not in BOT_INSTALLERS:
+                        bucket["human"] += count
 
                 for day, versions in daily_versions.items():
-                    date = parse_date(day)
-                    metadata = PyPIDownloadMetadata(versions=versions)
+                    date = _parse_date(day)
+                    metadata = PyPIDownloadMetadata(
+                        versions={
+                            v: PyPIVersionDetail(
+                                total=counts["total"],
+                                human=counts["human"],
+                            )
+                            for v, counts in versions.items()
+                        }
+                    )
                     _, created = await self.upsert_metric(
                         metric_type=version_type,
                         date=date,
@@ -232,12 +259,12 @@ class PyPICollector(BaseCollector):
                     rows_skipped += 0 if created else 1
 
                 # Per-day distribution type breakdown
-                type_data = await clickhouse_query(
+                type_data = await self._query(
                     client,
                     f"""
                     SELECT date, type, sum(count) as downloads
                     FROM {FULL_TABLE}
-                    WHERE project = '{package}' AND date >= today() - {lookback_days}
+                    WHERE project = '{package}' AND date >= today() - 14
                     GROUP BY date, type
                     ORDER BY date
                 """,
@@ -251,7 +278,7 @@ class PyPICollector(BaseCollector):
                     daily_types[day][row[1]] = int(row[2])
 
                 for day, types in daily_types.items():
-                    date = parse_date(day)
+                    date = _parse_date(day)
                     metadata = PyPITypeBreakdown(types=types)
                     _, created = await self.upsert_metric(
                         metric_type=dist_type,
@@ -264,9 +291,49 @@ class PyPICollector(BaseCollector):
                     rows_skipped += 0 if created else 1
 
             await self.db.commit()
-            return self._success(rows_written, rows_skipped)
+
+            logger.info(
+                "PyPI collected via ClickHouse: %d written, %d skipped, total=%d",
+                rows_written,
+                rows_skipped,
+                total,
+            )
+
+            return CollectionResult(
+                source_key=self.source_key,
+                success=True,
+                rows_written=rows_written,
+                rows_skipped=rows_skipped,
+            )
 
         except Exception as e:
-            return self._error(
-                f"PyPI collection failed: {e}", rows_written, rows_skipped
+            error_msg = f"PyPI collection failed: {e}"
+            logger.error(error_msg, exc_info=True)
+            return CollectionResult(
+                source_key=self.source_key,
+                success=False,
+                rows_written=rows_written,
+                rows_skipped=rows_skipped,
+                error=error_msg,
             )
+
+    async def _query(self, client: httpx.AsyncClient, sql: str) -> list[list]:
+        """Execute a ClickHouse SQL query and return rows."""
+        resp = await client.post(
+            CLICKHOUSE_URL,
+            params=CLICKHOUSE_PARAMS,
+            content=sql.strip(),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("data", [])
+
+
+def _parse_date(date_str: str) -> datetime:
+    """Parse YYYY-MM-DD date string to datetime."""
+    return datetime.strptime(date_str, "%Y-%m-%d")
+
+
+def _today() -> datetime:
+    """Get today as a midnight datetime."""
+    return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)

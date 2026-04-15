@@ -937,8 +937,10 @@ def record(
                         message=result.text,
                         conversation_id=conversation_id,
                         user_id=user_id,
+{% if ai_rag %}
                         use_rag=use_rag,
                         rag_collection=collection,
+{% endif %}
                     )
 
                 console.print(f"[bold green]{t('ai.response_label')}[/bold green]")

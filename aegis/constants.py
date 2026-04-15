@@ -83,6 +83,16 @@ class AIProviders:
     ]
 
 
+class PaymentProviders:
+    """Payment provider options for the payment service."""
+
+    STRIPE = "stripe"
+
+    ALL = [STRIPE]
+
+    DEFAULT = STRIPE
+
+
 class OllamaMode:
     """Ollama deployment mode options."""
 
@@ -126,18 +136,23 @@ class AnswerKeys:
     AI = "include_ai"
     COMMS = "include_comms"
     INSIGHTS = "include_insights"
+    PAYMENT = "include_payment"
 
     # Service names (used for selection/lookup)
     SERVICE_AUTH = "auth"
     SERVICE_AI = "ai"
     SERVICE_COMMS = "comms"
     SERVICE_INSIGHTS = "insights"
+    SERVICE_PAYMENT = "payment"
 
     # Insights source flags
     INSIGHTS_GITHUB = "insights_github"
     INSIGHTS_PYPI = "insights_pypi"
     INSIGHTS_PLAUSIBLE = "insights_plausible"
     INSIGHTS_REDDIT = "insights_reddit"
+
+    # Payment configuration
+    PAYMENT_PROVIDER = "payment_provider"
 
     # Configuration values
     SCHEDULER_BACKEND = "scheduler_backend"

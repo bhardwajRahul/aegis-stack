@@ -8,7 +8,7 @@ Add your own jobs by importing service functions and calling scheduler.add_job()
 import asyncio
 from typing import Any
 
-from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, EVENT_JOB_MISSED
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 {% if scheduler_backend != "memory" %}
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -117,11 +117,26 @@ def create_scheduler() -> AsyncIOScheduler:
     # Configure SQLAlchemy jobstore for persistence
     jobstore = SQLAlchemyJobStore(engine=engine, tablename='apscheduler_jobs')
     jobstores = {'default': jobstore}
-    scheduler = AsyncIOScheduler(jobstores=jobstores)
+    # misfire_grace_time=None: always run missed jobs when the scheduler wakes
+    # (host sleep, container pause, deploy gap). Assumes jobs are idempotent.
+    # coalesce=True collapses multiple missed runs into a single catch-up.
+    job_defaults = {"misfire_grace_time": None, "coalesce": True}
+    scheduler = AsyncIOScheduler(
+        jobstores=jobstores,
+        job_defaults=job_defaults,
+        timezone=settings.SCHEDULER_TIMEZONE,
+    )
     logger.info("Scheduler using {{ scheduler_backend }} database for job persistence")
 {% else %}
     # Use in-memory jobstore (default)
-    scheduler = AsyncIOScheduler()
+    # misfire_grace_time=None: always run missed jobs when the scheduler wakes
+    # (host sleep, container pause, deploy gap). Assumes jobs are idempotent.
+    # coalesce=True collapses multiple missed runs into a single catch-up.
+    job_defaults = {"misfire_grace_time": None, "coalesce": True}
+    scheduler = AsyncIOScheduler(
+        job_defaults=job_defaults,
+        timezone=settings.SCHEDULER_TIMEZONE,
+    )
     logger.info(
         "Scheduler running in memory mode (jobs won't persist across restarts)"
     )
@@ -143,6 +158,20 @@ def create_scheduler() -> AsyncIOScheduler:
 {% if scheduler_backend != "memory" or (include_scheduler and include_database) %}
     # Check config flag for force updates (useful during deployments)
     force_update = settings.SCHEDULER_FORCE_UPDATE
+{% if scheduler_backend != "memory" %}
+    if force_update:
+        # Wipe persisted jobs so each add_job below INSERTs cleanly.
+        # APScheduler's replace_existing=True catches IntegrityError Python-side
+        # but the failed INSERT still logs as a DB ERROR, making real errors
+        # hard to spot. DELETE FROM (portable across Postgres/SQLite/MySQL)
+        # avoids the noise entirely.
+        from sqlmodel import text
+
+        with db_session(autocommit=True) as session:
+            session.exec(text("DELETE FROM apscheduler_jobs"))
+        logger.info("SCHEDULER_FORCE_UPDATE=true: wiped apscheduler_jobs table")
+{% endif %}
+
     # Database backup job (runs daily at 2 AM when database is available)
     job_id = "database_backup"
 {% if scheduler_backend != "memory" %}
@@ -241,8 +270,9 @@ def create_scheduler() -> AsyncIOScheduler:
 
         scheduler.add_job(
             collect_github_traffic_job,
-            trigger="interval",
-            hours=settings.INSIGHT_COLLECTION_GITHUB_HOURS,
+            trigger="cron",
+            hour=12,
+            minute=0,
             id=job_id,
             name="Insight: GitHub Traffic",
             max_instances=1,
@@ -277,8 +307,9 @@ def create_scheduler() -> AsyncIOScheduler:
 
         scheduler.add_job(
             collect_github_stars_job,
-            trigger="interval",
-            hours=24,
+            trigger="cron",
+            hour=12,
+            minute=0,
             id=job_id,
             name="Insight: GitHub Stars",
             max_instances=1,
@@ -313,8 +344,9 @@ def create_scheduler() -> AsyncIOScheduler:
 
         scheduler.add_job(
             collect_github_events_job,
-            trigger="interval",
-            hours=24,
+            trigger="cron",
+            hour=12,
+            minute=0,
             id=job_id,
             name="Insight: GitHub Events",
             max_instances=1,
@@ -351,8 +383,9 @@ def create_scheduler() -> AsyncIOScheduler:
 
         scheduler.add_job(
             collect_pypi_job,
-            trigger="interval",
-            hours=settings.INSIGHT_COLLECTION_PYPI_HOURS,
+            trigger="cron",
+            hour=18,
+            minute=0,
             id=job_id,
             name="Insight: PyPI Downloads",
             max_instances=1,
@@ -389,8 +422,8 @@ def create_scheduler() -> AsyncIOScheduler:
 
         scheduler.add_job(
             collect_plausible_job,
-            trigger="interval",
-            hours=settings.INSIGHT_COLLECTION_PLAUSIBLE_HOURS,
+            trigger="cron",
+            minute=0,
             id=job_id,
             name="Insight: Plausible Analytics",
             max_instances=1,
@@ -440,10 +473,21 @@ async def run_scheduler() -> None:
                 status="error",
                 details=str(event.exception),
             )
+        elif event.code == EVENT_JOB_MISSED:
+            activity.add_event(
+                component="scheduler",
+                event_type="job_missed",
+                message=f"Job '{event.job_id}' missed its scheduled run",
+                status="warning",
+                details=f"scheduled_run={event.scheduled_run_time.isoformat()}",
+            )
 
     try:
         scheduler.start()
-        scheduler.add_listener(_on_job_event, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
+        scheduler.add_listener(
+            _on_job_event,
+            EVENT_JOB_EXECUTED | EVENT_JOB_ERROR | EVENT_JOB_MISSED,
+        )
         logger.info("Scheduler started successfully")
         logger.info(f"{len(scheduler.get_jobs())} jobs scheduled:")
 

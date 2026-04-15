@@ -465,7 +465,7 @@ class VectorStoreManager:
         return [c.name for c in collections]
 
     async def get_collection_info(self, collection_name: str) -> CollectionInfo | None:
-        """Get information about a collection."""
+        """Get information about a collection including document count."""
         try:
             collection = await asyncio.to_thread(
                 self.client.get_collection,
@@ -473,9 +473,18 @@ class VectorStoreManager:
                 embedding_function=self.embedding_function,
             )
             count = await asyncio.to_thread(collection.count)
+
+            # Get unique document count from metadata sources
+            results = await asyncio.to_thread(collection.get, include=["metadatas"])
+            unique_sources: set[str] = set()
+            for meta in results.get("metadatas") or []:
+                if meta and "source" in meta:
+                    unique_sources.add(meta["source"])
+
             return CollectionInfo(
                 name=collection_name,
                 count=count,
+                doc_count=len(unique_sources),
                 metadata=collection.metadata or {},
             )
         except (ValueError, NotFoundError):

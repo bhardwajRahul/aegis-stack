@@ -20,6 +20,7 @@ from app.components.backend.middleware.rate_limit import (
     register_limiter,
 )
 from app.core.audit import AuditEmitter
+from app.core.config import settings
 from app.core.security import create_access_token, verify_password, verify_token
 {% if include_auth_org %}
 from app.models.org import AcceptInviteRequest, InviteResponse
@@ -51,6 +52,8 @@ async def register(
     audit: AuditEmitter = Depends(get_audit),
 ):
     """Register a new user."""
+    if not settings.REGISTRATION_ENABLED:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Registration is closed")
     register_limiter.check(request)
 
     # Check if user already exists

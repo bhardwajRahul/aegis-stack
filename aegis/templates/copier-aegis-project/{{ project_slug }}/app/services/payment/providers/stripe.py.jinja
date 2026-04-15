@@ -1,0 +1,258 @@
+{%- if include_payment and payment_provider == "stripe" %}
+"""
+Stripe payment provider implementation.
+
+Wraps the Stripe Python SDK to implement the BasePaymentProvider interface.
+All Stripe API calls are made through this provider.
+"""
+
+import logging
+from typing import Any
+
+import stripe
+
+from app.core.config import settings
+
+from ..constants import PriceType
+from .base import (
+    BasePaymentProvider,
+    CatalogEntry,
+    CheckoutResult,
+    CustomerResult,
+    ProviderHealth,
+    RefundResult,
+    TransactionResult,
+    WebhookEvent,
+)
+
+logger = logging.getLogger(__name__)
+
+# Runtime-populated webhook secret. The Overseer auto-forwarder (see
+# ``app/components/backend/startup/payment_webhook_forwarder.py``) writes
+# the ephemeral ``whsec_...`` captured from ``stripe listen`` here at
+# startup so local webhook delivery works without the user editing
+# ``.env``. ``StripeProvider.__init__`` prefers this value when it's set
+# and falls back to the pydantic ``settings.STRIPE_WEBHOOK_SECRET`` when
+# it isn't — so an explicitly configured secret always wins.
+_RUNTIME_WEBHOOK_SECRET: str | None = None
+
+
+def set_runtime_webhook_secret(secret: str) -> None:
+    """Populate the runtime webhook secret (called by the startup hook)."""
+    global _RUNTIME_WEBHOOK_SECRET
+    _RUNTIME_WEBHOOK_SECRET = secret
+
+
+class StripeProvider(BasePaymentProvider):
+    """Stripe payment provider."""
+
+    def __init__(self) -> None:
+        self._api_key = settings.STRIPE_SECRET_KEY or ""
+        self._webhook_secret = (
+            _RUNTIME_WEBHOOK_SECRET or settings.STRIPE_WEBHOOK_SECRET or ""
+        )
+        if self._api_key:
+            stripe.api_key = self._api_key
+
+    @property
+    def provider_key(self) -> str:
+        return "stripe"
+
+    async def create_checkout(
+        self,
+        price_id: str,
+        quantity: int,
+        mode: str,
+        success_url: str,
+        cancel_url: str,
+        customer_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> CheckoutResult:
+        """Create a Stripe Checkout Session."""
+        params: dict[str, Any] = {
+            "line_items": [{"price": price_id, "quantity": quantity}],
+            "mode": mode,
+            "success_url": success_url,
+            "cancel_url": cancel_url,
+        }
+        if customer_id:
+            params["customer"] = customer_id
+        if metadata:
+            params["metadata"] = metadata
+
+        session = stripe.checkout.Session.create(**params)
+        return CheckoutResult(
+            session_id=session.id,
+            checkout_url=session.url or "",
+            provider_key=self.provider_key,
+        )
+
+    async def get_transaction(
+        self, provider_transaction_id: str
+    ) -> TransactionResult:
+        """Fetch a PaymentIntent from Stripe."""
+        pi = stripe.PaymentIntent.retrieve(provider_transaction_id)
+        return TransactionResult(
+            provider_transaction_id=pi.id,
+            status=pi.status or "unknown",
+            amount=pi.amount or 0,
+            currency=pi.currency or "usd",
+            metadata=dict(pi.metadata) if pi.metadata else {},
+        )
+
+    async def refund(
+        self,
+        provider_transaction_id: str,
+        amount: int | None = None,
+        reason: str | None = None,
+    ) -> RefundResult:
+        """Create a Stripe refund.
+
+        Stripe's Refund.create API accepts only these reason values:
+        ``duplicate``, ``fraudulent``, ``requested_by_customer``. Anything
+        else (including our local-only ``other``) is omitted from the
+        upstream call — the full reason still lives on our DB row.
+        """
+        from ..constants import RefundReason
+
+        params: dict[str, Any] = {
+            "payment_intent": provider_transaction_id,
+        }
+        if amount is not None:
+            params["amount"] = amount
+        if reason and reason in RefundReason.STRIPE_ACCEPTED:
+            params["reason"] = reason
+
+        refund = stripe.Refund.create(**params)
+        return RefundResult(
+            provider_refund_id=refund.id,
+            status=refund.status or "pending",
+            amount=refund.amount or 0,
+            currency=refund.currency or "usd",
+        )
+
+    async def create_customer(
+        self, email: str, name: str | None = None
+    ) -> CustomerResult:
+        """Create a Stripe customer."""
+        params: dict[str, Any] = {"email": email}
+        if name:
+            params["name"] = name
+
+        customer = stripe.Customer.create(**params)
+        return CustomerResult(
+            provider_customer_id=customer.id,
+            email=customer.email,
+        )
+
+    async def verify_webhook(
+        self, payload: bytes, signature: str
+    ) -> WebhookEvent:
+        """Verify Stripe webhook signature and parse event.
+
+        After ``construct_event`` confirms the signature, we re-parse
+        the raw payload as JSON rather than unpacking ``StripeObject``
+        values. Reasons:
+
+        - ``StripeObject`` is dict-like but not a ``dict`` instance, and
+          Pydantic v2 won't coerce it into our ``WebhookEvent.data``
+          schema (``dict[str, Any]``).
+        - The available conversion methods (``to_dict_recursive``,
+          ``dict(obj)``) differ across Stripe SDK versions and some
+          even raise (``KeyError: 0`` on ``dict(Product)`` in recent
+          SDKs) — fragile surface for a hot path.
+        - The payload bytes are already signature-verified, so
+          ``json.loads`` gives us authentic, fully-plain dicts with
+          zero special-case handling.
+        """
+        import json
+
+        event = stripe.Webhook.construct_event(
+            payload, signature, self._webhook_secret
+        )
+        parsed = json.loads(payload)
+        data_dict = parsed.get("data", {}).get("object", {}) or {}
+        return WebhookEvent(
+            event_type=event.type,
+            provider_key=self.provider_key,
+            data=data_dict,
+        )
+
+    async def health_check(self) -> ProviderHealth:
+        """Check Stripe API connectivity by hitting the balance endpoint."""
+        if not self._api_key:
+            return ProviderHealth(
+                provider_key=self.provider_key,
+                healthy=False,
+                message="STRIPE_SECRET_KEY not configured",
+            )
+
+        try:
+            balance = stripe.Balance.retrieve()
+            is_test = self._api_key.startswith("sk_test_")
+            return ProviderHealth(
+                provider_key=self.provider_key,
+                healthy=True,
+                is_test_mode=is_test,
+                message=f"Connected ({'test' if is_test else 'live'} mode)",
+                api_version=stripe.api_version,
+            )
+        except stripe.AuthenticationError:
+            return ProviderHealth(
+                provider_key=self.provider_key,
+                healthy=False,
+                message="Invalid API key",
+            )
+        except Exception as e:
+            return ProviderHealth(
+                provider_key=self.provider_key,
+                healthy=False,
+                message=f"Connection error: {e}",
+            )
+
+    async def list_catalog(self) -> list[CatalogEntry]:
+        """List active Stripe prices with their product names.
+
+        Uses ``expand=["data.product"]`` so we get the product name in the
+        same round-trip — two list calls would be wasteful here. Archived
+        prices and prices on archived products are filtered out. Prices
+        missing a ``unit_amount`` (e.g. ``billing_scheme=tiered``) are
+        skipped because the Actions tab needs a concrete price to display.
+        """
+        if not self._api_key:
+            return []
+
+        response = stripe.Price.list(
+            active=True,
+            expand=["data.product"],
+            limit=100,
+        )
+
+        entries: list[CatalogEntry] = []
+        for price in response.data:
+            product = price.product
+            if not isinstance(product, str) and getattr(product, "active", True) is False:
+                continue
+            if price.unit_amount is None:
+                continue
+
+            product_name = (
+                product if isinstance(product, str) else getattr(product, "name", "Unnamed")
+            )
+            recurring = price.recurring
+            interval = recurring.interval if recurring else None
+            price_type = PriceType.RECURRING if recurring else PriceType.ONE_TIME
+
+            entries.append(
+                CatalogEntry(
+                    price_id=price.id,
+                    product_name=product_name,
+                    amount=price.unit_amount,
+                    currency=price.currency or "usd",
+                    interval=interval,
+                    price_type=price_type,
+                )
+            )
+
+        return entries
+{%- endif %}

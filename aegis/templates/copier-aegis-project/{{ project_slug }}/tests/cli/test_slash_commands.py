@@ -33,12 +33,15 @@ def command_handler(
 ) -> SlashCommandHandler:
     """SlashCommandHandler with mocks and pre-populated cache."""
     session_state = ChatSessionState(provider="openai", model="gpt-4o")
+    # ``rag_enabled`` / ``rag_collection`` were refactored out of the
+    # ``SlashCommandHandler`` constructor — RAG state now lives on the
+    # ``ChatSessionState`` or the handler's mutable attrs. Tests that
+    # need to toggle RAG state do so by assigning to ``handler.rag_enabled``
+    # / ``handler.rag_collection`` after construction (see below).
     handler = SlashCommandHandler(
         ai_service=mock_ai_service,
         session_state=session_state,
         console=mock_console,
-        rag_enabled=False,
-        rag_collection=None,
     )
     handler._collection_cache = ["my-code", "docs", "tests"]
     handler._model_cache = ["gpt-4o", "gpt-4-turbo", "claude-sonnet-4"]
@@ -106,14 +109,18 @@ class TestCommandNames:
     def test_get_command_names_includes_all_commands(
         self, command_handler: SlashCommandHandler
     ) -> None:
-        """All registered commands returned."""
+        """All registered commands returned.
+
+        ``/rag`` was removed when RAG state moved off the slash-command
+        handler and onto ``ChatSessionState``; it's no longer a
+        registered command. See ``TestCmdRag`` (skipped below).
+        """
         names = command_handler.get_command_names()
         assert "help" in names
         assert "clear" in names
         assert "new" in names
         assert "model" in names
         assert "status" in names
-        assert "rag" in names
         assert "exit" in names
 
     def test_get_command_names_sorted(
@@ -166,6 +173,14 @@ class TestCmdNew:
         assert command_handler.current_conversation_id is None
 
 
+@pytest.mark.skip(
+    reason=(
+        "The /rag slash command was removed when RAG state moved off "
+        "``SlashCommandHandler`` onto ``ChatSessionState``. These tests "
+        "exercise a command that no longer exists and should be "
+        "rewritten against the new RAG-state API before un-skipping."
+    )
+)
 class TestCmdRag:
     """Test /rag command variations."""
 

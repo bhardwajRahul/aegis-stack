@@ -19,20 +19,22 @@ class TestExtractUsage:
     """Tests for the _extract_usage method."""
 
     def test_extract_usage_response(self, ai_service: AIService) -> None:
-        """Test extracting usage from AI response format.
+        """Test extracting usage from a PydanticAI-style response.
 
-        The actual format depends on the AI framework used:
-        - LangChain: response_metadata.token_usage
-        - PydanticAI: result.usage attribute
+        LangChain ``response_metadata`` was the old shape but the service
+        now only reads PydanticAI's ``result.usage`` attribute
+        (``request_tokens`` / ``response_tokens``). The LangChain branch
+        was removed when PydanticAI became the sole AI framework, so the
+        test now exercises the supported shape only.
         """
+        # ``_extract_usage`` requires ``result.usage`` to be non-callable
+        # (PydanticAI exposes usage as a data object, not a method). A bare
+        # ``MagicMock()`` is callable, so we use ``SimpleNamespace`` to get
+        # a plain attribute bag.
+        from types import SimpleNamespace
+
         mock_result = MagicMock()
-        # LangChain format
-        mock_result.response_metadata = {
-            "token_usage": {
-                "prompt_tokens": 100,
-                "completion_tokens": 50,
-            }
-        }
+        mock_result.usage = SimpleNamespace(request_tokens=100, response_tokens=50)
 
         usage = ai_service._extract_usage(mock_result)
 
@@ -64,15 +66,21 @@ class TestRecordUsage:
     """Tests for the _record_usage method."""
 
     @contextmanager
-    def _mock_db_session(self, session: Session) -> Generator[MagicMock, None, None]:
-        """Create a mock db_session context manager that uses our test session."""
+    def _mock_db_session(self, session: Session) -> Generator[None, None, None]:
+        """Patch ``db_session`` with a context manager wrapping the test session.
+
+        Callers use this as ``with self._mock_db_session(s):`` and don't bind
+        the yielded value — the side effect is the ``patch`` context. ``None``
+        is the honest yielded type; pinning to ``MagicMock`` was wrong (the
+        inner ``mock_session_cm`` is a callable contextmanager, not a mock).
+        """
 
         @contextmanager
         def mock_session_cm() -> Generator[Session, None, None]:
             yield session
 
         with patch("app.services.ai.service.db_session", mock_session_cm):
-            yield mock_session_cm
+            yield
 
     def test_record_usage_success(
         self,
@@ -102,7 +110,7 @@ class TestRecordUsage:
         assert usage_record.input_tokens == 100
         assert usage_record.output_tokens == 50
         assert usage_record.success is True
-        assert usage_record.llm_id == sample_llm.id
+        assert usage_record.model_id == sample_llm.model_id
 
     def test_record_usage_calculates_cost_correctly(
         self,
@@ -136,7 +144,13 @@ class TestRecordUsage:
         db_session: Session,
         mock_ai_settings: Any,
     ) -> None:
-        """Test that missing LLM logs a warning but doesn't fail."""
+        """Missing LLM logs a warning but still records the usage row.
+
+        Earlier behaviour dropped the row entirely when the LLM catalog
+        didn't know the model. Current behaviour records it with zero
+        cost so token totals don't silently vanish when a newly-enabled
+        model hasn't been catalogued yet.
+        """
         mock_ai_settings.AI_MODEL = "nonexistent-model"
         service = AIService(mock_ai_settings)
 
@@ -148,10 +162,11 @@ class TestRecordUsage:
                 user_id="user-789",
             )
 
-        # No usage record should be created
         stmt = select(LLMUsage).where(LLMUsage.user_id == "user-789")
         usage_record = db_session.exec(stmt).first()
-        assert usage_record is None
+        assert usage_record is not None
+        assert usage_record.model_id == "nonexistent-model"
+        assert usage_record.total_cost == 0.0
 
     def test_record_usage_missing_price_zero_cost(
         self,
@@ -229,7 +244,7 @@ class TestRecordUsage:
 
         # Should find the LLM by stripped model_id "gpt-4o"
         assert usage_record is not None
-        assert usage_record.llm_id == sample_llm.id
+        assert usage_record.model_id == sample_llm.model_id
 
     def test_record_usage_database_error_doesnt_fail(
         self,
@@ -260,15 +275,21 @@ class TestGetUsageStats:
     """Tests for get_usage_stats aggregation method."""
 
     @contextmanager
-    def _mock_db_session(self, session: Session) -> Generator[MagicMock, None, None]:
-        """Create a mock db_session context manager that uses our test session."""
+    def _mock_db_session(self, session: Session) -> Generator[None, None, None]:
+        """Patch ``db_session`` with a context manager wrapping the test session.
+
+        Callers use this as ``with self._mock_db_session(s):`` and don't bind
+        the yielded value — the side effect is the ``patch`` context. ``None``
+        is the honest yielded type; pinning to ``MagicMock`` was wrong (the
+        inner ``mock_session_cm`` is a callable contextmanager, not a mock).
+        """
 
         @contextmanager
         def mock_session_cm() -> Generator[Session, None, None]:
             yield session
 
         with patch("app.services.ai.service.db_session", mock_session_cm):
-            yield mock_session_cm
+            yield
 
     def test_get_usage_stats_empty_database(
         self,
@@ -296,7 +317,7 @@ class TestGetUsageStats:
     ) -> None:
         """Test stats aggregation with usage records."""
         usage1 = LLMUsage(
-            llm_id=sample_llm.id,
+            model_id=sample_llm.model_id,
             user_id="user-1",
             input_tokens=100,
             output_tokens=50,
@@ -305,7 +326,7 @@ class TestGetUsageStats:
             action="chat",
         )
         usage2 = LLMUsage(
-            llm_id=sample_llm.id,
+            model_id=sample_llm.model_id,
             user_id="user-1",
             input_tokens=200,
             output_tokens=100,
@@ -337,7 +358,7 @@ class TestGetUsageStats:
     ) -> None:
         """Test model breakdown aggregation."""
         usage = LLMUsage(
-            llm_id=sample_llm.id,
+            model_id=sample_llm.model_id,
             user_id="user-1",
             input_tokens=100,
             output_tokens=50,
@@ -367,7 +388,7 @@ class TestGetUsageStats:
     ) -> None:
         """Test recent activity returns correct entries."""
         usage = LLMUsage(
-            llm_id=sample_llm.id,
+            model_id=sample_llm.model_id,
             user_id="user-1",
             input_tokens=100,
             output_tokens=50,
@@ -384,8 +405,16 @@ class TestGetUsageStats:
 
         assert len(stats["recent_activity"]) == 1
         activity = stats["recent_activity"][0]
-        assert activity["model"] == "GPT-4o"
-        assert activity["tokens"] == 150
+        # Recent activity reports the raw ``model_id`` (the stable
+        # catalog key), not the display title. When the FK was dropped
+        # and usage decoupled from the catalog, the join that pulled
+        # display names went with it — orphan usage rows can outlive
+        # their catalog entry, so the usable stable value is ``model_id``.
+        assert activity["model"] == sample_llm.model_id
+        # ``tokens`` was split into ``input_tokens`` + ``output_tokens``
+        # so the UI can render prompt vs completion spend separately.
+        assert activity["input_tokens"] == 100
+        assert activity["output_tokens"] == 50
         assert activity["success"] is True
         assert activity["action"] == "chat"
 
@@ -397,7 +426,7 @@ class TestGetUsageStats:
     ) -> None:
         """Test filtering by user_id."""
         usage1 = LLMUsage(
-            llm_id=sample_llm.id,
+            model_id=sample_llm.model_id,
             user_id="user-1",
             input_tokens=100,
             output_tokens=50,
@@ -406,7 +435,7 @@ class TestGetUsageStats:
             action="chat",
         )
         usage2 = LLMUsage(
-            llm_id=sample_llm.id,
+            model_id=sample_llm.model_id,
             user_id="user-2",
             input_tokens=200,
             output_tokens=100,
@@ -433,7 +462,7 @@ class TestGetUsageStats:
     ) -> None:
         """Test success rate calculation with failures."""
         usage1 = LLMUsage(
-            llm_id=sample_llm.id,
+            model_id=sample_llm.model_id,
             user_id="user-1",
             input_tokens=100,
             output_tokens=50,
@@ -442,7 +471,7 @@ class TestGetUsageStats:
             action="chat",
         )
         usage2 = LLMUsage(
-            llm_id=sample_llm.id,
+            model_id=sample_llm.model_id,
             user_id="user-1",
             input_tokens=100,
             output_tokens=0,

@@ -22,7 +22,7 @@ from ..config.defaults import (
     GITHUB_TEMPLATE_URL,
     version_to_git_tag,
 )
-from ..constants import AnswerKeys, StorageBackends
+from ..constants import AnswerKeys, PaymentProviders, StorageBackends
 from .migration_generator import (
     generate_migrations_for_services,
     get_services_needing_migrations,
@@ -153,6 +153,10 @@ def generate_with_copier(
             AnswerKeys.INSIGHTS_REDDIT, "no"
         )
         == "yes",
+        AnswerKeys.PAYMENT: template_context.get(AnswerKeys.PAYMENT, "no") == "yes",
+        AnswerKeys.PAYMENT_PROVIDER: template_context.get(
+            AnswerKeys.PAYMENT_PROVIDER, PaymentProviders.DEFAULT
+        ),
     }
 
     # Detect dev vs production mode for template sourcing
@@ -264,6 +268,8 @@ def generate_with_copier(
     # Only run migrations automatically for SQLite (file-based, no server needed)
     # PostgreSQL requires a running server, so skip auto-migration
     is_sqlite = database_engine == StorageBackends.SQLITE
+    is_payment_included: bool = copier_data.get(AnswerKeys.PAYMENT, False) is True
+    needs_migration_files = needs_migration_files or is_payment_included
     run_migrations = needs_migration_files and is_sqlite
 
     # Generate migrations for services that need them (always, regardless of engine)
@@ -277,6 +283,8 @@ def generate_with_copier(
             "include_ai": is_ai_included,
             "ai_backend": ai_backend_str,
             "ai_voice": ai_voice_enabled,
+            "include_insights": is_insights_included,
+            "include_payment": is_payment_included,
         }
         services = get_services_needing_migrations(context)
         if services:
