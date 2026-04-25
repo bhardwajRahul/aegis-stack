@@ -283,6 +283,110 @@ class FormSecretField(ft.Container):
         self._text_field.focus()
 
 
+class FormDropdown(ft.Container):
+    """
+    Reusable dropdown with label and error state.
+
+    Mirrors ``FormTextField``'s shape (label above, field below, optional
+    error line) so forms mixing text inputs and dropdowns stay visually
+    consistent. Theme-aware styling: same border radius, surface colour,
+    and focused border as the rest of the form controls.
+    """
+
+    def __init__(
+        self,
+        label: str,
+        options: list[tuple[str, str]],
+        value: str | None = None,
+        on_change: Callable[[ft.ControlEvent], None] | None = None,
+        error: str | None = None,
+        disabled: bool = False,
+        width: int | None = None,
+    ) -> None:
+        """
+        Initialize form dropdown.
+
+        Args:
+            label: Label text displayed above the dropdown.
+            options: List of (key, display_label) tuples. `key` is what
+                ``value`` returns; `display_label` is what the user sees.
+            value: Initial selected key. Defaults to the first option's key.
+            on_change: Callback when selection changes.
+            error: Error message to display below the dropdown.
+            disabled: Whether the dropdown is disabled.
+            width: Optional fixed width; omit for `expand`.
+        """
+        super().__init__()
+
+        self._label = label
+        self._error = error
+        self._on_change = on_change
+
+        initial = value if value is not None else (options[0][0] if options else None)
+
+        self._dropdown = ft.Dropdown(
+            value=initial,
+            options=[ft.dropdown.Option(key=k, text=t) for k, t in options],
+            on_change=self._handle_change,
+            disabled=disabled,
+            border_radius=Theme.Components.INPUT_RADIUS,
+            bgcolor=ft.Colors.SURFACE,
+            border_color=Theme.Colors.ERROR if error else ft.Colors.OUTLINE,
+            focused_border_color=Theme.Colors.PRIMARY,
+            text_size=13,
+            content_padding=ft.padding.symmetric(horizontal=12, vertical=10),
+            expand=width is None,
+            width=width,
+        )
+
+        self._build_content()
+
+    def _build_content(self) -> None:
+        """Build the dropdown content with label and optional error."""
+        children: list[ft.Control] = [
+            LabelText(self._label),
+            ft.Container(height=4),
+            self._dropdown,
+        ]
+
+        if self._error:
+            children.append(ft.Container(height=4))
+            children.append(
+                ft.Text(
+                    self._error,
+                    size=Theme.Typography.BODY_SMALL,
+                    color=Theme.Colors.ERROR,
+                )
+            )
+
+        self.content = ft.Column(children, spacing=0, tight=True)
+
+    def _handle_change(self, e: ft.ControlEvent) -> None:
+        """Handle dropdown change events."""
+        if self._on_change:
+            self._on_change(e)
+
+    @property
+    def value(self) -> str:
+        """Get the currently selected key."""
+        return self._dropdown.value or ""
+
+    @value.setter
+    def value(self, new_value: str) -> None:
+        """Set the selected key."""
+        self._dropdown.value = new_value
+        if self.page:
+            self._dropdown.update()
+
+    def set_error(self, error: str | None) -> None:
+        """Set or clear the error message."""
+        self._error = error
+        self._dropdown.border_color = Theme.Colors.ERROR if error else ft.Colors.OUTLINE
+        self._build_content()
+        if self.page:
+            self.update()
+
+
 class FormActionButtons(ft.Row):
     """
     Save/Cancel button pair for forms.

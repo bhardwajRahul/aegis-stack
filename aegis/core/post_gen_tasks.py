@@ -217,6 +217,23 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/components/frontend/dashboard/cards/insights_card.py",
             "app/components/frontend/dashboard/modals/insights_modal.py",
         ],
+        AnswerKeys.SERVICE_PAYMENT: [
+            "app/components/backend/api/payment",
+            "app/services/payment",
+            "app/cli/payment.py",
+            "tests/services/test_payment_service.py",
+            "tests/services/test_payment_models.py",
+            "tests/services/test_payment_catalog.py",
+            "tests/services/test_payment_webhook_forwarder.py",
+            "tests/cli/test_payment_trigger.py",
+            "tests/api/test_payment_endpoints.py",
+            # Backend lifecycle hooks (auto-forward stripe-cli webhooks in dev)
+            "app/components/backend/startup/payment_webhook_forwarder.py",
+            "app/components/backend/shutdown/payment_webhook_forwarder.py",
+            # Frontend dashboard files
+            "app/components/frontend/dashboard/cards/payment_card.py",
+            "app/components/frontend/dashboard/modals/payment_modal.py",
+        ],
     }
 
 
@@ -553,6 +570,21 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
             project_path, "tests/components/frontend/test_ai_analytics_utils.py"
         )
 
+    # ETL / LLM catalog depend transitively on Ollama: they import from
+    # ``app.services.ai.ollama`` (which is a stub when ``ollama_mode=none``)
+    # and from ``app.services.ai.etl``. When Ollama is off the whole
+    # chain must come out so the module graph stays importable.
+    ollama_mode = context.get(AnswerKeys.OLLAMA_MODE, "none")
+    if ollama_mode == "none":
+        remove_dir(project_path, "tests/services/ai/etl")
+        remove_dir(project_path, "app/services/ai/etl")
+        # llm router + API imports ``app.services.ai.etl`` at module load.
+        remove_dir(project_path, "app/components/backend/api/llm")
+        remove_file(project_path, "tests/api/test_llm_endpoints.py")
+        # LLM CLI also touches etl models.
+        remove_file(project_path, "app/cli/llm.py")
+        remove_file(project_path, "tests/cli/test_llm_cli.py")
+
     # Remove RAG service if not enabled
     if not is_enabled(AnswerKeys.AI_RAG):
         remove_dir(project_path, "app/components/backend/api/rag")
@@ -589,6 +621,30 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         )
         remove_file(
             project_path, "app/components/frontend/dashboard/modals/comms_modal.py"
+        )
+
+    # Remove payment service if not selected
+    if not is_enabled(AnswerKeys.PAYMENT):
+        remove_dir(project_path, "app/components/backend/api/payment")
+        remove_dir(project_path, "app/services/payment")
+        remove_file(project_path, "app/cli/payment.py")
+        remove_file(project_path, "tests/services/test_payment_service.py")
+        remove_file(project_path, "tests/services/test_payment_models.py")
+        remove_file(project_path, "tests/services/test_payment_catalog.py")
+        remove_file(project_path, "tests/services/test_payment_webhook_forwarder.py")
+        remove_file(project_path, "tests/cli/test_payment_trigger.py")
+        remove_file(project_path, "tests/api/test_payment_endpoints.py")
+        remove_file(
+            project_path, "app/components/backend/startup/payment_webhook_forwarder.py"
+        )
+        remove_file(
+            project_path, "app/components/backend/shutdown/payment_webhook_forwarder.py"
+        )
+        remove_file(
+            project_path, "app/components/frontend/dashboard/cards/payment_card.py"
+        )
+        remove_file(
+            project_path, "app/components/frontend/dashboard/modals/payment_modal.py"
         )
 
     # Remove insights service if not selected
@@ -634,19 +690,23 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         and not is_enabled(AnswerKeys.AI)
         and not is_enabled(AnswerKeys.COMMS)
         and not is_enabled(AnswerKeys.INSIGHTS)
+        and not is_enabled(AnswerKeys.PAYMENT)
     ):
         remove_file(
             project_path, "app/components/frontend/dashboard/cards/services_card.py"
         )
 
     # Remove Alembic directory only if NO service needs migrations
-    # Alembic is needed when: auth, insights, or (AI with non-memory backend)
+    # Alembic is needed when: auth, insights, payment, or (AI with non-memory backend)
     include_auth = is_enabled(AnswerKeys.AUTH)
     include_ai = is_enabled(AnswerKeys.AI)
     include_insights = is_enabled(AnswerKeys.INSIGHTS)
+    include_payment = is_enabled(AnswerKeys.PAYMENT)
     ai_backend = context.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
     ai_needs_migrations = include_ai and ai_backend != StorageBackends.MEMORY
-    needs_migrations = include_auth or ai_needs_migrations or include_insights
+    needs_migrations = (
+        include_auth or ai_needs_migrations or include_insights or include_payment
+    )
 
     if not needs_migrations:
         remove_dir(project_path, "alembic")
@@ -694,6 +754,7 @@ def _render_jinja_template(src: Path, dst: Path, project_path: Path) -> None:
         "include_ai": True,
         "include_comms": True,
         "include_insights": True,
+        "include_payment": True,
         # Component flags - check what exists in project
         "include_scheduler": (project_path / "app/components/scheduler").exists(),
         "include_worker": (project_path / "app/components/worker").exists(),
@@ -947,8 +1008,12 @@ def run_migrations(
         env = os.environ.copy()
         env.pop("VIRTUAL_ENV", None)
 
-        # Build command with optional --python flag
-        cmd = ["uv", "run"]
+        # Build command with optional --python flag. `--project` pins uv to
+        # the generated project regardless of the caller's cwd or parent
+        # venv; without it, running `aegis init` from inside aegis-stack
+        # picks up aegis-stack's alembic (which has no sqlmodel) instead
+        # of the project's.
+        cmd = ["uv", "run", "--project", str(project_path)]
         if python_version:
             cmd.extend(["--python", python_version])
         cmd.extend(["alembic", "-c", str(alembic_ini_path), "upgrade", "head"])
@@ -1058,8 +1123,9 @@ def seed_llm_fixtures(project_path: Path, python_version: str | None = None) -> 
         env = os.environ.copy()
         env.pop("VIRTUAL_ENV", None)
 
-        # Build command with optional --python flag
-        cmd = ["uv", "run"]
+        # Build command with optional --python flag. `--project` pins uv
+        # to the generated project regardless of caller cwd / parent venv.
+        cmd = ["uv", "run", "--project", str(project_path)]
         if python_version:
             cmd.extend(["--python", python_version])
         cmd.extend(
@@ -1128,8 +1194,10 @@ def sync_llm_catalog(
         env = os.environ.copy()
         env.pop("VIRTUAL_ENV", None)
 
-        # Build command: uv run [--python X.Y] project-slug llm sync
-        cmd = ["uv", "run"]
+        # Build command: uv run --project PATH [--python X.Y] project-slug llm sync
+        # `--project` pins uv to the generated project regardless of caller
+        # cwd / parent venv.
+        cmd = ["uv", "run", "--project", str(project_path)]
         if python_version:
             cmd.extend(["--python", python_version])
         cmd.extend([project_slug, "llm", "sync"])

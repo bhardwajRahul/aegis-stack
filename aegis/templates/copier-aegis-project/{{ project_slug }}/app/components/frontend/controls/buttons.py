@@ -127,6 +127,53 @@ class ElevatedRefreshButton(BaseElevatedButton):
         )
 
 
+class PulseButton(BaseElevatedButton):
+    """Flat, accent-tinted button matching the Aegis Pulse web frontend look.
+
+    Unlike the Elevated* family this button has no drop shadow — the
+    visual weight comes from a 1px accent border and a translucent fill
+    that deepens on hover. Pick a variant:
+
+    - ``"teal"`` (default) — primary / brand action.
+    - ``"amber"`` — secondary or highlight action.
+
+    Example::
+
+        PulseButton(on_click_callable=self._submit, text="Create")
+        PulseButton(on_click_callable=self._flag, text="Flag", variant="amber")
+    """
+
+    _VARIANTS = {
+        "teal": styles.PULSE_BUTTON_TEAL_STYLE,
+        "amber": styles.PULSE_BUTTON_AMBER_STYLE,
+        "muted": styles.PULSE_BUTTON_MUTED_STYLE,
+    }
+
+    def __init__(
+        self,
+        on_click_callable: Callable,
+        text: str,
+        variant: str = "teal",
+        **kwargs,
+    ) -> None:
+        style = self._VARIANTS.get(variant)
+        if style is None:
+            raise ValueError(
+                f"Unknown PulseButton variant '{variant}'. "
+                f"Must be one of: {', '.join(sorted(self._VARIANTS))}"
+            )
+        super().__init__(
+            on_click_callable,
+            style=style,
+            text=text,
+            text_style=styles.PulseButtonTextStyle,
+            **kwargs,
+        )
+        # Match Pulse's vertical rhythm (py-2.5 + text-sm → ~40px line box).
+        # BaseElevatedButton's 36px default feels cramped for the flat look.
+        self.height = 40
+
+
 class BaseIconButton(ft.IconButton):
     """
     Base icon button with theme-aware colors and disabled states.

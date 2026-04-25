@@ -25,6 +25,9 @@ from .ingress_modal import IngressDetailDialog
 {%- if include_insights %}
 from .insights_modal import InsightsDetailDialog
 {%- endif %}
+{%- if include_payment %}
+from .payment_modal import PaymentDetailDialog
+{%- endif %}
 {%- if include_observability %}
 from .observability_modal import ObservabilityDetailDialog
 {%- endif %}
@@ -61,6 +64,9 @@ __all__ = [
     {%- endif %}
     {%- if include_insights %}
     "InsightsDetailDialog",
+    {%- endif %}
+    {%- if include_payment %}
+    "PaymentDetailDialog",
     {%- endif %}
     {%- if include_observability %}
     "ObservabilityDetailDialog",

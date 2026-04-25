@@ -347,6 +347,22 @@ async def startup_database_init() -> None:
             logger.warning(f"Insight seed failed: {e}")
 {% endif %}
 
+{% if include_payment %}
+        # Seed default payment provider row (idempotent). Without this, the
+        # first concurrent health checks on a fresh DB race on
+        # get_or_create_provider and one hits a UNIQUE constraint on
+        # payment_provider.key.
+        try:
+            from app.core.db import db_session as get_db_session
+            from app.services.payment.seed import seed_payment_tables
+
+            with get_db_session() as session:
+                seed_payment_tables(session)
+            logger.info("Payment seed data verified")
+        except Exception as e:
+            logger.warning(f"Payment seed failed: {e}")
+{% endif %}
+
 {% if include_ai and database_engine == "postgres" %}
         # Sync LLM catalog (postgres only - SQLite syncs during generation)
         # Uses sync Session because sync_llm_catalog does sync DB ops (async is for HTTP calls)

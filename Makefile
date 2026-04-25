@@ -265,6 +265,13 @@ test-stacks-build: ## Test all stacks build and pass checks (slow)
 	@uv run pytest tests/cli/test_stack_validation.py -v -m "slow" --tb=short
 	@echo "✅ All stacks build and pass quality checks!"
 
+test-stacks-quick: ## Run Phase 2 against base, everything, insights only (fast feedback)
+	@echo "⚡ Running stack validation against representative subset..."
+	@uv run pytest tests/cli/test_stack_validation.py::test_stack_full_validation \
+		-v -m "slow" --tb=short \
+		-k "base or everything or insights"
+	@echo "✅ Quick stack validation completed!"
+
 test-stacks-runtime: ## Test all stacks runtime integration with Docker (future)
 	@echo "🐳 Runtime integration testing not yet implemented"
 	@echo "ℹ️  Will test Docker Compose startup and health checks for all combinations"
@@ -277,11 +284,16 @@ test-stacks-full: ## Full stack matrix testing pipeline (comprehensive but slow)
 	@echo "📋 Phase 2: Stack Build and Validation Testing"
 	@make test-stacks-build
 	@echo ""
-	@echo "📋 Phase 3: Stack Runtime Testing (skipped - not implemented)"
-	@echo "ℹ️  Runtime testing will be added in future iterations"
+	@echo "📋 Phase 3: Kitchen Sink (everything stack: all services + components)"
+	@make test-everything
 	@echo ""
 	@echo "🎉 Complete stack matrix testing completed successfully!"
-	@echo "   All component combinations can generate, build, and pass quality checks"
+	@echo "   All component/service combinations can generate, build, and pass quality checks"
+
+test-everything: ## Generate and run ALL tests inside the kitchen-sink stack
+	@echo "🧪 Running full kitchen-sink stack test (all services + core components)..."
+	@uv run pytest tests/cli/test_stack_validation.py -v -m "slow" -k "everything" --tb=short
+	@echo "✅ Kitchen sink passes full validation."
 
 # Enhanced template testing with specific component combinations
 test-template-database: ## Test template with database component
@@ -413,52 +425,13 @@ endif
 	@echo "✅ $(COMPONENT) component generated successfully in ../test-$(COMPONENT)-quick/"
 	@echo "   Run 'cd ../test-$(COMPONENT)-quick && make check' to validate"
 
-# ============================================================================
-# PARITY TESTING - Cookiecutter vs Copier Template Comparison
-# ============================================================================
+# ``test-parity*`` and ``test-engines*`` targets were removed in PR #401
+# when Cookiecutter was retired — Copier is now the sole template engine,
+# so parity/dual-engine harnesses became dead weight. The backing
+# ``tests/test_template_parity.py`` + ``--engine=`` plugin no longer exist;
+# ``make test-stacks-full`` is the canonical full-coverage entry point.
 
-test-parity: ## Run all Cookiecutter vs Copier parity tests
-	@echo "🔍 Running template parity tests (Cookiecutter vs Copier)..."
-	@uv run pytest tests/test_template_parity.py -v
-
-test-parity-quick: ## Quick parity test (base project only)
-	@echo "⚡ Quick parity test - base project only..."
-	@uv run pytest tests/test_template_parity.py::TestTemplateParity::test_parity_base_project -v
-
-test-parity-components: ## Test parity for all component combinations
-	@echo "🧩 Testing parity for all component combinations..."
-	@uv run pytest tests/test_template_parity.py -k "scheduler or worker or database" -v
-
-test-parity-services: ## Test parity for all service combinations
-	@echo "🔧 Testing parity for all service combinations..."
-	@uv run pytest tests/test_template_parity.py -k "auth or ai" -v
-
-test-parity-full: ## Comprehensive parity test (all combinations)
-	@echo "🚀 Comprehensive parity testing..."
-	@uv run pytest tests/test_template_parity.py::TestTemplateParity::test_parity_kitchen_sink -v
-
-# ============================================================================
-# DUAL-ENGINE TESTING - Cookiecutter and Copier Template Matrix
-# ============================================================================
-
-test-engines: ## Run all tests with both template engines
-	@echo "🔧 Running tests with both Cookiecutter and Copier engines..."
-	@uv run pytest -v -m "not slow"
-
-test-engines-quick: ## Quick test with both engines (fast tests only)
-	@echo "⚡ Quick dual-engine test (fast tests only)..."
-	@uv run pytest -v -m "not slow" --engine=cookiecutter
-	@uv run pytest -v -m "not slow" --engine=copier
-
-test-engines-cookiecutter: ## Run tests with Cookiecutter engine only
-	@echo "🍪 Testing with Cookiecutter engine..."
-	@uv run pytest -v --engine=cookiecutter
-
-test-engines-copier: ## Run tests with Copier engine only
-	@echo "📋 Testing with Copier engine..."
-	@uv run pytest -v --engine=copier
-
-.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test gif gif-quick gif-demo redis-start redis-stop redis-cli redis-logs redis-stats redis-reset redis-queues redis-workers redis-failed redis-monitor redis-info test-template-quick test-template test-template-with-components test-template-database test-template-worker test-template-auth test-template-ai test-template-full test-component-quick test-stacks test-stacks-build test-stacks-runtime test-stacks-full clean-test-projects test-parity test-parity-quick test-parity-components test-parity-services test-parity-full test-engines test-engines-quick test-engines-cookiecutter test-engines-copier help
+.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test gif gif-quick gif-demo redis-start redis-stop redis-cli redis-logs redis-stats redis-reset redis-queues redis-workers redis-failed redis-monitor redis-info test-template-quick test-template test-template-with-components test-template-database test-template-worker test-template-auth test-template-ai test-template-full test-component-quick test-stacks test-stacks-build test-stacks-runtime test-stacks-full test-everything clean-test-projects help
 
 # Default target
 .DEFAULT_GOAL := help

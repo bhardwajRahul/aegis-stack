@@ -44,7 +44,10 @@ class TestRenderAIHeader:
         render_ai_header(console, inline=True)
 
         result = output.getvalue()
-        assert "> " in result
+        # Renderer prints the persona name ("Illiana: ") instead of a
+        # prompt character; the old ``"> "`` sentinel was dropped when
+        # the header switched to a named AI assistant.
+        assert "Illiana" in result
         assert "Response:" not in result
         # Should not have a newline at the end (end="" parameter)
         assert not result.endswith("\n\n")
@@ -57,8 +60,7 @@ class TestRenderAIHeader:
         render_ai_header(console, inline=False)
 
         result = output.getvalue()
-        assert "> " in result
-        assert "Response:" in result
+        assert "Illiana" in result
 
     def test_header_styles(self):
         """Test that headers have proper styling."""
@@ -70,7 +72,9 @@ class TestRenderAIHeader:
         render_ai_header(console, inline=True)
 
         result = output.getvalue()
-        assert "> " in result
+        # Should emit ANSI styling around the persona name.
+        assert "Illiana" in result
+        assert "\x1b[" in result
 
 
 class TestRenderMarkdownResponse:

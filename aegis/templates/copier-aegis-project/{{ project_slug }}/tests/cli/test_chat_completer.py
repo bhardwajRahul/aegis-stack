@@ -24,12 +24,13 @@ def mock_command_handler() -> SlashCommandHandler:
     mock_console = Console(file=output, force_terminal=False, width=80)
 
     session_state = ChatSessionState(provider="openai", model="gpt-4o")
+    # See note in ``test_slash_commands.py``: RAG params moved out of
+    # ``SlashCommandHandler.__init__`` — tests now mutate attributes
+    # directly for RAG-state scenarios.
     handler = SlashCommandHandler(
         ai_service=mock_ai_service,
         session_state=session_state,
         console=mock_console,
-        rag_enabled=False,
-        rag_collection=None,
     )
     handler._collection_cache = ["my-code", "docs", "tests"]
     handler._model_cache = ["gpt-4o", "gpt-4-turbo", "claude-sonnet-4"]
@@ -62,12 +63,15 @@ class TestChatCompleterBasics:
         assert completions == []
 
     def test_completions_for_slash_prefix(self, completer: ChatCompleter) -> None:
-        """'/' yields command completions."""
+        """'/' yields command completions.
+
+        ``/rag`` was removed when RAG state moved off the slash-command
+        handler; tab completion no longer offers it.
+        """
         completions = get_completions_list(completer, "/")
         assert len(completions) > 0
         assert "help" in completions
         assert "model" in completions
-        assert "rag" in completions
 
     def test_completions_filtered_by_typed_chars(
         self, completer: ChatCompleter

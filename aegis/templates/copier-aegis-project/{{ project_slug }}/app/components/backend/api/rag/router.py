@@ -81,7 +81,8 @@ class CollectionInfoResponse(BaseModel):
     """Collection information response."""
 
     name: str
-    count: int
+    count: int  # Total chunks
+    doc_count: int = 0  # Unique documents/files
     metadata: dict[str, Any]
 
 
@@ -225,6 +226,7 @@ async def get_collection_info(collection_name: str) -> CollectionInfoResponse:
         return CollectionInfoResponse(
             name=stats["name"],
             count=stats["count"],
+            doc_count=stats.get("doc_count", 0),
             metadata=stats.get("metadata", {}),
         )
     except HTTPException:

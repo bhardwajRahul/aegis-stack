@@ -437,18 +437,27 @@ class SchedulerDetailDialog(BaseDetailPopup):
         """
         metadata = component_data.metadata or {}
 
-        # Build sections
-        sections = [
-            OverviewSection(metadata),
-            JobsSection(metadata),
-        ]
-
-        # Initialize base popup with custom sections
         super().__init__(
             page=page,
             component_data=component_data,
             title_text=get_component_title("scheduler"),
             subtitle_text=get_component_subtitle("scheduler", metadata),
-            sections=sections,
             status_detail=get_status_detail(component_data),
         )
+
+    def _build_sections(self) -> list[ft.Control]:
+        """Rebuild overview + jobs list from the latest component_data."""
+        metadata = self.component_data.metadata or {}
+        return [
+            OverviewSection(metadata),
+            JobsSection(metadata),
+        ]
+
+    def update_data(self, component_data: ComponentStatus) -> None:
+        """Refresh modal with re-derived scheduler status detail.
+
+        Sets status_detail BEFORE super() so the base's status tag rebuild +
+        single self.update() cover the scheduler-specific detail too.
+        """
+        self.status_detail = get_status_detail(component_data)
+        super().update_data(component_data)

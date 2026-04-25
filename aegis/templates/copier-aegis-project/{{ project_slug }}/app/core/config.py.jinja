@@ -23,6 +23,15 @@ class Settings(BaseSettings):
     # Application environment: "dev" or "prod"
     APP_ENV: str = "dev"
 
+    # API docs auth (HTTP Basic). When both are set, /docs /redoc /openapi.json
+    # require these creds. When unset: open in dev, 404 in any other APP_ENV.
+    DOCS_USERNAME: str = ""
+    DOCS_PASSWORD: str = ""
+
+    # Public signup gate. When False, /register returns 403 and OAuth new-user
+    # creation is refused. Existing users still sign in normally.
+    REGISTRATION_ENABLED: bool = True
+
     # Log level for the application
     LOG_LEVEL: str = "INFO"
 
@@ -240,6 +249,22 @@ class Settings(BaseSettings):
     TWILIO_MESSAGING_SERVICE_SID: str | None = None  # Required for toll-free SMS
 {% endif %}
 
+{% if include_payment %}
+    # Payment Service Configuration (Stripe)
+    # Sign up at https://dashboard.stripe.com; test keys are prefixed sk_test_ / pk_test_
+    STRIPE_SECRET_KEY: str | None = None  # Secret key (sk_test_... or sk_live_...)
+    STRIPE_WEBHOOK_SECRET: str | None = None  # Webhook signing secret (whsec_...)
+
+    # Default URLs Stripe redirects to after checkout. These are used when the
+    # POST /api/v1/payment/checkout request body does not provide success_url
+    # or cancel_url. The built-in defaults point at the bundled HTML pages
+    # served at /payment/success and /payment/cancel. Override for production.
+    PAYMENT_SUCCESS_URL: str = (
+        "http://localhost:8000/payment/success?session_id={CHECKOUT_SESSION_ID}"
+    )
+    PAYMENT_CANCEL_URL: str = "http://localhost:8000/payment/cancel"
+{% endif %}
+
 {% if include_insights %}
     # Insights Service Configuration
 {% if insights_github %}
@@ -277,6 +302,7 @@ class Settings(BaseSettings):
 {% if include_scheduler %}
     # Scheduler settings
     SCHEDULER_FORCE_UPDATE: bool = False  # Force update jobs from code on restart
+    SCHEDULER_TIMEZONE: str = "UTC"  # IANA timezone name; cron triggers inherit this
 {% endif %}
 
 {% if include_ingress %}

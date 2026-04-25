@@ -246,6 +246,19 @@ include_comms:
   help: "Include communications service (email/SMS)?"
   default: false
 
+include_payment:
+  type: bool
+  help: "Include payment processing service (Stripe)?"
+  default: false
+
+payment_provider:
+  type: str
+  help: "Payment provider"
+  default: "stripe"
+  choices:
+    - "stripe"
+  when: "{{ include_payment }}"
+
 include_insights:
   type: bool
   help: "Include insights service (adoption metrics and analytics)?"

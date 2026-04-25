@@ -188,7 +188,12 @@ class TestRunMigrations:
             assert result is True
             mock_run.assert_called_once()
             args = mock_run.call_args
-            assert args[0][0][0:3] == ["uv", "run", "alembic"]
+            # ``run_migrations`` now prepends ``--project <path>`` to isolate
+            # the generated project's venv from the caller's (otherwise
+            # ``aegis init``-then-migrate would grab the aegis-stack venv
+            # and miss the project's own dependencies).
+            assert args[0][0][0:4] == ["uv", "run", "--project", str(tmp_path)]
+            assert args[0][0][4] == "alembic"
             assert "VIRTUAL_ENV" not in args[1]["env"]
 
     def test_missing_alembic_config(self, tmp_path: Path) -> None:

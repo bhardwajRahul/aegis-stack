@@ -300,8 +300,12 @@ def _run_health_check(
 ) -> bool:
     """Run health check against the deployed application.
 
-    Waits for containers to stabilize, then checks the /health/ endpoint.
-    Returns True if healthy.
+    Hits the public Traefik entrypoint on the droplet (port 80) rather
+    than the webserver container's internal port 8000 — that port isn't
+    published to the host in prod compose, so the old `localhost:8000`
+    check always produced a false negative. Going through Traefik also
+    validates the full routing path the real users hit (container health
+    + docker labels + Traefik registration).
     """
     typer.echo(t("deploy.health_waiting"))
     time.sleep(10)
@@ -309,7 +313,9 @@ def _run_health_check(
     for attempt in range(1, retries + 1):
         typer.echo(t("deploy.health_attempt", n=attempt, total=retries))
         result = _run_remote_capture(
-            host, user, "curl -sf http://localhost:8000/health/ 2>/dev/null"
+            host,
+            user,
+            "curl -sf --max-time 10 http://localhost/health/ -o /dev/null",
         )
         if result.returncode == 0:
             typer.secho(t("deploy.health_passed"), fg="green")

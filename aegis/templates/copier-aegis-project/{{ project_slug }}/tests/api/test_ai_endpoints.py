@@ -41,7 +41,11 @@ def mock_usage_stats() -> dict[str, Any]:
             {
                 "timestamp": "2024-01-01T12:00:00",
                 "model": "GPT-4o",
-                "tokens": 150,
+                # Response schema split ``tokens`` into ``input_tokens`` +
+                # ``output_tokens`` so the UI can colorize prompt vs
+                # completion spend separately.
+                "input_tokens": 100,
+                "output_tokens": 50,
                 "cost": 0.0015,
                 "success": True,
                 "action": "chat",

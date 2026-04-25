@@ -36,6 +36,14 @@ def mock_ai_settings():
     settings.MISTRAL_API_KEY = None
     settings.COHERE_API_KEY = None
 
+    # RAG-Chat integration defaults. Needed because ``AIServiceConfig``
+    # now pulls these through ``getattr(settings, "RAG_CHAT_*", default)``
+    # and a plain ``MagicMock()`` auto-creates Mock attrs (not the
+    # defaults), which Pydantic then rejects as the wrong type.
+    settings.RAG_CHAT_DEFAULT_COLLECTION = "default"
+    settings.RAG_CHAT_TOP_K = 10
+    settings.RAG_CHAT_MIN_SCORE = 0.1
+
     return settings
 
 

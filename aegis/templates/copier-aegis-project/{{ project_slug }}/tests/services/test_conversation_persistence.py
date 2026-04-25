@@ -26,6 +26,13 @@ def mock_settings():
     settings.AI_PROVIDER = "openai"
     settings.AI_MODEL = "gpt-4"
     settings.OPENAI_API_KEY = "test-key"
+    # ``AIServiceConfig.from_settings`` now reads RAG_CHAT_* off settings
+    # and Pydantic validates them as real str/int/float — a bare
+    # ``MagicMock`` attribute auto-generates a child mock and fails
+    # validation with a confusing ``string_type`` error.
+    settings.RAG_CHAT_DEFAULT_COLLECTION = "default"
+    settings.RAG_CHAT_TOP_K = 10
+    settings.RAG_CHAT_MIN_SCORE = 0.1
     return settings
 
 

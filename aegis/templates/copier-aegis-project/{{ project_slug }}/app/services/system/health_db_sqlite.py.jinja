@@ -37,7 +37,16 @@ async def check_database_health() -> ComponentStatus:
 
         db_url = settings.DATABASE_URL
         if db_url.startswith("sqlite:///"):
-            db_path = db_url.replace("sqlite:///", "").lstrip("./")
+            # SQLite URL forms:
+            #   ``sqlite:///relative/path``     → ``relative/path``
+            #   ``sqlite:///./relative/path``   → ``./relative/path``
+            #   ``sqlite:////abs/path``         → ``/abs/path``
+            # The previous ``.lstrip("./")`` stripped ALL leading ``.`` and
+            # ``/`` characters, which mangled absolute URLs into invalid
+            # relative ones (``/abs/path`` → ``abs/path``) and caused this
+            # function to incorrectly report HEALTHY databases as
+            # uninitialized. ``removeprefix`` strips only the protocol.
+            db_path = db_url.removeprefix("sqlite:///")
 
             if not Path(db_path).exists():
                 return ComponentStatus(
@@ -68,7 +77,7 @@ async def check_database_health() -> ComponentStatus:
             try:
                 enhanced_metadata["version"] = sqlite3.sqlite_version
 
-                db_path = db_url.replace("sqlite:///", "").lstrip("./")
+                db_path = db_url.removeprefix("sqlite:///")
                 if Path(db_path).exists():
                     file_size = Path(db_path).stat().st_size
                     enhanced_metadata["file_size_bytes"] = file_size

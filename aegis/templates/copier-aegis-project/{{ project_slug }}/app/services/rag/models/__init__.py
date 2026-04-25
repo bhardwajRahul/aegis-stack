@@ -87,7 +87,8 @@ class CollectionInfo(BaseModel):
     """Information about a vector store collection."""
 
     name: str = Field(..., description="Collection name")
-    count: int = Field(..., ge=0, description="Number of documents")
+    count: int = Field(..., ge=0, description="Number of chunks")
+    doc_count: int = Field(0, ge=0, description="Number of unique documents/files")
     metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Collection metadata",

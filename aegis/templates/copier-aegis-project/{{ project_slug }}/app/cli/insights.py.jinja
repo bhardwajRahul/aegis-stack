@@ -6,12 +6,16 @@ managing Reddit posts, and logging events.
 """
 
 import asyncio
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.table import Table
 import typer
 
 from app.i18n import lazy_t, t
+
+if TYPE_CHECKING:
+    from app.services.insights.collectors.base import CollectionResult
 
 app = typer.Typer(help=lazy_t("insights.help"))
 console = Console()
@@ -113,7 +117,7 @@ async def _collect(source: str | None, lookback_days: int = 1) -> None:
                 _print_collection_result(result)
 
 
-def _print_collection_result(result: CollectionResult) -> None:  # noqa: F821
+def _print_collection_result(result: "CollectionResult") -> None:
     if result.success:
         typer.secho(
             t("insights.collect_success",

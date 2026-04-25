@@ -23,8 +23,15 @@ from .models.llm import LargeLanguageModel, LLMPrice, LLMUsage, LLMVendor
 {% endif %}
 
 from app.core.log import logger
+# Module-level imports for forward references used in ``_setup_conversation``
+# (``AIServiceConfig``) and ``_parse_http_health`` (``SystemStatus``). ``ty``
+# / pyright can't resolve string-forward refs when the symbol is only
+# imported lazily inside a method body. ``AIServiceConfig`` was previously
+# spelled ``AIConfig`` in a stale forward reference — there is no
+# ``AIConfig`` class, only the alias used here.
+from app.services.system.models import SystemStatus as SystemStatus
 
-from .config import get_ai_config
+from .config import AIServiceConfig, get_ai_config
 from .conversation import ConversationManager
 {% if ai_voice %}
 from .voice import (
@@ -761,7 +768,7 @@ class AIService:
         message: str,
         conversation_id: str | None,
         user_id: str,
-        config: "AIConfig | None" = None,
+        config: AIServiceConfig | None = None,
     ) -> Conversation:
         """
         Get or create conversation and add user message.
@@ -1222,11 +1229,16 @@ class AIService:
             logger.warning(f"Failed to build health context: {e}")
             return None, warning
 
-    def _parse_http_health(self, data: dict[str, Any]) -> "SystemStatus":
+    def _parse_http_health(self, data: dict[str, Any]) -> SystemStatus:
         """Parse HTTP health response into SystemStatus model."""
-        from app.services.system.models import ComponentStatus, SystemStatus
+        # ``SystemStatus`` is module-level imported above; ``ComponentStatus``
+        # is only used inside this method so we keep it local.
+        from app.services.system.models import ComponentStatus
 
         def parse_component(comp: dict[str, Any]) -> ComponentStatus:
+            # ``healthy`` is a ``@computed_field`` on ``ComponentStatus`` derived
+            # from ``status``, not a constructor input — drop the kwarg and
+            # let the property compute itself from the status enum value.
             return ComponentStatus(
                 name=comp["name"],
                 status=comp["status"],
@@ -1237,7 +1249,6 @@ class AIService:
                     k: parse_component(v)
                     for k, v in comp.get("sub_components", {}).items()
                 },
-                healthy=comp.get("healthy", True),
             )
 
         return SystemStatus(

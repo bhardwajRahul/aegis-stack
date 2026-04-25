@@ -1,7 +1,7 @@
 """Tests for CLI docs command."""
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from app.cli.docs import (
     AEGIS_BASE,
@@ -49,7 +49,9 @@ class TestDetectInstalled:
     """Test component/service detection."""
 
     @patch("app.cli.docs._get_app_path")
-    def test_detect_core_components(self, mock_app_path: patch, tmp_path: Path) -> None:
+    def test_detect_core_components(
+        self, mock_app_path: MagicMock, tmp_path: Path
+    ) -> None:
         """Test backend and frontend are always detected."""
         mock_app_path.return_value = tmp_path
 
@@ -64,7 +66,7 @@ class TestDetectInstalled:
 
     @patch("app.cli.docs._get_app_path")
     def test_detect_optional_components(
-        self, mock_app_path: patch, tmp_path: Path
+        self, mock_app_path: MagicMock, tmp_path: Path
     ) -> None:
         """Test optional components are detected when present."""
         mock_app_path.return_value = tmp_path
@@ -82,7 +84,7 @@ class TestDetectInstalled:
 
     @patch("app.cli.docs._get_app_path")
     def test_detect_database_from_models(
-        self, mock_app_path: patch, tmp_path: Path
+        self, mock_app_path: MagicMock, tmp_path: Path
     ) -> None:
         """Test database component detected from models directory."""
         mock_app_path.return_value = tmp_path
@@ -98,7 +100,7 @@ class TestDetectInstalled:
         assert "database" in components
 
     @patch("app.cli.docs._get_app_path")
-    def test_detect_services(self, mock_app_path: patch, tmp_path: Path) -> None:
+    def test_detect_services(self, mock_app_path: MagicMock, tmp_path: Path) -> None:
         """Test services are detected when present."""
         mock_app_path.return_value = tmp_path
 
@@ -112,7 +114,9 @@ class TestDetectInstalled:
         assert "ai" in services
 
     @patch("app.cli.docs._get_app_path")
-    def test_no_services_when_empty(self, mock_app_path: patch, tmp_path: Path) -> None:
+    def test_no_services_when_empty(
+        self, mock_app_path: MagicMock, tmp_path: Path
+    ) -> None:
         """Test empty services list when none installed."""
         mock_app_path.return_value = tmp_path
 
@@ -159,7 +163,7 @@ class TestDocsCLI:
     """Test docs CLI command."""
 
     @patch("app.cli.docs._detect_installed")
-    def test_docs_command_success(self, mock_detect: patch) -> None:
+    def test_docs_command_success(self, mock_detect: MagicMock) -> None:
         """Test docs command runs successfully."""
         mock_detect.return_value = (["backend", "frontend"], [])
 
@@ -169,7 +173,7 @@ class TestDocsCLI:
         assert "Documentation" in result.output
 
     @patch("app.cli.docs._detect_installed")
-    def test_docs_shows_components(self, mock_detect: patch) -> None:
+    def test_docs_shows_components(self, mock_detect: MagicMock) -> None:
         """Test docs shows detected components."""
         mock_detect.return_value = (["backend", "frontend", "scheduler"], [])
 
@@ -180,7 +184,7 @@ class TestDocsCLI:
         assert "scheduler" in result.output
 
     @patch("app.cli.docs._detect_installed")
-    def test_docs_shows_services(self, mock_detect: patch) -> None:
+    def test_docs_shows_services(self, mock_detect: MagicMock) -> None:
         """Test docs shows detected services."""
         mock_detect.return_value = (["backend", "frontend"], ["auth", "ai"])
 
@@ -190,7 +194,7 @@ class TestDocsCLI:
         assert "ai" in result.output
 
     @patch("app.cli.docs._detect_installed")
-    def test_docs_shows_urls(self, mock_detect: patch) -> None:
+    def test_docs_shows_urls(self, mock_detect: MagicMock) -> None:
         """Test docs shows documentation URLs."""
         mock_detect.return_value = (["backend"], [])
 
@@ -200,7 +204,7 @@ class TestDocsCLI:
         assert "fastapi.tiangolo.com" in result.output
 
     @patch("app.cli.docs._detect_installed")
-    def test_docs_empty_shows_message(self, mock_detect: patch) -> None:
+    def test_docs_empty_shows_message(self, mock_detect: MagicMock) -> None:
         """Test docs shows message when nothing detected."""
         mock_detect.return_value = ([], [])
 

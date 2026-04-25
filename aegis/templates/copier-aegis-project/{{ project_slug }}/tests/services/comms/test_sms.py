@@ -58,11 +58,20 @@ class TestSMSConfiguration:
             assert len(errors) == 0
 
     def test_validate_sms_config_missing_credentials(self) -> None:
-        """Test validation when credentials are missing."""
+        """Test validation when credentials are missing.
+
+        ``validate_sms_config`` accepts EITHER a Messaging Service SID OR
+        a raw phone number as the sender (preferring the former). Both
+        must be unset to trigger the sender-missing error — mocking only
+        ``TWILIO_PHONE_NUMBER`` leaves ``TWILIO_MESSAGING_SERVICE_SID``
+        as a truthy MagicMock, suppressing one error and failing the
+        ``len(errors) == 3`` assertion.
+        """
         with patch("app.services.comms.sms.settings") as mock_settings:
             mock_settings.TWILIO_ACCOUNT_SID = None
             mock_settings.TWILIO_AUTH_TOKEN = None
             mock_settings.TWILIO_PHONE_NUMBER = None
+            mock_settings.TWILIO_MESSAGING_SERVICE_SID = None
 
             errors = validate_sms_config()
 

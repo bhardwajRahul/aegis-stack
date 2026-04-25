@@ -164,9 +164,11 @@ aegis init my-app --services auth --components database --no-interactive --outpu
 
 | Service | Status | Description | Required Components |
 |---------|--------|-------------|---------------------|
-| `auth` | ✅ Available | User authentication with JWT tokens | backend, database |
 | `ai` | 🧪 Experimental | AI chatbot with 7 provider options | backend |
+| `auth` | ✅ Available | User authentication with JWT tokens | backend, database |
 | `comms` | 🧪 Experimental | Email (Resend), SMS & voice (Twilio) | backend |
+| `insights` | 🧪 Experimental | Adoption metrics (GitHub, PyPI, Plausible, Reddit) | backend, database, scheduler |
+| `payment` | 🧪 Experimental | Stripe checkout, subscriptions, refunds, disputes | backend, database |
 
 **Service Auto-Resolution:**
 

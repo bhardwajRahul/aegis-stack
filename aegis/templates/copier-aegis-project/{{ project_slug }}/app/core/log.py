@@ -97,6 +97,12 @@ def setup_logging() -> None:
         logging.WARNING
     )  # Suppress HTTP request logs from health checks
 
+    # Suppress Stripe SDK request/response logs. The payment service hits
+    # stripe.Balance.retrieve() on every dashboard health check — at INFO
+    # that's two lines of noise per check per open tab. Harmless if stripe
+    # isn't installed; logging.getLogger() creates a named logger either way.
+    logging.getLogger("stripe").setLevel(logging.WARNING)
+
     # Suppress RAG service logs (CLI uses progress bar instead)
     logging.getLogger("app.services.rag").setLevel(logging.WARNING)
 

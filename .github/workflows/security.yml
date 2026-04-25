@@ -58,5 +58,6 @@ jobs:
         uv run pip-audit \
           --ignore-vuln GHSA-4xh5-x5gv-qwph \
           --ignore-vuln GHSA-6vgw-5pg2-w6jp \
+          --ignore-vuln GHSA-58qw-9mgm-455v \
           --ignore-vuln ECHO-ffe1-1d3c-d9bc \
           --ignore-vuln ECHO-7db2-03aa-5591

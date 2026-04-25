@@ -65,10 +65,11 @@ class TableSpec:
 
 @dataclass
 class AlterTableSpec:
-    """Specification for altering an existing table (adding columns)."""
+    """Specification for altering an existing table (adding columns or FKs)."""
 
     name: str
-    add_columns: list[ColumnSpec]
+    add_columns: list[ColumnSpec] = field(default_factory=list)
+    add_foreign_keys: list[ForeignKeySpec] = field(default_factory=list)
 
 
 @dataclass
@@ -509,6 +510,299 @@ VOICE_MIGRATION = ServiceMigrationSpec(
     ],
 )
 
+INSIGHTS_MIGRATION = ServiceMigrationSpec(
+    service_name="insights",
+    description="Insights service tables (sources, metrics, records, events)",
+    tables=[
+        # InsightSource - lookup table for data sources
+        TableSpec(
+            name="insight_source",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("key", "sa.String(64)", nullable=False),
+                ColumnSpec("display_name", "sa.String(128)", nullable=False),
+                ColumnSpec("collection_interval_hours", "sa.Integer()", nullable=True),
+                ColumnSpec(
+                    "requires_auth", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec("enabled", "sa.Boolean()", nullable=False, default="True"),
+                ColumnSpec("last_collected_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_insight_source_key", ["key"], unique=True),
+            ],
+        ),
+        # InsightMetricType - metric type registry, FK to source
+        TableSpec(
+            name="insight_metric_type",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("source_id", "sa.Integer()", nullable=False),
+                ColumnSpec("key", "sa.String(64)", nullable=False),
+                ColumnSpec("display_name", "sa.String(128)", nullable=False),
+                ColumnSpec("unit", "sa.String(32)", nullable=False),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_insight_metric_type_key", ["key"]),
+                IndexSpec("ix_insight_metric_type_source_id", ["source_id"]),
+                IndexSpec(
+                    "uq_metric_type_source_key",
+                    ["source_id", "key"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["source_id"], "insight_source", ["id"]),
+            ],
+        ),
+        # InsightMetric - core time-series data
+        TableSpec(
+            name="insight_metric",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("date", "sa.DateTime()", nullable=False),
+                ColumnSpec("metric_type_id", "sa.Integer()", nullable=False),
+                ColumnSpec("value", "sa.Float()", nullable=False, default="0.0"),
+                ColumnSpec("period", "sa.String(32)", nullable=False),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_insight_metric_type_date", ["metric_type_id", "date"]),
+                IndexSpec("ix_insight_metric_date", ["date"]),
+                IndexSpec("ix_insight_metric_metric_type_id", ["metric_type_id"]),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["metric_type_id"], "insight_metric_type", ["id"]),
+            ],
+        ),
+        # InsightRecord - all-time records per metric type
+        TableSpec(
+            name="insight_record",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("metric_type_id", "sa.Integer()", nullable=False),
+                ColumnSpec("value", "sa.Float()", nullable=False, default="0.0"),
+                ColumnSpec("date_achieved", "sa.DateTime()", nullable=False),
+                ColumnSpec("previous_value", "sa.Float()", nullable=True),
+                ColumnSpec("previous_date", "sa.DateTime()", nullable=True),
+                ColumnSpec("context", "sa.String(512)", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec(
+                    "ix_insight_record_metric_type_id",
+                    ["metric_type_id"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["metric_type_id"], "insight_metric_type", ["id"]),
+            ],
+        ),
+        # InsightEvent - contextual markers
+        TableSpec(
+            name="insight_event",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("date", "sa.DateTime()", nullable=False),
+                ColumnSpec("event_type", "sa.String(64)", nullable=False),
+                ColumnSpec("description", "sa.String(1024)", nullable=False),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_insight_event_date", ["date"]),
+                IndexSpec("ix_insight_event_type_date", ["event_type", "date"]),
+            ],
+        ),
+    ],
+)
+
+PAYMENT_MIGRATION = ServiceMigrationSpec(
+    service_name="payment",
+    description="Payment service tables (providers, customers, transactions, subscriptions, disputes)",
+    tables=[
+        TableSpec(
+            name="payment_provider",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("key", "sa.String(32)", nullable=False),
+                ColumnSpec("display_name", "sa.String(64)", nullable=False),
+                ColumnSpec("enabled", "sa.Boolean()", nullable=False, default="True"),
+                ColumnSpec(
+                    "is_test_mode", "sa.Boolean()", nullable=False, default="True"
+                ),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_payment_provider_key", ["key"], unique=True),
+            ],
+        ),
+        TableSpec(
+            name="payment_customer",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                # user_id is nullable: anonymous checkouts (guest carts,
+                # donations, pre-signup SaaS trials) have no app user yet.
+                # An FK to `user.id` is added by the `payment_auth_link`
+                # migration when both services are included.
+                ColumnSpec("user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("provider_id", "sa.Integer()", nullable=False),
+                ColumnSpec("provider_customer_id", "sa.String(128)", nullable=False),
+                ColumnSpec("email", "sa.String(255)", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_payment_customer_user_id", ["user_id"]),
+                IndexSpec("ix_payment_customer_provider_id", ["provider_id"]),
+                IndexSpec(
+                    "ix_payment_customer_provider_customer_id",
+                    ["provider_customer_id"],
+                ),
+                IndexSpec(
+                    "uq_provider_customer",
+                    ["provider_id", "provider_customer_id"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["provider_id"], "payment_provider", ["id"]),
+            ],
+        ),
+        TableSpec(
+            name="payment_transaction",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("provider_id", "sa.Integer()", nullable=False),
+                ColumnSpec("customer_id", "sa.Integer()", nullable=True),
+                ColumnSpec("provider_transaction_id", "sa.String(128)", nullable=False),
+                ColumnSpec("type", "sa.String(32)", nullable=False),
+                ColumnSpec("status", "sa.String(32)", nullable=False),
+                ColumnSpec("amount", "sa.Integer()", nullable=False, default="0"),
+                ColumnSpec("currency", "sa.String(3)", nullable=False, default="'usd'"),
+                ColumnSpec("description", "sa.String(512)", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec(
+                    "ix_payment_transaction_provider_transaction_id",
+                    ["provider_transaction_id"],
+                    unique=True,
+                ),
+                IndexSpec("ix_payment_transaction_provider_id", ["provider_id"]),
+                IndexSpec("ix_payment_transaction_customer_id", ["customer_id"]),
+                IndexSpec("ix_payment_transaction_status", ["status"]),
+                IndexSpec("ix_payment_txn_status_created", ["status", "created_at"]),
+                IndexSpec(
+                    "ix_payment_txn_provider_created",
+                    ["provider_id", "created_at"],
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["provider_id"], "payment_provider", ["id"]),
+                ForeignKeySpec(["customer_id"], "payment_customer", ["id"]),
+            ],
+        ),
+        TableSpec(
+            name="payment_subscription",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("customer_id", "sa.Integer()", nullable=False),
+                ColumnSpec(
+                    "provider_subscription_id", "sa.String(128)", nullable=False
+                ),
+                ColumnSpec("plan_name", "sa.String(64)", nullable=False),
+                ColumnSpec("status", "sa.String(32)", nullable=False),
+                ColumnSpec("current_period_start", "sa.DateTime()", nullable=False),
+                ColumnSpec("current_period_end", "sa.DateTime()", nullable=False),
+                ColumnSpec(
+                    "cancel_at_period_end",
+                    "sa.Boolean()",
+                    nullable=False,
+                    default="False",
+                ),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec(
+                    "ix_payment_subscription_provider_subscription_id",
+                    ["provider_subscription_id"],
+                    unique=True,
+                ),
+                IndexSpec("ix_payment_subscription_customer_id", ["customer_id"]),
+                IndexSpec("ix_payment_subscription_status", ["status"]),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["customer_id"], "payment_customer", ["id"]),
+            ],
+        ),
+        TableSpec(
+            name="payment_dispute",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("transaction_id", "sa.Integer()", nullable=False),
+                ColumnSpec("provider_dispute_id", "sa.String(128)", nullable=False),
+                ColumnSpec("status", "sa.String(32)", nullable=False),
+                ColumnSpec("reason", "sa.String(64)", nullable=True),
+                ColumnSpec("amount", "sa.Integer()", nullable=False, default="0"),
+                ColumnSpec("currency", "sa.String(3)", nullable=False, default="'usd'"),
+                ColumnSpec("evidence_due_by", "sa.DateTime()", nullable=True),
+                ColumnSpec("event_type", "sa.String(64)", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec(
+                    "ix_payment_dispute_provider_dispute_id",
+                    ["provider_dispute_id"],
+                    unique=True,
+                ),
+                IndexSpec("ix_payment_dispute_transaction_id", ["transaction_id"]),
+                IndexSpec("ix_payment_dispute_status", ["status"]),
+                IndexSpec(
+                    "ix_payment_dispute_status_created",
+                    ["status", "created_at"],
+                ),
+                IndexSpec(
+                    "ix_payment_dispute_txn_created",
+                    ["transaction_id", "created_at"],
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["transaction_id"], "payment_transaction", ["id"]),
+            ],
+        ),
+    ],
+)
+
+PAYMENT_AUTH_LINK_MIGRATION = ServiceMigrationSpec(
+    service_name="payment_auth_link",
+    description="Link payment_customer.user_id to user.id (auth + payment)",
+    tables=[],
+    alter_tables=[
+        AlterTableSpec(
+            name="payment_customer",
+            add_foreign_keys=[
+                ForeignKeySpec(["user_id"], "user", ["id"]),
+            ],
+        ),
+    ],
+)
+
 # Registry of all service migrations
 MIGRATION_SPECS: dict[str, ServiceMigrationSpec] = {
     "auth": AUTH_MIGRATION,
@@ -517,6 +811,9 @@ MIGRATION_SPECS: dict[str, ServiceMigrationSpec] = {
     "auth_tokens": AUTH_TOKENS_MIGRATION,
     "ai": AI_MIGRATION,
     "ai_voice": VOICE_MIGRATION,
+    "payment": PAYMENT_MIGRATION,
+    "payment_auth_link": PAYMENT_AUTH_LINK_MIGRATION,
+    "insights": INSIGHTS_MIGRATION,
 }
 
 # ============================================================================
@@ -574,12 +871,18 @@ def upgrade() -> None:
 {% for column in alter.add_columns %}
     op.add_column('{{ alter.name }}', sa.Column('{{ column.name }}', {{ column.type }}, nullable={{ column.nullable }}{% if column.server_default %}, server_default={{ column.server_default }}{% endif %}))
 {% endfor %}
+{% for fk in alter.add_foreign_keys %}
+    op.create_foreign_key('fk_{{ alter.name }}_{{ fk.columns[0] }}_{{ fk.ref_table }}', '{{ alter.name }}', '{{ fk.ref_table }}', {{ fk.columns }}, {{ fk.ref_columns }})
+{% endfor %}
 
 {% endfor %}
 
 def downgrade() -> None:
     """Reverse {{ service_name }} migration."""
 {% for alter in alter_tables|reverse %}
+{% for fk in alter.add_foreign_keys|reverse %}
+    op.drop_constraint('fk_{{ alter.name }}_{{ fk.columns[0] }}_{{ fk.ref_table }}', '{{ alter.name }}', type_='foreignkey')
+{% endfor %}
 {% for column in alter.add_columns|reverse %}
     op.drop_column('{{ alter.name }}', '{{ column.name }}')
 {% endfor %}
@@ -729,10 +1032,19 @@ def _render_migration(
                     "server_default": server_default,
                 }
             )
+        fks = [
+            {
+                "columns": fk.columns,
+                "ref_table": fk.ref_table,
+                "ref_columns": fk.ref_columns,
+            }
+            for fk in alter.add_foreign_keys
+        ]
         alter_tables_data.append(
             {
                 "name": alter.name,
                 "add_columns": cols,
+                "add_foreign_keys": fks,
             }
         )
 
@@ -879,6 +1191,24 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
         and (ai_voice == "yes" or ai_voice is True)
     ):
         services.append("ai_voice")
+
+    # Insights service (always needs database)
+    include_insights = context.get("include_insights")
+    if include_insights == "yes" or include_insights is True:
+        services.append("insights")
+
+    # Payment service (always needs database)
+    include_payment = context.get("include_payment")
+    include_payment_on = include_payment == "yes" or include_payment is True
+    if include_payment_on:
+        services.append("payment")
+
+    # Payment + Auth: add FK from payment_customer.user_id -> user.id.
+    # Only meaningful when BOTH services are included; runs after both
+    # base migrations so the `user` table exists when the FK is created.
+    include_auth_on = include_auth == "yes" or include_auth is True
+    if include_payment_on and include_auth_on:
+        services.append("payment_auth_link")
 
     return services
 

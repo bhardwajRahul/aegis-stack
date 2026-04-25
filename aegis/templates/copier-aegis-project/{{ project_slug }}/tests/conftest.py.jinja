@@ -23,6 +23,15 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 # Import models to register them with SQLModel metadata
 from app.models.user import User  # noqa: F401
 {% endif %}
+{%- if include_payment %}
+# Import payment models to register them with SQLModel metadata
+from app.services.payment.models import (  # noqa: F401
+    PaymentCustomer,
+    PaymentProvider,
+    PaymentSubscription,
+    PaymentTransaction,
+)
+{% endif %}
 
 # Add project root to Python path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))

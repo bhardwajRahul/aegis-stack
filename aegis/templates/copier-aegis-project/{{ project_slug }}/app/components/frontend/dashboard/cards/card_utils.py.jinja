@@ -474,6 +474,9 @@ def create_modal_for_component(
         {%- if include_insights %}
         InsightsDetailDialog,
         {%- endif %}
+        {%- if include_payment %}
+        PaymentDetailDialog,
+        {%- endif %}
         {%- if include_observability %}
         ObservabilityDetailDialog,
         {%- endif %}
@@ -511,6 +514,9 @@ def create_modal_for_component(
         {%- endif %}
         {%- if include_insights %}
         "service_insights": InsightsDetailDialog,
+        {%- endif %}
+        {%- if include_payment %}
+        "service_payment": PaymentDetailDialog,
         {%- endif %}
         {%- if include_observability %}
         "observability": ObservabilityDetailDialog,

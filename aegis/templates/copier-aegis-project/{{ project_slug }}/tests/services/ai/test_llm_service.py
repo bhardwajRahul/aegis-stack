@@ -512,15 +512,15 @@ class TestSetActiveModel:
         mock_async_session,
         sample_models: list[LargeLanguageModel],
     ) -> None:
-        """Should set model when it exists in catalog."""
-        mock_env_vars = {"AI_PROVIDER": "anthropic", "AI_MODEL": "old-model"}
+        """Should set model when it exists in catalog.
 
+        ``read_env_file`` was removed from ``llm_service`` in the env-handling
+        cleanup — the new implementation only writes via ``update_env_file``
+        and auto-detects provider from the catalog vendor. Tests no longer
+        need to seed prior env state.
+        """
         with (
             patch("app.services.ai.llm_service.get_async_session", mock_async_session),
-            patch(
-                "app.services.ai.llm_service.read_env_file",
-                return_value=mock_env_vars,
-            ),
             patch("app.services.ai.llm_service.update_env_file") as mock_update,
         ):
             result = await set_active_model("claude-sonnet-4-20250514")
@@ -549,14 +549,8 @@ class TestSetActiveModel:
         mock_async_session,
     ) -> None:
         """Should succeed with force=True even if model not in catalog."""
-        mock_env_vars = {"AI_PROVIDER": "custom", "AI_MODEL": "old-model"}
-
         with (
             patch("app.services.ai.llm_service.get_async_session", mock_async_session),
-            patch(
-                "app.services.ai.llm_service.read_env_file",
-                return_value=mock_env_vars,
-            ),
             patch("app.services.ai.llm_service.update_env_file") as mock_update,
         ):
             result = await set_active_model("custom-model", force=True)
@@ -571,14 +565,8 @@ class TestSetActiveModel:
         sample_models: list[LargeLanguageModel],
     ) -> None:
         """Should update provider when switching to different vendor."""
-        mock_env_vars = {"AI_PROVIDER": "anthropic", "AI_MODEL": "claude-sonnet"}
-
         with (
             patch("app.services.ai.llm_service.get_async_session", mock_async_session),
-            patch(
-                "app.services.ai.llm_service.read_env_file",
-                return_value=mock_env_vars,
-            ),
             patch("app.services.ai.llm_service.update_env_file") as mock_update,
         ):
             result = await set_active_model("gpt-4o")
@@ -588,28 +576,22 @@ class TestSetActiveModel:
         call_args = mock_update.call_args[0][0]
         assert call_args["AI_PROVIDER"] == "openai"
 
+    @pytest.mark.skip(
+        reason=(
+            "``set_active_model`` no longer inspects the prior ``AI_PROVIDER`` "
+            "value — it always auto-detects from the catalog vendor. The "
+            "'skip switching when currently public' branch was removed; this "
+            "test exercises behavior that no longer exists and should be "
+            "rewritten against the new auto-detect contract if we want to "
+            "pin it."
+        )
+    )
     async def test_no_provider_switch_for_public(
         self,
         mock_async_session,
         sample_models: list[LargeLanguageModel],
     ) -> None:
-        """Should not update provider when current is 'public'."""
-        mock_env_vars = {"AI_PROVIDER": "public", "AI_MODEL": "any-model"}
-
-        with (
-            patch("app.services.ai.llm_service.get_async_session", mock_async_session),
-            patch(
-                "app.services.ai.llm_service.read_env_file",
-                return_value=mock_env_vars,
-            ),
-            patch("app.services.ai.llm_service.update_env_file") as mock_update,
-        ):
-            result = await set_active_model("gpt-4o")
-
-        assert result.success is True
-        assert result.provider_updated is False
-        call_args = mock_update.call_args[0][0]
-        assert "AI_PROVIDER" not in call_args
+        """Should not update provider when current is 'public' (obsolete)."""
 
 
 @pytest.mark.asyncio
