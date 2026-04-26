@@ -4,25 +4,19 @@ The Scheduler Component provides background task processing and cron job capabil
 
 ## Overview
 
-{{ project_name }} includes a scheduler component that runs as an independent service, enabling:
+{{ project_slug }} includes a scheduler component that runs as an independent service, enabling:
 
 - **Background job processing**
 - **Cron-style scheduled tasks**
 - **Async job execution**
-{% if scheduler_backend != "memory" -%}
 - **Job persistence and recovery**
 - **Real-time job monitoring**
 - **Task statistics tracking**
-{% else -%}
-- **In-memory job execution**
-{% endif -%}
-
 ## Architecture
 
-{% if scheduler_backend != "memory" -%}
 ```mermaid
 graph TB
-    subgraph "{{ project_name }} Architecture"
+    subgraph "{{ project_slug }} Architecture"
         API[FastAPI Backend<br/>Port 8000]
         Scheduler[Scheduler Service<br/>Background Jobs]
         Database[(SQLite Database<br/>Job Persistence)]
@@ -46,30 +40,6 @@ graph TB
     style Database fill:#bbf,stroke:#333,stroke-width:2px
     style BackupJob fill:#bfb,stroke:#333,stroke-width:2px
 ```
-{% else -%}
-```mermaid
-graph TB
-    subgraph "{{ project_name }} Architecture"
-        API[FastAPI Backend<br/>Port 8000]
-        Scheduler[Scheduler Service<br/>Background Jobs]
-        Jobs[(Job Queue<br/>In-Memory)]
-    end
-
-    subgraph "Job Types"
-        SystemJobs[System Maintenance<br/>Every 6 hours]
-        CustomJobs[Custom Jobs<br/>User-defined]
-    end
-
-    API -.-> Scheduler
-    Scheduler --> Jobs
-    Jobs --> SystemJobs
-    Jobs --> CustomJobs
-
-    style Scheduler fill:#f9f,stroke:#333,stroke-width:2px
-    style Jobs fill:#bbf,stroke:#333,stroke-width:2px
-```
-{% endif -%}
-
 ## Running the Scheduler
 
 The scheduler runs as a Docker service. Use these commands:
@@ -86,7 +56,6 @@ make run
 docker compose --profile dev up
 ```
 
-{% if scheduler_backend != "memory" -%}
 ## Database Persistence Features
 
 Your scheduler includes persistence capabilities through SQLAlchemy jobstore:
@@ -121,7 +90,6 @@ The scheduler component card provides:
 - **Interactive controls** (pause/delete buttons appear on hover)
 - **Job details** showing schedule patterns and names
 
-{% endif -%}
 ## Job Configuration
 
 The scheduler is configured in `app/components/scheduler/main.py`:
@@ -131,20 +99,14 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 def create_scheduler() -> AsyncIOScheduler:
-{% if scheduler_backend != "memory" -%}
-    # Configured with SQLAlchemy jobstore for persistence
+# Configured with SQLAlchemy jobstore for persistence
     from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
     from app.core.db import engine, init_database
 
     init_database()
     jobstore = SQLAlchemyJobStore(engine=engine, tablename='apscheduler_jobs')
     scheduler = AsyncIOScheduler(jobstores={'default': jobstore})
-{% else -%}
-    # Memory-only scheduler (jobs reset on restart)
-    scheduler = AsyncIOScheduler()
-{% endif -%}
-
-    # Add your jobs here
+# Add your jobs here
     scheduler.add_job(
         func=system_maintenance_job,
         trigger=CronTrigger(hour=2),  # Run daily at 2 AM
@@ -156,7 +118,6 @@ def create_scheduler() -> AsyncIOScheduler:
     return scheduler
 ```
 
-{% if scheduler_backend != "memory" -%}
 ### Pre-configured Jobs
 
 Your scheduler includes these automatic jobs:
@@ -185,7 +146,6 @@ This job:
 - Logs backup success/failure status
 - Prevents overlapping executions
 
-{% endif -%}
 ## Adding Custom Jobs
 
 ### 1. Create Job Function
@@ -222,8 +182,7 @@ Add jobs to the scheduler configuration:
 from app.services.my_jobs import process_daily_reports, cleanup_old_files
 
 def create_scheduler() -> AsyncIOScheduler:
-{% if scheduler_backend != "memory" -%}
-    # Configure persistent scheduler (already initialized above)
+# Configure persistent scheduler (already initialized above)
     scheduler = AsyncIOScheduler(jobstores={'default': jobstore})
 
     # Check for existing jobs to respect runtime modifications
@@ -248,28 +207,7 @@ def create_scheduler() -> AsyncIOScheduler:
             name="Weekly File Cleanup",
             replace_existing=True
         )
-{% else -%}
-    # Configure memory scheduler
-    scheduler = AsyncIOScheduler()
-
-    # Daily report at 6 AM
-    scheduler.add_job(
-        func=process_daily_reports,
-        trigger=CronTrigger(hour=6, minute=0),
-        id="daily_reports",
-        name="Daily Report Generation"
-    )
-
-    # Weekly cleanup on Sundays at midnight
-    scheduler.add_job(
-        func=cleanup_old_files,
-        trigger=CronTrigger(day_of_week="sun", hour=0, minute=0),
-        id="weekly_cleanup",
-        name="Weekly File Cleanup"
-    )
-{% endif -%}
-
-    return scheduler
+return scheduler
 ```
 
 ## Job Scheduling Options
@@ -343,7 +281,6 @@ scheduler.remove_job("old_job_id")
 scheduler.modify_job("daily_reports", hour=7)  # Change to 7 AM
 ```
 
-{% if scheduler_backend != "memory" -%}
 ### Production Job Updates
 
 For persistent schedulers, use environment variables to control job updates:
@@ -361,7 +298,6 @@ This pattern allows:
 - **Production**: Runtime job modifications are preserved across restarts
 - **Deployments**: Force updates when needed with environment flag
 
-{% endif -%}
 ## Error Handling
 
 ### Job Error Handling
@@ -403,12 +339,7 @@ The scheduler health is included in system health checks:
 {{ project_slug }} health check --detailed
 ```
 
-{% if scheduler_backend != "memory" -%}
 Shows scheduler status, task statistics, active jobs, and next execution times.
-{% else -%}
-Shows scheduler status and basic job information.
-{% endif -%}
-
 ### Job Logging
 All job executions are logged with structured logging:
 
@@ -462,7 +393,6 @@ class Settings(BaseSettings):
     }
 ```
 
-{% if scheduler_backend != "memory" -%}
 ### Persistence Configuration
 The scheduler automatically uses SQLAlchemy jobstore with your database:
 
@@ -476,22 +406,6 @@ scheduler = AsyncIOScheduler(jobstores={'default': jobstore})
 ```
 
 Jobs are stored in the `apscheduler_jobs` table with automatic schema creation.
-{% else -%}
-### Job Persistence
-For production deployments, consider upgrading to persistent job storage by adding the database component:
-
-```bash
-# Upgrade your project to include persistence
-aegis init {{ project_slug }}-v2 --components scheduler,database
-```
-
-This adds:
-- SQLAlchemy jobstore for job persistence
-- Automatic database backup jobs
-- Real-time task monitoring
-- Job history tracking
-{% endif -%}
-
 ## Best Practices
 
 ### 1. Keep Jobs Small and Focused
@@ -557,7 +471,6 @@ async def idempotent_job():
 - Check timezone settings
 - Review job logs for errors
 
-{% if scheduler_backend != "memory" -%}
 **Database connection issues:**
 - Verify database service is running
 - Check SQLite file permissions
@@ -568,8 +481,6 @@ async def idempotent_job():
 - Check if SCHEDULER_FORCE_UPDATE is set incorrectly
 - Verify database write permissions
 - Review SQLAlchemy jobstore logs
-{% endif -%}
-
 **High memory usage:**
 - Monitor job execution times
 - Check for memory leaks in job functions
@@ -588,11 +499,9 @@ async def idempotent_job():
 # View scheduler logs
 docker compose logs scheduler
 
-{% if scheduler_backend != "memory" -%}
 # Check database for jobs
 sqlite3 app.db "SELECT id, name, next_run_time FROM apscheduler_jobs;"
 
-{% endif -%}
 # List all jobs (in Python shell)
 python -c "
 from app.components.scheduler.main import create_scheduler
@@ -604,18 +513,9 @@ for job in scheduler.get_jobs():
 
 ## Production Considerations
 
-{% if scheduler_backend != "memory" -%}
 1. **Database Backups**: Your automatic backup job handles database persistence
 2. **Job Monitoring**: Use the built-in task statistics for monitoring
 3. **Resource Limits**: Configure appropriate memory and CPU limits
 4. **Timezone Handling**: All jobs use UTC (configured automatically)
 5. **Error Notifications**: Implement alerting for critical job failures
 6. **Job Updates**: Use SCHEDULER_FORCE_UPDATE for deployment job updates
-{% else -%}
-1. **Job Persistence**: Consider upgrading to database component for persistence
-2. **Monitoring**: Set up alerts for job failures and long execution times
-3. **Resource Limits**: Configure appropriate memory and CPU limits
-4. **Timezone Handling**: Always use UTC for job scheduling
-5. **Error Notifications**: Implement alerting for critical job failures
-6. **Job State**: Jobs reset on restart - design accordingly
-{% endif -%}

@@ -10,6 +10,7 @@ from dataclasses import asdict
 
 import flet as ft
 from app.components.frontend import styles
+from app.components.frontend.controls.text import BodyText, H3Text
 
 
 class BaseElevatedButton(ft.ElevatedButton):
@@ -40,7 +41,7 @@ class BaseElevatedButton(ft.ElevatedButton):
         self.args = args
         self.content = ft.Text(self.text, **asdict(self.text_style))
         self.on_click = lambda _: self.on_click_callable()
-        self.on_hover = self.on_hover_event
+        self.on_hover = self.on_hover_event  # type: ignore[assignment]
         self.kwargs = kwargs
         self.height = 36  # Consistent button height
 
@@ -124,6 +125,53 @@ class ElevatedRefreshButton(BaseElevatedButton):
             text_style=styles.RefreshButtonTextStyle,
             **kwargs,
         )
+
+
+class PulseButton(BaseElevatedButton):
+    """Flat, accent-tinted button matching the Aegis Pulse web frontend look.
+
+    Unlike the Elevated* family this button has no drop shadow — the
+    visual weight comes from a 1px accent border and a translucent fill
+    that deepens on hover. Pick a variant:
+
+    - ``"teal"`` (default) — primary / brand action.
+    - ``"amber"`` — secondary or highlight action.
+
+    Example::
+
+        PulseButton(on_click_callable=self._submit, text="Create")
+        PulseButton(on_click_callable=self._flag, text="Flag", variant="amber")
+    """
+
+    _VARIANTS = {
+        "teal": styles.PULSE_BUTTON_TEAL_STYLE,
+        "amber": styles.PULSE_BUTTON_AMBER_STYLE,
+        "muted": styles.PULSE_BUTTON_MUTED_STYLE,
+    }
+
+    def __init__(
+        self,
+        on_click_callable: Callable,
+        text: str,
+        variant: str = "teal",
+        **kwargs,
+    ) -> None:
+        style = self._VARIANTS.get(variant)
+        if style is None:
+            raise ValueError(
+                f"Unknown PulseButton variant '{variant}'. "
+                f"Must be one of: {', '.join(sorted(self._VARIANTS))}"
+            )
+        super().__init__(
+            on_click_callable,
+            style=style,
+            text=text,
+            text_style=styles.PulseButtonTextStyle,
+            **kwargs,
+        )
+        # Match Pulse's vertical rhythm (py-2.5 + text-sm → ~40px line box).
+        # BaseElevatedButton's 36px default feels cramped for the flat look.
+        self.height = 40
 
 
 class BaseIconButton(ft.IconButton):
@@ -238,3 +286,88 @@ class IconDeleteButton(BaseIconButton):
             disabled=disabled,
             **kwargs,
         )
+
+
+class ConfirmDialog(ft.AlertDialog):
+    """
+    Reusable confirmation dialog with consistent styling.
+
+    Features:
+    - Theme-aware styling
+    - Cancel and Confirm buttons
+    - Optional destructive mode (red confirm button)
+    - Async callback support
+    """
+
+    def __init__(
+        self,
+        page: ft.Page,
+        title: str,
+        message: str,
+        confirm_text: str = "Confirm",
+        cancel_text: str = "Cancel",
+        on_confirm: Callable | None = None,
+        destructive: bool = False,
+    ) -> None:
+        """
+        Initialize confirmation dialog.
+
+        Args:
+            page: Flet page instance
+            title: Dialog title
+            message: Dialog message/content
+            confirm_text: Text for confirm button
+            cancel_text: Text for cancel button
+            on_confirm: Callback when confirmed (can be sync or async)
+            destructive: If True, confirm button is styled as destructive (red)
+        """
+        self._page = page
+        self._on_confirm = on_confirm
+
+        # Confirm button style
+        confirm_style = None
+        if destructive:
+            confirm_style = ft.ButtonStyle(
+                bgcolor=ft.Colors.ERROR,
+                color=ft.Colors.ON_ERROR,
+            )
+
+        super().__init__(
+            modal=True,
+            title=H3Text(title),
+            content=BodyText(message),
+            actions=[
+                ft.TextButton(cancel_text, on_click=self._close),
+                ft.FilledButton(
+                    confirm_text,
+                    on_click=self._confirm,
+                    style=confirm_style,
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+        )
+
+    def _close(self, e: ft.ControlEvent) -> None:
+        """Close the dialog."""
+        self.open = False
+        self._page.update()
+
+    def _confirm(self, e: ft.ControlEvent) -> None:
+        """Handle confirm action."""
+        self.open = False
+        self._page.update()
+        if self._on_confirm:
+            import asyncio
+            import inspect
+
+            if inspect.iscoroutinefunction(self._on_confirm):
+                self._page.run_task(self._on_confirm)
+            else:
+                result = self._on_confirm()
+                if asyncio.iscoroutine(result):
+                    self._page.run_task(lambda: result)
+
+    def show(self) -> None:
+        """Show the dialog."""
+        self._page.open(self)

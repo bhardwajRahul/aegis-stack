@@ -6,6 +6,7 @@ and other components in realistic scenarios.
 """
 
 import pytest
+from app.core.config import settings
 from app.core.security import create_access_token, verify_password, verify_token
 from app.models.user import User, UserCreate
 from app.services.auth.auth_service import get_current_user_from_token
@@ -13,6 +14,17 @@ from app.services.auth.user_service import UserService
 from fastapi import HTTPException
 from sqlmodel import Session, select
 from sqlmodel.ext.asyncio.session import AsyncSession
+
+
+@pytest.fixture(autouse=True)
+def _enable_auth():
+    """Force real auth on for this module. See ``test_auth_endpoints.py``."""
+    prior = settings.AUTH_ENABLED
+    settings.AUTH_ENABLED = True
+    try:
+        yield
+    finally:
+        settings.AUTH_ENABLED = prior
 
 
 class TestAuthServiceIntegration:
@@ -38,6 +50,8 @@ class TestAuthServiceIntegration:
         assert created_user.email == user_data.email
         assert created_user.full_name == user_data.full_name
         assert created_user.is_active is True
+        assert created_user.is_verified is False
+        assert created_user.last_login is None
         # Password should be hashed
         assert created_user.hashed_password != user_data.password
         assert verify_password(user_data.password, created_user.hashed_password)
@@ -461,6 +475,7 @@ class TestAuthDatabaseInitialization:
 
         # Verify update
         updated_user = await user_service.get_user_by_email(user_data.email)
+        assert updated_user is not None
         assert updated_user.full_name == "Updated Name"
 
         # DELETE (via direct SQLModel operations)

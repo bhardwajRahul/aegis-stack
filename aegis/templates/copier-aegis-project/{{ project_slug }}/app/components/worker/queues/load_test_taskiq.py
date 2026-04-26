@@ -8,6 +8,9 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
+import redis.asyncio as aioredis
+from app.components.worker.events import publish_event
+from app.components.worker.middleware import EventPublishMiddleware
 from app.core.config import settings
 from app.core.log import logger
 from app.services.load_test_workloads import (
@@ -27,32 +30,52 @@ redis_url = (
 
 # Create the broker with Redis backend (using streams for acknowledgement support)
 # Use unique queue_name to ensure workers don't consume from each other's streams
-broker = RedisStreamBroker(
-    url=redis_url, queue_name="taskiq:load_test"
-).with_result_backend(RedisAsyncResultBackend(redis_url=redis_url))
+broker = (
+    RedisStreamBroker(url=redis_url, queue_name="taskiq:load_test")
+    .with_result_backend(
+        RedisAsyncResultBackend(redis_url=redis_url, result_ex_time=60)
+    )
+    .with_middlewares(EventPublishMiddleware().set_queue_name("load_test"))
+)
 
 
 @broker.task
 async def cpu_intensive_task() -> dict[str, Any]:
-    """CPU-bound task for load testing."""
+    """Stress-test CPU with synthetic computation.
+
+    Runs a configurable burst of mathematical operations (prime sieve,
+    matrix multiply) to measure worker throughput under CPU pressure.
+    """
     return await run_cpu_intensive()
 
 
 @broker.task
 async def io_simulation_task() -> dict[str, Any]:
-    """I/O simulation task for load testing."""
+    """Simulate I/O-bound workloads with async sleep.
+
+    Mimics network calls, file reads, and database queries using
+    randomised async delays to test worker concurrency handling.
+    """
     return await run_io_simulation()
 
 
 @broker.task
 async def memory_operations_task() -> dict[str, Any]:
-    """Memory operations task for load testing."""
+    """Exercise memory allocation and garbage collection.
+
+    Allocates and releases large byte buffers and data structures to
+    test worker memory behaviour under sustained allocation pressure.
+    """
     return await run_memory_operations()
 
 
 @broker.task
 async def failure_testing_task() -> dict[str, Any]:
-    """Task that randomly fails for testing error handling."""
+    """Randomly raise exceptions for error-handling validation.
+
+    Fails with a configurable probability to verify retry logic,
+    dead-letter routing, and failure metric collection.
+    """
     return await run_failure_testing()
 
 
@@ -105,6 +128,9 @@ async def load_test_orchestrator(
     tasks_sent = 0
     task_handles = []
 
+    # Redis client for publishing enqueue events to the dashboard
+    events_redis = aioredis.from_url(redis_url)
+
     try:
         # Spawn tasks in batches
         for batch_start in range(0, num_tasks, batch_size):
@@ -117,6 +143,12 @@ async def load_test_orchestrator(
                 handle = await task_func.kiq()
                 batch_handles.append(handle)
                 task_handles.append(handle)
+                await publish_event(
+                    events_redis,
+                    "job.enqueued",
+                    "load_test",
+                    {"job_id": str(handle.task_id), "task": task_type},
+                )
 
             tasks_sent += current_batch_size
             logger.info(
@@ -172,6 +204,8 @@ async def load_test_orchestrator(
     except Exception as e:
         logger.error(f"Load test orchestrator failed: {e}")
         return {"error": str(e), "tasks_sent": tasks_sent}
+    finally:
+        await events_redis.aclose()
 
 
 async def _monitor_task_completion(

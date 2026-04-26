@@ -1,0 +1,3696 @@
+"""
+Insights Service Detail Modal
+
+Tabbed modal showing adoption metrics across all data sources.
+All tabs pull real data from the database via _load_db().
+"""
+
+from __future__ import annotations  # noqa: I001
+
+from typing import Any
+
+import flet as ft
+
+from app.components.frontend.controls import (
+    BodyText,
+    H3Text,
+    LabelText,
+    SecondaryText,
+)
+from app.components.frontend.theme import AegisTheme as Theme
+from app.core.constants import COUNTRY_NAMES
+from app.services.insights.schemas import BulkInsightsResponse
+from app.services.system.models import ComponentStatus
+from app.services.system.ui import get_component_subtitle, get_component_title
+
+from ..cards.card_utils import get_status_detail
+from .base_detail_popup import BaseDetailPopup
+from .modal_sections import MetricCard, MilestoneCard, PieChartCard
+
+# Event type → chip border/highlight color
+EVENT_TYPE_COLORS: dict[str, str] = {
+    "release": "#22C55E",
+    "fork": "#A855F7",
+    "star": "#F59E0B",
+    "reddit_post": "#FF5722",
+    "localization": "#3B82F6",
+    "feature": "#06B6D4",
+    "milestone_github": "#EC4899",
+    "milestone_pypi": "#EC4899",
+    "anomaly_github": "#EF4444",
+    "external": "#9CA3AF",
+}
+
+# Shared date range options for all tabs
+RANGE_OPTIONS = [
+    ("7d", 7),
+    ("14d", 14),
+    ("1m", 30),
+    ("3m", 90),
+    ("6m", 180),
+    ("1y", 365),
+    ("All", 9999),
+]
+
+# Event types relevant to each tab
+GITHUB_EVENT_TYPES = {
+    "release",
+    "fork",
+    "star",
+    "feature",
+    "milestone_github",
+    "anomaly_github",
+    "localization",
+    "external",
+}
+PYPI_EVENT_TYPES = {
+    "release",
+    "reddit_post",
+    "star",
+    "feature",
+    "milestone_pypi",
+    "localization",
+    "external",
+}
+DOCS_EVENT_TYPES = {
+    "release",
+    "reddit_post",
+    "star",
+    "feature",
+    "localization",
+    "external",
+}
+
+# Milestone category config (for Overview trophy cards)
+CATEGORY_CONFIG: dict[str, dict[str, str]] = {
+    "daily_clones": {"label": "GitHub 1-Day Clones", "color": "#2563eb"},
+    "daily_unique": {"label": "GitHub 1-Day Unique", "color": "#A855F7"},
+    "daily_views": {"label": "GitHub 1-Day Views", "color": "#22C55E"},
+    "daily_visitors": {"label": "GitHub 1-Day Visitors", "color": "#F59E0B"},
+    "14d_clones": {"label": "GitHub 14-Day Clones", "color": "#06B6D4"},
+    "14d_unique": {"label": "GitHub 14-Day Unique", "color": "#EC4899"},
+    "14d_visitors": {"label": "GitHub 14-Day Visitors", "color": "#F97316"},
+    "pypi_daily": {"label": "PyPI Best Single Day", "color": "#EF4444"},
+    "plausible_daily_visitors": {"label": "Docs 1-Day Visitors", "color": "#6366F1"},
+    "plausible_daily_pageviews": {"label": "Docs 1-Day Pageviews", "color": "#22C55E"},
+    "star_daily": {"label": "Stars Best Day", "color": "#FFD700"},
+    "star_monthly": {"label": "Stars Best Month", "color": "#FFD700"},
+}
+
+# Event type to status mapping (for activity feed dot colors)
+EVENT_STATUS_MAP: dict[str, str] = {
+    "release": "success",
+    "star": "warning",
+    "reddit_post": "info",
+    "milestone_github": "warning",
+    "milestone_pypi": "warning",
+    "feature": "info",
+    "anomaly_github": "error",
+    "external": "info",
+}
+
+
+def _pct(current: float, previous: float) -> float | None:
+    """Compute period-over-period percentage change."""
+    if previous > 0:
+        return (current - previous) / previous * 100
+    return None
+
+
+def _make_line_chart(
+    data_series: list,
+    max_y: float,
+    daily: list[dict],
+    step: int,
+    min_y: float = 0,
+    height: int = 350,
+) -> ft.LineChart:
+    """Build a standard line chart with shared tooltip/grid/border config."""
+    return ft.LineChart(
+        data_series=data_series,
+        left_axis=ft.ChartAxis(labels_size=50, labels_interval=step),
+        bottom_axis=ft.ChartAxis(
+            labels_size=50,
+            labels=[
+                ft.ChartAxisLabel(
+                    value=i,
+                    label=ft.Text(
+                        d["date"][-5:], size=9, color=ft.Colors.ON_SURFACE_VARIANT
+                    ),
+                )
+                for i, d in enumerate(daily)
+                if i % max(1, len(daily) // 8) == 0 or i == len(daily) - 1
+            ],
+        ),
+        horizontal_grid_lines=ft.ChartGridLines(
+            interval=step,
+            color=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE),
+            width=1,
+        ),
+        tooltip_bgcolor=Theme.Colors.SURFACE_1,
+        tooltip_rounded_radius=8,
+        tooltip_padding=10,
+        tooltip_max_content_width=200,
+        tooltip_tooltip_border_side=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+        tooltip_fit_inside_vertically=True,
+        tooltip_fit_inside_horizontally=True,
+        tooltip_show_on_top_of_chart_box_area=True,
+        point_line_start=0,
+        point_line_end=float("inf"),
+        border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+        interactive=True,
+        min_y=min_y,
+        max_y=max_y,
+        min_x=0,
+        max_x=len(daily) - 1,
+        height=height,
+        expand=True,
+    )
+
+
+def _make_legend(items: list[tuple[str, str]]) -> ft.Row:
+    """Build chart legend. items = [(color, label), ...]"""
+    return ft.Row(
+        [
+            ft.Row(
+                [
+                    ft.Container(width=10, height=10, bgcolor=color, border_radius=5),
+                    SecondaryText(label, size=Theme.Typography.BODY_SMALL),
+                ],
+                spacing=4,
+            )
+            for color, label in items
+        ],
+        spacing=16,
+        alignment=ft.MainAxisAlignment.CENTER,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Base class for interactive insight tabs
+# ---------------------------------------------------------------------------
+
+
+class InsightsTab(ft.Container):
+    """Base class for insight tabs with date range chips, events toggle, and rebuild pattern."""  # noqa: E501
+
+    _default_days: int = 7  # Override in subclass
+
+    def __init__(self, bulk: BulkInsightsResponse | None = None) -> None:
+        super().__init__()
+
+        self._bulk = bulk
+        self._days = self._default_days
+        self._data = self._load_data(self._days)
+        self._show_events = False
+        self._highlighted_dates: set[str] = set()
+        self._content_column = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO)
+
+        self._events_toggle = ft.Switch(
+            label="Show events",
+            value=False,
+            on_change=self._on_events_toggle,
+            label_style=ft.TextStyle(size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+        )
+
+        self._range_chips = ft.Row(
+            [
+                ft.Container(
+                    content=ft.Text(
+                        label,
+                        size=11,
+                        weight=ft.FontWeight.W_600
+                        if days == self._days
+                        else ft.FontWeight.W_400,
+                        color=ft.Colors.ON_SURFACE
+                        if days == self._days
+                        else ft.Colors.ON_SURFACE_VARIANT,
+                    ),
+                    bgcolor=Theme.Colors.SURFACE_2 if days == self._days else None,
+                    border=ft.border.all(1, ft.Colors.ON_SURFACE)
+                    if days == self._days
+                    else ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                    border_radius=12,
+                    padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                    on_click=lambda e, d=days: self._on_range_change(d),
+                    ink=True,
+                )
+                for label, days in RANGE_OPTIONS
+            ],
+            spacing=6,
+        )
+
+        self._build_content()
+
+        self.content = self._content_column
+        self.padding = ft.padding.only(
+            left=Theme.Spacing.MD,
+            top=Theme.Spacing.MD,
+            bottom=Theme.Spacing.MD,
+            right=Theme.Spacing.LG + 8,
+        )
+        self.expand = True
+
+    def _on_events_toggle(self, e: ft.ControlEvent) -> None:
+        self._show_events = e.control.value
+        self._highlighted_dates = set()
+        self._build_content()
+        self._content_column.update()
+
+    def _on_event_click(self, dates: set[str]) -> None:
+        if self._highlighted_dates == dates:
+            self._highlighted_dates = set()
+        else:
+            self._highlighted_dates = dates
+        self._build_content()
+        self._content_column.update()
+
+    def _on_range_change(self, days: int) -> None:
+        self._days = days
+        self._data = self._load_data(days)
+
+        for i, (_label, d) in enumerate(RANGE_OPTIONS):
+            chip = self._range_chips.controls[i]
+            is_active = d == days
+            chip.bgcolor = Theme.Colors.SURFACE_2 if is_active else None
+            chip.border = (
+                ft.border.all(1, ft.Colors.ON_SURFACE)
+                if is_active
+                else ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
+            )
+            chip.content.weight = (
+                ft.FontWeight.W_600 if is_active else ft.FontWeight.W_400
+            )
+            chip.content.color = (
+                ft.Colors.ON_SURFACE if is_active else ft.Colors.ON_SURFACE_VARIANT
+            )
+
+        self._build_content()
+        self._content_column.update()
+
+    def _build_content(self) -> None:
+        """Override in subclass to build tab-specific content."""
+        raise NotImplementedError
+
+    def _load_data(self, days: int = 14) -> dict[str, Any]:
+        """Override in subclass to load tab-specific data."""
+        raise NotImplementedError
+
+    def _make_filter_bar(
+        self, last_updated: str = "", extra_controls: list[ft.Control] | None = None
+    ) -> ft.Row:
+        """Build the standard filter bar with range chips, last updated, and events toggle."""  # noqa: E501
+        right_items: list[ft.Control] = []
+        if last_updated:
+            right_items.append(
+                SecondaryText(
+                    f"Last updated: {last_updated}", size=Theme.Typography.BODY_SMALL
+                )
+            )
+        right_items.append(self._events_toggle)
+        if extra_controls:
+            right_items.extend(extra_controls)
+        return ft.Row(
+            [self._range_chips, ft.Row(right_items, spacing=Theme.Spacing.MD)],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+        )
+
+    def _render_event_chips(
+        self,
+        all_events: list[tuple[str, str, str]],
+        valid_dates: set[str] | None = None,
+        exclude_types: set[str] | None = None,
+    ) -> ft.Control | None:
+        """Render grouped event chips. Returns Row control or None."""
+        if not self._show_events:
+            return None
+
+        if exclude_types:
+            all_events = [
+                (d, lbl, t) for d, lbl, t in all_events if t not in exclude_types
+            ]
+        if valid_dates is not None:
+            all_events = [(d, lbl, t) for d, lbl, t in all_events if d in valid_dates]
+
+        grouped = _group_events(all_events, self._days)
+        if not grouped:
+            return None
+
+        highlighted = self._highlighted_dates
+        return ft.Row(
+            [
+                ft.Container(
+                    content=ft.Text(
+                        f"{label}  {date[-5:]}",
+                        size=Theme.Typography.BODY_SMALL,
+                        weight=ft.FontWeight.W_600,
+                        selectable=False,
+                    ),
+                    bgcolor=EVENT_TYPE_COLORS.get(etype, Theme.Colors.SURFACE_2)
+                    if dates_set & highlighted
+                    else Theme.Colors.SURFACE_2,
+                    border=ft.border.all(
+                        2 if dates_set & highlighted else 1,
+                        EVENT_TYPE_COLORS.get(etype, ft.Colors.OUTLINE_VARIANT),
+                    ),
+                    border_radius=10,
+                    padding=ft.padding.symmetric(horizontal=8, vertical=3),
+                    on_click=lambda e, ds=dates_set: self._on_event_click(ds),
+                    ink=True,
+                )
+                for date, label, etype, dates_set in grouped
+            ],
+            spacing=6,
+            wrap=True,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Shared DB loader
+# ---------------------------------------------------------------------------
+
+
+def _build_db_from_bulk(bulk: BulkInsightsResponse) -> dict[str, Any]:
+    """Transform bulk-loaded data into the db dict consumed by OverviewTab and SettingsTab."""  # noqa: E501
+    from app.services.insights.query_service import InsightQueryService
+
+    cutoff_14d, _ = InsightQueryService.compute_cutoffs(14)
+
+    # -- github_traffic (filter to 14d from bulk) ----------------------------
+
+    clones_rows = [r for r in bulk.daily.get("clones", []) if r.date >= cutoff_14d]
+    unique_rows = [
+        r for r in bulk.daily.get("unique_cloners", []) if r.date >= cutoff_14d
+    ]
+    views_rows = [r for r in bulk.daily.get("views", []) if r.date >= cutoff_14d]
+    visitors_rows = [
+        r for r in bulk.daily.get("unique_visitors", []) if r.date >= cutoff_14d
+    ]
+
+    unique_map = {str(r.date)[:10]: int(r.value) for r in unique_rows}
+    views_map = {str(r.date)[:10]: int(r.value) for r in views_rows}
+    visitors_map = {str(r.date)[:10]: int(r.value) for r in visitors_rows}
+
+    traffic_daily: list[dict[str, Any]] = []
+    for r in clones_rows:
+        day = str(r.date)[:10]
+        traffic_daily.append(
+            {
+                "date": day,
+                "clones": int(r.value),
+                "unique_cloners": unique_map.get(day, 0),
+                "views": views_map.get(day, 0),
+                "unique_visitors": visitors_map.get(day, 0),
+            }
+        )
+
+    # -- referrers / paths (from latest snapshots) ---------------------------
+
+    referrers_row = bulk.latest.get("referrers")
+    referrers: list[dict[str, Any]] = []
+    if referrers_row and referrers_row.metadata_:
+        meta = referrers_row.metadata_
+        if isinstance(meta, dict) and not meta.get("referrers"):
+            for domain, counts in meta.items():
+                if isinstance(counts, dict):
+                    referrers.append(
+                        {
+                            "domain": domain,
+                            "views": counts.get("views", 0),
+                            "uniques": counts.get("uniques", 0),
+                        }
+                    )
+        else:
+            for ref in meta.get("referrers", []):
+                referrers.append(
+                    {
+                        "domain": ref.get("referrer", ref.get("domain", "unknown")),
+                        "views": ref.get("count", ref.get("views", 0)),
+                        "uniques": ref.get("uniques", 0),
+                    }
+                )
+        referrers.sort(key=lambda x: -x["views"])
+
+    paths_row = bulk.latest.get("popular_paths")
+    popular_paths: list[dict[str, Any]] = []
+    if paths_row and paths_row.metadata_:
+        for p in paths_row.metadata_.get("popular_paths", []):
+            popular_paths.append(
+                {
+                    "path": p.get("path", "unknown"),
+                    "views": p.get("count", p.get("views", 0)),
+                    "uniques": p.get("uniques", 0),
+                }
+            )
+
+    # -- github_stars (from bulk events) ------------------------------------
+
+    star_events = bulk.events.get("new_star", [])
+    stars_total = len(star_events)
+
+    stars_recent: list[dict[str, Any]] = []
+    star_countries: dict[str, int] = {}
+    for ev in star_events:
+        meta = ev.metadata_ or {}
+        country = meta.get("location", "Unknown")
+        if country and country != "Unknown":
+            parts = [p.strip() for p in country.split(",")]
+            country_key = parts[-1] if parts else "Unknown"
+        else:
+            country_key = "Unknown"
+        star_countries[country_key] = star_countries.get(country_key, 0) + 1
+
+        if len(stars_recent) < 10:
+            stars_recent.append(
+                {
+                    "username": meta.get("username", "unknown"),
+                    "location": meta.get("location", ""),
+                    "company": meta.get("company", ""),
+                    "date": str(ev.date)[:10],
+                }
+            )
+
+    star_countries = dict(sorted(star_countries.items(), key=lambda x: -x[1]))
+
+    # -- sources / pypi total ------------------------------------------------
+
+    sources = [
+        {"key": s.key, "display_name": s.display_name, "enabled": s.enabled}
+        for s in bulk.sources
+    ]
+
+    pypi_total_row = bulk.latest.get("downloads_total")
+    pypi_total = int(pypi_total_row.value) if pypi_total_row else 0
+
+    return {
+        "traffic_daily": traffic_daily,
+        "referrers": referrers,
+        "popular_paths": popular_paths,
+        "stars_total": stars_total,
+        "stars_recent": stars_recent,
+        "star_countries": star_countries,
+        "sources": sources,
+        "pypi_total": pypi_total,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tab 1: Overview
+# ---------------------------------------------------------------------------
+
+
+class OverviewTab(ft.Container):
+    """Overview: key metrics, milestones, recent events, source status."""
+
+    def __init__(
+        self,
+        metadata: dict[str, Any],
+        db: dict[str, Any],
+        bulk: BulkInsightsResponse | None = None,
+    ) -> None:
+        super().__init__()
+
+        daily = db["traffic_daily"]
+
+        # Compute rolling 14d totals
+        total_clones = sum(d["clones"] for d in daily)
+        total_unique = sum(d["unique_cloners"] for d in daily)
+        total_views = sum(d["views"] for d in daily)
+
+        # Compute previous 14d for change arrows using bulk data (no DB)
+        from datetime import datetime, timedelta
+
+        stars_total = db["stars_total"]
+
+        now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        d14 = now - timedelta(days=14)
+        d28 = now - timedelta(days=28)
+
+        def _sum_bulk_range(key: str, start: datetime, end: datetime) -> int:
+            rows = bulk.daily.get(key, []) if bulk else []
+            return sum(int(r.value) for r in rows if start <= r.date < end)
+
+        prev_clones = _sum_bulk_range("clones", d28, d14)
+        prev_unique = _sum_bulk_range("unique_cloners", d28, d14)
+        prev_views = _sum_bulk_range("views", d28, d14)
+
+        pypi_14d = _sum_bulk_range("downloads_daily", d14, now + timedelta(days=1))
+        pypi_prev14d = _sum_bulk_range("downloads_daily", d28, d14)
+
+        # Stars in range from bulk events
+        star_events = bulk.events.get("new_star", []) if bulk else []
+        recent_stars = len([r for r in star_events if r.date >= d14])
+        prev_star_count = len([r for r in star_events if d28 <= r.date < d14])
+
+        # Milestones - highest value per category (ATH per record type)
+        insight_events = bulk.insight_events if bulk else []
+        best_per_category: dict[str, dict[str, Any]] = {}
+        for ev in insight_events:
+            if ev.event_type not in ("milestone_github", "milestone_pypi", "feature"):
+                continue
+            meta = ev.metadata_ if isinstance(ev.metadata_, dict) else {}
+            category = meta.get("category", ev.description)
+
+            hero_str = (
+                _extract_max_number(ev.description)
+                if ev.event_type != "feature"
+                else ""
+            )
+            value = int(hero_str.replace(",", "")) if hero_str else 0
+
+            existing = best_per_category.get(category)
+            if existing is None or value > existing.get("_value", 0):
+                best_per_category[category] = {
+                    "date": str(ev.date)[:10],
+                    "description": ev.description,
+                    "type": ev.event_type,
+                    "metadata": meta,
+                    "_value": value,
+                }
+
+        milestones = sorted(
+            best_per_category.values(), key=lambda m: m["date"], reverse=True
+        )
+
+        # Recent events of all types from bulk
+        recent_events: list[dict[str, Any]] = []
+        for ev in insight_events:
+            meta = ev.metadata_ if isinstance(ev.metadata_, dict) else {}
+            recent_events.append(
+                {
+                    "date": str(ev.date)[:10],
+                    "description": ev.description,
+                    "type": ev.event_type,
+                    "metadata": meta,
+                }
+            )
+
+        # Also add releases from bulk event metrics
+        for r in bulk.events.get("releases", []) if bulk else []:
+            meta = r.metadata_ or {}
+            tag = meta.get("tag", "")
+            if tag:
+                recent_events.append(
+                    {
+                        "date": str(r.date)[:10],
+                        "description": tag,
+                        "type": "release",
+                        "metadata": meta,
+                    }
+                )
+
+        # Enrich reddit posts with upvote/comment data from bulk
+        reddit_stats: dict[str, dict] = {}
+        for r in bulk.events.get("post_stats", []) if bulk else []:
+            meta = r.metadata_ or {}
+            pid = meta.get("post_id", "")
+            if pid:
+                reddit_stats[pid] = {
+                    "upvotes": int(r.value),
+                    "comments": meta.get("comments", 0),
+                    "subreddit": meta.get("subreddit", ""),
+                }
+
+        # Sort by date desc, take 15
+        recent_events.sort(key=lambda x: x["date"], reverse=True)
+        recent_events = recent_events[:15]
+
+        # Latest day's deltas from bulk data (for "+X today/yesterday" subtitle)
+        def _latest_daily(key: str) -> tuple[int, str]:
+            """Get the most recent day's value and label ('today', 'yesterday', 'Xd ago')."""  # noqa: E501
+            rows = bulk.daily.get(key, []) if bulk else []
+            if not rows:
+                return 0, "today"
+            last = rows[-1]
+            val = int(last.value)
+            days_ago = (datetime.now() - last.date).days
+            if days_ago == 0:
+                return val, "today"
+            if days_ago == 1:
+                return val, "yesterday"
+            return val, f"{days_ago}d ago"
+
+        latest_clones, clones_label = _latest_daily("clones")
+        latest_unique, unique_label = _latest_daily("unique_cloners")
+        latest_views, views_label = _latest_daily("views")
+        latest_downloads, dl_label = _latest_daily("downloads_daily")
+        today_str = now.strftime("%Y-%m-%d")
+        today_stars = len([r for r in star_events if str(r.date)[:10] == today_str])
+
+        # Top-level metrics with change arrows + "+X today" subtitle
+        metrics_row = ft.Row(
+            [
+                MetricCard(
+                    "Stars",
+                    str(stars_total),
+                    "#FFD700",
+                    change_pct=_pct(recent_stars, prev_star_count),
+                    prev_value=f"+{today_stars} today",
+                ),
+                MetricCard(
+                    "PyPI Downloads",
+                    f"{db['pypi_total']:,}",
+                    "#FF69B4",
+                    change_pct=_pct(pypi_14d, pypi_prev14d),
+                    prev_value=f"+{latest_downloads:,} {dl_label}",
+                ),
+                MetricCard(
+                    "14d Clones",
+                    f"{total_clones:,}",
+                    Theme.Colors.PRIMARY,
+                    change_pct=_pct(total_clones, prev_clones),
+                    prev_value=f"+{latest_clones:,} {clones_label}",
+                ),
+                MetricCard(
+                    "14d Unique",
+                    f"{total_unique:,}",
+                    Theme.Colors.INFO,
+                    change_pct=_pct(total_unique, prev_unique),
+                    prev_value=f"+{latest_unique:,} {unique_label}",
+                ),
+                MetricCard(
+                    "14d Views",
+                    f"{total_views:,}",
+                    Theme.Colors.SUCCESS,
+                    change_pct=_pct(total_views, prev_views),
+                    prev_value=f"+{latest_views:,} {views_label}",
+                ),
+            ],
+            spacing=Theme.Spacing.MD,
+        )
+
+        # Recent activity (left) — reuse ExpandableActivityRow
+        from datetime import datetime as _dt
+
+        from app.components.frontend.controls.data_table import (
+            DataTableColumn,
+            DataTableRow,
+        )
+        from app.services.system.activity import ActivityEvent
+
+        from ..activity_feed import ExpandableActivityRow
+
+        _row_col = [DataTableColumn("Activity")]
+
+        activity_items: list[ft.Control] = []
+        for ev in recent_events:
+            status = EVENT_STATUS_MAP.get(ev["type"], "info")
+            try:
+                ts = _dt.strptime(ev["date"], "%Y-%m-%d")
+            except (ValueError, TypeError):
+                ts = _dt.now()
+
+            # Build details from metadata
+            meta = ev.get("metadata", {})
+            details = None
+            reddit_url = None
+            if ev["type"] == "reddit_post":
+                pid = meta.get("post_id", "")
+                stats = reddit_stats.get(pid, {})
+                parts = []
+                sub = meta.get("subreddit") or stats.get("subreddit", "")
+                if sub:
+                    parts.append(f"r/{sub}")
+                if stats.get("upvotes"):
+                    parts.append(f"{stats['upvotes']} upvotes")
+                if stats.get("comments"):
+                    parts.append(f"{stats['comments']} comments")
+                details = " \u2022 ".join(parts) if parts else None
+                reddit_url = meta.get("url", "")
+            elif ev["type"] == "star":
+                usernames = meta.get("usernames", [])
+                if usernames:
+                    details = ", ".join(usernames[:10])
+                    if len(usernames) > 10:
+                        details += f" +{len(usernames) - 10} more"
+            release_url = None
+            fork_url = None
+            if ev["type"] == "fork":
+                actor = meta.get("actor", "")
+                if actor:
+                    fork_url = f"https://github.com/{actor}"
+                    details = actor
+            elif ev["type"] == "release":
+                tag = meta.get("tag", ev["description"])
+                release_url = (
+                    f"https://github.com/lbedner/aegis-stack/releases/tag/{tag}"
+                )
+                details = tag
+            elif ev["type"] in ("milestone_github", "milestone_pypi"):
+                cat = meta.get("category", "")
+                if cat:
+                    details = cat.replace("_", " ").title()
+
+            # For stars, show just the number in the title, name in details
+            # For forks, show just "Fork" in the title, name in details
+            message = ev["description"][:80]
+            if ev["type"] == "star" and " \u2014 " in message:
+                message = message.split(" \u2014 ")[0]  # "⭐ #99 — ncthuc" → "⭐ #99"
+            elif ev["type"] == "fork" and not message.startswith("Fork #"):
+                message = "Fork"
+
+            event_obj = ActivityEvent(
+                component="insights",
+                event_type=ev["type"],
+                message=message,
+                status=status,
+                timestamp=ts,
+                details=details or (reddit_url if reddit_url else None),
+            )
+            row = ExpandableActivityRow(event_obj)
+            # Hide the status dot — not needed in insights feed
+            row.content.controls[0].controls[0].visible = False
+
+            # For reddit posts, replace details with stats + clickable link
+            if reddit_url and details:
+                row._details_container.content = ft.Column(
+                    [
+                        SecondaryText(details),
+                        ft.Container(
+                            content=ft.Text(
+                                reddit_url,
+                                size=Theme.Typography.BODY_SMALL,
+                                style=ft.TextStyle(
+                                    color=Theme.Colors.INFO,
+                                    decoration=ft.TextDecoration.UNDERLINE,
+                                ),
+                                selectable=False,
+                            ),
+                            on_click=lambda e, u=reddit_url: e.page.launch_url(u),
+                            ink=True,
+                        ),
+                    ],
+                    spacing=4,
+                )
+            elif fork_url:
+                row._details_container.content = ft.Container(
+                    content=ft.Text(
+                        fork_url,
+                        size=Theme.Typography.BODY_SMALL,
+                        style=ft.TextStyle(
+                            color=Theme.Colors.INFO,
+                            decoration=ft.TextDecoration.UNDERLINE,
+                        ),
+                        selectable=False,
+                    ),
+                    on_click=lambda e, u=fork_url: e.page.launch_url(u),
+                    ink=True,
+                )
+            elif release_url:
+                row._details_container.content = ft.Container(
+                    content=ft.Text(
+                        release_url,
+                        size=Theme.Typography.BODY_SMALL,
+                        style=ft.TextStyle(
+                            color=Theme.Colors.INFO,
+                            decoration=ft.TextDecoration.UNDERLINE,
+                        ),
+                        selectable=False,
+                    ),
+                    on_click=lambda e, u=release_url: e.page.launch_url(u),
+                    ink=True,
+                )
+
+            activity_items.append(
+                DataTableRow(columns=_row_col, row_data=[row], padding=4)
+            )
+
+        # Parse milestone data into trophy cards
+        milestone_cards: list[ft.Control] = []
+        for m in milestones:
+            meta = m.get("metadata", {})
+            category = meta.get("category", "")
+            config = CATEGORY_CONFIG.get(category, {})
+            label = config.get("label", m["description"])
+            accent = config.get("color", "#9CA3AF")
+
+            # Extract hero number — only for milestone types, not features
+            hero = (
+                _extract_max_number(m["description"]) if m["type"] != "feature" else ""
+            )
+
+            milestone_cards.append(
+                MilestoneCard(
+                    label=label,
+                    value=hero or "\u2014",
+                    date=_pretty_date(m["date"]),
+                    accent_color=accent,
+                )
+            )
+
+        # Arrange milestones in a 2x2 grid
+        milestone_grid: list[ft.Control] = [
+            H3Text("Key Milestones"),
+            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+        ]
+        row_items: list[ft.Control] = []
+        for card in milestone_cards:
+            row_items.append(card)
+            if len(row_items) == 2:
+                milestone_grid.append(ft.Row(row_items, spacing=Theme.Spacing.MD))
+                row_items = []
+        if row_items:
+            milestone_grid.append(ft.Row(row_items, spacing=Theme.Spacing.MD))
+
+        side_by_side = ft.Row(
+            [
+                ft.Column(
+                    [
+                        H3Text("Recent Activity"),
+                        ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                        *activity_items,
+                    ],
+                    spacing=6,
+                    expand=2,
+                ),
+                ft.Column(
+                    milestone_grid,
+                    spacing=6,
+                    expand=1,
+                ),
+            ],
+            spacing=Theme.Spacing.LG,
+            vertical_alignment=ft.CrossAxisAlignment.START,
+        )
+
+        # Intelligence Report — collapsible analysis
+        self.content = ft.Column(
+            [
+                metrics_row,
+                ft.Container(height=4),
+                side_by_side,
+            ],
+            spacing=8,
+            scroll=ft.ScrollMode.AUTO,
+        )
+        self.padding = Theme.Spacing.MD
+        self.expand = True
+
+
+# ---------------------------------------------------------------------------
+# Tab 2: GitHub
+# ---------------------------------------------------------------------------
+
+
+class GitHubTrafficTab(InsightsTab):
+    """GitHub traffic, events, and activity with date range and event annotations."""
+
+    _default_days = 7
+
+    # -- build content --------------------------------------------------------
+
+    def _build_content(self) -> None:  # noqa: C901
+        """Build or rebuild all content based on state."""
+        data = self._data
+        daily = data["daily"]
+
+        last_date = daily[-1]["date"] if daily else ""
+        content: list[ft.Control] = [
+            self._make_filter_bar(last_updated=last_date),
+            ft.Container(height=8),
+        ]
+
+        if not daily:
+            content.append(SecondaryText("No GitHub traffic data collected yet."))
+            self._content_column.controls = content
+            return
+
+        # Range-level aggregates
+        total_clones = sum(d["clones"] for d in daily)
+        total_unique = sum(d["unique_cloners"] for d in daily)
+        total_views = sum(d["views"] for d in daily)
+        total_visitors = sum(d["unique_visitors"] for d in daily)
+        clone_ratio = total_clones / total_unique if total_unique > 0 else 0
+        num_days = len(daily)
+        range_label = next(
+            (label for label, days in RANGE_OPTIONS if days == self._days),
+            f"{self._days}d",
+        )
+
+        # Period-over-period change
+
+        prev_c = data.get("prev_clones", 0)
+        prev_u = data.get("prev_unique", 0)
+        prev_v = data.get("prev_views", 0)
+        prev_vis = data.get("prev_visitors", 0)
+
+        # Latest day's values for subtitle
+        last_day = daily[-1] if daily else {}
+        last_clones = last_day.get("clones", 0)
+        last_unique = last_day.get("unique_cloners", 0)
+        last_views = last_day.get("views", 0)
+        last_visitors = last_day.get("unique_visitors", 0)
+        last_date = last_day.get("date", "")
+
+        from datetime import datetime as _dt
+
+        _days_ago = (
+            (_dt.now() - _dt.strptime(last_date, "%Y-%m-%d")).days if last_date else 0
+        )
+        _day_label = (
+            "today"
+            if _days_ago == 0
+            else "yesterday"
+            if _days_ago == 1
+            else f"{_days_ago}d ago"
+        )
+
+        # Metric cards — all on one row, always visible
+        forks = data.get("forks", [])
+        releases = data.get("releases", {})
+        star_daily = data.get("star_events_daily", [])
+        avg_stars = (
+            sum(d["stars"] for d in star_daily) / len(star_daily) if star_daily else 0
+        )
+
+        # Previous period clone ratio
+        prev_ratio = prev_c / prev_u if prev_u > 0 else 0
+        prev_ratio_label = (
+            f"prev: {prev_ratio:.1f}:1" if prev_ratio > 0 else f"in {range_label}"
+        )
+
+        # Previous period avg stars (from bulk data)
+        from app.services.insights.query_service import InsightQueryService
+
+        cutoff, prev_cutoff = InsightQueryService.compute_cutoffs(self._days)
+        prev_star_rows = [
+            r
+            for r in self._bulk.daily.get("star_events", [])
+            if prev_cutoff <= r.date < cutoff
+        ]
+        prev_avg_stars = (
+            sum(int(r.value) for r in prev_star_rows) / len(prev_star_rows)
+            if prev_star_rows
+            else 0
+        )
+        prev_stars_label = (
+            f"prev: {prev_avg_stars:.1f}" if prev_star_rows else f"in {range_label}"
+        )
+
+        content.append(
+            ft.Row(
+                [
+                    MetricCard(
+                        "Clones",
+                        f"{total_clones:,}",
+                        Theme.Colors.PRIMARY,
+                        change_pct=_pct(total_clones, prev_c),
+                        prev_value=f"+{last_clones:,} {_day_label}",
+                    ),
+                    MetricCard(
+                        "Unique",
+                        f"{total_unique:,}",
+                        Theme.Colors.INFO,
+                        change_pct=_pct(total_unique, prev_u),
+                        prev_value=f"+{last_unique:,} {_day_label}",
+                        tooltip="Unique cloners per day, counted independently by GitHub. Not deduplicated across days.",  # noqa: E501
+                    ),
+                    MetricCard(
+                        "Views",
+                        f"{total_views:,}",
+                        Theme.Colors.SUCCESS,
+                        change_pct=_pct(total_views, prev_v),
+                        prev_value=f"+{last_views:,} {_day_label}",
+                    ),
+                    MetricCard(
+                        "Visitors",
+                        f"{total_visitors:,}",
+                        Theme.Colors.WARNING,
+                        change_pct=_pct(total_visitors, prev_vis),
+                        prev_value=f"+{last_visitors:,} {_day_label}",
+                    ),
+                    MetricCard(
+                        "Clone Ratio",
+                        f"{clone_ratio:.1f}:1",
+                        "#E91E63",
+                        prev_value=prev_ratio_label,
+                    ),
+                    MetricCard(
+                        "Forks",
+                        str(len(forks)),
+                        "#A855F7",
+                        prev_value=f"in {range_label}",
+                    ),
+                    MetricCard(
+                        "Releases",
+                        str(len(releases)),
+                        "#22C55E",
+                        prev_value=f"in {range_label}",
+                    ),
+                    MetricCard(
+                        "Avg Stars/Day",
+                        f"{avg_stars:.1f}",
+                        "#F59E0B",
+                        prev_value=prev_stars_label,
+                    ),
+                ],
+                spacing=Theme.Spacing.MD,
+            )
+        )
+
+        # Date range text
+        date_range = (
+            f"{_pretty_date(daily[0]['date'])} \u2014 {_pretty_date(daily[-1]['date'])}"
+        )
+        content.append(SecondaryText(date_range, size=Theme.Typography.BODY_SMALL))
+
+        # Event chips
+        first_date = daily[0]["date"]
+        last_date = daily[-1]["date"]
+        window_events = [
+            (date, label, etype)
+            for date, label, etype in data.get("all_events", [])
+            if first_date <= date <= last_date
+        ]
+        chips = self._render_event_chips(window_events)
+        if chips:
+            content.append(chips)
+
+        content.append(ft.Container(height=4))
+
+        # -- Clones + Unique chart with event annotations ---------------------
+
+        releases_map = data.get("releases", {}) if self._show_events else {}
+        highlighted = self._highlighted_dates
+
+        # Trim leading zero days separately for each chart
+        clone_daily = daily
+        for i, d in enumerate(daily):
+            if d["clones"] or d["unique_cloners"]:
+                clone_daily = daily[i:]
+                break
+
+        view_daily = daily
+        for i, d in enumerate(daily):
+            if d["views"] or d["unique_visitors"]:
+                view_daily = daily[i:]
+                break
+
+        # -- Clones + Unique chart --------------------------------------------
+
+        max_clone = max(d["clones"] for d in clone_daily) if clone_daily else 1
+        clone_step = _smart_step(max_clone)
+        clone_max_y = int((max_clone // clone_step + 1) * clone_step)
+
+        clone_points: list[ft.LineChartDataPoint] = []
+        unique_points: list[ft.LineChartDataPoint] = []
+        release_anno_points: list[ft.LineChartDataPoint] = []
+
+        for i, d in enumerate(clone_daily):
+            is_hl = d["date"] in highlighted
+            hl_point = (
+                ft.ChartCirclePoint(
+                    radius=7, color="#FF5722", stroke_width=2, stroke_color="#FFFFFF"
+                )
+                if is_hl
+                else None
+            )
+
+            clone_points.append(
+                ft.LineChartDataPoint(
+                    i,
+                    d["clones"],
+                    tooltip=f"Clones: {d['clones']:,}",
+                    point=hl_point,
+                )
+            )
+            unique_points.append(
+                ft.LineChartDataPoint(
+                    i,
+                    d["unique_cloners"],
+                    tooltip=f"Unique: {d['unique_cloners']:,}",
+                )
+            )
+
+            rel = releases_map.get(d["date"])
+            if rel:
+                release_anno_points.append(
+                    ft.LineChartDataPoint(i, 0, tooltip=rel, show_tooltip=True)
+                )
+            else:
+                release_anno_points.append(
+                    ft.LineChartDataPoint(i, 0, show_tooltip=False)
+                )
+
+        clone_series = [
+            ft.LineChartData(
+                data_points=clone_points,
+                stroke_width=2,
+                color="#2563eb",
+                curved=True,
+                point=ft.ChartCirclePoint(
+                    radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
+                ),
+                stroke_cap_round=True,
+            ),
+            ft.LineChartData(
+                data_points=unique_points,
+                stroke_width=2,
+                color="#7c3aed",
+                curved=True,
+                point=ft.ChartCirclePoint(
+                    radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
+                ),
+                stroke_cap_round=True,
+            ),
+        ]
+        if any(p.show_tooltip for p in release_anno_points):
+            clone_series.append(
+                ft.LineChartData(
+                    data_points=release_anno_points,
+                    stroke_width=0,
+                    color="#9CA3AF",
+                )
+            )
+
+        clone_chart = _make_line_chart(
+            clone_series, clone_max_y, clone_daily, clone_step
+        )
+        content.append(
+            ft.Container(content=clone_chart, margin=ft.margin.only(right=20))
+        )
+        content.append(
+            _make_legend([("#2563eb", "Clones"), ("#7c3aed", "Unique Cloners")])
+        )
+
+        content.append(ft.Container(height=12))
+
+        # -- Views + Visitors chart -------------------------------------------
+
+        max_view = max(d["views"] for d in view_daily) if view_daily else 1
+        view_step = _smart_step(max_view)
+        view_max_y = int((max_view // view_step + 1) * view_step)
+
+        view_points: list[ft.LineChartDataPoint] = []
+        visitor_points: list[ft.LineChartDataPoint] = []
+        release_anno2: list[ft.LineChartDataPoint] = []
+
+        for i, d in enumerate(view_daily):
+            is_hl = d["date"] in highlighted
+            hl_point = (
+                ft.ChartCirclePoint(
+                    radius=7, color="#FF5722", stroke_width=2, stroke_color="#FFFFFF"
+                )
+                if is_hl
+                else None
+            )
+
+            view_points.append(
+                ft.LineChartDataPoint(
+                    i,
+                    d["views"],
+                    tooltip=f"Views: {d['views']:,}",
+                    point=hl_point,
+                )
+            )
+            visitor_points.append(
+                ft.LineChartDataPoint(
+                    i,
+                    d["unique_visitors"],
+                    tooltip=f"Visitors: {d['unique_visitors']:,}",
+                )
+            )
+
+            rel = releases_map.get(d["date"])
+            if rel:
+                release_anno2.append(
+                    ft.LineChartDataPoint(i, 0, tooltip=rel, show_tooltip=True)
+                )
+            else:
+                release_anno2.append(ft.LineChartDataPoint(i, 0, show_tooltip=False))
+
+        view_series = [
+            ft.LineChartData(
+                data_points=view_points,
+                stroke_width=2,
+                color="#22C55E",
+                curved=True,
+                point=ft.ChartCirclePoint(
+                    radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
+                ),
+                stroke_cap_round=True,
+            ),
+            ft.LineChartData(
+                data_points=visitor_points,
+                stroke_width=2,
+                color="#F59E0B",
+                curved=True,
+                point=ft.ChartCirclePoint(
+                    radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
+                ),
+                stroke_cap_round=True,
+            ),
+        ]
+        if any(p.show_tooltip for p in release_anno2):
+            view_series.append(
+                ft.LineChartData(
+                    data_points=release_anno2,
+                    stroke_width=0,
+                    color="#9CA3AF",
+                )
+            )
+
+        views_chart = _make_line_chart(view_series, view_max_y, view_daily, view_step)
+        content.append(
+            ft.Container(content=views_chart, margin=ft.margin.only(right=20))
+        )
+        content.append(_make_legend([("#22C55E", "Views"), ("#F59E0B", "Visitors")]))
+
+        # Interpretation
+        content.append(
+            ft.Container(
+                content=SecondaryText(
+                    f"{range_label} clone ratio of {clone_ratio:.1f}:1 across {total_clones:,} clones "  # noqa: E501
+                    f"from {total_unique:,} unique cloners. "
+                    f"Traffic data covers {num_days} days.",
+                    size=Theme.Typography.BODY_SMALL,
+                ),
+                padding=ft.padding.symmetric(horizontal=4, vertical=8),
+            )
+        )
+
+        # -- Activity Summary stacked bar chart -------------------------------
+
+        activity = data.get("activity_summary", [])
+        if activity:
+            content.append(ft.Container(height=12))
+            content.append(H3Text("Activity Summary"))
+
+            # Group into 5 categories
+            act_categories = [
+                ("Code", "#3B82F6", ["push", "creates", "deletes"]),
+                ("Issues", "#F59E0B", ["issues", "issue_comments"]),
+                ("PRs", "#A855F7", ["pull_requests", "pull_request_reviews"]),
+                ("Community", "#22C55E", ["forks", "stars"]),
+                ("Releases", "#EC4899", ["releases"]),
+            ]
+
+            bar_groups: list[ft.BarChartGroup] = []
+            act_max = 0
+
+            bar_width = max(8, 400 // max(len(activity), 1))
+
+            for i, day in enumerate(activity):
+                stack_items: list[ft.BarChartRodStackItem] = []
+                running_y = 0.0
+                for _cat_name, color, fields in act_categories:
+                    val = sum(day.get(f, 0) for f in fields)
+                    if val > 0:
+                        stack_items.append(
+                            ft.BarChartRodStackItem(
+                                from_y=running_y,
+                                to_y=running_y + val,
+                                color=color,
+                            )
+                        )
+                    running_y += val
+                act_max = max(act_max, running_y)
+                bar_groups.append(
+                    ft.BarChartGroup(
+                        x=i,
+                        bar_rods=[
+                            ft.BarChartRod(
+                                to_y=running_y,
+                                width=bar_width,
+                                rod_stack_items=stack_items,
+                                color=ft.Colors.TRANSPARENT,
+                                border_radius=2,
+                            ),
+                        ],
+                    )
+                )
+
+            act_step = _smart_step(act_max) if act_max > 0 else 5
+            act_max_y = int((act_max // act_step + 1) * act_step) if act_max > 0 else 10
+
+            activity_chart = ft.BarChart(
+                bar_groups=bar_groups,
+                left_axis=ft.ChartAxis(labels_size=50, labels_interval=act_step),
+                bottom_axis=ft.ChartAxis(
+                    labels_size=50,
+                    labels=[
+                        ft.ChartAxisLabel(
+                            value=i,
+                            label=ft.Text(
+                                day["date"][-5:],
+                                size=9,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                            ),
+                        )
+                        for i, day in enumerate(activity)
+                        if i % 3 == 0 or i == len(activity) - 1
+                    ],
+                ),
+                horizontal_grid_lines=ft.ChartGridLines(
+                    interval=act_step,
+                    color=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE),
+                    width=1,
+                ),
+                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                interactive=False,
+                max_y=act_max_y,
+                height=300,
+                expand=True,
+            )
+
+            content.append(
+                ft.Container(content=activity_chart, margin=ft.margin.only(right=20))
+            )
+            content.append(
+                ft.Row(
+                    [
+                        ft.Row(
+                            [
+                                ft.Container(
+                                    width=10, height=10, bgcolor=color, border_radius=5
+                                ),
+                                SecondaryText(name, size=Theme.Typography.BODY_SMALL),
+                            ],
+                            spacing=4,
+                        )
+                        for name, color, _fields in act_categories
+                    ],
+                    spacing=16,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                )
+            )
+
+        # -- Referrers --------------------------------------------------------
+
+        referrers = data.get("referrers", [])
+        content.append(ft.Container(height=8))
+        content.append(H3Text("Referrers"))
+        content.append(ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT))
+
+        if referrers:
+            for ref in referrers:
+                domain = ref["domain"]
+                # Build URL — search engines get their URL, others get https://
+                url = (
+                    f"https://{domain}"
+                    if "." in domain
+                    else f"https://www.google.com/search?q={domain}"
+                )
+                content.append(
+                    ft.Row(
+                        [
+                            ft.Container(
+                                content=ft.Text(
+                                    domain,
+                                    size=Theme.Typography.BODY_SMALL,
+                                    style=ft.TextStyle(
+                                        color=Theme.Colors.INFO,
+                                        decoration=ft.TextDecoration.UNDERLINE,
+                                    ),
+                                    selectable=False,
+                                ),
+                                width=200,
+                                on_click=lambda e, u=url: e.page.launch_url(u),
+                                ink=True,
+                            ),
+                            SecondaryText(
+                                f"{ref['views']} views",
+                                size=Theme.Typography.BODY_SMALL,
+                            ),
+                            SecondaryText(
+                                f"{ref['uniques']} unique",
+                                size=Theme.Typography.BODY_SMALL,
+                            ),
+                        ],
+                        spacing=8,
+                    )
+                )
+        else:
+            content.append(
+                SecondaryText(
+                    "No referrer data available.", size=Theme.Typography.BODY_SMALL
+                )
+            )
+
+        # -- Popular Paths ----------------------------------------------------
+
+        paths = data.get("popular_paths", [])
+        if paths:
+            content.append(ft.Container(height=8))
+            content.append(H3Text("Popular Paths"))
+            content.append(ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT))
+            for p in paths:
+                path_url = f"https://github.com{p['path']}"
+                content.append(
+                    ft.Row(
+                        [
+                            ft.Container(
+                                content=ft.Text(
+                                    p["path"],
+                                    size=Theme.Typography.BODY_SMALL,
+                                    style=ft.TextStyle(
+                                        color=Theme.Colors.INFO,
+                                        decoration=ft.TextDecoration.UNDERLINE,
+                                    ),
+                                    selectable=False,
+                                ),
+                                expand=True,
+                                on_click=lambda e, u=path_url: e.page.launch_url(u),
+                                ink=True,
+                            ),
+                            SecondaryText(
+                                f"{p['views']} views", size=Theme.Typography.BODY_SMALL
+                            ),
+                            SecondaryText(
+                                f"{p['uniques']} unique",
+                                size=Theme.Typography.BODY_SMALL,
+                            ),
+                        ],
+                        spacing=8,
+                    )
+                )
+
+        self._content_column.controls = content
+
+    # -- data loader ----------------------------------------------------------
+
+    def _load_data(self, days: int = 14) -> dict[str, Any]:
+        """Load GitHub data from bulk pre-loaded data with date cutoff."""
+        from app.services.insights.query_service import InsightQueryService
+
+        cutoff, prev_cutoff = InsightQueryService.compute_cutoffs(days)
+
+        # Traffic daily
+        clones_rows = [
+            r for r in self._bulk.daily.get("clones", []) if r.date >= cutoff
+        ]
+        unique_rows = [
+            r for r in self._bulk.daily.get("unique_cloners", []) if r.date >= cutoff
+        ]
+        views_rows = [r for r in self._bulk.daily.get("views", []) if r.date >= cutoff]
+        visitors_rows = [
+            r for r in self._bulk.daily.get("unique_visitors", []) if r.date >= cutoff
+        ]
+
+        unique_map = {str(r.date)[:10]: int(r.value) for r in unique_rows}
+        views_map = {str(r.date)[:10]: int(r.value) for r in views_rows}
+        visitors_map = {str(r.date)[:10]: int(r.value) for r in visitors_rows}
+
+        daily: list[dict[str, Any]] = []
+        for r in clones_rows:
+            day = str(r.date)[:10]
+            clones = int(r.value)
+            unique = unique_map.get(day, 0)
+            views = views_map.get(day, 0)
+            visitors = visitors_map.get(day, 0)
+            # Skip days with no activity to avoid dead space on chart
+            if clones == 0 and unique == 0 and views == 0 and visitors == 0:
+                continue
+            daily.append(
+                {
+                    "date": day,
+                    "clones": clones,
+                    "unique_cloners": unique,
+                    "views": views,
+                    "unique_visitors": visitors,
+                }
+            )
+
+        # Referrers (latest snapshot)
+        referrers_row = self._bulk.latest.get("referrers")
+        referrers: list[dict[str, Any]] = []
+        if referrers_row and referrers_row.metadata_:
+            meta = referrers_row.metadata_
+            if isinstance(meta, dict) and not meta.get("referrers"):
+                for domain, counts in meta.items():
+                    if isinstance(counts, dict):
+                        referrers.append(
+                            {
+                                "domain": domain,
+                                "views": counts.get("views", 0),
+                                "uniques": counts.get("uniques", 0),
+                            }
+                        )
+            else:
+                for ref in meta.get("referrers", []):
+                    referrers.append(
+                        {
+                            "domain": ref.get("referrer", ref.get("domain", "unknown")),
+                            "views": ref.get("count", ref.get("views", 0)),
+                            "uniques": ref.get("uniques", 0),
+                        }
+                    )
+            referrers.sort(key=lambda x: -x["views"])
+
+        # Popular paths (latest snapshot)
+        paths_row = self._bulk.latest.get("popular_paths")
+        popular_paths: list[dict[str, Any]] = []
+        if paths_row and paths_row.metadata_:
+            for p in paths_row.metadata_.get(
+                "paths", paths_row.metadata_.get("popular_paths", [])
+            ):
+                popular_paths.append(
+                    {
+                        "path": p.get("path", "unknown"),
+                        "title": p.get("title", ""),
+                        "views": p.get("count", p.get("views", 0)),
+                        "uniques": p.get("uniques", 0),
+                    }
+                )
+
+        # Fork events
+        fork_rows = [r for r in self._bulk.events.get("forks", []) if r.date >= cutoff]
+        forks: list[dict[str, str]] = []
+        for r in fork_rows:
+            meta = r.metadata_ or {}
+            forks.append(
+                {"actor": meta.get("actor", "unknown"), "date": str(r.date)[:10]}
+            )
+
+        # Star events daily
+        star_rows = [
+            r for r in self._bulk.daily.get("star_events", []) if r.date >= cutoff
+        ]
+        star_events_daily: list[dict[str, Any]] = []
+        for r in star_rows:
+            star_events_daily.append({"date": str(r.date)[:10], "stars": int(r.value)})
+
+        # Activity summary daily
+        activity_rows = [
+            r for r in self._bulk.daily.get("activity_summary", []) if r.date >= cutoff
+        ]
+        activity_summary: list[dict[str, Any]] = []
+        for r in activity_rows:
+            meta = r.metadata_ or {}
+            entry: dict[str, Any] = {"date": str(r.date)[:10]}
+            for field in (
+                "push",
+                "issues",
+                "pull_requests",
+                "pull_request_reviews",
+                "issue_comments",
+                "forks",
+                "stars",
+                "releases",
+                "creates",
+                "deletes",
+            ):
+                entry[field] = meta.get(field, 0)
+            activity_summary.append(entry)
+
+        # Build all_events list for chips
+        all_events: list[tuple[str, str, str]] = []
+
+        # Release events from metrics
+        release_rows = [
+            r for r in self._bulk.events.get("releases", []) if r.date >= cutoff
+        ]
+        releases: dict[str, str] = {}
+        for r in release_rows:
+            meta = r.metadata_ or {}
+            tag = meta.get("tag", "")
+            day = str(r.date)[:10]
+            if tag:
+                all_events.append((day, tag, "release"))
+                if day in releases:
+                    releases[day] += f"\n{tag}"
+                else:
+                    releases[day] = tag
+
+        # InsightEvent rows filtered to GitHub-relevant types
+        cutoff_str = str(cutoff.date())
+        for ev in [
+            ev
+            for ev in self._bulk.insight_events
+            if str(ev.date)[:10] >= cutoff_str and ev.event_type in GITHUB_EVENT_TYPES
+        ]:
+            day = str(ev.date)[:10]
+            all_events.append((day, ev.description[:60], ev.event_type))
+            # Only add release-type events to the releases annotation map
+            if ev.event_type == "release":
+                if day in releases:
+                    releases[day] += f"\n{ev.description[:60]}"
+                else:
+                    releases[day] = ev.description[:60]
+
+        all_events.sort(key=lambda x: x[0])
+
+        return {
+            "daily": daily,
+            "referrers": referrers,
+            "popular_paths": popular_paths,
+            "forks": forks,
+            "releases": releases,
+            "all_events": all_events,
+            "activity_summary": activity_summary,
+            "star_events_daily": star_events_daily,
+            "prev_clones": sum(
+                int(r.value)
+                for r in self._bulk.daily.get("clones", [])
+                if prev_cutoff <= r.date < cutoff
+            ),
+            "prev_unique": sum(
+                int(r.value)
+                for r in self._bulk.daily.get("unique_cloners", [])
+                if prev_cutoff <= r.date < cutoff
+            ),
+            "prev_views": sum(
+                int(r.value)
+                for r in self._bulk.daily.get("views", [])
+                if prev_cutoff <= r.date < cutoff
+            ),
+            "prev_visitors": sum(
+                int(r.value)
+                for r in self._bulk.daily.get("unique_visitors", [])
+                if prev_cutoff <= r.date < cutoff
+            ),
+        }
+
+
+# ---------------------------------------------------------------------------
+# Tab 3: Stars
+# ---------------------------------------------------------------------------
+
+
+class StarsTab(InsightsTab):
+    """Stars: cumulative chart, recent list, event chips — with date range."""
+
+    _default_days = 7
+
+    def _build_content(self) -> None:
+        """Build or rebuild all content based on state."""
+        data = self._data
+        star_history = data["star_history"]
+        total_stars = data["total_stars"]
+        range_stars = data["range_stars"]
+
+        last_date = star_history[-1]["date"] if star_history else ""
+        content: list[ft.Control] = [
+            self._make_filter_bar(last_updated=last_date),
+            ft.Container(height=8),
+        ]
+
+        # Metric cards
+        num_days = len(star_history) if star_history else 1
+        avg_per_day = range_stars / num_days if num_days else 0
+
+        content.append(
+            ft.Row(
+                [
+                    MetricCard("Total Stars", str(total_stars), "#FFD700"),
+                    MetricCard("In Range", str(range_stars), Theme.Colors.INFO),
+                    MetricCard("Avg / Day", f"{avg_per_day:.1f}", Theme.Colors.SUCCESS),
+                ],
+                spacing=Theme.Spacing.MD,
+            )
+        )
+
+        if not star_history:
+            content.append(SecondaryText("No star events in this range."))
+            self._content_column.controls = content
+            return
+
+        # Date range text
+        date_range = f"{_pretty_date(star_history[0]['date'])} \u2014 {_pretty_date(star_history[-1]['date'])}"  # noqa: E501
+        content.append(SecondaryText(date_range, size=Theme.Typography.BODY_SMALL))
+
+        # Event chips — only on dates with stars, exclude star type
+        star_dates = {d["date"] for d in star_history}
+        chips = self._render_event_chips(
+            data.get("all_events", []),
+            valid_dates=star_dates,
+            exclude_types={"star"},
+        )
+        if chips:
+            content.append(chips)
+
+        # Star History cumulative chart
+        max_stars = star_history[-1]["stars"]
+        min_stars = star_history[0]["stars"]
+        padding = max(1, (max_stars - min_stars) // 4)
+        star_min_y = max(0, min_stars - padding)
+        star_range = max_stars - star_min_y
+        star_step = _smart_step(star_range)
+        star_max_y = int((max_stars // star_step + 1) * star_step)
+        highlighted = self._highlighted_dates
+        # Filter releases: exclude star events, only dates that have chart points
+        releases_map = data.get("releases", {}) if self._show_events else {}
+        non_star_releases: dict[str, str] = {}
+        for day, label in releases_map.items():
+            if day not in star_dates:
+                continue
+            lines = [ln for ln in label.split("\n") if not ln.startswith("\u2b50")]
+            if lines:
+                non_star_releases[day] = "\n".join(lines)
+
+        history_points: list[ft.LineChartDataPoint] = []
+        release_anno: list[ft.LineChartDataPoint] = []
+
+        for i, d in enumerate(star_history):
+            is_hl = d["date"] in highlighted
+            hl_point = (
+                ft.ChartCirclePoint(
+                    radius=7, color="#FF5722", stroke_width=2, stroke_color="#FFFFFF"
+                )
+                if is_hl
+                else None
+            )
+            count = d.get("count", 1)
+            names = d.get("usernames", [])
+            if count == 1:
+                tip = f"#{d['stars']} — {names[0] if names else ''}\n{_pretty_date(d['date'])}"  # noqa: E501
+            else:
+                first_num = d["stars"] - count + 1
+                tip = f"#{first_num}-#{d['stars']} ({count} stars)\n{_pretty_date(d['date'])}"  # noqa: E501
+            history_points.append(
+                ft.LineChartDataPoint(
+                    i,
+                    d["stars"],
+                    tooltip=tip,
+                    point=hl_point,
+                )
+            )
+
+            rel = non_star_releases.get(d["date"])
+            if rel:
+                release_anno.append(
+                    ft.LineChartDataPoint(i, 0, tooltip=rel, show_tooltip=True)
+                )
+            else:
+                release_anno.append(ft.LineChartDataPoint(i, 0, show_tooltip=False))
+
+        chart_series = [
+            ft.LineChartData(
+                data_points=history_points,
+                stroke_width=3,
+                color="#FFD700",
+                curved=True,
+                below_line_bgcolor=ft.Colors.with_opacity(0.15, "#FFD700"),
+                point=ft.ChartCirclePoint(radius=3, color="#FFD700", stroke_width=0),
+                stroke_cap_round=True,
+            ),
+        ]
+        if any(p.show_tooltip for p in release_anno):
+            chart_series.append(
+                ft.LineChartData(
+                    data_points=release_anno,
+                    stroke_width=0,
+                    color="#9CA3AF",
+                )
+            )
+
+        history_chart = _make_line_chart(
+            chart_series, star_max_y, star_history, star_step, min_y=star_min_y
+        )
+        content.append(
+            ft.Container(content=history_chart, margin=ft.margin.only(right=20))
+        )
+        content.append(_make_legend([("#FFD700", "Cumulative Stars")]))
+
+        self._content_column.controls = content
+
+    def _load_data(self, days: int = 9999) -> dict[str, Any]:
+        """Load star data from bulk pre-loaded data with date cutoff."""
+        from app.services.insights.query_service import InsightQueryService
+
+        cutoff, _ = InsightQueryService.compute_cutoffs(days)
+
+        # All stars (for total count)
+        all_rows = self._bulk.events.get("new_star", [])
+        total_stars = len(all_rows)
+
+        if not all_rows:
+            return {
+                "star_history": [],
+                "stars_recent": [],
+                "total_stars": 0,
+                "range_stars": 0,
+                "all_events": [],
+                "releases": {},
+            }
+
+        # Stars in range
+        range_rows = [r for r in all_rows if r.date >= cutoff]
+        range_stars = len(range_rows)
+
+        # Cumulative history - only days with stars, within range
+        by_date: dict[str, dict[str, Any]] = {}
+        for r in range_rows:
+            day = str(r.date)[:10]
+            meta = r.metadata_ if isinstance(r.metadata_, dict) else {}
+            if day not in by_date:
+                by_date[day] = {"max_num": 0, "count": 0, "usernames": []}
+            by_date[day]["max_num"] = max(by_date[day]["max_num"], int(r.value))
+            by_date[day]["count"] += 1
+            by_date[day]["usernames"].append(meta.get("username", "unknown"))
+        star_history = [
+            {
+                "date": d,
+                "stars": info["max_num"],
+                "count": info["count"],
+                "usernames": info["usernames"],
+            }
+            for d, info in sorted(by_date.items())
+        ]
+
+        # Recent stars (last 20 in range)
+        stars_recent: list[dict[str, Any]] = []
+        for r in reversed(range_rows[-20:]):
+            meta = r.metadata_ if isinstance(r.metadata_, dict) else {}
+            stars_recent.append(
+                {
+                    "number": int(r.value),
+                    "username": meta.get("username", "unknown"),
+                    "location": meta.get("location", ""),
+                    "company": meta.get("company", ""),
+                    "date": str(r.date)[:10],
+                }
+            )
+
+        # Events for chips + chart annotations
+        all_events: list[tuple[str, str, str]] = []
+        for r in self._bulk.events.get("releases", []):
+            tag = (r.metadata_ or {}).get("tag", "")
+            if tag:
+                all_events.append((str(r.date)[:10], tag, "release"))
+        cutoff_str = str(cutoff.date())
+        for ev in [
+            ev
+            for ev in self._bulk.insight_events
+            if str(ev.date)[:10] >= cutoff_str and ev.event_type in GITHUB_EVENT_TYPES
+        ]:
+            all_events.append((str(ev.date)[:10], ev.description[:60], ev.event_type))
+
+        release_map: dict[str, str] = {}
+        for date, label, _ in all_events:
+            if date in release_map:
+                release_map[date] += f"\n{label}"
+            else:
+                release_map[date] = label
+
+        all_events.sort(key=lambda x: x[0])
+
+        return {
+            "star_history": star_history,
+            "stars_recent": stars_recent,
+            "total_stars": total_stars,
+            "range_stars": range_stars,
+            "all_events": all_events,
+            "releases": release_map,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Tab 4: PyPI (unchanged -- already uses real data)
+# ---------------------------------------------------------------------------
+
+
+class PyPITab(InsightsTab):
+    """PyPI: real data from database with CI/mirror toggle and date range filter."""
+
+    _default_days = 7
+
+    def __init__(self, bulk: BulkInsightsResponse | None = None) -> None:
+        self._include_ci = False
+        self._toggle = ft.Switch(
+            label="Include CI/Mirror downloads",
+            value=False,
+            on_change=self._on_toggle,
+            label_style=ft.TextStyle(size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+        )
+        super().__init__(bulk=bulk)
+
+    def _on_toggle(self, e: ft.ControlEvent) -> None:
+        self._include_ci = e.control.value
+        self._build_content()
+        self._content_column.update()
+
+    def _build_content(self) -> None:
+        """Build or rebuild all content based on toggle state and date range."""
+        data = self._data
+        include_ci = self._include_ci
+        daily = data["daily"]
+
+        # Compute averages from daily data
+        bot_pct = data["bot_percent"]
+        num_days = len(daily) if daily else 1
+        range_label = next(
+            (label for label, days in RANGE_OPTIONS if days == self._days),
+            f"{self._days}d",
+        )
+
+        range_all = sum(d["total"] for d in daily) if daily else 0
+        range_human = sum(d["human"] for d in daily) if daily else 0
+
+        if include_ci:
+            total_display = f"{range_all:,}"
+            avg_day = range_all // num_days if num_days else 0
+        else:
+            total_display = f"{range_human:,}"
+            avg_day = range_human // num_days if num_days else 0
+
+        avg_week = avg_day * 7
+        avg_month = avg_day * 30
+
+        last_date = daily[-1]["date"] if daily else ""
+        content: list[ft.Control] = [
+            self._make_filter_bar(
+                last_updated=last_date, extra_controls=[self._toggle]
+            ),
+            ft.Container(height=8),
+        ]
+
+        # Period-over-period change
+        prev_total = data.get("prev_total", 0)
+        prev_human = data.get("prev_human", 0)
+        prev_val = prev_total if include_ci else prev_human
+        cur_val = range_all if include_ci else range_human
+
+        # Latest day's value for subtitle
+        last_day = daily[-1] if daily else {}
+        last_dl = (
+            last_day.get("human", 0) if not include_ci else last_day.get("total", 0)
+        )
+        last_dl_date = last_day.get("date", "")
+        from datetime import datetime as _dt
+
+        _dl_days_ago = (
+            (_dt.now() - _dt.strptime(last_dl_date, "%Y-%m-%d")).days
+            if last_dl_date
+            else 0
+        )
+        _dl_label = (
+            "today"
+            if _dl_days_ago == 0
+            else "yesterday"
+            if _dl_days_ago == 1
+            else f"{_dl_days_ago}d ago"
+        )
+
+        # Metric cards
+        metrics_row = ft.Row(
+            [
+                MetricCard(
+                    "Total Downloads",
+                    total_display,
+                    "#FF69B4",
+                    change_pct=_pct(cur_val, prev_val),
+                    prev_value=f"+{last_dl:,} {_dl_label}",
+                ),
+                MetricCard(
+                    "Avg / Day",
+                    f"{avg_day:,}",
+                    Theme.Colors.INFO,
+                    prev_value=f"in {range_label}",
+                ),
+                MetricCard(
+                    "Avg / Week",
+                    f"{avg_week:,}",
+                    Theme.Colors.SUCCESS,
+                    prev_value=f"in {range_label}",
+                ),
+                MetricCard(
+                    "Avg / Month",
+                    f"{avg_month:,}",
+                    Theme.Colors.PRIMARY,
+                    prev_value=f"in {range_label}",
+                ),
+                MetricCard(
+                    "Bot %",
+                    f"{bot_pct:.0f}%",
+                    Theme.Colors.WARNING if bot_pct > 50 else Theme.Colors.INFO,
+                    prev_value=f"in {range_label}",
+                ),
+            ],
+            spacing=Theme.Spacing.MD,
+        )
+        content.append(metrics_row)
+
+        # Date range + events in window
+        releases = data.get("releases", {})
+        if daily:
+            date_range = f"{_pretty_date(daily[0]['date'])} \u2014 {_pretty_date(daily[-1]['date'])}"  # noqa: E501
+            content.append(ft.Container(height=8))
+            content.append(SecondaryText(date_range, size=Theme.Typography.BODY_SMALL))
+
+            # Event chips
+            first_date = daily[0]["date"] if daily else ""
+            last_date = daily[-1]["date"] if daily else ""
+            window_events = [
+                (date, label, etype)
+                for date, label, etype in data.get("all_events", [])
+                if first_date <= date <= last_date
+            ]
+            chips = self._render_event_chips(window_events)
+            if chips:
+                content.append(chips)
+
+        # Chart 1: Downloads — toggle controls which lines show
+        if daily:
+            if include_ci:
+                max_val = max(d["total"] for d in daily)
+            else:
+                max_val = (
+                    max(d["human"] for d in daily)
+                    if any(d["human"] for d in daily)
+                    else 1
+                )
+
+            # Smart rounding: small values round to nearest 5, medium to 25, large to 100  # noqa: E501
+            if max_val <= 20:
+                step = 5
+            elif max_val <= 100:
+                step = 10
+            elif max_val <= 500:
+                step = 50
+            else:
+                step = 100
+            rounded_max = int((max_val // step + 1) * step)
+
+            releases = data.get("releases", {}) if self._show_events else {}
+
+            chart1_series = []
+            if include_ci:
+                # Stacked: total (pink filled) on top, human (green filled) below
+                total_points = []
+                human_points_ci = []
+                release_points_ci = []
+                highlighted = self._highlighted_dates
+                for i, d in enumerate(daily):
+                    is_hl = d["date"] in highlighted
+                    point_style = (
+                        ft.ChartCirclePoint(
+                            radius=7,
+                            color="#FF5722",
+                            stroke_width=2,
+                            stroke_color="#FFFFFF",
+                        )
+                        if is_hl
+                        else None
+                    )
+                    total_points.append(
+                        ft.LineChartDataPoint(
+                            i,
+                            d["total"],
+                            tooltip=f"Total: {d['total']:,}  Bot: {d['total'] - d['human']:,}",  # noqa: E501
+                            point=point_style,
+                        )
+                    )
+                    human_points_ci.append(
+                        ft.LineChartDataPoint(
+                            i, d["human"], tooltip=f"Human: {d['human']:,}"
+                        )
+                    )
+
+                    rel = releases.get(d["date"])
+                    if rel:
+                        release_points_ci.append(
+                            ft.LineChartDataPoint(
+                                i, 0, tooltip=f"{rel}", show_tooltip=True
+                            )
+                        )
+                    else:
+                        release_points_ci.append(
+                            ft.LineChartDataPoint(i, 0, show_tooltip=False)
+                        )
+
+                chart1_series.append(
+                    ft.LineChartData(
+                        data_points=total_points,
+                        stroke_width=1,
+                        color="#FF69B4",
+                        below_line_bgcolor=ft.Colors.with_opacity(0.5, "#FF69B4"),
+                    )
+                )
+                chart1_series.append(
+                    ft.LineChartData(
+                        data_points=human_points_ci,
+                        stroke_width=2,
+                        color="#22C55E",
+                        below_line_bgcolor=ft.Colors.with_opacity(0.6, "#22C55E"),
+                        point=ft.ChartCirclePoint(
+                            radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
+                        ),
+                    )
+                )
+                chart1_series.append(
+                    ft.LineChartData(
+                        data_points=release_points_ci,
+                        stroke_width=0,
+                        color="#9CA3AF",
+                    )
+                )
+            else:
+                # Just human as filled area
+                human_points = []
+                release_points = []
+                highlighted = self._highlighted_dates
+                for i, d in enumerate(daily):
+                    tip = f"{d['human']:,} downloads"
+                    is_hl = d["date"] in highlighted
+                    point_style = (
+                        ft.ChartCirclePoint(
+                            radius=7,
+                            color="#FF5722",
+                            stroke_width=2,
+                            stroke_color="#FFFFFF",
+                        )
+                        if is_hl
+                        else ft.ChartCirclePoint(
+                            radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
+                        )
+                    )
+                    human_points.append(
+                        ft.LineChartDataPoint(
+                            i, d["human"], tooltip=tip, point=point_style
+                        )
+                    )
+
+                    rel = releases.get(d["date"])
+                    if rel:
+                        release_points.append(
+                            ft.LineChartDataPoint(
+                                i, 0, tooltip=f"{rel}", show_tooltip=True
+                            )
+                        )
+                    else:
+                        release_points.append(
+                            ft.LineChartDataPoint(i, 0, show_tooltip=False)
+                        )
+
+                chart1_series.append(
+                    ft.LineChartData(
+                        data_points=human_points,
+                        stroke_width=2,
+                        color="#22C55E",
+                        below_line_bgcolor=ft.Colors.with_opacity(0.4, "#22C55E"),
+                        point=ft.ChartCirclePoint(
+                            radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
+                        ),
+                    )
+                )
+                # Release annotation series — invisible line, tooltip in secondary color
+                chart1_series.append(
+                    ft.LineChartData(
+                        data_points=release_points,
+                        stroke_width=0,
+                        color="#9CA3AF",
+                    )
+                )
+
+            chart1 = _make_line_chart(chart1_series, rounded_max, daily, step)
+
+            if include_ci:
+                legend1 = _make_legend(
+                    [
+                        (ft.Colors.with_opacity(0.5, "#FF69B4"), "Bot / Mirror"),
+                        (ft.Colors.with_opacity(0.6, "#22C55E"), "Human"),
+                    ]
+                )
+            else:
+                legend1 = _make_legend(
+                    [(ft.Colors.with_opacity(0.4, "#22C55E"), "Human Downloads")]
+                )
+
+            chart1_wrapped = ft.Container(
+                content=chart1,
+                margin=ft.margin.only(right=20),
+            )
+            content.extend([ft.Container(height=8), chart1_wrapped, legend1])
+
+        # Bar chart: downloads by version
+        versions = data["versions"]
+        if versions:
+            # Sort by version number (semantic sort)
+            def _version_sort_key(ver: str) -> tuple:
+                parts = (
+                    ver.replace("rc", ".")
+                    .replace("a", ".")
+                    .replace("b", ".")
+                    .split(".")
+                )
+                return tuple(int(p) if p.isdigit() else 0 for p in parts)
+
+            all_sorted = sorted(versions.keys(), key=_version_sort_key)
+
+            # Filter out versions with 0 downloads for the current mode
+            sorted_versions = []
+            for ver in all_sorted:
+                info = versions[ver]
+                if isinstance(info, dict):
+                    t, h = info.get("total", 0), info.get("human", 0)
+                else:
+                    t, h = info, 0
+                val = t if include_ci else h
+                if val > 0:
+                    sorted_versions.append(ver)
+
+            bar_groups = []
+            bar_max = 0
+            for i, ver in enumerate(sorted_versions):
+                info = versions[ver]
+                if isinstance(info, dict):
+                    t, h = info.get("total", 0), info.get("human", 0)
+                else:
+                    t, h = info, 0
+
+                val = t if include_ci else h
+                bar_max = max(bar_max, val)
+
+                bar_groups.append(
+                    ft.BarChartGroup(
+                        x=i,
+                        bar_rods=[
+                            ft.BarChartRod(
+                                from_y=0,
+                                to_y=val,
+                                width=max(8, 400 // len(sorted_versions)),
+                                color="#FF69B4" if include_ci else "#22C55E",
+                                border_radius=ft.border_radius.only(
+                                    top_left=3, top_right=3
+                                ),
+                                tooltip=f"{ver}: {val:,}",
+                            )
+                        ],
+                    )
+                )
+
+            bar_rounded_max = int(bar_max * 1.15) + 1 if bar_max > 0 else 10
+
+            # Show every Nth label to avoid overlap
+            label_step = max(1, len(sorted_versions) // 12)
+
+            version_bar = ft.BarChart(
+                bar_groups=bar_groups,
+                left_axis=ft.ChartAxis(
+                    labels_size=50, labels_interval=max(1, bar_rounded_max // 4)
+                ),
+                bottom_axis=ft.ChartAxis(
+                    labels_size=50,
+                    labels=[
+                        ft.ChartAxisLabel(
+                            value=i,
+                            label=ft.Text(
+                                ver, size=8, color=ft.Colors.ON_SURFACE_VARIANT
+                            ),
+                        )
+                        for i, ver in enumerate(sorted_versions)
+                        if i % label_step == 0 or i == len(sorted_versions) - 1
+                    ],
+                ),
+                horizontal_grid_lines=ft.ChartGridLines(
+                    interval=bar_rounded_max // 4 or 1,
+                    color=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE),
+                    width=1,
+                ),
+                tooltip_bgcolor=Theme.Colors.SURFACE_1,
+                tooltip_rounded_radius=8,
+                tooltip_padding=10,
+                tooltip_tooltip_border_side=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                max_y=bar_rounded_max,
+                height=250,
+                expand=True,
+            )
+
+            bar_wrapped = ft.Container(
+                content=version_bar, margin=ft.margin.only(right=20)
+            )
+            bar_legend = ft.Row(
+                [
+                    ft.Row(
+                        [
+                            ft.Container(
+                                width=10,
+                                height=10,
+                                bgcolor="#FF69B4" if include_ci else "#22C55E",
+                                border_radius=5,
+                            ),
+                            SecondaryText(
+                                f"Downloads by Version ({'incl. CI' if include_ci else 'human only'})",  # noqa: E501
+                                size=Theme.Typography.BODY_SMALL,
+                            ),
+                        ],
+                        spacing=4,
+                    )
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+            )
+
+            content.extend([ft.Container(height=12), bar_wrapped, bar_legend])
+
+        # Three pie charts in one row
+        pie_charts: list[ft.Control] = []
+
+        installers = data["installers"]
+        if installers:
+            total_inst = sum(installers.values())
+            pie_charts.append(
+                PieChartCard(
+                    title=f"By Installer ({range_label})",
+                    sections=[
+                        {"value": count, "label": f"{name} ({count / total_inst:.0%})"}
+                        for name, count in list(installers.items())[:8]
+                    ],
+                )
+            )
+
+        countries = data["countries"]
+        if countries:
+            total_c = sum(countries.values())
+            pie_charts.append(
+                PieChartCard(
+                    title=f"By Country ({range_label})",
+                    sections=[
+                        {"value": count, "label": f"{code} ({count / total_c:.0%})"}
+                        for code, count in list(countries.items())[:10]
+                    ],
+                )
+            )
+
+        dist_types = data.get("types", {})
+        if dist_types:
+            total_t = sum(dist_types.values())
+            pie_charts.append(
+                PieChartCard(
+                    title=f"Dist Type ({range_label})",
+                    sections=[
+                        {"value": count, "label": f"{name} ({count / total_t:.0%})"}
+                        for name, count in dist_types.items()
+                    ],
+                )
+            )
+
+        if pie_charts:
+            content.extend(
+                [
+                    ft.Container(height=8),
+                    ft.Row(pie_charts, spacing=Theme.Spacing.MD),
+                ]
+            )
+
+        # Version table
+        versions = data["versions"]
+        if versions:
+            from app.components.frontend.controls.data_table import (
+                DataTable,
+                DataTableColumn,
+            )
+
+            version_columns = [
+                DataTableColumn(header="Version", width=100, style="primary"),
+                DataTableColumn(header="Total", width=80, alignment="right"),
+                DataTableColumn(header="Human", width=80, alignment="right"),
+                DataTableColumn(header="Bot", width=80, alignment="right"),
+                DataTableColumn(header="Bot %", width=70, alignment="right"),
+            ]
+
+            version_rows_data = []
+            for ver, info in list(versions.items())[:10]:
+                if isinstance(info, dict):
+                    t, h = info.get("total", 0), info.get("human", 0)
+                else:
+                    t, h = info, 0
+                b = t - h
+                pct = f"{(b / t * 100):.0f}%" if t > 0 else "\u2014"
+                pct_color = "#EF4444" if t > 0 and b / t > 0.8 else "#22C55E"
+                version_rows_data.append(
+                    [
+                        ver,
+                        f"{t:,}",
+                        ft.Text(f"{h:,}", color="#22C55E", size=12),
+                        ft.Text(f"{b:,}", color="#EF4444", size=12),
+                        ft.Text(
+                            pct, color=pct_color, size=12, weight=ft.FontWeight.W_600
+                        ),
+                    ]
+                )
+
+            # Totals row
+            total_t = sum(
+                info.get("total", 0) if isinstance(info, dict) else info
+                for info in versions.values()
+            )
+            total_h = sum(
+                info.get("human", 0) if isinstance(info, dict) else 0
+                for info in versions.values()
+            )
+            total_b = total_t - total_h
+            total_pct = f"{(total_b / total_t * 100):.0f}%" if total_t > 0 else "\u2014"
+
+            version_rows_data.append(
+                [
+                    ft.Text("TOTAL", size=12, weight=ft.FontWeight.W_700),
+                    ft.Text(f"{total_t:,}", size=12, weight=ft.FontWeight.W_700),
+                    ft.Text(
+                        f"{total_h:,}",
+                        size=12,
+                        weight=ft.FontWeight.W_700,
+                        color="#22C55E",
+                    ),
+                    ft.Text(
+                        f"{total_b:,}",
+                        size=12,
+                        weight=ft.FontWeight.W_700,
+                        color="#EF4444",
+                    ),
+                    ft.Text(
+                        total_pct,
+                        size=12,
+                        weight=ft.FontWeight.W_700,
+                        color="#EF4444"
+                        if total_t > 0 and total_b / total_t > 0.8
+                        else "#22C55E",
+                    ),
+                ]
+            )
+
+            version_table = DataTable(
+                columns=version_columns,
+                rows=version_rows_data,
+            )
+
+            # Daily downloads table (sorted by highest day)
+            daily_columns = [
+                DataTableColumn(header="Date", width=80, style="primary"),
+                DataTableColumn(header="Total", width=70, alignment="right"),
+                DataTableColumn(header="Human", width=70, alignment="right"),
+                DataTableColumn(header="Bot", width=70, alignment="right"),
+            ]
+
+            sorted_days = sorted(daily, key=lambda d: d["date"], reverse=True)
+            daily_rows_data = []
+            for d in sorted_days:
+                bot = d["total"] - d["human"]
+                daily_rows_data.append(
+                    [
+                        d["date"][-5:],
+                        f"{d['total']:,}",
+                        ft.Text(f"{d['human']:,}", color="#22C55E", size=12),
+                        ft.Text(f"{bot:,}", color="#EF4444", size=12),
+                    ]
+                )
+
+            daily_table = DataTable(
+                columns=daily_columns,
+                rows=daily_rows_data,
+                scroll_height=400,
+            )
+
+            content.extend(
+                [
+                    ft.Container(height=12),
+                    ft.Row(
+                        [
+                            ft.Column(
+                                [
+                                    H3Text(f"Downloads by Version ({range_label})"),
+                                    version_table,
+                                ],
+                                expand=True,
+                            ),
+                            ft.Column(
+                                [
+                                    H3Text(f"Daily Downloads ({range_label})"),
+                                    daily_table,
+                                ],
+                                expand=True,
+                            ),
+                        ],
+                        spacing=Theme.Spacing.LG,
+                        vertical_alignment=ft.CrossAxisAlignment.START,
+                    ),
+                ]
+            )
+
+        self._content_column.controls = content
+
+    def _load_data(self, days: int = 14) -> dict:
+        """Load PyPI data from bulk pre-loaded data."""
+        from app.services.insights.query_service import InsightQueryService
+
+        cutoff, prev_cutoff = InsightQueryService.compute_cutoffs(days)
+
+        # Total
+        total_row = self._bulk.latest.get("downloads_total")
+        total = int(total_row.value) if total_row else 0
+
+        # Daily total + human
+        daily_rows = [
+            r for r in self._bulk.daily.get("downloads_daily", []) if r.date >= cutoff
+        ]
+        human_rows = [
+            r
+            for r in self._bulk.daily.get("downloads_daily_human", [])
+            if r.date >= cutoff
+        ]
+        human_map = {str(r.date)[:10]: int(r.value) for r in human_rows}
+
+        daily = []
+        for r in daily_rows:
+            day = str(r.date)[:10]
+            t = int(r.value)
+            h = human_map.get(day, 0)
+            daily.append({"date": day, "total": t, "human": h})
+
+        today_total = daily[-1]["total"] if daily else 0
+        today_human = daily[-1]["human"] if daily else 0
+
+        # Bot % computed over entire selected range
+        range_total = sum(d["total"] for d in daily)
+        range_human = sum(d["human"] for d in daily)
+        bot_pct = (
+            ((range_total - range_human) / range_total * 100) if range_total > 0 else 0
+        )
+
+        # Latest installer breakdown (aggregate from all days)
+        all_installers: dict[str, int] = {}
+        for r in [
+            r
+            for r in self._bulk.daily.get("downloads_by_installer", [])
+            if r.date >= cutoff
+        ]:
+            meta = r.metadata_ or {}
+            for name, count in meta.get("installers", {}).items():
+                all_installers[name] = all_installers.get(name, 0) + count
+        installers = dict(sorted(all_installers.items(), key=lambda x: -x[1]))
+
+        # Latest country breakdown (aggregate)
+        all_countries: dict[str, int] = {}
+        for r in [
+            r
+            for r in self._bulk.daily.get("downloads_by_country", [])
+            if r.date >= cutoff
+        ]:
+            meta = r.metadata_ or {}
+            for code, count in meta.get("countries", {}).items():
+                all_countries[code] = all_countries.get(code, 0) + count
+        countries = dict(sorted(all_countries.items(), key=lambda x: -x[1]))
+
+        # Per-day per-version data
+        version_daily_rows = [
+            r
+            for r in self._bulk.daily.get("downloads_by_version", [])
+            if r.date >= cutoff
+        ]
+        version_daily: dict[str, dict[str, int]] = {}
+        for r in version_daily_rows:
+            day = str(r.date)[:10]
+            meta = r.metadata_ or {}
+            day_versions = meta.get("versions", {})
+            version_daily[day] = {}
+            for ver, info in day_versions.items():
+                if isinstance(info, dict):
+                    version_daily[day][ver] = info.get("total", 0)
+                else:
+                    version_daily[day][ver] = info
+
+        # Version breakdown with real human/bot
+        versions: dict[str, dict[str, int]] = {}
+        for r in version_daily_rows:
+            meta = r.metadata_ or {}
+            for ver, info in meta.get("versions", {}).items():
+                if ver not in versions:
+                    versions[ver] = {"total": 0, "human": 0}
+                if isinstance(info, dict):
+                    versions[ver]["total"] += info.get("total", 0)
+                    versions[ver]["human"] += info.get("human", 0)
+                else:
+                    versions[ver]["total"] += info
+        versions = dict(sorted(versions.items(), key=lambda x: -x[1]["total"]))
+
+        # Distribution type breakdown
+        all_types: dict[str, int] = {}
+        for r in [
+            r for r in self._bulk.daily.get("downloads_by_type", []) if r.date >= cutoff
+        ]:
+            meta = r.metadata_ or {}
+            for t, count in meta.get("types", {}).items():
+                all_types[t] = all_types.get(t, 0) + count
+        dist_types = dict(sorted(all_types.items(), key=lambda x: -x[1]))
+
+        # Events for chart annotations
+        all_events: list[tuple[str, str, str]] = []
+        for r in self._bulk.events.get("releases", []):
+            tag = (r.metadata_ or {}).get("tag", "")
+            if tag:
+                all_events.append((str(r.date)[:10], tag, "release"))
+        for ev in [
+            ev for ev in self._bulk.insight_events if ev.event_type in PYPI_EVENT_TYPES
+        ]:
+            all_events.append((str(ev.date)[:10], ev.description[:60], ev.event_type))
+
+        release_map: dict[str, str] = {}
+        for date, label, _ in all_events:
+            if date in release_map:
+                release_map[date] += f"\n{label}"
+            else:
+                release_map[date] = label
+
+        return {
+            "total": total,
+            "today_total": today_total,
+            "today_human": today_human,
+            "bot_percent": bot_pct,
+            "prev_total": sum(
+                int(r.value)
+                for r in self._bulk.daily.get("downloads_daily", [])
+                if prev_cutoff <= r.date < cutoff
+            ),
+            "prev_human": sum(
+                int(r.value)
+                for r in self._bulk.daily.get("downloads_daily_human", [])
+                if prev_cutoff <= r.date < cutoff
+            ),
+            "daily": daily,
+            "version_daily": version_daily,
+            "installers": installers,
+            "countries": countries,
+            "versions": versions,
+            "types": dist_types,
+            "releases": release_map,
+            "all_events": all_events,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Tab 5: Docs (Plausible)
+# ---------------------------------------------------------------------------
+
+
+class DocsTab(InsightsTab):
+    """Docs analytics from Plausible with date range and event annotations."""
+
+    _default_days = 7
+
+    def _build_content(self) -> None:
+        """Build or rebuild all content."""
+        data = self._data
+        daily = data["daily"]
+
+        last_collected = data.get("last_collected", "")
+        content: list[ft.Control] = [
+            self._make_filter_bar(last_updated=last_collected),
+            ft.Container(height=8),
+        ]
+
+        if not daily:
+            content.append(
+                SecondaryText(
+                    "No Plausible data collected yet. Run: my-app insights collect plausible"  # noqa: E501
+                )
+            )
+            self._content_column.controls = content
+            return
+
+        # Aggregates over range
+        total_visitors = sum(d["visitors"] for d in daily)
+        total_pageviews = sum(d["pageviews"] for d in daily)
+        num_days = len(daily)
+        avg_bounce = sum(d["bounce_rate"] for d in daily) / num_days if num_days else 0
+        avg_duration = (
+            sum(d["avg_duration"] for d in daily) / num_days if num_days else 0
+        )
+        views_per_visit = total_pageviews / total_visitors if total_visitors else 0
+        duration_min = int(avg_duration // 60)
+        duration_sec = int(avg_duration % 60)
+
+        # Period-over-period change
+        prev_v = data.get("prev_visitors", 0)
+        prev_pv = data.get("prev_pageviews", 0)
+        prev_b = data.get("prev_bounce", 0)
+        prev_d = data.get("prev_duration", 0)
+
+        # Metric cards with change arrows
+        content.append(
+            ft.Row(
+                [
+                    MetricCard(
+                        "Visitors",
+                        f"{total_visitors:,}",
+                        Theme.Colors.PRIMARY,
+                        change_pct=_pct(total_visitors, prev_v),
+                    ),
+                    MetricCard(
+                        "Pageviews",
+                        f"{total_pageviews:,}",
+                        Theme.Colors.INFO,
+                        change_pct=_pct(total_pageviews, prev_pv),
+                    ),
+                    MetricCard(
+                        "Views/Visit", f"{views_per_visit:.1f}", Theme.Colors.SUCCESS
+                    ),
+                    MetricCard(
+                        "Bounce Rate",
+                        f"{avg_bounce:.0f}%",
+                        Theme.Colors.WARNING if avg_bounce > 50 else Theme.Colors.INFO,
+                        change_pct=_pct(avg_bounce, prev_b),
+                        invert=True,
+                    ),
+                    MetricCard(
+                        "Avg Duration",
+                        f"{duration_min}m {duration_sec}s",
+                        "#A855F7",
+                        change_pct=_pct(avg_duration, prev_d),
+                    ),
+                ],
+                spacing=Theme.Spacing.MD,
+            )
+        )
+
+        # Insight cards: Most Read, Most Visited, Top Country
+        top_pages = data.get("top_pages", [])
+        countries = data.get("countries", [])
+        insight_cards: list[ft.Control] = []
+
+        if top_pages:
+
+            def _page_title(url: str) -> str:
+                parts = [p for p in url.strip("/").split("/") if p]
+                return parts[-1].replace("-", " ").title() if parts else "Home"
+
+            content_pages = [
+                p for p in top_pages if len(p["url"].strip("/").split("/")) >= 2
+            ]
+            read_pages = [p for p in content_pages if (p.get("time_s") or 0) > 0]
+            by_visitors = sorted(content_pages, key=lambda x: -x["visitors"])
+
+            # Card 1: Most Read (highest time_s)
+            if read_pages:
+                mr = read_pages[0]
+                mr_time = mr.get("time_s") or 0
+                mr_min = int(mr_time // 60)
+                mr_sec = int(mr_time % 60)
+                insight_cards.append(
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                SecondaryText("Most Read"),
+                                ft.Text(
+                                    _page_title(mr["url"]),
+                                    size=24,
+                                    weight=ft.FontWeight.W_600,
+                                ),
+                                SecondaryText(
+                                    f"{mr_min}m {mr_sec}s read time",
+                                    size=Theme.Typography.BODY_SMALL,
+                                ),
+                            ],
+                            spacing=Theme.Spacing.XS,
+                        ),
+                        padding=Theme.Spacing.MD,
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        border_radius=Theme.Components.CARD_RADIUS,
+                        border=ft.border.all(0.5, ft.Colors.OUTLINE),
+                        expand=True,
+                        tooltip=mr["url"],
+                    )
+                )
+
+            # Card 2: Most Visited (highest visitors, if different from Most Read)
+            most_read_url = read_pages[0]["url"] if read_pages else ""
+            if by_visitors and by_visitors[0]["url"] != most_read_url:
+                tv = by_visitors[0]
+                insight_cards.append(
+                    ft.Container(
+                        content=ft.Column(
+                            [
+                                SecondaryText("Most Visited"),
+                                ft.Text(
+                                    _page_title(tv["url"]),
+                                    size=24,
+                                    weight=ft.FontWeight.W_600,
+                                ),
+                                SecondaryText(
+                                    f"{tv['visitors']} visitors",
+                                    size=Theme.Typography.BODY_SMALL,
+                                ),
+                            ],
+                            spacing=Theme.Spacing.XS,
+                        ),
+                        padding=Theme.Spacing.MD,
+                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                        border_radius=Theme.Components.CARD_RADIUS,
+                        border=ft.border.all(0.5, ft.Colors.OUTLINE),
+                        expand=True,
+                        tooltip=tv["url"],
+                    )
+                )
+
+        # Card 3: Top Country
+        if countries:
+            top_country = countries[0]
+            insight_cards.append(
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            SecondaryText("Top Country"),
+                            ft.Text(
+                                COUNTRY_NAMES.get(
+                                    top_country["country"], top_country["country"]
+                                ),
+                                size=24,
+                                weight=ft.FontWeight.W_600,
+                            ),
+                            SecondaryText(
+                                f"{top_country['visitors']} visitors",
+                                size=Theme.Typography.BODY_SMALL,
+                            ),
+                        ],
+                        spacing=Theme.Spacing.XS,
+                    ),
+                    padding=Theme.Spacing.MD,
+                    bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                    border_radius=Theme.Components.CARD_RADIUS,
+                    border=ft.border.all(0.5, ft.Colors.OUTLINE),
+                    expand=True,
+                )
+            )
+
+        # Card 4: Top 3 Countries
+        if len(countries) >= 2:
+            country_items: list[ft.Control] = []
+            for i, c in enumerate(countries[:3], 1):
+                country_items.append(
+                    ft.Container(
+                        content=ft.Row(
+                            [
+                                SecondaryText(
+                                    f"#{i}", size=Theme.Typography.BODY_SMALL
+                                ),
+                                BodyText(
+                                    COUNTRY_NAMES.get(c["country"], c["country"]),
+                                    size=Theme.Typography.BODY_SMALL,
+                                ),
+                                ft.Container(expand=True),
+                                SecondaryText(
+                                    f"{c['visitors']}", size=Theme.Typography.BODY_SMALL
+                                ),
+                            ],
+                            spacing=4,
+                        ),
+                    )
+                )
+            insight_cards.append(
+                ft.Container(
+                    content=ft.Column(
+                        [
+                            SecondaryText("Top Countries"),
+                            *country_items,
+                        ],
+                        spacing=Theme.Spacing.XS,
+                    ),
+                    padding=Theme.Spacing.MD,
+                    bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                    border_radius=Theme.Components.CARD_RADIUS,
+                    border=ft.border.all(0.5, ft.Colors.OUTLINE),
+                    expand=True,
+                )
+            )
+
+        if insight_cards:
+            content.append(ft.Container(height=8))
+            content.append(ft.Row(insight_cards, spacing=Theme.Spacing.MD))
+
+        # Date range
+        date_range = (
+            f"{_pretty_date(daily[0]['date'])} \u2014 {_pretty_date(daily[-1]['date'])}"
+        )
+        content.append(SecondaryText(date_range, size=Theme.Typography.BODY_SMALL))
+
+        # Event chips — only on days with visitor activity
+        active_dates = {d["date"] for d in daily}
+        chips = self._render_event_chips(
+            data.get("all_events", []), valid_dates=active_dates
+        )
+        if chips:
+            content.append(chips)
+
+        content.append(ft.Container(height=4))
+
+        # Visitors + Pageviews chart
+        highlighted = self._highlighted_dates
+        releases_map = {
+            day: label
+            for day, label in (
+                data.get("releases", {}) if self._show_events else {}
+            ).items()
+            if day in active_dates
+        }
+
+        max_val = max(
+            max(d["pageviews"] for d in daily), max(d["visitors"] for d in daily)
+        )
+        step = _smart_step(max_val)
+        max_y = int((max_val // step + 1) * step)
+
+        visitor_points: list[ft.LineChartDataPoint] = []
+        pageview_points: list[ft.LineChartDataPoint] = []
+        release_anno: list[ft.LineChartDataPoint] = []
+
+        for i, d in enumerate(daily):
+            is_hl = d["date"] in highlighted
+            hl_point = (
+                ft.ChartCirclePoint(
+                    radius=7, color="#FF5722", stroke_width=2, stroke_color="#FFFFFF"
+                )
+                if is_hl
+                else None
+            )
+
+            visitor_points.append(
+                ft.LineChartDataPoint(
+                    i,
+                    d["visitors"],
+                    tooltip=f"Visitors: {d['visitors']}",
+                    point=hl_point,
+                )
+            )
+            pageview_points.append(
+                ft.LineChartDataPoint(
+                    i,
+                    d["pageviews"],
+                    tooltip=f"Pageviews: {d['pageviews']}",
+                )
+            )
+
+            rel = releases_map.get(d["date"])
+            if rel:
+                release_anno.append(
+                    ft.LineChartDataPoint(i, 0, tooltip=rel, show_tooltip=True)
+                )
+            else:
+                release_anno.append(ft.LineChartDataPoint(i, 0, show_tooltip=False))
+
+        chart_series = [
+            ft.LineChartData(
+                data_points=visitor_points,
+                stroke_width=2,
+                color="#6366F1",
+                curved=True,
+                below_line_bgcolor=ft.Colors.with_opacity(0.15, "#6366F1"),
+                point=ft.ChartCirclePoint(
+                    radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
+                ),
+                stroke_cap_round=True,
+            ),
+            ft.LineChartData(
+                data_points=pageview_points,
+                stroke_width=2,
+                color="#22C55E",
+                curved=True,
+                point=ft.ChartCirclePoint(
+                    radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
+                ),
+                stroke_cap_round=True,
+            ),
+        ]
+        if any(p.show_tooltip for p in release_anno):
+            chart_series.append(
+                ft.LineChartData(
+                    data_points=release_anno,
+                    stroke_width=0,
+                    color="#9CA3AF",
+                )
+            )
+
+        chart = _make_line_chart(chart_series, max_y, daily, step)
+        content.append(ft.Container(content=chart, margin=ft.margin.only(right=20)))
+        content.append(
+            _make_legend([("#6366F1", "Visitors"), ("#22C55E", "Pageviews")])
+        )
+
+        # Country breakdown — horizontal bar chart
+        countries = data.get("countries", [])
+        if countries:
+            content.append(ft.Container(height=12))
+            content.append(H3Text("Countries"))
+
+            max_visitors = countries[0]["visitors"] if countries else 1
+            country_bar_groups = []
+            country_labels = []
+            for i, c in enumerate(countries):
+                country_bar_groups.append(
+                    ft.BarChartGroup(
+                        x=i,
+                        bar_rods=[
+                            ft.BarChartRod(
+                                from_y=0,
+                                to_y=c["visitors"],
+                                width=max(12, 300 // max(len(countries), 1)),
+                                color="#6366F1",
+                                border_radius=ft.border_radius.only(
+                                    top_left=3, top_right=3
+                                ),
+                                tooltip=f"{c['country']}: {c['visitors']}",
+                            )
+                        ],
+                    )
+                )
+                country_labels.append(c["country"])
+
+            country_step = _smart_step(max_visitors)
+            country_max_y = int((max_visitors // country_step + 1) * country_step)
+
+            country_chart = ft.BarChart(
+                bar_groups=country_bar_groups,
+                left_axis=ft.ChartAxis(labels_size=50, labels_interval=country_step),
+                bottom_axis=ft.ChartAxis(
+                    labels_size=50,
+                    labels=[
+                        ft.ChartAxisLabel(
+                            value=i,
+                            label=ft.Text(
+                                lbl, size=9, color=ft.Colors.ON_SURFACE_VARIANT
+                            ),
+                        )
+                        for i, lbl in enumerate(country_labels)
+                    ],
+                ),
+                horizontal_grid_lines=ft.ChartGridLines(
+                    interval=country_step,
+                    color=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE),
+                    width=1,
+                ),
+                tooltip_bgcolor=Theme.Colors.SURFACE_1,
+                tooltip_rounded_radius=8,
+                tooltip_padding=10,
+                tooltip_tooltip_border_side=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                max_y=country_max_y,
+                height=250,
+                expand=True,
+            )
+
+            content.append(
+                ft.Container(content=country_chart, margin=ft.margin.only(right=20))
+            )
+
+        # Top Pages table
+        top_pages = data.get("top_pages", [])
+        if top_pages:
+            content.append(ft.Container(height=12))
+            content.append(H3Text("Top Pages"))
+            content.append(ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT))
+            for p in top_pages:
+                page_url = f"https://lbedner.github.io{p['url']}"
+                duration = p.get("time_s") or 0
+                d_min = int(duration // 60)
+                d_sec = int(duration % 60)
+                content.append(
+                    ft.Row(
+                        [
+                            ft.Container(
+                                content=ft.Text(
+                                    p["url"],
+                                    size=Theme.Typography.BODY_SMALL,
+                                    style=ft.TextStyle(
+                                        color=Theme.Colors.INFO,
+                                        decoration=ft.TextDecoration.UNDERLINE,
+                                    ),
+                                    selectable=False,
+                                ),
+                                expand=True,
+                                on_click=lambda e, u=page_url: e.page.launch_url(u),
+                                ink=True,
+                            ),
+                            SecondaryText(
+                                f"{p['visitors']} visitors",
+                                size=Theme.Typography.BODY_SMALL,
+                            ),
+                            SecondaryText(
+                                f"{d_min}m {d_sec}s", size=Theme.Typography.BODY_SMALL
+                            ),
+                        ],
+                        spacing=8,
+                    )
+                )
+
+        self._content_column.controls = content
+
+    def _load_data(self, days: int = 30) -> dict[str, Any]:
+        """Load Plausible data from bulk pre-loaded data."""
+        from app.services.insights.query_service import InsightQueryService
+
+        cutoff, prev_cutoff = InsightQueryService.compute_cutoffs(days)
+
+        # Daily metrics - current period
+        visitors_rows = [
+            r for r in self._bulk.daily.get("visitors", []) if r.date >= cutoff
+        ]
+        pageviews_rows = [
+            r for r in self._bulk.daily.get("pageviews", []) if r.date >= cutoff
+        ]
+        duration_rows = [
+            r for r in self._bulk.daily.get("avg_duration", []) if r.date >= cutoff
+        ]
+        bounce_rows = [
+            r for r in self._bulk.daily.get("bounce_rate", []) if r.date >= cutoff
+        ]
+
+        # Previous period totals for comparison
+        prev_visitors = sum(
+            int(r.value)
+            for r in self._bulk.daily.get("visitors", [])
+            if prev_cutoff <= r.date < cutoff
+        )
+        prev_pageviews = sum(
+            int(r.value)
+            for r in self._bulk.daily.get("pageviews", [])
+            if prev_cutoff <= r.date < cutoff
+        )
+        prev_dur_rows = [
+            r
+            for r in self._bulk.daily.get("avg_duration", [])
+            if prev_cutoff <= r.date < cutoff
+        ]
+        prev_duration = (
+            sum(float(r.value) for r in prev_dur_rows) / len(prev_dur_rows)
+            if prev_dur_rows
+            else 0
+        )
+        prev_bounce_rows = [
+            r
+            for r in self._bulk.daily.get("bounce_rate", [])
+            if prev_cutoff <= r.date < cutoff
+        ]
+        prev_bounce = (
+            sum(float(r.value) for r in prev_bounce_rows) / len(prev_bounce_rows)
+            if prev_bounce_rows
+            else 0
+        )
+
+        pv_map = {str(r.date)[:10]: int(r.value) for r in pageviews_rows}
+        dur_map = {str(r.date)[:10]: float(r.value) for r in duration_rows}
+        bounce_map = {str(r.date)[:10]: float(r.value) for r in bounce_rows}
+
+        daily: list[dict[str, Any]] = []
+        last_collected = ""
+        for r in visitors_rows:
+            day = str(r.date)[:10]
+            visitors = int(r.value)
+            pageviews = pv_map.get(day, 0)
+            # Skip days with no activity to avoid dead space on chart
+            if visitors == 0 and pageviews == 0:
+                continue
+            last_collected = day
+            daily.append(
+                {
+                    "date": day,
+                    "visitors": visitors,
+                    "pageviews": pageviews,
+                    "avg_duration": dur_map.get(day, 0),
+                    "bounce_rate": bounce_map.get(day, 0),
+                }
+            )
+
+        # Top pages - aggregate per-day snapshots across selected range
+        all_pages: dict[str, dict[str, Any]] = {}
+        for r in [r for r in self._bulk.daily.get("top_pages", []) if r.date >= cutoff]:
+            meta = r.metadata_ if isinstance(r.metadata_, dict) else {}
+            for p in meta.get("pages", []):
+                url = p.get("url", "")
+                if url not in all_pages:
+                    all_pages[url] = {"url": url, "visitors": 0, "time_s": 0}
+                all_pages[url]["visitors"] += p.get("visitors", 0)
+                all_pages[url]["time_s"] += p.get("time_s") or 0
+        top_pages = sorted(all_pages.values(), key=lambda x: -(x.get("time_s") or 0))[
+            :20
+        ]
+
+        # Countries - aggregate per-day snapshots across selected range
+        all_countries: dict[str, int] = {}
+        for r in [
+            r for r in self._bulk.daily.get("top_countries", []) if r.date >= cutoff
+        ]:
+            meta = r.metadata_ if isinstance(r.metadata_, dict) else {}
+            for c in meta.get("countries", []):
+                code = c.get("country", "")
+                all_countries[code] = all_countries.get(code, 0) + c.get("visitors", 0)
+        countries = [
+            {"country": code, "visitors": count}
+            for code, count in sorted(all_countries.items(), key=lambda x: -x[1])
+        ][:20]
+
+        # Events
+        all_events: list[tuple[str, str, str]] = []
+        for r in self._bulk.events.get("releases", []):
+            tag = (r.metadata_ or {}).get("tag", "")
+            if tag:
+                all_events.append((str(r.date)[:10], tag, "release"))
+        cutoff_str = str(cutoff.date())
+        for ev in [
+            ev
+            for ev in self._bulk.insight_events
+            if str(ev.date)[:10] >= cutoff_str and ev.event_type in DOCS_EVENT_TYPES
+        ]:
+            all_events.append((str(ev.date)[:10], ev.description[:60], ev.event_type))
+
+        release_map: dict[str, str] = {}
+        for date, label, _ in all_events:
+            if date in release_map:
+                release_map[date] += f"\n{label}"
+            else:
+                release_map[date] = label
+
+        all_events.sort(key=lambda x: x[0])
+
+        return {
+            "daily": daily,
+            "top_pages": top_pages,
+            "countries": countries,
+            "all_events": all_events,
+            "releases": release_map,
+            "prev_visitors": prev_visitors,
+            "prev_pageviews": prev_pageviews,
+            "prev_bounce": prev_bounce,
+            "prev_duration": prev_duration,
+            "last_collected": last_collected,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Tab 6: Reddit
+# ---------------------------------------------------------------------------
+
+
+class RedditTab(ft.Container):
+    """Reddit: tracked post stats from database."""
+
+    def __init__(self, bulk: BulkInsightsResponse | None = None) -> None:
+        super().__init__()
+        self._bulk = bulk
+
+        posts = self._load_posts()
+
+        if not posts:
+            self.content = ft.Column(
+                [
+                    SecondaryText(
+                        "No Reddit posts tracked. Use: my-app insights reddit add <url>"
+                    )
+                ],
+                scroll=ft.ScrollMode.AUTO,
+            )
+            self.padding = Theme.Spacing.MD
+            self.expand = True
+            return
+
+        last_date = posts[0]["date"] if posts else ""
+        content: list[ft.Control] = [
+            SecondaryText(
+                f"Last updated: {last_date}" if last_date else "",
+                size=Theme.Typography.BODY_SMALL,
+            ),
+            ft.Container(height=4),
+        ]
+
+        for post in posts:
+            meta = post.get("metadata", {})
+            subreddit = meta.get("subreddit", "")
+            title = meta.get("title", "")
+            comments = meta.get("comments", 0)
+            upvote_ratio = meta.get("upvote_ratio", 0)
+            url = meta.get("url", "")
+            upvotes = post.get("upvotes", 0)
+            date = post.get("date", "")
+
+            # Post card — compact layout
+            post_card = ft.Container(
+                content=ft.Column(
+                    [
+                        # Row 1: subreddit + date + stats
+                        ft.Row(
+                            [
+                                ft.Container(
+                                    content=LabelText(
+                                        f"r/{subreddit}", color=Theme.Colors.BADGE_TEXT
+                                    ),
+                                    bgcolor="#FF5722",
+                                    padding=ft.padding.symmetric(
+                                        horizontal=6, vertical=2
+                                    ),
+                                    border_radius=4,
+                                ),
+                                SecondaryText(
+                                    _pretty_date(date), size=Theme.Typography.BODY_SMALL
+                                ),
+                                ft.Container(expand=True),
+                                ft.Text(
+                                    f"{upvotes:,}",
+                                    size=13,
+                                    weight=ft.FontWeight.W_700,
+                                    color="#FF5722",
+                                ),
+                                SecondaryText("upvotes", size=Theme.Typography.CAPTION),
+                                ft.Container(width=8),
+                                ft.Text(
+                                    str(comments),
+                                    size=13,
+                                    weight=ft.FontWeight.W_700,
+                                    color=Theme.Colors.INFO,
+                                ),
+                                SecondaryText(
+                                    "comments", size=Theme.Typography.CAPTION
+                                ),
+                                ft.Container(width=8),
+                                ft.Text(
+                                    f"{upvote_ratio:.0%}",
+                                    size=13,
+                                    weight=ft.FontWeight.W_700,
+                                    color=Theme.Colors.SUCCESS
+                                    if upvote_ratio and upvote_ratio > 0.9
+                                    else Theme.Colors.WARNING,
+                                ),
+                            ],
+                            spacing=4,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        # Row 2: title as hyperlink
+                        ft.Text(
+                            spans=[
+                                ft.TextSpan(
+                                    title,
+                                    style=ft.TextStyle(
+                                        size=13,
+                                        decoration=ft.TextDecoration.UNDERLINE,
+                                        color=Theme.Colors.PRIMARY,
+                                    ),
+                                    url=url,
+                                ),
+                            ],
+                        )
+                        if url
+                        else BodyText(title),
+                    ],
+                    spacing=6,
+                ),
+                padding=ft.padding.all(10),
+                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                border_radius=8,
+            )
+
+            content.append(post_card)
+
+        self.content = ft.Column(
+            content,
+            spacing=12,
+            scroll=ft.ScrollMode.AUTO,
+        )
+        self.padding = Theme.Spacing.MD
+        self.expand = True
+
+    def _load_posts(self) -> list[dict]:
+        """Load Reddit posts from bulk pre-loaded data."""
+        rows = self._bulk.events.get("post_stats", [])
+        if not rows:
+            return []
+
+        # Get original post dates from events
+        event_dates: dict[str, str] = {}
+        for ev in [
+            ev for ev in self._bulk.insight_events if ev.event_type in {"reddit_post"}
+        ]:
+            pid = (ev.metadata_ or {}).get("post_id", "")
+            if pid and pid not in event_dates:
+                event_dates[pid] = str(ev.date)[:10]
+
+        # Group by post_id, take latest snapshot per post
+        seen: set[str] = set()
+        posts = []
+        for r in rows:
+            meta = r.metadata_ or {}
+            post_id = meta.get("post_id", "")
+            if post_id in seen:
+                continue
+            seen.add(post_id)
+            original_date = event_dates.get(post_id, str(r.date)[:10])
+            posts.append(
+                {
+                    "upvotes": int(r.value),
+                    "date": original_date,
+                    "metadata": meta,
+                }
+            )
+
+        return posts
+
+
+# ---------------------------------------------------------------------------
+# Modal
+# ---------------------------------------------------------------------------
+
+
+def _group_events(
+    events: list[tuple[str, str, str]],
+    days: int,
+) -> list[tuple[str, str, str, set[str]]]:
+    """Group same-type events by time bucket for cleaner display.
+
+    Returns list of (display_date, label, type, dates_set).
+    At small ranges (<=30d), no grouping — each event gets its own chip.
+    """
+    from datetime import datetime as dt  # noqa: I001
+    import re
+
+    # Always return with dates_set for consistent interface
+    if days <= 30 or not events:
+        return [(date, label, etype, {date}) for date, label, etype in events]
+
+    # Determine bucket size
+    if days <= 90:
+
+        def bucket_key(date_str: str) -> str:
+            d = dt.strptime(date_str, "%Y-%m-%d")
+            # ISO week: YYYY-WNN
+            return f"{d.isocalendar()[0]}-W{d.isocalendar()[1]:02d}"
+    else:
+
+        def bucket_key(date_str: str) -> str:
+            return date_str[:7]  # YYYY-MM
+
+    # Group by (bucket, type)
+    buckets: dict[tuple[str, str], list[tuple[str, str]]] = {}
+    for date, label, etype in events:
+        key = (bucket_key(date), etype)
+        buckets.setdefault(key, []).append((date, label))
+
+    result: list[tuple[str, str, str, set[str]]] = []
+    for (_, etype), items in buckets.items():
+        dates = {d for d, _ in items}
+        first_date = min(dates)
+
+        if len(items) == 1:
+            result.append((items[0][0], items[0][1], etype, dates))
+            continue
+
+        if etype == "release":
+            tags = [lbl for _, lbl in sorted(items)]
+            label = f"{tags[0]}\u2013{tags[-1]}" if len(tags) > 1 else tags[0]
+        elif etype == "star":
+            # Extract star numbers from labels like "⭐ #80-#85 (6 stars)" or "⭐ #99 — user"  # noqa: E501
+            nums: list[int] = []
+            for _, lbl in items:
+                for m in re.findall(r"#(\d+)", lbl):
+                    nums.append(int(m))
+            if nums:
+                label = f"\u2b50 #{min(nums)}-#{max(nums)} ({len(items)} events)"
+            else:
+                label = f"\u2b50 ({len(items)} stars)"
+        elif etype == "reddit_post":
+            # Keep individual reddit posts — don't group
+            for date, lbl in items:
+                result.append((date, lbl, etype, {date}))
+            continue
+        else:
+            label = f"{etype} ({len(items)})"
+
+        result.append((first_date, label, etype, dates))
+
+    result.sort(key=lambda x: x[0])
+    return result
+
+
+def _extract_max_number(text: str) -> str:
+    """Extract the largest number from a text string (e.g., '5,292 clones' -> '5,292')."""  # noqa: E501
+    import re
+
+    numbers = re.findall(r"\d[\d,]*", text)
+    if not numbers:
+        return ""
+    return max(numbers, key=lambda n: int(n.replace(",", "")))
+
+
+def _smart_step(max_val: float) -> int:
+    """Pick a nice y-axis interval based on magnitude."""
+    if max_val <= 20:
+        return 5
+    if max_val <= 100:
+        return 10
+    if max_val <= 500:
+        return 50
+    return 100
+
+
+def _pretty_date(date_str: str) -> str:
+    """Format '2026-04-03' as 'April 3rd, 2026'."""
+    from datetime import datetime as dt
+
+    try:
+        d = dt.strptime(date_str, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return date_str
+
+    day = d.day
+    if 11 <= day <= 13:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+    return d.strftime(f"%B {day}{suffix}, %Y")
+
+
+class SettingsTab(ft.Container):
+    """Settings: data sources, collection status, metric counts."""
+
+    def __init__(self, metadata: dict[str, Any], db: dict[str, Any]) -> None:
+        super().__init__()
+
+        total_metrics = metadata.get("total_metrics", 0)
+        enabled_sources = metadata.get("enabled_sources", 0)
+        stale_sources = metadata.get("stale_sources", [])
+        sources_meta = metadata.get("sources", {})
+
+        content: list[ft.Control] = [
+            ft.Row(
+                [
+                    MetricCard(
+                        "Total Metrics", f"{total_metrics:,}", Theme.Colors.PRIMARY
+                    ),
+                    MetricCard(
+                        "Active Sources", str(enabled_sources), Theme.Colors.SUCCESS
+                    ),
+                ],
+                spacing=Theme.Spacing.MD,
+            ),
+            ft.Container(height=8),
+            H3Text("Data Sources"),
+            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+        ]
+
+        for src in db["sources"]:
+            is_stale = src["key"] in stale_sources
+            if src["enabled"]:
+                status_text = "Stale" if is_stale else "Active"
+                status_color = "#F59E0B" if is_stale else "#22C55E"
+            else:
+                status_text = "Disabled"
+                status_color = ft.Colors.ON_SURFACE_VARIANT
+
+            # Last collected time from health metadata
+            src_meta = sources_meta.get(src["key"], {})
+            last_collected = src_meta.get("last_collected", "")
+            if last_collected:
+                last_collected = last_collected[:16].replace("T", " ")
+
+            content.append(
+                ft.Row(
+                    [
+                        ft.Container(
+                            content=BodyText(
+                                src["display_name"], size=Theme.Typography.BODY_SMALL
+                            ),
+                            width=140,
+                        ),
+                        ft.Container(
+                            content=LabelText(
+                                status_text, color=Theme.Colors.BADGE_TEXT
+                            ),
+                            bgcolor=status_color,
+                            padding=ft.padding.symmetric(horizontal=6, vertical=2),
+                            border_radius=4,
+                        ),
+                        SecondaryText(
+                            f"Last: {last_collected}" if last_collected else "",
+                            size=Theme.Typography.BODY_SMALL,
+                        ),
+                    ],
+                    spacing=8,
+                )
+            )
+
+        self.content = ft.Column(
+            content,
+            spacing=8,
+            scroll=ft.ScrollMode.AUTO,
+        )
+        self.padding = Theme.Spacing.MD
+        self.expand = True
+
+
+class InsightsDetailDialog(BaseDetailPopup):
+    """Insights service detail modal with tabbed interface."""
+
+    def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
+        self._metadata: dict[str, Any] = component_data.metadata or {}
+        self._tabs_container = ft.Container(
+            content=ft.Column(
+                [ft.ProgressBar()],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                alignment=ft.MainAxisAlignment.CENTER,
+                expand=True,
+            ),
+            padding=ft.padding.symmetric(horizontal=60),
+            expand=True,
+        )
+
+        super().__init__(
+            page=page,
+            component_data=component_data,
+            title_text=get_component_title("service_insights"),
+            subtitle_text=get_component_subtitle(
+                "service_insights", metadata=self._metadata
+            ),
+            sections=[self._tabs_container],
+            scrollable=False,
+            status_detail=get_status_detail(component_data),
+            width=1500,
+            height=850,
+        )
+
+    def did_mount(self) -> None:
+        self.page.run_task(self._load_and_build)
+
+    async def _load_and_build(self) -> None:
+        """Fetch bulk data from API and build all tabs."""
+        from app.core.client import APIClient
+
+        client = APIClient()
+        raw = await client.get("/api/v1/insights/all")
+        if not raw:
+            self._tabs_container.content = SecondaryText(
+                "Failed to load insights data."
+            )
+            self._tabs_container.update()
+            return
+
+        bulk = BulkInsightsResponse.model_validate(raw)
+        db = _build_db_from_bulk(bulk)
+        metadata = self._metadata
+
+        tabs_list = [
+            ft.Tab(text="Overview", content=OverviewTab(metadata, db, bulk)),
+            ft.Tab(text="GitHub", content=GitHubTrafficTab(bulk=bulk)),
+            ft.Tab(text="Stars", content=StarsTab(bulk=bulk)),
+            ft.Tab(text="PyPI", content=PyPITab(bulk=bulk)),
+            ft.Tab(text="Docs", content=DocsTab(bulk=bulk)),
+            ft.Tab(text="Reddit", content=RedditTab(bulk=bulk)),
+            ft.Tab(text="Settings", content=SettingsTab(metadata, db)),
+        ]
+
+        tabs = ft.Tabs(
+            selected_index=0,
+            animation_duration=200,
+            tabs=tabs_list,
+            expand=True,
+            label_color=ft.Colors.ON_SURFACE,
+            unselected_label_color=ft.Colors.ON_SURFACE_VARIANT,
+            indicator_color=ft.Colors.ON_SURFACE_VARIANT,
+        )
+
+        self._tabs_container.content = tabs
+        self._tabs_container.update()

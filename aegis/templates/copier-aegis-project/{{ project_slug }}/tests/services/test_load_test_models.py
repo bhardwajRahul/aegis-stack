@@ -40,8 +40,14 @@ class TestLoadTestConfiguration:
         assert config.target_queue == "load_test"
 
     def test_num_tasks_validation(self):
-        """Test num_tasks constraints."""
-        # Valid range
+        """``num_tasks`` accepts anything ``>= 1``; no upper bound.
+
+        Earlier revisions capped this at ``ge=10, le=10000``; both were
+        dropped because (a) a 5-task load test is a legitimate smoke and
+        (b) an arbitrary 10k ceiling blocked long saturation runs. The
+        model is the spec — this test pins current semantics so any
+        future tighten-up shows up in review.
+        """
         config = LoadTestConfiguration(
             task_type=LoadTestTypes.CPU_INTENSIVE,
             num_tasks=50,
@@ -50,20 +56,11 @@ class TestLoadTestConfiguration:
         )
         assert config.num_tasks == 50
 
-        # Too low
-        with pytest.raises(ValidationError, match="greater than or equal to 10"):
+        # Zero is rejected — must be at least 1 task.
+        with pytest.raises(ValidationError, match="greater than or equal to 1"):
             LoadTestConfiguration(
                 task_type=LoadTestTypes.CPU_INTENSIVE,
-                num_tasks=5,
-                batch_size=10,
-                target_queue="load_test",
-            )
-
-        # Too high
-        with pytest.raises(ValidationError, match="less than or equal to 10000"):
-            LoadTestConfiguration(
-                task_type=LoadTestTypes.CPU_INTENSIVE,
-                num_tasks=20000,
+                num_tasks=0,
                 batch_size=10,
                 target_queue="load_test",
             )

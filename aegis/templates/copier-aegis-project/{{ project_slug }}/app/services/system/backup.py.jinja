@@ -7,23 +7,40 @@ Included when scheduler and database components are both present.
 {% if scheduler_backend != "memory" or (include_scheduler and include_database) %}
 
 import asyncio
+{% if database_engine == "sqlite" %}
 import shutil
+{% else %}
+import subprocess
+{% endif %}
 from datetime import datetime
 from pathlib import Path
 
+{% if database_engine == "sqlite" %}
 from app.core.db import DATABASE_PATH
+{% else %}
+from app.core.config import settings
+{% endif %}
 from app.core.log import logger
 
 # Backup file naming pattern
+{% if database_engine == "sqlite" %}
 BACKUP_FILE_PATTERN = "database_backup_*.db"
 BACKUP_FILE_PREFIX = "database_backup_"
+{% else %}
+BACKUP_FILE_PATTERN = "database_backup_*.sql"
+BACKUP_FILE_PREFIX = "database_backup_"
+{% endif %}
 
 
 async def backup_database_job() -> None:
     """
     Scheduled database backup job.
 
+{% if database_engine == "sqlite" %}
     Creates a backup of the SQLite database file with timestamp.
+{% else %}
+    Creates a backup of the PostgreSQL database using pg_dump.
+{% endif %}
     Keeps the last 7 daily backups to prevent disk space issues.
     """
     try:
@@ -33,6 +50,7 @@ async def backup_database_job() -> None:
 
         # Create timestamped backup filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+{% if database_engine == "sqlite" %}
         backup_filename = f"{BACKUP_FILE_PREFIX}{timestamp}.db"
         backup_path = backup_dir / backup_filename
 
@@ -42,6 +60,21 @@ async def backup_database_job() -> None:
             logger.info(f"Database backup created: {backup_path}")
         else:
             logger.warning(f"Database file not found for backup: {DATABASE_PATH}")
+{% else %}
+        backup_filename = f"{BACKUP_FILE_PREFIX}{timestamp}.sql"
+        backup_path = backup_dir / backup_filename
+
+        # Run pg_dump to create backup
+        result = subprocess.run(
+            ["pg_dump", settings.database_url_effective, "-f", str(backup_path)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            logger.info(f"Database backup created: {backup_path}")
+        else:
+            logger.error(f"pg_dump failed: {result.stderr}")
+{% endif %}
 
         # Clean up old backups (keep last 7) - always run regardless of backup success
         await _cleanup_old_backups(backup_dir)
@@ -100,6 +133,7 @@ async def restore_database_from_backup(backup_filename: str) -> bool:
             logger.error(f"Backup file not found: {backup_path}")
             return False
 
+{% if database_engine == "sqlite" %}
         # Create backup of current database before restore
         current_db = Path(DATABASE_PATH)
         if current_db.exists():
@@ -112,6 +146,31 @@ async def restore_database_from_backup(backup_filename: str) -> bool:
         shutil.copy2(backup_path, DATABASE_PATH)
         logger.info(f"Database restored from backup: {backup_filename}")
         return True
+{% else %}
+        # Create backup before restore
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        pre_restore_path = backup_dir / f"pre_restore_backup_{timestamp}.sql"
+        pre_result = subprocess.run(
+            ["pg_dump", settings.database_url_effective, "-f", str(pre_restore_path)],
+            capture_output=True,
+            text=True,
+        )
+        if pre_result.returncode == 0:
+            logger.info(f"Created pre-restore backup: {pre_restore_path}")
+
+        # Restore from backup using psql
+        result = subprocess.run(
+            ["psql", settings.database_url_effective, "-f", str(backup_path)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            logger.info(f"Database restored from backup: {backup_filename}")
+            return True
+        else:
+            logger.error(f"psql restore failed: {result.stderr}")
+            return False
+{% endif %}
 
     except Exception as e:
         logger.error(f"Database restore failed: {e}")

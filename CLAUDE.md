@@ -1,29 +1,46 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with code in this repository.
+
+## ⚠️ CRITICAL: No Git Operations
+
+**DO NOT perform git operations unless explicitly requested.** This includes:
+- No `git add`, `git commit`, or `git push` commands
+- No `git status`, `git diff`, or `git log` for preparation purposes
+- No creating pull requests
+- No staging files
+
+**Wait for explicit user approval before ANY git operations.**
+
+---
 
 ## Project Architecture
 
-**Aegis Stack is a CLI tool for generating containerized Python applications.** It is NOT a runnable application itself.
+**Aegis Stack is a modular platform for building and evolving production-ready Python applications.**
 
-The architecture follows this pattern:
-- **CLI Tool** (`aegis-stack`): Installable via `pip install aegis-stack`
-- **Generated Projects**: Full-stack containerized applications created by the CLI
-- **Templates**: Cookiecutter templates that define generated project structure
+What you get:
+- **CLI Tool** (`aegis`): Create, modify, and update projects
+- **Component System**: Add/remove building blocks (database, worker, scheduler, redis)
+- **Service System**: Add/remove business capabilities (auth, AI, payment, analytics)
+- **Living Projects**: Generated projects can pull updates, bug fixes, and new features via `aegis update`
 
-## Release Status: v0.1.0 (LIVE on PyPI!)
+Each generated project includes:
+- Project-specific CLI
+- FastAPI backend
+- Full test suite
+- Docker containerization
 
-**First Official Release** - August 2024
-- ✅ **CLI Tool**: Published to PyPI as `aegis-stack`
-- ✅ **Database Component**: SQLite + SQLModel ORM with health monitoring
-- ✅ **Foundation Stack**: FastAPI backend + Flet frontend + Docker containerization
-- ✅ **Worker Component**: arq + Redis for background job processing
-- ✅ **Scheduler Component**: APScheduler for scheduled tasks
-- ✅ **Documentation**: Progressive documentation philosophy - grows with real implementations
+## Installation
 
-**Install**: `pip install aegis-stack`
-**PyPI**: https://pypi.org/project/aegis-stack/
-**GitHub Release**: https://github.com/lbedner/aegis-stack/releases/tag/v0.1.0
+**Current Version**: 0.6.11
+
+```bash
+pip install aegis-stack
+```
+
+**Links**:
+- PyPI: https://pypi.org/project/aegis-stack/
+- GitHub: https://github.com/lbedner/aegis-stack
 
 ## Development Commands
 
@@ -31,7 +48,7 @@ This project uses `uv` for dependency management and a `Makefile` for CLI develo
 
 ### CLI Development Commands
 - `make test` - Run the CLI test suite with pytest
-- `make lint` - Run linting with ruff  
+- `make lint` - Run linting with ruff
 - `make typecheck` - Run type checking with ty
 - `make check` - Run all checks (lint + typecheck + test) - **run this before committing**
 - `make install` or `uv sync --all-extras` - Install/sync dependencies
@@ -42,7 +59,7 @@ This project uses `uv` for dependency management and a `Makefile` for CLI develo
 - `make test-template-quick` - Quick template test without validation
 - `make test-template` - Full template test with validation
 - `make test-template-with-components` - Test template with scheduler component
-- `make test-template-auth` - **Test auth service template with comprehensive validation**
+- `make test-template-auth` - Test auth service template
 - `make test-template-worker` - Test worker component template
 - `make test-template-database` - Test database component template
 - `make test-template-full` - Test template with all components
@@ -50,139 +67,162 @@ This project uses `uv` for dependency management and a `Makefile` for CLI develo
 
 **Template testing is critical** - always run `make test-template` after modifying templates to ensure generated projects work correctly.
 
-**For auth service development**: Use `make test-template-auth` to generate auth service project and run full validation including:
-- ✅ Auth service includes Alembic migration infrastructure
-- ✅ Database component auto-inclusion
-- ✅ Migration files generate correctly
-- ✅ All 52 auth service tests pass
-- ✅ CLI script installation and functionality
-- ✅ Linting, type checking, and quality checks
+### Pre-RC verification (REQUIRED before any version bump)
 
-## CRITICAL: Template Development Workflow
+Before suggesting a version/rc bump, run BOTH locally:
 
-**NEVER edit generated test projects directly!** Always follow this workflow:
+1. **`make check`** — the aegis-stack repo's OWN test suite (lint +
+   typecheck + pytest). Catches bugs in the CLI / core code itself,
+   including config tests that gate on constants like
+   ``DEFAULT_PYTHON_VERSION``. Without this, changing a constant
+   without updating its assertion test passes locally but fails CI.
 
-### ✅ Correct Template Development Process:
-1. **Edit template files only** in `aegis/templates/cookiecutter-aegis-project/{{cookiecutter.project_slug}}/`
-2. **Generate fresh test project**: `make test-template` or `aegis init test-project`  
-3. **Run tests on generated project** to verify template changes work
-4. **If tests fail**: Fix the **template files** (step 1), then regenerate (step 2)
-5. **Delete test project** when done - it's just for validation
-6. **Repeat** until all tests pass
+2. **`make test-stacks-full`** — the matrix that runs each generated
+   stack through generation → install → lint → typecheck → pytest.
+   Catches drift in templates / cross-stack issues.
 
-### ❌ Wrong Approach (DO NOT DO):
-- ❌ Editing files in generated test projects (`../test-basic-stack/`, etc.)
-- ❌ Making changes to temporary test artifacts
-- ❌ Assuming test project changes affect future `aegis init` projects
+History shows multiple rcs in a row were "green locally" by `aegis init` +
+`make check` (on the GENERATED project) on a single stack, but failed CI
+because either:
+- The matrix was never run (caught template drift on stacks the local
+  test didn't generate), or
+- The aegis-stack repo's own tests were never run (caught constant /
+  config changes without test updates).
 
-### Why This Matters:
-- Only **template files** affect future `aegis init new-project` commands
-- Generated test projects are **temporary validation artifacts** 
-- Editing test projects wastes time and creates confusion about what's actually fixed
-- Template changes must be validated by regenerating fresh projects
+Running both targets is the only way to match what CI actually runs.
 
-**Remember: Templates → Generate → Test → Fix Templates → Repeat**
+If the matrix takes too long during iteration, use `make test-stacks-quick`
+for fast feedback (3 representative stacks: base, everything, insights),
+then run the full matrix once at the end.
 
-## CLI Architecture
+### TestPyPI Release Testing
+Test upgrade paths using TestPyPI before publishing to PyPI:
 
-Aegis Stack is built around a CLI-first approach for project generation and management.
+```bash
+# 1. Install old version from TestPyPI and create project
+uvx --index-url https://test.pypi.org/simple/ \
+    --extra-index-url https://pypi.org/simple/ \
+    --index-strategy unsafe-best-match \
+    aegis-stack@0.5.3 init test-upgrade-project --no-interactive -y
 
-### CLI Commands
+# 2. Install new RC version and test update
+cd test-upgrade-project
+uvx --index-url https://test.pypi.org/simple/ \
+    --extra-index-url https://pypi.org/simple/ \
+    --index-strategy unsafe-best-match \
+    aegis-stack@0.5.4rc1 update -y
+```
 
-#### `aegis init PROJECT_NAME`
-The main command for creating new Aegis Stack projects with customizable components.
+**Key uvx flags:**
+- `--index-url` - Primary source: TestPyPI
+- `--extra-index-url` - Fallback: PyPI (for dependencies not on TestPyPI)
+- `--index-strategy unsafe-best-match` - Allows mixing packages from different indexes
 
-**Key files:**
-- `aegis/__main__.py` - Main CLI entry point and command definitions
-- `aegis/templates/cookiecutter-aegis-project/` - Cookiecutter template structure
-- `aegis/templates/cookiecutter-aegis-project/hooks/post_gen_project.py` - Template processing logic
-- `aegis/templates/cookiecutter-aegis-project/cookiecutter.json` - Template configuration
+### Updating External Projects with Local Committed Template Changes
+To test local committed template changes against an external Aegis project, use the `--template-path` and `--to-version HEAD` flags:
 
-**Options:**
-- `--components COMPONENTS` - Comma-separated list of components (redis,worker,scheduler)
-- `--output-dir PATH` - Custom output directory
-- `--no-interactive` - Skip prompts
-- `--force` - Overwrite existing directories
-- `--yes, -y` - Auto-confirm prompts
+```bash
+# From the aegis-stack root (where .venv lives):
+aegis update -y -p /path/to/project -t /path/to/aegis-stack --to-version HEAD
+```
 
-#### `aegis components`
-Shows project information and available components.
+**Key flags:**
+- `-p` / `--project-path` - Path to the target Aegis project
+- `-t` / `--template-path` - Points Copier at the local aegis-stack repo instead of the installed package
+- `--to-version HEAD` - Uses the latest commit on the current branch (not the version tag)
 
-## Creator Context & Philosophy
+**Note:** Template changes must be committed to git first — Copier reads from the git state, not the working tree.
 
-### The Architect: Leonard Bedner
+## Code Navigation (LSP-First)
 
-**Leonard Bedner** (aka Challseus) is the creator and architect of Aegis Stack. A career software engineer since 2004, systems builder, and game developer who brings decades of experience building production systems and award-winning creative projects.
+Use the Language Server (Pyright) for code navigation instead of grep/glob:
 
-#### Background: Rose of Eternity
-Before Aegis Stack, Leonard created the **Rose of Eternity** series - critically acclaimed RPG mods that pioneered innovative gameplay systems:
-- **Rose of Eternity - The Coming** (2005) - Ranked #15 all-time NWN modules
-- **Rose of Eternity - Cry The Beloved** (2006) - **2nd highest rated NWN module of all time**
-- **Rose of Eternity - Family & Country** (Dragon Age) - Continuing the saga 20 years later
+**Prefer LSP:**
+- `LSP(findReferences)` - Find all usages of a symbol
+- `LSP(goToDefinition)` - Jump to where something is defined
+- `LSP(hover)` - Get type info and docstrings
+- `LSP(documentSymbol)` - List all symbols in a file
 
-These games featured groundbreaking composable systems:
-- **Bonds of Battle**: Characters growing stronger fighting together
-- **Unison Abilities**: Combining party member strengths for emergent gameplay
-- **Last Resorts**: Desperation mechanics at low health
-- **Custom progression systems** that rewarded player experimentation
+**Use grep/glob when:**
+- Searching for text patterns (not symbol names)
+- Searching in non-Python files (yaml, md, json, jinja)
+- LSP server not available
 
-#### The Connection: Game Design → Platform Architecture
+**Why LSP is better:**
+- Semantic understanding - knows actual references, not text matches
+- Type-aware - hover shows full type signatures
 
-The same philosophy that made Rose of Eternity revolutionary now drives Aegis Stack:
-- **Composable systems that create emergent behavior** (like Breath of the Wild's chemistry engine)
-- **Small, focused components** that do one thing excellently
-- **Unexpected interactions** between components creating new possibilities
-- **Progressive enhancement** - systems that grow stronger together
-- **Player/Developer agency** - providing tools, not prescribing paths
+## Test Project Location
 
-### What Aegis Stack Really Is
+**When prototyping, check `my-app/` under the aegis-stack root first.**
 
-**Aegis Stack is a modular, evolving, agent-ready boilerplate platform** - not just a CLI tool, but an ecosystem of composable primitives that grows with you.
+The user often has a test project at `/Users/leonardbedner/Workspace/house_bedner/aegis-stack/my-app/` for iterating on changes before backporting to templates. When making fixes:
+1. Look in `my-app/` first for the generated project code
+2. Test changes there
+3. Backport working changes to templates in `aegis/templates/`
 
-#### Core Philosophy:
-- **"Build foundations, not toys"** - Every component exists because it solved real production problems
-- **"Build once, scale forever"** - Upgradable, testable, observable foundations that never get in the way
-- **"Everything can affect everything"** - Components that compose in unexpected but delightful ways
-- **"It does damn well enough"** - Not trying to be everything, but what it does, it does RIGHT
+## Template Development Workflow
 
-#### The Emergent Behavior Pattern:
-Just like Rose of Eternity's combat systems created unexpected synergies, Aegis components combine in powerful ways:
-- **AI Service alone**: Basic chatbot
+### ⚠️ CRITICAL: Always Backport Immediately
+
+**When editing code in `my-app/` or any generated project, ALWAYS backport changes to templates immediately.**
+
+- Edit both `my-app/` AND templates in the same session
+- Copy fixed files: `cp my-app/path/to/file.py "aegis/templates/copier-aegis-project/{{ project_slug }}/path/to/file.py"`
+- Never leave changes only in `my-app/` - they will be lost on next `aegis init`
+
+### Two Approaches
+
+**1. Template-First** (for known changes)
+Edit templates directly, then generate to verify:
+1. Edit template files in `aegis/templates/copier-aegis-project/{{ project_slug }}/`
+2. Generate: `make test-template` or `aegis init test-project`
+3. Verify it works
+4. Clean up: `make clean-test-projects`
+
+**2. Prototype-First** (for exploratory work)
+Get it working in a real project, then backport:
+1. Generate a test project: `aegis init test-project`
+2. Make changes in the generated project until it works
+3. **Backport immediately** - copy working changes to template files
+4. Regenerate fresh to verify templates are correct
+5. Clean up test project
+
+### Key Principle
+Template files are the source of truth. Any changes you want to persist across future `aegis init` commands **must** be backported to templates.
+
+**Remember**: Generated projects are for validation/prototyping. Templates are what ships.
+
+### Important: Template Changes Require Git Commit
+
+**Copier uses `git+file://` in development mode**, which means it reads templates from the **committed git state**, not the working tree. After modifying template files:
+
+1. **Ask the user to commit** the template changes (Claude should NOT commit per the git policy above)
+2. Then regenerate test projects to verify the changes
+
+Without committing, `aegis init` will use the old template content even though the files appear modified locally.
+
+## Design Principles
+
+### Core Philosophy
+- **Composable systems** - Components combine in powerful, sometimes unexpected ways
+- **Small, focused components** - Each does one thing excellently
+- **No abstraction for abstraction's sake** - Direct access to tools, not wrappers
+- **Test-first development** - Comprehensive testing as a core requirement
+
+### Component Combinations
+Components create emergent capabilities when combined:
 - **AI + Auth**: User-specific conversations, protected endpoints
 - **AI + Database**: Persistent history, analytics
-- **AI + Redis**: Fast conversation caching
-- **AI + Scheduler**: Scheduled summaries, model warm-ups
 - **AI + Worker**: Background AI processing, batch operations
-
-Each combination creates possibilities not explicitly designed - the hallmark of great platform architecture.
+- **Scheduler + Database**: Persistent job scheduling
 
 ### Development Approach
-
-Leonard's approach prioritizes:
-1. **Foundation-first thinking** - Not features, but capabilities others can build on
+1. **Foundation-first** - Build capabilities others can build on
 2. **Battle-tested patterns** - Everything exists because it solved a real problem
 3. **Agent-ready architecture** - Predictable, testable, extendable
-4. **No abstraction for abstraction's sake** - Direct access to tools, not wrappers
-5. **Test-first development** - Comprehensive testing as a core requirement
-
-### Why This Matters
-
-When working with Aegis Stack code:
-- Remember you're working with **architectural DNA**, not just code
-- Every pattern repeats because it's been proven in production
-- Components are designed to discover unexpected interactions
-- The goal is empowering developers, not constraining them
-- This is a **meta-resume** - craft, discipline, and mind made visible in code
-
-**Aegis Stack is Leonard's engineering worldview made shareable** - two decades of building systems distilled into a platform that lets others skip the painful parts and get straight to creating.
 
 ## Coding Standards
-
-### Git and Version Control
-**DO NOT perform git operations unless explicitly requested.** This includes:
-- No `git add`, `git commit`, or `git push` commands
-- No creating pull requests
-- Wait for explicit user approval before committing changes
 
 ### Python Style Guidelines
 
@@ -206,6 +246,22 @@ When working with Aegis Stack code:
 - Use `from None` to suppress chaining when appropriate
 - Log errors at appropriate levels
 
+**Database Queries (Avoid N+1):**
+- **NEVER** query inside a loop - this causes N+1 query problems
+- Batch-fetch related data using `WHERE id IN (...)` or JOINs
+- Use `selectinload()` or `joinedload()` for eager loading relationships
+- Example of what NOT to do:
+  ```python
+  # BAD: N+1 queries (1 query + N queries in loop)
+  for model in models:
+      price = session.exec(select(Price).where(Price.model_id == model.id)).first()
+
+  # GOOD: Batch fetch (2 queries total)
+  model_ids = [m.id for m in models]
+  prices = session.exec(select(Price).where(Price.model_id.in_(model_ids))).all()
+  price_map = {p.model_id: p for p in prices}
+  ```
+
 ### DRY Principle (Don't Repeat Yourself)
 **Always look for existing code being used in multiple places.** Before writing new code, heavily weigh towards creating a single function imported to other places rather than duplicating logic.
 
@@ -217,80 +273,11 @@ When working with Aegis Stack code:
 3. **Make minimal viable fixes** - Simple, working solutions over complex architectures
 4. **Test the fix works** - Verify the original issue is resolved
 
-### Code Quality Checks
-**Always run `make check` after making coding changes.** This runs linting, type checking, and tests to ensure code quality and catch issues early.
+## Components vs Services (in Generated Projects)
 
-```bash
-make check  # Runs: lint + typecheck + test
-```
+When editing templates, understand where code belongs:
 
-## CRITICAL TERMINOLOGY REMINDERS
-- **NEVER call components "services"** - Components are foundation capabilities (scheduler, database, cache)
-- **NEVER use "scheduler_service"** - Always use "scheduler_component" or the actual instance name
-- **Components are NOT microservices** - They are independent components that can run separately
-- **Scheduler is a COMPONENT** - Never call it a service, microservice, or scheduler_service
+**Components** (`app/components/`): Infrastructure - scheduler, worker, database, backend, frontend
+**Services** (`app/services/`): Business logic - auth, AI, payment, etc.
 
-### COMPONENT VS SERVICE BOUNDARIES
-
-**Components (`app/components/`):**
-- Foundation capabilities (scheduler, backend, frontend, database, cache)
-- Own their infrastructure and job/route/UI definitions
-- Examples:
-  - `app/components/scheduler.py` - defines scheduled tasks AND scheduling infrastructure
-  - `app/components/backend/api/` - defines API routes AND FastAPI setup
-  - `app/components/frontend/` - defines UI components AND Flet setup
-
-**Services (`app/services/`):**
-- Business logic that components can call
-- Should NOT directly define hooks, jobs, or routes
-- Examples:
-  - `app/services/report_service.py` - report generation logic
-  - `app/services/email_service.py` - email sending logic  
-  - `app/services/file_service.py` - file processing logic
-
-**Key Pattern:**
-- Components define WHEN/WHERE things happen (routes, scheduled jobs, UI components)
-- Services define WHAT happens (business logic)
-- Components call services, not vice versa
-- Job definitions belong in scheduler component, not in services
-
-## Specialized Documentation
-
-For specific development contexts, see these specialized CLAUDE.md files:
-
-### 🧪 Testing (`tests/CLAUDE.md`)
-When working in `tests/` directory:
-- Testing procedures and writing new tests
-- Template testing workflow patterns
-- CLI integration testing approaches
-- Debugging test failures
-
-### 📋 Templates (`aegis/templates/CLAUDE.md`) 
-When working in `aegis/templates/` directory:
-- Template development patterns and Cookiecutter usage
-- Jinja2 template syntax and best practices
-- Component conditional logic
-- Post-generation hook patterns
-
-### 📖 Documentation (`docs/CLAUDE.md`)
-When working in `docs/` directory:
-- Documentation standards and component documentation patterns
-- MkDocs configuration and Mermaid diagram patterns
-- Writing component guides and user documentation
-- Documentation maintenance workflows
-
-### ⚙️ CLI Core (`aegis/core/CLAUDE.md`)
-When working in `aegis/core/` directory:
-- CLI development patterns and command structure
-- Component system architecture and dependency resolution
-- Template generation logic and validation patterns
-- Error handling and user experience design
-
-### 👷 Worker Architecture (`aegis/templates/.../worker/CLAUDE.md`)
-When working with worker components:
-- arq worker patterns and queue management
-- Task creation and registration patterns
-- Native arq CLI usage and debugging
-- Docker worker debugging commands
-
-**Context Loading**: Claude loads ALL applicable CLAUDE.md files when working in a folder, providing context-specific guidance without duplication.
+Components define WHEN/WHERE (routes, jobs). Services define WHAT (logic).

@@ -1,0 +1,578 @@
+"""
+Slash command system for Illiana interactive chat.
+
+Provides in-session commands for managing the chat experience without
+leaving the interactive loop. Commands start with / and provide quick
+access to provider switching, conversation management, and configuration.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+
+from app.i18n import t
+
+if TYPE_CHECKING:
+    from app.services.ai.service import AIService
+    from app.cli.status_line import ChatSessionState
+
+
+class SlashCommandName(StrEnum):
+    """Slash command identifiers."""
+
+    HELP = "help"
+    CLEAR = "clear"
+    NEW = "new"
+    MODEL = "model"
+    STATUS = "status"
+{% if ai_rag %}
+    RAG = "rag"
+    SOURCES = "sources"
+{% endif %}
+    EXIT = "exit"
+
+
+@dataclass
+class CommandResult:
+    """Result of executing a slash command."""
+
+    success: bool
+    message: str | None = None
+    should_exit: bool = False
+    new_conversation_id: str | None = None
+    # For commands that need to update session state
+    update_provider: str | None = None
+    update_model: str | None = None
+    update_rag: bool | None = None
+    update_rag_collection: str | None = None
+    update_show_sources: bool | None = None
+
+
+@dataclass
+class SlashCommand:
+    """Definition of a slash command."""
+
+    name: str
+    description: str
+    usage: str
+    aliases: list[str] = field(default_factory=list)
+
+
+class SlashCommandHandler:
+    """
+    Handler for slash commands in interactive chat.
+
+    Provides command parsing, execution, and help display.
+    Reuses existing service methods rather than duplicating logic.
+    """
+
+    def __init__(
+        self,
+        ai_service: "AIService",
+        session_state: "ChatSessionState",
+        console: Console,
+        current_conversation_id: str | None = None,
+{% if ai_rag %}
+        rag_enabled: bool = False,
+        rag_collection: str | None = None,
+        show_sources: bool = False,
+{% endif %}
+    ) -> None:
+        """Initialize slash command handler."""
+        self.ai_service = ai_service
+        self.session_state = session_state
+        self.console = console
+        self.current_conversation_id = current_conversation_id
+{% if ai_rag %}
+        self.rag_enabled = rag_enabled
+        self.rag_collection = rag_collection
+        self.show_sources = show_sources
+{% endif %}
+
+        # Define available commands (minimal set, no aliases)
+        self.commands: dict[SlashCommandName, SlashCommand] = {
+            SlashCommandName.HELP: SlashCommand(
+                name=SlashCommandName.HELP,
+                description=t("slash.help_desc"),
+                usage="/help",
+            ),
+            SlashCommandName.CLEAR: SlashCommand(
+                name=SlashCommandName.CLEAR,
+                description=t("slash.clear_desc"),
+                usage="/clear",
+            ),
+            SlashCommandName.NEW: SlashCommand(
+                name=SlashCommandName.NEW,
+                description=t("slash.new_desc"),
+                usage="/new",
+            ),
+            SlashCommandName.MODEL: SlashCommand(
+                name=SlashCommandName.MODEL,
+                description=t("slash.model_desc"),
+                usage="/model [name]",
+            ),
+            SlashCommandName.STATUS: SlashCommand(
+                name=SlashCommandName.STATUS,
+                description=t("slash.status_desc"),
+                usage="/status",
+            ),
+{% if ai_rag %}
+            SlashCommandName.RAG: SlashCommand(
+                name=SlashCommandName.RAG,
+                description=t("slash.rag_desc"),
+                usage="/rag [off|<collection>]",
+            ),
+            SlashCommandName.SOURCES: SlashCommand(
+                name=SlashCommandName.SOURCES,
+                description=t("slash.sources_desc"),
+                usage="/sources [enable|disable]",
+            ),
+{% endif %}
+            SlashCommandName.EXIT: SlashCommand(
+                name=SlashCommandName.EXIT,
+                description=t("slash.exit_desc"),
+                usage="/exit",
+            ),
+        }
+
+        # Build alias lookup
+        self._alias_map: dict[str, str] = {}
+        for cmd_name, cmd in self.commands.items():
+            for alias in cmd.aliases:
+                self._alias_map[alias] = cmd_name
+
+        # Cache for model completions (populated at startup)
+        self._model_cache: list[str] = []
+        # Cache for collection completions (populated at startup)
+        self._collection_cache: list[str] = []
+
+    def get_command_names(self) -> list[str]:
+        """Get all command names and aliases for autocomplete."""
+        names = list(self.commands.keys())
+        names.extend(self._alias_map.keys())
+        return sorted(names)
+
+    def get_model_completions(self) -> list[str]:
+        """Get cached model names for tab completion."""
+        return self._model_cache
+
+    def get_collection_completions(self) -> list[str]:
+        """Get cached collection names for tab completion."""
+        return self._collection_cache
+
+    async def load_model_cache(self) -> None:
+        """Pre-populate model cache for tab completion."""
+        from app.core.log import logger
+
+        all_model_ids: list[str] = []
+
+        # Check for Ollama models (local, no API key needed)
+        try:
+            from app.services.ai.ollama import OllamaClient
+
+            ollama_client = OllamaClient()
+            if await ollama_client.is_available():
+                ollama_models = await ollama_client.fetch_models()
+                all_model_ids.extend([m.model_id for m in ollama_models])
+                logger.debug(f"Loaded {len(ollama_models)} Ollama models")
+        except Exception as e:
+            logger.debug(f"Ollama not available: {e}")
+{% if ai_backend != "memory" %}
+
+        # Check for cloud providers with API keys (requires LLM catalog)
+        from app.services.ai.llm_service import list_models
+        from app.services.ai.models import AIProvider
+        from app.services.ai.provider_management import (
+            check_provider_dependency_installed,
+            get_existing_api_key,
+        )
+
+        provider_to_vendor = {
+            "openai": "OpenAI",
+            "anthropic": "Anthropic",
+            "google": "Google",
+            "groq": "Groq",
+            "mistral": "Mistral",
+            "cohere": "Cohere",
+        }
+
+        configured_vendors = []
+        for provider in AIProvider:
+            if provider.value in ("public", "ollama"):
+                continue
+            if not check_provider_dependency_installed(provider.value):
+                continue
+            if not get_existing_api_key(provider.value):
+                continue
+            vendor_name = provider_to_vendor.get(provider.value)
+            if vendor_name:
+                configured_vendors.append(vendor_name)
+
+        # Fetch cloud provider models from database
+        if configured_vendors:
+            try:
+                for vendor in configured_vendors:
+                    results = await list_models(pattern=None, vendor=vendor, limit=100)
+                    all_model_ids.extend([m.model_id for m in results])
+                logger.debug(f"Loaded models from vendors: {configured_vendors}")
+            except Exception as e:
+                logger.warning(f"Failed to load cloud model cache: {e}")
+{% endif %}
+
+        if not all_model_ids:
+            logger.debug("No models available for model cache")
+            self.console.print(
+                "[dim]No models available for /model tab completion. "
+                "Start Ollama or set provider API keys.[/dim]"
+            )
+            return
+
+        self._model_cache = all_model_ids
+        logger.debug(f"Model cache loaded: {len(self._model_cache)} models")
+
+{% if ai_rag %}
+    async def load_collection_cache(self) -> None:
+        """Pre-populate collection cache for tab completion."""
+        from app.core.config import settings
+        from app.core.log import logger
+        from app.services.rag.config import get_rag_config
+        from app.services.rag.service import RAGService
+
+        try:
+            rag_config = get_rag_config(settings)
+            rag_service = RAGService(rag_config)
+            self._collection_cache = await rag_service.list_collections()
+            count = len(self._collection_cache)
+            logger.debug(f"Collection cache loaded: {count} collections")
+        except Exception as e:
+            logger.warning(f"Failed to load collection cache: {e}")
+{% endif %}
+
+    def is_slash_command(self, text: str) -> bool:
+        """Check if input is a slash command."""
+        return text.strip().startswith("/")
+
+    def parse_input(self, text: str) -> tuple[str | None, list[str]]:
+        """Parse input to extract command and arguments."""
+        text = text.strip()
+        if not text.startswith("/"):
+            return None, []
+
+        parts = text[1:].split(maxsplit=1)
+        command = parts[0].lower() if parts else ""
+        args = parts[1].split() if len(parts) > 1 else []
+        return command, args
+
+    async def execute(self, text: str) -> CommandResult | None:
+        """Execute a slash command if input starts with /."""
+        command_name, args = self.parse_input(text)
+        if command_name is None:
+            return None  # Not a slash command
+
+        # Resolve alias to command name
+        if command_name in self._alias_map:
+            command_name = self._alias_map[command_name]
+
+        if command_name not in self.commands:
+            msg = t("slash.unknown_command", name=command_name)
+            return CommandResult(success=False, message=msg)
+
+        # Dispatch to handler method
+        handler_method = getattr(self, f"_cmd_{command_name}", None)
+        if handler_method is None:
+            return CommandResult(
+                success=False,
+                message=f"Command /{command_name} is not implemented.",
+            )
+
+        return await handler_method(args)
+
+    async def _cmd_help(self, args: list[str]) -> CommandResult:
+        """Show available commands."""
+        table = Table(
+            show_header=True,
+            header_style="bold cyan",
+            box=None,
+            padding=(0, 2),
+        )
+        table.add_column("Command", style="green")
+        table.add_column("Description")
+
+        for name, cmd in sorted(self.commands.items()):
+            table.add_row(f"/{name}", cmd.description)
+
+        self.console.print(Panel(table, title=t("slash.commands_panel"), border_style="dim"))
+        return CommandResult(success=True)
+
+    async def _cmd_clear(self, args: list[str]) -> CommandResult:
+        """Clear the screen."""
+        # Use appropriate clear command for the platform
+        os.system("cls" if os.name == "nt" else "clear")
+        return CommandResult(success=True)
+
+    async def _cmd_new(self, args: list[str]) -> CommandResult:
+        """Start a new conversation."""
+        self.current_conversation_id = None
+        return CommandResult(
+            success=True,
+            message=f"[green]{t('slash.new_conversation')}[/green]",
+            new_conversation_id="new",  # Signal to reset
+        )
+
+    async def _cmd_model(self, args: list[str]) -> CommandResult:
+        """Switch AI model (auto-detects provider)."""
+        # Show current if no args
+        if not args:
+            current = self.ai_service.config
+            content = Text()
+            content.append(t("ai.provider_label") + " ", style="dim")
+            content.append(f"{current.provider.value}\n", style="cyan")
+            content.append(t("ai.model_label") + " ", style="dim")
+            content.append(f"{current.model}\n", style="cyan")
+            content.append(t("slash.use_model_hint"), style="dim")
+            self.console.print(Panel(content, title=t("slash.current_panel"), border_style="dim"))
+            return CommandResult(success=True)
+
+        model = args[0]
+{% if ai_backend != "memory" %}
+        # Use set_active_model which auto-detects provider from model
+        # (requires LLM catalog)
+        from app.services.ai.llm_service import set_active_model
+
+        result = await set_active_model(model)
+
+        if not result.success:
+            # Model not in catalog - try with force
+            result = await set_active_model(model, force=True)
+
+        from dotenv import load_dotenv
+        load_dotenv(override=True)
+        self.ai_service.refresh_config()
+
+        # Build message
+        if result.provider_updated:
+            switched = t(
+                "slash.switched_to",
+                provider=result.vendor,
+                model=model,
+            )
+            msg = f"[green]{switched}[/green]"
+            return CommandResult(
+                success=True,
+                message=msg,
+                update_provider=result.vendor.lower() if result.vendor else None,
+                update_model=model,
+            )
+        else:
+            return CommandResult(
+                success=True,
+                message=f"[green]{t('slash.switched_model', model=model)}[/green]",
+                update_model=model,
+            )
+{% else %}
+        # Without LLM catalog, check if model is in Ollama, then update .env directly
+        from pathlib import Path
+
+        provider = None
+
+        # Check if model is available in Ollama
+        if model in self._model_cache:
+            try:
+                from app.services.ai.ollama import OllamaClient
+
+                ollama_client = OllamaClient()
+                if await ollama_client.is_available():
+                    ollama_models = await ollama_client.fetch_models()
+                    ollama_model_ids = [m.model_id for m in ollama_models]
+                    if model in ollama_model_ids:
+                        provider = "ollama"
+            except Exception:
+                pass
+
+        # Update .env file directly
+        env_path = Path(".env")
+        updates = {"AI_MODEL": model}
+        if provider:
+            updates["AI_PROVIDER"] = provider
+
+        if env_path.exists():
+            lines: list[str] = []
+            updated_keys: set[str] = set()
+            with open(env_path) as f:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith("#") and "=" in stripped:
+                        key = stripped.split("=", 1)[0].strip()
+                        if key in updates:
+                            lines.append(f"{key}={updates[key]}\n")
+                            updated_keys.add(key)
+                            continue
+                    lines.append(line)
+            # Append any new keys
+            for key, value in updates.items():
+                if key not in updated_keys:
+                    lines.append(f"{key}={value}\n")
+            with open(env_path, "w") as f:
+                f.writelines(lines)
+
+        from dotenv import load_dotenv
+        load_dotenv(override=True)
+        self.ai_service.refresh_config()
+
+        if provider:
+            return CommandResult(
+                success=True,
+                message=f"[green]{t('slash.switched_to', provider=provider, model=model)}[/green]",
+                update_provider=provider,
+                update_model=model,
+            )
+        else:
+            return CommandResult(
+                success=True,
+                message=f"[green]{t('slash.switched_model', model=model)}[/green]",
+                update_model=model,
+            )
+{% endif %}
+
+    async def _cmd_status(self, args: list[str]) -> CommandResult:
+        """Show current configuration."""
+        current = self.ai_service.config
+{% if ai_rag %}
+        rag_status = "ON" if self.rag_enabled else "OFF"
+{% endif %}
+
+        content = Text()
+        content.append(t("ai.provider_label") + " ", style="dim")
+        content.append(f"{current.provider.value}\n", style="cyan")
+        content.append(t("ai.model_label") + " ", style="dim")
+        content.append(f"{current.model}\n", style="cyan")
+        content.append(t("ai.temperature_label") + " ", style="dim")
+        content.append(f"{current.temperature}\n")
+        content.append(t("ai.max_tokens_label") + " ", style="dim")
+        content.append(f"{current.max_tokens}")
+{% if ai_rag %}
+        content.append("\nRAG: ", style="dim")
+        content.append(rag_status, style="green" if self.rag_enabled else "dim")
+        if self.rag_collection:
+            content.append(f" ({self.rag_collection})", style="cyan")
+{% endif %}
+
+        self.console.print(Panel(content, title=t("slash.status_panel"), border_style="dim"))
+        return CommandResult(success=True)
+
+{% if ai_rag %}
+    async def _cmd_rag(self, args: list[str]) -> CommandResult:
+        """Manage RAG mode - show status, disable, or select collection."""
+        # Use cached collections for performance
+        collections = self._collection_cache
+
+        if not args:
+            # Show current status
+            content = Text()
+            content.append(t("ai.status_label") + " ", style="dim")
+            content.append("ON" if self.rag_enabled else "OFF",
+                          style="green" if self.rag_enabled else "dim")
+            if self.rag_collection:
+                content.append(f"\n{t('ai.opt_collection')}: ", style="dim")
+                content.append(self.rag_collection, style="cyan")
+            if collections:
+                content.append(f"\n{t('slash.available_collections', list=', '.join(collections[:5]))}", style="dim")
+                content.append(f"\n{t('slash.rag_use_hint')}", style="dim")
+            else:
+                content.append(f"\n{t('slash.no_collections_indexed')}", style="dim")
+                content.append(f"\n{t('slash.index_documents_hint', app='{{ project_slug }}')}", style="dim")
+            self.console.print(Panel(content, title=t("slash.rag_panel"), border_style="dim"))
+            return CommandResult(success=True)
+
+        arg = args[0].lower()
+
+        if arg == "off":
+            self.rag_enabled = False
+            return CommandResult(
+                success=True,
+                message=f"[yellow]{t('slash.rag_disabled')}[/yellow]",
+                update_rag=False,
+            )
+
+        # Treat arg as collection name
+        if arg not in collections:
+            if collections:
+                avail = ", ".join(collections[:5])
+                msg = f"[red]{t('slash.collection_not_found', name=arg)}[/red]\n"
+                msg += f"[dim]{t('slash.available_collections', list=avail)}[/dim]"
+            else:
+                msg = f"[red]{t('slash.collection_not_found', name=arg)}[/red]\n"
+                msg += f"[dim]{t('slash.no_collections')}[/dim]"
+            return CommandResult(success=False, message=msg)
+
+        self.rag_collection = arg
+        self.rag_enabled = True
+        return CommandResult(
+            success=True,
+            message=f"[green]{t('slash.rag_enabled', name=arg)}[/green]",
+            update_rag=True,
+            update_rag_collection=arg,
+        )
+
+    async def _cmd_sources(self, args: list[str]) -> CommandResult:
+        """Toggle source references display in output."""
+        # Sources require RAG to be enabled
+        if not self.rag_enabled:
+            return CommandResult(
+                success=False,
+                message=f"[red]{t('slash.sources_require_rag')}[/red]\n"
+                f"[dim]{t('slash.enable_rag_first')}[/dim]",
+            )
+
+        if not args:
+            # Toggle current state
+            self.show_sources = not self.show_sources
+            if self.show_sources:
+                msg = f"[green]{t('slash.sources_enabled')}[/green]"
+            else:
+                msg = f"[yellow]{t('slash.sources_disabled')}[/yellow]"
+            return CommandResult(
+                success=True,
+                message=msg,
+                update_show_sources=self.show_sources,
+            )
+
+        arg = args[0].lower()
+        if arg in ("on", "enable"):
+            self.show_sources = True
+            return CommandResult(
+                success=True,
+                message=f"[green]{t('slash.sources_enabled')}[/green]",
+                update_show_sources=True,
+            )
+        elif arg in ("off", "disable"):
+            self.show_sources = False
+            return CommandResult(
+                success=True,
+                message=f"[yellow]{t('slash.sources_disabled')}[/yellow]",
+                update_show_sources=False,
+            )
+        else:
+            return CommandResult(
+                success=False,
+                message=f"[red]{t('slash.unknown_option', arg=arg)}[/red]\n"
+                f"[dim]{t('slash.sources_usage')}[/dim]",
+            )
+{% endif %}
+
+    async def _cmd_exit(self, args: list[str]) -> CommandResult:
+        """Exit the chat session."""
+        return CommandResult(
+            success=True,
+            message=f"[yellow]{t('ai.goodbye')}[/yellow]",
+            should_exit=True,
+        )

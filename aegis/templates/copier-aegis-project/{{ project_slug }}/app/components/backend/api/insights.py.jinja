@@ -1,0 +1,38 @@
+{%- if include_insights %}
+"""
+Insights API endpoints.
+
+Provides bulk data loading for the Overseer dashboard and external consumers.
+"""
+
+from fastapi import APIRouter, Depends
+
+from app.components.backend.api.deps import get_query_service
+from app.core.cache import CacheService, get_cache
+from app.services.insights.query_service import InsightQueryService
+from app.services.insights.schemas import BulkInsightsResponse
+{%- if include_auth %}
+from app.services.auth.deps import get_current_active_user
+{%- endif %}
+
+router = APIRouter(prefix="/insights", tags=["insights"])
+
+CACHE_KEY = "insights:all"
+
+
+@router.get("/all", response_model=BulkInsightsResponse)
+async def get_all_insights(
+    qs: InsightQueryService = Depends(get_query_service),
+    cache: CacheService = Depends(get_cache),
+{%- if include_auth %}
+    _current_user=Depends(get_current_active_user),
+{%- endif %}
+) -> BulkInsightsResponse:
+    """Bulk-load all insight data for the dashboard."""
+    cached = cache.get(CACHE_KEY)
+    if cached is not None:
+        return cached
+    result = await qs.load_all()
+    cache.set(CACHE_KEY, result)
+    return result
+{%- endif %}

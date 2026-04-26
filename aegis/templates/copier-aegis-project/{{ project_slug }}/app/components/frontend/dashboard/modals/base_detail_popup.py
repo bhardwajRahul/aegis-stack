@@ -6,7 +6,7 @@ including title, status badge, scrollable sections, and close button.
 """
 
 import flet as ft
-from app.components.frontend.controls import H2Text, Tag
+from app.components.frontend.controls import H2Text, SecondaryText, StatusTag
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
@@ -27,7 +27,7 @@ class BaseDetailPopup(BasePopup):
             def __init__(self, component_data: ComponentStatus, page: ft.Page):
                 sections = [
                     MyOverviewSection(component_data.metadata),
-                    ft.Divider(height=20, color=ft.Colors.OUTLINE),
+                    ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                     MyStatsSection(component_data),
                 ]
 
@@ -45,8 +45,11 @@ class BaseDetailPopup(BasePopup):
         component_data: ComponentStatus,
         title_text: str,
         sections: list[ft.Control],
+        subtitle_text: str | None = None,
+        status_detail: str | None = None,
         width: int = ModalLayout.DEFAULT_WIDTH,
         height: int = ModalLayout.DEFAULT_HEIGHT,
+        scrollable: bool = True,
     ) -> None:
         """
         Initialize the base detail popup.
@@ -55,31 +58,58 @@ class BaseDetailPopup(BasePopup):
             component_data: ComponentStatus containing component health and metrics
             title_text: Title text (e.g., "Scheduler Details")
             sections: List of section controls to display in modal body
+            subtitle_text: Optional subtitle text (e.g., "Web Framework")
+            status_detail: Optional detail text for status badge (e.g., "2/3 online")
             width: Modal width in pixels (default: 900)
             height: Modal height in pixels (default: 700)
+            scrollable: Whether to wrap sections in scrollable container
+                        (default: True). Set to False for tabs with own scrolling.
         """
         self.component_data = component_data
         self.title_text = title_text
+        self.subtitle_text = subtitle_text
+        self.status_detail = status_detail
+        self._status_tag: StatusTag | None = None
+        self._title_row: ft.Row | None = None
+
+        # Build sections container - scrollable or direct based on parameter
+        if scrollable:
+            sections_container = ft.Container(
+                content=ft.Column(
+                    sections,
+                    spacing=0,
+                    scroll=ft.ScrollMode.AUTO,
+                ),
+                expand=True,
+            )
+        else:
+            # For tabs or content that manages its own scrolling
+            sections_container = ft.Container(
+                content=sections[0]
+                if len(sections) == 1
+                else ft.Column(sections, spacing=0),
+                expand=True,
+            )
 
         # Build modal content with title, sections, and close button
         modal_content = ft.Column(
             controls=[
                 # Title with status badge
                 self._create_title(),
-                ft.Divider(height=1),
-                # Scrollable sections
-                ft.Container(
-                    content=ft.Column(
-                        sections,
-                        spacing=0,
-                        scroll=ft.ScrollMode.AUTO,
-                    ),
-                    expand=True,
-                ),
+                # Sections (scrollable or not based on parameter)
+                sections_container,
                 # Actions
                 ft.Container(
                     content=ft.Row(
-                        [ft.TextButton("Close", on_click=self._handle_close_click)],
+                        [
+                            ft.TextButton(
+                                "Close",
+                                on_click=self._handle_close_click,
+                                style=ft.ButtonStyle(
+                                    color=ft.Colors.ON_SURFACE_VARIANT,
+                                ),
+                            )
+                        ],
                         alignment=ft.MainAxisAlignment.END,
                     ),
                     padding=ft.padding.only(top=10),
@@ -103,7 +133,7 @@ class BaseDetailPopup(BasePopup):
             content=content_container,
             width=width,
             height=height,
-            border=ft.border.all(1, self._get_status_color()),
+            border=ft.border.all(1, ft.Colors.OUTLINE),
             border_radius=Theme.Components.CARD_RADIUS,
             bgcolor=ft.Colors.SURFACE,
             shadow=ft.BoxShadow(
@@ -116,38 +146,56 @@ class BaseDetailPopup(BasePopup):
 
     def _create_title(self) -> ft.Control:
         """
-        Create the modal title with status badge.
+        Create the modal title with optional subtitle and status badge.
 
-        Returns a Row containing the title text with icon and a status badge
-        using theme-aware colors.
+        Returns a Row containing the title text (with optional subtitle)
+        and a status badge using theme-aware colors.
         """
-        status_color = self._get_status_color()
+        # Build title column with optional subtitle
+        title_controls: list[ft.Control] = [H2Text(self.title_text)]
+        if self.subtitle_text:
+            title_controls.append(SecondaryText(self.subtitle_text))
 
-        return ft.Row(
+        title_column = ft.Column(
+            title_controls,
+            spacing=2,
+        )
+
+        # Create and store status tag reference for later updates
+        self._status_tag = StatusTag(
+            status=self.component_data.status, detail=self.status_detail
+        )
+
+        self._title_row = ft.Row(
             [
-                H2Text(self.title_text),
-                Tag(
-                    text=self.component_data.status.value.upper(),
-                    color=status_color,
-                ),
+                title_column,
+                self._status_tag,
             ],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         )
+        return self._title_row
 
-    def _get_status_color(self) -> str:
+    def update_status(
+        self, status: ComponentStatusType, detail: str | None = None
+    ) -> None:
         """
-        Map component status to theme color.
+        Update the status tag in the modal header.
 
-        Returns:
-            Theme color constant based on component status
+        Args:
+            status: New component status
+            detail: Optional detail text for the status badge
         """
-        status_map = {
-            ComponentStatusType.HEALTHY: Theme.Colors.SUCCESS,
-            ComponentStatusType.INFO: Theme.Colors.INFO,
-            ComponentStatusType.WARNING: Theme.Colors.WARNING,
-            ComponentStatusType.UNHEALTHY: Theme.Colors.ERROR,
-        }
-        return status_map.get(self.component_data.status, ft.Colors.ON_SURFACE_VARIANT)
+        if self._title_row and self._status_tag:
+            # Create new status tag with updated values
+            new_tag = StatusTag(status=status, detail=detail)
+
+            # Replace the old tag in the title row
+            self._title_row.controls[-1] = new_tag
+            self._status_tag = new_tag
+
+            # Update the component data for consistency
+            self.component_data.status = status
+            self.status_detail = detail
 
     def _handle_close_click(self, e: ft.ControlEvent) -> None:
         """Handle close button click."""

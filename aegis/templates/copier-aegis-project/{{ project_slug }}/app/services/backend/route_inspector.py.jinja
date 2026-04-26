@@ -81,7 +81,7 @@ class FastAPIRouteInspector:
         return re.findall(r'\{([^}]+)\}', path)
 
     def _extract_dependency_names(self, route: APIRoute) -> list[str]:
-        """Extract dependency function names from both router and parameter dependencies."""
+        """Extract dependency names from router and parameter dependencies."""
         import inspect
         from fastapi.params import Depends
 
@@ -91,7 +91,8 @@ class FastAPIRouteInspector:
         if route.dependencies:
             for dep in route.dependencies:
                 if dep.dependency and hasattr(dep.dependency, "__name__"):
-                    dependency_names.append(dep.dependency.__name__)
+                    dep_name = dep.dependency.__name__
+                    dependency_names.append(dep_name)
 
         # Extract parameter-level dependencies from function signature
         if route.endpoint:
@@ -103,11 +104,13 @@ class FastAPIRouteInspector:
                         if isinstance(param.default, Depends):
                             if param.default.dependency:
                                 # Try to get the name from the dependency
-                                if hasattr(param.default.dependency, "__name__"):
-                                    dep_name = param.default.dependency.__name__
+                                dep = param.default.dependency
+                                if hasattr(dep, "__name__"):
+                                    dep_name = dep.__name__
                                 else:
-                                    # For objects like OAuth2PasswordBearer, use class name
-                                    dep_name = param.default.dependency.__class__.__name__
+                                    # For objects use class name
+                                    dep_cls = param.default.dependency.__class__
+                                    dep_name = dep_cls.__name__
 
                                 # Avoid duplicates
                                 if dep_name not in dependency_names:

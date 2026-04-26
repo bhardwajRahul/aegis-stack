@@ -84,7 +84,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
     "worker": ComponentSpec(
         name="worker",
         type=ComponentType.INFRASTRUCTURE,
-        description="Background task processing infrastructure with arq",
+        description="Background task processing (arq, Dramatiq, or TaskIQ)",
         requires=["redis"],  # Hard dependency
         pyproject_deps=["arq==0.25.0"],
         docker_services=["worker-system", "worker-load-test"],
@@ -101,9 +101,24 @@ COMPONENTS: dict[str, ComponentSpec] = {
     "database": ComponentSpec(
         name="database",
         type=ComponentType.INFRASTRUCTURE,
-        description="SQLite database with SQLModel ORM",
-        pyproject_deps=["sqlmodel>=0.0.14", "sqlalchemy>=2.0.0", "aiosqlite>=0.19.0"],
+        description="Database with SQLModel ORM (SQLite or PostgreSQL)",
+        pyproject_deps=["sqlmodel>=0.0.14", "sqlalchemy>=2.0.0"],
+        # Note: async driver (aiosqlite or asyncpg) selected based on database_type in copier.yml
         template_files=["app/core/db.py"],
+    ),
+    "ingress": ComponentSpec(
+        name="ingress",
+        type=ComponentType.INFRASTRUCTURE,
+        description="Traefik reverse proxy and load balancer",
+        docker_services=["traefik"],
+        recommends=["backend"],
+    ),
+    "observability": ComponentSpec(
+        name="observability",
+        type=ComponentType.INFRASTRUCTURE,
+        description="Logfire observability, tracing, and metrics",
+        pyproject_deps=["logfire[fastapi,httpx]"],
+        template_files=["app/components/backend/middleware/logfire_tracing.py"],
     ),
 }
 

@@ -1,0 +1,154 @@
+"""
+Seed data for insight service tables.
+
+Populates insight_source and insight_metric_type with default entries.
+Idempotent — safe to call multiple times.
+"""
+
+from sqlmodel import Session, select
+
+from .constants import MetricKeys, SourceKeys, Units
+from .models import InsightMetricType, InsightSource
+
+
+# ---------------------------------------------------------------------------
+# Source definitions
+# ---------------------------------------------------------------------------
+
+DEFAULT_SOURCES: list[dict] = [
+    {
+        "key": SourceKeys.GITHUB_TRAFFIC,
+        "display_name": "GitHub Traffic",
+        "collection_interval_hours": 6,
+        "requires_auth": True,
+        "enabled": {% if insights_github %}True{% else %}False{% endif %},
+    },
+    {
+        "key": SourceKeys.GITHUB_STARS,
+        "display_name": "GitHub Stars",
+        "collection_interval_hours": 24,
+        "requires_auth": True,
+        "enabled": {% if insights_github %}True{% else %}False{% endif %},
+    },
+    {
+        "key": SourceKeys.PYPI,
+        "display_name": "PyPI",
+        "collection_interval_hours": 24,
+        "requires_auth": False,
+        "enabled": {% if insights_pypi %}True{% else %}False{% endif %},
+    },
+    {
+        "key": SourceKeys.PLAUSIBLE,
+        "display_name": "Plausible",
+        "collection_interval_hours": 24,
+        "requires_auth": True,
+        "enabled": {% if insights_plausible %}True{% else %}False{% endif %},
+    },
+    {
+        "key": SourceKeys.GITHUB_EVENTS,
+        "display_name": "GitHub Events",
+        "collection_interval_hours": 24,
+        "requires_auth": False,
+        "enabled": {% if insights_github %}True{% else %}False{% endif %},
+    },
+    {
+        "key": SourceKeys.REDDIT,
+        "display_name": "Reddit",
+        "collection_interval_hours": None,
+        "requires_auth": False,
+        "enabled": {% if insights_reddit %}True{% else %}False{% endif %},
+    },
+]
+
+
+# ---------------------------------------------------------------------------
+# Metric type definitions (keyed by source key)
+# ---------------------------------------------------------------------------
+
+DEFAULT_METRIC_TYPES: dict[str, list[dict]] = {
+    SourceKeys.GITHUB_TRAFFIC: [
+        {"key": MetricKeys.CLONES, "display_name": "Clones", "unit": Units.COUNT},
+        {"key": MetricKeys.UNIQUE_CLONERS, "display_name": "Unique Cloners", "unit": Units.COUNT},
+        {"key": MetricKeys.VIEWS, "display_name": "Views", "unit": Units.COUNT},
+        {"key": MetricKeys.UNIQUE_VISITORS, "display_name": "Unique Visitors", "unit": Units.COUNT},
+        {"key": MetricKeys.REFERRERS, "display_name": "Referrers", "unit": Units.JSON},
+        {"key": MetricKeys.POPULAR_PATHS, "display_name": "Popular Paths", "unit": Units.JSON},
+    ],
+    SourceKeys.GITHUB_STARS: [
+        {"key": MetricKeys.NEW_STAR, "display_name": "New Star", "unit": Units.COUNT},
+    ],
+    SourceKeys.PYPI: [
+        {"key": MetricKeys.DOWNLOADS_TOTAL, "display_name": "Total Downloads", "unit": Units.COUNT},
+        {"key": MetricKeys.DOWNLOADS_DAILY, "display_name": "Daily Downloads", "unit": Units.COUNT},
+        {"key": MetricKeys.DOWNLOADS_DAILY_HUMAN, "display_name": "Daily Downloads (Human)", "unit": Units.COUNT},
+        {"key": MetricKeys.DOWNLOADS_BY_COUNTRY, "display_name": "Downloads by Country", "unit": Units.JSON},
+        {"key": MetricKeys.DOWNLOADS_BY_INSTALLER, "display_name": "Downloads by Installer", "unit": Units.JSON},
+        {"key": MetricKeys.DOWNLOADS_BY_VERSION, "display_name": "Downloads by Version", "unit": Units.JSON},
+        {"key": MetricKeys.DOWNLOADS_BY_TYPE, "display_name": "Downloads by Type", "unit": Units.JSON},
+    ],
+    SourceKeys.GITHUB_EVENTS: [
+        {"key": MetricKeys.FORKS, "display_name": "Forks", "unit": Units.COUNT},
+        {"key": MetricKeys.RELEASES, "display_name": "Releases", "unit": Units.COUNT},
+        {"key": MetricKeys.STAR_EVENTS, "display_name": "Star Events", "unit": Units.COUNT},
+        {"key": MetricKeys.ACTIVITY_SUMMARY, "display_name": "Activity Summary", "unit": Units.JSON},
+    ],
+    SourceKeys.PLAUSIBLE: [
+        {"key": MetricKeys.VISITORS, "display_name": "Visitors", "unit": Units.COUNT},
+        {"key": MetricKeys.PAGEVIEWS, "display_name": "Pageviews", "unit": Units.COUNT},
+        {"key": MetricKeys.AVG_DURATION, "display_name": "Avg Duration", "unit": Units.SECONDS},
+        {"key": MetricKeys.BOUNCE_RATE, "display_name": "Bounce Rate", "unit": Units.PERCENTAGE},
+        {"key": MetricKeys.TOP_PAGES, "display_name": "Top Pages", "unit": Units.JSON},
+    ],
+    SourceKeys.REDDIT: [
+        {"key": MetricKeys.POST_STATS, "display_name": "Post Stats", "unit": Units.JSON},
+    ],
+}
+
+
+def seed_insight_tables(session: Session) -> None:
+    """
+    Seed insight_source and insight_metric_type tables.
+
+    Idempotent: skips rows that already exist (matched by key).
+    """
+    # Seed sources
+    for source_data in DEFAULT_SOURCES:
+        existing = session.exec(
+            select(InsightSource).where(InsightSource.key == source_data["key"])
+        ).first()
+        if existing is None:
+            session.add(InsightSource(**source_data))
+
+    session.flush()  # Ensure source IDs are available for metric types
+
+    # Build source key → id lookup
+    sources = session.exec(select(InsightSource)).all()
+    source_map: dict[str, int] = {}
+    for source in sources:
+        if source.id is not None:
+            source_map[source.key] = source.id
+
+    # Seed metric types
+    for source_key, metric_types in DEFAULT_METRIC_TYPES.items():
+        source_id = source_map.get(source_key)
+        if source_id is None:
+            continue
+
+        for mt_data in metric_types:
+            existing = session.exec(
+                select(InsightMetricType).where(
+                    InsightMetricType.source_id == source_id,
+                    InsightMetricType.key == mt_data["key"],
+                )
+            ).first()
+            if existing is None:
+                session.add(
+                    InsightMetricType(
+                        source_id=source_id,
+                        key=mt_data["key"],
+                        display_name=mt_data["display_name"],
+                        unit=mt_data["unit"],
+                    )
+                )
+
+    session.commit()

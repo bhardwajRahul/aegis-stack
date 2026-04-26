@@ -14,6 +14,11 @@ The **Authentication Service** provides complete user management and JWT-based a
 
     Authentication endpoints available at `/auth/*` with automatic database setup.
 
+!!! tip "Auth Levels: Basic, RBAC, and Organization"
+    Auth supports three progressive levels. Start with basic JWT auth and upgrade to role-based access control or multi-tenant organizations as your needs grow.
+
+    [:octicons-arrow-right-24: Auth Levels Guide](levels.md)
+
 ## What You Get
 
 - **JWT-based authentication** - Industry-standard token authentication
@@ -39,7 +44,7 @@ graph TB
 
         subgraph "Required Components"
             Backend[⚡ Backend Component<br/>FastAPI Routes]
-            Database[💾 Database Component<br/>SQLite + SQLModel]
+            Database[💾 Database Component<br/>SQLite / PostgreSQL]
         end
 
         subgraph "Security Layer"
@@ -203,6 +208,7 @@ def get_password_hash(password: str) -> str:
 
 | Topic | Description |
 |-------|-------------|
+| **[Auth Levels](levels.md)** | RBAC, organizations, and upgrade paths |
 | **[API Reference](api.md)** | Complete endpoint documentation with schemas |
 | **[Integration Guide](integration.md)** | Frontend/backend integration patterns |
 | **[CLI Commands](cli.md)** | User management and utility commands |

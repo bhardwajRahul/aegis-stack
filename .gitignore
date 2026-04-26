@@ -134,3 +134,12 @@ data/
 
 # Demos
 demos/recordings
+
+# Claude Stuff
+.claude/settings.json
+
+# Typical generated stack folders
+my-app/
+
+# Translation review artifacts
+aegis_*_review.csv

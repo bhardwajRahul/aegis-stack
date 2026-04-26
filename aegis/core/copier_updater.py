@@ -13,9 +13,12 @@ from copier import run_update
 from packaging.version import parse
 from pydantic import BaseModel, Field
 
+from aegis.config.defaults import GITHUB_REPO_URL, version_to_git_tag
 from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
 from aegis.core.copier_manager import load_copier_answers
-from aegis.core.post_gen_tasks import run_post_generation_tasks
+from aegis.core.post_gen_tasks import cleanup_components, run_post_generation_tasks
+from aegis.core.template_cleanup import cleanup_nested_project_directory
+from aegis.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +121,8 @@ def update_with_copier_native(
         # We must edit the file directly, then Copier detects the change and regenerates
         answers = load_copier_answers(project_path)
         answers.update(update_data)
+        # Point _src_path to the template root (copier 9.14+ reads src from answers)
+        answers["_src_path"] = f"git+file://{template_root}"
 
         # Save updated answers
         import yaml
@@ -160,9 +165,9 @@ def update_with_copier_native(
         # 5. Use git diff to merge changes
         # 6. Handle conflicts with .rej files or inline markers
         # NOTE: _tasks removed from copier.yml - we run them ourselves below
+        # copier 9.14+ reads _src_path from .copier-answers.yml (set above)
         run_update(
             dst_path=str(project_path),
-            src_path=str(template_root),  # Point to repo root, not subdirectory
             defaults=True,  # Use existing answers as defaults
             overwrite=True,  # Allow overwriting files
             conflict="rej",  # Create .rej files for conflicts
@@ -170,10 +175,25 @@ def update_with_copier_native(
             vcs_ref="HEAD",  # Use latest template version
         )
 
+        # Load answers for cleanup and post-generation tasks
+        answers = load_copier_answers(project_path)
+
+        # Clean up nested directory if Copier created one
+        # This happens when new files are added between template versions
+        # because the template uses {{ project_slug }}/ wrapper
+        project_slug = answers.get("project_slug", "")
+
+        if project_slug:
+            moved_files = cleanup_nested_project_directory(project_path, project_slug)
+            if moved_files:
+                # CRITICAL: Clean up files that shouldn't exist based on component selection
+                # This mirrors what happens during 'aegis init' - the template includes all
+                # files and cleanup_components removes those not selected in answers
+                cleanup_components(project_path, answers)
+
         # CRITICAL: Copy service-specific files for newly-added services
         # Copier can only re-render existing files - it cannot copy new directories
         # that were excluded during initial generation
-        answers = load_copier_answers(project_path)
 
         # Check for services in components_to_add (they start with 'include_')
         # Service names: auth, ai
@@ -196,9 +216,19 @@ def update_with_copier_native(
         # Run post-generation tasks with explicit working directory control
         # This ensures consistent behavior with initial generation
         include_auth = answers.get(AnswerKeys.AUTH, False)
+        include_ai = answers.get(AnswerKeys.AI, False)
+        ai_backend = answers.get(AnswerKeys.AI_BACKEND, "memory")
+        ai_needs_migrations = include_ai and ai_backend != "memory"
+        include_migrations = include_auth or ai_needs_migrations
+        # AI needs seeding when using persistence backend (same condition as migrations)
+        ai_needs_seeding = ai_needs_migrations
 
         # Run shared post-generation tasks
-        run_post_generation_tasks(project_path, include_auth=include_auth)
+        run_post_generation_tasks(
+            project_path,
+            include_migrations=include_migrations,
+            seed_ai=ai_needs_seeding,
+        )
 
         return CopierUpdateResult(
             success=True,
@@ -235,18 +265,85 @@ def get_current_template_commit(project_path: Path) -> str | None:
         return None
 
 
-def get_available_versions(template_root: Path | None = None) -> list[str]:
+def _get_versions_from_github(include_prereleases: bool = False) -> list[str]:
+    """
+    Fetch available versions from GitHub API when not in a git repo.
+
+    Used when running from installed package (pip/uvx) instead of git checkout.
+
+    Args:
+        include_prereleases: Include pre-release versions (rc, alpha, beta, dev)
+
+    Returns:
+        List of version strings sorted by PEP 440 (newest first)
+    """
+    import json
+    import urllib.request
+    from urllib.parse import urlparse
+
+    github_url = GITHUB_REPO_URL
+
+    # Extract owner/repo from GITHUB_REPO_URL (e.g., "lbedner/aegis-stack")
+    parsed = urlparse(github_url)
+    repo_path = parsed.path.strip("/")  # "lbedner/aegis-stack"
+
+    api_url = f"https://api.github.com/repos/{repo_path}/tags?per_page=100"
+
+    try:
+        req = urllib.request.Request(
+            api_url,
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "aegis-stack-cli",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode())
+
+        # Parse tags from API response
+        versions = []
+        for tag_info in data:
+            tag_name = tag_info.get("name", "")
+            if tag_name.startswith("v"):
+                version_str = tag_name[1:]  # Remove 'v' prefix
+                try:
+                    parsed_ver = parse(version_str)
+                    if not include_prereleases and parsed_ver.is_prerelease:
+                        continue
+                    versions.append(version_str)
+                except Exception:
+                    continue
+
+        # Sort by PEP 440 (newest first)
+        versions.sort(key=parse, reverse=True)
+        return versions
+
+    except Exception:
+        return []
+
+
+def get_available_versions(
+    template_root: Path | None = None, include_prereleases: bool = False
+) -> list[str]:
     """
     Get list of available template versions from git tags.
 
+    Falls back to GitHub API when not in a git repository (installed package mode).
+
     Args:
         template_root: Path to template repository (default: auto-detect)
+        include_prereleases: Include pre-release versions (rc, alpha, beta, dev)
 
     Returns:
         List of version strings sorted by PEP 440 (newest first)
     """
     if template_root is None:
         template_root = get_template_root()
+
+    # Check if we're in a git repository
+    if not (template_root / ".git").exists():
+        # Fall back to GitHub API (installed package mode)
+        return _get_versions_from_github(include_prereleases)
 
     try:
         result = subprocess.run(
@@ -263,17 +360,21 @@ def get_available_versions(template_root: Path | None = None) -> list[str]:
             if tag.startswith("v"):
                 version_str = tag[1:]  # Remove 'v' prefix
                 try:
-                    parse(version_str)  # Validate version
+                    parsed_ver = parse(version_str)  # Validate version
+                    # Skip pre-releases (rc, alpha, beta, dev) unless explicitly requested
+                    if not include_prereleases and parsed_ver.is_prerelease:
+                        continue
                     versions.append(version_str)
                 except Exception:
                     continue
 
         # Sort by PEP 440 (newest first)
-        versions.sort(key=lambda v: parse(v), reverse=True)
+        versions.sort(key=parse, reverse=True)
         return versions
 
     except Exception:
-        return []
+        # Fall back to GitHub API on any git error
+        return _get_versions_from_github(include_prereleases)
 
 
 def get_latest_version(template_root: Path | None = None) -> str | None:
@@ -314,31 +415,6 @@ def resolve_ref_to_commit(ref: str, repo_path: Path) -> str | None:
         return None
 
 
-def count_commits_between(from_ref: str, to_ref: str, repo_path: Path) -> int:
-    """
-    Count commits between two git references.
-
-    Args:
-        from_ref: Starting git reference (older commit)
-        to_ref: Ending git reference (newer commit)
-        repo_path: Path to git repository
-
-    Returns:
-        Number of commits between refs, or 0 if unable to count
-    """
-    try:
-        result = subprocess.run(
-            ["git", "rev-list", "--count", f"{from_ref}..{to_ref}"],
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return int(result.stdout.strip())
-    except (subprocess.CalledProcessError, ValueError):
-        return 0
-
-
 def resolve_version_to_ref(
     version: str | None, template_root: Path | None = None
 ) -> str:
@@ -359,7 +435,7 @@ def resolve_version_to_ref(
     if not version or version == "latest":
         latest = get_latest_version(template_root)
         if latest:
-            return f"v{latest}"
+            return version_to_git_tag(latest)
         return "HEAD"
 
     # Check if it's a commit hash (40 hex characters)
@@ -369,16 +445,9 @@ def resolve_version_to_ref(
     # Check if it looks like a version number (add 'v' prefix)
     try:
         parse(version)
-        # Valid version number - check if tag exists
-        tag_name = f"v{version}"
-        result = subprocess.run(
-            ["git", "rev-parse", "--verify", f"refs/tags/{tag_name}"],
-            cwd=template_root,
-            capture_output=True,
-            check=False,
-        )
-        if result.returncode == 0:
-            return tag_name
+        # Valid version number - convert to git tag format
+        # PEP 440 "0.6.0rc1" → git tag "v0.6.0-rc1"
+        return version_to_git_tag(version)
     except Exception:
         pass
 
@@ -437,14 +506,139 @@ def validate_clean_git_tree(project_path: Path) -> tuple[bool, str]:
         )
 
         if result.stdout.strip():
-            return False, "Git tree has uncommitted changes"
+            return False, t("update.dirty_tree")
 
-        return True, "Git tree is clean"
+        return True, t("update.git_clean")
 
     except subprocess.CalledProcessError as e:
         return False, f"Failed to check git status: {e}"
     except Exception as e:
         return False, f"Error checking git status: {e}"
+
+
+def _format_commits_as_changelog(
+    commits: list[tuple[str, str]], github_url: str
+) -> str:
+    """
+    Format a list of (hash, message) commits as a categorized changelog.
+
+    Args:
+        commits: List of (commit_hash, message) tuples
+        github_url: Base GitHub URL for commit links
+
+    Returns:
+        Formatted changelog string
+    """
+    if not commits:
+        return "No changes"
+
+    features: list[tuple[str, str]] = []
+    fixes: list[tuple[str, str]] = []
+    breaking: list[tuple[str, str]] = []
+    other: list[tuple[str, str]] = []
+
+    for commit_hash, message in commits:
+        message_lower = message.lower()
+        if "breaking:" in message_lower or "breaking change" in message_lower:
+            breaking.append((commit_hash, message))
+        elif message.startswith("feat:") or message.startswith("feature:"):
+            features.append((commit_hash, message))
+        elif message.startswith("fix:"):
+            fixes.append((commit_hash, message))
+        else:
+            other.append((commit_hash, message))
+
+    def format_commit(commit_hash: str, message: str) -> str:
+        """Format commit with GitHub link."""
+        if commit_hash:
+            return f"  • {message} ([{commit_hash}]({github_url}/commit/{commit_hash}))"
+        return f"  • {message}"
+
+    lines = []
+
+    if breaking:
+        lines.append(t("update.changelog_breaking"))
+        for commit_hash, message in breaking:
+            lines.append(format_commit(commit_hash, message))
+        lines.append("")
+
+    if features:
+        lines.append(t("update.changelog_features"))
+        for commit_hash, message in features:
+            lines.append(format_commit(commit_hash, message))
+        lines.append("")
+
+    if fixes:
+        lines.append(t("update.changelog_fixes"))
+        for commit_hash, message in fixes:
+            lines.append(format_commit(commit_hash, message))
+        lines.append("")
+
+    if other:
+        lines.append(t("update.changelog_other"))
+        for commit_hash, message in other:
+            lines.append(format_commit(commit_hash, message))
+
+    return "\n".join(lines).strip()
+
+
+def _get_changelog_from_github(from_ref: str, to_ref: str) -> str:
+    """
+    Fetch changelog from GitHub Compare API when not in a git repo.
+
+    Used when running from installed package (pip/uvx) instead of git checkout.
+
+    Args:
+        from_ref: Starting git reference (commit hash)
+        to_ref: Ending git reference (commit, tag, or "HEAD")
+
+    Returns:
+        Formatted changelog string or error message with fallback link
+    """
+    import json
+    import urllib.request
+    from urllib.parse import urlparse
+
+    github_url = GITHUB_REPO_URL
+
+    # Extract owner/repo from GITHUB_REPO_URL (e.g., "lbedner/aegis-stack")
+    parsed = urlparse(github_url)
+    repo_path = parsed.path.strip("/")  # "lbedner/aegis-stack"
+
+    # Normalize refs (HEAD -> main for API)
+    base = from_ref
+    head = "main" if to_ref == "HEAD" else to_ref
+
+    api_url = f"https://api.github.com/repos/{repo_path}/compare/{base}...{head}"
+
+    try:
+        req = urllib.request.Request(
+            api_url,
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "aegis-stack-cli",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode())
+
+        api_commits = data.get("commits", [])
+        if not api_commits:
+            return "No changes"
+
+        # Extract (hash, message) tuples from API response
+        commits = [
+            (c["sha"][:7], c["commit"]["message"].split("\n")[0]) for c in api_commits
+        ]
+
+        return _format_commits_as_changelog(commits, github_url)
+
+    except Exception as e:
+        # Fallback to compare link
+        return (
+            f"Changelog not available: {e}\n"
+            f"View changes: {github_url}/compare/{from_ref}...main"
+        )
 
 
 def get_changelog(from_ref: str, to_ref: str, template_root: Path | None = None) -> str:
@@ -462,15 +656,19 @@ def get_changelog(from_ref: str, to_ref: str, template_root: Path | None = None)
     if template_root is None:
         template_root = get_template_root()
 
+    # Check if we're in a git repository (not installed package mode)
+    if not (template_root / ".git").exists():
+        return _get_changelog_from_github(from_ref, to_ref)
+
     try:
-        # Get commit log between refs
+        # Get commit log between refs (hash|message format for GitHub links)
         result = subprocess.run(
             [
                 "git",
                 "log",
                 "--oneline",
                 "--no-merges",
-                "--pretty=format:%s",
+                "--pretty=format:%h|%s",
                 f"{from_ref}..{to_ref}",
             ],
             cwd=template_root,
@@ -482,51 +680,17 @@ def get_changelog(from_ref: str, to_ref: str, template_root: Path | None = None)
         if not result.stdout.strip():
             return "No changes"
 
-        # Parse commits and categorize
-        commits = result.stdout.strip().split("\n")
-        features = []
-        fixes = []
-        breaking = []
-        other = []
-
-        for commit in commits:
-            commit_lower = commit.lower()
-            if "breaking:" in commit_lower or "breaking change" in commit_lower:
-                breaking.append(commit)
-            elif commit.startswith("feat:") or commit.startswith("feature:"):
-                features.append(commit)
-            elif commit.startswith("fix:"):
-                fixes.append(commit)
+        # Parse commits from git output
+        raw_commits = result.stdout.strip().split("\n")
+        commits = []
+        for line in raw_commits:
+            if "|" in line:
+                commit_hash, message = line.split("|", 1)
             else:
-                other.append(commit)
+                commit_hash, message = "", line
+            commits.append((commit_hash, message))
 
-        # Format changelog
-        lines = []
-
-        if breaking:
-            lines.append("Breaking Changes:")
-            for commit in breaking:
-                lines.append(f"  • {commit}")
-            lines.append("")
-
-        if features:
-            lines.append("New Features:")
-            for commit in features:
-                lines.append(f"  • {commit}")
-            lines.append("")
-
-        if fixes:
-            lines.append("Bug Fixes:")
-            for commit in fixes:
-                lines.append(f"  • {commit}")
-            lines.append("")
-
-        if other:
-            lines.append("Other Changes:")
-            for commit in other:
-                lines.append(f"  • {commit}")
-
-        return "\n".join(lines).strip()
+        return _format_commits_as_changelog(commits, GITHUB_REPO_URL)
 
     except Exception as e:
         return f"Error generating changelog: {e}"
@@ -632,7 +796,7 @@ def get_commit_for_version(
         template_root = get_template_root()
 
     # Ensure version has 'v' prefix
-    tag_name = version if version.startswith("v") else f"v{version}"
+    tag_name = version if version.startswith("v") else version_to_git_tag(version)
 
     try:
         result = subprocess.run(

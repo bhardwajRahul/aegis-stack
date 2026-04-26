@@ -28,16 +28,22 @@ class TestProviderFunctions:
         """
         free_providers = get_free_providers()
 
-        # These comparisons must work (enum in list[enum])
+        # These comparisons must work (enum in list[enum]).
+        # Only OLLAMA (local) and PUBLIC (no API key) are free-tier in
+        # ``PROVIDER_CAPABILITIES``. GROQ/GOOGLE/COHERE previously advertised
+        # free tiers but the capability flags were tightened — their free
+        # offerings are rate-limited or behind signup, so the catalog marks
+        # them paid and we test what's actually shipped.
         assert AIProvider.PUBLIC in free_providers
-        assert AIProvider.GROQ in free_providers
-        assert AIProvider.GOOGLE in free_providers
-        assert AIProvider.COHERE in free_providers
+        assert AIProvider.OLLAMA in free_providers
 
-        # These should NOT be free (paid only)
+        # These should NOT be free (paid / API-key required)
         assert AIProvider.OPENAI not in free_providers
         assert AIProvider.ANTHROPIC not in free_providers
         assert AIProvider.MISTRAL not in free_providers
+        assert AIProvider.GROQ not in free_providers
+        assert AIProvider.GOOGLE not in free_providers
+        assert AIProvider.COHERE not in free_providers
 
     def test_free_providers_string_join(self) -> None:
         """Test that free providers can be joined as strings for display."""
@@ -48,7 +54,7 @@ class TestProviderFunctions:
 
         assert isinstance(providers_list, str)
         assert "public" in providers_list
-        assert "groq" in providers_list
+        assert "ollama" in providers_list
 
     def test_get_provider_capabilities_public(self) -> None:
         """Test capabilities for PUBLIC provider."""
@@ -72,11 +78,16 @@ class TestProviderFunctions:
         assert caps.supports_vision is True
 
     def test_get_provider_capabilities_groq(self) -> None:
-        """Test capabilities for Groq provider (free tier)."""
+        """Test capabilities for Groq provider.
+
+        Groq's free tier is rate-limited/signup-gated, so ``PROVIDER_CAPABILITIES``
+        marks it paid. This test pins that intent so a casual flag flip
+        doesn't drift the catalog silently.
+        """
         caps = get_provider_capabilities(AIProvider.GROQ)
 
         assert caps.provider == AIProvider.GROQ
-        assert caps.free_tier_available is True
+        assert caps.free_tier_available is False
         assert caps.supports_streaming is True
 
     def test_all_providers_have_capabilities(self) -> None:

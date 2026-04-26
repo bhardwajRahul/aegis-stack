@@ -68,9 +68,10 @@ AVAILABLE COMPONENTS
 Infrastructure Components
 ----------------------------------------
   scheduler     - APScheduler-based async task scheduling
-  worker        - Pure arq worker with multiple queues (requires: redis)
-  database      - SQLite database with SQLModel ORM
+  worker        - Background task processing (arq, Dramatiq, or TaskIQ) (requires: redis)
+  database      - SQLite or PostgreSQL with SQLModel ORM
   redis         - Redis cache and message broker
+  observability - Logfire observability, tracing, and metrics
 ```
 
 ### aegis services
@@ -152,18 +153,22 @@ aegis init my-app --services auth --components database --no-interactive --outpu
 |-----------|--------|-------------|
 | `scheduler` | ✅ Available | APScheduler-based async task scheduling |
 | `scheduler[sqlite]` | ✅ Available | Scheduler with SQLite persistence (auto-adds database) |
-| `worker` | ✅ Available | arq worker with Redis for background processing (auto-adds redis) |
-| `database` | ✅ Available | SQLite database with SQLModel ORM |
+| `worker` | ✅ Available | Background task worker (arq, TaskIQ, or Dramatiq) with Redis for background processing (auto-adds redis) |
+| `database` | ✅ Available | SQLite or PostgreSQL with SQLModel ORM |
 | `redis` | ✅ Available | Redis cache and message broker |
+| `ingress` | ✅ Available | Traefik reverse proxy with auto-discovery and admin protection |
+| `observability` | ✅ Available | Logfire observability, tracing, and metrics |
 | `cache` | 🚧 Coming Soon | Redis-based async caching layer |
 
 **Available Services:**
 
 | Service | Status | Description | Required Components |
 |---------|--------|-------------|---------------------|
-| `auth` | ✅ Available | User authentication with JWT tokens | backend, database |
 | `ai` | 🧪 Experimental | AI chatbot with 7 provider options | backend |
+| `auth` | ✅ Available | User authentication with JWT tokens | backend, database |
 | `comms` | 🧪 Experimental | Email (Resend), SMS & voice (Twilio) | backend |
+| `insights` | 🧪 Experimental | Adoption metrics (GitHub, PyPI, Plausible, Reddit) | backend, database, scheduler |
+| `payment` | 🧪 Experimental | Stripe checkout, subscriptions, refunds, disputes | backend, database |
 
 **Service Auto-Resolution:**
 
@@ -329,8 +334,9 @@ AI_PROVIDER=public  # Options: public, openai, anthropic, google, groq, mistral,
 
 Test the AI service:
 ```bash
+my-project ai status               # Check configuration
 my-project ai chat                 # Start interactive chat
-my-project ai providers list       # See all available providers
+my-project ai providers            # See all available providers
 ```
 
 **Important Notes:**
@@ -461,10 +467,275 @@ aegis update --force --yes
 
 **Important Notes:**
 
-- **Cookiecutter projects cannot use this command** - Copier only
 - **Always commit before updating**: `git add . && git commit -m "Pre-update checkpoint"`
 - **Test after updating**: Run `make check` to verify everything works
 - Use `--dry-run` first to preview changes
+
+---
+
+## Deployment Commands
+
+Commands for deploying your project to a remote server. See the **[Deployment Guide](deployment/index.md)** for full workflows and examples.
+
+### aegis deploy-init
+
+Initialize deployment configuration for a project.
+
+**Usage:**
+```bash
+aegis deploy-init [OPTIONS]
+```
+
+**Options:**
+
+- `--host, -h TEXT` — Server IP address or hostname
+- `--user, -u TEXT` — SSH user for deployment (default: `root`)
+- `--path, -p TEXT` — Deployment path on server (default: `/opt/{project-name}`)
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-init --host 192.168.1.100
+aegis deploy-init --host myserver.com --user deploy
+```
+
+---
+
+### aegis deploy-setup
+
+Provision a remote server for deployment. Installs Docker, configures firewall, and prepares the server.
+
+**Usage:**
+```bash
+aegis deploy-setup [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-setup
+```
+
+---
+
+### aegis deploy
+
+Deploy the project to the configured server. Creates a backup, syncs files, builds Docker images, starts services, and runs a health check. Auto-rollback on failure.
+
+**Usage:**
+```bash
+aegis deploy [OPTIONS]
+```
+
+**Options:**
+
+- `--build / --no-build` — Build images before deploying (default: `--build`)
+- `--backup / --no-backup` — Create backup before deploying (default: `--backup`)
+- `--health-check / --no-health-check` — Run health check after deploying (default: `--health-check`)
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy
+aegis deploy --no-build
+aegis deploy --no-backup --no-health-check
+```
+
+---
+
+### aegis deploy-backup
+
+Create a backup of the currently deployed application on the remote server.
+
+**Usage:**
+```bash
+aegis deploy-backup [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-backup
+```
+
+---
+
+### aegis deploy-backups
+
+List available deployment backups with timestamps, sizes, and database dump status.
+
+**Usage:**
+```bash
+aegis deploy-backups [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-backups
+```
+
+---
+
+### aegis deploy-rollback
+
+Rollback to a previous deployment backup. Uses the latest backup if none specified.
+
+**Usage:**
+```bash
+aegis deploy-rollback [OPTIONS]
+```
+
+**Options:**
+
+- `--backup, -b TEXT` — Backup timestamp to rollback to (default: latest)
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-rollback
+aegis deploy-rollback --backup 2026-03-11_183045
+```
+
+---
+
+### aegis deploy-logs
+
+View logs from the deployed application.
+
+**Usage:**
+```bash
+aegis deploy-logs [OPTIONS]
+```
+
+**Options:**
+
+- `--follow / --no-follow, -f` — Follow log output (default: `--follow`)
+- `--service, -s TEXT` — Show logs for a specific service
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-logs
+aegis deploy-logs --no-follow
+aegis deploy-logs --service webserver
+```
+
+---
+
+### aegis deploy-status
+
+Check the status of deployed services.
+
+**Usage:**
+```bash
+aegis deploy-status [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-status
+```
+
+---
+
+### aegis deploy-stop
+
+Stop all deployed services.
+
+**Usage:**
+```bash
+aegis deploy-stop [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-stop
+```
+
+---
+
+### aegis deploy-restart
+
+Restart all deployed services.
+
+**Usage:**
+```bash
+aegis deploy-restart [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-restart
+```
+
+---
+
+### aegis deploy-shell
+
+Open a shell in a deployed container.
+
+**Usage:**
+```bash
+aegis deploy-shell [OPTIONS]
+```
+
+**Options:**
+
+- `--service, -s TEXT` — Service to connect to (default: `webserver`)
+- `--project-path TEXT` — Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-shell
+aegis deploy-shell --service redis
+```
+
+---
+
+### aegis ingress-enable
+
+Enable TLS (HTTPS) on a project with the ingress component. Configures Let's Encrypt certificates via Traefik.
+
+**Usage:**
+```bash
+aegis ingress-enable [OPTIONS]
+```
+
+**Options:**
+
+- `--domain, -d TEXT` — Domain name for TLS certificate (e.g., `example.com`)
+- `--email, -e TEXT` — Email for Let's Encrypt certificate notifications
+- `--project-path, -p TEXT` — Path to the project (default: current directory)
+- `--yes, -y` — Skip confirmation prompts
+
+**Examples:**
+```bash
+aegis ingress-enable --domain example.com --email admin@example.com
+aegis ingress-enable -d example.com -e admin@example.com -y
+aegis ingress-enable  # interactive prompts
+```
 
 ---
 
@@ -499,16 +770,30 @@ my-app tasks history    # View execution history
 
 **→ [Complete Scheduler CLI Reference](components/scheduler/cli.md)**
 
-**Worker** - Native `arq` CLI
+**Worker** - Backend-specific CLI
 
-Background task processing with Redis-backed queues:
+Background task processing with Redis-backed queues. Commands depend on your selected backend:
 
+**arq (default):**
 ```bash
-arq my_project.components.worker.WorkerSettings  # Start worker
-arq --watch my_project.components.worker.WorkerSettings  # Auto-reload
+arq my_project.components.worker.queues.system.WorkerSettings   # Start worker
+arq --watch my_project.components.worker.queues.system.WorkerSettings  # Auto-reload
 ```
 
-**→ [Complete Worker CLI Reference](components/worker/cli.md)**
+**Dramatiq:**
+```bash
+dramatiq app.components.worker.broker \
+  app.components.worker.queues.system \
+  app.components.worker.queues.load_test \
+  --queues system load_test
+```
+
+**TaskIQ:**
+```bash
+taskiq worker app.components.worker.queues.system:broker
+```
+
+**→ [Complete Worker CLI Reference](components/worker/index.md#cli-commands)**
 
 ### Service CLIs
 
@@ -531,10 +816,12 @@ my-app auth list-users         # List all users
 Multi-provider AI chat interface with conversation management:
 
 ```bash
+my-app ai status               # Show configuration and validation
+my-app ai providers            # List all 7 AI providers
+my-app ai chat "Hello"         # Send single message
 my-app ai chat                 # Interactive chat session
-my-app ai chat send "Hello"    # Send single message
-my-app ai config show          # View AI configuration
-my-app ai providers list       # List all 7 AI providers
+my-app ai conversations        # List user conversations
+my-app ai history <id>         # View conversation history
 ```
 
 **→ [Complete AI CLI Reference](services/ai/cli.md)**
@@ -552,12 +839,16 @@ my-project/
 │   │   ├── backend/        # FastAPI backend
 │   │   ├── frontend/       # Flet frontend
 │   │   ├── scheduler.py    # APScheduler (if included)
-│   │   ├── worker/         # arq worker queues (if included)
+│   │   ├── worker/         # Worker queues (if included)
 │   │   └── database.py     # Database setup (if included)
 │   ├── core/              # Framework utilities
 │   ├── services/          # Business logic
 │   ├── cli/               # CLI commands (if services added)
 │   └── integrations/      # App composition
+├── traefik/               # Traefik config (if ingress included)
+│   └── traefik.yml        # Traefik static configuration
+├── scripts/               # Deployment scripts (if ingress included)
+│   └── server-setup.sh    # Server provisioning
 ├── tests/                 # Test suite
 ├── docs/                  # Documentation
 ├── data/                  # SQLite databases (if database included)
