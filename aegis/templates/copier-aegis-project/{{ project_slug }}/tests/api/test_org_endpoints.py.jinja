@@ -1,0 +1,598 @@
+"""
+Tests for organization API endpoints.
+
+Tests the org CRUD and membership management endpoints,
+including bulk member operations.
+"""
+{% if include_auth_org %}
+
+from fastapi import status
+from fastapi.testclient import TestClient
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.config import settings
+from app.core.security import create_access_token
+from app.models.org import OrgCreate, ORG_ROLE_OWNER
+from app.models.user import UserCreate
+from app.services.auth.membership_service import MembershipService
+from app.services.auth.org_service import OrgService
+from app.services.auth.user_service import UserService
+
+
+@pytest.fixture(autouse=False)
+def _enable_auth():
+    """Enable auth for tests that need real auth checks."""
+    original = settings.AUTH_ENABLED
+    settings.AUTH_ENABLED = True
+    yield
+    settings.AUTH_ENABLED = original
+
+
+# ---------------------------------------------------------------------------
+# Shared fixtures used by the newer TestMemberDetails / TestOwnershipTransfer
+# classes. The older classes inline these as private methods
+# (``_setup_org_with_owner`` / ``_create_users``); both patterns coexist.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def setup_org_with_owner(async_db_session: AsyncSession):
+    """Async factory: create a user + org + owner membership + token."""
+
+    async def _factory(email: str = "owner@test.com", slug: str = "test-org"):
+        user_service = UserService(async_db_session)
+        user = await user_service.create_user(
+            UserCreate(email=email, full_name="Owner", password="password123")
+        )
+        org_service = OrgService(async_db_session)
+        org = await org_service.create_org(OrgCreate(name="Test Org", slug=slug))
+        membership_service = MembershipService(async_db_session)
+        await membership_service.add_member(org.id, user.id, role=ORG_ROLE_OWNER)
+        token = create_access_token(data={"sub": user.email})
+        return user, org, token
+
+    return _factory
+
+
+@pytest.fixture
+def create_user(async_db_session: AsyncSession):
+    """Async factory: create and return a test user by email."""
+
+    async def _factory(email: str, full_name: str = "Test User"):
+        user_service = UserService(async_db_session)
+        return await user_service.create_user(
+            UserCreate(email=email, full_name=full_name, password="password123")
+        )
+
+    return _factory
+
+
+@pytest.fixture
+def create_user_with_token(async_db_session: AsyncSession):
+    """Async factory: create a user and return ``(user, token)``."""
+
+    async def _factory(email: str, full_name: str = "Test User"):
+        user_service = UserService(async_db_session)
+        user = await user_service.create_user(
+            UserCreate(email=email, full_name=full_name, password="password123")
+        )
+        token = create_access_token(data={"sub": user.email})
+        return user, token
+
+    return _factory
+
+
+class TestBulkAddMembersEndpoint:
+    """Test POST /{org_id}/members/bulk endpoint."""
+
+    async def _setup_org_with_owner(
+        self, db: AsyncSession
+    ) -> tuple:
+        """Create a user, org, and make the user the owner.
+
+        Returns (user, org, token).
+        """
+        user_service = UserService(db)
+        user = await user_service.create_user(
+            UserCreate(email="owner@test.com", full_name="Owner", password="password123")
+        )
+        org_service = OrgService(db)
+        org = await org_service.create_org(OrgCreate(name="Test Org", slug="test-org"))
+        membership_service = MembershipService(db)
+        await membership_service.add_member(org.id, user.id, role=ORG_ROLE_OWNER)
+        token = create_access_token(data={"sub": user.email})
+        return user, org, token
+
+    async def _create_users(
+        self, db: AsyncSession, count: int, prefix: str = "member"
+    ) -> list:
+        """Create multiple test users."""
+        user_service = UserService(db)
+        users = []
+        for i in range(count):
+            user = await user_service.create_user(
+                UserCreate(
+                    email=f"{prefix}{i}@test.com",
+                    full_name=f"User {i}",
+                    password="password123",
+                )
+            )
+            users.append(user)
+        return users
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Test bulk adding multiple users to an organization."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+        users = await self._create_users(async_db_session, 3)
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/members/bulk",
+            json={"user_ids": [u.id for u in users]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        assert len(data) == 3
+        added_user_ids = {m["user_id"] for m in data}
+        for u in users:
+            assert u.id in added_user_ids
+        assert all(m["role"] == "member" for m in data)
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_with_role(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Test bulk adding members with a custom role."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+        users = await self._create_users(async_db_session, 2, prefix="admin")
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/members/bulk",
+            json={"user_ids": [u.id for u in users], "role": "admin"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        assert len(data) == 2
+        assert all(m["role"] == "admin" for m in data)
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_skips_existing(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Test that bulk add skips users who are already members."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+        users = await self._create_users(async_db_session, 4, prefix="skip")
+
+        # Add first two individually
+        membership_service = MembershipService(async_db_session)
+        await membership_service.add_member(org.id, users[0].id)
+        await membership_service.add_member(org.id, users[1].id)
+
+        # Bulk add all four
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/members/bulk",
+            json={"user_ids": [u.id for u in users]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        assert len(data) == 2
+        added_user_ids = {m["user_id"] for m in data}
+        assert users[2].id in added_user_ids
+        assert users[3].id in added_user_ids
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_empty_list(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Test bulk add with empty user_ids returns empty list."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/members/bulk",
+            json={"user_ids": []},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.json() == []
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_invalid_role(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Test bulk add with invalid role returns 400."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/members/bulk",
+            json={"user_ids": [1], "role": "superadmin"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Invalid role" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_delete_org_with_members(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Test deleting an org with members cascades to remove members."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+        users = await self._create_users(async_db_session, 3, prefix="delapi")
+
+        # Add members
+        async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/members/bulk",
+            json={"user_ids": [u.id for u in users]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # Delete org
+        response = async_client_with_db.delete(
+            f"/api/v1/orgs/{org.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+
+        # Org should be gone
+        response = async_client_with_db.get(
+            f"/api/v1/orgs/{org.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.usefixtures("_enable_auth")
+class TestOrgContextIsolation:
+    """Test org-scoped access control (AUTH-011)."""
+
+    async def _setup(self, db: AsyncSession) -> tuple:
+        """Create owner + org + token. Returns (user, org, token)."""
+        user_service = UserService(db)
+        user = await user_service.create_user(
+            UserCreate(email="orgctx-owner@test.com", full_name="Owner", password="password123")
+        )
+        org_service = OrgService(db)
+        org = await org_service.create_org(OrgCreate(name="Ctx Org", slug="ctx-org"))
+        membership_service = MembershipService(db)
+        await membership_service.add_member(org.id, user.id, role=ORG_ROLE_OWNER)
+        token = create_access_token(data={"sub": user.email, "role": "user"})
+        return user, org, token
+
+    @pytest.mark.asyncio
+    async def test_member_can_access_org(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """A member of the org can access org details."""
+        _, org, token = await self._setup(async_db_session)
+
+        response = async_client_with_db.get(
+            f"/api/v1/orgs/{org.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["slug"] == "ctx-org"
+
+    @pytest.mark.asyncio
+    async def test_non_member_cannot_access_org(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """A non-member cannot access org details."""
+        _, org, _ = await self._setup(async_db_session)
+
+        # Create a different user who is NOT a member
+        user_service = UserService(async_db_session)
+        outsider = await user_service.create_user(
+            UserCreate(email="outsider@test.com", full_name="Outsider", password="password123")
+        )
+        outsider_token = create_access_token(data={"sub": outsider.email, "role": "user"})
+
+        response = async_client_with_db.get(
+            f"/api/v1/orgs/{org.id}",
+            headers={"Authorization": f"Bearer {outsider_token}"},
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_nonexistent_org_returns_404(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Accessing a nonexistent org returns 404."""
+        _, _, token = await self._setup(async_db_session)
+
+        response = async_client_with_db.get(
+            "/api/v1/orgs/99999",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+class TestInviteEndpoints:
+    """Test invite API endpoints (AUTH-013)."""
+
+    async def _setup_org_with_owner(self, db: AsyncSession) -> tuple:
+        """Create owner + org + token."""
+        user_service = UserService(db)
+        user = await user_service.create_user(
+            UserCreate(email="inv-api-owner@test.com", full_name="Owner", password="password123")
+        )
+        org_service = OrgService(db)
+        org = await org_service.create_org(OrgCreate(name="Invite Org", slug="invite-org"))
+        membership_service = MembershipService(db)
+        await membership_service.add_member(org.id, user.id, role=ORG_ROLE_OWNER)
+        token = create_access_token(data={"sub": user.email})
+        return user, org, token
+
+    @pytest.mark.asyncio
+    async def test_create_invite(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Create an invite for a new email."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/invites",
+            json={"email": "newinvitee@test.com", "role": "member"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        assert data["email"] == "newinvitee@test.com"
+        assert data["status"] == "pending"
+
+    @pytest.mark.asyncio
+    async def test_invite_existing_user_auto_accepts(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Inviting an existing user immediately adds them."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+
+        user_service = UserService(async_db_session)
+        await user_service.create_user(
+            UserCreate(email="existinginv@test.com", full_name="Existing", password="password123")
+        )
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/invites",
+            json={"email": "existinginv@test.com", "role": "admin"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.json()["status"] == "accepted"
+
+    @pytest.mark.skip(
+        reason=(
+            "Flaky: same DB-session isolation issue as "
+            "``test_user_persistence_across_requests`` in test_auth_endpoints. "
+            "Passes alone, 401s on the register-then-login handshake when "
+            "run with siblings. Audit pending."
+        )
+    )
+    @pytest.mark.asyncio
+    async def test_register_accepts_pending_invite(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Registering with a pending invite auto-adds to org."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+
+        async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/invites",
+            json={"email": "willregister@test.com"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        response = async_client_with_db.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "willregister@test.com",
+                "full_name": "New User",
+                "password": "password123",
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        new_user_id = response.json()["id"]
+
+        membership_service = MembershipService(async_db_session)
+        member = await membership_service.get_member(org.id, new_user_id)
+        assert member is not None
+        assert member.role == "member"
+
+    @pytest.mark.asyncio
+    async def test_list_pending_invites(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """List pending invites for an org."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+
+        for email in ["list1@test.com", "list2@test.com"]:
+            async_client_with_db.post(
+                f"/api/v1/orgs/{org.id}/invites",
+                json={"email": email},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+        response = async_client_with_db.get(
+            f"/api/v1/orgs/{org.id}/invites",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.json()) == 2
+
+    @pytest.mark.asyncio
+    async def test_duplicate_invite_returns_400(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Cannot invite the same email twice."""
+        _, org, token = await self._setup_org_with_owner(async_db_session)
+
+        async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/invites",
+            json={"email": "dup-api@test.com"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/invites",
+            json={"email": "dup-api@test.com"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.usefixtures("_enable_auth")
+class TestMemberDetails:
+    """Test GET /orgs/{org_id}/members/details."""
+
+    @pytest.mark.asyncio
+    async def test_org_admin_can_get_member_details(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession,
+        setup_org_with_owner, create_user,
+    ) -> None:
+        """Org admin can see member emails and names."""
+        _, org, token = await setup_org_with_owner(
+            email="det-owner@test.com", slug="det-org"
+        )
+        member = await create_user("det-member@test.com")
+        membership_service = MembershipService(async_db_session)
+        await membership_service.add_member(org.id, member.id)
+
+        response = async_client_with_db.get(
+            f"/api/v1/orgs/{org.id}/members/details",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data) >= 2
+        emails = {m["email"] for m in data}
+        assert "det-member@test.com" in emails
+
+    @pytest.mark.asyncio
+    async def test_non_member_cannot_get_member_details(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession,
+        setup_org_with_owner, create_user_with_token,
+    ) -> None:
+        """Non-member cannot see org member details."""
+        _, org, _ = await setup_org_with_owner(
+            email="det2-owner@test.com", slug="det2-org"
+        )
+        _, outsider_token = await create_user_with_token("det2-outsider@test.com")
+
+        response = async_client_with_db.get(
+            f"/api/v1/orgs/{org.id}/members/details",
+            headers={"Authorization": f"Bearer {outsider_token}"},
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.usefixtures("_enable_auth")
+class TestOwnershipTransfer:
+    """Test POST /orgs/{org_id}/transfer-ownership."""
+
+    @pytest.mark.asyncio
+    async def test_owner_can_transfer(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession,
+        setup_org_with_owner, create_user,
+    ) -> None:
+        """Owner transfers ownership to an admin member."""
+        owner, org, token = await setup_org_with_owner(
+            email="xfer-owner@test.com", slug="xfer-org"
+        )
+        admin = await create_user("xfer-admin@test.com")
+        membership_service = MembershipService(async_db_session)
+        await membership_service.add_member(org.id, admin.id, role="admin")
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/transfer-ownership",
+            json={"user_id": admin.id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+
+        new_owner = await membership_service.get_member(org.id, admin.id)
+        assert new_owner.role == "owner"
+
+        old_owner = await membership_service.get_member(org.id, owner.id)
+        assert old_owner.role == "admin"
+
+    @pytest.mark.asyncio
+    async def test_non_owner_cannot_transfer(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession,
+        setup_org_with_owner, create_user_with_token,
+    ) -> None:
+        """Admin cannot transfer ownership."""
+        _, org, _ = await setup_org_with_owner(
+            email="xfer2-owner@test.com", slug="xfer2-org"
+        )
+        admin, admin_token = await create_user_with_token("xfer2-admin@test.com")
+        membership_service = MembershipService(async_db_session)
+        await membership_service.add_member(org.id, admin.id, role="admin")
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/transfer-ownership",
+            json={"user_id": admin.id},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_transfer_to_non_member_fails(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession,
+        setup_org_with_owner, create_user,
+    ) -> None:
+        """Cannot transfer to someone who isn't a member."""
+        _, org, token = await setup_org_with_owner(
+            email="xfer3-owner@test.com", slug="xfer3-org"
+        )
+        outsider = await create_user("xfer3-outsider@test.com")
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/transfer-ownership",
+            json={"user_id": outsider.id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    @pytest.mark.asyncio
+    async def test_self_transfer_fails(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession,
+        setup_org_with_owner,
+    ) -> None:
+        """Cannot transfer ownership to yourself."""
+        owner, org, token = await setup_org_with_owner(
+            email="xfer4-owner@test.com", slug="xfer4-org"
+        )
+
+        response = async_client_with_db.post(
+            f"/api/v1/orgs/{org.id}/transfer-ownership",
+            json={"user_id": owner.id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "yourself" in response.json()["detail"].lower()
+{% else %}
+# Organization endpoint tests not included (auth_level != org)
+{% endif %}

@@ -6,7 +6,9 @@ Add your own jobs by importing service functions and calling scheduler.add_job()
 """
 
 import asyncio
+from typing import Any
 
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, EVENT_JOB_MISSED
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 {% if scheduler_backend != "memory" %}
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -16,11 +18,70 @@ from app.services.system.backup import backup_database_job
 {% elif include_scheduler and include_database %}
 from app.services.system.backup import backup_database_job
 {% endif %}
+{% if include_ai and ai_backend != "memory" %}
+from app.services.ai.jobs import sync_llm_catalog_job
+{% endif %}
+{% if include_insights %}
+{% if insights_github %}
+from app.services.insights.jobs import collect_github_events_job, collect_github_stars_job, collect_github_traffic_job
+{% endif %}
+{% if insights_pypi %}
+from app.services.insights.jobs import collect_pypi_job
+{% endif %}
+{% if insights_plausible %}
+from app.services.insights.jobs import collect_plausible_job
+{% endif %}
+{% endif %}
 
 from app.core.config import settings
 from app.core.log import logger
+from app.services.system import activity
 
 {% if scheduler_backend != "memory" %}
+
+def _cleanup_stale_jobs() -> None:
+    """Remove persisted jobs whose func_ref can no longer be imported.
+
+    This handles Docker volumes persisting jobs from a previous project
+    configuration (e.g., AI service was enabled before but isn't now).
+    """
+    import pickle
+
+    from sqlmodel import text
+
+    try:
+        with db_session() as session:
+            rows = session.exec(
+                text("SELECT id, job_state FROM apscheduler_jobs")
+            ).fetchall()
+
+        stale_ids: list[str] = []
+        for job_id, job_state_bytes in rows:
+            try:
+                state = pickle.loads(job_state_bytes)
+                func_ref = state.get("func", "")
+                if ":" in func_ref:
+                    module_name = func_ref.split(":")[0]
+                    __import__(module_name)
+            except (ImportError, ModuleNotFoundError):
+                stale_ids.append(job_id)
+            except Exception:
+                pass
+
+        if stale_ids:
+            with db_session(autocommit=True) as session:
+                for job_id in stale_ids:
+                    session.exec(
+                        text("DELETE FROM apscheduler_jobs WHERE id = :id"),
+                        params={"id": job_id},
+                    )
+            logger.warning(
+                f"Removed {len(stale_ids)} stale scheduled job(s) "
+                f"from persistent store: {stale_ids}"
+            )
+    except Exception as e:
+        logger.debug(f"Stale job cleanup skipped: {e}")
+
 
 def _job_exists_in_database(job_id: str) -> bool:
     """Check if a job already exists in the persistence database using SQLModel."""
@@ -49,14 +110,33 @@ def create_scheduler() -> AsyncIOScheduler:
     # Ensure database is initialized before creating jobstore
     init_database()
 
+    # Clean up stale jobs from persistent store before loading
+    # (handles Docker volume persisting jobs from a previous project config)
+    _cleanup_stale_jobs()
+
     # Configure SQLAlchemy jobstore for persistence
     jobstore = SQLAlchemyJobStore(engine=engine, tablename='apscheduler_jobs')
     jobstores = {'default': jobstore}
-    scheduler = AsyncIOScheduler(jobstores=jobstores)
-    logger.info("Scheduler using SQLite database for job persistence")
+    # misfire_grace_time=None: always run missed jobs when the scheduler wakes
+    # (host sleep, container pause, deploy gap). Assumes jobs are idempotent.
+    # coalesce=True collapses multiple missed runs into a single catch-up.
+    job_defaults = {"misfire_grace_time": None, "coalesce": True}
+    scheduler = AsyncIOScheduler(
+        jobstores=jobstores,
+        job_defaults=job_defaults,
+        timezone=settings.SCHEDULER_TIMEZONE,
+    )
+    logger.info("Scheduler using {{ scheduler_backend }} database for job persistence")
 {% else %}
     # Use in-memory jobstore (default)
-    scheduler = AsyncIOScheduler()
+    # misfire_grace_time=None: always run missed jobs when the scheduler wakes
+    # (host sleep, container pause, deploy gap). Assumes jobs are idempotent.
+    # coalesce=True collapses multiple missed runs into a single catch-up.
+    job_defaults = {"misfire_grace_time": None, "coalesce": True}
+    scheduler = AsyncIOScheduler(
+        job_defaults=job_defaults,
+        timezone=settings.SCHEDULER_TIMEZONE,
+    )
     logger.info(
         "Scheduler running in memory mode (jobs won't persist across restarts)"
     )
@@ -78,6 +158,20 @@ def create_scheduler() -> AsyncIOScheduler:
 {% if scheduler_backend != "memory" or (include_scheduler and include_database) %}
     # Check config flag for force updates (useful during deployments)
     force_update = settings.SCHEDULER_FORCE_UPDATE
+{% if scheduler_backend != "memory" %}
+    if force_update:
+        # Wipe persisted jobs so each add_job below INSERTs cleanly.
+        # APScheduler's replace_existing=True catches IntegrityError Python-side
+        # but the failed INSERT still logs as a DB ERROR, making real errors
+        # hard to spot. DELETE FROM (portable across Postgres/SQLite/MySQL)
+        # avoids the noise entirely.
+        from sqlmodel import text
+
+        with db_session(autocommit=True) as session:
+            session.exec(text("DELETE FROM apscheduler_jobs"))
+        logger.info("SCHEDULER_FORCE_UPDATE=true: wiped apscheduler_jobs table")
+{% endif %}
+
     # Database backup job (runs daily at 2 AM when database is available)
     job_id = "database_backup"
 {% if scheduler_backend != "memory" %}
@@ -119,6 +213,236 @@ def create_scheduler() -> AsyncIOScheduler:
 {% endif %}
 {% endif %}
 
+{% if include_ai and ai_backend != "memory" %}
+    # LLM catalog sync job (runs every 6 hours)
+    job_id = "llm_sync"
+{% if scheduler_backend != "memory" %}
+    job_exists = _job_exists_in_database(job_id)
+{% else %}
+    existing_job = scheduler.get_job(job_id)
+    job_exists = existing_job is not None
+{% endif %}
+
+    if not job_exists or force_update:
+        if job_exists and force_update:
+            logger.info(f"Force updating job '{job_id}' from code configuration")
+        else:
+            logger.info(f"Adding new job '{job_id}'")
+
+        scheduler.add_job(
+            sync_llm_catalog_job,
+            trigger="interval",
+            hours=6,
+            id=job_id,
+            name="LLM Catalog Sync",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+        )
+    else:
+{% if scheduler_backend != "memory" %}
+        msg = f"Job '{job_id}' exists in database, preserving current configuration"
+        logger.info(msg)
+{% else %}
+        logger.info(
+            f"Job '{job_id}' exists, preserving current configuration: "
+            f"{existing_job.trigger}"
+        )
+{% endif %}
+{% endif %}
+
+{% if include_insights %}
+{% if insights_github %}
+    # Insight: GitHub traffic collection
+    job_id = "insight_github_traffic"
+{% if scheduler_backend != "memory" %}
+    job_exists = _job_exists_in_database(job_id)
+{% else %}
+    existing_job = scheduler.get_job(job_id)
+    job_exists = existing_job is not None
+{% endif %}
+
+    if not job_exists or force_update:
+        if job_exists and force_update:
+            logger.info(f"Force updating job '{job_id}' from code configuration")
+        else:
+            logger.info(f"Adding new job '{job_id}'")
+
+        scheduler.add_job(
+            collect_github_traffic_job,
+            trigger="cron",
+            hour=12,
+            minute=0,
+            id=job_id,
+            name="Insight: GitHub Traffic",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+        )
+    else:
+{% if scheduler_backend != "memory" %}
+        msg = f"Job '{job_id}' exists in database, preserving current configuration"
+        logger.info(msg)
+{% else %}
+        logger.info(
+            f"Job '{job_id}' exists, preserving current configuration: "
+            f"{existing_job.trigger}"
+        )
+{% endif %}
+
+    # Insight: GitHub stars collection (daily)
+    job_id = "insight_github_stars"
+{% if scheduler_backend != "memory" %}
+    job_exists = _job_exists_in_database(job_id)
+{% else %}
+    existing_job = scheduler.get_job(job_id)
+    job_exists = existing_job is not None
+{% endif %}
+
+    if not job_exists or force_update:
+        if job_exists and force_update:
+            logger.info(f"Force updating job '{job_id}' from code configuration")
+        else:
+            logger.info(f"Adding new job '{job_id}'")
+
+        scheduler.add_job(
+            collect_github_stars_job,
+            trigger="cron",
+            hour=12,
+            minute=0,
+            id=job_id,
+            name="Insight: GitHub Stars",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+        )
+    else:
+{% if scheduler_backend != "memory" %}
+        msg = f"Job '{job_id}' exists in database, preserving current configuration"
+        logger.info(msg)
+{% else %}
+        logger.info(
+            f"Job '{job_id}' exists, preserving current configuration: "
+            f"{existing_job.trigger}"
+        )
+{% endif %}
+
+    # Insight: GitHub events collection (daily via ClickHouse)
+    job_id = "insight_github_events"
+{% if scheduler_backend != "memory" %}
+    job_exists = _job_exists_in_database(job_id)
+{% else %}
+    existing_job = scheduler.get_job(job_id)
+    job_exists = existing_job is not None
+{% endif %}
+
+    if not job_exists or force_update:
+        if job_exists and force_update:
+            logger.info(f"Force updating job '{job_id}' from code configuration")
+        else:
+            logger.info(f"Adding new job '{job_id}'")
+
+        scheduler.add_job(
+            collect_github_events_job,
+            trigger="cron",
+            hour=12,
+            minute=0,
+            id=job_id,
+            name="Insight: GitHub Events",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+        )
+    else:
+{% if scheduler_backend != "memory" %}
+        msg = f"Job '{job_id}' exists in database, preserving current configuration"
+        logger.info(msg)
+{% else %}
+        logger.info(
+            f"Job '{job_id}' exists, preserving current configuration: "
+            f"{existing_job.trigger}"
+        )
+{% endif %}
+{% endif %}
+
+{% if insights_pypi %}
+    # Insight: PyPI downloads collection
+    job_id = "insight_pypi"
+{% if scheduler_backend != "memory" %}
+    job_exists = _job_exists_in_database(job_id)
+{% else %}
+    existing_job = scheduler.get_job(job_id)
+    job_exists = existing_job is not None
+{% endif %}
+
+    if not job_exists or force_update:
+        if job_exists and force_update:
+            logger.info(f"Force updating job '{job_id}' from code configuration")
+        else:
+            logger.info(f"Adding new job '{job_id}'")
+
+        scheduler.add_job(
+            collect_pypi_job,
+            trigger="cron",
+            hour=18,
+            minute=0,
+            id=job_id,
+            name="Insight: PyPI Downloads",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+        )
+    else:
+{% if scheduler_backend != "memory" %}
+        msg = f"Job '{job_id}' exists in database, preserving current configuration"
+        logger.info(msg)
+{% else %}
+        logger.info(
+            f"Job '{job_id}' exists, preserving current configuration: "
+            f"{existing_job.trigger}"
+        )
+{% endif %}
+{% endif %}
+
+{% if insights_plausible %}
+    # Insight: Plausible analytics collection
+    job_id = "insight_plausible"
+{% if scheduler_backend != "memory" %}
+    job_exists = _job_exists_in_database(job_id)
+{% else %}
+    existing_job = scheduler.get_job(job_id)
+    job_exists = existing_job is not None
+{% endif %}
+
+    if not job_exists or force_update:
+        if job_exists and force_update:
+            logger.info(f"Force updating job '{job_id}' from code configuration")
+        else:
+            logger.info(f"Adding new job '{job_id}'")
+
+        scheduler.add_job(
+            collect_plausible_job,
+            trigger="cron",
+            minute=0,
+            id=job_id,
+            name="Insight: Plausible Analytics",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+        )
+    else:
+{% if scheduler_backend != "memory" %}
+        msg = f"Job '{job_id}' exists in database, preserving current configuration"
+        logger.info(msg)
+{% else %}
+        logger.info(
+            f"Job '{job_id}' exists, preserving current configuration: "
+            f"{existing_job.trigger}"
+        )
+{% endif %}
+{% endif %}
+{% endif %}
+
     # Add your own scheduled jobs here by importing service functions
     # and calling scheduler.add_job() with your custom business logic
 
@@ -132,8 +456,38 @@ async def run_scheduler() -> None:
 
     scheduler = create_scheduler()
 
+    def _on_job_event(event: Any) -> None:
+        """Emit activity events for job execution results."""
+        if event.code == EVENT_JOB_EXECUTED:
+            activity.add_event(
+                component="scheduler",
+                event_type="job_complete",
+                message=f"Job '{event.job_id}' completed",
+                status="success",
+            )
+        elif event.code == EVENT_JOB_ERROR:
+            activity.add_event(
+                component="scheduler",
+                event_type="job_failed",
+                message=f"Job '{event.job_id}' failed",
+                status="error",
+                details=str(event.exception),
+            )
+        elif event.code == EVENT_JOB_MISSED:
+            activity.add_event(
+                component="scheduler",
+                event_type="job_missed",
+                message=f"Job '{event.job_id}' missed its scheduled run",
+                status="warning",
+                details=f"scheduled_run={event.scheduled_run_time.isoformat()}",
+            )
+
     try:
         scheduler.start()
+        scheduler.add_listener(
+            _on_job_event,
+            EVENT_JOB_EXECUTED | EVENT_JOB_ERROR | EVENT_JOB_MISSED,
+        )
         logger.info("Scheduler started successfully")
         logger.info(f"{len(scheduler.get_jobs())} jobs scheduled:")
 

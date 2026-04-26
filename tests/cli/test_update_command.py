@@ -138,7 +138,7 @@ class TestUpdateCommandGitValidation:
 
         # Should succeed and show early exit message
         assert result.success
-        assert "already at the target commit" in result.stdout.lower()
+        assert "already at the requested version" in result.stdout.lower()
 
 
 class TestUpdateCommandDryRun:
@@ -162,7 +162,7 @@ class TestUpdateCommandDryRun:
         # Should succeed and either show dry-run message or early exit message
         assert result.success
         # If early exit happened (already at target), that's valid too
-        is_early_exit = "already at the target commit" in result.stdout.lower()
+        is_early_exit = "already at the requested version" in result.stdout.lower()
         has_dry_run_msg = (
             "dry run" in result.stdout.lower() or "preview" in result.stdout.lower()
         )
@@ -176,17 +176,14 @@ class TestUpdateCommandDryRun:
 class TestUpdateCommandVersionResolution:
     """Tests for version resolution logic."""
 
-    @patch("aegis.commands.update.get_latest_version")
     @patch("aegis.commands.update.resolve_version_to_ref")
     def test_update_to_latest_default(
         self,
         mock_resolve: MagicMock,
-        mock_get_latest: MagicMock,
         project_factory: "ProjectFactory",
     ) -> None:
-        """Test that update defaults to latest version."""
-        # Setup mocks
-        mock_get_latest.return_value = "0.2.0"
+        """Test that update defaults to CLI version."""
+        # Setup mock - resolve_version_to_ref is called with CLI version
         mock_resolve.return_value = "v0.2.0"
 
         # Use cached base project
@@ -258,7 +255,7 @@ class TestUpdateCommandChangelog:
         has_changelog = (
             "changelog" in result.stdout.lower() or "changes" in result.stdout.lower()
         )
-        is_early_exit = "already at the target commit" in result.stdout.lower()
+        is_early_exit = "already at the requested version" in result.stdout.lower()
         assert has_changelog or is_early_exit
 
 
@@ -507,6 +504,7 @@ class TestUpdateCommandRollback:
         # Either creates backup or hits early exit
         assert result.stdout
 
+    @patch("aegis.commands.update.run_post_generation_tasks")
     @patch("copier.run_update")
     @patch("aegis.commands.update.get_current_template_commit")
     @patch("aegis.commands.update.cleanup_backup_tag")
@@ -517,11 +515,13 @@ class TestUpdateCommandRollback:
         mock_cleanup: MagicMock,
         mock_get_commit: MagicMock,
         mock_copier_update: MagicMock,
+        mock_post_gen: MagicMock,
         project_factory: "ProjectFactory",
     ) -> None:
         """Test that backup tag is cleaned up on successful update."""
         mock_create_backup.return_value = "aegis-backup-123"
         mock_get_commit.return_value = "different-commit"  # Prevent early exit
+        mock_post_gen.return_value = True  # Mock successful post-gen tasks
 
         project_path = project_factory("base")
 
@@ -807,17 +807,14 @@ class TestUpdateCommandVersionInfo:
         # Should show version information
         assert "version" in output or "template" in output
 
-    @patch("aegis.commands.update.get_latest_version")
     @patch("aegis.commands.update.get_current_template_commit")
     def test_update_shows_cli_version(
         self,
         mock_get_commit: MagicMock,
-        mock_latest: MagicMock,
         project_factory: "ProjectFactory",
     ) -> None:
         """Test that update shows CLI version information."""
         mock_get_commit.return_value = "abc123"
-        mock_latest.return_value = "0.2.0"
 
         project_path = project_factory("base")
 

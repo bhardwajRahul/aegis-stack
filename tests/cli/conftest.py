@@ -3,6 +3,7 @@ Pytest configuration for CLI integration tests.
 """
 
 import hashlib
+import os
 import shutil
 import tempfile
 from collections.abc import Callable, Generator, Iterable
@@ -20,6 +21,9 @@ from .test_utils import CLITestResult, run_aegis_init
 
 # Type alias for project_factory fixture
 ProjectFactory = Callable[..., Path]
+
+# PostgreSQL test configuration (password can be overridden via environment)
+POSTGRES_TEST_PASSWORD = os.environ.get("POSTGRES_TEST_PASSWORD", "postgres")
 
 
 @pytest.fixture(scope="session")
@@ -54,14 +58,43 @@ class ProjectTemplateSpec:
 NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
     "base": ProjectTemplateSpec(),
     "base_with_database": ProjectTemplateSpec(components=("database",)),
+    "base_with_database_postgres": ProjectTemplateSpec(
+        components=("database[postgres]",)
+    ),
     "base_with_scheduler": ProjectTemplateSpec(components=("scheduler",)),
     "base_with_scheduler_sqlite": ProjectTemplateSpec(
         components=("database", "scheduler"), scheduler_backend="sqlite"
     ),
     "base_with_worker": ProjectTemplateSpec(components=("worker",)),
+    "base_with_worker_taskiq": ProjectTemplateSpec(components=("worker[taskiq]",)),
     "base_with_redis": ProjectTemplateSpec(components=("redis",)),
     "scheduler_and_database": ProjectTemplateSpec(components=("database", "scheduler")),
     "base_with_auth_service": ProjectTemplateSpec(services=("auth",)),
+    "base_with_ai_service": ProjectTemplateSpec(services=("ai",)),
+    "base_with_ai_sqlite_service": ProjectTemplateSpec(services=("ai[sqlite]",)),
+    "base_with_auth_and_ai_services": ProjectTemplateSpec(services=("auth", "ai")),
+    # Full-stack matrix entries (mirror STACK_COMBINATIONS service rows so
+    # ``make test-stacks-build`` doesn't pay a 30-40s regeneration cost
+    # per slow test — per ``tests/CLAUDE.md``, every new stack MUST have
+    # a cache entry or the matrix explodes past 10 minutes.
+    "auth_basic": ProjectTemplateSpec(services=("auth",)),
+    "auth_org_with_database": ProjectTemplateSpec(
+        components=("database",), services=("auth[org]",)
+    ),
+    "ai_with_database": ProjectTemplateSpec(
+        components=("database",), services=("ai[sqlite]",)
+    ),
+    "insights_full": ProjectTemplateSpec(
+        components=("database", "scheduler"), services=("insights",)
+    ),
+    "payment_with_database": ProjectTemplateSpec(
+        components=("database",), services=("payment",)
+    ),
+    "comms_only": ProjectTemplateSpec(services=("comms",)),
+    "everything": ProjectTemplateSpec(
+        components=("database", "scheduler", "worker", "redis"),
+        services=("auth[org]", "ai[sqlite]", "insights", "payment", "comms"),
+    ),
 }
 
 
@@ -146,18 +179,10 @@ def generated_stacks(
 
     This dramatically reduces test time by avoiding duplicate stack generation.
     Returns a dict mapping stack names to (combination, result) tuples.
-
-    Note: Always uses Cookiecutter engine for session-scoped generation.
-    Engine-parameterized tests will skip Copier tests via skip_copier_tests fixture.
     """
-    # Always use Cookiecutter for session-scoped fixture
-    engine = "cookiecutter"
-
     stacks = {}
 
-    print(
-        f"\n🏗️  Generating {len(STACK_COMBINATIONS)} stacks for session (engine={engine})..."
-    )
+    print(f"\nGenerating {len(STACK_COMBINATIONS)} stacks for session...")
 
     for combination in STACK_COMBINATIONS:
         print(f"   - Generating {combination.name} stack...")
@@ -166,7 +191,7 @@ def generated_stacks(
             combination.project_name,
             combination.components,
             session_temp_dir,
-            engine=engine,
+            services=combination.services or None,
         )
 
         if not result.success:
@@ -178,7 +203,7 @@ def generated_stacks(
 
         stacks[combination.name] = (combination, result)
 
-    print(f"✅ All {len(stacks)} stacks generated successfully!")
+    print(f"All {len(stacks)} stacks generated successfully!")
     return stacks
 
 
@@ -202,119 +227,182 @@ def get_generated_stack(
 # Following ee-toolset pattern for proper fixture-based testing
 
 
+# PostgreSQL Runtime Testing Fixtures
+
+
 @pytest.fixture(scope="session")
-def generated_db_project(session_temp_dir: Path) -> CLITestResult:
+def generated_db_project_postgres(
+    project_template_cache: Callable[[ProjectTemplateSpec], Path],
+    session_temp_dir: Path,
+) -> CLITestResult | None:
     """
-    Generate a project with database component once per session.
+    Get a cached PostgreSQL database project for runtime testing.
 
-    This fixture generates a project and installs its dependencies
-    so we can import and test the generated db.py module.
+    Uses the project_template_cache for fast project generation.
+    Returns None if PostgreSQL is not available.
     """
-    print("🗄️  Generating database project for runtime testing...")
+    import os
+    import socket
+    import subprocess
+    import sys
 
-    result = run_aegis_init(
-        "test-database-runtime",
-        ["database"],
-        session_temp_dir,
+    from .test_utils import CLITestResult, run_project_command
+
+    # Check if PostgreSQL is available
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex(("localhost", 5432))
+        sock.close()
+        if result != 0:
+            print("PostgreSQL not available on localhost:5432, skipping setup")
+            return None
+    except Exception:
+        print("Could not check PostgreSQL availability, skipping setup")
+        return None
+
+    # Create the test database in PostgreSQL
+    db_name = "test-database-postgres-runtime"
+    print(f"Creating PostgreSQL database: {db_name}")
+    try:
+        subprocess.run(
+            [
+                "psql",
+                "-h",
+                "localhost",
+                "-U",
+                "postgres",
+                "-c",
+                f'DROP DATABASE IF EXISTS "{db_name}"',
+            ],
+            capture_output=True,
+            env={**dict(os.environ), "PGPASSWORD": POSTGRES_TEST_PASSWORD},
+        )
+        create_result = subprocess.run(
+            [
+                "psql",
+                "-h",
+                "localhost",
+                "-U",
+                "postgres",
+                "-c",
+                f'CREATE DATABASE "{db_name}"',
+            ],
+            capture_output=True,
+            env={**dict(os.environ), "PGPASSWORD": POSTGRES_TEST_PASSWORD},
+        )
+        if create_result.returncode != 0:
+            print(f"Failed to create database: {create_result.stderr.decode()}")
+            return None
+    except Exception as e:
+        print(f"Could not create PostgreSQL database: {e}")
+        return None
+
+    # Get cached project and copy to session temp dir (exclude .venv - wrong Python version)
+    print("Using cached PostgreSQL project template...")
+    spec = NAMED_PROJECT_SPECS["base_with_database_postgres"]
+    cached_project = project_template_cache(spec)
+    project_path = session_temp_dir / "db-postgres-runtime"
+    shutil.copytree(
+        cached_project, project_path, ignore=shutil.ignore_patterns(".venv")
     )
 
-    if not result.success:
-        raise RuntimeError(f"Failed to generate database project: {result.stderr}")
+    # Patch pyproject.toml to use current Python version (cached may have different version)
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+    pyproject_path = project_path / "pyproject.toml"
+    content = pyproject_path.read_text()
+    import re
 
-    # Install dependencies in the generated project
-    print("Installing dependencies in generated project...")
-    from .test_utils import run_project_command
+    content = re.sub(
+        r'requires-python\s*=\s*"[^"]+"',
+        f'requires-python = ">={python_version}"',
+        content,
+    )
+    pyproject_path.write_text(content)
 
-    assert result.project_path is not None, "Project path should not be None"
+    # Update .python-version to match current Python (cached may have different version)
+    python_version_file = project_path / ".python-version"
+    python_version_file.write_text(f"{python_version}\n")
+
+    # Install dependencies
+    print("Installing dependencies in PostgreSQL project...")
     install_result = run_project_command(
-        ["uv", "sync", "--extra", "dev"],
-        result.project_path,
+        ["uv", "sync", "--extra", "dev", "--python", python_version],
+        project_path,
         step_name="Install Dependencies",
-        env_overrides={"VIRTUAL_ENV": ""},  # Ensure clean environment
+        env_overrides={"VIRTUAL_ENV": ""},
     )
 
     if not install_result.success:
         raise RuntimeError(f"Failed to install dependencies: {install_result.stderr}")
 
-    print("✅ Database project ready for runtime testing!")
-    return result
+    print("PostgreSQL database project ready for runtime testing!")
+    return CLITestResult(
+        returncode=0,
+        stdout="",
+        stderr="",
+        project_path=project_path,
+    )
+
+
+# SQLite Runtime Testing Fixtures
 
 
 @pytest.fixture(scope="session")
-def db_module(generated_db_project: CLITestResult) -> dict[str, Any]:
+def generated_db_project(
+    project_template_cache: Callable[[ProjectTemplateSpec], Path],
+    session_temp_dir: Path,
+) -> CLITestResult:
     """
-    Import the generated database module.
+    Get a cached SQLite database project for runtime testing.
 
-    This allows us to test the actual generated code,
-    not just check that files exist.
+    Uses the project_template_cache for fast project generation.
     """
+    from .test_utils import CLITestResult, run_project_command
+
+    # Get cached project and copy to session temp dir (exclude .venv - wrong Python version)
+    print("Using cached SQLite project template...")
+    spec = NAMED_PROJECT_SPECS["base_with_database"]
+    cached_project = project_template_cache(spec)
+    project_path = session_temp_dir / "db-sqlite-runtime"
+    shutil.copytree(
+        cached_project, project_path, ignore=shutil.ignore_patterns(".venv")
+    )
+
+    # Patch pyproject.toml to use current Python version (cached may have different version)
+    import re
     import sys
 
-    # Add generated project to Python path
-    project_path = str(generated_db_project.project_path)
-    if project_path not in sys.path:
-        sys.path.insert(0, project_path)
-
-    # Add generated project's site-packages to access its dependencies
-    # This is safe because we control version pinning in both environments
-    import glob
-
-    site_packages_paths = glob.glob(f"{project_path}/.venv/lib/python*/site-packages")
-    if site_packages_paths:
-        sys.path.insert(0, site_packages_paths[0])
-
-    # Import the generated db module
-    # NOTE: These imports are from the dynamically generated project, not aegis-stack
-    # MyPy can't see them during static analysis, hence the type: ignore comments
-    from app.core.db import (  # type: ignore[import-not-found]
-        SessionLocal,
-        db_session,
-        engine,
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+    pyproject_path = project_path / "pyproject.toml"
+    content = pyproject_path.read_text()
+    content = re.sub(
+        r'requires-python\s*=\s*"[^"]+"',
+        f'requires-python = ">={python_version}"',
+        content,
     )
-    from sqlalchemy.exc import IntegrityError  # type: ignore[import-not-found]
+    pyproject_path.write_text(content)
 
-    # Also import SQLModel classes from the generated project
-    from sqlmodel import Field, SQLModel  # type: ignore[import-not-found]
+    # Update .python-version to match current Python (cached may have different version)
+    python_version_file = project_path / ".python-version"
+    python_version_file.write_text(f"{python_version}\n")
 
-    # Create model factory function
-    def create_test_models() -> dict[str, Any]:
-        """Create test model classes using the generated project's SQLModel."""
+    # Install dependencies
+    print("Installing dependencies in SQLite project...")
+    install_result = run_project_command(
+        ["uv", "sync", "--extra", "dev"],
+        project_path,
+        step_name="Install Dependencies",
+        env_overrides={"VIRTUAL_ENV": ""},
+    )
 
-        class TestUser(SQLModel, table=True):  # type: ignore[misc,call-arg]
-            """Simple test model for database tests."""
+    if not install_result.success:
+        raise RuntimeError(f"Failed to install dependencies: {install_result.stderr}")
 
-            __tablename__ = "test_users"
-            id: int | None = Field(default=None, primary_key=True)
-            name: str
-            email: str | None = None
-
-        class Parent(SQLModel, table=True):  # type: ignore[misc,call-arg]
-            """Parent model for foreign key testing."""
-
-            __tablename__ = "parents"
-            id: int | None = Field(default=None, primary_key=True)
-            name: str
-
-        class Child(SQLModel, table=True):  # type: ignore[misc,call-arg]
-            """Child model for foreign key testing."""
-
-            __tablename__ = "children"
-            id: int | None = Field(default=None, primary_key=True)
-            name: str
-            parent_id: int = Field(foreign_key="parents.id")
-
-        return {
-            "TestUser": TestUser,
-            "Parent": Parent,
-            "Child": Child,
-        }
-
-    return {
-        "db_session": db_session,
-        "engine": engine,
-        "SessionLocal": SessionLocal,
-        "SQLModel": SQLModel,
-        "Field": Field,
-        "IntegrityError": IntegrityError,
-        "create_test_models": create_test_models,
-    }
+    print("SQLite database project ready for runtime testing!")
+    return CLITestResult(
+        returncode=0,
+        stdout="",
+        stderr="",
+        project_path=project_path,
+    )

@@ -1,7 +1,7 @@
 """
 Tests for worker backend detection and validation logic.
 
-Tests the functions for handling worker[backend] syntax (arq vs taskiq).
+Tests the functions for handling worker[backend] syntax (arq, taskiq, or dramatiq).
 """
 
 from aegis.cli.utils import detect_worker_backend
@@ -22,6 +22,12 @@ class TestWorkerBackendDetection:
         components = ["scheduler", "worker[taskiq]"]
         backend = detect_worker_backend(components)
         assert backend == "taskiq"
+
+    def test_detect_worker_dramatiq_backend(self) -> None:
+        """Test detecting worker[dramatiq] backend."""
+        components = ["redis", "worker[dramatiq]"]
+        backend = detect_worker_backend(components)
+        assert backend == "dramatiq"
 
     def test_detect_arq_backend_default(self) -> None:
         """Test detecting arq backend when no bracket syntax used."""
@@ -53,8 +59,13 @@ class TestWorkerBackendsConstants:
         """Test TASKIQ constant value."""
         assert WorkerBackends.TASKIQ == "taskiq"
 
+    def test_dramatiq_constant(self) -> None:
+        """Test DRAMATIQ constant value."""
+        assert WorkerBackends.DRAMATIQ == "dramatiq"
+
     def test_all_backends_list(self) -> None:
         """Test ALL backends list contains expected values."""
         assert WorkerBackends.ARQ in WorkerBackends.ALL
         assert WorkerBackends.TASKIQ in WorkerBackends.ALL
-        assert len(WorkerBackends.ALL) == 2
+        assert WorkerBackends.DRAMATIQ in WorkerBackends.ALL
+        assert len(WorkerBackends.ALL) == 3

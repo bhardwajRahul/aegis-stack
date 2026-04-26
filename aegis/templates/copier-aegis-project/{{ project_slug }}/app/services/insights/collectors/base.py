@@ -1,0 +1,223 @@
+"""
+Base collector for insight data sources.
+
+All collectors inherit from BaseCollector and implement:
+- source_key: which insight_source this collector writes to
+- collect(): run the collection, return a CollectionResult
+"""
+
+import logging
+from abc import ABC, abstractmethod
+from datetime import UTC, datetime
+from typing import Any
+
+import httpx
+from pydantic import BaseModel, Field
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from ..models import InsightMetric, InsightMetricType, InsightSource
+
+logger = logging.getLogger(__name__)
+
+
+class CollectionResult(BaseModel):
+    """Result of a collection run."""
+
+    source_key: str
+    success: bool
+    rows_written: int = Field(default=0, ge=0)
+    rows_skipped: int = Field(default=0, ge=0)
+    records_broken: list[str] = Field(default_factory=list)
+    error: str | None = None
+    collected_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+
+
+# -- Shared helpers -----------------------------------------------------------
+
+CLICKHOUSE_URL = "https://sql-clickhouse.clickhouse.com"
+CLICKHOUSE_PARAMS = {"user": "play", "default_format": "JSONCompact"}
+
+
+def today() -> datetime:
+    """Get today as a midnight datetime (no timezone)."""
+    return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def parse_date(date_str: str) -> datetime:
+    """Parse YYYY-MM-DD date string to datetime."""
+    return datetime.strptime(date_str, "%Y-%m-%d")
+
+
+def parse_github_date(timestamp: str) -> datetime:
+    """Parse GitHub API timestamp (ISO 8601) to date-only datetime."""
+    dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    return dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+
+
+async def clickhouse_query(client: httpx.AsyncClient, sql: str) -> list[list]:
+    """Execute a ClickHouse SQL query and return rows."""
+    resp = await client.post(
+        CLICKHOUSE_URL,
+        params=CLICKHOUSE_PARAMS,
+        content=sql.strip(),
+    )
+    resp.raise_for_status()
+    return resp.json().get("data", [])
+
+
+class BaseCollector(ABC):
+    """Base class for all insight data collectors."""
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    @property
+    @abstractmethod
+    def source_key(self) -> str:
+        """The insight_source.key this collector writes to."""
+        ...
+
+    @abstractmethod
+    async def collect(self) -> CollectionResult:
+        """Run collection. Returns what was collected."""
+        ...
+
+    # -- Result helpers -------------------------------------------------------
+
+    def _validate_config(self, **required: Any) -> CollectionResult | None:
+        """Check required config values. Returns error result if any are falsy."""
+        missing = [k for k, v in required.items() if not v]
+        if missing:
+            return self._error(f"Missing {', '.join(missing)}")
+        return None
+
+    def _error(
+        self,
+        msg: str,
+        rows_written: int = 0,
+        rows_skipped: int = 0,
+    ) -> CollectionResult:
+        """Build a failure CollectionResult and log the error."""
+        logger.error(msg)
+        return CollectionResult(
+            source_key=self.source_key,
+            success=False,
+            rows_written=rows_written,
+            rows_skipped=rows_skipped,
+            error=msg,
+        )
+
+    def _success(
+        self,
+        rows_written: int,
+        rows_skipped: int = 0,
+    ) -> CollectionResult:
+        """Commit, log, and return a success CollectionResult."""
+        logger.info(
+            "%s collected: %d written, %d skipped",
+            self.source_key,
+            rows_written,
+            rows_skipped,
+        )
+        return CollectionResult(
+            source_key=self.source_key,
+            success=True,
+            rows_written=rows_written,
+            rows_skipped=rows_skipped,
+        )
+
+    async def get_source(self) -> InsightSource:
+        """Look up this collector's source row."""
+        result = await self.db.exec(
+            select(InsightSource).where(InsightSource.key == self.source_key)
+        )
+        source = result.first()
+        if source is None:
+            raise RuntimeError(
+                f"InsightSource '{self.source_key}' not found. "
+                "Run seed_insight_tables() first."
+            )
+        return source
+
+    async def get_metric_type(self, key: str) -> InsightMetricType:
+        """Look up a metric type by key within this source."""
+        source = await self.get_source()
+        result = await self.db.exec(
+            select(InsightMetricType).where(
+                InsightMetricType.source_id == source.id,
+                InsightMetricType.key == key,
+            )
+        )
+        metric_type = result.first()
+        if metric_type is None:
+            raise RuntimeError(
+                f"InsightMetricType '{key}' not found for source '{self.source_key}'. "
+                "Run seed_insight_tables() first."
+            )
+        return metric_type
+
+    async def upsert_metric(
+        self,
+        metric_type: InsightMetricType,
+        date: datetime,
+        value: float,
+        period: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> tuple[InsightMetric, bool]:
+        """
+        Insert or update a metric row.
+
+        Deduplicates on (metric_type_id, date, period) for non-event periods.
+        Event period rows (e.g., new stars) are always inserted.
+
+        Returns:
+            Tuple of (metric, was_created). was_created=False means updated existing.
+        """
+        if metric_type.id is None:
+            raise RuntimeError("MetricType has no id — was it persisted?")
+
+        # Event rows are always new (multiple stars per day, etc.)
+        from ..constants import Periods
+
+        if period == Periods.EVENT:
+            metric = InsightMetric(
+                date=date,
+                metric_type_id=metric_type.id,
+                value=value,
+                period=period,
+                metadata_=metadata or {},
+            )
+            self.db.add(metric)
+            return metric, True
+
+        # For other periods, check for existing row
+        result = await self.db.exec(
+            select(InsightMetric).where(
+                InsightMetric.metric_type_id == metric_type.id,
+                InsightMetric.date == date,
+                InsightMetric.period == period,
+            )
+        )
+        existing = result.first()
+
+        if existing is not None:
+            # Update existing row
+            existing.value = value
+            if metadata is not None:
+                existing.metadata_ = metadata
+            self.db.add(existing)
+            return existing, False
+
+        # Create new row
+        metric = InsightMetric(
+            date=date,
+            metric_type_id=metric_type.id,
+            value=value,
+            period=period,
+            metadata_=metadata or {},
+        )
+        self.db.add(metric)
+        return metric, True

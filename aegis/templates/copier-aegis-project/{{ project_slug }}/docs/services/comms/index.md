@@ -31,7 +31,7 @@ export TWILIO_PHONE_NUMBER=+15551234567
 ### 3. Check Configuration
 
 ```bash
-{{ cookiecutter.project_slug }} comms status
+{{ project_slug }} comms status
 ```
 
 ## Features
@@ -60,18 +60,18 @@ export TWILIO_PHONE_NUMBER=+15551234567
 
 ```bash
 # Send an email
-{{ cookiecutter.project_slug }} comms email send user@example.com \
+{{ project_slug }} comms email send user@example.com \
   --subject "Welcome" \
   --text "Hello, welcome to our service!"
 
 # Send an SMS
-{{ cookiecutter.project_slug }} comms sms send +15559876543 "Your verification code is 123456"
+{{ project_slug }} comms sms send +15559876543 "Your verification code is 123456"
 
 # Make a voice call
-{{ cookiecutter.project_slug }} comms call make +15559876543 "https://example.com/twiml/greeting.xml"
+{{ project_slug }} comms call make +15559876543 "https://example.com/twiml/greeting.xml"
 
 # Check service status
-{{ cookiecutter.project_slug }} comms status
+{{ project_slug }} comms status
 ```
 
 ### API

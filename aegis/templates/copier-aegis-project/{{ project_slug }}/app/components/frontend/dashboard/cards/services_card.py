@@ -136,8 +136,6 @@ class ServicesCard:
         return TechBadge(
             title="Business Logic",
             subtitle="Application Services",
-            badge_text="Services",
-            badge_color=ft.Colors.INDIGO,
             primary_color=primary_color,
         )
 

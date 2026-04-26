@@ -15,6 +15,7 @@ from app.components.backend.api.models import (
     TaskStatusResponse,
 )
 from app.components.worker.constants import LoadTestTypes
+from app.components.worker.events import publish_event
 from app.components.worker.pools import get_queue_pool
 from app.components.worker.tasks import get_task_by_name, list_available_tasks
 from app.core.config import get_default_queue
@@ -93,10 +94,29 @@ async def enqueue_task(task_request: TaskRequest) -> TaskResponse:
         if task_request.delay_seconds:
             estimated_start = queued_at + timedelta(seconds=task_request.delay_seconds)
 
-        await pool.aclose()
-
         if job is None:
+            await pool.aclose()
             raise HTTPException(status_code=500, detail="Failed to enqueue task")
+
+        # Publish enqueue event for real-time dashboard updates
+        await publish_event(
+            pool, "job.enqueued", task_request.queue_type,
+            {"job_id": job.job_id, "task": task_request.task_name},
+        )
+
+        # Record task enqueued in history
+        from app.components.worker.task_history import record_task_enqueued
+        from app.core.config import settings as app_settings
+
+        await record_task_enqueued(
+            pool,
+            job.job_id,
+            task_request.task_name,
+            task_request.queue_type,
+            ttl_seconds=app_settings.TASK_HISTORY_TTL_SECONDS,
+        )
+
+        await pool.aclose()
 
         logger.info(f"Task enqueued: {job.job_id} ({task_request.task_name})")
 

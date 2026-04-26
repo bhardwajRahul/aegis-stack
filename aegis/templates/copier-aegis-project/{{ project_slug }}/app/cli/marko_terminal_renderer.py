@@ -93,7 +93,7 @@ class TerminalRenderer(Renderer):
 
             try:
                 lexer = get_lexer_by_name(lang, stripall=True)
-                formatter = Terminal256Formatter(style="monokai")
+                formatter = Terminal256Formatter(style="ir-black")
                 highlighted = highlight(code, lexer, formatter)
 
                 # Process each line: add indentation only
@@ -316,12 +316,22 @@ class TerminalRenderer(Renderer):
         # First pass: render all cells and collect metadata
         rendered_rows = []
         for row in rows:
+            # Skip non-element children (strings from malformed parsing)
+            if not hasattr(row, "children"):
+                continue
             rendered_cells = []
             for cell in row.children:
+                # Skip non-element cells
+                if not hasattr(cell, "children"):
+                    continue
                 content = self.render_children(cell)
-                is_header = cell.header
+                is_header = getattr(cell, "header", False)
                 rendered_cells.append((content, is_header))
-            rendered_rows.append(rendered_cells)
+            if rendered_cells:
+                rendered_rows.append(rendered_cells)
+
+        if not rendered_rows:
+            return ""
 
         # Calculate column widths from rendered content
         col_widths = self._calculate_widths_from_rendered(rendered_rows)
@@ -458,6 +468,40 @@ class TerminalRenderer(Renderer):
         url = element.dest if hasattr(element, "dest") else str(element.children)
         return f"\033[36m{url}\033[0m"  # Cyan color
 
+    def render_inline_html(self, element) -> str:
+        """
+        Render inline HTML elements.
+
+        Required for GFM extension compatibility - the @render_dispatch decorator
+        needs a fallback method in the MRO when the renderer is not HTMLRenderer.
+
+        Args:
+            element: InlineHTML element
+
+        Returns:
+            The HTML content as plain text (dimmed)
+        """
+        content = element.children if isinstance(element.children, str) else ""
+        return f"\033[2m{content}\033[0m"  # Dim style for HTML
+
+    def render_html_block(self, element) -> str:
+        """
+        Render HTML block elements.
+
+        Required for GFM extension compatibility - the @render_dispatch decorator
+        needs a fallback method in the MRO when the renderer is not HTMLRenderer.
+
+        Args:
+            element: HTMLBlock element
+
+        Returns:
+            The HTML content as plain text (dimmed)
+        """
+        content = getattr(element, "body", "") or getattr(element, "children", "")
+        if not isinstance(content, str):
+            content = str(content)
+        return f"\033[2m{content}\033[0m\n"  # Dim style for HTML blocks
+
     def __getattr__(self, name: str):
         """
         Fallback for any missing render methods.
@@ -480,6 +524,8 @@ class TerminalRenderer(Renderer):
             def fallback_render(element):
                 """Generic fallback - renders as plain text."""
                 if hasattr(element, "children"):
+                    if isinstance(element.children, str):
+                        return element.children
                     return self.render_children(element)
                 return str(element)
 

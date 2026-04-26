@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from app.components.worker.constants import LoadTestTypes, TaskNames
+from app.components.worker.events import publish_event
 from app.core.config import get_load_test_queue
 from app.core.log import logger
 
@@ -81,6 +82,12 @@ async def load_test_orchestrator(
                     if job is not None:
                         batch_jobs.append(job)
                         task_ids.append(job.job_id)
+                        await publish_event(
+                            pool,
+                            "job.enqueued",
+                            target_queue,
+                            {"job_id": job.job_id, "task": task_func},
+                        )
 
                 tasks_sent += current_batch_size
                 logger.info(

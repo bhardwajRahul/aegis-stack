@@ -1,0 +1,89 @@
+"""
+Health check for the insights service.
+"""
+
+from datetime import datetime, timedelta
+import logging
+
+from sqlalchemy import func
+from sqlmodel import select
+
+from app.core.db import get_async_session
+from app.services.system.models import ComponentStatus, ComponentStatusType
+
+from .constants import INSIGHT_COMPONENT_NAME
+from .models import InsightMetric, InsightSource
+
+logger = logging.getLogger(__name__)
+
+
+async def check_insight_health() -> ComponentStatus:
+    """Check insight service health — last collection times, stale sources."""
+    try:
+        async with get_async_session() as session:
+            # Get all enabled sources
+            stmt = select(InsightSource).where(InsightSource.enabled == True)  # noqa: E712
+            result = await session.exec(stmt)
+            sources = result.all()
+
+            # Total metric rows
+            count_stmt = select(func.count()).select_from(InsightMetric)
+            count_result = await session.exec(count_stmt)
+            total_metrics = count_result.one()
+
+            # Check staleness per source
+            now = datetime.now()
+            stale_sources: list[str] = []
+            source_details: dict[str, dict] = {}
+
+            for source in sources:
+                last_collected = source.last_collected_at
+
+                is_stale = False
+                if (
+                    source.collection_interval_hours is not None
+                    and last_collected is not None
+                ):
+                    max_age = timedelta(hours=source.collection_interval_hours * 3)
+                    if now - last_collected > max_age:
+                        is_stale = True
+                        stale_sources.append(source.key)
+                elif source.collection_interval_hours is not None and last_collected is None:
+                    stale_sources.append(source.key)
+
+                source_details[source.key] = {
+                    "enabled": source.enabled,
+                    "last_collected": last_collected.isoformat() if last_collected else None,
+                    "stale": is_stale,
+                }
+
+            if total_metrics == 0:
+                status = ComponentStatusType.WARNING
+                message = "No data collected yet"
+            elif stale_sources:
+                status = ComponentStatusType.WARNING
+                message = f"Stale sources: {', '.join(stale_sources)}"
+            else:
+                status = ComponentStatusType.HEALTHY
+                message = f"{total_metrics} metrics across {len(sources)} sources"
+
+        return ComponentStatus(
+            name=INSIGHT_COMPONENT_NAME,
+            status=status,
+            message=message,
+            metadata={
+                "total_metrics": total_metrics,
+                "enabled_sources": len(sources),
+                "stale_sources": stale_sources,
+                "sources": source_details,
+            },
+        )
+
+    except Exception as e:
+        logger.error("Insight health check failed: %s", e)
+        return ComponentStatus(
+            name=INSIGHT_COMPONENT_NAME,
+            status=ComponentStatusType.UNHEALTHY,
+            message=f"Health check error: {e}",
+            metadata={"error": str(e)},
+        )

@@ -9,6 +9,8 @@ output for production environments.
 
 import logging
 import sys
+from collections.abc import Generator
+from contextlib import contextmanager
 
 import structlog
 from app.core.config import settings
@@ -17,16 +19,23 @@ from structlog.types import Processor
 # A global logger instance for easy access throughout the application
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 
+# Guard to prevent duplicate handler registration
+_logging_configured = False
+
 
 def setup_logging() -> None:
     """
     Configures logging for the entire application.
 
-    This function sets up structlog with processors for structured logging.
-    It routes all standard library logging through structlog to ensure
-    consistent log formats. The output format is determined by the APP_ENV
-    setting (dev-friendly console format or production-ready JSON format).
+    This function is idempotent - safe to call multiple times.
+    Only the first call has any effect. It sets up structlog with processors
+    for structured logging and routes all standard library logging through
+    structlog to ensure consistent log formats.
     """
+    global _logging_configured
+    if _logging_configured:
+        return
+    _logging_configured = True
     # Type hint for the list of processors
     shared_processors: list[Processor] = [
         structlog.stdlib.add_logger_name,
@@ -68,6 +77,9 @@ def setup_logging() -> None:
     handler.setFormatter(formatter)
     root_logger = logging.getLogger()
 
+    # Clear existing handlers to prevent duplicates (e.g., Alembic reconfigures)
+    root_logger.handlers.clear()
+
     # CRITICAL: Set log level BEFORE adding handler
     # This ensures all loggers (including import-time loggers) respect the level
     log_level = settings.LOG_LEVEL.upper()
@@ -81,12 +93,44 @@ def setup_logging() -> None:
     logging.getLogger("flet_runtime").setLevel(logging.INFO)
     logging.getLogger("flet_fastapi").setLevel(logging.INFO)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(
+        logging.WARNING
+    )  # Suppress HTTP request logs from health checks
+
+    # Suppress RAG service logs (CLI uses progress bar instead)
+    logging.getLogger("app.services.rag").setLevel(logging.WARNING)
+
+    # Suppress ChromaDB telemetry errors (posthog.py line 61)
+    logging.getLogger("chromadb.telemetry").setLevel(logging.CRITICAL)
 
     log_format = "DEV" if settings.APP_ENV == "dev" else "JSON"
-    logger.info(
+    logger.debug(
         "Logging setup complete",
         level=log_level,
         log_format=log_format,
         root_level=root_logger.level,
         effective_level=root_logger.getEffectiveLevel(),
     )
+
+
+@contextmanager
+def suppress_logs(level: int = logging.ERROR) -> Generator[None]:
+    """
+    Temporarily suppress logs during CLI operations.
+
+    Sets the root logger to the specified level to hide lower-priority logs
+    while preserving higher-priority logs for critical issues.
+
+    Args:
+        level: Minimum log level to show (default: ERROR)
+
+    Yields:
+        None
+    """
+    root_logger = logging.getLogger()
+    original_level = root_logger.level
+    try:
+        root_logger.setLevel(level)
+        yield
+    finally:
+        root_logger.setLevel(original_level)

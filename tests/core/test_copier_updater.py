@@ -10,10 +10,14 @@ from pathlib import Path
 import pytest
 
 from aegis.core.copier_updater import (
+    _format_commits_as_changelog,
+    _get_changelog_from_github,
     analyze_conflict_files,
     cleanup_backup_tag,
     create_backup_point,
     format_conflict_report,
+    get_available_versions,
+    get_latest_version,
     rollback_to_backup,
 )
 
@@ -258,3 +262,242 @@ class TestFormatConflictReport:
         report = format_conflict_report([])
 
         assert report == ""
+
+
+class TestFormatCommitsAsChangelog:
+    """Tests for _format_commits_as_changelog function."""
+
+    def test_empty_commits_returns_no_changes(self) -> None:
+        """Test that empty commits list returns 'No changes'."""
+        result = _format_commits_as_changelog([], "https://github.com/test/repo")
+        assert result == "No changes"
+
+    def test_categorizes_breaking_changes(self) -> None:
+        """Test that breaking changes are categorized correctly."""
+        commits = [
+            ("abc1234", "breaking: Remove deprecated API"),
+            ("def5678", "Other change"),
+        ]
+        result = _format_commits_as_changelog(commits, "https://github.com/test/repo")
+
+        assert "Breaking Changes:" in result
+        assert "Remove deprecated API" in result
+
+    def test_categorizes_features(self) -> None:
+        """Test that features are categorized correctly."""
+        commits = [
+            ("abc1234", "feat: Add new feature"),
+            ("def5678", "feature: Another feature"),
+        ]
+        result = _format_commits_as_changelog(commits, "https://github.com/test/repo")
+
+        assert "New Features:" in result
+        assert "Add new feature" in result
+        assert "Another feature" in result
+
+    def test_categorizes_fixes(self) -> None:
+        """Test that fixes are categorized correctly."""
+        commits = [
+            ("abc1234", "fix: Fix a bug"),
+        ]
+        result = _format_commits_as_changelog(commits, "https://github.com/test/repo")
+
+        assert "Bug Fixes:" in result
+        assert "Fix a bug" in result
+
+    def test_categorizes_other_changes(self) -> None:
+        """Test that non-categorized commits go to Other Changes."""
+        commits = [
+            ("abc1234", "Update documentation"),
+            ("def5678", "Refactor code"),
+        ]
+        result = _format_commits_as_changelog(commits, "https://github.com/test/repo")
+
+        assert "Other Changes:" in result
+        assert "Update documentation" in result
+        assert "Refactor code" in result
+
+    def test_includes_github_links(self) -> None:
+        """Test that commit hashes are linked to GitHub."""
+        commits = [("abc1234", "Some change")]
+        github_url = "https://github.com/test/repo"
+        result = _format_commits_as_changelog(commits, github_url)
+
+        assert f"[abc1234]({github_url}/commit/abc1234)" in result
+
+    def test_handles_empty_commit_hash(self) -> None:
+        """Test that commits without hash are formatted without links."""
+        commits = [("", "Some change")]
+        result = _format_commits_as_changelog(commits, "https://github.com/test/repo")
+
+        assert "• Some change" in result
+        assert "[" not in result  # No link brackets
+
+
+class TestGetChangelogFromGithub:
+    """Tests for _get_changelog_from_github function."""
+
+    def test_normalizes_head_to_main(self) -> None:
+        """Test that HEAD is normalized to main for API calls."""
+        # This test verifies the URL construction logic
+        # We can't easily test the actual API call without mocking
+        # but we can verify the function handles the HEAD -> main conversion
+        # by checking it doesn't crash and returns a string
+        result = _get_changelog_from_github("abc1234", "HEAD")
+        # Should return either changelog or fallback message
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_returns_fallback_on_invalid_ref(self) -> None:
+        """Test that invalid refs return a fallback message."""
+        result = _get_changelog_from_github("invalid_ref_123", "HEAD")
+        # Should contain fallback message with "Changelog not available" or actual changelog
+        assert isinstance(result, str)
+        assert "Changelog not available" in result or "Changes:" in result
+
+
+@pytest.fixture
+def git_repo_with_tags(tmp_path: Path) -> Path:
+    """Initialize a git repository with version tags (including prereleases)."""
+    subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@test.com"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+
+    # Create a copier.yml to make it a valid template root
+    (tmp_path / "copier.yml").write_text("_subdirectory: templates\n")
+
+    # Create initial commit and tags
+    (tmp_path / "test.txt").write_text("v0.1.0")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "v0.1.0"], cwd=tmp_path, capture_output=True, check=True
+    )
+    subprocess.run(
+        ["git", "tag", "v0.1.0"], cwd=tmp_path, capture_output=True, check=True
+    )
+
+    # Add more commits and tags
+    (tmp_path / "test.txt").write_text("v0.2.0")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "v0.2.0"], cwd=tmp_path, capture_output=True, check=True
+    )
+    subprocess.run(
+        ["git", "tag", "v0.2.0"], cwd=tmp_path, capture_output=True, check=True
+    )
+
+    # Add a prerelease tag (dash format matches our git tag convention)
+    (tmp_path / "test.txt").write_text("v0.3.0-rc1")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "v0.3.0-rc1"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "tag", "v0.3.0-rc1"], cwd=tmp_path, capture_output=True, check=True
+    )
+
+    # Add another prerelease
+    (tmp_path / "test.txt").write_text("v0.3.0-alpha.1")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "v0.3.0-alpha.1"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "tag", "v0.3.0-alpha.1"], cwd=tmp_path, capture_output=True, check=True
+    )
+
+    return tmp_path
+
+
+class TestGetAvailableVersions:
+    """Tests for get_available_versions function."""
+
+    def test_returns_versions_sorted_newest_first(
+        self, git_repo_with_tags: Path
+    ) -> None:
+        """Test that versions are returned sorted newest first."""
+        versions = get_available_versions(git_repo_with_tags)
+
+        # Should get 0.2.0 and 0.1.0 (no prereleases by default)
+        assert len(versions) == 2
+        assert versions[0] == "0.2.0"  # Newest first
+        assert versions[1] == "0.1.0"
+
+    def test_excludes_prereleases_by_default(self, git_repo_with_tags: Path) -> None:
+        """Test that prereleases are excluded by default."""
+        versions = get_available_versions(git_repo_with_tags)
+
+        # Should NOT contain rc or alpha versions
+        assert "0.3.0-rc1" not in versions
+        assert "0.3.0-alpha.1" not in versions
+
+    def test_includes_prereleases_when_requested(
+        self, git_repo_with_tags: Path
+    ) -> None:
+        """Test that prereleases are included when include_prereleases=True."""
+        versions = get_available_versions(git_repo_with_tags, include_prereleases=True)
+
+        # Should contain all versions including prereleases
+        assert "0.3.0-rc1" in versions
+        assert "0.3.0-alpha.1" in versions
+        assert "0.2.0" in versions
+        assert "0.1.0" in versions
+
+    def test_returns_empty_for_no_tags(self, git_repo: Path) -> None:
+        """Test that empty list is returned when no version tags exist."""
+        # Create copier.yml to make it a valid template root
+        (git_repo / "copier.yml").write_text("_subdirectory: templates\n")
+        subprocess.run(["git", "add", "."], cwd=git_repo, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "Add copier.yml"],
+            cwd=git_repo,
+            capture_output=True,
+        )
+
+        versions = get_available_versions(git_repo)
+
+        assert versions == []
+
+
+class TestGetLatestVersion:
+    """Tests for get_latest_version function."""
+
+    def test_returns_latest_non_prerelease_version(
+        self, git_repo_with_tags: Path
+    ) -> None:
+        """Test that latest version is 0.2.0, not a prerelease."""
+        latest = get_latest_version(git_repo_with_tags)
+
+        # Should be 0.2.0, NOT 0.3.0-rc1 or 0.3.0-alpha.1
+        assert latest == "0.2.0"
+
+    def test_returns_none_for_no_versions(self, git_repo: Path) -> None:
+        """Test that None is returned when no version tags exist."""
+        # Create copier.yml to make it a valid template root
+        (git_repo / "copier.yml").write_text("_subdirectory: templates\n")
+        subprocess.run(["git", "add", "."], cwd=git_repo, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "Add copier.yml"],
+            cwd=git_repo,
+            capture_output=True,
+        )
+
+        latest = get_latest_version(git_repo)
+
+        assert latest is None

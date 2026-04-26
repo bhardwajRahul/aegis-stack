@@ -5,7 +5,7 @@ The Communications Service provides CLI commands for sending emails, SMS, and ma
 ## Command Structure
 
 ```bash
-{{ cookiecutter.project_slug }} comms <channel> <action> [options]
+{{ project_slug }} comms <channel> <action> [options]
 ```
 
 ## Commands
@@ -15,7 +15,7 @@ The Communications Service provides CLI commands for sending emails, SMS, and ma
 Check the configuration status of all communication channels.
 
 ```bash
-{{ cookiecutter.project_slug }} comms status
+{{ project_slug }} comms status
 ```
 
 **Output:**
@@ -29,7 +29,7 @@ Check the configuration status of all communication channels.
 Show available communication providers and free tier information.
 
 ```bash
-{{ cookiecutter.project_slug }} comms providers
+{{ project_slug }} comms providers
 ```
 
 ---
@@ -41,7 +41,7 @@ Show available communication providers and free tier information.
 Send an email via Resend.
 
 ```bash
-{{ cookiecutter.project_slug }} comms email send <to> --subject <subject> [--text <text>] [--html <html>]
+{{ project_slug }} comms email send <to> --subject <subject> [--text <text>] [--html <html>]
 ```
 
 **Arguments:**
@@ -58,17 +58,17 @@ Send an email via Resend.
 
 ```bash
 # Send plain text email
-{{ cookiecutter.project_slug }} comms email send user@example.com \
+{{ project_slug }} comms email send user@example.com \
   --subject "Welcome!" \
   --text "Thanks for signing up"
 
 # Send HTML email
-{{ cookiecutter.project_slug }} comms email send user@example.com \
+{{ project_slug }} comms email send user@example.com \
   --subject "Welcome!" \
   --html "<h1>Welcome!</h1><p>Thanks for signing up</p>"
 
 # Send with both text and HTML
-{{ cookiecutter.project_slug }} comms email send user@example.com \
+{{ project_slug }} comms email send user@example.com \
   --subject "Welcome!" \
   --text "Thanks for signing up" \
   --html "<h1>Welcome!</h1>"
@@ -91,7 +91,7 @@ Subject: Welcome!
 Send an SMS message via Twilio.
 
 ```bash
-{{ cookiecutter.project_slug }} comms sms send <to> <body>
+{{ project_slug }} comms sms send <to> <body>
 ```
 
 **Arguments:**
@@ -102,10 +102,10 @@ Send an SMS message via Twilio.
 
 ```bash
 # Send verification code
-{{ cookiecutter.project_slug }} comms sms send +15559876543 "Your code is 123456"
+{{ project_slug }} comms sms send +15559876543 "Your code is 123456"
 
 # Send notification
-{{ cookiecutter.project_slug }} comms sms send +15559876543 "Your order has shipped!"
+{{ project_slug }} comms sms send +15559876543 "Your order has shipped!"
 ```
 
 **Output:**
@@ -127,7 +127,7 @@ Segments: 1
 Initiate a voice call via Twilio.
 
 ```bash
-{{ cookiecutter.project_slug }} comms call make <to> <twiml_url> [--timeout <seconds>]
+{{ project_slug }} comms call make <to> <twiml_url> [--timeout <seconds>]
 ```
 
 **Arguments:**
@@ -141,10 +141,10 @@ Initiate a voice call via Twilio.
 
 ```bash
 # Make call with default timeout
-{{ cookiecutter.project_slug }} comms call make +15559876543 "https://example.com/twiml/greeting.xml"
+{{ project_slug }} comms call make +15559876543 "https://example.com/twiml/greeting.xml"
 
 # Make call with custom timeout
-{{ cookiecutter.project_slug }} comms call make +15559876543 "https://example.com/twiml/survey.xml" --timeout 60
+{{ project_slug }} comms call make +15559876543 "https://example.com/twiml/survey.xml" --timeout 60
 ```
 
 **Output:**

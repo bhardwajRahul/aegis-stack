@@ -3,7 +3,9 @@ name = "{{ project_slug }}"
 version = "{{ version }}"
 description = "{{ project_description }}"
 readme = "README.md"
-requires-python = ">={{ python_version }},<3.14"
+{% if ai_rag %}requires-python = ">=3.11,<3.14"  # chromadb→onnxruntime lacks Python 3.14 wheels
+{% else %}requires-python = ">={{ python_version }},<3.15"
+{% endif %}
 authors = [
     {name = "{{ author_name }}", email = "{{ author_email }}"}
 ]
@@ -13,14 +15,18 @@ dependencies = [
     "flet[all]==0.28.3",
     "uvicorn==0.35.0",
     "structlog==25.4.0",
-    "pydantic-settings==2.10.1",
+    "pydantic-settings>=2.12.0",
     "typer==0.16.0",
     # Pin click to avoid yanked versions (typer dependency)
     "click==8.2.1",
     # Rich CLI formatting
     "rich==14.1.0",
+    # Interactive prompts with status line support
+    "prompt_toolkit>=3.0.0",
     # HTTP client for CLI API calls
     "httpx==0.28.1",
+    # Security fix for GHSA-38jv-5279-wg99
+    "urllib3>=2.6.3",
     # System monitoring
     "psutil==7.0.0",
 {%- if include_scheduler %}
@@ -33,6 +39,8 @@ dependencies = [
 {%- if worker_backend == "taskiq" %}
     "taskiq>=0.11.11",
     "taskiq-redis>=1.0.2",
+{%- elif worker_backend == "dramatiq" %}
+    "dramatiq[redis]>=1.17.0",
 {%- else %}
     "arq==0.25.0",
 {%- endif %}
@@ -40,29 +48,74 @@ dependencies = [
 {%- if include_database %}
     "sqlmodel>=0.0.14",
     "sqlalchemy>=2.0.0",
+{%- if database_engine == "postgres" %}
+    "asyncpg>=0.29.0",
+    "psycopg2-binary>=2.9.9",
+{%- else %}
     "aiosqlite>=0.19.0",
+{%- endif %}
     "greenlet>=1.1.0",
 {%- endif %}
 {%- if include_cache %}
     "redis[hiredis]==5.0.8",
 {%- endif %}
+{%- if include_observability %}
+    "logfire[fastapi,httpx{%- if include_database %},sqlalchemy{%- endif %}{%- if include_redis %},redis{%- endif %}]",
+{%- endif %}
 {%- if include_auth %}
     "python-jose[cryptography]==3.3.0",
-    "passlib[bcrypt]==1.7.4",
-    "bcrypt<5.0.0",  # Pin to 4.x due to passlib compatibility
+    "bcrypt>=4.0.0",
     "python-multipart==0.0.9",
+{%- endif %}
+{%- if include_auth or include_payment or include_insights or (include_ai and ai_backend in ["sqlite", "postgres"]) %}
     "alembic==1.16.5",
 {%- endif %}
 {%- if include_ai %}
-    "pydantic-ai-slim[{{ ai_providers }}]==1.0.10",
+    # File uploads for voice/STT endpoints
+    "python-multipart==0.0.9",
+{%- if ai_framework == "pydantic-ai" %}
+{# Map provider names to pydantic-ai-slim extras (OpenAI-compatible providers -> openai) #}
+{%- set pydantic_extras = ai_providers | replace("public", "openai") | replace("openrouter", "openai") | replace("ollama", "openai") %}
+    "pydantic-ai-slim[{{ pydantic_extras }}]>=1.0.10",
+    "httpx>=0.27.0",
+{%- else %}
+    # LangChain framework dependencies
+    "langchain-core>=1.1.0",
+{%- if "openai" in ai_providers or "public" in ai_providers %}
+    "langchain-openai>=1.1.0",
+{%- endif %}
+{%- if "anthropic" in ai_providers %}
+    "langchain-anthropic>=1.2.0",
+{%- endif %}
+{%- if "google" in ai_providers %}
+    "langchain-google-genai>=4.0.0",
+{%- endif %}
+{%- if "groq" in ai_providers %}
+    "langchain-groq>=1.1.0",
+{%- endif %}
+{%- if "mistral" in ai_providers %}
+    "langchain-mistralai>=1.1.0",
+{%- endif %}
+{%- if "cohere" in ai_providers %}
+    "langchain-cohere>=0.5.0",
+{%- endif %}
+{%- endif %}
     "marko==2.1.3",
 {%- endif %}
 {%- if include_comms %}
     "resend>=2.4.0",
     "twilio>=9.3.7",
 {%- endif %}
+{%- if include_payment %}
+    "stripe>=11.0.0",
+{%- endif %}
 {%- if include_auth or include_comms %}
     "email-validator==2.2.0",  # Required for EmailStr in auth/comms models
+{%- endif %}
+{%- if ai_rag %}
+    "chromadb>=0.4.22,<1.0.0",  # Vector store - pin to 0.x for stability
+    "sentence-transformers>=3.0.0",  # Local embeddings
+    "torch>=2.0.0",  # Explicit dep for CPU-only override (see [tool.uv.sources])
 {%- endif %}
 ]
 
@@ -71,8 +124,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest==8.4.1",
-    "pytest-asyncio==1.1.0",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.1.0",
     "ruff==0.12.7",
     "ty",
     "types-psutil==7.0.0.20250801",
@@ -101,6 +154,18 @@ packages = ["app"]
 [tool.ruff]
 line-length = 88
 target-version = "py{{ python_version | string | replace('.', '') }}"
+# Locale files are translator-managed: each entry is a single-line
+# ``"key": "translation",`` and rewrapping breaks the translator workflow.
+# CJK locales (ja/ko/zh/zh_Hant) also can't be wrapped on word boundaries.
+# Skip them entirely; lint the rest of the codebase strictly.
+#
+# Use ``extend-exclude`` (additive), NOT ``exclude`` — the latter
+# overrides ruff's built-in defaults and silently lets pre-commit's
+# ``ruff check --fix`` rewrite ``.venv`` (e.g. desugaring third-party
+# ``Optional[X]`` → ``X | None`` and breaking ``flet``'s submodule chain).
+extend-exclude = [
+    "app/i18n/locales/*.py",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]  # Added UP for pyupgrade (modern Python syntax)
@@ -120,16 +185,39 @@ force-sort-within-sections = true
 known-first-party = ["app"]
 
 [tool.ty.rules]
-# Configure ty to ignore only genuine false positives or unavoidable issues
-# Real type issues should be fixed, not ignored
+# Configure ty to ignore only genuine false positives or unavoidable issues.
+# Real type issues should be fixed, not ignored.
 unresolved-import = "ignore"              # Missing third-party type stubs (unavoidable)
 unresolved-attribute = "ignore"           # Some dynamic attribute access in Flet is unavoidable
 invalid-argument-type = "ignore"          # Flet dynamic attributes and colors
-non-subscriptable = "ignore"             # Flet page.controls access patterns
-unsupported-operator = "ignore"          # Flet value comparisons with None
-possibly-unbound-attribute = "ignore"    # Flet dynamic component properties
-call-non-callable = "ignore"             # Dynamic middleware registration patterns
-invalid-return-type = "ignore"           # Flet component return type flexibility
+not-subscriptable = "ignore"              # Flet page.controls access patterns
+unsupported-operator = "ignore"           # Flet value comparisons with None
+possibly-missing-attribute = "ignore"     # Flet dynamic component properties
+call-non-callable = "ignore"              # Dynamic middleware registration patterns
+invalid-return-type = "ignore"            # Flet component return type flexibility
+# Flet descriptors (Control.color, Canvas.shapes, FontWeight enum vs str)
+# reject the types our code assigns; adding `# type: ignore` at every site
+# is noisier than one rule-level mute. All genuine assignment errors are in
+# our own typed code paths (pydantic models, FastAPI handlers) — those
+# surface through ``mypy``/runtime validators, not through this rule.
+invalid-assignment = "ignore"
+# typer's ``Option`` / ``Argument`` overload set doesn't match how we call
+# them (explicit keyword combos with sentinels); the library is fine at
+# runtime.
+no-matching-overload = "ignore"
+# SQLModel emits a deprecation "prefer exec() over execute()" warning even
+# when ``execute(text(...))`` is the right call (raw SQL / PRAGMAs where
+# ``exec()`` doesn't apply). Suppress the noise; genuine sqlalchemy API
+# deprecations still surface at runtime.
+deprecated = "ignore"
+# Third-party packages (resend, etc.) with lazy / dynamic submodule imports
+# trip ty's static submodule-resolution. The code works at runtime.
+possibly-missing-submodule = "ignore"
+
+[tool.ty.src]
+# Don't check the virtualenv. Third-party stubs vary; we only care about
+# errors in our own code.
+exclude = [".venv", "venv", ".tox", "build", "dist"]
 
 
 [tool.pytest.ini_options]
@@ -140,3 +228,14 @@ testpaths = ["tests"]
 dev = [
     "httpx>=0.28.1",
 ]
+{%- if ai_rag %}
+
+# Route torch to CPU-only index to avoid ~2.5GB of CUDA/nvidia packages
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+{%- endif %}

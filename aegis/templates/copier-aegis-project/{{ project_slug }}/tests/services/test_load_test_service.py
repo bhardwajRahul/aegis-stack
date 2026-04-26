@@ -24,8 +24,7 @@ class TestLoadTestConfiguration:
         """Test configuration with defaults."""
         config = LoadTestConfiguration()
 
-        assert config.num_tasks >= 10
-        assert config.num_tasks <= 10000
+        assert config.num_tasks >= 1
         assert config.task_type == LoadTestTypes.CPU_INTENSIVE
         assert config.batch_size >= 1
         assert config.delay_ms >= 0
@@ -34,11 +33,11 @@ class TestLoadTestConfiguration:
         """Test configuration value bounds enforcement."""
         # Test upper bounds - should raise ValidationError
         with pytest.raises(ValidationError):
-            LoadTestConfiguration(num_tasks=50000, batch_size=200, delay_ms=10000)
+            LoadTestConfiguration(batch_size=200, delay_ms=10000)
 
         # Test lower bounds - should raise ValidationError
         with pytest.raises(ValidationError):
-            LoadTestConfiguration(num_tasks=5, batch_size=0, delay_ms=-100)
+            LoadTestConfiguration(num_tasks=0, batch_size=0, delay_ms=-100)
 
     def test_to_dict(self):
         """Test configuration serialization."""

@@ -26,7 +26,7 @@ class BaseDetailDialog(ft.AlertDialog):
             def __init__(self, component_data: ComponentStatus):
                 sections = [
                     MyOverviewSection(component_data.metadata),
-                    ft.Divider(height=20, color=ft.Colors.OUTLINE),
+                    ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                     MyStatsSection(component_data),
                 ]
 
@@ -67,7 +67,7 @@ class BaseDetailDialog(ft.AlertDialog):
             ),
             width=width,
             height=height,
-            border=ft.border.all(1, self._get_status_color()),  # Status-colored border
+            border=ft.border.all(1, ft.Colors.OUTLINE),  # Neutral border
             border_radius=Theme.Components.CARD_RADIUS,  # Rounded corners like cards
         )
 

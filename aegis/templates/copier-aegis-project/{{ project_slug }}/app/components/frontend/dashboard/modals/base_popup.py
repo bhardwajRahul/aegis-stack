@@ -81,7 +81,7 @@ class BasePopup(ft.Container):
         )
 
         # Actual popup panel with customizable styling
-        # Add a click handler that stops propagation so clicks inside don't close the popup
+        # Click handler stops propagation so clicks inside don't close popup
         self.panel = ft.Container(
             content=content,
             visible=False,

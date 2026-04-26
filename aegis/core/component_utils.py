@@ -73,6 +73,29 @@ def extract_base_component_name(component: str) -> str:
     return base_name
 
 
+def extract_base_service_name(service: str) -> str:
+    """
+    Extract the base service name from a service string with optional bracket syntax.
+
+    Unlike extract_base_component_name, this handles multi-value bracket syntax
+    like 'ai[langchain, openai]' which is specific to AI service configuration.
+
+    Args:
+        service: Service name like 'ai[langchain, openai]', 'ai[sqlite]', or 'auth'
+
+    Returns:
+        Base service name
+
+    Examples:
+        extract_base_service_name('ai[langchain, openai]') -> 'ai'
+        extract_base_service_name('ai[sqlite]') -> 'ai'
+        extract_base_service_name('auth') -> 'auth'
+    """
+    if "[" in service:
+        return service.split("[")[0].strip()
+    return service.strip()
+
+
 def extract_engine_info(component: str) -> str | None:
     """
     Extract engine information from a component name.

@@ -31,10 +31,12 @@ class AIServiceConfig(BaseModel):
     model: str = "gpt-3.5-turbo"  # Default to widely supported model
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1000, gt=0, le=8000)
-    timeout_seconds: float = Field(default=30.0, gt=0)
+    timeout_seconds: float = Field(default=120.0, gt=0)
 
-    class Config:
-        use_enum_values = True
+    # RAG-Chat integration settings (used when RAG is enabled)
+    rag_default_collection: str = "default"
+    rag_top_k: int = Field(default=10, gt=0, le=50)
+    rag_min_score: float = Field(default=0.1, ge=0.0, le=1.0)
 
     @classmethod
     def from_settings(cls, settings: Any) -> "AIServiceConfig":
@@ -45,7 +47,13 @@ class AIServiceConfig(BaseModel):
             model=getattr(settings, "AI_MODEL", "gpt-3.5-turbo"),
             temperature=getattr(settings, "AI_TEMPERATURE", 0.7),
             max_tokens=getattr(settings, "AI_MAX_TOKENS", 1000),
-            timeout_seconds=getattr(settings, "AI_TIMEOUT_SECONDS", 30.0),
+            timeout_seconds=getattr(settings, "AI_TIMEOUT_SECONDS", 120.0),
+            # RAG-Chat integration settings
+            rag_default_collection=getattr(
+                settings, "RAG_CHAT_DEFAULT_COLLECTION", "default"
+            ),
+            rag_top_k=getattr(settings, "RAG_CHAT_TOP_K", 10),
+            rag_min_score=getattr(settings, "RAG_CHAT_MIN_SCORE", 0.1),
         )
 
     def get_provider_config(self, settings: Any) -> ProviderConfig:
@@ -58,6 +66,7 @@ class AIServiceConfig(BaseModel):
             AIProvider.GROQ: getattr(settings, "GROQ_API_KEY", None),
             AIProvider.MISTRAL: getattr(settings, "MISTRAL_API_KEY", None),
             AIProvider.COHERE: getattr(settings, "COHERE_API_KEY", None),
+            AIProvider.OLLAMA: None,  # Local provider, no API key required
             AIProvider.PUBLIC: None,  # No API key required for public endpoints
         }
 
@@ -86,10 +95,11 @@ class AIServiceConfig(BaseModel):
         if not capabilities:
             errors.append(f"Unsupported provider: {self.provider}")
 
-        # Check API key requirement (only PUBLIC provider requires no API key)
+        # Check API key requirement (LOCAL providers don't need API keys)
+        local_providers = {AIProvider.PUBLIC, AIProvider.OLLAMA}
         provider_config = self.get_provider_config(settings)
 
-        if self.provider != AIProvider.PUBLIC and not provider_config.api_key:
+        if self.provider not in local_providers and not provider_config.api_key:
             errors.append(
                 f"Missing API key for {self.provider} provider. "
                 f"Set {self.provider.upper()}_API_KEY environment variable."

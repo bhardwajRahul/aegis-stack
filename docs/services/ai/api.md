@@ -537,10 +537,357 @@ curl http://localhost:8000/ai/version | jq
 }
 ```
 
+## Usage Analytics
+
+### GET `/ai/usage/stats`
+
+!!! note
+    Requires database backend (`ai[sqlite]` or `ai[postgres]`). Not available with in-memory backend.
+
+Get usage statistics with token counts, costs, and model breakdown.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `user_id` | string | No | all users | Filter by user |
+| `start_time` | datetime | No | all time | Start of time range |
+| `end_time` | datetime | No | now | End of time range |
+| `recent_limit` | integer | No | 10 | Number of recent activities |
+
+**Response:**
+
+```json
+{
+  "total_tokens": 45230,
+  "input_tokens": 32100,
+  "output_tokens": 13130,
+  "total_cost": 0.47,
+  "total_requests": 23,
+  "success_rate": 95.6,
+  "models": [
+    {
+      "model_id": "gpt-4o",
+      "vendor": "OpenAI",
+      "requests": 15,
+      "tokens": 30000,
+      "cost": 0.35,
+      "percentage": 65.2
+    }
+  ],
+  "recent_activity": [
+    {
+      "timestamp": "2024-01-15T10:30:00Z",
+      "model": "gpt-4o",
+      "input_tokens": 1500,
+      "output_tokens": 800,
+      "cost": 0.02,
+      "success": true,
+      "action": "chat"
+    }
+  ]
+}
+```
+
+**Example:**
+
+```bash
+# All-time stats
+curl http://localhost:8000/ai/usage/stats | jq
+
+# Per-user stats
+curl "http://localhost:8000/ai/usage/stats?user_id=my-user"
+
+# Time-range query
+curl "http://localhost:8000/ai/usage/stats?start_time=2024-01-01T00:00:00Z&recent_limit=20"
+```
+
+---
+
+## LLM Catalog Endpoints
+
+All LLM catalog endpoints are prefixed with `/llm`. See [LLM Catalog](llm-catalog.md) for full documentation.
+
+### GET `/llm/status`
+
+Get catalog statistics.
+
+```json
+{
+  "vendor_count": 32,
+  "model_count": 1847,
+  "deployment_count": 2103,
+  "price_count": 1952,
+  "top_vendors": [
+    {"name": "OpenAI", "model_count": 156},
+    {"name": "Google", "model_count": 89}
+  ]
+}
+```
+
+### GET `/llm/vendors`
+
+List all vendors with model counts.
+
+```bash
+curl http://localhost:8000/llm/vendors | jq
+```
+
+### GET `/llm/modalities`
+
+List modalities (text, image, audio, video) with model counts.
+
+### GET `/llm/models`
+
+Search and filter models.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `pattern` | string | null | Search pattern for model ID/title |
+| `vendor` | string | null | Filter by vendor name |
+| `modality` | string | null | Filter by modality |
+| `limit` | integer | 50 | Max results (1-200) |
+| `include_disabled` | boolean | false | Include disabled models |
+
+```bash
+# Search models
+curl "http://localhost:8000/llm/models?pattern=gpt-4&vendor=openai"
+
+# Filter by modality
+curl "http://localhost:8000/llm/models?modality=image&limit=20"
+```
+
+**Response:**
+
+```json
+[
+  {
+    "model_id": "gpt-4o",
+    "vendor": "OpenAI",
+    "context_window": 128000,
+    "input_price": 2.50,
+    "output_price": 10.00,
+    "released_on": "2024-05-13"
+  }
+]
+```
+
+### GET `/llm/current`
+
+Get current active LLM configuration enriched with catalog data.
+
+```json
+{
+  "provider": "openai",
+  "model": "gpt-4o",
+  "temperature": 0.7,
+  "max_tokens": 1000,
+  "context_window": 128000,
+  "input_price": 2.50,
+  "output_price": 10.00,
+  "modalities": ["text", "image"]
+}
+```
+
+---
+
+## RAG Endpoints
+
+All RAG endpoints are prefixed with `/rag`. See [RAG](rag.md) for full documentation.
+
+### POST `/rag/index`
+
+Index documents from a path.
+
+**Request:**
+
+```json
+{
+  "path": "./app",
+  "collection_name": "code",
+  "extensions": [".py", ".ts"],
+  "exclude_patterns": ["**/test_*"]
+}
+```
+
+**Response:**
+
+```json
+{
+  "collection_name": "code",
+  "documents_added": 1523,
+  "total_documents": 1523,
+  "duration_ms": 8300.5
+}
+```
+
+### POST `/rag/search`
+
+Semantic search across indexed documents.
+
+**Request:**
+
+```json
+{
+  "query": "how does authentication work",
+  "collection_name": "code",
+  "top_k": 5,
+  "filter_metadata": null
+}
+```
+
+**Response:**
+
+```json
+{
+  "query": "how does authentication work",
+  "collection_name": "code",
+  "results": [
+    {
+      "content": "class AuthService:\n    ...",
+      "metadata": {"source": "app/services/auth/service.py", "file_name": "service.py"},
+      "score": 0.8932,
+      "rank": 1
+    }
+  ],
+  "result_count": 5
+}
+```
+
+### GET `/rag/collections`
+
+List all collection names.
+
+### GET `/rag/collections/{name}`
+
+Get collection info (name, document count, metadata).
+
+### GET `/rag/collections/{name}/files`
+
+List indexed files with chunk counts.
+
+```json
+{
+  "collection_name": "code",
+  "files": [
+    {"source": "app/services/ai/service.py", "chunks": 45},
+    {"source": "app/services/auth/service.py", "chunks": 23}
+  ],
+  "total_files": 87,
+  "total_chunks": 1523
+}
+```
+
+### DELETE `/rag/collections/{name}`
+
+Delete a collection and all its documents.
+
+### GET `/rag/health`
+
+RAG service health status including configuration and validation.
+
+---
+
+## Voice Endpoints
+
+All voice endpoints are prefixed with `/voice`. See [Voice](voice.md) for full documentation.
+
+### TTS Catalog
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /voice/catalog/tts/providers` | List TTS providers |
+| `GET /voice/catalog/tts/{provider_id}/models` | List models for provider |
+| `GET /voice/catalog/tts/{provider_id}/voices` | List voices for provider |
+
+### STT Catalog
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /voice/catalog/stt/providers` | List STT providers |
+| `GET /voice/catalog/stt/{provider_id}/models` | List STT models |
+
+### Settings & Preview
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /voice/settings` | Get current voice settings |
+| `POST /voice/settings` | Update voice settings |
+| `POST /voice/preview` | Generate voice preview (returns audio/mpeg) |
+| `GET /voice/preview/{voice_id}` | Browser-friendly voice preview |
+| `GET /voice/catalog/summary` | Full catalog summary |
+
+---
+
+## Error Handling
+
+### HTTP Status Codes
+
+| Status | Description |
+|--------|-------------|
+| 200 | Success |
+| 400 | Bad request (invalid conversation_id, missing required fields) |
+| 403 | Forbidden (conversation access denied) |
+| 404 | Not found (conversation/collection doesn't exist) |
+| 502 | Bad gateway (AI provider error) |
+| 503 | Service unavailable (AI service disabled or misconfigured) |
+| 500 | Internal server error |
+
+### Error Response Format
+
+```json
+{
+  "detail": "Error message description"
+}
+```
+
+### Common Errors
+
+**AI Service Disabled:**
+```json
+{
+  "detail": "AI service error: AI service is disabled"
+}
+```
+
+**Missing API Key:**
+```json
+{
+  "detail": "AI service error: Missing API key for openai provider. Set OPENAI_API_KEY environment variable."
+}
+```
+
+**Provider Error:**
+```json
+{
+  "detail": "AI provider error: Rate limit exceeded"
+}
+```
+
+**Conversation Not Found:**
+```json
+{
+  "detail": "Conversation error: Conversation abc-123 not found"
+}
+```
+
+**Collection Not Found:**
+```json
+{
+  "detail": "Collection 'my-collection' not found"
+}
+```
+
 ---
 
 **Next Steps:**
 
+- **[LLM Catalog](llm-catalog.md)** - Full catalog documentation
+- **[RAG](rag.md)** - Full RAG documentation
+- **[Cost Tracking](cost-tracking.md)** - Usage analytics
+- **[Voice](voice.md)** - Voice capabilities
 - **[Service Layer](integration.md)** - Integration patterns and architecture
 - **[CLI Commands](cli.md)** - Command-line interface reference
 - **[Examples](examples.md)** - Real-world usage patterns

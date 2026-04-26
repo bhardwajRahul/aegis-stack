@@ -6,17 +6,44 @@ RUN apt-get update -y && \
       build-essential \
       ca-certificates \
       curl \
+{%- if database_engine == "postgres" %}
+      postgresql-client \
+{%- endif %}
     && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Install uv with specific version for reproducibility
-RUN pip install --no-cache-dir uv==0.4.18
+RUN pip install --no-cache-dir uv==0.10.0
+{%- if include_payment and payment_provider == "stripe" %}
+
+# Install stripe-cli — used by the Overseer webhook auto-forwarder
+# (app/components/backend/startup/payment_webhook_forwarder.py) to
+# shuttle Stripe test events to the local webhook endpoint without the
+# user needing to run `stripe listen` themselves. Auth is handled via
+# --api-key at runtime (STRIPE_SECRET_KEY) so no `stripe login` is
+# required inside the container.
+ARG STRIPE_CLI_VERSION=1.21.8
+RUN arch="$(dpkg --print-architecture)" && \
+    case "$arch" in \
+      amd64) target="linux_x86_64" ;; \
+      arm64) target="linux_arm64" ;; \
+      *) echo "Unsupported arch: $arch" && exit 1 ;; \
+    esac && \
+    curl -fsSL "https://github.com/stripe/stripe-cli/releases/download/v${STRIPE_CLI_VERSION}/stripe_${STRIPE_CLI_VERSION}_${target}.tar.gz" \
+      | tar -xz -C /usr/local/bin stripe && \
+    chmod +x /usr/local/bin/stripe
+{%- endif %}
 
 # Set environment variables
+# Use /opt/venv for virtual environment to avoid conflicts with volume mounts
 ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/code \
-    UV_CACHE_DIR=/tmp/uv-cache
+    UV_CACHE_DIR=/tmp/uv-cache \
+    UV_HTTP_TIMEOUT=300 \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /code
 
