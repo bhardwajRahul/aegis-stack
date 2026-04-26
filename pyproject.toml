@@ -1,6 +1,6 @@
 [project]
 name = "aegis-stack"
-version = "0.6.11rc2"
+version = "0.6.11rc3"
 description = "A production-ready FastAPI platform with modular components and a built-in control plane. Try: uvx aegis-stack init my-project"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
@@ -39,7 +39,11 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "typer>=0.9.0",
+    # Pinned (not >=) because typer's newer releases use unquoted forward
+    # references (e.g. ``cls: type[TyperCommand] | None``) that fail at
+    # class-body evaluation on Python 3.11/3.12. CI runs on 3.11 — pin
+    # below the regressed range until typer ships a fix.
+    "typer==0.16.0",
     "copier>=9.11.2",
     "rich>=13.0.0",
     "pillow>=12.2.0",

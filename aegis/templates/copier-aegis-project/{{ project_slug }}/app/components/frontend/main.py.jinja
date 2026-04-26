@@ -990,7 +990,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
 {% if include_worker and include_redis %}
         # How often the frontend pushes UI updates to the browser (seconds).
         # Events are received and counted immediately; only rendering is throttled.
-        _UI_FLUSH_INTERVAL = 0.1
+        _ui_flush_interval = 0.1
 
         async def flush_worker_modal() -> None:
             """Periodically flush dirty worker modal UI updates.
@@ -1000,7 +1000,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
             and aiter_lines() blocks waiting for the next event.
             """
             while _is_alive():
-                await asyncio.sleep(_UI_FLUSH_INTERVAL)
+                await asyncio.sleep(_ui_flush_interval)
                 worker_popup = page.data.get(
                     "_modal_cache", {}
                 ).get("worker")

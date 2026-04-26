@@ -154,6 +154,18 @@ packages = ["app"]
 [tool.ruff]
 line-length = 88
 target-version = "py{{ python_version | string | replace('.', '') }}"
+# Locale files are translator-managed: each entry is a single-line
+# ``"key": "translation",`` and rewrapping breaks the translator workflow.
+# CJK locales (ja/ko/zh/zh_Hant) also can't be wrapped on word boundaries.
+# Skip them entirely; lint the rest of the codebase strictly.
+#
+# Use ``extend-exclude`` (additive), NOT ``exclude`` — the latter
+# overrides ruff's built-in defaults and silently lets pre-commit's
+# ``ruff check --fix`` rewrite ``.venv`` (e.g. desugaring third-party
+# ``Optional[X]`` → ``X | None`` and breaking ``flet``'s submodule chain).
+extend-exclude = [
+    "app/i18n/locales/*.py",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]  # Added UP for pyupgrade (modern Python syntax)

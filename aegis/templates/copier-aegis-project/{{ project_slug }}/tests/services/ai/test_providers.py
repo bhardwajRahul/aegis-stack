@@ -136,7 +136,8 @@ class TestGetSupportedProviders:
     def test_supported_providers_count(self) -> None:
         """Verify expected number of supported providers."""
         providers = get_supported_providers()
-        # Should have at least 8 providers: openai, anthropic, google, groq, mistral, cohere, ollama, public
+        # Should have at least 8 providers: openai, anthropic, google,
+        # groq, mistral, cohere, ollama, public
         assert len(providers) >= 8
 
     def test_public_in_supported_providers(self) -> None:

@@ -198,7 +198,9 @@ def test_after_process_message_failed() -> None:
 # Group 3: _format_eta()
 # ---------------------------------------------------------------------------
 
-from app.components.frontend.dashboard.modals.worker_modal import _format_eta  # noqa: E402
+from app.components.frontend.dashboard.modals.worker_modal import (  # noqa: E402
+    _format_eta,
+)
 
 
 def test_format_eta_subsecond() -> None:

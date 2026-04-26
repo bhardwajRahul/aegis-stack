@@ -226,9 +226,13 @@ def _display_scheduler_metadata(
     paused_tasks = metadata.get("paused_tasks", 0)
 
     console.print(f"{tree_indent}[dim]{t('health.task_statistics')}[/dim]")
-    console.print(
-        f"{tree_indent}  [dim]• {t('health.task_stats_line', total=total_tasks, active=active_tasks, paused=paused_tasks)}[/dim]"
+    stats_line = t(
+        "health.task_stats_line",
+        total=total_tasks,
+        active=active_tasks,
+        paused=paused_tasks,
     )
+    console.print(f"{tree_indent}  [dim]• {stats_line}[/dim]")
 
     # Upcoming tasks
     upcoming_tasks = metadata.get("upcoming_tasks", [])
@@ -255,17 +259,23 @@ def _display_scheduler_metadata(
             else:
                 formatted_time = t("shared.unknown")
 
-            console.print(
-                f"{tree_indent}  [dim]• {t('health.task_next_run', name=task_name, time=formatted_time)}[/dim]"
+            next_run_line = t(
+                "health.task_next_run", name=task_name, time=formatted_time
             )
+            console.print(f"{tree_indent}  [dim]• {next_run_line}[/dim]")
 
         # Show "and X more..." if there are more tasks (only in non-detailed mode)
         if not detailed and len(upcoming_tasks) > 3:
             remaining = len(upcoming_tasks) - 3
-            task_word = t("health.task_word") if remaining == 1 else t("health.tasks_word")
-            console.print(
-                f"{tree_indent}  [dim]• {t('health.more_tasks', count=remaining, word=task_word)}[/dim]"
+            task_word = (
+                t("health.task_word")
+                if remaining == 1
+                else t("health.tasks_word")
             )
+            more_line = t(
+                "health.more_tasks", count=remaining, word=task_word
+            )
+            console.print(f"{tree_indent}  [dim]• {more_line}[/dim]")
     else:
         console.print(f"{tree_indent}[dim]{t('health.no_upcoming_tasks')}[/dim]")
 
@@ -314,9 +324,17 @@ async def get_health_data(
                         error_msg = f"{message}"
                         if unhealthy_components:
                             components_str = ", ".join(unhealthy_components)
-                            error_msg += f" ({t('health.unhealthy_label', components=components_str)})"
+                            unhealthy = t(
+                                "health.unhealthy_label",
+                                components=components_str,
+                            )
+                            error_msg += f" ({unhealthy})"
                         if health_percentage is not None:
-                            error_msg += f" - {t('health.health_pct_label', pct=f'{health_percentage:.1f}%')}"
+                            pct_label = t(
+                                "health.health_pct_label",
+                                pct=f"{health_percentage:.1f}%",
+                            )
+                            error_msg += f" - {pct_label}"
 
                         raise RuntimeError(error_msg) from None
                 except (ValueError, KeyError, TypeError):

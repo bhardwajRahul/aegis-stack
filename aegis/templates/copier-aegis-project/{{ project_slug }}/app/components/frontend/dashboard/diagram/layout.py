@@ -42,7 +42,6 @@ RADIAL_POSITIONS: dict[str, tuple[float, float]] = {
     "service_auth": (0.15, 0.30),  # Bottom-center-right
     "service_ai": (0.50, 0.25),  # Bottom-right
     "service_comms": (-0.50, 0.25),  # Bottom-left
-    "service_payment": (0.30, 0.45),  # Lower-right (below service_ai)
 }
 
 

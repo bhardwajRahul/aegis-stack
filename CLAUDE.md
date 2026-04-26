@@ -32,7 +32,7 @@ Each generated project includes:
 
 ## Installation
 
-**Current Version**: 0.6.11rc2
+**Current Version**: 0.6.11rc3
 
 ```bash
 pip install aegis-stack
@@ -66,6 +66,34 @@ This project uses `uv` for dependency management and a `Makefile` for CLI develo
 - `make clean-test-projects` - Remove generated test projects
 
 **Template testing is critical** - always run `make test-template` after modifying templates to ensure generated projects work correctly.
+
+### Pre-RC verification (REQUIRED before any version bump)
+
+Before suggesting a version/rc bump, run BOTH locally:
+
+1. **`make check`** — the aegis-stack repo's OWN test suite (lint +
+   typecheck + pytest). Catches bugs in the CLI / core code itself,
+   including config tests that gate on constants like
+   ``DEFAULT_PYTHON_VERSION``. Without this, changing a constant
+   without updating its assertion test passes locally but fails CI.
+
+2. **`make test-stacks-full`** — the matrix that runs each generated
+   stack through generation → install → lint → typecheck → pytest.
+   Catches drift in templates / cross-stack issues.
+
+History shows multiple rcs in a row were "green locally" by `aegis init` +
+`make check` (on the GENERATED project) on a single stack, but failed CI
+because either:
+- The matrix was never run (caught template drift on stacks the local
+  test didn't generate), or
+- The aegis-stack repo's own tests were never run (caught constant /
+  config changes without test updates).
+
+Running both targets is the only way to match what CI actually runs.
+
+If the matrix takes too long during iteration, use `make test-stacks-quick`
+for fast feedback (3 representative stacks: base, everything, insights),
+then run the full matrix once at the end.
 
 ### TestPyPI Release Testing
 Test upgrade paths using TestPyPI before publishing to PyPI:

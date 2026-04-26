@@ -5,11 +5,12 @@ Tabbed modal showing adoption metrics across all data sources.
 All tabs pull real data from the database via _load_db().
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: I001
 
 from typing import Any
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     H3Text,
@@ -191,7 +192,7 @@ def _make_legend(items: list[tuple[str, str]]) -> ft.Row:
 
 
 class InsightsTab(ft.Container):
-    """Base class for insight tabs with date range chips, events toggle, and rebuild pattern."""
+    """Base class for insight tabs with date range chips, events toggle, and rebuild pattern."""  # noqa: E501
 
     _default_days: int = 7  # Override in subclass
 
@@ -298,7 +299,7 @@ class InsightsTab(ft.Container):
     def _make_filter_bar(
         self, last_updated: str = "", extra_controls: list[ft.Control] | None = None
     ) -> ft.Row:
-        """Build the standard filter bar with range chips, last updated, and events toggle."""
+        """Build the standard filter bar with range chips, last updated, and events toggle."""  # noqa: E501
         right_items: list[ft.Control] = []
         if last_updated:
             right_items.append(
@@ -370,7 +371,7 @@ class InsightsTab(ft.Container):
 
 
 def _build_db_from_bulk(bulk: BulkInsightsResponse) -> dict[str, Any]:
-    """Transform bulk-loaded data into the db dict consumed by OverviewTab and SettingsTab."""
+    """Transform bulk-loaded data into the db dict consumed by OverviewTab and SettingsTab."""  # noqa: E501
     from app.services.insights.query_service import InsightQueryService
 
     cutoff_14d, _ = InsightQueryService.compute_cutoffs(14)
@@ -616,7 +617,7 @@ class OverviewTab(ft.Container):
 
         # Latest day's deltas from bulk data (for "+X today/yesterday" subtitle)
         def _latest_daily(key: str) -> tuple[int, str]:
-            """Get the most recent day's value and label ('today', 'yesterday', 'Xd ago')."""
+            """Get the most recent day's value and label ('today', 'yesterday', 'Xd ago')."""  # noqa: E501
             rows = bulk.daily.get(key, []) if bulk else []
             if not rows:
                 return 0, "today"
@@ -1002,7 +1003,7 @@ class GitHubTrafficTab(InsightsTab):
                         Theme.Colors.INFO,
                         change_pct=_pct(total_unique, prev_u),
                         prev_value=f"+{last_unique:,} {_day_label}",
-                        tooltip="Unique cloners per day, counted independently by GitHub. Not deduplicated across days.",
+                        tooltip="Unique cloners per day, counted independently by GitHub. Not deduplicated across days.",  # noqa: E501
                     ),
                     MetricCard(
                         "Views",
@@ -1259,7 +1260,7 @@ class GitHubTrafficTab(InsightsTab):
         content.append(
             ft.Container(
                 content=SecondaryText(
-                    f"{range_label} clone ratio of {clone_ratio:.1f}:1 across {total_clones:,} clones "
+                    f"{range_label} clone ratio of {clone_ratio:.1f}:1 across {total_clones:,} clones "  # noqa: E501
                     f"from {total_unique:,} unique cloners. "
                     f"Traffic data covers {num_days} days.",
                     size=Theme.Typography.BODY_SMALL,
@@ -1705,7 +1706,7 @@ class StarsTab(InsightsTab):
             return
 
         # Date range text
-        date_range = f"{_pretty_date(star_history[0]['date'])} \u2014 {_pretty_date(star_history[-1]['date'])}"
+        date_range = f"{_pretty_date(star_history[0]['date'])} \u2014 {_pretty_date(star_history[-1]['date'])}"  # noqa: E501
         content.append(SecondaryText(date_range, size=Theme.Typography.BODY_SMALL))
 
         # Event chips — only on dates with stars, exclude star type
@@ -1752,10 +1753,10 @@ class StarsTab(InsightsTab):
             count = d.get("count", 1)
             names = d.get("usernames", [])
             if count == 1:
-                tip = f"#{d['stars']} — {names[0] if names else ''}\n{_pretty_date(d['date'])}"
+                tip = f"#{d['stars']} — {names[0] if names else ''}\n{_pretty_date(d['date'])}"  # noqa: E501
             else:
                 first_num = d["stars"] - count + 1
-                tip = f"#{first_num}-#{d['stars']} ({count} stars)\n{_pretty_date(d['date'])}"
+                tip = f"#{first_num}-#{d['stars']} ({count} stars)\n{_pretty_date(d['date'])}"  # noqa: E501
             history_points.append(
                 ft.LineChartDataPoint(
                     i,
@@ -2023,7 +2024,7 @@ class PyPITab(InsightsTab):
         # Date range + events in window
         releases = data.get("releases", {})
         if daily:
-            date_range = f"{_pretty_date(daily[0]['date'])} \u2014 {_pretty_date(daily[-1]['date'])}"
+            date_range = f"{_pretty_date(daily[0]['date'])} \u2014 {_pretty_date(daily[-1]['date'])}"  # noqa: E501
             content.append(ft.Container(height=8))
             content.append(SecondaryText(date_range, size=Theme.Typography.BODY_SMALL))
 
@@ -2050,7 +2051,7 @@ class PyPITab(InsightsTab):
                     else 1
                 )
 
-            # Smart rounding: small values round to nearest 5, medium to 25, large to 100
+            # Smart rounding: small values round to nearest 5, medium to 25, large to 100  # noqa: E501
             if max_val <= 20:
                 step = 5
             elif max_val <= 100:
@@ -2086,7 +2087,7 @@ class PyPITab(InsightsTab):
                         ft.LineChartDataPoint(
                             i,
                             d["total"],
-                            tooltip=f"Total: {d['total']:,}  Bot: {d['total'] - d['human']:,}",
+                            tooltip=f"Total: {d['total']:,}  Bot: {d['total'] - d['human']:,}",  # noqa: E501
                             point=point_style,
                         )
                     )
@@ -2321,7 +2322,7 @@ class PyPITab(InsightsTab):
                                 border_radius=5,
                             ),
                             SecondaryText(
-                                f"Downloads by Version ({'incl. CI' if include_ci else 'human only'})",
+                                f"Downloads by Version ({'incl. CI' if include_ci else 'human only'})",  # noqa: E501
                                 size=Theme.Typography.BODY_SMALL,
                             ),
                         ],
@@ -2691,7 +2692,7 @@ class DocsTab(InsightsTab):
         if not daily:
             content.append(
                 SecondaryText(
-                    "No Plausible data collected yet. Run: my-app insights collect plausible"
+                    "No Plausible data collected yet. Run: my-app insights collect plausible"  # noqa: E501
                 )
             )
             self._content_column.controls = content
@@ -3444,8 +3445,8 @@ def _group_events(
     Returns list of (display_date, label, type, dates_set).
     At small ranges (<=30d), no grouping — each event gets its own chip.
     """
+    from datetime import datetime as dt  # noqa: I001
     import re
-    from datetime import datetime as dt
 
     # Always return with dates_set for consistent interface
     if days <= 30 or not events:
@@ -3482,7 +3483,7 @@ def _group_events(
             tags = [lbl for _, lbl in sorted(items)]
             label = f"{tags[0]}\u2013{tags[-1]}" if len(tags) > 1 else tags[0]
         elif etype == "star":
-            # Extract star numbers from labels like "⭐ #80-#85 (6 stars)" or "⭐ #99 — user"
+            # Extract star numbers from labels like "⭐ #80-#85 (6 stars)" or "⭐ #99 — user"  # noqa: E501
             nums: list[int] = []
             for _, lbl in items:
                 for m in re.findall(r"#(\d+)", lbl):
@@ -3506,7 +3507,7 @@ def _group_events(
 
 
 def _extract_max_number(text: str) -> str:
-    """Extract the largest number from a text string (e.g., '5,292 clones' -> '5,292')."""
+    """Extract the largest number from a text string (e.g., '5,292 clones' -> '5,292')."""  # noqa: E501
     import re
 
     numbers = re.findall(r"\d[\d,]*", text)

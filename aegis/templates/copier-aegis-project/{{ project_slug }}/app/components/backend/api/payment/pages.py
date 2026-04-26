@@ -34,6 +34,11 @@ def _page(
     """Render the shared page shell with a status-specific dot and content."""
     dot_class = "dot-success" if status == "success" else "dot-cancel"
     label = "Payment"
+    daisyui_url = "https://cdn.jsdelivr.net/npm/daisyui@4.12.23/dist/full.min.css"
+    back_btn_classes = (
+        "btn-aegis inline-flex items-center justify-center "
+        "w-full rounded-lg px-4 py-3 text-sm"
+    )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -41,7 +46,7 @@ def _page(
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{heading}</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.23/dist/full.min.css" rel="stylesheet">
+<link href="{daisyui_url}" rel="stylesheet">
 <style>
   :root {{
     --bg: #090B0D;
@@ -97,7 +102,7 @@ def _page(
     </div>
     <h1 class="text-2xl font-semibold mb-2">{heading}</h1>
     <p class="text-sm aegis-muted mb-8">{body}</p>
-    <a href="/dashboard/" class="btn-aegis inline-flex items-center justify-center w-full rounded-lg px-4 py-3 text-sm">Back to dashboard</a>
+    <a href="/dashboard/" class="{back_btn_classes}">Back to dashboard</a>
     {session_line}
   </div>
 </body>

@@ -235,11 +235,56 @@ class TestCheckRecords:
         broken = await service._check_records(SourceKeys.REDDIT)
         assert broken == []
 
-    # The previous ``test_star_daily_record`` / ``test_star_monthly_record``
-    # tests were removed when the ``GITHUB_STARS`` entry was dropped from
-    # ``CollectorService.RECORD_CHECKS``. If star-based records return,
-    # re-add tests alongside the matching entry in the RECORD_CHECKS dict
-    # (currently only ``github_traffic`` and ``pypi`` have entries).
+    @pytest.mark.asyncio
+    async def test_star_daily_record(self, async_db_session: AsyncSession) -> None:
+        """_check_records detects new star daily ATH from new_star events."""
+        source = await _seed_source(async_db_session, SourceKeys.GITHUB_STARS)
+        mt = await _seed_metric_type(async_db_session, source, "new_star")
+
+        # 6 stars on the same day
+        for i in range(6):
+            async_db_session.add(
+                InsightMetric(
+                    date=datetime(2026, 4, 10),
+                    metric_type_id=mt.id,  # type: ignore[arg-type]
+                    value=float(i + 1),
+                    period=Periods.EVENT,
+                )
+            )
+        await async_db_session.flush()
+
+        service = CollectorService(async_db_session)
+        broken = await service._check_records(SourceKeys.GITHUB_STARS)
+
+        star_records = [b for b in broken if "Stars Best Day" in b]
+        assert len(star_records) == 1
+        assert "6" in star_records[0]
+
+    @pytest.mark.asyncio
+    async def test_star_monthly_record(self, async_db_session: AsyncSession) -> None:
+        """_check_records detects new star monthly ATH from new_star events."""
+        source = await _seed_source(async_db_session, SourceKeys.GITHUB_STARS)
+        mt = await _seed_metric_type(async_db_session, source, "new_star")
+
+        # Stars across multiple days in the same month: 3 + 2 + 5 = 10
+        for day, count in [(1, 3), (5, 2), (10, 5)]:
+            for i in range(count):
+                async_db_session.add(
+                    InsightMetric(
+                        date=datetime(2026, 4, day),
+                        metric_type_id=mt.id,  # type: ignore[arg-type]
+                        value=float(i + 1),
+                        period=Periods.EVENT,
+                    )
+                )
+        await async_db_session.flush()
+
+        service = CollectorService(async_db_session)
+        broken = await service._check_records(SourceKeys.GITHUB_STARS)
+
+        monthly_records = [b for b in broken if "Stars Best Month" in b]
+        assert len(monthly_records) == 1
+        assert "10" in monthly_records[0]
 
 
 # ---------------------------------------------------------------------------
@@ -249,19 +294,20 @@ class TestCheckRecords:
 
 class TestGetRegisteredSources:
     def test_returns_all_registered(self) -> None:
-        """Pins the current registered collector set.
+        """Sources match what was wired up in COLLECTOR_REGISTRY at generation.
 
-        If a collector is added (plausible, reddit, etc.) or removed,
-        update this list to match — it's a tripwire, not a spec.
+        Which collectors are present depends on the user's ``insights_*``
+        copier flags (github/pypi default true, plausible/reddit default
+        false), so we re-derive expected from the registry rather than
+        hard-coding all 6 — that would fail any default-config init.
         """
+        from app.services.insights.collector_service import COLLECTOR_REGISTRY
+
         service = CollectorService(AsyncMock())
         sources = service.get_registered_sources()
 
-        assert SourceKeys.GITHUB_TRAFFIC in sources
-        assert SourceKeys.GITHUB_STARS in sources
-        assert SourceKeys.GITHUB_EVENTS in sources
-        assert SourceKeys.PYPI in sources
-        assert len(sources) == 4
+        assert sorted(sources) == sorted(COLLECTOR_REGISTRY.keys())
+        assert sources, "At least one collector should be registered"
 
 
 # ---------------------------------------------------------------------------

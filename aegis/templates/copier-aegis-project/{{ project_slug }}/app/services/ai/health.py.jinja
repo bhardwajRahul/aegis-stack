@@ -112,8 +112,10 @@ async def check_ai_service_health() -> ComponentStatus:
             )
 
             # Add Ollama-specific health info when using Ollama provider
-            # NOTE: Detailed model/VRAM info is reported by check_ollama_health() (component check).
-            # Here we only do a lightweight availability check to avoid redundant timeout costs.
+            # NOTE: Detailed model/VRAM info is reported by
+            # check_ollama_health() (component check). Here we only do a
+            # lightweight availability check to avoid redundant timeout
+            # costs.
             if current_config.provider == AIProvider.OLLAMA:
                 try:
                     from app.services.ai.ollama import OllamaClient
@@ -127,13 +129,17 @@ async def check_ai_service_health() -> ComponentStatus:
 
                     if not ollama_available:
                         status = ComponentStatusType.WARNING
-                        message = "AI service configured for Ollama but server not reachable"
+                        message = (
+                            "AI service configured for Ollama but "
+                            "server not reachable"
+                        )
                 except Exception as e:
                     logger.warning(f"Failed to check Ollama availability: {e}")
                     metadata["ollama_error"] = str(e)
             else:
-                # Auto-discovery: Check if Ollama is running even when not configured as provider
-                # Uses the configured base URL (respects Docker vs local environment)
+                # Auto-discovery: Check if Ollama is running even when
+                # not configured as provider. Uses the configured base
+                # URL (respects Docker vs local environment).
                 try:
                     import httpx
 
@@ -149,10 +155,16 @@ async def check_ai_service_health() -> ComponentStatus:
                             metadata["ollama_detected_models_count"] = len(models)
                             if models:
                                 # Show first 3 model names as preview
-                                model_names = [m.get("name", "unknown") for m in models[:3]]
-                                metadata["ollama_detected_models_preview"] = model_names
+                                model_names = [
+                                    m.get("name", "unknown")
+                                    for m in models[:3]
+                                ]
+                                metadata[
+                                    "ollama_detected_models_preview"
+                                ] = model_names
                             logger.debug(
-                                f"Ollama auto-discovered at {ollama_url} with {len(models)} models"
+                                "Ollama auto-discovered at "
+                                f"{ollama_url} with {len(models)} models"
                             )
                 except Exception:
                     # Ollama not running - that's fine, just skip

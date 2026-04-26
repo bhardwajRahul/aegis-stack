@@ -142,7 +142,10 @@ class TestForwarderStartup:
 
     @pytest.mark.asyncio
     async def test_startup_passes_api_key_to_stripe_listen(self) -> None:
-        """``stripe listen`` is invoked with ``--api-key`` so no ``stripe login`` is required."""
+        """``stripe listen`` is invoked with ``--api-key``.
+
+        No ``stripe login`` is required.
+        """
         banner = "Ready! Your webhook signing secret is whsec_xyz\n"
         fake_stdout = MagicMock()
         fake_stdout.readline.side_effect = [banner, ""]

@@ -121,7 +121,10 @@ async def login(
         await audit.emit("auth.login_locked", actor_email=form_data.username)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account temporarily locked due to too many failed login attempts. Please try again later.",
+            detail=(
+                "Account temporarily locked due to too many failed "
+                "login attempts. Please try again later."
+            ),
         )
 
     if not user or not verify_password(form_data.password, user.hashed_password):

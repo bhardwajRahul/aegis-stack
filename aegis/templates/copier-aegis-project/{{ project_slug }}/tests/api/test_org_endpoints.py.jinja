@@ -89,7 +89,10 @@ class TestBulkAddMembersEndpoint:
     async def _setup_org_with_owner(
         self, db: AsyncSession
     ) -> tuple:
-        """Create a user, org, and make the user the owner. Returns (user, org, token)."""
+        """Create a user, org, and make the user the owner.
+
+        Returns (user, org, token).
+        """
         user_service = UserService(db)
         user = await user_service.create_user(
             UserCreate(email="owner@test.com", full_name="Owner", password="password123")

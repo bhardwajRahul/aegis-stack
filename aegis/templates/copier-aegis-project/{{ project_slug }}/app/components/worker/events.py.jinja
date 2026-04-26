@@ -27,7 +27,8 @@ async def publish_event(
     Publish a worker event to the Redis Stream.
 
     Args:
-        redis_client: Any Redis client that supports xadd (redis.asyncio.Redis or ArqRedis).
+        redis_client: Any Redis client that supports xadd
+            (redis.asyncio.Redis or ArqRedis).
         event_type: Event type (job.enqueued, job.started, job.ended,
                     job.completed, job.failed, worker.started, worker.stopped).
         queue_name: Name of the worker queue (e.g., "system", "load_test").

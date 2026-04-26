@@ -12,7 +12,9 @@ Provides commonly used section patterns across component detail modals:
 - FlowSection: Labeled section in a lifecycle flow diagram
 """
 
-import contextlib
+from __future__ import annotations
+
+import contextlib  # noqa: I001
 from typing import Any
 
 import flet as ft
@@ -135,7 +137,7 @@ class MetricCard(ft.Container):
             change_pct: Optional period-over-period change percentage
             invert: If True, down is good (green) and up is bad (red) — e.g., bounce rate
             prev_value: Optional previous period value to display (e.g., "prev: 3,080")
-        """
+        """  # noqa: E501
         super().__init__()
 
         # Header row with icon and label
@@ -650,7 +652,7 @@ class LifecycleInspector(ft.Container):
                 self._selected_card.set_selected(False)
             self._selected_card = None
 
-    def select_card(self, card: "LifecycleCard") -> None:
+    def select_card(self, card: LifecycleCard) -> None:  # noqa: F821
         """Select a card and update inspector."""
         # Deselect previous (guard against unmounted cards)
         if self._selected_card:

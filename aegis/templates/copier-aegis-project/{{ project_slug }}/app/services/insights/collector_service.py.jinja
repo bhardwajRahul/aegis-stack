@@ -152,7 +152,10 @@ class CollectorService:
             )
 
     async def _check_records(self, source_key: str) -> list[str]:
-        """Check if any metrics set new all-time records after collection. Returns list of broken record descriptions."""
+        """Check if any metrics set new all-time records after collection.
+
+        Returns list of broken record descriptions.
+        """
         from datetime import datetime, timedelta
 
         from .models import InsightEvent, InsightMetric, InsightMetricType
@@ -189,7 +192,8 @@ class CollectorService:
                 },
             ],
             SourceKeys.GITHUB_STARS: [
-                # Uses new_star events grouped by day (not star_events which is ClickHouse 14d only)
+                # Uses new_star events grouped by day (not star_events which is
+                # ClickHouse 14d only)
             ],
 {% endif %}
 {% if insights_pypi %}
@@ -522,7 +526,8 @@ class CollectorService:
                         self.db.add(event)
                         await self.db.commit()
                         broken.append(
-                            f"Stars Best Month: {best_month_val:,} in {month_label} (was {current_record:,})"
+                            f"Stars Best Month: {best_month_val:,} in "
+                            f"{month_label} (was {current_record:,})"
                         )
                         logger.info(
                             "New star monthly record: %s in %s (prev: %s)",

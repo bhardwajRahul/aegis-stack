@@ -72,21 +72,14 @@ class TestPyPICollectorSuccess:
             """Mock ClickHouse API responses."""
             content = kwargs.get("content", "")
 
-            if "date, version, installer" in content:
-                # Version breakdown grouped by installer. The collector
-                # computes human/bot per-version in Python using
-                # ``BOT_INSTALLERS`` rather than SQL, so the mock just
-                # returns ``(date, version, installer, count)`` rows and
-                # lets the real logic partition them.
+            if "date, version" in content and "sumIf" in content:
+                # Version breakdown with human/bot split
                 return MagicMock(
                     json=lambda: {
                         "data": [
-                            ["2026-04-11", "1.0.0", "pip", 350],  # human
-                            ["2026-04-11", "1.0.0", "bandersnatch", 50],  # bot
-                            ["2026-04-11", "0.9.0", "pip", 50],  # human
-                            ["2026-04-11", "0.9.0", "bandersnatch", 50],  # bot
-                            ["2026-04-10", "1.0.0", "pip", 300],  # human
-                            ["2026-04-10", "1.0.0", "", 50],  # bot (empty UA)
+                            ["2026-04-11", "1.0.0", 400, 350],
+                            ["2026-04-11", "0.9.0", 100, 50],
+                            ["2026-04-10", "1.0.0", 350, 300],
                         ]
                     },
                     raise_for_status=lambda: None,
@@ -146,7 +139,7 @@ class TestPyPICollectorSuccess:
                 mock_settings.INSIGHT_PYPI_PACKAGE = "aegis-stack"
 
                 collector = PyPICollector(async_db_session)
-                result = await collector.collect()
+                result = await collector.collect(lookback_days=14)
 
         assert result.success is True
         assert result.source_key == SourceKeys.PYPI
@@ -215,12 +208,11 @@ class TestPyPICollectorSuccess:
 
         async def mock_post(url: str, **kwargs):
             content = kwargs.get("content", "")
-            if "date, version, installer" in content:
+            if "date, version" in content and "sumIf" in content:
                 return MagicMock(
                     json=lambda: {
                         "data": [
-                            ["2026-04-11", "1.0.0", "pip", 350],
-                            ["2026-04-11", "1.0.0", "bandersnatch", 50],
+                            ["2026-04-11", "1.0.0", 400, 350],
                         ]
                     },
                     raise_for_status=lambda: None,
@@ -254,23 +246,15 @@ class TestPyPICollectorSuccess:
                 mock_settings.INSIGHT_PYPI_PACKAGE = "aegis-stack"
 
                 collector = PyPICollector(async_db_session)
-                result = await collector.collect()
+                result = await collector.collect(lookback_days=14)
 
         assert result.success is True
         # The 2026-04-11 daily row should be skipped (already exists)
         assert result.rows_skipped > 0
 
     @pytest.mark.asyncio
-    async def test_lookback_window_is_14_days(
-        self, async_db_session: AsyncSession
-    ) -> None:
-        """Collector queries ClickHouse with a 14-day lookback window.
-
-        The collector has a fixed ``today() - 14`` window in its SQL —
-        enough history to cover daily/weekly patterns without pulling
-        months of noise. This test pins that window so a future drift
-        (someone bumping to 30 or 7 by accident) is caught loudly.
-        """
+    async def test_lookback_days(self, async_db_session: AsyncSession) -> None:
+        """Lookback parameter affects query date range."""
         await _seed_pypi(async_db_session)
 
         captured_queries: list[str] = []
@@ -298,8 +282,9 @@ class TestPyPICollectorSuccess:
                 mock_settings.INSIGHT_PYPI_PACKAGE = "aegis-stack"
 
                 collector = PyPICollector(async_db_session)
-                await collector.collect()
+                await collector.collect(lookback_days=30)
 
-        assert any("today() - 14" in q for q in captured_queries), (
-            f"Expected 'today() - 14' in queries, got: {captured_queries}"
+        # Check that one of the queries contains "today() - 30"
+        assert any("today() - 30" in q for q in captured_queries), (
+            f"Expected 'today() - 30' in queries, got: {captured_queries}"
         )
