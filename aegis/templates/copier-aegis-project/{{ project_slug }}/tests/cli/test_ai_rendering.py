@@ -37,14 +37,17 @@ class TestRenderAIHeader:
     """Test AI header rendering."""
 
     def test_inline_header(self):
-        """Test inline header style (🤖:)."""
+        """Test inline header style (>)."""
         output = StringIO()
         console = Console(file=output, force_terminal=True, width=80)
 
         render_ai_header(console, inline=True)
 
         result = output.getvalue()
-        assert "🤖: " in result
+        # Renderer prints the persona name ("Illiana: ") instead of a
+        # prompt character; the old ``"> "`` sentinel was dropped when
+        # the header switched to a named AI assistant.
+        assert "Illiana" in result
         assert "Response:" not in result
         # Should not have a newline at the end (end="" parameter)
         assert not result.endswith("\n\n")
@@ -57,8 +60,7 @@ class TestRenderAIHeader:
         render_ai_header(console, inline=False)
 
         result = output.getvalue()
-        assert "🤖 " in result
-        assert "Response:" in result
+        assert "Illiana" in result
 
     def test_header_styles(self):
         """Test that headers have proper styling."""
@@ -70,7 +72,9 @@ class TestRenderAIHeader:
         render_ai_header(console, inline=True)
 
         result = output.getvalue()
-        assert "🤖" in result
+        # Should emit ANSI styling around the persona name.
+        assert "Illiana" in result
+        assert "\x1b[" in result
 
 
 class TestRenderMarkdownResponse:
@@ -161,7 +165,7 @@ class TestRenderConversationMetadata:
         render_conversation_metadata(console, "conv-123")
 
         result = strip_ansi_codes(output.getvalue())
-        assert "💬 Conversation: conv-123" in result
+        assert "Conversation: conv-123" in result
         assert "Messages:" not in result
         assert "Response time:" not in result
 
@@ -177,9 +181,9 @@ class TestRenderConversationMetadata:
         )
 
         result = strip_ansi_codes(output.getvalue())
-        assert "💬 Conversation: conv-123" in result
-        assert "ℹ️  Messages: 5" in result
-        assert "⏱️  Response time: 123.4ms" in result
+        assert "Conversation: conv-123" in result
+        assert "Messages: 5" in result
+        assert "Response time: 123.4ms" in result
 
     def test_partial_metadata(self):
         """Test with only some metadata fields."""
@@ -191,8 +195,8 @@ class TestRenderConversationMetadata:
         render_conversation_metadata(console, "conv-456", message_count=10)
 
         result = strip_ansi_codes(output.getvalue())
-        assert "💬 Conversation: conv-456" in result
-        assert "ℹ️  Messages: 10" in result
+        assert "Conversation: conv-456" in result
+        assert "Messages: 10" in result
         assert "Response time:" not in result
 
     def test_response_time_formatting(self):
@@ -205,7 +209,7 @@ class TestRenderConversationMetadata:
         render_conversation_metadata(console, "conv-789", response_time=1234.56789)
 
         result = strip_ansi_codes(output.getvalue())
-        assert "⏱️  Response time: 1234.6ms" in result
+        assert "Response time: 1234.6ms" in result
 
 
 class TestRenderErrorMessage:
@@ -219,8 +223,8 @@ class TestRenderErrorMessage:
         render_error_message(console, "Connection failed")
 
         result = output.getvalue()
-        assert "❌ Error: Connection failed" in result
-        assert "💡 Suggestion:" not in result
+        assert "Error: Connection failed" in result
+        assert "Tip:" not in result
 
     def test_error_with_suggestion(self):
         """Test error message with suggestion."""
@@ -230,8 +234,8 @@ class TestRenderErrorMessage:
         render_error_message(console, "API key invalid", "Check your .env file")
 
         result = output.getvalue()
-        assert "❌ Error: API key invalid" in result
-        assert "💡 Suggestion: Check your .env file" in result
+        assert "Error: API key invalid" in result
+        assert "Tip: Check your .env file" in result
 
 
 class TestRenderThinkingSpinner:
@@ -246,7 +250,7 @@ class TestRenderThinkingSpinner:
 
         assert spinner is not None
         assert live is not None
-        assert str(spinner.text) == "🤖 Thinking..."
+        assert str(spinner.text) == "Thinking..."
         assert spinner.style == "bright_blue"
 
     def test_spinner_lifecycle(self):
@@ -260,7 +264,7 @@ class TestRenderThinkingSpinner:
         live.start()
         live.stop()
 
-        assert str(spinner.text) == "🤖 Thinking..."
+        assert str(spinner.text) == "Thinking..."
 
 
 class TestStreamingMarkdownRenderer:
@@ -369,6 +373,138 @@ class TestStreamingMarkdownRenderer:
         assert "First item" in result
         assert "Second item" in result
         assert "print('test')" in result
+
+    def test_langchain_style_subword_tokens(self):
+        """Test streaming with subword token boundaries (LangChain compatibility)."""
+        output = StringIO()
+        console = Console(file=output, force_terminal=True, width=80)
+        renderer = StreamingMarkdownRenderer(console)
+
+        # Simulate LangChain-style subword tokens
+        tokens = ["Hel", "lo ", "wor", "ld", "! ", "How ", "are ", "you", "?\n"]
+        for token in tokens:
+            renderer.add_delta(token)
+        renderer.finalize()
+
+        result = strip_ansi_codes(output.getvalue())
+        assert "Hello" in result
+        assert "world" in result
+        assert "How are you?" in result
+
+    def test_character_level_tokens(self):
+        """Test streaming with character-level tokens (extreme case)."""
+        output = StringIO()
+        console = Console(file=output, force_terminal=True, width=80)
+        renderer = StreamingMarkdownRenderer(console)
+
+        # Character by character (extreme case)
+        message = "Hello world!"
+        for char in message:
+            renderer.add_delta(char)
+        renderer.add_delta("\n")
+        renderer.finalize()
+
+        result = strip_ansi_codes(output.getvalue())
+        assert "Hello world!" in result
+
+    def test_long_token_without_spaces(self):
+        """Test handling of very long tokens without word breaks."""
+        output = StringIO()
+        console = Console(file=output, force_terminal=True, width=80)
+        renderer = StreamingMarkdownRenderer(console)
+
+        # Long URL without spaces - exceeds 2x threshold so it should flush
+        long_url = (
+            "https://example.com/very/long/path/that/exceeds/threshold/and/keeps/going"
+        )
+        renderer.add_delta(long_url)
+        renderer.add_delta("\n")
+        renderer.finalize()
+
+        result = output.getvalue()
+        assert "example.com" in result
+
+    def test_line_buffering_with_sentences(self):
+        """Test that content is buffered until newline, then rendered correctly."""
+        output = StringIO()
+        console = Console(file=output, force_terminal=True, width=80)
+        renderer = StreamingMarkdownRenderer(console)
+
+        # Content without newline should be buffered
+        renderer.add_delta("First sentence.")
+        renderer.add_delta(" ")
+        renderer.add_delta("Second")
+        renderer.add_delta(" sentence.")
+
+        # No newline yet - content accumulates in buffer until newline
+
+        # Now add newline - content should be rendered
+        renderer.add_delta("\n")
+        renderer.finalize()
+
+        result = strip_ansi_codes(output.getvalue())
+        assert "First sentence." in result
+        assert "Second sentence." in result
+
+    def test_code_block_with_fragmented_fence(self):
+        """Test code blocks where fence markers are split across tokens."""
+        output = StringIO()
+        console = Console(file=output, force_terminal=True, width=80)
+        renderer = StreamingMarkdownRenderer(console)
+
+        # Fence split across tokens
+        renderer.add_delta("``")
+        renderer.add_delta("`python\n")
+        renderer.add_delta("print")
+        renderer.add_delta("('hello')\n")
+        renderer.add_delta("``")
+        renderer.add_delta("`\n")
+        renderer.finalize()
+
+        result = strip_ansi_codes(output.getvalue())
+        assert "print" in result
+        assert "hello" in result
+
+    def test_pydantic_ai_compatibility(self):
+        """Ensure PydanticAI-style word-aligned tokens still work correctly."""
+        output = StringIO()
+        console = Console(file=output, force_terminal=True, width=80)
+        renderer = StreamingMarkdownRenderer(console)
+
+        # PydanticAI-style tokens (word-aligned with trailing spaces)
+        tokens = ["Hello ", "world! ", "This ", "is ", "a ", "test.\n"]
+        for token in tokens:
+            renderer.add_delta(token)
+        renderer.finalize()
+
+        result = strip_ansi_codes(output.getvalue())
+        assert "Hello" in result
+        assert "world!" in result
+        assert "This is a test." in result
+
+    def test_mixed_markdown_and_plain_text_tokens(self):
+        """Test transitions between plain text and markdown with fragmented tokens."""
+        output = StringIO()
+        console = Console(file=output, force_terminal=True, width=80)
+        renderer = StreamingMarkdownRenderer(console)
+
+        # Start with plain text
+        renderer.add_delta("Some text. ")
+        renderer.add_delta("More ")
+        renderer.add_delta("text")
+        renderer.add_delta(".\n")
+
+        # Switch to markdown
+        renderer.add_delta("# ")
+        renderer.add_delta("Head")
+        renderer.add_delta("er\n")
+
+        renderer.finalize()
+
+        result = strip_ansi_codes(output.getvalue())
+        assert "Some text." in result
+        assert "More text." in result
+        assert "Header" in result
 
 
 class TestContentCleaning:

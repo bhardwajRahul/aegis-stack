@@ -3,9 +3,12 @@ site_name: Aegis Stack
 site_description: A production-ready Python foundation for builders who refuse to wait.
 site_author: Aegis Stack Contributors
 site_url: https://lbedner.github.io/aegis-stack/
+repo_url: https://github.com/lbedner/aegis-stack
+repo_name: lbedner/aegis-stack
 
 theme:
   name: material
+  custom_dir: docs/overrides
   palette:
     # Palette toggle for light vs dark mode
     - scheme: default
@@ -29,16 +32,15 @@ nav:
   - Home:
     - Overview: index.md
     - Installation: installation.md
-  - About: about.md
-  - Philosophy: philosophy.md
+  - Origin Story:
+    - About: about.md
+    - Technology Stack: technology.md
+    - How I Build: process.md
   - Components:
     - Overview: components/index.md
     - Backend: components/webserver.md
     - Database: components/database.md
-    - Frontend:
-      - Getting Started: components/frontend.md
-      - Extras:
-        - Health Dashboard: components/frontend/extras/dashboard.md
+    - Frontend: components/frontend.md
     - Scheduler:
       - Getting Started: components/scheduler.md
       - Examples: components/scheduler/examples.md
@@ -51,25 +53,59 @@ nav:
       - Examples: components/worker/examples.md
       - Extras:
         - Load Testing: components/worker/extras/load-testing.md
+    - Ingress: components/ingress.md
+    - Observability: components/observability.md
   - Services:
     - Overview: services/index.md
-    - Authentication:
-      - Getting Started: services/auth/index.md
-      - API Reference: services/auth/api.md
-      - Service Layer: services/auth/integration.md
-      - CLI Commands: services/auth/cli.md
-      - Examples: services/auth/examples.md
     - AI Service:
       - Getting Started: services/ai/index.md
+      - Illiana: services/ai/illiana.md
+      - LLM Catalog: services/ai/llm-catalog.md
+      - RAG: services/ai/rag.md
+      - Cost Tracking: services/ai/cost-tracking.md
+      - Voice: services/ai/voice.md
+      - Engines: services/ai/engines.md
       - Provider Setup: services/ai/providers.md
       - API Reference: services/ai/api.md
       - Service Layer: services/ai/integration.md
       - CLI Commands: services/ai/cli.md
       - Examples: services/ai/examples.md
+    - Authentication:
+      - Getting Started: services/auth/index.md
+      - Auth Levels: services/auth/levels.md
+      - API Reference: services/auth/api.md
+      - Service Layer: services/auth/integration.md
+      - CLI Commands: services/auth/cli.md
+      - Examples: services/auth/examples.md
+    - Communications:
+      - Getting Started: services/comms/index.md
+      - Provider Setup: services/comms/setup.md
+      - API Reference: services/comms/api.md
+      - CLI Commands: services/comms/cli.md
+    - Insights (Experimental):
+      - Getting Started: services/insights/index.md
+      - Data Sources: services/insights/data-sources.md
+      - CLI Commands: services/insights/cli.md
+      - Dashboard: services/insights/dashboard.md
+      - Configuration: services/insights/configuration.md
+      - Examples: services/insights/examples.md
+    - Payment (Experimental):
+      - Getting Started: services/payment/index.md
+      - Provider Setup: services/payment/setup.md
+      - Dashboard: services/payment/dashboard.md
+      - API Reference: services/payment/api.md
+      - CLI Commands: services/payment/cli.md
+      - Examples: services/payment/examples.md
+  - Overseer:
+    - Overview: overseer/index.md
+    - The Story: overseer/story.md
+    - Integration: overseer/integration.md
+  - Deployment:
+    - Getting Started: deployment/index.md
   - Reference:
     - CLI Reference: cli-reference.md
+    - Evolving Your Stack: evolving-your-stack.md
     - Integration Patterns: integration-patterns.md
-    - Technology Stack: technology.md
 
 # Plugins
 plugins:
@@ -122,3 +158,4 @@ extra_css:
 extra_javascript:
   - https://unpkg.com/mermaid@10.4.0/dist/mermaid.min.js
   - javascripts/mermaid-config.js
+  - javascripts/feedback.js

@@ -58,23 +58,39 @@ def get_stack_validator(
     return result, result.project_path
 
 
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
 @pytest.mark.parametrize("combination", STACK_COMBINATIONS, ids=lambda x: x.name)
 @pytest.mark.slow
-def test_stack_dependency_installation(
+def test_stack_full_validation(
     combination: StackCombination,
     get_generated_stack: Any,
-    skip_copier_tests: Any,
-    engine: str,
 ) -> None:
-    """Test that each stack's dependencies can be installed successfully."""
+    """Validate every generated stack end-to-end in a single pipeline pass.
+
+    Previously this matrix had 5 separate parametrized tests
+    (dependency_installation, cli_installation, code_quality,
+    cli_functionality, health_commands) and each one re-invoked
+    ``run_quality_checks`` from scratch — running the full
+    ``uv sync → uv pip install -e . → ruff → ty → pytest`` pipeline
+    five times per stack just to assert different slices of the same
+    result list. With 13 stacks that meant 65 pipeline executions per
+    ``make test-stacks-build`` run.
+
+    Now the pipeline runs once per stack and every check (deps, CLI
+    install, lint, typecheck, pytest, ``--help``, ``health status --help``)
+    asserts against that single result set.
+    """
+    from .test_utils import run_project_command
+
     result, project_path = get_stack_validator(get_generated_stack, combination)
 
     assert result.success, f"Failed to generate {combination.description}"
 
-    # Test dependency installation using unified quality checks
     quality_results = run_quality_checks(project_path)
-    dep_result = quality_results[0]  # First result is dependency installation
+    dep_result = quality_results[0]
+    cli_install_result = quality_results[1]
+    lint_result = quality_results[2]
+    type_result = quality_results[3]
+    pytest_result = quality_results[4]
 
     assert dep_result.success, (
         f"Dependency installation failed for {combination.description}\n"
@@ -84,59 +100,15 @@ def test_stack_dependency_installation(
         f"STDERR: {dep_result.stderr}"
     )
 
-
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
-@pytest.mark.parametrize("combination", STACK_COMBINATIONS, ids=lambda x: x.name)
-@pytest.mark.slow
-def test_stack_cli_installation(
-    combination: StackCombination,
-    get_generated_stack: Any,
-    skip_copier_tests: Any,
-    engine: str,
-) -> None:
-    """Test that each stack's CLI script can be installed."""
-    result, project_path = get_stack_validator(get_generated_stack, combination)
-
-    assert result.success, f"Failed to generate {combination.description}"
-
-    # Test both dependency and CLI installation using unified quality checks
-    quality_results = run_quality_checks(project_path)
-    dep_result = quality_results[0]  # Dependency installation
-    cli_result = quality_results[1]  # CLI installation
-
-    assert dep_result.success, "Dependency installation failed"
-    assert cli_result.success, (
+    assert cli_install_result.success, (
         f"CLI installation failed for {combination.description}\n"
-        f"Duration: {cli_result.duration:.1f}s\n"
-        f"Error: {cli_result.error_message}\n"
-        f"STDOUT: {cli_result.stdout}\n"
-        f"STDERR: {cli_result.stderr}"
+        f"Duration: {cli_install_result.duration:.1f}s\n"
+        f"Error: {cli_install_result.error_message}\n"
+        f"STDOUT: {cli_install_result.stdout}\n"
+        f"STDERR: {cli_install_result.stderr}"
     )
 
-
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
-@pytest.mark.parametrize("combination", STACK_COMBINATIONS, ids=lambda x: x.name)
-@pytest.mark.slow
-def test_stack_code_quality(
-    combination: StackCombination,
-    get_generated_stack: Any,
-    skip_copier_tests: Any,
-    engine: str,
-) -> None:
-    """Test that each stack passes code quality checks."""
-    result, project_path = get_stack_validator(get_generated_stack, combination)
-
-    assert result.success, f"Failed to generate {combination.description}"
-
-    # Run all quality checks
-    quality_results = run_quality_checks(project_path)
-    dep_result = quality_results[0]  # Dependency installation
-    lint_result = quality_results[2]  # Linting
-    type_result = quality_results[3]  # Type checking
-
-    assert dep_result.success, "Dependency installation failed"
-
-    # Linting should pass or have fixable issues only
+    # Linting is allowed to surface fixable findings (rc=1) but not crash.
     assert lint_result.returncode in [0, 1], (
         f"Linting failed for {combination.description}\n"
         f"Duration: {lint_result.duration:.1f}s\n"
@@ -153,40 +125,23 @@ def test_stack_code_quality(
         f"STDERR: {type_result.stderr}"
     )
 
+    # Every stack's internal pytest must pass — this gate was historically
+    # only enforced by ``test_full_stack_validation_pipeline`` (worker only),
+    # which let regressions in the other stacks land silently.
+    assert pytest_result.success, (
+        f"pytest failed inside {combination.description}\n"
+        f"Duration: {pytest_result.duration:.1f}s\n"
+        f"Error: {pytest_result.error_message}\n"
+        f"STDOUT: {pytest_result.stdout}\n"
+        f"STDERR: {pytest_result.stderr}"
+    )
 
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
-@pytest.mark.parametrize("combination", STACK_COMBINATIONS, ids=lambda x: x.name)
-@pytest.mark.slow
-def test_stack_cli_functionality(
-    combination: StackCombination,
-    get_generated_stack: Any,
-    skip_copier_tests: Any,
-    engine: str,
-) -> None:
-    """Test that each stack's CLI script is functional."""
-    from .test_utils import run_project_command
-
-    result, project_path = get_stack_validator(get_generated_stack, combination)
-
-    assert result.success, f"Failed to generate {combination.description}"
-
-    # Full setup pipeline
-    quality_results = run_quality_checks(project_path)
-    dep_result = quality_results[0]  # Dependency installation
-    cli_install_result = quality_results[1]  # CLI installation
-
-    assert dep_result.success, "Dependency installation failed"
-    assert cli_install_result.success, "CLI installation failed"
-
-    # Test CLI script functionality
     cli_test_result = run_project_command(
-        ["uv", "run", combination.project_name, "--help"],
+        ["uv", "run", combination.project_slug, "--help"],
         project_path,
-        timeout=30,
         step_name="CLI Script Test",
         env_overrides={"VIRTUAL_ENV": ""},
     )
-
     assert cli_test_result.success, (
         f"CLI script test failed for {combination.description}\n"
         f"Duration: {cli_test_result.duration:.1f}s\n"
@@ -195,40 +150,12 @@ def test_stack_cli_functionality(
         f"STDERR: {cli_test_result.stderr}"
     )
 
-
-@pytest.mark.parametrize("engine", ["cookiecutter", "copier"])
-@pytest.mark.parametrize("combination", STACK_COMBINATIONS, ids=lambda x: x.name)
-@pytest.mark.slow
-def test_stack_health_commands(
-    combination: StackCombination,
-    get_generated_stack: Any,
-    skip_copier_tests: Any,
-    engine: str,
-) -> None:
-    """Test that each stack's health commands are available."""
-    from .test_utils import run_project_command
-
-    result, project_path = get_stack_validator(get_generated_stack, combination)
-
-    assert result.success, f"Failed to generate {combination.description}"
-
-    # Full setup pipeline
-    quality_results = run_quality_checks(project_path)
-    dep_result = quality_results[0]  # Dependency installation
-    cli_install_result = quality_results[1]  # CLI installation
-
-    assert dep_result.success, "Dependency installation failed"
-    assert cli_install_result.success, "CLI installation failed"
-
-    # Test health command availability
     health_result = run_project_command(
-        ["uv", "run", combination.project_name, "health", "status", "--help"],
+        ["uv", "run", combination.project_slug, "health", "status", "--help"],
         project_path,
-        timeout=30,
         step_name="Health Command Test",
         env_overrides={"VIRTUAL_ENV": ""},
     )
-
     assert health_result.success, (
         f"Health command test failed for {combination.description}\n"
         f"Duration: {health_result.duration:.1f}s\n"
@@ -254,18 +181,16 @@ def test_full_stack_validation_pipeline(get_generated_stack: Any) -> None:
 
     # Test CLI script functionality
     cli_test_result = run_project_command(
-        ["uv", "run", combination.project_name, "--help"],
+        ["uv", "run", combination.project_slug, "--help"],
         project_path,
-        timeout=30,
         step_name="CLI Script Test",
         env_overrides={"VIRTUAL_ENV": ""},
     )
 
     # Test health command
     health_result = run_project_command(
-        ["uv", "run", combination.project_name, "health", "status", "--help"],
+        ["uv", "run", combination.project_slug, "health", "status", "--help"],
         project_path,
-        timeout=30,
         step_name="Health Command Test",
         env_overrides={"VIRTUAL_ENV": ""},
     )
@@ -282,10 +207,21 @@ def test_full_stack_validation_pipeline(get_generated_stack: Any) -> None:
     lint_result = quality_results[2]  # Linting result
     critical_failures = [r for r in all_results if not r.success and r != lint_result]
 
+    # Dump full stdout/stderr for any failing critical step. ``CLITestResult``'s
+    # default ``__str__`` only renders a one-line summary, which is fine for
+    # local runs but useless in CI when the matrix runner is the only place
+    # a transient failure reproduces. Surface enough output here that the
+    # next CI run is self-diagnosing.
+    failure_blocks = []
+    for r in critical_failures:
+        failure_blocks.append(
+            f"  - {r}\n    STDOUT:\n{r.stdout}\n    STDERR:\n{r.stderr}"
+        )
+
     assert len(critical_failures) == 0, (
         f"Validation pipeline failed for {combination.description}\n"
         f"Summary: {passed}/{total} passed in {total_duration:.1f}s\n"
-        f"Failed steps:\n" + "\n".join(f"  - {r}" for r in critical_failures)
+        f"Failed steps:\n" + "\n".join(failure_blocks)
     )
 
     # Verify reasonable performance

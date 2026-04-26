@@ -45,12 +45,11 @@ class ComponentStatus(BaseModel):
     @property
     def healthy(self) -> bool:
         """
-        Component is healthy if status is not UNHEALTHY.
+        Component is healthy only if status is HEALTHY.
 
-        WARNING and INFO statuses are considered healthy (functional but with concerns),
-        only UNHEALTHY is considered not healthy (non-functional).
+        INFO, WARNING, and UNHEALTHY are not considered healthy for counting.
         """
-        return self.status != ComponentStatusType.UNHEALTHY
+        return self.status == ComponentStatusType.HEALTHY
 
 
 class SystemStatus(BaseModel):
@@ -237,6 +236,19 @@ class Alert(BaseModel):
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional alert data"
     )
+
+
+class MigrationInfo(BaseModel):
+    """Migration file metadata for dashboard display."""
+
+    revision: str
+    down_revision: str | None = None
+    description: str = "No description"
+    content: str = ""
+    file_mtime: float = 0.0
+    create_date: str | None = None
+    file_path: str = ""
+    is_current: bool = False
 
 
 # Singleton for alert severity constants

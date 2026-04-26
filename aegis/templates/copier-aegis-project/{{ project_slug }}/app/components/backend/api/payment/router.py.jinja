@@ -1,0 +1,382 @@
+
+"""
+Payment API endpoints.
+
+Provides checkout, transaction management, subscription management,
+and a webhook ingress endpoint for the payment provider.
+"""
+
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+import stripe
+
+from app.components.backend.api.deps import get_payment_service
+from app.core.config import settings
+from app.services.payment.catalog import get_catalog
+from app.services.payment.payment_service import PaymentService
+from app.services.payment.schemas import (
+    CatalogEntryResponse,
+    CatalogResponse,
+    CheckoutRequest,
+    CheckoutResponse,
+    DisputeListResponse,
+    DisputeResponse,
+    PaymentStatusResponse,
+    RefundRequest,
+    RevenueTimeseriesPoint,
+    RevenueTimeseriesResponse,
+    SubscriptionListResponse,
+    SubscriptionResponse,
+    TransactionListResponse,
+    TransactionResponse,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/payment", tags=["payment"])
+
+
+# -- Checkout ----------------------------------------------------------------
+
+
+@router.post("/checkout", response_model=CheckoutResponse)
+async def create_checkout(
+    request: CheckoutRequest,
+    service: PaymentService = Depends(get_payment_service),
+) -> CheckoutResponse:
+    """Create a checkout session with the payment provider."""
+    success_url = request.success_url or settings.PAYMENT_SUCCESS_URL
+    cancel_url = request.cancel_url or settings.PAYMENT_CANCEL_URL
+    try:
+        result = await service.create_checkout(
+            price_id=request.price_id,
+            quantity=request.quantity,
+            mode=request.mode,
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+    except stripe.InvalidRequestError as e:
+        raise HTTPException(
+            status_code=400, detail=e.user_message or str(e)
+        ) from e
+    except stripe.CardError as e:
+        raise HTTPException(
+            status_code=400, detail=e.user_message or str(e)
+        ) from e
+    except stripe.AuthenticationError as e:
+        raise HTTPException(
+            status_code=401, detail=e.user_message or str(e)
+        ) from e
+    return CheckoutResponse(**result)
+
+
+# -- Transactions ------------------------------------------------------------
+
+
+@router.get("/transactions", response_model=TransactionListResponse)
+async def list_transactions(
+    page: int = 1,
+    page_size: int = 20,
+    status: str | None = None,
+    service: PaymentService = Depends(get_payment_service),
+) -> TransactionListResponse:
+    """List transactions with pagination."""
+    transactions, total = await service.get_transactions(
+        page=page,
+        page_size=page_size,
+        status=status,
+    )
+    return TransactionListResponse(
+        transactions=[
+            TransactionResponse(
+                id=t.id,  # type: ignore[arg-type]
+                provider_transaction_id=t.provider_transaction_id,
+                type=t.type,
+                status=t.status,
+                amount=t.amount,
+                currency=t.currency,
+                description=t.description,
+                created_at=t.created_at,
+            )
+            for t in transactions
+        ],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/transactions/{transaction_id}", response_model=TransactionResponse)
+async def get_transaction(
+    transaction_id: int,
+    service: PaymentService = Depends(get_payment_service),
+) -> TransactionResponse:
+    """Get a single transaction by ID."""
+    txn = await service.get_transaction_by_id(
+        transaction_id,
+    )
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return TransactionResponse(
+        id=txn.id,  # type: ignore[arg-type]
+        provider_transaction_id=txn.provider_transaction_id,
+        type=txn.type,
+        status=txn.status,
+        amount=txn.amount,
+        currency=txn.currency,
+        description=txn.description,
+        created_at=txn.created_at,
+    )
+
+
+# -- Refunds -----------------------------------------------------------------
+
+
+@router.post("/refund/{transaction_id}", response_model=TransactionResponse)
+async def refund_transaction(
+    transaction_id: int,
+    request: RefundRequest,
+    service: PaymentService = Depends(get_payment_service),
+) -> TransactionResponse:
+    """Refund a transaction (full or partial)."""
+    try:
+        refund_txn = await service.refund_transaction(
+            transaction_id=transaction_id,
+            amount=request.amount,
+            reason=request.reason,
+        )
+    except stripe.InvalidRequestError as e:
+        raise HTTPException(
+            status_code=400, detail=e.user_message or str(e)
+        ) from e
+    except stripe.CardError as e:
+        raise HTTPException(
+            status_code=400, detail=e.user_message or str(e)
+        ) from e
+    except stripe.AuthenticationError as e:
+        raise HTTPException(
+            status_code=401, detail=e.user_message or str(e)
+        ) from e
+    if not refund_txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return TransactionResponse(
+        id=refund_txn.id,  # type: ignore[arg-type]
+        provider_transaction_id=refund_txn.provider_transaction_id,
+        type=refund_txn.type,
+        status=refund_txn.status,
+        amount=refund_txn.amount,
+        currency=refund_txn.currency,
+        description=refund_txn.description,
+        created_at=refund_txn.created_at,
+    )
+
+
+# -- Subscriptions -----------------------------------------------------------
+
+
+@router.get("/subscriptions", response_model=SubscriptionListResponse)
+async def list_subscriptions(
+    status: str | None = None,
+    service: PaymentService = Depends(get_payment_service),
+) -> SubscriptionListResponse:
+    """List subscriptions."""
+    subs = await service.get_subscriptions(
+        status=status,
+    )
+    return SubscriptionListResponse(
+        subscriptions=[
+            SubscriptionResponse(
+                id=s.id,  # type: ignore[arg-type]
+                provider_subscription_id=s.provider_subscription_id,
+                plan_name=s.plan_name,
+                status=s.status,
+                current_period_start=s.current_period_start,
+                current_period_end=s.current_period_end,
+                cancel_at_period_end=s.cancel_at_period_end,
+            )
+            for s in subs
+        ],
+        total=len(subs),
+    )
+
+
+@router.post("/subscriptions/{subscription_id}/cancel")
+async def cancel_subscription(
+    subscription_id: int,
+    service: PaymentService = Depends(get_payment_service),
+) -> dict[str, str]:
+    """Cancel a subscription at the end of the current billing period."""
+    sub = await service.cancel_subscription(
+        subscription_id,
+    )
+    if not sub:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    return {"status": "canceled", "cancel_at_period_end": "true"}
+
+
+# -- Disputes ----------------------------------------------------------------
+
+
+@router.get("/disputes", response_model=DisputeListResponse)
+async def list_disputes(
+    status: str | None = None,
+    service: PaymentService = Depends(get_payment_service),
+) -> DisputeListResponse:
+    """List chargebacks and early fraud warnings.
+
+    Pass `status=open` to get only disputes needing attention
+    (warning_issued, needs_response, under_review).
+    """
+    disputes = await service.get_disputes(
+        status=status,
+    )
+    return DisputeListResponse(
+        disputes=[
+            DisputeResponse(
+                id=d.id,  # type: ignore[arg-type]
+                transaction_id=d.transaction_id,
+                provider_dispute_id=d.provider_dispute_id,
+                status=d.status,
+                reason=d.reason,
+                amount=d.amount,
+                currency=d.currency,
+                evidence_due_by=d.evidence_due_by,
+                event_type=d.event_type,
+                created_at=d.created_at,
+                updated_at=d.updated_at,
+            )
+            for d in disputes
+        ],
+        total=len(disputes),
+    )
+
+
+@router.get("/disputes/{dispute_id}", response_model=DisputeResponse)
+async def get_dispute(
+    dispute_id: int,
+    service: PaymentService = Depends(get_payment_service),
+) -> DisputeResponse:
+    """Get a single dispute by id."""
+    d = await service.get_dispute_by_id(
+        dispute_id,
+    )
+    if not d:
+        raise HTTPException(status_code=404, detail="Dispute not found")
+    return DisputeResponse(
+        id=d.id,  # type: ignore[arg-type]
+        transaction_id=d.transaction_id,
+        provider_dispute_id=d.provider_dispute_id,
+        status=d.status,
+        reason=d.reason,
+        amount=d.amount,
+        currency=d.currency,
+        evidence_due_by=d.evidence_due_by,
+        event_type=d.event_type,
+        created_at=d.created_at,
+        updated_at=d.updated_at,
+    )
+
+
+# -- Status ------------------------------------------------------------------
+
+
+@router.get("/status", response_model=PaymentStatusResponse)
+async def payment_status(
+    service: PaymentService = Depends(get_payment_service),
+) -> PaymentStatusResponse:
+    """Get payment service status overview."""
+    summary = await service.get_status_summary()
+    return PaymentStatusResponse(
+        provider=summary.provider_key,
+        enabled=summary.enabled,
+        is_test_mode=summary.is_test_mode,
+        total_transactions=summary.total_transactions,
+        total_revenue_cents=summary.total_revenue_cents,
+        active_subscriptions=summary.active_subscriptions,
+    )
+
+
+# -- Catalog -----------------------------------------------------------------
+
+
+@router.get("/catalog", response_model=CatalogResponse)
+async def payment_catalog(
+    service: PaymentService = Depends(get_payment_service),
+) -> CatalogResponse:
+    """Return the active provider catalog (products + prices).
+
+    Response is served from an in-process 60s cache; the first request per
+    worker (or first after expiry) pays the Stripe API round-trip. Used by
+    the dashboard Actions tab to populate the Price dropdown.
+    """
+    entries = await get_catalog(service)
+    return CatalogResponse(
+        entries=[CatalogEntryResponse(**e.model_dump()) for e in entries],
+        total=len(entries),
+    )
+
+
+# -- Analytics ---------------------------------------------------------------
+
+
+@router.get("/revenue-timeseries", response_model=RevenueTimeseriesResponse)
+async def payment_revenue_timeseries(
+    days: int = 30,
+    service: PaymentService = Depends(get_payment_service),
+) -> RevenueTimeseriesResponse:
+    """Daily succeeded-charge revenue for the last ``days`` days.
+
+    Dense series (zero-filled), succeeded charges only — refunds and
+    failures are excluded so the chart tracks the same number as the
+    headline Revenue KPI.
+    """
+    days = max(1, min(days, 365))
+    rows = await service.get_revenue_timeseries(days=days)
+    return RevenueTimeseriesResponse(
+        points=[RevenueTimeseriesPoint(**r) for r in rows],
+        days=days,
+    )
+
+
+# -- Webhook -----------------------------------------------------------------
+
+
+@router.post("/webhook")
+async def payment_webhook(
+    request: Request,
+    service: PaymentService = Depends(get_payment_service),
+) -> dict[str, str]:
+    """
+    Webhook endpoint for the payment provider.
+
+    No authentication — the provider sends events here.
+    Security is via signature verification.
+    """
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature", "")
+
+    logger.info("Payment webhook received (%d bytes)", len(payload))
+    try:
+        result = await service.handle_webhook(payload, signature)
+        await service.db.commit()
+        logger.info("Payment webhook processed: %s", result.get("event_type"))
+        return result
+    except ValueError as e:
+        # Stripe SDK raises ValueError for malformed payloads. Stripe
+        # only ever sends valid JSON, so hitting this means either a
+        # misconfigured proxy or our own parse/construction bug — log
+        # the full traceback so the root cause is never silent.
+        logger.exception("Payment webhook rejected (invalid payload)")
+        raise HTTPException(status_code=400, detail=f"Invalid payload: {e}") from e
+    except Exception as e:
+        # Anything else (SignatureVerificationError, handler bugs,
+        # DB integrity errors) lands here. ``logger.exception`` emits
+        # the full traceback so we can diagnose without having to
+        # re-provoke the failure with extra instrumentation.
+        logger.exception(
+            "Payment webhook rejected (%s)", type(e).__name__
+        )
+        raise HTTPException(
+            status_code=400, detail=f"Webhook verification failed: {e}"
+        ) from e

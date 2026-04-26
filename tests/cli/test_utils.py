@@ -5,19 +5,20 @@ This module provides common functionality used across all CLI test files
 to avoid code duplication and ensure consistent behavior.
 """
 
+import os
 import subprocess
+import time
 from pathlib import Path
-from typing import Any
 
 import pytest
+from typer.testing import CliRunner
+
+from aegis.__main__ import app
 
 # Test Configuration Constants
 CLI_TIMEOUT_QUICK = 10  # For fast help commands
 CLI_TIMEOUT_STANDARD = 60  # For normal commands
 CLI_TIMEOUT_LONG = 180  # For complex operations
-
-# Template Engine Configuration
-TEMPLATE_ENGINES = ["cookiecutter", "copier"]
 
 QUALITY_CHECK_TIMEOUTS = {
     "dependency_install": 180,
@@ -42,6 +43,7 @@ def find_project_root() -> Path:
 
 
 PROJECT_ROOT = find_project_root()
+CLI_RUNNER = CliRunner()
 
 
 class CLITestResult:
@@ -92,9 +94,6 @@ def run_command(
     Returns:
         CLITestResult with command results and timing
     """
-    import os
-    import time
-
     start_time = time.time()
 
     try:
@@ -156,32 +155,32 @@ def run_command(
 def run_aegis_command(
     subcommand: str,
     *args: str,
-    timeout: int | None = None,
-    expect_success: bool = True,
-    **kwargs: Any,
 ) -> CLITestResult:
     """
-    Run an aegis CLI command and return results.
+    Run an aegis CLI command and return results using Typer's CliRunner.
 
     Args:
         subcommand: The aegis subcommand (init, version, components)
         *args: Additional arguments to pass to the command
-        timeout: Command timeout in seconds (defaults to CLI_TIMEOUT_STANDARD)
-        expect_success: Whether to expect the command to succeed
-        **kwargs: Additional keyword arguments (unused, for compatibility)
 
     Returns:
         CLITestResult with command results
     """
-    if timeout is None:
-        timeout = CLI_TIMEOUT_STANDARD
+    start_time = time.time()
+    result = CLI_RUNNER.invoke(
+        app,
+        [subcommand, *args],
+        catch_exceptions=False,
+    )
+    duration = time.time() - start_time
 
-    cmd = ["uv", "run", "python", "-m", "aegis", subcommand] + list(args)
-
-    return run_command(
-        cmd=cmd,
-        timeout=timeout,
-        step_name=f"aegis {subcommand}",
+    return CLITestResult(
+        returncode=result.exit_code,
+        stdout=result.stdout,
+        stderr=result.stderr or "",
+        duration=duration,
+        step=f"aegis {subcommand}",
+        project_path=None,
     )
 
 
@@ -300,8 +299,8 @@ def run_aegis_init(
     interactive: bool = False,
     force: bool = True,
     yes: bool = True,
-    timeout: int | None = None,
-    engine: str = "copier",
+    python_version: str | None = None,
+    services: list[str] | None = None,
 ) -> CLITestResult:
     """
     Run the aegis init command and return results.
@@ -313,32 +312,29 @@ def run_aegis_init(
         interactive: Whether to use interactive mode
         force: Whether to force overwrite
         yes: Whether to skip confirmation
-        timeout: Command timeout in seconds (defaults to CLI_TIMEOUT_STANDARD)
-        engine: Template engine to use (cookiecutter or copier)
+        python_version: Python version for generated project (e.g., "3.13")
 
     Returns:
         CLITestResult with command results and project path
     """
-    if timeout is None:
-        timeout = CLI_TIMEOUT_STANDARD
-
     args = [project_name]
 
     if components:
         args.extend(["--components", ",".join(components)])
+    if services:
+        args.extend(["--services", ",".join(services)])
     if output_dir:
         args.extend(["--output-dir", str(output_dir)])
+    if python_version:
+        args.extend(["--python-version", python_version])
     if not interactive:
         args.append("--no-interactive")
     if force:
         args.append("--force")
     if yes:
         args.append("--yes")
-    # Add engine flag (hidden flag for testing both engines)
-    if engine != "cookiecutter":
-        args.extend(["--engine", engine])
 
-    result = run_aegis_command("init", *args, timeout=timeout)
+    result = run_aegis_command("init", *args)
 
     # Set the project path for init commands
     # Account for project name slug conversion (underscores to hyphens)
@@ -511,10 +507,9 @@ def run_aegis_init_expect_failure(
     project_name: str,
     components: list[str],
     output_dir: Path,
-    timeout: int = 30,
 ) -> CLITestResult:
     """Run aegis init command expecting it to fail."""
-    result = run_aegis_init(project_name, components, output_dir, timeout=timeout)
+    result = run_aegis_init(project_name, components, output_dir)
 
     # For error testing, we expect failures
     assert not result.success, (
@@ -547,3 +542,22 @@ def check_error_indicators(
             f"Got output: {output}\n"
             f"Missing all indicators: {missing_indicators}"
         )
+
+
+def strip_ansi_codes(text: str) -> str:
+    """
+    Strip ANSI escape codes from text for testing.
+
+    CLI output often contains ANSI color codes that make string comparison
+    difficult. This helper removes all ANSI escape sequences to get clean text.
+
+    Args:
+        text: Text potentially containing ANSI codes
+
+    Returns:
+        Clean text without ANSI codes
+    """
+    import re
+
+    ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
+    return ansi_pattern.sub("", text)

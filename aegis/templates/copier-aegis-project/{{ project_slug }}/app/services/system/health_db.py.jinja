@@ -1,0 +1,15 @@
+"""
+Database health check dispatcher for {{ project_name }}.
+
+Imports the appropriate database health check implementation based on
+the configured database engine (SQLite or PostgreSQL).
+"""
+{% if include_database %}
+{% if database_engine == "postgres" %}
+from app.services.system.health_db_postgres import check_database_health
+{% else %}
+from app.services.system.health_db_sqlite import check_database_health
+{% endif %}
+
+__all__ = ["check_database_health"]
+{% endif %}

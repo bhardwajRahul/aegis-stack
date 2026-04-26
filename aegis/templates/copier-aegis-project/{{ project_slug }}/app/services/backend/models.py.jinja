@@ -21,7 +21,7 @@ class RouteInfo(BaseModel):
     tags: list[str] = []
     deprecated: bool = False
     path_params: list[str] = []
-    dependencies: int = 0
+    dependencies: list[str] = []
     response_model: str | None = None
 
 
@@ -47,12 +47,13 @@ class RouteMetadata(BaseModel):
 
 class MiddlewareInfo(BaseModel):
     """Information about a single middleware in the stack."""
-    
+
     type: str
     module: str
     order: int
     config: dict[str, Any] = {}
     is_security: bool = False
+    description: str | None = None
 
 
 class MiddlewareMetadata(BaseModel):

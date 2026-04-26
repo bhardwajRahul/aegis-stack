@@ -28,6 +28,8 @@ SHARED_TEMPLATE_FILES: dict[str, SharedFilePolicy] = {
     # These files configure the project infrastructure and should be
     # automatically regenerated when components change.
     "docker-compose.yml": {"overwrite": True, "backup": True, "warn": False},
+    "docker-compose.dev.yml": {"overwrite": True, "backup": True, "warn": False},
+    "docker-compose.prod.yml": {"overwrite": True, "backup": True, "warn": False},
     "pyproject.toml": {"overwrite": True, "backup": True, "warn": False},
     "Makefile": {"overwrite": True, "backup": True, "warn": False},
     ".dockerignore": {"overwrite": True, "backup": False, "warn": False},
@@ -52,6 +54,51 @@ SHARED_TEMPLATE_FILES: dict[str, SharedFilePolicy] = {
         "backup": True,
         "warn": False,
     },  # Card exports
+    "app/components/frontend/dashboard/cards/card_utils.py": {
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Contains modal_map with conditional component entries
+    "app/components/frontend/dashboard/modals/__init__.py": {
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Modal exports (conditional)
+    "app/components/backend/api/routing.py": {
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Contains conditional router includes for services (auth, AI, etc.)
+    "app/components/backend/api/deps.py": {
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Contains conditional dependency providers for services
+    "app/services/system/health_db.py": {
+        "overwrite": True,
+        "backup": False,
+        "warn": False,
+    },  # Database health check dispatcher (conditional on database engine)
+    "app/services/system/health_db_sqlite.py": {
+        "overwrite": True,
+        "backup": False,
+        "warn": False,
+    },  # SQLite health check (conditional on include_database)
+    "app/services/system/health_db_postgres.py": {
+        "overwrite": True,
+        "backup": False,
+        "warn": False,
+    },  # Postgres health check (conditional on include_database)
+    "app/components/backend/startup/database_init.py": {
+        "overwrite": True,
+        "backup": False,
+        "warn": False,
+    },  # Database init hook (conditional on include_database)
+    "app/components/backend/api/models.py": {
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Contains worker and scheduler API models
     # ==========================================
     # Core Configuration Files
     # ==========================================
@@ -88,10 +135,10 @@ SHARED_TEMPLATE_FILES: dict[str, SharedFilePolicy] = {
         "warn": True,
     },  # Users may add custom build steps
     ".env.example": {
-        "overwrite": False,
-        "backup": False,
-        "warn": True,
-    },  # Users may add custom env vars
+        "overwrite": True,
+        "backup": True,
+        "warn": False,
+    },  # Contains component configuration (regenerated when components change)
 }
 
 

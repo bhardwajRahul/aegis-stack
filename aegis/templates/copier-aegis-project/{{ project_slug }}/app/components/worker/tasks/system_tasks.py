@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from app.components.worker.constants import LoadTestTypes, TaskNames
+from app.components.worker.events import publish_event
 from app.core.config import get_load_test_queue
 from app.core.log import logger
 
@@ -49,7 +50,7 @@ async def load_test_orchestrator(
         target_queue = get_load_test_queue()
 
     logger.info(
-        f"🚀 Starting load test orchestrator: {num_tasks} {task_type} tasks "
+        f"Starting load test orchestrator: {num_tasks} {task_type} tasks "
         f"(batches of {batch_size})"
     )
 
@@ -81,10 +82,16 @@ async def load_test_orchestrator(
                     if job is not None:
                         batch_jobs.append(job)
                         task_ids.append(job.job_id)
+                        await publish_event(
+                            pool,
+                            "job.enqueued",
+                            target_queue,
+                            {"job_id": job.job_id, "task": task_func},
+                        )
 
                 tasks_sent += current_batch_size
                 logger.info(
-                    f"📤 Sent batch: {current_batch_size} tasks "
+                    f"Sent batch: {current_batch_size} tasks "
                     f"(total: {tasks_sent}/{num_tasks})"
                 )
 
@@ -92,7 +99,7 @@ async def load_test_orchestrator(
                 if delay_ms > 0 and batch_end < num_tasks:
                     await asyncio.sleep(delay_ms / 1000.0)
 
-            logger.info(f"✅ All {tasks_sent} tasks enqueued to {queue_name}")
+            logger.info(f"All {tasks_sent} tasks enqueued to {queue_name}")
 
             # Monitor task completion with timeout based on queue configuration
             from app.components.worker.registry import get_queue_metadata
@@ -100,9 +107,7 @@ async def load_test_orchestrator(
             queue_metadata = get_queue_metadata(target_queue)
             monitor_timeout = queue_metadata.get("timeout", 300)  # Use queue's timeout
 
-            logger.info(
-                f"⏱️ Monitoring task completion (timeout: {monitor_timeout}s)..."
-            )
+            logger.info(f"Monitoring task completion (timeout: {monitor_timeout}s)...")
 
             completion_result = await _monitor_task_completion(
                 task_ids=task_ids,
@@ -138,11 +143,11 @@ async def load_test_orchestrator(
                 result["overall_throughput_per_second"] = 0
 
             logger.info(
-                f"🏁 Load test complete: {result['tasks_completed']}/{tasks_sent} "
+                f"Load test complete: {result['tasks_completed']}/{tasks_sent} "
                 f"tasks in {total_duration:.1f}s"
             )
             logger.info(
-                f"📈 Throughput: {result['overall_throughput_per_second']} tasks/sec"
+                f"Throughput: {result['overall_throughput_per_second']} tasks/sec"
             )
 
             return result
@@ -231,7 +236,7 @@ async def _monitor_task_completion(
                 tasks_done % 10 == 0 or tasks_done == expected_tasks
             ):  # Log every 10 tasks or at completion
                 logger.info(
-                    f"📈 Progress: {tasks_done}/{expected_tasks} "
+                    f"Progress: {tasks_done}/{expected_tasks} "
                     f"({progress_pct:.0f}% - completed: {tasks_completed}, "
                     f"failed: {tasks_failed}) throughput: {throughput:.1f} tasks/sec"
                 )
@@ -239,21 +244,21 @@ async def _monitor_task_completion(
             # Check completion
             if tasks_done >= expected_tasks:
                 logger.info(
-                    f"✅ All tasks completed: {tasks_completed} success, "
+                    f"All tasks completed: {tasks_completed} success, "
                     f"{tasks_failed} failed"
                 )
                 break
 
             # Check timeout
             if elapsed > timeout_seconds:
-                logger.warning(f"⏱️ Load test timed out after {timeout_seconds}s")
+                logger.warning(f"Load test timed out after {timeout_seconds}s")
                 break
 
             # Check if we're stuck (no progress for 30 seconds)
             stuck_duration = (datetime.now() - last_progress_time).total_seconds()
             if stuck_duration > 30 and tasks_done > 0:
                 logger.warning(
-                    f"⚠️ No progress for {stuck_duration:.0f}s, stopping monitor"
+                    f"Warning: No progress for {stuck_duration:.0f}s, stopping monitor"
                 )
                 break
 

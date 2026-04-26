@@ -7,22 +7,59 @@ during the migration period.
 """
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
+import typer
 import yaml
 from copier import run_copy, run_update
+from packaging.version import Version
 
+from aegis import __version__
+from aegis.i18n import t
+
+from ..config.defaults import (
+    DEFAULT_PYTHON_VERSION,
+    GITHUB_TEMPLATE_URL,
+    version_to_git_tag,
+)
+from ..constants import AnswerKeys, PaymentProviders, StorageBackends
+from .migration_generator import (
+    generate_migrations_for_services,
+    get_services_needing_migrations,
+)
 from .post_gen_tasks import cleanup_components, run_post_generation_tasks
 from .template_generator import TemplateGenerator
+from .verbosity import is_verbose, verbose_print
 
 
-def generate_with_copier(template_gen: TemplateGenerator, output_dir: Path) -> Path:
+def is_git_repo(path: Path) -> bool:
+    """
+    Check if path is inside a git repository.
+
+    Args:
+        path: Path to check
+
+    Returns:
+        True if path has a .git directory (is a git repo root)
+    """
+    return (path / ".git").exists()
+
+
+def generate_with_copier(
+    template_gen: TemplateGenerator,
+    output_dir: Path,
+    vcs_ref: str | None = None,
+    skip_llm_sync: bool = False,
+    dev_mode: bool = False,
+) -> Path:
     """
     Generate project using Copier template engine.
 
     Args:
         template_gen: Template generator with project configuration
         output_dir: Directory to create the project in
+        vcs_ref: Git reference (tag, branch, or commit) to generate from
+        skip_llm_sync: Whether to skip LLM catalog sync after generation
 
     Returns:
         Path to the generated project
@@ -34,59 +71,173 @@ def generate_with_copier(template_gen: TemplateGenerator, output_dir: Path) -> P
     """
     import subprocess
 
-    # Get cookiecutter context from template generator
-    cookiecutter_context = template_gen.get_template_context()
+    # Get template context from template generator
+    template_context = template_gen.get_template_context()
 
-    # Convert cookiecutter context to Copier data format
+    # Determine Python version early - may need to override for RAG compatibility
+    # When RAG is enabled, chromadb requires onnxruntime which lacks Python 3.14 wheels
+    python_version = template_context.get("python_version", DEFAULT_PYTHON_VERSION)
+    ai_rag = template_context.get(AnswerKeys.AI_RAG, "no") == "yes"
+    if ai_rag and python_version and Version(python_version) >= Version("3.14"):
+        python_version = "3.13"
+
+    # Convert template context to Copier data format
     # Copier uses boolean values instead of "yes"/"no" strings
     copier_data = {
-        "project_name": cookiecutter_context["project_name"],
-        "project_slug": cookiecutter_context["project_slug"],
-        "project_description": cookiecutter_context.get(
+        "project_name": template_context["project_name"],
+        "project_slug": template_context["project_slug"],
+        "project_description": template_context.get(
             "project_description",
             "A production-ready async Python application built with Aegis Stack",
         ),
-        "author_name": cookiecutter_context.get("author_name", "Your Name"),
-        "author_email": cookiecutter_context.get(
-            "author_email", "your.email@example.com"
-        ),
-        "github_username": cookiecutter_context.get("github_username", "your-username"),
-        "version": cookiecutter_context.get("version", "0.1.0"),
-        "python_version": cookiecutter_context.get("python_version", "3.11"),
+        "author_name": template_context.get("author_name", "Your Name"),
+        "author_email": template_context.get("author_email", "your.email@example.com"),
+        "github_username": template_context.get("github_username", "your-username"),
+        "version": template_context.get("version", "0.1.0"),
+        "python_version": python_version,  # Uses override for RAG + Python 3.14
+        "aegis_version": template_context.get("aegis_version", "0.0.0"),
         # Convert yes/no strings to booleans
-        "include_scheduler": cookiecutter_context["include_scheduler"] == "yes",
-        "scheduler_backend": cookiecutter_context["scheduler_backend"],
-        "scheduler_with_persistence": cookiecutter_context["scheduler_with_persistence"]
+        AnswerKeys.SCHEDULER: template_context[AnswerKeys.SCHEDULER] == "yes",
+        AnswerKeys.SCHEDULER_BACKEND: template_context[AnswerKeys.SCHEDULER_BACKEND],
+        AnswerKeys.SCHEDULER_WITH_PERSISTENCE: template_context[
+            AnswerKeys.SCHEDULER_WITH_PERSISTENCE
+        ]
         == "yes",
-        "include_worker": cookiecutter_context["include_worker"] == "yes",
-        "include_redis": cookiecutter_context["include_redis"] == "yes",
-        "include_database": cookiecutter_context["include_database"] == "yes",
-        "include_cache": False,  # Default to no
-        "include_auth": cookiecutter_context.get("include_auth", "no") == "yes",
-        "include_ai": cookiecutter_context.get("include_ai", "no") == "yes",
-        "ai_providers": cookiecutter_context.get("ai_providers", "openai"),
+        AnswerKeys.WORKER: template_context[AnswerKeys.WORKER] == "yes",
+        AnswerKeys.WORKER_BACKEND: template_context.get(
+            AnswerKeys.WORKER_BACKEND, "arq"
+        ),
+        AnswerKeys.REDIS: template_context[AnswerKeys.REDIS] == "yes",
+        AnswerKeys.DATABASE: template_context[AnswerKeys.DATABASE] == "yes",
+        AnswerKeys.DATABASE_ENGINE: template_context.get(
+            AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE
+        ),
+        AnswerKeys.CACHE: False,  # Default to no
+        AnswerKeys.INGRESS: template_context.get(AnswerKeys.INGRESS, "no") == "yes",
+        AnswerKeys.OBSERVABILITY: template_context.get(AnswerKeys.OBSERVABILITY, "no")
+        == "yes",
+        AnswerKeys.AUTH: template_context.get(AnswerKeys.AUTH, "no") == "yes",
+        AnswerKeys.AUTH_LEVEL: template_context.get(AnswerKeys.AUTH_LEVEL, "basic"),
+        AnswerKeys.AUTH_RBAC: template_context.get(AnswerKeys.AUTH_RBAC, "no") == "yes",
+        AnswerKeys.AUTH_ORG: template_context.get(AnswerKeys.AUTH_ORG, "no") == "yes",
+        AnswerKeys.AI: template_context.get(AnswerKeys.AI, "no") == "yes",
+        AnswerKeys.COMMS: template_context.get(AnswerKeys.COMMS, "no") == "yes",
+        AnswerKeys.AI_FRAMEWORK: template_context.get(
+            AnswerKeys.AI_FRAMEWORK, "pydantic-ai"
+        ),
+        AnswerKeys.AI_PROVIDERS: template_context.get(
+            AnswerKeys.AI_PROVIDERS, "openai"
+        ),
+        AnswerKeys.AI_BACKEND: template_context.get(
+            AnswerKeys.AI_BACKEND, StorageBackends.MEMORY
+        ),
+        AnswerKeys.AI_WITH_PERSISTENCE: template_context.get(
+            AnswerKeys.AI_WITH_PERSISTENCE, "no"
+        )
+        == "yes",
+        AnswerKeys.AI_RAG: template_context.get(AnswerKeys.AI_RAG, "no") == "yes",
+        AnswerKeys.AI_VOICE: template_context.get(AnswerKeys.AI_VOICE, "no") == "yes",
+        AnswerKeys.OLLAMA_MODE: template_context.get(AnswerKeys.OLLAMA_MODE, "none"),
+        AnswerKeys.INSIGHTS: template_context.get(AnswerKeys.INSIGHTS, "no") == "yes",
+        AnswerKeys.INSIGHTS_GITHUB: template_context.get(
+            AnswerKeys.INSIGHTS_GITHUB, "no"
+        )
+        == "yes",
+        AnswerKeys.INSIGHTS_PYPI: template_context.get(AnswerKeys.INSIGHTS_PYPI, "no")
+        == "yes",
+        AnswerKeys.INSIGHTS_PLAUSIBLE: template_context.get(
+            AnswerKeys.INSIGHTS_PLAUSIBLE, "no"
+        )
+        == "yes",
+        AnswerKeys.INSIGHTS_REDDIT: template_context.get(
+            AnswerKeys.INSIGHTS_REDDIT, "no"
+        )
+        == "yes",
+        AnswerKeys.PAYMENT: template_context.get(AnswerKeys.PAYMENT, "no") == "yes",
+        AnswerKeys.PAYMENT_PROVIDER: template_context.get(
+            AnswerKeys.PAYMENT_PROVIDER, PaymentProviders.DEFAULT
+        ),
     }
 
-    # Get copier template path - point directly at template directory
-    # This prevents copying aegis-stack repo files into generated projects
-    # The repo root path is set later in .copier-answers.yml for git-aware updates
-    template_path = Path(__file__).parent.parent / "templates" / "copier-aegis-project"
+    # Detect dev vs production mode for template sourcing
+    # - Dev mode (--dev flag): Use plain file path to read from working tree
+    # - Development: Use git+file:// URL to access local git repo at HEAD
+    # - Production (pip/uvx install): Use GitHub URL (no local git repo)
+    from .copier_updater import get_template_root, resolve_version_to_ref
 
-    # Generate project - Copier creates the project_slug directory automatically
+    template_root = get_template_root()
+
+    if dev_mode:
+        # Dev mode: read directly from working tree (uncommitted changes)
+        # WARNING: Projects generated in dev mode cannot be updated with aegis update
+        template_source = str(template_root)
+        resolved_ref = None  # No version pinning in dev mode
+    elif is_git_repo(template_root):
+        # Development mode: local git repository available
+        # Always use git+file:// URL so projects are updatable
+        template_source = f"git+file://{template_root}"
+        if vcs_ref:
+            # Specific version requested - resolve to git reference
+            resolved_ref = resolve_version_to_ref(vcs_ref, template_root)
+        else:
+            # No version specified - use HEAD so project has valid _commit
+            # This is CRITICAL for aegis update to work properly
+            resolved_ref = "HEAD"
+    else:
+        # Production mode: installed via pip/uvx (no .git directory)
+        # Use GitHub URL for template source with CLI version as default ref
+        # This ensures CLI v0.4.1 uses template v0.4.1, not HEAD
+        template_source = GITHUB_TEMPLATE_URL
+        resolved_ref = vcs_ref if vcs_ref else version_to_git_tag(__version__)
+
+    # Store template version in answers for future reference
+    # This allows aegis update to show "v0.4.1" instead of commit hash
+    if resolved_ref is None:
+        # Dev mode - no version tracking
+        copier_data["_template_version"] = "dev"
+    elif resolved_ref.startswith("v"):
+        # Version tag (e.g., "v0.4.1") -> strip 'v' prefix
+        copier_data["_template_version"] = resolved_ref[1:]
+    else:
+        # Branch or commit hash - store as-is
+        copier_data["_template_version"] = resolved_ref
+
+    # Generate project - Copier creates output_dir/project_slug via {{ project_slug }}/ wrapper
     # NOTE: _tasks removed from copier.yml - we run them ourselves below
+    # Suppress Copier output unless --verbose flag is passed
     run_copy(
-        str(
-            template_path
-        ),  # Use template directory (not repo root) to avoid copying extra files
-        output_dir,
+        template_source,
+        output_dir,  # Copier creates project_slug subdirectory from template
         data=copier_data,
         defaults=True,  # Use template defaults, overridden by our explicit data
         unsafe=False,  # No tasks in copier.yml anymore - we run them ourselves
-        vcs_ref=None,  # Don't use git for template versioning - prevents git submodule errors in CI
+        vcs_ref=resolved_ref,  # Use specified version if provided
+        quiet=not is_verbose(),  # Silent unless --verbose
     )
 
     # Copier creates the project in output_dir/project_slug
-    project_path = output_dir / cookiecutter_context["project_slug"]
+    project_path = output_dir / template_context["project_slug"]
+
+    # Store template version in answers file for future reference
+    # Copier only writes fields defined in copier.yml, so we add this manually
+    # This allows 'aegis update' to show "v0.4.1" instead of commit hash
+    # Copier doesn't persist conditional fields (those with `when:`) to the answers
+    # file even when their value is provided via `data`. Patch them in manually so
+    # downstream code (project_map, aegis update) can read them back.
+    answers_file = project_path / AnswerKeys.ANSWERS_FILENAME
+    if answers_file.exists():
+        answers = yaml.safe_load(answers_file.read_text()) or {}
+
+        template_version = copier_data.get("_template_version")
+        if template_version:
+            answers["_template_version"] = template_version
+
+        # Persist conditional choice fields that Copier omits
+        for key in (AnswerKeys.WORKER_BACKEND, AnswerKeys.SCHEDULER_BACKEND):
+            if key in copier_data:
+                answers[key] = copier_data[key]
+
+        answers_file.write_text(yaml.safe_dump(answers, default_flow_style=False))
 
     # Clean up unwanted component files based on selection
     # This must happen BEFORE post-generation tasks (which run linting on the remaining files)
@@ -94,15 +245,86 @@ def generate_with_copier(template_gen: TemplateGenerator, output_dir: Path) -> P
 
     # Run post-generation tasks with explicit working directory control
     # This ensures consistent behavior with Cookiecutter
-    include_auth = copier_data.get("include_auth", False)
-    run_post_generation_tasks(project_path, include_auth=include_auth)
+    include_auth = copier_data.get(AnswerKeys.AUTH, False)
+    include_ai = copier_data.get(AnswerKeys.AI, False)
+    include_insights = copier_data.get(AnswerKeys.INSIGHTS, False)
+    ai_backend = copier_data.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
+    database_engine = copier_data.get(
+        AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE
+    )
+
+    # Type narrowing: ensure booleans for include_auth and include_ai
+    is_auth_included: bool = include_auth is True
+    is_ai_included: bool = include_ai is True
+
+    # Type narrowing: ai_backend should always be a string, but narrow from Any
+    ai_backend_str: str = str(ai_backend) if ai_backend else StorageBackends.MEMORY
+
+    is_insights_included: bool = include_insights is True
+    ai_needs_migrations = is_ai_included and ai_backend_str != StorageBackends.MEMORY
+    needs_migration_files = (
+        is_auth_included or ai_needs_migrations or is_insights_included
+    )
+    # Only run migrations automatically for SQLite (file-based, no server needed)
+    # PostgreSQL requires a running server, so skip auto-migration
+    is_sqlite = database_engine == StorageBackends.SQLITE
+    is_payment_included: bool = copier_data.get(AnswerKeys.PAYMENT, False) is True
+    needs_migration_files = needs_migration_files or is_payment_included
+    run_migrations = needs_migration_files and is_sqlite
+
+    # Generate migrations for services that need them (always, regardless of engine)
+    if needs_migration_files:
+        # Get ai_voice from copier_data (it's a boolean after conversion)
+        ai_voice_enabled: bool = copier_data.get(AnswerKeys.AI_VOICE, False) is True
+        context = {
+            "include_auth": is_auth_included,
+            "include_auth_org": copier_data.get(AnswerKeys.AUTH_ORG, False) is True,
+            "auth_level": copier_data.get(AnswerKeys.AUTH_LEVEL, "basic"),
+            "include_ai": is_ai_included,
+            "ai_backend": ai_backend_str,
+            "ai_voice": ai_voice_enabled,
+            "include_insights": is_insights_included,
+            "include_payment": is_payment_included,
+        }
+        services = get_services_needing_migrations(context)
+        if services:
+            generated = generate_migrations_for_services(project_path, services)
+            for migration_path in generated:
+                print(f"Generated migration: {migration_path.name}")
+
+    # AI needs seeding when using persistence backend AND sqlite (postgres needs running server)
+    ai_needs_seeding = ai_needs_migrations and is_sqlite
+
+    # Type narrowing: python_version from copier_data can be Any, so narrow to str | None
+    python_version_value = copier_data.get("python_version")
+    python_version_str: str | None = (
+        python_version_value if isinstance(python_version_value, str) else None
+    )
+
+    # Skip LLM sync for postgres (requires running database server)
+    should_skip_llm_sync = skip_llm_sync or not is_sqlite
+
+    run_post_generation_tasks(
+        project_path,
+        include_migrations=run_migrations,
+        python_version=python_version_str,
+        seed_ai=ai_needs_seeding,
+        skip_llm_sync=should_skip_llm_sync,
+        project_slug=template_context["project_slug"],
+    )
 
     # Initialize git repository for Copier updates
     # Copier requires a git-tracked project to perform updates
 
     try:
-        # Configure git user in case CI environment doesn't have it set
-        # This is needed for commits to work in CI
+        subprocess.run(
+            ["git", "init"],
+            cwd=project_path,
+            check=True,
+            capture_output=True,
+        )
+        # Configure git user AFTER init (local config requires .git to exist)
+        # This is needed for commits to work in CI environments
         subprocess.run(
             ["git", "config", "user.name", "Aegis Stack"],
             cwd=project_path,
@@ -111,13 +333,6 @@ def generate_with_copier(template_gen: TemplateGenerator, output_dir: Path) -> P
         subprocess.run(
             ["git", "config", "user.email", "noreply@aegis-stack.dev"],
             cwd=project_path,
-            capture_output=True,
-        )
-
-        subprocess.run(
-            ["git", "init"],
-            cwd=project_path,
-            check=True,
             capture_output=True,
         )
         subprocess.run(
@@ -132,40 +347,59 @@ def generate_with_copier(template_gen: TemplateGenerator, output_dir: Path) -> P
             check=True,
             capture_output=True,
         )
-        print("✅ Git repository initialized")
+        verbose_print("Git repository initialized")
     except subprocess.CalledProcessError as e:
-        print(f"⚠️  Failed to initialize git repository: {e}")
-        print("💡 Run 'git init && git add . && git commit' manually")
+        print(f"Warning: Failed to initialize git repository: {e}")
+        print("Run 'git init && git add . && git commit' manually")
 
-    # CRITICAL: Update .copier-answers.yml for future updates to work
-    # We need to:
-    # 1. Store git commit hash (_commit) - tells Copier which template version was used
-    # 2. Update template path (_src_path) - point to repo root, not subdirectory
-    #    (repo root has .git so Copier can detect version changes)
+    # Show docs/star links
+    typer.echo()
+    typer.secho(t("postgen.docs_link"), dim=True)
+    typer.echo()
+    star = typer.style("\u2605", fg=typer.colors.BRIGHT_YELLOW, bold=True)
+    typer.echo(
+        f"{star} {t('postgen.star_prompt')}\n  https://github.com/lbedner/aegis-stack"
+    )
+
+    # CRITICAL: Fix _src_path in .copier-answers.yml for future updates to work
+    #
+    # Problem: Copier stores a temp directory path during generation (e.g.,
+    # /private/var/folders/...) which won't exist later when running updates.
+    #
+    # Solution: Update _src_path to point to the actual template repository:
+    # - Development: git+file:// URL for local git repo
+    # - Production: GitHub URL for remote repo
+    #
+    # IMPORTANT: We do NOT modify _commit - Copier sets this correctly when using
+    # git+file:// URL. Manually overwriting _commit breaks Copier's 3-way merge
+    # algorithm for updates. See: https://copier.readthedocs.io/en/stable/updating/
     try:
-        # Get current commit hash from aegis-stack repo
-        template_root = Path(__file__).parent.parent.parent
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=template_root,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        commit_hash = result.stdout.strip()
-
-        # Update .copier-answers.yml with commit hash AND repo root path
         answers_file = project_path / ".copier-answers.yml"
         if answers_file.exists():
             with open(answers_file) as f:
                 answers = yaml.safe_load(f)
 
-            # Update _commit field (was None, now has actual hash)
-            answers["_commit"] = commit_hash
+            # Fix _src_path based on dev vs production mode
+            # We already determined template_root above
+            if is_git_repo(template_root):
+                # Development mode: use local git repo
+                answers["_src_path"] = f"git+file://{template_root}"
+            else:
+                # Production mode: use GitHub URL
+                answers["_src_path"] = GITHUB_TEMPLATE_URL
 
-            # Update _src_path to point to repo root (where .git exists)
-            # The copier.yml at repo root has _subdirectory setting to find actual template
-            answers["_src_path"] = str(template_root)
+            # Persist conditional auth fields (Copier may omit conditional
+            # questions from answers file when values are provided via data)
+            if copier_data.get(AnswerKeys.AUTH):
+                answers[AnswerKeys.AUTH_LEVEL] = copier_data.get(
+                    AnswerKeys.AUTH_LEVEL, "basic"
+                )
+                answers[AnswerKeys.AUTH_RBAC] = copier_data.get(
+                    AnswerKeys.AUTH_RBAC, False
+                )
+                answers[AnswerKeys.AUTH_ORG] = copier_data.get(
+                    AnswerKeys.AUTH_ORG, False
+                )
 
             with open(answers_file, "w") as f:
                 yaml.safe_dump(answers, f, default_flow_style=False, sort_keys=False)
@@ -183,7 +417,7 @@ def generate_with_copier(template_gen: TemplateGenerator, output_dir: Path) -> P
                         "git",
                         "commit",
                         "-m",
-                        "Update .copier-answers.yml with template version",
+                        "Fix .copier-answers.yml _src_path for template updates",
                     ],
                     cwd=project_path,
                     check=True,
@@ -194,8 +428,8 @@ def generate_with_copier(template_gen: TemplateGenerator, output_dir: Path) -> P
                 pass
 
     except Exception:
-        # If we can't get commit hash, that's OK - updates won't work but
-        # project generation succeeded. This can happen in non-git environments.
+        # If we can't fix _src_path, that's OK - project generation succeeded
+        # but updates won't work. This can happen in non-git environments.
         pass
 
     return project_path
@@ -250,7 +484,7 @@ def load_copier_answers(project_path: Path) -> dict[str, Any]:
 def update_with_copier(
     project_path: Path,
     additional_data: dict[str, Any] | None = None,
-    conflict_mode: str = "rej",
+    conflict_mode: Literal["inline", "rej"] = "rej",
 ) -> None:
     """
     Update an existing Copier-generated project with new data.

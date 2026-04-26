@@ -9,9 +9,14 @@ from typing import Any
 from unittest.mock import patch
 
 from aegis.cli.interactive import (
+    clear_ai_backend_selection,
     clear_ai_provider_selection,
+    clear_database_engine_selection,
+    clear_ollama_mode_selection,
+    get_ai_backend_selection,
     get_ai_provider_selection,
     interactive_project_selection,
+    set_database_engine_selection,
 )
 
 
@@ -27,24 +32,31 @@ class TestAIProviderSelection:
         """Test AI service selection with default providers."""
         # Mock user responses: no components, yes AI service, no to all specific providers (triggers defaults)
         mock_confirm.side_effect = [
-            False,
-            False,
-            False,
-            False,  # redis, worker, scheduler, database
+            False,  # redis
+            False,  # worker
+            False,  # scheduler
+            False,  # database
+            False,  # ingress
+            False,  # observability
             False,  # auth service
             True,  # AI service
-            False,
-            False,
-            False,
-            False,
-            False,
-            False,  # All AI providers declined
+            False,  # Use PydanticAI? (framework, default True)
+            False,  # Enable usage tracking with SQLite? No (memory backend)
+            False,  # openai
+            False,  # anthropic
+            False,  # google
+            False,  # groq
+            False,  # mistral
+            False,  # cohere
+            False,  # ollama
+            True,  # Enable RAG? Yes (default)
+            True,  # Enable voice?
         ]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
-        # Verify AI service was selected
-        assert "ai" in services
+        # Verify AI service was selected (now uses bracket syntax like ai[backend,framework,...])
+        assert any(s.startswith("ai") for s in services)
         assert scheduler_backend == "memory"
 
         # Verify default providers were selected
@@ -56,24 +68,31 @@ class TestAIProviderSelection:
         """Test AI service selection with custom provider selection."""
         # Mock user responses: no components, yes AI service, select openai and anthropic
         mock_confirm.side_effect = [
-            False,
-            False,
-            False,
-            False,  # redis, worker, scheduler, database
+            False,  # redis
+            False,  # worker
+            False,  # scheduler
+            False,  # database
+            False,  # ingress
+            False,  # observability
             False,  # auth service
             True,  # AI service
-            True,  # OpenAI
-            True,  # Anthropic
-            False,
-            False,
-            False,
-            False,  # Google, Groq, Mistral, Cohere
+            True,  # Use LangChain? Yes
+            False,  # Enable usage tracking with SQLite? No (memory backend)
+            True,  # openai
+            True,  # anthropic
+            False,  # google
+            False,  # groq
+            False,  # mistral
+            False,  # cohere
+            False,  # ollama
+            True,  # Enable RAG? Yes (default)
+            True,  # Enable voice?
         ]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         # Verify AI service was selected
-        assert "ai" in services
+        assert any(s.startswith("ai") for s in services)
 
         # Verify custom providers were selected
         providers = get_ai_provider_selection("ai")
@@ -86,24 +105,31 @@ class TestAIProviderSelection:
         """Test AI service selection with recommended providers selected by default."""
         # Mock user responses: no components, yes AI service, accept recommended defaults
         mock_confirm.side_effect = [
-            False,
-            False,
-            False,
-            False,  # redis, worker, scheduler, database
+            False,  # redis
+            False,  # worker
+            False,  # scheduler
+            False,  # database
+            False,  # ingress
+            False,  # observability
             False,  # auth service
             True,  # AI service
-            False,
-            False,  # OpenAI, Anthropic
-            True,
-            True,  # Google (recommended), Groq (recommended)
-            False,
-            False,  # Mistral, Cohere
+            False,  # Use LangChain? No (use PydanticAI)
+            False,  # Enable usage tracking with SQLite? No (memory backend)
+            False,  # openai
+            False,  # anthropic
+            True,  # google (recommended)
+            True,  # groq (recommended)
+            False,  # mistral
+            False,  # cohere
+            False,  # ollama
+            True,  # Enable RAG? Yes (default)
+            True,  # Enable voice?
         ]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         # Verify AI service was selected
-        assert "ai" in services
+        assert any(s.startswith("ai") for s in services)
 
         # Verify recommended providers were selected
         providers = get_ai_provider_selection("ai")
@@ -116,15 +142,17 @@ class TestAIProviderSelection:
         """Test when AI service is not selected."""
         # Mock user responses: no components, no services
         mock_confirm.side_effect = [
-            False,
-            False,
-            False,
-            False,  # redis, worker, scheduler, database
+            False,  # redis
+            False,  # worker
+            False,  # scheduler
+            False,  # database
+            False,  # ingress
+            False,  # observability
             False,  # auth service
             False,  # AI service
         ]
 
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         # Verify AI service was not selected
         assert "ai" not in services
@@ -133,6 +161,161 @@ class TestAIProviderSelection:
         # Verify no provider selection was stored
         providers = get_ai_provider_selection("ai")
         assert providers == ["openai"]  # Default when not selected
+
+
+class TestAIBackendSelection:
+    """Test cases for AI backend selection (memory vs sqlite) in interactive mode."""
+
+    def setup_method(self) -> None:
+        """Clear selections before each test."""
+        clear_ai_provider_selection()
+        clear_ai_backend_selection()
+        clear_database_engine_selection()
+
+    @patch("typer.confirm")
+    def test_ai_backend_selection_sqlite_auto_adds_database(
+        self, mock_confirm: Any
+    ) -> None:
+        """Test that selecting SQLite backend auto-adds database component."""
+        # Pre-set database engine (avoids interactive questionary prompt)
+        set_database_engine_selection("sqlite")
+
+        try:
+            # Mock user responses: no components, yes AI service, yes SQLite tracking with sync
+            mock_confirm.side_effect = [
+                False,  # redis
+                False,  # worker
+                False,  # scheduler
+                False,  # database
+                False,  # ingress
+                False,  # observability
+                False,  # auth service
+                True,  # AI service
+                False,  # Use LangChain? No (use PydanticAI)
+                True,  # Enable usage tracking? Yes
+                True,  # Sync LLM catalog during project generation? Yes
+                False,  # openai
+                False,  # anthropic
+                True,  # google
+                True,  # groq
+                False,  # mistral
+                False,  # cohere
+                False,  # ollama
+                True,  # Enable RAG? Yes (default)
+                True,  # Enable voice?
+            ]
+
+            components, scheduler_backend, services, _ = interactive_project_selection()
+
+            # Verify AI service was selected
+            assert any(s.startswith("ai") for s in services)
+
+            # Verify database component was auto-added
+            assert any("database" in comp for comp in components)
+
+            # Verify backend selection is sqlite
+            backend = get_ai_backend_selection("ai")
+            assert backend == "sqlite"
+        finally:
+            clear_database_engine_selection()
+
+    @patch("typer.confirm")
+    def test_ai_backend_selection_sqlite_with_existing_database(
+        self, mock_confirm: Any
+    ) -> None:
+        """Test SQLite backend with database already selected doesn't duplicate."""
+        # Pre-set database engine (avoids interactive questionary prompt)
+        set_database_engine_selection("sqlite")
+
+        try:
+            # Mock user responses: yes database, yes AI service, yes SQLite tracking with sync
+            mock_confirm.side_effect = [
+                False,  # redis
+                False,  # worker
+                False,  # scheduler
+                True,  # database (yes)
+                False,  # ingress
+                False,  # observability
+                False,  # auth service
+                True,  # AI service
+                False,  # Use LangChain? No (use PydanticAI)
+                True,  # Enable usage tracking? Yes
+                True,  # Sync LLM catalog during project generation? Yes
+                False,  # openai
+                False,  # anthropic
+                True,  # google
+                True,  # groq
+                False,  # mistral
+                False,  # cohere
+                False,  # ollama
+                True,  # Enable RAG? Yes (default)
+                True,  # Enable voice?
+            ]
+
+            components, scheduler_backend, services, _ = interactive_project_selection()
+
+            # Verify AI service was selected
+            assert any(s.startswith("ai") for s in services)
+
+            # Verify database appears only once (no duplicate)
+            database_count = sum(1 for comp in components if "database" in comp)
+            assert database_count == 1
+
+            # Verify backend selection is sqlite
+            backend = get_ai_backend_selection("ai")
+            assert backend == "sqlite"
+        finally:
+            clear_database_engine_selection()
+
+    @patch("typer.confirm")
+    def test_ai_backend_selection_memory(self, mock_confirm: Any) -> None:
+        """Test that declining SQLite keeps memory backend."""
+        # Mock user responses: no components, yes AI service, no SQLite tracking
+        mock_confirm.side_effect = [
+            False,  # redis
+            False,  # worker
+            False,  # scheduler
+            False,  # database
+            False,  # ingress
+            False,  # observability
+            False,  # auth service
+            True,  # AI service
+            False,  # Use LangChain? No (use PydanticAI)
+            False,  # Enable usage tracking with SQLite? No (memory)
+            False,  # openai
+            False,  # anthropic
+            True,  # google
+            True,  # groq
+            False,  # mistral
+            False,  # cohere
+            False,  # ollama
+            True,  # Enable RAG? Yes (default)
+            True,  # Enable voice?
+        ]
+
+        components, scheduler_backend, services, _ = interactive_project_selection()
+
+        # Verify AI service was selected
+        assert any(s.startswith("ai") for s in services)
+
+        # Verify no database was auto-added
+        assert not any("database" in comp for comp in components)
+
+        # Verify backend selection is memory
+        backend = get_ai_backend_selection("ai")
+        assert backend == "memory"
+
+    def test_ai_backend_selection_defaults(self) -> None:
+        """Test that backend defaults to memory when not set."""
+        clear_ai_backend_selection()
+
+        # Should return memory as default
+        backend = get_ai_backend_selection("ai")
+        assert backend == "memory"
+
+        # Should return memory for unknown service too
+        backend = get_ai_backend_selection("unknown_service")
+        assert backend == "memory"
 
 
 class TestAIConfigurationIntegration:
@@ -249,25 +432,32 @@ class TestAIConfigurationEndToEnd:
 
         # Mock interactive selection with AI service and specific providers
         mock_confirm.side_effect = [
-            False,
-            False,
-            False,
-            False,  # No infrastructure components
+            False,  # redis
+            False,  # worker
+            False,  # scheduler
+            False,  # database
+            False,  # ingress
+            False,  # observability
             False,  # No auth service
             True,  # Yes AI service
+            True,  # Use LangChain? Yes
+            False,  # Enable usage tracking with SQLite? No (memory backend)
             True,
             False,
             True,
             True,
             False,
-            False,  # OpenAI, Google, Groq selected
+            False,
+            False,  # Provider selection (7 providers: openai yes, anthropic no, google yes, groq yes, mistral no, cohere no, ollama no)
+            True,  # Enable RAG? Yes (default)
+            True,  # Enable voice?
         ]
 
         # Run interactive selection
-        components, scheduler_backend, services = interactive_project_selection()
+        components, scheduler_backend, services, _ = interactive_project_selection()
 
         # Verify service selection
-        assert "ai" in services
+        assert any(s.startswith("ai") for s in services)
 
         # Verify provider selection
         providers = get_ai_provider_selection("ai")
@@ -292,29 +482,121 @@ class TestAIConfigurationEndToEnd:
         assert context["ai_providers"] == "openai,google,groq"
         assert context["project_name"] == "test-ai-project"
 
-    def test_cookiecutter_json_structure(self) -> None:
-        """Test that cookiecutter.json has correct AI provider structure."""
-        import json
+    def test_copier_yaml_structure(self) -> None:
+        """Test that copier.yml has correct AI provider structure."""
         from pathlib import Path
 
-        # Load cookiecutter.json directly
-        cookiecutter_path = (
-            Path(__file__).parent.parent.parent
-            / "aegis"
-            / "templates"
-            / "cookiecutter-aegis-project"
-            / "cookiecutter.json"
-        )
+        import yaml
 
-        with open(cookiecutter_path) as f:
-            config = json.load(f)
+        # Load copier.yml directly
+        copier_path = Path(__file__).parent.parent.parent / "copier.yml"
+
+        with open(copier_path) as f:
+            config = yaml.safe_load(f)
 
         # Verify AI-related fields exist
         assert "include_ai" in config
         assert "ai_providers" in config
         assert "_ai_deps" in config
 
+        # Verify AI voice configuration exists
+        assert "ai_voice" in config
+        assert config["ai_voice"]["type"] == "bool"
+        assert "when" in config["ai_voice"]  # Should be conditional on include_ai
+
         # Verify AI dependencies template uses provider variable
         ai_deps = config["_ai_deps"]
-        assert "{{ cookiecutter.ai_providers }}" in ai_deps
+        assert "ai_providers" in ai_deps
         assert "pydantic-ai-slim" in ai_deps
+
+
+class TestOllamaModeSelection:
+    """Test cases for Ollama mode selection in interactive and non-interactive modes."""
+
+    def setup_method(self) -> None:
+        """Clear all AI selections before each test."""
+
+        clear_ai_provider_selection()
+        clear_ai_backend_selection()
+        clear_ollama_mode_selection()
+
+    @patch("typer.confirm")
+    def test_ai_service_with_ollama_host_mode(self, mock_confirm: Any) -> None:
+        """Test Ollama mode selection when Ollama is chosen as provider."""
+        from aegis.cli.interactive import (
+            get_ollama_mode_selection,
+        )
+        from aegis.constants import OllamaMode
+
+        clear_ollama_mode_selection()  # Reset state
+
+        mock_confirm.side_effect = [
+            False,  # redis
+            False,  # worker
+            False,  # scheduler
+            False,  # database
+            False,  # ingress
+            False,  # observability
+            False,  # auth service
+            True,  # AI service
+            False,  # Use LangChain? No
+            False,  # Enable usage tracking? No
+            False,  # openai
+            False,  # anthropic
+            False,  # google
+            False,  # groq
+            False,  # mistral
+            False,  # cohere
+            True,  # SELECT Ollama
+            True,  # Ollama mode: connect to host (True = HOST)
+            True,  # Enable RAG
+            True,  # Enable voice?
+        ]
+
+        interactive_project_selection()
+
+        # Verify Ollama mode was set correctly
+        ollama_mode = get_ollama_mode_selection("ai")
+        assert ollama_mode == OllamaMode.HOST
+
+    def test_non_interactive_ollama_auto_default(self) -> None:
+        """Test that ollama_mode defaults to HOST when ollama in providers (non-interactive)."""
+        from aegis.cli.interactive import (
+            get_ollama_mode_selection,
+            set_ai_service_config,
+        )
+        from aegis.constants import AIProviders, OllamaMode
+
+        clear_ollama_mode_selection()
+
+        # Simulate bracket syntax: ai[sqlite,ollama]
+        set_ai_service_config(
+            service_name="ai",
+            framework="pydantic-ai",
+            backend="sqlite",
+            providers=["openai", AIProviders.OLLAMA],
+        )
+
+        # Verify auto-default to HOST
+        assert get_ollama_mode_selection("ai") == OllamaMode.HOST
+
+    def test_non_interactive_no_ollama_defaults_none(self) -> None:
+        """Test that ollama_mode defaults to NONE when ollama NOT in providers."""
+        from aegis.cli.interactive import (
+            get_ollama_mode_selection,
+            set_ai_service_config,
+        )
+        from aegis.constants import OllamaMode
+
+        clear_ollama_mode_selection()
+
+        # Simulate bracket syntax without ollama: ai[sqlite]
+        set_ai_service_config(
+            service_name="ai",
+            framework="pydantic-ai",
+            backend="sqlite",
+            providers=["openai", "anthropic"],
+        )
+
+        # Verify mode is NONE
+        assert get_ollama_mode_selection("ai") == OllamaMode.NONE

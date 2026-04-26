@@ -4,9 +4,39 @@ A script to dynamically generate documentation files for MkDocs.
 This is run automatically by the mkdocs-gen-files plugin.
 """
 
+import re
+
 import mkdocs_gen_files
 
 print("--- Running gen_docs.py ---")
+
+# Image path mappings: GitHub path -> MkDocs path
+# Maps docs/images/* references in README.md to images/* for MkDocs
+IMAGE_PATH_MAPPINGS = {
+    # GIFs
+    "![Aegis Stack Quick Start Demo](docs/images/aegis-demo.gif)": "![Aegis Stack Quick Start Demo](images/aegis-demo.gif)",
+    "![Component Evolution Demo](docs/images/aegis-evolution-demo.gif)": "![Component Evolution Demo](images/aegis-evolution-demo.gif)",
+    "![AI Service Demo](docs/images/aegis-ai-demo.gif)": "![AI Service Demo](images/aegis-ai-demo.gif)",
+    "![Ron Swanson](docs/images/ron-swanson.gif)": "![Ron Swanson](images/ron-swanson.gif)",
+    # Static images
+    "![CLI Health Check](docs/images/cli_health_check.png)": "![CLI Health Check](images/cli_health_check.png)",
+    # Overseer Dashboard
+    "![Overseer](docs/images/overseer-demo.gif)": "![Overseer](images/overseer-demo.gif)",
+    # CLI Demo
+    "![CLI Demo](docs/images/cli-demo.gif)": "![CLI Demo](images/cli-demo.gif)",
+    # Illiana Demo
+    "![Illiana Demo](docs/images/illiana-demo.gif)": "![Illiana Demo](images/illiana-demo.gif)",
+    # Dashboard - single dark image -> dual light/dark
+    "![System Health Dashboard](docs/images/dashboard-dark.png)": (
+        "![System Health Dashboard](images/dashboard-light.png#only-light)\n"
+        "![System Health Dashboard](images/dashboard-dark.png#only-dark)"
+    ),
+    # Dashboard - light/dark syntax (remove docs/ prefix)
+    "![System Health Dashboard](docs/images/dashboard-light.png#only-light)": "![System Health Dashboard](images/dashboard-light.png#only-light)",
+    "![System Health Dashboard](docs/images/dashboard-dark.png#only-dark)": "![System Health Dashboard](images/dashboard-dark.png#only-dark)",
+    # Legacy dashboard image
+    "![System Health Dashboard](docs/images/dashboard.png)": "![System Health Dashboard](images/dashboard.png)",
+}
 
 # Copy the root README.md to be the documentation's index page.
 # This allows us to maintain a single source of truth for the project's
@@ -14,37 +44,9 @@ print("--- Running gen_docs.py ---")
 with open("README.md") as readme:
     content = readme.read()
 
-    # Fix paths for documentation context
-    # Convert single dark dashboard image to dual light/dark for MkDocs
-    content = content.replace(
-        "![System Health Dashboard](docs/images/dashboard-dark.png)",
-        "![System Health Dashboard](images/dashboard-light.png#only-light)\n"
-        "![System Health Dashboard](images/dashboard-dark.png#only-dark)",
-    )
-    # Handle existing light/dark syntax (remove docs/ prefix)
-    content = content.replace(
-        "![System Health Dashboard](docs/images/dashboard-light.png#only-light)",
-        "![System Health Dashboard](images/dashboard-light.png#only-light)",
-    )
-    content = content.replace(
-        "![System Health Dashboard](docs/images/dashboard-dark.png#only-dark)",
-        "![System Health Dashboard](images/dashboard-dark.png#only-dark)",
-    )
-    # Handle legacy single image if it exists
-    content = content.replace(
-        "![System Health Dashboard](docs/images/dashboard.png)",
-        "![System Health Dashboard](images/dashboard.png)",
-    )
-    # Fix Ron Swanson GIF path
-    content = content.replace(
-        "![Ron Swanson](docs/images/ron-swanson.gif)",
-        "![Ron Swanson](images/ron-swanson.gif)",
-    )
-    # Fix CLI health check image path
-    content = content.replace(
-        "![CLI Health Check](docs/images/cli_health_check.png)",
-        "![CLI Health Check](images/cli_health_check.png)",
-    )
+    # Apply all image path mappings
+    for github_path, mkdocs_path in IMAGE_PATH_MAPPINGS.items():
+        content = content.replace(github_path, mkdocs_path)
     # Convert GitHub picture element to MkDocs light/dark syntax
     picture_element = (
         "<picture>\n"
@@ -74,10 +76,30 @@ with open("README.md") as readme:
     )
 
     # Fix links to documentation pages (remove 'docs/' prefix)
-    content = content.replace("](docs/cli-reference.md)", "](cli-reference.md)")
-    content = content.replace("](docs/components/index.md)", "](components/index.md)")
-    content = content.replace("](docs/services/index.md)", "](services/index.md)")
-    content = content.replace("](docs/philosophy.md)", "](philosophy.md)")
+    # Use regex to catch all docs/*.md links instead of manually listing each one
+    content = re.sub(r"\]\(docs/([^)]+\.md)\)", r"](\1)", content)
+
+    # Convert absolute docs URLs to relative for MkDocs (works locally and deployed)
+    content = content.replace("https://lbedner.github.io/aegis-stack/", "")
+
+    # Fix trailing slash links to explicit file references for MkDocs
+    # Check if it's a directory (has index.md) or a top-level page
+    from pathlib import Path
+
+    docs_dir = Path("docs")
+
+    def fix_trailing_slash(match: re.Match[str]) -> str:
+        path = match.group(1).rstrip("/")
+        check_path = docs_dir / path / "index.md"
+        # Check if it's a directory with index.md
+        if check_path.exists():
+            return f"]({path}/index.md)"
+        else:
+            # Top-level page, convert to .md
+            print(f"  DEBUG: {check_path} does not exist, using {path}.md")
+            return f"]({path}.md)"
+
+    content = re.sub(r"\]\(([a-z][a-z0-9-/]*)/\)", fix_trailing_slash, content)
 
     # Use mkdocs_gen_files to create a virtual file instead of writing directly
     # This prevents triggering file change detection loops

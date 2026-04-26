@@ -1,91 +1,121 @@
 <img src="images/aegis-manifesto.png#only-light" alt="Aegis Stack" width="400">
 <img src="images/aegis-manifesto-dark.png#only-dark" alt="Aegis Stack" width="400">
 
-**Build production-ready Python applications with your chosen components.**
+**Build production-ready Python applications with your chosen components and services.**
 
+[![GitHub Stars](https://img.shields.io/github/stars/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack)
 [![CI](https://github.com/lbedner/aegis-stack/workflows/CI/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/ci.yml)
 [![Documentation](https://github.com/lbedner/aegis-stack/workflows/Deploy%20Documentation/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/docs.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-Aegis Stack is a CLI-driven framework for creating custom Python applications. Select exactly the components you need - no bloat, no unused dependencies.
+Aegis Stack is a CLI that scaffolds modular Python applications. Select exactly the components you need - no bloat, no unused dependencies.
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
-# Install
-pip install aegis-stack
-
-# Create a simple API
-aegis init my-api
+# Run instantly without installation
+uvx aegis-stack init my-api
 
 # Create with user authentication
-aegis init user-app --services auth --components database
+uvx aegis-stack init user-app --services auth
 
 # Create with background processing
-aegis init task-processor --components scheduler,worker
+uvx aegis-stack init task-processor --components scheduler,worker
 
 # Start building
-cd my-project && uv sync && source .venv/bin/activate && make server
+cd my-api && uv sync && cp .env.example .env && make serve
 ```
 
-## 🔨 Know What You're Doing?
+## Installation
 
-![Ron Swanson: I know more than you](https://tenor.com/d4GaMe0YmEt.gif)
-
-**"I know more than you."** - Got it. Here's what you can build with:
+**No installation needed** - just run it:
 
 ```bash
-aegis init my-project --services auth --components database,worker,scheduler
+uvx aegis-stack init my-project
 ```
 
-Your stack. Your rules. No hand-holding.
+That's it. [`uvx`](https://docs.astral.sh/uv/) downloads, installs, and runs Aegis Stack in one command.
 
-## 🧩 Available Components & Services
+---
+
+**Alternative methods:** [Installation Guide](installation.md) covers `uv tool install` and `pip install` for specific workflows.
+
+## 🌱 Your Stack Grows With You
+
+**Your choices aren't permanent.** Start with what you need today, add components when requirements change, remove what you outgrow.
+
+```bash
+# Monday: Ship MVP
+aegis init my-api
+
+# Week 3: Add scheduled reports
+aegis add scheduler --project-path ./my-api
+
+# Month 2: Need async workers
+aegis add worker --project-path ./my-api
+
+# Month 6: Scheduler not needed
+aegis remove scheduler --project-path ./my-api
+```
+
+| Starter | Add Later? | Remove Later? | Git Conflicts? |
+|-----------|------------|---------------|----------------|
+| **Others** | ❌ Locked at init | ❌ Manual deletion | ⚠️ High risk |
+| **Aegis Stack** | ✅ One command | ✅ One command | ✅ Auto-handled |
+
+Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your Stack](evolving-your-stack.md)** for the complete guide.
+
+## Available Components & Services
 
 ### Infrastructure Components
 | Component | Purpose | Status |
 |-----------|---------|--------|
-| **Core** (FastAPI + Flet) | Web API + Frontend | ✅ **Always Included** |
-| **Database** | SQLite + SQLModel ORM | ✅ **Available** |
+| **Core** (FastAPI + Flet) | Web API + Overseer | ✅ **Always Included** |
+| **Database** | SQLite or PostgreSQL + SQLModel ORM | ✅ **Available** |
 | **Scheduler** | Background tasks, cron jobs | ✅ **Available** |
-| **Worker** | Async task queues (arq + Redis) | 🧪 **Experimental** |
+| **Worker** | Task queues (arq, Dramatiq, or TaskIQ) | ✅ **Available** |
+| **Observability** | Tracing, metrics, logging (Logfire) | ✅ **Available** |
 | **Cache** | Redis caching and sessions | 🚧 **Coming Soon** |
 
 ### Business Services
 | Service | Purpose | Status |
 |---------|---------|--------|
-| **Auth** | User authentication & JWT | ✅ **Available** |
-| **AI** | Multi-provider AI chat | 🧪 **Experimental** |
+| **[AI](services/ai/index.md)** | Multi-provider AI chat | 🧪 **Experimental** |
+| **[Auth](services/auth/index.md)** | User authentication & JWT | ✅ **Available** |
+| **[Comms](services/comms/index.md)** | Email, SMS, voice calls | 🧪 **Experimental** |
+| **[Insights](services/insights/index.md)** | Adoption metrics (GitHub, PyPI, Plausible, Reddit) | 🧪 **Experimental** |
+| **[Payment](services/payment/index.md)** | Stripe checkout, subscriptions, refunds, disputes | 🧪 **Experimental** |
 
-## What You Get
+## See It In Action
 
-- **FastAPI backend** with automatic API documentation
-- **Flet frontend** with system health dashboard  
-- **CLI management** with health monitoring commands
-- **Worker queues** with async task processing and load testing
-- **Production ready** with structured logging and containerization
-- **Async-first** architecture for high-concurrency workloads
+### System Health Dashboard
 
-## 📱 System Health Dashboard
-
-![System Health Dashboard](images/dashboard.png)
+![System Health Dashboard](images/dashboard-light.png#only-light)
+![System Health Dashboard](images/dashboard-dark.png#only-dark)
 
 Real-time monitoring with component status, health percentages, and cross-platform deployment (web, desktop, mobile).
 
-## 📚 Learn More
+### CLI Health Monitoring
 
-- **[📖 CLI Reference](cli-reference.md)** - Complete command reference
-- **[🏗️ Components](components/index.md)** - Infrastructure components (database, worker, scheduler)
-- **[🔧 Services](services/index.md)** - Business services (auth, payment, AI)
-- **[🧠 Philosophy](philosophy.md)** - Architecture and design principles
+![CLI Health Check](images/cli_health_check.png)
 
-## Development Commands
+Rich terminal output showing detailed component status, health metrics, and system diagnostics.
 
-```bash
-make server       # Start development server
-make test         # Run test suite  
-make check        # Run all quality checks
-make docs-serve   # Serve documentation
-```
+## Learn More
 
-Built on FastAPI, Flet, Typer, and other open-source tools.
+- **[CLI Reference](cli-reference.md)** - Complete command reference
+- **[Components](components/index.md)** - Deep dive into available components
+- **[Services](services/index.md)** - Business services (auth, AI)
+- **[About](about.md)** - The philosophy and vision behind Aegis Stack
+- **[Evolving Your Stack](evolving-your-stack.md)** - Add/remove components as needs change
+- **[Technology Stack](technology.md)** - Battle-tested technology choices
+
+## For The Veterans
+
+![Ron Swanson](images/ron-swanson.gif)
+
+No reinventing the wheel. Just the tools you already know, pre-configured and ready to compose.
+
+Aegis Stack respects your expertise. We maintain existing standards - FastAPI for APIs, SQLModel for databases, arq for workers. No custom abstractions or proprietary patterns to learn. Pick your components, get a production-ready foundation, and build your way.
+
+The tool gets out of your way so you can get started.

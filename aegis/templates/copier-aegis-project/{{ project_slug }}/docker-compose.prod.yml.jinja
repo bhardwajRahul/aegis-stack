@@ -1,0 +1,59 @@
+{%- if include_ingress -%}
+# Production overrides
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d
+#
+# Key differences from dev:
+#   - No code volume mounts (code is baked into the image)
+#   - Only essential ports exposed (80, 443)
+#   - No debug ports (no dashboard, no direct DB access)
+
+services:
+  webserver:
+    volumes: []  # Remove dev code mount - code is baked into the image
+{%- if ingress_tls %}
+    labels:
+      # Public router (HTTPS)
+{%- if ingress_domain %}
+      - "traefik.http.routers.webserver.rule=Host(`{{ ingress_domain }}`)"
+{%- else %}
+      - "traefik.http.routers.webserver.rule=PathPrefix(`/`)"
+{%- endif %}
+      - "traefik.http.routers.webserver.entrypoints=websecure"
+      - "traefik.http.routers.webserver.tls.certresolver=letsencrypt"
+      # Admin paths - IP restricted
+{%- if ingress_domain %}
+      - "traefik.http.routers.webserver-admin.rule=Host(`{{ ingress_domain }}`) && (PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))"
+{%- else %}
+      - "traefik.http.routers.webserver-admin.rule=PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`)"
+{%- endif %}
+      - "traefik.http.routers.webserver-admin.entrypoints=websecure"
+      - "traefik.http.routers.webserver-admin.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.webserver-admin.service=webserver"
+      - "traefik.http.routers.webserver-admin.middlewares=admin-ipallowlist"
+      - "traefik.http.middlewares.admin-ipallowlist.ipallowlist.sourcerange=${ADMIN_IP_ALLOWLIST:-0.0.0.0/0}"
+{%- endif %}
+    profiles:
+      - dev
+      - prod
+{% if include_redis %}
+  redis:
+    ports: []  # No direct Redis access in production
+    profiles:
+      - dev
+      - prod
+{% endif %}
+{% if database_type == "postgres" %}
+  postgres:
+    ports: []  # No direct DB access in production
+    profiles:
+      - dev
+      - prod
+{% endif %}
+  traefik:
+    ports:
+      - "80:80"
+{%- if ingress_tls %}
+      - "443:443"
+{%- endif %}
+      # No 8080 dashboard port exposed in production
+{% endif %}

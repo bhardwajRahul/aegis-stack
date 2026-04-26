@@ -1,0 +1,165 @@
+"""
+Shared UI helpers for status presentation across CLI and frontend.
+
+Provides a single source of truth for mapping ComponentStatusType to
+icons and semantic colors, so CLI and dashboard remain consistent.
+"""
+
+from .models import ComponentStatusType
+
+
+def get_status_icon(status: ComponentStatusType) -> str:
+    """Return the display icon for a given status.
+
+    Note: INFO icon intentionally includes a trailing space for terminal alignment.
+    """
+    if status == ComponentStatusType.HEALTHY:
+        return "✅"
+    if status == ComponentStatusType.INFO:
+        return "ℹ️ "
+    if status == ComponentStatusType.WARNING:
+        return "⚠️ "
+    if status == ComponentStatusType.UNHEALTHY:
+        return "❌"
+    return "❓"
+
+
+def get_status_color_name(status: ComponentStatusType) -> str:
+    """Return a semantic color name for a given status (CLI friendly).
+
+    Frontend can adapt these semantic names to theme-specific colors.
+    """
+    if status == ComponentStatusType.HEALTHY:
+        return "green"
+    if status == ComponentStatusType.INFO:
+        return "blue"
+    if status == ComponentStatusType.WARNING:
+        return "yellow"
+    if status == ComponentStatusType.UNHEALTHY:
+        return "red"
+    return "white"
+
+
+def get_component_title(component_name: str) -> str:
+    """Map component keys to category/title names for modal headers."""
+    mapping = {
+        "backend": "Server",
+        "frontend": "Frontend",
+        {%- if include_database %}
+        "database": "Database",
+        {%- endif %}
+        "cache": "Cache",
+        {%- if include_worker %}
+        "worker": "Worker",
+        {%- endif %}
+        {%- if include_scheduler %}
+        "scheduler": "Scheduler",
+        {%- endif %}
+        {%- if include_observability %}
+        "observability": "Observability",
+        {%- endif %}
+        {%- if include_ollama %}
+        "ollama": "Inference",
+        {%- endif %}
+        {%- if include_ai %}
+        "service_ai": "AI Service",
+        {%- endif %}
+        {%- if include_auth %}
+        "service_auth": "Auth Service",
+        {%- endif %}
+        {%- if include_comms %}
+        "service_comms": "Communications",
+        {%- endif %}
+        {%- if include_insights %}
+        "service_insights": "Insights",
+        {%- endif %}
+        {%- if include_payment %}
+        "service_payment": "Payment",
+        {%- endif %}
+        {%- if include_ingress %}
+        "ingress": "Ingress",
+        {%- endif %}
+    }
+    return mapping.get(component_name, component_name.replace("_", " ").title())
+
+
+def get_component_label(component_name: str) -> str:
+    """Map component keys to user-facing labels (brand or friendly name)."""
+    mapping = {
+        "backend": "FastAPI + Flet",
+        "frontend": "Flet",
+        {%- if include_database %}
+        "database": "PostgreSQL",
+        {%- endif %}
+        "cache": "Redis",
+        {%- if include_worker %}
+        "worker": "{{ worker_backend }}",
+        {%- endif %}
+        {%- if include_scheduler %}
+        "scheduler": "APScheduler",
+        {%- endif %}
+        {%- if include_ollama %}
+        "ollama": "Ollama",
+        {%- endif %}
+        {%- if include_ai %}
+        "service_ai": "LLM Provider",
+        {%- endif %}
+        {%- if include_auth %}
+        "service_auth": "JWT Auth",
+        {%- endif %}
+        {%- if include_comms %}
+        "service_comms": "Resend + Twilio",
+        {%- endif %}
+        {%- if include_payment %}
+        "service_payment": "Stripe",
+        {%- endif %}
+        {%- if include_ingress %}
+        "ingress": "Traefik",
+        {%- endif %}
+    }
+    return mapping.get(component_name, component_name.replace("_", " ").title())
+
+
+def get_component_subtitle(
+    component_name: str, metadata: dict[str, object] | None = None
+) -> str:
+    """Get a versioned subtitle for a component (e.g. 'Dramatiq 1.17.0').
+
+    Uses the base label from ``get_component_label`` and appends the version
+    from health-check metadata when available.
+    """
+{% if include_insights %}
+    # Insights: build subtitle from enabled sources
+    if component_name == "service_insights" and metadata:
+        sources = metadata.get("sources", {})
+        if isinstance(sources, dict):
+            enabled = [
+                _format_source_name(key)
+                for key, detail in sources.items()
+                if isinstance(detail, dict) and detail.get("enabled")
+            ]
+            if enabled:
+                return ", ".join(enabled)
+        return "Adoption Analytics"
+{% endif %}
+
+    label = get_component_label(component_name)
+    if metadata:
+        version = metadata.get("version", "")
+        if version and version != "unknown":
+            return f"{label} {version}"
+    return label
+
+
+{% if include_insights %}
+def _format_source_name(key: str) -> str:
+    """Format source keys for display: github_traffic → GitHub, pypi → PyPI."""
+    display_map = {
+        "github_traffic": "GitHub",
+        "github_stars": "Stars",
+        "pypi": "PyPI",
+        "plausible": "Plausible",
+        "reddit": "Reddit",
+    }
+    return display_map.get(key, key.replace("_", " ").title())
+{% endif %}

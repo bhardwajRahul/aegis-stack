@@ -100,7 +100,9 @@ def get_queue_metadata(queue_name: str) -> dict[str, Any]:
         elif hasattr(settings_class, "__doc__") and settings_class.__doc__:
             metadata["description"] = settings_class.__doc__.strip()
         else:
-            metadata["description"] = f"{queue_name.title()} worker queue"
+            metadata["description"] = (
+                f"{queue_name.replace('_', ' ').title()} worker queue"
+            )
 
         return metadata
 
@@ -125,6 +127,63 @@ def get_all_queue_metadata() -> dict[str, dict[str, Any]]:
     for queue_name in discover_worker_queues():
         metadata[queue_name] = get_queue_metadata(queue_name)
     return metadata
+
+
+def get_queue_lifecycle(queue_name: str) -> dict[str, dict[str, str]]:
+    """Get lifecycle hook info for a queue.
+
+    In arq, lifecycle hooks are defined on the WorkerSettings class
+    (on_startup, on_shutdown, on_job_start, after_job_end).
+
+    Args:
+        queue_name: Name of the queue (e.g., 'system', 'load_test')
+
+    Returns:
+        Dictionary mapping hook names to their metadata.
+    """
+    try:
+        settings_class = get_worker_settings(queue_name)
+    except (ImportError, AttributeError):
+        return {}
+
+    hooks: dict[str, dict[str, str]] = {}
+    hook_names = ["on_startup", "on_shutdown", "on_job_start", "after_job_end"]
+
+    for hook_name in hook_names:
+        fn = getattr(settings_class, hook_name, None)
+        if fn and callable(fn):
+            hooks[hook_name] = {
+                "name": fn.__name__,
+                "module": f"{fn.__module__}.{fn.__qualname__}",
+                "description": (fn.__doc__ or "").strip(),
+            }
+
+    return hooks
+
+
+def get_task_docstrings(queue_name: str) -> dict[str, dict[str, str]]:
+    """Get docstrings and module paths for all tasks in a queue.
+
+    In arq, task functions are listed in WorkerSettings.functions.
+
+    Args:
+        queue_name: Name of the queue (e.g., 'system', 'load_test')
+
+    Returns:
+        Dict mapping function name to {"description": ..., "module": ...}
+    """
+    try:
+        settings_class = get_worker_settings(queue_name)
+    except (ImportError, AttributeError):
+        return {}
+
+    result: dict[str, dict[str, str]] = {}
+    for fn in getattr(settings_class, "functions", []):
+        doc = (fn.__doc__ or "").strip() if hasattr(fn, "__doc__") else ""
+        mod = f"{fn.__module__}.{fn.__qualname__}" if hasattr(fn, "__module__") else ""
+        if doc or mod:
+            result[fn.__name__] = {"description": doc, "module": mod}
+    return result
 
 
 def validate_queue_name(queue_name: str) -> bool:

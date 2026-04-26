@@ -124,7 +124,7 @@ class LoadTestService:
         from app.components.worker.pools import get_queue_pool
 
         logger.info(
-            f"🚀 Enqueueing load test: {config.num_tasks} {config.task_type} tasks"
+            f"Enqueueing load test: {config.num_tasks} {config.task_type} tasks"
         )
 
         # Get appropriate queue pool
@@ -147,12 +147,12 @@ class LoadTestService:
             if job is None:
                 raise RuntimeError("Failed to enqueue job - returned None")
 
-            logger.info(f"✅ Load test orchestrator enqueued: {job.job_id}")
+            logger.info(f"Load test orchestrator enqueued: {job.job_id}")
             return str(job.job_id)
 
         except Exception as e:
             await pool.aclose()
-            logger.error(f"❌ Failed to enqueue load test: {e}")
+            logger.error(f"Failed to enqueue load test: {e}")
             raise
 
     @staticmethod

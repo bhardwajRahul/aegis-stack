@@ -2,6 +2,32 @@
 
 Aegis Stack can be used in multiple ways depending on your needs and preferences.
 
+## System Requirements
+
+Before installing Aegis Stack, ensure you have the following:
+
+### Required
+
+- **Python 3.11 or higher** - Core runtime for Aegis Stack and generated projects
+- **Docker & Docker Compose** - Required for generated projects' development workflow
+
+### Why Docker?
+
+Generated projects use Docker for:
+
+- **Consistent development environments** - Same setup across all machines
+- **Service dependencies** - Redis for worker component, health monitoring infrastructure
+- **Standard workflow** - The `make serve` command uses `docker compose` under the hood
+- **Production parity** - Development closely mirrors production deployment
+
+!!! note "Docker Alternatives"
+    While the standard workflow uses Docker, generated projects are standard Python applications. Advanced users can manually run components (uvicorn for backend, direct Redis installation, etc.), but this workflow is currently undocumented and unsupported.
+
+### Installing Docker
+
+- **macOS/Windows**: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- **Linux**: [Docker Engine](https://docs.docker.com/engine/install/) + [Docker Compose](https://docs.docker.com/compose/install/)
+
 ## Installation
 
 Choose the method that works best for your workflow:
@@ -23,20 +49,20 @@ Choose the method that works best for your workflow:
 
     **Benefits:**
 
-    - ✨ No installation required
-    - 📦 Always uses latest version
-    - ⚡ Zero setup, works immediately
-    - 🔒 Isolated execution environment
-    - 🚀 Perfect for trying Aegis Stack or one-off usage
+    - No installation required
+    - Always uses latest version
+    - Zero setup, works immediately
+    - Isolated execution environment
+    - Perfect for trying Aegis Stack or one-off usage
 
     **Best for:** Quick start, experimentation, CI/CD, one-off usage
 
 === "uv tool"
 
-    Install Aegis Stack as a global CLI tool with uv:
+    Install Aegis Stack as a persistent CLI tool with uv:
 
     ```bash
-    # Install globally
+    # Install persistently
     uv tool install aegis-stack
 
     # Use the installed version
@@ -47,16 +73,16 @@ Choose the method that works best for your workflow:
 
     **Benefits:**
 
-    - 🏃 Fastest subsequent runs (pre-installed)
-    - 🎯 Simple `aegis` command
-    - 🔄 Easy to upgrade with `uv tool upgrade aegis-stack`
-    - 💾 Persistent installation
+    - Fastest subsequent runs (pre-installed)
+    - Simple `aegis` command
+    - Easy to upgrade with `uv tool upgrade aegis-stack`
+    - Persistent installation
 
     **Best for:** Daily development work, regular CLI usage
 
 === "pip"
 
-    Install Aegis Stack globally with pip:
+    Install Aegis Stack with pip:
 
     ```bash
     # Install from PyPI
@@ -70,9 +96,9 @@ Choose the method that works best for your workflow:
 
     **Benefits:**
 
-    - 🔄 Works in any Python environment
-    - 📚 Familiar to all Python developers
-    - 🛠️ Compatible with existing workflows
+    - Works in any Python environment
+    - Familiar to all Python developers
+    - Compatible with existing workflows
 
     **Best for:** Traditional workflows, existing pip-based setups
 
@@ -100,67 +126,24 @@ Choose the method that works best for your workflow:
 
     **Benefits:**
 
-    - 🧪 Latest unreleased features
-    - 🔧 Full development environment
-    - ✏️ Ability to modify and test changes
-    - 🧰 Access to development tools
+    - Latest unreleased features
+    - Full development environment
+    - Ability to modify and test changes
+    - Access to development tools
 
     **Best for:** Contributing, customizing, latest features
 
-## Command Examples
+## CLI Language Support
 
-All commands work the same regardless of installation method:
+Aegis Stack CLI supports Simplified Chinese (简体中文). Set your language with a flag or environment variable:
 
-=== "uvx"
+```bash
+# Via flag
+aegis --lang zh init my-project
 
-    ```bash
-    # Initialize new projects
-    uvx aegis-stack init my-web-app
-    uvx aegis-stack init my-api --components worker
-    uvx aegis-stack init full-stack --components scheduler,database
+# Via environment variable
+export AEGIS_LANG=zh
+aegis init my-project
+```
 
-    # Project information
-    uvx aegis-stack components
-    uvx aegis-stack --help
-    ```
-
-=== "uv tool"
-
-    ```bash
-    # Initialize new projects  
-    aegis init my-web-app
-    aegis init my-api --components worker
-    aegis init full-stack --components scheduler,database
-
-    # Project information
-    aegis components
-    aegis --help
-    ```
-
-=== "pip"
-
-    ```bash
-    # Initialize new projects
-    aegis init my-web-app
-    aegis init my-api --components worker  
-    aegis init full-stack --components scheduler,database
-
-    # Project information
-    aegis components
-    aegis --help
-    ```
-
-=== "Development"
-
-    ```bash
-    # Initialize new projects
-    .venv/bin/aegis init my-web-app
-    .venv/bin/aegis init my-api --components worker
-    .venv/bin/aegis init full-stack --components scheduler,database
-
-    # Development commands
-    .venv/bin/aegis --help
-    make test
-    make lint
-    ```
-
+Supported languages: `en` (English, default), `zh` (简体中文)
