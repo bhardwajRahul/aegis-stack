@@ -1,4 +1,4 @@
-# {{ project_name }} 🛡️
+# {{ project_name }}
 
 {{ project_description }}
 
@@ -6,17 +6,34 @@
 
 This Aegis Stack project includes the following components:
 
-- **✅ Backend**: FastAPI-based async web server
-- **✅ Frontend**: Flet-based Python UI framework
+- **Backend**: FastAPI-based async web server
+- **Frontend**: Flet-based Python UI framework
 {%- if include_scheduler %}
-- **✅ Scheduler**: APScheduler-based async task scheduling
+- **Scheduler**: APScheduler-based async task scheduling
 {%- endif %}
 {%- if include_database %}
-- **✅ Database**: SQLite database with SQLModel ORM
+- **Database**: SQLite database with SQLModel ORM
 {%- endif %}
 {%- if include_cache %}
-- **✅ Cache**: Redis-based async caching
+- **Cache**: Redis-based async caching
 {%- endif %}
+
+{% if include_auth or include_ai or include_comms or include_insights %}
+## Services
+
+{%- if include_auth %}
+- **Auth**: JWT authentication with user management
+{%- endif %}
+{%- if include_ai %}
+- **AI**: Multi-provider AI integration with PydanticAI
+{%- endif %}
+{%- if include_comms %}
+- **Comms**: Email, SMS, and voice communications
+{%- endif %}
+{%- if include_insights %}
+- **Insights**: Adoption metrics tracking (GitHub, PyPI, Plausible, Reddit)
+{%- endif %}
+{% endif %}
 
 ## Getting Started
 
@@ -61,7 +78,7 @@ This Aegis Stack project includes the following components:
 4. **Run the application:**
 {%- endif %}
    ```bash
-   make server
+   make serve
    ```
 
 The application will be available at `http://127.0.0.1:8000`.
@@ -80,7 +97,7 @@ make check  # Run linting, type checking, and tests
 
 ### CLI Commands
 
-Your project gets its own CLI command **automatically installed** when first used - no setup required! 🎉
+Your project gets its own CLI command **automatically installed** when first used - no setup required! 
 
 ```bash
 # Health monitoring (auto-installs CLI if needed)
@@ -193,4 +210,4 @@ with db_session() as session:
 
 ---
 
-Generated with [Aegis Stack](https://github.com/lbedner/aegis-stack) 🛡️
+Generated with [Aegis Stack](https://github.com/lbedner/aegis-stack)

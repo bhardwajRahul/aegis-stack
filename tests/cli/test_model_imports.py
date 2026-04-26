@@ -181,40 +181,31 @@ def test_worker_critical_models_present(
     )
 
 
-def test_worker_only_project_has_models() -> None:
+def test_worker_only_project_has_models(
+    project_factory: Any,
+) -> None:
     """Specific test for worker-only projects to catch conditional nesting issues."""
     # This test specifically targets the issue we just fixed where worker models
     # were nested under scheduler conditionals
 
-    from tempfile import TemporaryDirectory
+    from typing import TYPE_CHECKING
 
-    from .test_utils import run_aegis_init
+    if TYPE_CHECKING:
+        pass
 
-    with TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
+    # Use cached worker project
+    project_path = project_factory("base_with_worker")
 
-        # Generate a worker-only project
-        result = run_aegis_init("test-worker-models", ["worker"], temp_path)
+    # Check that critical worker models exist
+    models_file = project_path / "app" / "components" / "backend" / "api" / "models.py"
+    actual_models = _get_models_in_file(models_file)
 
-        assert result.success, (
-            f"Failed to generate worker-only project: {result.error_message}"
-        )
+    critical_models = ["LoadTestRequest", "TaskRequest"]
+    missing_models = [model for model in critical_models if model not in actual_models]
 
-        # Check that critical worker models exist
-        assert result.project_path is not None, "Project path should not be None"
-        models_file = (
-            result.project_path / "app" / "components" / "backend" / "api" / "models.py"
-        )
-        actual_models = _get_models_in_file(models_file)
-
-        critical_models = ["LoadTestRequest", "TaskRequest"]
-        missing_models = [
-            model for model in critical_models if model not in actual_models
-        ]
-
-        assert not missing_models, (
-            f"Worker-only project missing critical models:\n"
-            f"Missing: {missing_models}\n"
-            f"Available: {actual_models}\n"
-            "This suggests worker models are still nested under scheduler conditionals"
-        )
+    assert not missing_models, (
+        f"Worker-only project missing critical models:\n"
+        f"Missing: {missing_models}\n"
+        f"Available: {actual_models}\n"
+        "This suggests worker models are still nested under scheduler conditionals"
+    )

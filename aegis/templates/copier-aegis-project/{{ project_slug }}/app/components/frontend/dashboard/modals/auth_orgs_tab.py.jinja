@@ -1,0 +1,386 @@
+"""
+Auth Organizations Tab Component
+
+Displays organization management with expandable member rows.
+Fetches data from the /orgs API endpoints.
+"""
+{% if include_auth_org %}
+
+from datetime import UTC, datetime
+from typing import Any
+
+import flet as ft
+import httpx
+from app.components.frontend.controls import (
+    ConfirmDialog,
+    DataTable,
+    DataTableColumn,
+    ExpandableDataTable,
+    ExpandableRow,
+    H3Text,
+    SecondaryText,
+    Tag,
+)
+from app.components.frontend.theme import AegisTheme as Theme
+from app.core.config import settings
+
+
+def _format_relative_time(timestamp_str: str) -> str:
+    """Convert ISO timestamp to relative time."""
+    try:
+        if "T" in timestamp_str:
+            dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+        else:
+            return timestamp_str
+
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+
+        now = datetime.now(UTC)
+        diff = now - dt
+        seconds = int(diff.total_seconds())
+
+        if seconds < 0:
+            return "just now"
+        elif seconds < 60:
+            return f"{seconds}s ago"
+        elif seconds < 3600:
+            return f"{seconds // 60}m ago"
+        elif seconds < 86400:
+            return f"{seconds // 3600}h ago"
+        else:
+            return f"{seconds // 86400}d ago"
+    except (ValueError, AttributeError):
+        return timestamp_str
+
+
+def _build_member_row(member: dict[str, Any]) -> list[Any]:
+    """Build a table row for a member."""
+    role = member.get("role", "member")
+    role_colors = {
+        "owner": Theme.Colors.PRIMARY,
+        "admin": Theme.Colors.INFO,
+        "member": Theme.Colors.SUCCESS,
+    }
+
+    return [
+        str(member.get("user_id", "")),
+        Tag(text=role, color=role_colors.get(role, Theme.Colors.SUCCESS)),
+        _format_relative_time(member.get("joined_at", "")),
+    ]
+
+
+def _build_members_content(
+    members: list[dict[str, Any]],
+) -> ft.Control:
+    """Build expanded content showing organization members."""
+    if not members:
+        return ft.Container(
+            content=SecondaryText("No members found"),
+            padding=Theme.Spacing.MD,
+        )
+
+    columns = [
+        DataTableColumn("User ID", width=80, style="primary"),
+        DataTableColumn("Role", width=100),
+        DataTableColumn("Joined", width=100, style="secondary"),
+    ]
+
+    rows = [_build_member_row(m) for m in members]
+
+    return ft.Container(
+        content=DataTable(
+            columns=columns,
+            rows=rows,
+            empty_message="No members",
+        ),
+        padding=ft.padding.only(left=20, right=20, bottom=10),
+    )
+
+
+class AuthOrgsTab(ft.Container):
+    """
+    Organizations management tab for the Auth Service modal.
+
+    Fetches and displays organization list with expandable member rows.
+    """
+
+    def __init__(self, metadata: dict[str, Any] | None = None) -> None:
+        super().__init__()
+        self._metadata = metadata or {}
+        self._orgs_data: list[dict[str, Any]] = []
+
+        self._content_column = ft.Column(
+            [
+                ft.Container(
+                    content=ft.ProgressRing(width=32, height=32),
+                    alignment=ft.alignment.center,
+                    padding=Theme.Spacing.XL,
+                ),
+                ft.Container(
+                    content=SecondaryText("Loading organizations..."),
+                    alignment=ft.alignment.center,
+                ),
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=Theme.Spacing.MD,
+        )
+        self.content = self._content_column
+
+    def did_mount(self) -> None:
+        """Called when the control is added to the page."""
+        if not self._metadata.get("database_available", False):
+            self._render_unavailable()
+        else:
+            self.page.run_task(self._load_orgs)
+
+    async def _load_orgs(self) -> None:
+        """Fetch organizations from API."""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"http://localhost:{settings.PORT}/api/v1/orgs/all",
+                    timeout=10.0,
+                )
+
+                if response.status_code == 200:
+                    self._orgs_data = response.json()
+                    await self._load_members_and_render()
+                elif response.status_code == 401:
+                    self._render_error("Authentication required")
+                else:
+                    self._render_error(f"API returned status {response.status_code}")
+
+        except httpx.TimeoutException:
+            self._render_error("Request timed out")
+        except httpx.ConnectError:
+            self._render_error("Could not connect to backend API")
+        except Exception as e:
+            self._render_error(str(e))
+
+    async def _load_members_and_render(self) -> None:
+        """Load members for each org and render the table."""
+        org_members: dict[int, list[dict[str, Any]]] = {}
+
+        async with httpx.AsyncClient() as client:
+            for org in self._orgs_data:
+                org_id = org.get("id")
+                if org_id is None:
+                    continue
+                try:
+                    response = await client.get(
+                        f"http://localhost:{settings.PORT}/api/v1/orgs/{org_id}/members",
+                        timeout=10.0,
+                    )
+                    if response.status_code == 200:
+                        org_members[org_id] = response.json()
+                    else:
+                        org_members[org_id] = []
+                except Exception:
+                    org_members[org_id] = []
+
+        self._render_orgs(self._orgs_data, org_members)
+
+    def _render_orgs(
+        self,
+        orgs: list[dict[str, Any]],
+        org_members: dict[int, list[dict[str, Any]]],
+    ) -> None:
+        """Render the organizations table with expandable member rows."""
+        refresh_row = ft.Row(
+            [
+                ft.Container(expand=True),
+                ft.IconButton(
+                    icon=ft.Icons.REFRESH,
+                    icon_color=ft.Colors.ON_SURFACE_VARIANT,
+                    tooltip="Refresh organizations",
+                    on_click=self._on_refresh_click,
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.END,
+        )
+
+        columns = [
+            DataTableColumn("Name", style="primary"),
+            DataTableColumn("Slug", width=120, style="secondary"),
+            DataTableColumn("Members", width=80),
+            DataTableColumn("Status", width=60),
+            DataTableColumn("Created", width=80, style="secondary"),
+            DataTableColumn("Actions", width=60, alignment="right"),
+        ]
+
+        rows: list[ExpandableRow] = []
+        for org in orgs:
+            org_id = org.get("id", 0)
+            is_active = org.get("is_active", True)
+            members = org_members.get(org_id, [])
+
+            status_tag = Tag(
+                text="Active" if is_active else "Inactive",
+                color=Theme.Colors.SUCCESS if is_active else Theme.Colors.WARNING,
+            )
+
+            action_buttons = ft.Row(
+                [
+                    ft.IconButton(
+                        icon=ft.Icons.DELETE_OUTLINE,
+                        icon_size=18,
+                        icon_color=ft.Colors.ON_SURFACE_VARIANT,
+                        tooltip="Delete organization",
+                        on_click=lambda e, o=org: self._on_delete_org(o),
+                    ),
+                ],
+                spacing=0,
+            )
+
+            cells = [
+                org.get("name", ""),
+                org.get("slug", ""),
+                str(len(members)),
+                status_tag,
+                _format_relative_time(org.get("created_at", "")),
+                action_buttons,
+            ]
+
+            rows.append(
+                ExpandableRow(
+                    cells=cells,
+                    expanded_content=_build_members_content(members),
+                )
+            )
+
+        table = ExpandableDataTable(
+            columns=columns,
+            rows=rows,
+            row_padding=6,
+            empty_message="No organizations found",
+        )
+
+        self._content_column.controls = [refresh_row, table]
+        self._content_column.scroll = ft.ScrollMode.AUTO
+        self._content_column.spacing = 0
+        self.update()
+
+    def _render_error(self, message: str) -> None:
+        """Render an error state."""
+        self._content_column.controls = [
+            ft.Container(
+                content=ft.Icon(
+                    ft.Icons.ERROR_OUTLINE,
+                    size=48,
+                    color=Theme.Colors.ERROR,
+                ),
+                alignment=ft.alignment.center,
+                padding=Theme.Spacing.MD,
+            ),
+            ft.Container(
+                content=H3Text("Failed to load organizations"),
+                alignment=ft.alignment.center,
+            ),
+            ft.Container(
+                content=SecondaryText(message),
+                alignment=ft.alignment.center,
+            ),
+        ]
+        self._content_column.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+        self.update()
+
+    def _render_unavailable(self) -> None:
+        """Render unavailable state when database is not available."""
+        self._content_column.controls = [
+            ft.Container(height=40),
+            ft.Icon(
+                ft.Icons.BUSINESS_OUTLINED,
+                size=64,
+                color=ft.Colors.OUTLINE,
+            ),
+            ft.Container(height=Theme.Spacing.MD),
+            H3Text("Organization Management Unavailable"),
+            ft.Container(height=Theme.Spacing.SM),
+            SecondaryText("Database backend required for organization management."),
+        ]
+        self._content_column.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+        self._content_column.alignment = ft.MainAxisAlignment.START
+        self.update()
+
+    async def _on_refresh_click(self, e: ft.ControlEvent) -> None:
+        """Handle refresh button click."""
+        self._content_column.controls = [
+            ft.Container(
+                content=ft.ProgressRing(width=32, height=32),
+                alignment=ft.alignment.center,
+                padding=Theme.Spacing.XL,
+            ),
+            ft.Container(
+                content=SecondaryText("Refreshing..."),
+                alignment=ft.alignment.center,
+            ),
+        ]
+        self._content_column.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+        self._content_column.spacing = Theme.Spacing.MD
+        self.update()
+
+        await self._load_orgs()
+
+    def _on_delete_org(self, org: dict[str, Any]) -> None:
+        """Handle delete organization button click."""
+        page = self.page
+        if not page:
+            return
+
+        org_id = org.get("id")
+
+        async def do_delete() -> None:
+            await self._delete_org(org_id)
+
+        ConfirmDialog(
+            page=page,
+            title="Delete Organization",
+            message=(
+                f"Permanently delete '{org.get('name')}'?\n\n"
+                "All memberships will be removed. This cannot be undone."
+            ),
+            confirm_text="Delete",
+            on_confirm=do_delete,
+            destructive=True,
+        ).show()
+
+    async def _delete_org(self, org_id: int) -> None:
+        """Delete an organization via API."""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.delete(
+                    f"http://localhost:{settings.PORT}/api/v1/orgs/{org_id}",
+                    timeout=10.0,
+                )
+
+                if response.status_code == 204:
+                    self.page.open(
+                        ft.SnackBar(
+                            content=ft.Text("Organization deleted successfully")
+                        )
+                    )
+                    await self._load_orgs()
+                elif response.status_code == 403:
+                    self.page.open(
+                        ft.SnackBar(
+                            content=ft.Text("Only the owner can delete this organization"),
+                            bgcolor=Theme.Colors.ERROR,
+                        )
+                    )
+                else:
+                    self.page.open(
+                        ft.SnackBar(
+                            content=ft.Text(f"Failed: {response.text}"),
+                            bgcolor=Theme.Colors.ERROR,
+                        )
+                    )
+        except Exception as e:
+            self.page.open(
+                ft.SnackBar(
+                    content=ft.Text(f"Error: {e}"), bgcolor=Theme.Colors.ERROR
+                )
+            )
+{% else %}
+# Organization tab not included (auth_level != org)
+{% endif %}

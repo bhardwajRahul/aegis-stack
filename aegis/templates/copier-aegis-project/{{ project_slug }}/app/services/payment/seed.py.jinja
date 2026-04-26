@@ -1,0 +1,48 @@
+{%- if include_payment %}
+"""
+Seed default payment provider configuration.
+
+Idempotent — safe to run multiple times. Sync API to match the database
+startup hook in ``app/components/backend/startup/database_init.py``.
+"""
+
+import logging
+
+from sqlmodel import Session, select
+
+from .models import PaymentProvider
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_PROVIDERS = [
+    {
+        "key": "{{ payment_provider }}",
+        "display_name": "{{ payment_provider | title }}",
+        "enabled": True,
+        "is_test_mode": True,
+    },
+]
+
+
+def seed_payment_tables(session: Session) -> None:
+    """Create default payment provider rows if they don't exist."""
+    for provider_data in DEFAULT_PROVIDERS:
+        result = session.exec(
+            select(PaymentProvider).where(
+                PaymentProvider.key == provider_data["key"]
+            )
+        )
+        existing = result.first()
+        if existing:
+            logger.debug(
+                "Payment provider '%s' already exists, skipping",
+                provider_data["key"],
+            )
+            continue
+
+        provider = PaymentProvider(**provider_data)
+        session.add(provider)
+        logger.info("Seeded payment provider: %s", provider_data["key"])
+
+    session.commit()
+{%- endif %}

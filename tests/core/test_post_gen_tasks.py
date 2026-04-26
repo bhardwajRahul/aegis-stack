@@ -12,12 +12,63 @@ from unittest.mock import Mock, patch
 import pytest
 
 from aegis.core.post_gen_tasks import (
+    DependencyInstallationError,
+    _truncate_stderr,
     format_code,
     install_dependencies,
     run_migrations,
     run_post_generation_tasks,
     setup_env_file,
 )
+
+
+class TestTruncateStderr:
+    """Test stderr truncation helper function."""
+
+    def test_short_output_unchanged(self) -> None:
+        """Test that short output is returned unchanged."""
+        stderr = "line 1\nline 2\nline 3"
+        result = _truncate_stderr(stderr)
+        assert result == "line 1\nline 2\nline 3"
+
+    def test_truncates_long_output(self) -> None:
+        """Test that long output is truncated."""
+        lines = [f"line {i}" for i in range(30)]
+        stderr = "\n".join(lines)
+
+        result = _truncate_stderr(stderr, max_lines=10)
+
+        # Should have head + omitted message + tail
+        result_lines = result.split("\n")
+        assert len(result_lines) == 11  # 5 head + 1 omitted + 5 tail
+        assert "omitted" in result_lines[5].lower()
+        assert "20" in result_lines[5]  # 30 - 10 = 20 omitted
+
+    def test_preserves_first_and_last_lines(self) -> None:
+        """Test that first and last lines are preserved."""
+        lines = [f"line {i}" for i in range(30)]
+        stderr = "\n".join(lines)
+
+        result = _truncate_stderr(stderr, max_lines=10)
+
+        result_lines = result.split("\n")
+        assert result_lines[0] == "line 0"
+        assert result_lines[-1] == "line 29"
+
+    def test_handles_empty_input(self) -> None:
+        """Test handling of empty input."""
+        result = _truncate_stderr("")
+        assert result == ""
+
+    def test_handles_single_line(self) -> None:
+        """Test handling of single line input."""
+        result = _truncate_stderr("single line")
+        assert result == "single line"
+
+    def test_strips_whitespace(self) -> None:
+        """Test that leading/trailing whitespace is stripped."""
+        result = _truncate_stderr("  line 1\nline 2  \n")
+        assert result == "line 1\nline 2"
 
 
 class TestInstallDependencies:
@@ -117,7 +168,7 @@ class TestRunMigrations:
 
     def test_skips_when_auth_disabled(self, tmp_path: Path) -> None:
         """Test migrations are skipped when auth not enabled."""
-        result = run_migrations(tmp_path, include_auth=False)
+        result = run_migrations(tmp_path, include_migrations=False)
 
         assert result is True  # Success (no-op)
 
@@ -132,17 +183,22 @@ class TestRunMigrations:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=0, stderr="")
 
-            result = run_migrations(tmp_path, include_auth=True)
+            result = run_migrations(tmp_path, include_migrations=True)
 
             assert result is True
             mock_run.assert_called_once()
             args = mock_run.call_args
-            assert args[0][0][0:3] == ["uv", "run", "alembic"]
+            # ``run_migrations`` now prepends ``--project <path>`` to isolate
+            # the generated project's venv from the caller's (otherwise
+            # ``aegis init``-then-migrate would grab the aegis-stack venv
+            # and miss the project's own dependencies).
+            assert args[0][0][0:4] == ["uv", "run", "--project", str(tmp_path)]
+            assert args[0][0][4] == "alembic"
             assert "VIRTUAL_ENV" not in args[1]["env"]
 
     def test_missing_alembic_config(self, tmp_path: Path) -> None:
         """Test when alembic config doesn't exist."""
-        result = run_migrations(tmp_path, include_auth=True)
+        result = run_migrations(tmp_path, include_migrations=True)
 
         assert result is False
 
@@ -156,7 +212,7 @@ class TestRunMigrations:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=1, stderr="Migration error")
 
-            result = run_migrations(tmp_path, include_auth=True)
+            result = run_migrations(tmp_path, include_migrations=True)
 
             assert result is False
 
@@ -170,7 +226,7 @@ class TestRunMigrations:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=0, stderr="")
 
-            run_migrations(tmp_path, include_auth=True)
+            run_migrations(tmp_path, include_migrations=True)
 
             data_dir = tmp_path / "data"
             assert data_dir.exists()
@@ -233,21 +289,22 @@ class TestRunPostGenerationTasks:
             patch("aegis.core.post_gen_tasks.run_migrations", return_value=True),
             patch("aegis.core.post_gen_tasks.format_code", return_value=True),
         ):
-            result = run_post_generation_tasks(tmp_path, include_auth=False)
+            result = run_post_generation_tasks(tmp_path, include_migrations=False)
 
             assert result is True
 
     def test_dependency_install_failure(self, tmp_path: Path) -> None:
-        """Test when dependency installation fails (critical)."""
+        """Test when dependency installation fails (critical - raises exception)."""
         with (
             patch("aegis.core.post_gen_tasks.install_dependencies", return_value=False),
             patch("aegis.core.post_gen_tasks.setup_env_file", return_value=True),
             patch("aegis.core.post_gen_tasks.run_migrations", return_value=True),
             patch("aegis.core.post_gen_tasks.format_code", return_value=True),
         ):
-            result = run_post_generation_tasks(tmp_path, include_auth=False)
+            with pytest.raises(DependencyInstallationError) as exc_info:
+                run_post_generation_tasks(tmp_path, include_migrations=False)
 
-            assert result is False  # Critical failure
+            assert str(tmp_path) in str(exc_info.value)
 
     def test_non_critical_failures_continue(self, tmp_path: Path) -> None:
         """Test that non-critical failures don't stop execution."""
@@ -257,7 +314,7 @@ class TestRunPostGenerationTasks:
             patch("aegis.core.post_gen_tasks.run_migrations", return_value=False),
             patch("aegis.core.post_gen_tasks.format_code", return_value=False),
         ):
-            result = run_post_generation_tasks(tmp_path, include_auth=True)
+            result = run_post_generation_tasks(tmp_path, include_migrations=True)
 
             assert result is True  # Deps succeeded, so overall success
 
@@ -271,15 +328,15 @@ class TestRunPostGenerationTasks:
         ):
             mock_migrations.return_value = True
 
-            run_post_generation_tasks(tmp_path, include_auth=True)
+            run_post_generation_tasks(tmp_path, include_migrations=True)
 
-            mock_migrations.assert_called_once_with(tmp_path, True)
+            mock_migrations.assert_called_once_with(tmp_path, True, None)
 
     def test_tasks_run_in_order(self, tmp_path: Path) -> None:
         """Test that tasks run in the correct order."""
         call_order = []
 
-        def track_deps(path: Path) -> bool:
+        def track_deps(path: Path, python_version: str | None = None) -> bool:
             call_order.append("deps")
             return True
 
@@ -287,7 +344,9 @@ class TestRunPostGenerationTasks:
             call_order.append("env")
             return True
 
-        def track_migrations(path: Path, auth: bool) -> bool:
+        def track_migrations(
+            path: Path, auth: bool, python_version: str | None = None
+        ) -> bool:
             call_order.append("migrations")
             return True
 
@@ -305,6 +364,6 @@ class TestRunPostGenerationTasks:
             ),
             patch("aegis.core.post_gen_tasks.format_code", side_effect=track_format),
         ):
-            run_post_generation_tasks(tmp_path, include_auth=True)
+            run_post_generation_tasks(tmp_path, include_migrations=True)
 
             assert call_order == ["deps", "env", "migrations", "format"]

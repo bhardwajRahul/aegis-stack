@@ -21,9 +21,7 @@ class LoadTestError(Exception):
 class LoadTestConfiguration(BaseModel):
     """Load test configuration with validation and defaults."""
 
-    num_tasks: int = Field(
-        default=100, ge=10, le=10000, description="Number of tasks to spawn"
-    )
+    num_tasks: int = Field(default=100, ge=1, description="Number of tasks to spawn")
     task_type: LoadTestTypes = Field(
         default=LoadTestTypes.CPU_INTENSIVE, description="Type of load test to run"
     )
@@ -197,14 +195,25 @@ class LoadTestResult(BaseModel):
 
 
 class OrchestratorRawResult(BaseModel):
-    """Raw orchestrator result format for transformation."""
+    """Raw orchestrator result format for transformation.
 
-    test_id: str = Field(..., description="Test identifier")
+    Supports both fire-and-forget (enqueue-only) and monitored orchestrator
+    results. Fire-and-forget returns enqueue_duration_seconds; monitored
+    returns total_duration_seconds with completion stats.
+    """
+
+    test_id: str | None = Field(None, description="Test identifier (optional)")
     task_type: str = Field(..., description="Task type executed")
     tasks_sent: int = Field(..., description="Tasks enqueued")
     tasks_completed: int = Field(0, description="Successfully completed")
     tasks_failed: int = Field(0, description="Failed tasks")
-    total_duration_seconds: float = Field(..., description="Total duration")
+    # Fire-and-forget orchestrator fields
+    enqueue_duration_seconds: float = Field(0, description="Time to enqueue all tasks")
+    enqueue_throughput_per_second: float = Field(
+        0, description="Enqueue throughput (tasks/sec)"
+    )
+    # Monitored orchestrator fields (arq/TaskIQ)
+    total_duration_seconds: float = Field(0, description="Total duration")
     overall_throughput_per_second: float = Field(0, description="Overall throughput")
     failure_rate_percent: float = Field(0, description="Failure rate")
     completion_percentage: float = Field(0, description="Completion rate")
@@ -227,21 +236,32 @@ class OrchestratorRawResult(BaseModel):
             target_queue=self.target_queue,
         )
 
+        # Use whichever duration is available
+        duration = self.total_duration_seconds or self.enqueue_duration_seconds
+        throughput = (
+            self.overall_throughput_per_second or self.enqueue_throughput_per_second
+        )
+
         metrics = LoadTestMetrics(
             tasks_sent=self.tasks_sent,
             tasks_completed=self.tasks_completed,
             tasks_failed=self.tasks_failed,
-            total_duration_seconds=self.total_duration_seconds,
-            overall_throughput=self.overall_throughput_per_second,
+            total_duration_seconds=duration,
+            overall_throughput=throughput,
             failure_rate_percent=self.failure_rate_percent,
             completion_percentage=self.completion_percentage,
             average_throughput_per_second=self.average_throughput_per_second,
             monitor_duration_seconds=self.monitor_duration_seconds,
         )
 
+        # Use test_id if provided, otherwise generate from task_ids or use "unknown"
+        effective_test_id = self.test_id or (
+            self.task_ids[0] if self.task_ids else "unknown"
+        )
+
         return LoadTestResult(
             status="completed",
-            test_id=self.test_id,
+            test_id=effective_test_id,
             configuration=configuration,
             metrics=metrics,
             start_time=self.start_time,

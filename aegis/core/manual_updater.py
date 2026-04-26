@@ -11,14 +11,17 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import typer
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from pydantic import BaseModel, Field
 
 from aegis.config.shared_files import SHARED_TEMPLATE_FILES
+from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
+from aegis.i18n import t
 
-from .component_files import get_component_files, get_template_path
-from .components import SchedulerBackend
+from .component_files import get_component_files, get_copier_defaults, get_template_path
 from .copier_manager import is_copier_project, load_copier_answers
+from .verbosity import verbose_print
 
 # Constants
 COPIER_ANSWERS_FILE = ".copier-answers.yml"
@@ -27,6 +30,35 @@ COPIER_ANSWERS_HEADER = (
 )
 PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
 JINJA_EXTENSION = ".jinja"
+
+# Files with conditional content that should be regenerated when components change.
+# These files are not user-editable and contain Jinja conditionals that depend on
+# which components/services are enabled.
+REGENERATE_ON_COMPONENT_CHANGE = {
+    "app/components/backend/api/deps.py",
+    "app/components/backend/api/routing.py",
+}
+
+# Files with Jinja conditionals that depend on auth level (basic/rbac/org).
+# Must be regenerated when upgrading auth level.
+REGENERATE_ON_AUTH_LEVEL_CHANGE = {
+    "app/models/user.py",
+    "app/models/org.py",
+    "app/core/security.py",
+    "app/services/auth/auth_service.py",
+    "app/services/auth/org_service.py",
+    "app/services/auth/membership_service.py",
+    "app/services/auth/invite_service.py",
+    "app/components/backend/api/auth/router.py",
+    "app/components/backend/api/orgs/router.py",
+    "app/components/backend/api/orgs/__init__.py",
+    "app/components/backend/api/deps.py",
+    "app/components/frontend/dashboard/modals/auth_modal.py",
+    "app/components/frontend/dashboard/modals/auth_users_tab.py",
+    "app/components/frontend/dashboard/modals/auth_orgs_tab.py",
+    "tests/services/test_org_integration.py",
+    "tests/api/test_org_endpoints.py",
+}
 
 
 class UpdateResult(BaseModel):
@@ -87,7 +119,13 @@ class ManualUpdater:
 
         self.project_path = project_path
         self.template_path = get_template_path()
-        self.answers = load_copier_answers(project_path)
+
+        # Backfill missing answer keys with copier.yml defaults before any
+        # rendering. Without this, undefined variables (e.g. ollama_mode missing
+        # from older projects) cause Jinja2 conditionals to inject unrelated
+        # component code. See: #504
+        copier_defaults = get_copier_defaults()
+        self.answers = {**copier_defaults, **load_copier_answers(project_path)}
 
         # Setup Jinja2 environment
         # Template files are at: template/{{ project_slug }}/...
@@ -124,9 +162,16 @@ class ManualUpdater:
 
         try:
             # Check if already enabled
-            include_key = f"include_{component}"
+            include_key = AnswerKeys.include_key(component)
             if self.answers.get(include_key) is True:
-                raise ValueError(f"Component '{component}' is already enabled")
+                # Allow auth level upgrades (basic → rbac → org)
+                is_auth_upgrade = (
+                    component == AnswerKeys.SERVICE_AUTH
+                    and additional_data
+                    and AnswerKeys.AUTH_LEVEL in additional_data
+                )
+                if not is_auth_upgrade:
+                    raise ValueError(f"Component '{component}' is already enabled")
 
             # Merge additional data
             update_data = additional_data or {}
@@ -137,51 +182,80 @@ class ManualUpdater:
 
             # Get files for this component
             backend_variant = (
-                update_data.get("scheduler_backend")
-                if component == "scheduler"
+                update_data.get(AnswerKeys.SCHEDULER_BACKEND)
+                if component == ComponentNames.SCHEDULER
                 else None
             )
             component_files = get_component_files(component, backend_variant)
 
-            if not component_files:
-                raise ValueError(f"No files found for component '{component}'")
-
-            # Render and copy each file
+            # Some components (like Redis) have no template files - they only
+            # configure Docker services and dependencies via shared files
             rendered_files: dict[Path, str] = {}
 
-            for file_path in component_files:
-                # Convert relative path to template path
-                # copier_files: "app/components/scheduler"
-                # template_file: "{{ project_slug }}/app/components/scheduler.jinja"
-                template_file = f"{PROJECT_SLUG_PLACEHOLDER}/{file_path}"
+            if not component_files:
+                verbose_print(
+                    f"   Component '{component}' has no template files "
+                    f"(configured via shared files only)"
+                )
+                # Continue to regenerate shared files even if no component files
+            else:
+                # Render and copy each file for this component
+                typer.secho(
+                    f"   {t('updater.processing_files', count=len(component_files))}",
+                    fg=typer.colors.CYAN,
+                )
+                for file_path in component_files:
+                    # Convert relative path to template path
+                    # copier_files: "app/components/scheduler"
+                    # template_file: "{{ project_slug }}/app/components/scheduler.jinja"
+                    template_file = f"{PROJECT_SLUG_PLACEHOLDER}/{file_path}"
 
-                # Try with .jinja extension first, then without
-                content = self._render_template_file(template_file, updated_answers)
+                    # Try with .jinja extension first, then without
+                    content = self._render_template_file(template_file, updated_answers)
 
-                if content is not None:
-                    # Output path in project
-                    output_path = self.project_path / file_path
-                    rendered_files[output_path] = content
+                    if content is not None:
+                        # Output path in project
+                        output_path = self.project_path / file_path
+                        rendered_files[output_path] = content
+                    else:
+                        typer.secho(
+                            f"   Warning: Template not found for: {file_path}",
+                            fg=typer.colors.YELLOW,
+                        )
 
-            # Copy files to project
-            for output_path, content in rendered_files.items():
-                # Create parent directories
-                output_path.parent.mkdir(parents=True, exist_ok=True)
+                # Copy files to project
+                for output_path, content in rendered_files.items():
+                    # Create parent directories
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-                relative_path = str(output_path.relative_to(self.project_path))
+                    relative_path = str(output_path.relative_to(self.project_path))
 
-                # Check for conflicts
-                if output_path.exists():
-                    # For now, skip existing files
-                    # TODO: Implement conflict resolution
-                    print(f"   ⚠️  Skipping existing file: {relative_path}")
-                    files_skipped.append(relative_path)
-                    continue
+                    # Check for conflicts
+                    if output_path.exists():
+                        # Some files have conditional content and must be regenerated
+                        is_auth_upgrade = (
+                            additional_data
+                            and AnswerKeys.AUTH_LEVEL in additional_data
+                            and relative_path in REGENERATE_ON_AUTH_LEVEL_CHANGE
+                        )
+                        if (
+                            relative_path in REGENERATE_ON_COMPONENT_CHANGE
+                            or is_auth_upgrade
+                        ):
+                            output_path.write_text(content)
+                            verbose_print(f"   Regenerated: {relative_path}")
+                            files_modified.append(relative_path)
+                            continue
 
-                # Write file
-                output_path.write_text(content)
-                print(f"   ✅ Created: {relative_path}")
-                files_modified.append(relative_path)
+                        # For other files, skip existing to preserve user changes
+                        verbose_print(f"   Skipping existing file: {relative_path}")
+                        files_skipped.append(relative_path)
+                        continue
+
+                    # Write file
+                    output_path.write_text(content)
+                    verbose_print(f"   Created: {relative_path}")
+                    files_modified.append(relative_path)
 
             # Regenerate shared template files with updated component configuration
             (
@@ -232,14 +306,14 @@ class ManualUpdater:
 
         try:
             # Check if enabled
-            include_key = f"include_{component}"
+            include_key = AnswerKeys.include_key(component)
             if not self.answers.get(include_key):
                 raise ValueError(f"Component '{component}' is not enabled")
 
             # Get files for this component
             backend_variant = (
-                self.answers.get("scheduler_backend")
-                if component == "scheduler"
+                self.answers.get(AnswerKeys.SCHEDULER_BACKEND)
+                if component == ComponentNames.SCHEDULER
                 else None
             )
             component_files = get_component_files(component, backend_variant)
@@ -255,10 +329,10 @@ class ManualUpdater:
 
                     if full_path.is_dir():
                         shutil.rmtree(full_path)
-                        print(f"   🗑️  Removed directory: {relative_path}")
+                        verbose_print(f"   Removed directory: {relative_path}")
                     else:
                         full_path.unlink()
-                        print(f"   🗑️  Removed file: {relative_path}")
+                        verbose_print(f"   Removed file: {relative_path}")
 
                     files_deleted.append(relative_path)
                     deleted_paths.append(full_path)
@@ -270,7 +344,7 @@ class ManualUpdater:
                     if parent.exists() and not any(parent.iterdir()):
                         parent.rmdir()
                         relative_parent = str(parent.relative_to(self.project_path))
-                        print(f"   🗑️  Removed empty directory: {relative_parent}")
+                        verbose_print(f"   Removed empty directory: {relative_parent}")
                 except OSError:
                     # Directory not empty or other error, skip
                     pass
@@ -279,9 +353,9 @@ class ManualUpdater:
             updated_answers = {**self.answers, include_key: False}
 
             # Also reset backend variant if removing scheduler
-            if component == "scheduler":
-                updated_answers["scheduler_backend"] = SchedulerBackend.MEMORY.value
-                updated_answers["scheduler_with_persistence"] = False
+            if component == ComponentNames.SCHEDULER:
+                updated_answers[AnswerKeys.SCHEDULER_BACKEND] = StorageBackends.MEMORY
+                updated_answers[AnswerKeys.SCHEDULER_WITH_PERSISTENCE] = False
 
             # Update .copier-answers.yml before regenerating shared files
             self._save_answers(updated_answers)
@@ -313,6 +387,46 @@ class ManualUpdater:
                 error_message=str(e),
             )
 
+    def _extract_env_vars(self, content: str) -> dict[str, str]:
+        """
+        Extract environment variable names and values from .env.example content.
+
+        Args:
+            content: Content of .env.example file
+
+        Returns:
+            Dictionary mapping variable names to their values (or empty string if commented)
+        """
+        env_vars: dict[str, str] = {}
+
+        for line in content.split("\n"):
+            line = line.strip()
+
+            # Skip blank lines
+            if not line:
+                continue
+
+            # Handle commented variable definitions FIRST (e.g., "# REDIS_URL=...")
+            if line.startswith("# ") and "=" in line:
+                var_line = line[2:].strip()  # Remove "# " prefix
+                if "=" in var_line:
+                    var_name = var_line.split("=")[0].strip()
+                    var_value = var_line.split("=", 1)[1].strip()
+                    env_vars[var_name] = var_value
+                continue
+
+            # Skip other comment-only lines (section headers, descriptions, etc.)
+            if line.startswith("#"):
+                continue
+
+            # Handle active variable definitions (e.g., "REDIS_URL=...")
+            if "=" in line:
+                var_name = line.split("=")[0].strip()
+                var_value = line.split("=", 1)[1].strip()
+                env_vars[var_name] = var_value
+
+        return env_vars
+
     def _regenerate_shared_files(
         self, updated_answers: dict[str, Any]
     ) -> tuple[list[str], list[str], list[str]]:
@@ -333,7 +447,7 @@ class ManualUpdater:
         shared_files_backed_up: list[str] = []
         shared_files_need_manual_merge: list[str] = []
 
-        print("\n📦 Updating shared template files...")
+        print(f"\n{t('updater.updating_shared')}")
         for shared_file, policy in SHARED_TEMPLATE_FILES.items():
             template_file = f"{PROJECT_SLUG_PLACEHOLDER}/{shared_file}"
             output_path = self.project_path / shared_file
@@ -341,6 +455,12 @@ class ManualUpdater:
             # Skip if file doesn't exist (shouldn't happen for shared files)
             if not output_path.exists():
                 continue
+
+            # For .env.example, extract variables before and after to show diff
+            old_env_vars: dict[str, str] = {}
+            if shared_file == ".env.example":
+                old_content = output_path.read_text()
+                old_env_vars = self._extract_env_vars(old_content)
 
             # Render template with updated answers
             content = self._render_template_file(template_file, updated_answers)
@@ -352,18 +472,33 @@ class ManualUpdater:
                 # Create backup before overwriting
                 backup_path = output_path.with_suffix(output_path.suffix + ".backup")
                 shutil.copy(output_path, backup_path)
-                print(f"   💾 Backed up: {shared_file}")
+                verbose_print(f"   Backed up: {shared_file}")
                 shared_files_backed_up.append(shared_file)
 
             if policy.get("overwrite"):
                 # Regenerate with updated answers
                 output_path.write_text(content)
-                print(f"   ♻️  Updated: {shared_file}")
+                verbose_print(f"   Updated: {shared_file}")
                 shared_files_updated.append(shared_file)
+
+                # Show environment variable changes for .env.example
+                if shared_file == ".env.example":
+                    new_env_vars = self._extract_env_vars(content)
+                    added_vars = {
+                        k: v for k, v in new_env_vars.items() if k not in old_env_vars
+                    }
+
+                    if added_vars:
+                        verbose_print("   New environment variables:")
+                        for var_name, var_value in sorted(added_vars.items()):
+                            verbose_print(f"      • {var_name}={var_value}")
+
             elif policy.get("warn"):
-                # Warn user manual merge needed
-                print(f"   ⚠️  Manual merge required: {shared_file}")
-                shared_files_need_manual_merge.append(shared_file)
+                # Only warn if file actually has changes that need manual merge
+                existing_content = output_path.read_text()
+                if content != existing_content:
+                    print(f"   Manual merge required: {shared_file}")
+                    shared_files_need_manual_merge.append(shared_file)
 
         return (
             shared_files_updated,
@@ -433,7 +568,7 @@ class ManualUpdater:
         - Code is auto-formatted
         - Imports are organized
         """
-        print("\n🔧 Running post-generation tasks...")
+        print(f"\n{t('updater.running_postgen')}")
 
         # Run uv sync to update dependencies
         try:
@@ -443,9 +578,9 @@ class ManualUpdater:
                 check=True,
                 capture_output=True,
             )
-            print("   ✅ Dependencies synced (uv sync)")
+            print(f"   {t('updater.deps_synced')}")
         except subprocess.CalledProcessError as e:
-            print(f"   ⚠️  Failed to sync dependencies: {e}")
+            print(f"   Warning: Failed to sync dependencies: {e}")
 
         # Run make fix to auto-format code
         try:
@@ -455,9 +590,15 @@ class ManualUpdater:
                 check=True,
                 capture_output=True,
             )
-            print("   ✅ Code formatted (make fix)")
-        except subprocess.CalledProcessError as e:
-            print(f"   ⚠️  Failed to format code: {e}")
+            print(f"   {t('updater.code_formatted')}")
+        except subprocess.CalledProcessError:
+            typer.echo(
+                "   "
+                + typer.style("Warning:", fg=typer.colors.YELLOW)
+                + " "
+                + typer.style("make fix", fg=typer.colors.CYAN)
+                + " had issues. Run it manually to see details."
+            )
 
 
 def add_component_manual(

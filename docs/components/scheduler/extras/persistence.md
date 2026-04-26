@@ -150,8 +150,10 @@ This pattern allows:
 ### Job Existence Checking
 
 ```python
+from app.core.config import settings
+
 # Check for existing jobs to respect runtime modifications
-force_update = os.getenv("SCHEDULER_FORCE_UPDATE", "false").lower() == "true"
+force_update = settings.SCHEDULER_FORCE_UPDATE
 
 if not _job_exists_in_database("daily_reports") or force_update:
     scheduler.add_job(

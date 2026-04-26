@@ -79,6 +79,9 @@ ipython_config.py
 
 # pyenv
 .python-version
+# But include template .python-version files
+!aegis/templates/**/.python-version
+!aegis/templates/**/.python-version.jinja
 
 # celery beat schedule file
 celerybeat-schedule
@@ -126,5 +129,17 @@ dmypy.json
 ehthumbs.db
 Thumbs.db
 
-# Data
+# Data and test artifacts
 data/
+
+# Demos
+demos/recordings
+
+# Claude Stuff
+.claude/settings.json
+
+# Typical generated stack folders
+my-app/
+
+# Translation review artifacts
+aegis_*_review.csv

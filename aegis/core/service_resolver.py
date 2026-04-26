@@ -5,7 +5,16 @@ This module handles service dependency resolution, converting service selections
 to their required components and validating service-to-component compatibility.
 """
 
+from ..constants import AnswerKeys, ComponentNames, StorageBackends
+from ..i18n import t
+from .ai_service_parser import is_ai_service_with_options, parse_ai_service_config
+from .auth_service_parser import is_auth_service_with_options, parse_auth_service_config
+from .component_utils import extract_base_component_name, extract_base_service_name
 from .dependency_resolver import DependencyResolver
+from .insights_service_parser import (
+    is_insights_service_with_options,
+    parse_insights_service_config,
+)
 from .services import SERVICES, get_service_dependencies
 
 
@@ -21,6 +30,7 @@ class ServiceResolver:
 
         Args:
             selected_services: List of service names selected by user
+                              (may include bracket syntax like ai[sqlite])
 
         Returns:
             Tuple of (resolved_components, service_added_components)
@@ -36,10 +46,37 @@ class ServiceResolver:
             raise ValueError(f"Invalid services: {'; '.join(errors)}")
 
         # Collect all components required by services
-        service_required_components = set()
-        for service_name in selected_services:
-            service_deps = get_service_dependencies(service_name)
+        service_required_components: set[str] = set()
+        for service in selected_services:
+            # Extract base service name (strip bracket info)
+            base_service = extract_base_service_name(service)
+            service_deps = get_service_dependencies(base_service)
             service_required_components.update(service_deps)
+
+            # Handle AI service with persistence backend (from bracket syntax)
+            if base_service == AnswerKeys.SERVICE_AI and is_ai_service_with_options(
+                service
+            ):
+                ai_config = parse_ai_service_config(service)
+                if ai_config.backend != StorageBackends.MEMORY:
+                    # Auto-add database component for AI persistence
+                    database_component = (
+                        f"{ComponentNames.DATABASE}[{ai_config.backend}]"
+                    )
+                    service_required_components.add(database_component)
+
+            # Handle Auth service with engine override (from bracket syntax)
+            if base_service == AnswerKeys.SERVICE_AUTH and is_auth_service_with_options(
+                service
+            ):
+                auth_config = parse_auth_service_config(service)
+                if auth_config.engine:
+                    # Replace plain "database" with engine-specific version
+                    service_required_components.discard(ComponentNames.DATABASE)
+                    database_component = (
+                        f"{ComponentNames.DATABASE}[{auth_config.engine}]"
+                    )
+                    service_required_components.add(database_component)
 
         # Convert to list and resolve component-to-component dependencies
         component_list = list(service_required_components)
@@ -58,38 +95,75 @@ class ServiceResolver:
 
         Args:
             services: List of service names to validate
+                     (may include bracket syntax like ai[langchain, sqlite, openai])
 
         Returns:
             List of error messages (empty if valid)
         """
         errors = []
 
+        # Extract base names for all services (strip bracket info)
+        base_services = [extract_base_service_name(s) for s in services]
+
         for service in services:
-            if service not in SERVICES:
-                errors.append(f"Unknown service: {service}")
+            base_service = extract_base_service_name(service)
+            if base_service not in SERVICES:
+                errors.append(t("validation.unknown_service", name=base_service))
                 continue
 
-            spec = SERVICES[service]
+            # Validate AI service bracket syntax if provided
+            if base_service == AnswerKeys.SERVICE_AI and is_ai_service_with_options(
+                service
+            ):
+                try:
+                    ai_config = parse_ai_service_config(service)
+                    valid_backends = [
+                        StorageBackends.MEMORY,
+                        StorageBackends.SQLITE,
+                        StorageBackends.POSTGRES,
+                    ]
+                    if ai_config.backend not in valid_backends:
+                        errors.append(
+                            f"Invalid backend '{ai_config.backend}' for AI service. "
+                            f"Valid options: {', '.join(valid_backends)}"
+                        )
+                except ValueError as e:
+                    errors.append(f"Invalid AI service syntax: {e}")
+
+            # Validate insights service bracket syntax if provided
+            if (
+                base_service == AnswerKeys.SERVICE_INSIGHTS
+                and is_insights_service_with_options(service)
+            ):
+                try:
+                    parse_insights_service_config(service)
+                except ValueError as e:
+                    errors.append(f"Invalid insights service syntax: {e}")
+
+            spec = SERVICES[base_service]
 
             # Check service conflicts
             if spec.conflicts:
                 for conflict in spec.conflicts:
-                    if conflict in services:
+                    if conflict in base_services:
                         errors.append(
-                            f"Service '{service}' conflicts with service '{conflict}'"
+                            f"Service '{base_service}' conflicts with "
+                            f"service '{conflict}'"
                         )
 
         # Check for service-to-service dependencies
         for service in services:
-            if service not in SERVICES:
+            base_service = extract_base_service_name(service)
+            if base_service not in SERVICES:
                 continue  # Already reported above
 
-            spec = SERVICES[service]
+            spec = SERVICES[base_service]
             if spec.required_services:
                 for required_service in spec.required_services:
-                    if required_service not in services:
+                    if required_service not in base_services:
                         errors.append(
-                            f"Service '{service}' requires service '{required_service}'"
+                            f"Service '{base_service}' requires "
+                            f"service '{required_service}'"
                         )
 
         return errors
@@ -142,13 +216,15 @@ class ServiceResolver:
         errors.extend(service_errors)
 
         # Then check component dependencies
+        # Extract base names to handle bracket syntax (e.g., database[postgres] satisfies "database")
+        base_available = {extract_base_component_name(c) for c in available_components}
         for service_name in selected_services:
             if service_name not in SERVICES:
                 continue  # Already reported in service validation
 
             service_deps = get_service_dependencies(service_name)
             for required_comp in service_deps:
-                if required_comp not in available_components:
+                if required_comp not in base_available:
                     errors.append(
                         f"Service '{service_name}' requires component '{required_comp}'"
                     )

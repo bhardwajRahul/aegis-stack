@@ -1,0 +1,91 @@
+"""
+Health check for the payment service.
+"""
+
+import logging
+import time
+
+from app.core.db import get_async_session
+from app.services.system.models import ComponentStatus, ComponentStatusType
+
+from .constants import PAYMENT_COMPONENT_NAME
+from .payment_service import PaymentService
+from .providers.base import ProviderHealth
+
+logger = logging.getLogger(__name__)
+
+# Cache only the upstream provider health probe (a real Stripe API call)
+# to avoid hammering the provider on every dashboard refresh. DB-backed
+# counts stay fresh — caching them would hide newly-seeded or newly-created
+# rows for up to the TTL and regress the dashboard's "just added" UX.
+_CACHE_TTL_SECONDS = 60.0
+_cached_provider_health: tuple[ProviderHealth, float] | None = None
+
+
+async def check_payment_service_health() -> ComponentStatus:
+    """Check payment service health — provider connectivity and transaction stats.
+
+    The provider connectivity probe is memoized for ``_CACHE_TTL_SECONDS`` to
+    limit upstream API pressure. DB counts and recent lists are always read
+    fresh. Call :func:`invalidate_payment_health_cache` after a provider
+    config change to force a fresh connectivity check.
+    """
+    try:
+        async with get_async_session() as session:
+            service = PaymentService(session)
+            provider_health = await _get_cached_provider_health(service)
+            summary = await service.get_status_summary(
+                provider_health=provider_health
+            )
+            metadata = summary.model_dump(mode="json")
+
+            if not summary.healthy:
+                return ComponentStatus(
+                    name=PAYMENT_COMPONENT_NAME,
+                    status=ComponentStatusType.WARNING,
+                    message=summary.health_message or "Provider unhealthy",
+                    metadata=metadata,
+                )
+
+            mode = "test" if summary.is_test_mode else "live"
+            message = (
+                f"{summary.provider_display_name} ({mode} mode) — "
+                f"{summary.total_transactions} transactions"
+            )
+
+            return ComponentStatus(
+                name=PAYMENT_COMPONENT_NAME,
+                status=ComponentStatusType.HEALTHY,
+                message=message,
+                metadata=metadata,
+            )
+
+    except Exception as e:
+        logger.error("Payment health check failed: %s", e)
+        return ComponentStatus(
+            name=PAYMENT_COMPONENT_NAME,
+            status=ComponentStatusType.UNHEALTHY,
+            message=f"Health check error: {e}",
+            metadata={"error": str(e)},
+        )
+
+
+def invalidate_payment_health_cache() -> None:
+    """Drop the cached provider health so the next check hits the provider."""
+    global _cached_provider_health
+    _cached_provider_health = None
+
+
+async def _get_cached_provider_health(service: PaymentService) -> ProviderHealth:
+    """Return a fresh or cached ``ProviderHealth`` for this process."""
+    global _cached_provider_health
+
+    now = time.monotonic()
+    if _cached_provider_health is not None:
+        cached, cached_at = _cached_provider_health
+        if now - cached_at < _CACHE_TTL_SECONDS:
+            return cached
+
+    result = await service.provider.health_check()
+    _cached_provider_health = (result, now)
+    return result

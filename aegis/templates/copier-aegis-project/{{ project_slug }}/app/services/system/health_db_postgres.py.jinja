@@ -1,0 +1,495 @@
+"""
+PostgreSQL database health check for {{ project_name }}.
+
+Provides comprehensive health checking for PostgreSQL databases including
+connection testing, version info, database size, connection counts, and
+server settings.
+"""
+{% if include_database and database_engine == "postgres" %}
+import os
+from pathlib import Path
+import re
+from typing import Any
+
+from app.core.config import settings
+from app.core.log import logger
+from app.services.system.health import format_bytes
+from app.services.system.models import ComponentStatus, ComponentStatusType, MigrationInfo
+
+# Cache static data that doesn't change at runtime
+_migration_cache: list[MigrationInfo] | None = None
+_pg_settings_cache: dict[str, Any] | None = None
+_schema_cache: dict[str, Any] | None = None
+
+
+async def check_database_health() -> ComponentStatus:
+    """
+    Check PostgreSQL database connectivity and basic functionality.
+
+    Returns:
+        ComponentStatus indicating database health
+    """
+    global _migration_cache, _pg_settings_cache, _schema_cache
+
+    try:
+        from app.core.db import get_async_session
+        from sqlalchemy import text
+
+        # Use effective URL which handles Docker vs local hostname translation
+        db_url = settings.database_url_effective
+
+        # Test database connection with simple query and collect enhanced metadata
+        enhanced_metadata: dict[str, Any] = {
+            "implementation": "postgresql",
+            "url": db_url,
+            "database_exists": True,
+            "engine_echo": settings.DATABASE_ENGINE_ECHO,
+        }
+
+        # Test database connection and collect PostgreSQL-specific info
+        async with get_async_session() as session:
+            # Execute a simple query to test connectivity
+            await session.execute(text("SELECT 1"))
+
+            # Get PostgreSQL version
+            try:
+                result = (await session.execute(text("SELECT version()"))).fetchone()
+                if result:
+                    enhanced_metadata["version"] = result[0]
+                    # Extract just the version number for display
+                    version_parts = result[0].split()
+                    if len(version_parts) >= 2:
+                        enhanced_metadata["version_short"] = version_parts[1]
+            except Exception:
+                logger.debug("Failed to get PostgreSQL version", exc_info=True)
+
+            # Get database size
+            try:
+                result = (await session.execute(
+                    text("SELECT pg_database_size(current_database())")
+                )).fetchone()
+                if result:
+                    db_size = result[0]
+                    enhanced_metadata["database_size_bytes"] = db_size
+                    enhanced_metadata["database_size_human"] = format_bytes(db_size)
+            except Exception:
+                logger.debug("Failed to get database size", exc_info=True)
+
+            # Get active connection count
+            try:
+                result = (await session.execute(
+                    text(
+                        "SELECT count(*) FROM pg_stat_activity "
+                        "WHERE datname = current_database()"
+                    )
+                )).fetchone()
+                if result:
+                    enhanced_metadata["active_connections"] = result[0]
+            except Exception:
+                logger.debug("Failed to get connection count", exc_info=True)
+
+            # Get connection pool information
+            try:
+                from app.core.db import async_engine
+                pool = async_engine.pool
+                if hasattr(pool, 'size'):
+                    enhanced_metadata["connection_pool_size"] = pool.size()
+                if hasattr(pool, 'checkedin'):
+                    enhanced_metadata["pool_checked_in"] = pool.checkedin()
+                if hasattr(pool, 'checkedout'):
+                    enhanced_metadata["pool_checked_out"] = pool.checkedout()
+            except Exception:
+                logger.debug("Failed to get pool information", exc_info=True)
+
+            # Cached: PostgreSQL settings (don't change at runtime)
+            if _pg_settings_cache is not None:
+                enhanced_metadata["pg_settings"] = _pg_settings_cache
+            else:
+                try:
+                    pg_settings: dict[str, Any] = {}
+
+                    rows = (await session.execute(text(
+                        "SELECT name, setting FROM pg_settings "
+                        "WHERE name IN ("
+                        "'max_connections','shared_buffers','work_mem',"
+                        "'effective_cache_size','maintenance_work_mem','wal_level')"
+                    ))).fetchall()
+                    for row in rows:
+                        pg_settings[row[0]] = row[1]
+
+                    _pg_settings_cache = pg_settings
+                    enhanced_metadata["pg_settings"] = pg_settings
+
+                except Exception:
+                    logger.debug(
+                        "Failed to collect PostgreSQL settings", exc_info=True
+                    )
+
+            # Collect table row counts using pg_stat_user_tables
+            # (single query instead of N individual COUNT(*) queries)
+            # Note: n_live_tup is an estimate updated by autovacuum, perfect for monitoring
+            table_info: list[dict[str, Any]] = []
+            try:
+                rows = (await session.execute(text(
+                    "SELECT relname, n_live_tup FROM pg_stat_user_tables "
+                    "ORDER BY relname"
+                ))).fetchall()
+
+                for row in rows:
+                    table_info.append({
+                        "name": row[0],
+                        "rows": row[1]
+                    })
+
+                enhanced_metadata["tables"] = table_info
+                enhanced_metadata["table_count"] = len(table_info)
+
+            except Exception:
+                logger.debug("Failed to collect table information", exc_info=True)
+                enhanced_metadata["tables"] = []
+                enhanced_metadata["table_count"] = 0
+
+            # Cached: table schema details (columns, indexes, foreign keys)
+            if table_info:
+                # Invalidate schema cache if table list changed
+                cached_tables = (
+                    {s["name"] for s in _schema_cache["table_schemas"]}
+                    if _schema_cache is not None
+                    else set()
+                )
+                current_tables = {t["name"] for t in table_info}
+
+                if _schema_cache is not None and cached_tables == current_tables:
+                    # Update row counts in cached schemas (rows are live)
+                    row_map = {t["name"]: t["rows"] for t in table_info}
+                    table_schemas = []
+                    for schema in _schema_cache["table_schemas"]:
+                        table_schemas.append({
+                            **schema,
+                            "rows": row_map.get(schema["name"], 0),
+                        })
+                    enhanced_metadata["table_schemas"] = table_schemas
+                    enhanced_metadata["total_indexes"] = _schema_cache[
+                        "total_indexes"
+                    ]
+                    enhanced_metadata["total_foreign_keys"] = _schema_cache[
+                        "total_foreign_keys"
+                    ]
+                else:
+                    try:
+                        table_schemas_list: list[dict[str, Any]] = []
+                        total_indexes = 0
+                        total_foreign_keys = 0
+
+                        # Build per-table lookup from row counts
+                        row_count_map = {t["name"]: t["rows"] for t in table_info}
+
+                        # Batch query 1: All columns with types
+                        columns_rows = (await session.execute(text(
+                            "SELECT table_name, column_name, data_type, "
+                            "is_nullable, column_default "
+                            "FROM information_schema.columns "
+                            "WHERE table_schema = 'public' "
+                            "ORDER BY table_name, ordinal_position"
+                        ))).fetchall()
+
+                        # Batch query 2: Primary key columns
+                        pk_rows = (await session.execute(text(
+                            "SELECT tc.table_name, kcu.column_name "
+                            "FROM information_schema.table_constraints tc "
+                            "JOIN information_schema.key_column_usage kcu "
+                            "ON tc.constraint_name = kcu.constraint_name "
+                            "AND tc.table_schema = kcu.table_schema "
+                            "WHERE tc.constraint_type = 'PRIMARY KEY' "
+                            "AND tc.table_schema = 'public'"
+                        ))).fetchall()
+
+                        # Batch query 3: Indexes
+                        idx_rows = (await session.execute(text(
+                            "SELECT tablename, indexname, "
+                            "indexdef LIKE '%UNIQUE%' AS is_unique "
+                            "FROM pg_indexes "
+                            "WHERE schemaname = 'public'"
+                        ))).fetchall()
+
+                        # Batch query 4: Foreign keys
+                        fk_rows = (await session.execute(text(
+                            "SELECT tc.table_name, tc.constraint_name, "
+                            "kcu.column_name, ccu.table_name AS referred_table, "
+                            "ccu.column_name AS referred_column "
+                            "FROM information_schema.table_constraints tc "
+                            "JOIN information_schema.key_column_usage kcu "
+                            "ON tc.constraint_name = kcu.constraint_name "
+                            "AND tc.table_schema = kcu.table_schema "
+                            "JOIN information_schema.constraint_column_usage ccu "
+                            "ON tc.constraint_name = ccu.constraint_name "
+                            "AND tc.table_schema = ccu.table_schema "
+                            "WHERE tc.constraint_type = 'FOREIGN KEY' "
+                            "AND tc.table_schema = 'public'"
+                        ))).fetchall()
+
+                        # Group columns by table
+                        columns_by_table: dict[str, list[dict[str, Any]]] = {}
+                        for row in columns_rows:
+                            columns_by_table.setdefault(row[0], []).append({
+                                "name": row[1],
+                                "type": row[2],
+                                "nullable": row[3] == "YES",
+                                "default": str(row[4] or ""),
+                            })
+
+                        # Group primary keys by table
+                        pk_by_table: dict[str, set[str]] = {}
+                        for row in pk_rows:
+                            pk_by_table.setdefault(row[0], set()).add(row[1])
+
+                        # Group indexes by table
+                        idx_by_table: dict[str, list[dict[str, Any]]] = {}
+                        for row in idx_rows:
+                            idx_by_table.setdefault(row[0], []).append({
+                                "name": row[1],
+                                "unique": bool(row[2]),
+                                "columns": [],
+                            })
+
+                        # Group foreign keys by table
+                        fk_by_table: dict[str, dict[str, dict[str, Any]]] = {}
+                        for row in fk_rows:
+                            table_name = row[0]
+                            constraint_name = row[1]
+                            fk_by_table.setdefault(table_name, {})
+                            if constraint_name not in fk_by_table[table_name]:
+                                fk_by_table[table_name][constraint_name] = {
+                                    "name": constraint_name,
+                                    "referred_table": row[3],
+                                    "constrained_columns": [],
+                                    "referred_columns": [],
+                                }
+                            fk_by_table[table_name][constraint_name][
+                                "constrained_columns"
+                            ].append(row[2])
+                            fk_by_table[table_name][constraint_name][
+                                "referred_columns"
+                            ].append(row[4])
+
+                        # Assemble per-table schema info
+                        for table in table_info:
+                            tname = table["name"]
+                            pk_cols = pk_by_table.get(tname, set())
+
+                            cols = columns_by_table.get(tname, [])
+                            for col in cols:
+                                col["primary_key"] = col["name"] in pk_cols
+
+                            indexes = idx_by_table.get(tname, [])
+                            total_indexes += len(indexes)
+
+                            fks = list(fk_by_table.get(tname, {}).values())
+                            total_foreign_keys += len(fks)
+
+                            table_schemas_list.append({
+                                "name": tname,
+                                "rows": row_count_map.get(tname, 0),
+                                "columns": cols,
+                                "indexes": indexes,
+                                "foreign_keys": fks,
+                            })
+
+                        _schema_cache = {
+                            "table_schemas": table_schemas_list,
+                            "total_indexes": total_indexes,
+                            "total_foreign_keys": total_foreign_keys,
+                        }
+
+                        enhanced_metadata["table_schemas"] = table_schemas_list
+                        enhanced_metadata["total_indexes"] = total_indexes
+                        enhanced_metadata["total_foreign_keys"] = (
+                            total_foreign_keys
+                        )
+
+                    except Exception:
+                        logger.debug(
+                            "Failed to collect table schema details",
+                            exc_info=True,
+                        )
+
+                if table_info:
+                    total_rows = sum(t["rows"] for t in table_info)
+                    largest_table = max(table_info, key=lambda t: t["rows"])
+                    enhanced_metadata["total_rows"] = total_rows
+                    enhanced_metadata["largest_table"] = largest_table
+
+            # Collect migration history from Alembic
+            # Migration files are cached since they don't change at runtime
+            try:
+                result = (await session.execute(
+                    text(
+                        "SELECT EXISTS ("
+                        "SELECT FROM information_schema.tables "
+                        "WHERE table_name = 'alembic_version'"
+                        ")"
+                    )
+                )).fetchone()
+
+                if result and result[0]:
+                    # Always query current HEAD live
+                    version_result = (await session.execute(
+                        text("SELECT version_num FROM alembic_version")
+                    )).fetchone()
+                    current_version = version_result[0] if version_result else None
+                    enhanced_metadata["current_migration"] = current_version
+
+                    # Parse migration files once, cache forever
+                    if _migration_cache is None:
+                        _migration_cache = []
+                        alembic_versions_path = Path("alembic/versions")
+                        if alembic_versions_path.exists():
+                            migration_files = alembic_versions_path.glob("*.py")
+                            for migration_file in sorted(migration_files):
+                                if migration_file.name == "__init__.py":
+                                    continue
+
+                                try:
+                                    with open(migration_file) as f:
+                                        content = f.read()
+
+                                    revision_id = migration_file.stem.split("_")[0]
+                                    description = "No description"
+                                    down_revision = None
+                                    create_date = None
+
+                                    doc_pat = r'"""(.+?)"""'
+                                    doc_match = re.search(
+                                        doc_pat, content, re.DOTALL
+                                    )
+                                    if doc_match:
+                                        description = doc_match.group(1).strip()
+
+                                    rev_pat = r'revision\s*=\s*[\'"](.+?)[\'"]'
+                                    revision_match = re.search(rev_pat, content)
+                                    if revision_match:
+                                        revision_id = revision_match.group(1)
+
+                                    down_pat = (
+                                        r'down_revision\s*=\s*[\'"](.+?)[\'"]'
+                                    )
+                                    down_match = re.search(down_pat, content)
+                                    if down_match:
+                                        down_revision = down_match.group(1)
+
+                                    date_pat = (
+                                        r'create_date\s*=\s*.+?datetime\((.+?)\)'
+                                    )
+                                    date_match = re.search(date_pat, content)
+                                    if date_match:
+                                        create_date = date_match.group(0)
+
+                                    file_mtime = os.path.getmtime(migration_file)
+
+                                    _migration_cache.append(MigrationInfo(
+                                        revision=revision_id,
+                                        down_revision=down_revision,
+                                        description=description,
+                                        content=content,
+                                        file_mtime=file_mtime,
+                                        create_date=create_date,
+                                        file_path=str(migration_file),
+                                    ))
+
+                                except Exception as e:
+                                    logger.debug(
+                                        f"Failed to parse migration "
+                                        f"{migration_file}: {e}"
+                                    )
+
+                    # Stamp is_current from live HEAD onto cached data
+                    migrations = [
+                        m.model_copy(update={"is_current": m.revision == current_version})
+                        for m in _migration_cache
+                    ]
+
+                    enhanced_metadata["migrations"] = [m.model_dump() for m in migrations]
+                    enhanced_metadata["migration_count"] = len(migrations)
+                else:
+                    enhanced_metadata["current_migration"] = None
+                    enhanced_metadata["migrations"] = []
+                    enhanced_metadata["migration_count"] = 0
+
+            except Exception:
+                logger.debug("Failed to collect migration history", exc_info=True)
+                enhanced_metadata["migrations"] = []
+                enhanced_metadata["migration_count"] = 0
+
+        return ComponentStatus(
+            name="database",
+            status=ComponentStatusType.HEALTHY,
+            message="Database connection successful",
+            response_time_ms=None,
+            metadata=enhanced_metadata,
+        )
+
+    except ImportError:
+        return ComponentStatus(
+            name="database",
+            status=ComponentStatusType.UNHEALTHY,
+            message="Database module not available",
+            response_time_ms=None,
+            metadata={
+                "implementation": "postgresql",
+                "error": "Database module not imported or configured",
+            },
+        )
+    except Exception as e:
+        error_str = str(e).lower()
+        if "connection refused" in error_str:
+            return ComponentStatus(
+                name="database",
+                status=ComponentStatusType.UNHEALTHY,
+                message="PostgreSQL server not reachable",
+                response_time_ms=None,
+                metadata={
+                    "implementation": "postgresql",
+                    "url": settings.database_url_effective,
+                    "error": str(e),
+                    "recommendation": "Ensure PostgreSQL server is running",
+                },
+            )
+        if "authentication failed" in error_str or "password" in error_str:
+            return ComponentStatus(
+                name="database",
+                status=ComponentStatusType.UNHEALTHY,
+                message="PostgreSQL authentication failed",
+                response_time_ms=None,
+                metadata={
+                    "implementation": "postgresql",
+                    "url": settings.database_url_effective,
+                    "error": str(e),
+                    "recommendation": "Check database credentials",
+                },
+            )
+        if "does not exist" in error_str:
+            return ComponentStatus(
+                name="database",
+                status=ComponentStatusType.WARNING,
+                message="PostgreSQL database does not exist",
+                response_time_ms=None,
+                metadata={
+                    "implementation": "postgresql",
+                    "url": settings.database_url_effective,
+                    "error": str(e),
+                    "recommendation": "Create the database or check DATABASE_URL",
+                },
+            )
+
+        return ComponentStatus(
+            name="database",
+            status=ComponentStatusType.UNHEALTHY,
+            message=f"Database connection failed: {str(e)}",
+            response_time_ms=None,
+            metadata={
+                "implementation": "postgresql",
+                "url": settings.database_url_effective,
+                "error": str(e),
+            },
+        )
+{% endif %}

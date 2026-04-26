@@ -12,7 +12,7 @@ Real-world usage patterns and configuration examples for the AI service.
 ### Code Explanation
 
 ```bash
-my-app ai chat send "Explain this code step by step:
+my-app ai chat "Explain this code step by step:
 def fibonacci(n):
     if n <= 1: return n
     return fibonacci(n-1) + fibonacci(n-2)"
@@ -21,25 +21,25 @@ def fibonacci(n):
 ### Generate Code
 
 ```bash
-my-app ai chat send "Write a Python function that validates email addresses using regex"
+my-app ai chat "Write a Python function that validates email addresses using regex"
 ```
 
 ### Debug Help
 
 ```bash
-my-app ai chat send "Why might I get 'NoneType object is not iterable' in Python?"
+my-app ai chat "Why might I get 'NoneType object is not iterable' in Python?"
 ```
 
 ### Learn Concepts
 
 ```bash
-my-app ai chat send "Explain dependency injection with a simple Python example"
+my-app ai chat "Explain dependency injection with a simple Python example"
 ```
 
 ### API Documentation
 
 ```bash
-my-app ai chat send "How do I use FastAPI's Path parameters with type hints?"
+my-app ai chat "How do I use FastAPI's Path parameters with type hints?"
 ```
 
 ## Configuration Patterns

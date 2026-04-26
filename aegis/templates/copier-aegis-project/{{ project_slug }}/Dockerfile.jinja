@@ -1,0 +1,80 @@
+FROM python:{{ python_version }}-slim
+
+# Install system dependencies and clean up
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+      build-essential \
+      ca-certificates \
+      curl \
+{%- if database_engine == "postgres" %}
+      postgresql-client \
+{%- endif %}
+    && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Install uv with specific version for reproducibility
+RUN pip install --no-cache-dir uv==0.10.0
+{%- if include_payment and payment_provider == "stripe" %}
+
+# Install stripe-cli — used by the Overseer webhook auto-forwarder
+# (app/components/backend/startup/payment_webhook_forwarder.py) to
+# shuttle Stripe test events to the local webhook endpoint without the
+# user needing to run `stripe listen` themselves. Auth is handled via
+# --api-key at runtime (STRIPE_SECRET_KEY) so no `stripe login` is
+# required inside the container.
+ARG STRIPE_CLI_VERSION=1.21.8
+RUN arch="$(dpkg --print-architecture)" && \
+    case "$arch" in \
+      amd64) target="linux_x86_64" ;; \
+      arm64) target="linux_arm64" ;; \
+      *) echo "Unsupported arch: $arch" && exit 1 ;; \
+    esac && \
+    curl -fsSL "https://github.com/stripe/stripe-cli/releases/download/v${STRIPE_CLI_VERSION}/stripe_${STRIPE_CLI_VERSION}_${target}.tar.gz" \
+      | tar -xz -C /usr/local/bin stripe && \
+    chmod +x /usr/local/bin/stripe
+{%- endif %}
+
+# Set environment variables
+# Use /opt/venv for virtual environment to avoid conflicts with volume mounts
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/code \
+    UV_CACHE_DIR=/tmp/uv-cache \
+    UV_HTTP_TIMEOUT=300 \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /code
+
+# Copy dependency files and README (needed by pyproject.toml)
+COPY pyproject.toml uv.lock README.md /code/
+
+# Install dependencies
+RUN uv sync --all-extras && \
+    rm -rf /tmp/uv-cache
+
+# Copy application code
+COPY . /code
+
+# Make entrypoint executable
+RUN chmod +x /code/scripts/entrypoint.sh
+
+# Set default port as an environment variable
+ARG PORT=8000
+ENV PORT=$PORT
+
+# Expose the port
+EXPOSE $PORT
+
+# Add health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:$PORT/health || exit 1
+
+
+# Labels for better container management
+LABEL maintainer="contact@aegis-stack.dev" \
+      version="0.1.0" \
+      description="Aegis Stack - Production-ready async Python foundation"
+
+ENTRYPOINT ["uv", "run", "/code/scripts/entrypoint.sh"]

@@ -1,0 +1,147 @@
+name: Release to PyPI
+
+on:
+  push:
+    tags:
+      - 'v*.*.*-rc*'  # Pre-release tags (v0.2.0-rc1, etc.) → TestPyPI
+      - 'v*.*.*'      # Production tags (v0.2.0, etc.) → PyPI
+
+jobs:
+  build:
+    name: Build Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run quality checks
+        run: make check
+
+      - name: Build package
+        run: uv build
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    if: contains(github.ref, '-rc')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # REQUIRED for Trusted Publishing
+      contents: write  # For creating GitHub pre-releases
+    environment:
+      name: release-test
+      url: https://test.pypi.org/project/aegis-stack/
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          print-hash: true
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ steps.version.outputs.VERSION }} (Release Candidate)"
+          draft: true
+          generate_release_notes: true
+          body: |
+            ## Test Release (TestPyPI)
+
+            ```bash
+            uvx --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ --index-strategy unsafe-best-match aegis-stack@${{ steps.version.outputs.VERSION }} init test-project
+            ```
+
+            Not for production use. If testing passes, promote with:
+            ```bash
+            git tag v<version>
+            git push origin v<version>
+            ```
+          prerelease: true
+          files: dist/*
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build
+    if: "!contains(github.ref, '-rc')"
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # REQUIRED for Trusted Publishing
+      contents: write  # For creating GitHub releases
+    environment:
+      name: release
+      url: https://pypi.org/project/aegis-stack/
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          print-hash: true
+          attestations: true  # Generate Sigstore attestations
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ steps.version.outputs.VERSION }}"
+          draft: true
+          generate_release_notes: true
+          body: |
+            ## Installation
+
+            ```bash
+            pip install aegis-stack==${{ steps.version.outputs.VERSION }}
+            ```
+
+            Or run directly:
+            ```bash
+            uvx aegis-stack init my-project
+            ```
+
+            ## Links
+
+            - [PyPI](https://pypi.org/project/aegis-stack/${{ steps.version.outputs.VERSION }}/)
+            - [Documentation](https://lbedner.github.io/aegis-stack/)
+            - [Changelog](https://github.com/lbedner/aegis-stack/blob/main/CHANGELOG.md)
+          files: dist/*
+          prerelease: false

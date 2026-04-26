@@ -1,80 +1,388 @@
 """
 Database initialization startup hook.
 
-Ensures database directory structure exists and verifies connectivity
+{% if database_engine == "sqlite" %}Ensures directory structure exists and creates tables{% elif needs_migrations %}Runs Alembic migrations and verifies connectivity{% else %}Creates tables and verifies connectivity{% endif %}
 when the backend starts up (only when database component is included).
 """
 {% if include_database %}
 
+{% if database_engine == "sqlite" %}
 from pathlib import Path
-from app.core.db import init_database
+{% endif %}
 from app.core.log import logger
 
 {% if include_auth %}
 # Import models to register them with SQLModel metadata
 from app.models.user import User  # noqa: F401
 {% endif %}
+{% if include_auth_org %}
+from app.models.org import Organization, OrganizationMember  # noqa: F401
+{% endif %}
+
+{% set needs_migrations = include_auth or (include_ai and ai_backend != "memory") %}
+{% if database_engine == "postgres" and needs_migrations %}
+def _check_and_stamp_existing_tables() -> None:
+    """
+    Detect when tables for a pending migration already exist.
+
+    This handles the case where:
+    - Project regenerated with -f flag
+    - Docker volume persisted with old tables
+    - alembic_version is valid but behind (e.g., at 001 when 002 tables exist)
+
+    Fix: If signature table for a migration exists, stamp it as complete.
+    """
+    try:
+        from alembic import command
+        from alembic.config import Config
+        from alembic.runtime.migration import MigrationContext
+        from alembic.script import ScriptDirectory
+        from sqlalchemy import inspect
+
+        from app.core.db import db_session
+
+        alembic_cfg = Config("alembic/alembic.ini")
+        script = ScriptDirectory.from_config(alembic_cfg)
+
+        # Get existing tables and current revision
+        with db_session(autocommit=False) as session:
+            inspector = inspect(session.connection())
+            existing_tables = set(inspector.get_table_names())
+
+            context = MigrationContext.configure(session.connection())
+            current_rev = context.get_current_revision()
+
+        # Map known service migrations to their signature
+        # - ("table", name): check if table exists (CREATE TABLE migrations)
+        # - ("column", table, col): check if column exists (ALTER TABLE migrations)
+        service_signatures: dict[str, tuple[str, ...]] = {
+            "auth": ("table", "user"),
+            "auth_rbac": ("column", "user", "role"),
+            "auth_org": ("table", "organization"),
+            "ai": ("table", "llm_vendor"),
+            "ai_voice": ("table", "voice_usage"),
+        }
+
+        # Build signature mapping from migration filenames
+        signatures: dict[str, tuple[str, ...]] = {}
+        for rev in script.walk_revisions():
+            if rev.down_revision is not None or rev.revision:
+                parts = rev.path.stem.split("_", 1)
+                if len(parts) > 1:
+                    service_name = parts[1]
+                    sig = service_signatures.get(service_name)
+                    if sig:
+                        signatures[rev.revision] = sig
+
+        # Get column info for alter-table checks
+        db_columns: dict[str, set[str]] = {}
+        for table_name in existing_tables:
+            try:
+                cols = inspector.get_columns(table_name)
+                db_columns[table_name] = {c["name"] for c in cols}
+            except Exception:
+                pass
+
+        # Walk revisions and stamp any already applied
+        for rev in script.walk_revisions():
+            # Skip if already applied
+            if current_rev and rev.revision <= current_rev:
+                continue
+
+            sig = signatures.get(rev.revision)
+            if not sig:
+                continue
+
+            already_applied = False
+            if sig[0] == "table":
+                already_applied = sig[1] in existing_tables
+            elif sig[0] == "column":
+                table_name, col_name = sig[1], sig[2]
+                already_applied = col_name in db_columns.get(table_name, set())
+
+            if already_applied:
+                logger.warning(
+                    f"Migration {rev.revision} tables already exist. "
+                    "Stamping as complete (Docker volume likely persisted)..."
+                )
+                command.stamp(alembic_cfg, rev.revision)
+                logger.info(f"Stamped migration {rev.revision}")
+
+    except Exception as e:
+        logger.debug(f"Existing tables check skipped: {e}")
+
+
+def _check_and_fix_stale_revision() -> None:
+    """
+    Detect and fix stale alembic_version entries.
+
+    This handles the case where project is regenerated with -f flag:
+    - Database has old revision ID in alembic_version
+    - New migration files have different revision IDs
+    - Alembic can't find the old revision and fails
+
+    Fix: If revision doesn't exist in scripts, clear alembic_version
+    and stamp to head (tables already exist, just need version sync).
+    """
+    try:
+        from alembic import command
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+        from sqlmodel import text
+
+        from app.core.db import db_session
+
+        alembic_cfg = Config("alembic/alembic.ini")
+        script = ScriptDirectory.from_config(alembic_cfg)
+
+        # Get all known revision IDs from migration files
+        known_revisions = {rev.revision for rev in script.walk_revisions()}
+
+        # Check current database revision
+        with db_session(autocommit=False) as session:
+            try:
+                result = session.exec(
+                    text("SELECT version_num FROM alembic_version")
+                )
+                db_revisions = [row[0] for row in result.fetchall()]
+            except Exception:
+                # Table doesn't exist or other error - let migrations handle it
+                return
+
+        # Check if any DB revision is stale (not in migration files)
+        stale_revisions = [r for r in db_revisions if r not in known_revisions]
+
+        if stale_revisions:
+            logger.warning(
+                f"Detected stale revisions: {stale_revisions}. "
+                "This happens after project regeneration. Auto-recovering..."
+            )
+            # Clear alembic_version and stamp to head
+            with db_session(autocommit=True) as session:
+                session.exec(text("DELETE FROM alembic_version"))
+
+            # Stamp to head (marks DB as up-to-date without running migrations)
+            command.stamp(alembic_cfg, "head")
+            logger.info("Recovery complete: stamped database to head revision")
+
+    except Exception as e:
+        logger.debug(f"Stale revision check skipped: {e}")
+        # Don't fail - let normal migration flow handle errors
+
+
+def _run_migrations() -> bool:
+    """
+    Run Alembic migrations programmatically.
+
+    Returns:
+        True if migrations ran successfully, False otherwise.
+    """
+    try:
+        from alembic import command
+        from alembic.config import Config
+
+        # Check for stale revisions first (handles -f regeneration)
+        _check_and_fix_stale_revision()
+
+        # Check for pre-existing tables (handles persisted Docker volumes)
+        _check_and_stamp_existing_tables()
+
+        alembic_cfg = Config("alembic/alembic.ini")
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Database migrations applied successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to run migrations: {e}")
+        return False
+{% endif %}
+
+
+def _check_schema_mismatch() -> None:
+    """
+    Detect missing columns/tables and warn user.
+
+    Compares SQLModel metadata (what the code expects) against
+    the actual database schema. Only checks tables registered
+    in SQLModel metadata — user-created tables are ignored.
+    """
+    try:
+        from sqlalchemy import inspect as sa_inspect
+        from sqlmodel import SQLModel
+
+        from app.core.db import engine
+
+        inspector = sa_inspect(engine)
+        existing_tables = set(inspector.get_table_names())
+
+        # Only check tables in SQLModel metadata (our models)
+        expected_tables = set(SQLModel.metadata.tables.keys())
+        missing_tables = expected_tables - existing_tables - {"alembic_version"}
+
+        # Check columns for tables that exist in both
+        missing_columns: dict[str, set[str]] = {}
+        for table_name in expected_tables & existing_tables:
+            model_cols = {
+                c.name for c in SQLModel.metadata.tables[table_name].columns
+            }
+            db_cols = {c["name"] for c in inspector.get_columns(table_name)}
+            missing = model_cols - db_cols
+            if missing:
+                missing_columns[table_name] = missing
+
+        if missing_tables or missing_columns:
+            logger.error("=" * 60)
+            logger.error("SCHEMA MISMATCH DETECTED")
+            logger.error(
+                "Your database is missing columns/tables expected by the code."
+            )
+            if missing_tables:
+                logger.error(
+                    f"  Missing tables: {', '.join(sorted(missing_tables))}"
+                )
+            for table, cols in sorted(missing_columns.items()):
+                logger.error(
+                    f"  Missing columns in '{table}': {', '.join(sorted(cols))}"
+                )
+            logger.error("")
+            logger.error(
+                "  Fix: run 'make migrate-fix' to auto-generate a safe migration"
+            )
+            logger.error("=" * 60)
+
+    except Exception as e:
+        logger.debug(f"Schema mismatch check skipped: {e}")
 
 
 async def startup_database_init() -> None:
     """
-    Initialize database directory structure and verify connectivity.
+    Initialize database and run migrations.
 
-    This hook runs when the backend starts to ensure the database
-    directory exists and connection works. For auth service projects,
-    migrations should already be applied during project generation.
+    This hook runs when the backend starts to:
+    1. {% if database_engine == "sqlite" %}Ensure database directory exists and create tables{% else %}Verify database connectivity{% endif %}
+{% if database_engine == "postgres" and needs_migrations %}
+    2. Run Alembic migrations (idempotent - safe to run multiple times)
+    3. Verify database schema is ready
+{%- endif %}
+    {%- if include_ai and database_engine == "postgres" %}
+    4. Sync LLM catalog (AI service, postgres only)
+    {%- endif %}
     """
     try:
+{% if database_engine == "sqlite" %}
         # Ensure database directory exists
         from app.core.db import DATABASE_PATH
         db_path = Path(DATABASE_PATH)
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        {% if include_auth %}
-        # Auth service - verify database and migration status
+        # Create tables via SQLModel (no Alembic needed for SQLite)
+        from sqlmodel import SQLModel
+
+        from app.core.db import engine
+        SQLModel.metadata.create_all(engine)
+        logger.info("Database tables created/verified (SQLite)")
+
+        # Check for schema mismatches (e.g., after aegis update added new columns)
+        _check_schema_mismatch()
+{% endif %}
+
+{% if database_engine == "postgres" and needs_migrations %}
+        # Run Alembic migrations (idempotent)
+        migrations_ok = _run_migrations()
+
+        if not migrations_ok:
+            logger.warning("Migrations failed - database may not be fully initialized")
+            # Continue anyway to allow debugging
+
+        # Check for schema mismatches (e.g., after aegis update added new columns)
+        _check_schema_mismatch()
+{% endif %}
+
+{% if database_engine == "postgres" and not needs_migrations %}
+        # No migrations needed - create tables directly via SQLModel
+        from sqlmodel import SQLModel
+
+        from app.core.db import engine
+        SQLModel.metadata.create_all(engine)
+        logger.info("Database tables created/verified (PostgreSQL)")
+{% endif %}
+
+        # Verify database connectivity
         try:
-            from app.core.db import db_session
-            from sqlmodel import select, func, text
             from sqlalchemy import inspect
+            from sqlmodel import text
+
+            from app.core.db import db_session
 
             with db_session(autocommit=False) as session:
-                # Check 1: Basic database connectivity
+                # Basic connectivity check
                 session.exec(text("SELECT 1"))
 
-                # Check 2: Auth tables exist (User table specifically)
-                session.exec(select(func.count()).select_from(User))
-
-                # Check 3: Alembic migration system is set up
                 inspector = inspect(session.connection())
                 table_names = inspector.get_table_names()
+{% if database_engine == "postgres" and needs_migrations %}
 
+                # Verify alembic_version table exists
                 if "alembic_version" in table_names:
-                    logger.info(
-                        "✅ Database connectivity and auth schema verified "
-                        "(migrations applied)"
-                    )
+                    logger.info(f"Database ready with {len(table_names)} tables")
                 else:
-                    logger.warning(
-                        "⚠️  alembic_version table missing - migrations may not be "
-                        "fully applied"
-                    )
-                    logger.warning(
-                        "💡 Run 'alembic upgrade head' to ensure all migrations "
-                        "are applied"
-                    )
+                    logger.warning("alembic_version table missing after migrations")
+{% else %}
+                logger.info(f"Database ready with {len(table_names)} tables")
+{% endif %}
 
         except Exception as e:
-            logger.warning(f"⚠️  Database check failed: {e}")
-            logger.warning("💡 Run 'alembic upgrade head' to apply migrations")
+            logger.warning(f"Database verification failed: {e}")
             # Don't fail startup - let the app run and show clear errors
-        {% else %}
-        # Database component only - ensure tables exist
-        init_database()
-        logger.info("🗃️  Database initialization completed")
-        {% endif %}
+
+{% if include_insights %}
+        # Seed insight lookup tables (idempotent)
+        try:
+            from app.core.db import db_session as get_db_session
+            from app.services.insights.seed import seed_insight_tables
+
+            with get_db_session() as session:
+                seed_insight_tables(session)
+            logger.info("Insight seed data verified")
+        except Exception as e:
+            logger.warning(f"Insight seed failed: {e}")
+{% endif %}
+
+{% if include_payment %}
+        # Seed default payment provider row (idempotent). Without this, the
+        # first concurrent health checks on a fresh DB race on
+        # get_or_create_provider and one hits a UNIQUE constraint on
+        # payment_provider.key.
+        try:
+            from app.core.db import db_session as get_db_session
+            from app.services.payment.seed import seed_payment_tables
+
+            with get_db_session() as session:
+                seed_payment_tables(session)
+            logger.info("Payment seed data verified")
+        except Exception as e:
+            logger.warning(f"Payment seed failed: {e}")
+{% endif %}
+
+{% if include_ai and database_engine == "postgres" %}
+        # Sync LLM catalog (postgres only - SQLite syncs during generation)
+        # Uses sync Session because sync_llm_catalog does sync DB ops (async is for HTTP calls)
+        try:
+            logger.info("Starting LLM catalog sync...")
+            from sqlmodel import Session
+            from app.core.db import engine
+            from app.services.ai.etl import sync_llm_catalog
+
+            logger.info("Creating database session for LLM sync...")
+            with Session(engine) as session:
+                logger.info("Calling sync_llm_catalog...")
+                result = await sync_llm_catalog(session, mode="chat")
+                logger.info(f"LLM catalog synced: {result.total_synced} models")
+        except Exception as e:
+            logger.warning(f"LLM catalog sync skipped: {e}")
+{% endif %}
 
     except Exception as e:
-        logger.error(f"❌ Database initialization failed: {e}")
+        logger.error(f"Database initialization failed: {e}")
         raise
 
 

@@ -1,9 +1,11 @@
 # Scheduler CLI Interface
 
+**Part of the Generated Project CLI** - See [CLI Reference](../../cli-reference.md#component-clis) for complete overview.
+
 !!! warning "Persistence Required"
     The scheduler CLI is only available when using database persistence for job storage.
     Memory-based scheduling (default) does not support CLI operations.
-    
+
     Enable persistence with: `aegis init my-app --components scheduler,database`
 
 The scheduler provides a `tasks` CLI for managing scheduled jobs when persistence is enabled.
@@ -36,7 +38,7 @@ my-app tasks list
 
 **Example Output:**
 ```
-📋 Scheduled Jobs (1 total)
+Scheduled Jobs (1 total)
 ┌─────────────────────┬───────────────────────┬─────────┬──────────────────────────────┐
 │ Job ID              │ Name                  │ Status  │ Next Run                     │
 ├─────────────────────┼───────────────────────┼─────────┼──────────────────────────────┤
@@ -61,24 +63,24 @@ my-app tasks stats
 
 **Example Output:**
 ```
-📊 Overall Scheduler Statistics
-╭───────────────────────────────────────────────────────── 📊 Scheduler Statistics ─────────────────────────────────────────────────────────╮
-│ Scheduler Overview                                                                                                                        │
-│                                                                                                                                           │
-│ 📋 Total Jobs: 1                                                                                                                          │
-│ 🟢 Active Jobs: 1                                                                                                                         │
-│ 🔴 Paused Jobs: 0                                                                                                                         │
-│                                                                                                                                           │
-│ 🏃 Total Executions: 0                                                                                                                    │
-│ ✅ Successful: 0                                                                                                                          │
-│ ❌ Failed: 0                                                                                                                              │
-│                                                                                                                                           │
-│ 📊 Overall Success Rate: 0.0%                                                                                                             │
-│ ⏱️  Avg Execution Time: 0.0ms                                                                                                              │
-│                                                                                                                                           │
-│ 🕐 Scheduler Uptime: Unknown                                                                                                              │
-│ 🔄 Last Activity: No recent activity                                                                                                      │
-╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+Overall Scheduler Statistics
+╭───────────────────────────────────────────────────────── Scheduler Statistics ──────────────────────────────────────────────────────────╮
+│ Scheduler Overview                                                                                                                      │
+│                                                                                                                                         │
+│ Total Jobs: 1                                                                                                                           │
+│ Active Jobs: 1                                                                                                                          │
+│ Paused Jobs: 0                                                                                                                          │
+│                                                                                                                                         │
+│ Total Executions: 0                                                                                                                     │
+│ Successful: 0                                                                                                                           │
+│ Failed: 0                                                                                                                               │
+│                                                                                                                                         │
+│ Overall Success Rate: 0.0%                                                                                                              │
+│ Avg Execution Time: 0.0ms                                                                                                               │
+│                                                                                                                                         │
+│ Scheduler Uptime: Unknown                                                                                                               │
+│ Last Activity: No recent activity                                                                                                       │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 **Job-Specific Statistics:**
@@ -144,7 +146,7 @@ my-app tasks trigger daily_health_check --wait
 my-app tasks trigger cleanup_temp_files --wait --timeout 60
 ```
 
-!!! note "Implementation Status"
+!!! warning "Implementation Status"
     Manual job triggering is currently not implemented but is planned for future releases.
     The command will return an appropriate message indicating this limitation.
 
@@ -221,9 +223,9 @@ export DATABASE_URL=sqlite:///data/app.db
 docker exec my-app-container my-app tasks list
 ```
 
-## Next Steps
+## See Also
 
+- **[CLI Reference](../../cli-reference.md)** - Complete CLI overview and all commands
 - **[Scheduler Component](../scheduler.md)** - Main scheduler documentation
 - **[Examples](examples.md)** - Real-world scheduling patterns
 - **[Database Persistence](extras/persistence.md)** - Job persistence setup
-- **[Component Overview](../index.md)** - How components work together

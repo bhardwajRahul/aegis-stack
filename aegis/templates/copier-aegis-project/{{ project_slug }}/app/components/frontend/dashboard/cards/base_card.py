@@ -9,8 +9,10 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import flet as ft
-from app.components.frontend.controls import LabelText, SecondaryText, TitleText
-from app.services.system.models import ComponentStatus, ComponentStatusType
+from app.components.frontend.controls.tech_badge import TechBadge
+from app.services.system.models import ComponentStatus
+
+from .card_utils import get_status_colors
 
 
 class BaseCard(ABC):
@@ -41,24 +43,12 @@ class BaseCard(ABC):
         Returns:
             Tuple of (primary_color, background_color, border_color)
         """
-        status = self.component_data.status
-
-        if status == ComponentStatusType.HEALTHY:
-            return (ft.Colors.GREEN, ft.Colors.SURFACE, ft.Colors.GREEN)
-        elif status == ComponentStatusType.INFO:
-            return (ft.Colors.BLUE, ft.Colors.SURFACE, ft.Colors.BLUE)
-        elif status == ComponentStatusType.WARNING:
-            return (ft.Colors.ORANGE, ft.Colors.SURFACE, ft.Colors.ORANGE)
-        else:  # UNHEALTHY
-            return (ft.Colors.RED, ft.Colors.SURFACE, ft.Colors.RED)
+        return get_status_colors(self.component_data)
 
     def _create_technology_badge(
         self,
         title: str,
         subtitle: str,
-        badge_text: str,
-        icon: str,
-        badge_color: str,
         width: int = 160,
     ) -> ft.Container:
         """
@@ -67,9 +57,6 @@ class BaseCard(ABC):
         Args:
             title: Main technology title (e.g., "FastAPI", "Worker")
             subtitle: Technology subtitle (e.g., "Backend API", "arq + Redis")
-            badge_text: Badge label text (e.g., "ACTIVE", "QUEUES")
-            icon: Emoji icon for the technology
-            badge_color: Background color for the badge
             width: Width of the badge container
 
         Returns:
@@ -77,36 +64,11 @@ class BaseCard(ABC):
         """
         primary_color, _, _ = self._get_status_colors()
 
-        return ft.Container(
-            content=ft.Column(
-                [
-                    ft.Container(
-                        content=ft.Text(icon, size=32),
-                        padding=ft.padding.all(8),
-                        bgcolor=primary_color,
-                        border_radius=12,
-                        margin=ft.margin.only(bottom=8),
-                    ),
-                    TitleText(title),
-                    SecondaryText(subtitle),
-                    ft.Container(
-                        content=LabelText(
-                            badge_text,
-                            color=ft.Colors.WHITE,
-                        ),
-                        padding=ft.padding.symmetric(horizontal=8, vertical=2),
-                        bgcolor=badge_color,
-                        border_radius=8,
-                        margin=ft.margin.only(top=4),
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=4,
-            ),
-            padding=ft.padding.all(16),
+        return TechBadge(
+            title=title,
+            subtitle=subtitle,
+            primary_color=primary_color,
             width=width,
-            alignment=ft.alignment.center,
         )
 
     def _create_section_container(
@@ -131,7 +93,7 @@ class BaseCard(ABC):
             section_content.extend(
                 [
                     ft.Text(title, size=16, weight=ft.FontWeight.BOLD),
-                    ft.Divider(height=1, color=ft.Colors.GREY_300),
+                    ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 ]
             )
         section_content.extend(content)
@@ -153,7 +115,7 @@ class BaseCard(ABC):
         Get technology-specific information for the badge.
 
         Returns:
-            Dictionary with keys: title, subtitle, badge_text, icon, badge_color
+            Dictionary with keys: title, subtitle
         """
         pass
 
@@ -213,9 +175,6 @@ class BaseCard(ABC):
             content=self._create_technology_badge(
                 title=tech_info["title"],
                 subtitle=tech_info["subtitle"],
-                badge_text=tech_info["badge_text"],
-                icon=tech_info["icon"],
-                badge_color=tech_info["badge_color"],
                 width=widths["left"],
             ),
             width=widths["left"],
@@ -236,9 +195,9 @@ class BaseCard(ABC):
             content=ft.Row(
                 [
                     left_section,
-                    ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
+                    ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
                     middle_section,
-                    ft.VerticalDivider(width=1, color=ft.Colors.GREY_300),
+                    ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT),
                     right_section,
                 ],
                 spacing=0,

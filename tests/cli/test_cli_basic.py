@@ -5,11 +5,9 @@ These tests focus on command parsing, help text, and basic functionality
 without doing full project generation.
 """
 
-import re
-
 import pytest
 
-from .test_utils import run_aegis_command, run_cli_help_command
+from .test_utils import run_aegis_command, run_cli_help_command, strip_ansi_codes
 
 
 class TestCLIBasics:
@@ -30,7 +28,7 @@ class TestCLIBasics:
         assert result.success, f"Init help command failed: {result.stderr}"
 
         # Remove ANSI color codes for reliable string matching
-        clean_output = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+        clean_output = strip_ansi_codes(result.stdout)
         assert "Initialize a new Aegis Stack project" in clean_output
         assert "--components" in clean_output
         assert (
@@ -55,7 +53,6 @@ class TestCLIBasics:
             "invalid_component",
             "--no-interactive",
             "--yes",
-            timeout=10,
         )
         assert not result.success, "Expected command to fail with invalid component"
         assert (
@@ -64,7 +61,7 @@ class TestCLIBasics:
 
     def test_missing_project_name(self) -> None:
         """Test that missing project name shows helpful error."""
-        result = run_aegis_command("init", timeout=10)
+        result = run_aegis_command("init")
         assert not result.success, "Expected command to fail with missing project name"
         # Should show usage information about missing project name
 
@@ -89,7 +86,6 @@ class TestComponentValidation:
             "--force",
             "--output-dir",
             "/tmp/test-non-existent-dir",
-            timeout=10,
         )
         # Should not fail with "Invalid component" error
         assert "Invalid component" not in result.stderr
@@ -106,7 +102,6 @@ class TestComponentValidation:
             "--force",
             "--output-dir",
             "/tmp/test-non-existent-dir",
-            timeout=10,
         )
         # Should not fail with component validation errors
         assert "Invalid component" not in result.stderr
@@ -120,7 +115,6 @@ class TestComponentValidation:
             "scheduler,invalid,worker",  # Updated to match actual available components
             "--no-interactive",
             "--yes",
-            timeout=10,
         )
         assert not result.success, "Expected command to fail with invalid component"
         assert (
@@ -136,7 +130,6 @@ class TestComponentValidation:
             "scheduler[sqlite]",
             "--no-interactive",
             "--yes",
-            timeout=10,
         )
         # Should not fail validation (though may fail due to no output dir)
         # The key thing is it shouldn't reject scheduler[sqlite] as invalid component
@@ -155,7 +148,6 @@ class TestComponentValidation:
             "scheduler[sqlite]",
             "--no-interactive",
             "--yes",
-            timeout=10,
         )
         # Should show auto-added database message (even if command fails for other
         # reasons)
@@ -171,7 +163,6 @@ class TestComponentValidation:
             "--no-interactive",
             "--yes",
             "--force",
-            timeout=10,
         )
         # Should show scheduler backend detection (the actual message is slightly
         # different)
