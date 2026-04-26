@@ -10,6 +10,7 @@ from typing import Any
 import flet as ft
 
 from ..theme import AegisTheme as Theme
+from ..theme import DarkColorPalette
 
 
 class PrimaryText(ft.Text):  # type: ignore[misc]
@@ -48,6 +49,7 @@ class SecondaryText(ft.Text):  # type: ignore[misc]
             "font_family": "Roboto",
             "size": Theme.Typography.BODY,
             "weight": Theme.Typography.WEIGHT_REGULAR,
+            "color": DarkColorPalette.TEXT_SECONDARY_DEFAULT,
             "selectable": True,
         }
         defaults.update(kwargs)

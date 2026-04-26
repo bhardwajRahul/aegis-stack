@@ -24,6 +24,9 @@ def main() -> None:
             host="0.0.0.0",
             port=settings.PORT,
             reload=True,
+            ws_ping_interval=None,
+            ws_ping_timeout=None,
+            timeout_graceful_shutdown=5,
         )
     else:
         # Use the integration layer (handles webserver hooks, service discovery, etc.)
@@ -32,6 +35,8 @@ def main() -> None:
             app,
             host="0.0.0.0",
             port=settings.PORT,
+            ws_ping_interval=None,
+            ws_ping_timeout=None,
         )
 
 

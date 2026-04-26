@@ -369,7 +369,8 @@ class TestRemoveCommandInteractive:
         for component_name in COMPONENTS:
             if component_name not in CORE_COMPONENTS:
                 include_key = f"include_{component_name}"
-                assert answers.get(include_key) is False, (
+                # Use falsy check - key may not exist in old cached projects
+                assert not answers.get(include_key), (
                     f"{component_name} should not be enabled"
                 )
 

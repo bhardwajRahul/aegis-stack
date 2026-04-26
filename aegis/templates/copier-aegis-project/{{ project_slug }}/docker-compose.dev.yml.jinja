@@ -1,0 +1,75 @@
+# Development overrides
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile dev up
+#
+# Adds:
+#   - Code volume mounts for hot-reload
+#   - Debug ports for direct service access
+
+services:
+  webserver:
+    volumes:
+      - .:/code
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+{%- if include_ingress and ingress_tls %}
+    labels:
+      # Dev router (HTTP, localhost — no TLS)
+      - "traefik.http.routers.webserver-dev.rule=Host(`localhost`) || Host(`127.0.0.1`)"
+      - "traefik.http.routers.webserver-dev.entrypoints=web"
+      - "traefik.http.routers.webserver-dev.service=webserver"
+      # Admin paths in dev
+      - "traefik.http.routers.webserver-admin.rule=PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`)"
+      - "traefik.http.routers.webserver-admin.entrypoints=web"
+      - "traefik.http.routers.webserver-admin.service=webserver"
+      - "traefik.http.routers.webserver-admin.middlewares=admin-ipallowlist"
+      - "traefik.http.middlewares.admin-ipallowlist.ipallowlist.sourcerange=${ADMIN_IP_ALLOWLIST:-0.0.0.0/0}"
+{%- endif %}
+{%- if include_scheduler %}
+
+  scheduler:
+    volumes:
+      - .:/code
+{%- endif %}
+{%- if include_worker %}
+
+  worker-load-test:
+    volumes:
+      - .:/code
+
+  worker-system:
+    volumes:
+      - .:/code
+{%- endif %}
+{%- if include_redis %}
+
+  redis:
+    ports:
+      - "6379:6379"
+{%- endif %}
+{%- if database_engine == "postgres" %}
+
+  postgres:
+    ports:
+      - "5432:5432"
+{%- endif %}
+{%- if ollama_mode == "docker" %}
+
+  ollama:
+    ports:
+      - "11434:11434"
+{%- endif %}
+{%- if include_ingress %}
+
+  traefik:
+{%- if ingress_tls %}
+    volumes:
+      - ./traefik/traefik.dev.yml:/etc/traefik/traefik.yml:ro
+{%- endif %}
+    ports:
+      - "80:80"
+      - "8080:8080"  # Dashboard
+{%- endif %}
+
+  test_runner:
+    volumes:
+      - .:/code

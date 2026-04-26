@@ -1,272 +1,681 @@
-# Real-World Examples
+# Auth Examples
 
-Complete examples showing how to use the auth service in applications.
+Copy-paste recipes for every auth feature. All examples assume the app is running at `http://localhost:8000` and was generated with `aegis add-service auth[org]`.
 
-## Basic Authentication Flow
+---
 
-### Project Setup
+## 1. Quick Start
 
-Generate a project with the auth service:
+Generate a project, seed test users, and verify login works end to end.
 
 ```bash
-# Create project with auth
-aegis init my-auth-app --services auth --components database
-cd my-auth-app
+# Generate project with full auth and database
+aegis init my-app --services auth[org] --components database
+cd my-app
 uv sync && source .venv/bin/activate
 
-# Start the application (spins up all infrastructure)
+# Start all services (PostgreSQL + API)
 make serve
 
-# In a new terminal, create test users
-my-auth-app auth create-test-user --email "admin@test.com" --password "admin123"
-my-auth-app auth create-test-users --count 3
+# In a second terminal — create test users
+my-app auth create-test-user --email "admin@example.com" --password "Admin1234!"
+my-app auth create-test-users --count 3 --prefix "user"
+
+# Confirm users exist
+my-app auth list-users
 ```
 
-### Frontend Login Application
-
-A complete Flet application with authentication:
-
-```python
-# app/components/frontend/main.py
-import flet as ft
-import httpx
-from typing import Optional
-
-class AuthApp:
-    def __init__(self, page: ft.Page):
-        self.page = page
-        self.page.title = "Auth Demo"
-        self.current_user: Optional[dict] = None
-        self.token: Optional[str] = None
-
-    async def main(self):
-        """Main application entry point."""
-        await self.check_existing_auth()
-
-        if self.current_user:
-            await self.show_dashboard()
-        else:
-            await self.show_login()
-
-    async def check_existing_auth(self):
-        """Check if user is already logged in."""
-        token = await self.page.client_storage.get_async("auth_token")
-        if token:
-            user = await self.get_current_user(token)
-            if user:
-                self.token = token
-                self.current_user = user
-
-    async def show_login(self):
-        """Show login form."""
-        self.page.clean()
-
-        email_field = ft.TextField(
-            label="Email",
-            width=300,
-            keyboard_type=ft.KeyboardType.EMAIL
-        )
-
-        password_field = ft.TextField(
-            label="Password",
-            width=300,
-            password=True,
-            can_reveal_password=True
-        )
-
-        error_text = ft.Text(color=ft.colors.RED, visible=False)
-
-        async def handle_login(e):
-            if not email_field.value or not password_field.value:
-                error_text.value = "Please fill in all fields"
-                error_text.visible = True
-                self.page.update()
-                return
-
-            token_data = await self.login_user(email_field.value, password_field.value)
-
-            if token_data:
-                self.token = token_data["access_token"]
-                await self.page.client_storage.set_async("auth_token", self.token)
-
-                self.current_user = await self.get_current_user(self.token)
-                await self.show_dashboard()
-            else:
-                error_text.value = "Invalid email or password"
-                error_text.visible = True
-                self.page.update()
-
-        login_button = ft.ElevatedButton(
-            "Login",
-            on_click=handle_login,
-            width=300
-        )
-
-        self.page.add(
-            ft.Container(
-                content=ft.Column([
-                    ft.Text("Login", size=24, weight=ft.FontWeight.BOLD),
-                    email_field,
-                    password_field,
-                    error_text,
-                    login_button,
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                alignment=ft.alignment.center,
-                expand=True
-            )
-        )
-
-    async def show_dashboard(self):
-        """Show user dashboard."""
-        self.page.clean()
-
-        async def handle_logout(e):
-            await self.page.client_storage.remove_async("auth_token")
-            self.token = None
-            self.current_user = None
-            await self.show_login()
-
-        self.page.add(
-            ft.Container(
-                content=ft.Column([
-                    ft.Row([
-                        ft.Text(f"Welcome, {self.current_user['full_name'] or self.current_user['email']}",
-                               size=20),
-                        ft.IconButton(ft.icons.LOGOUT, on_click=handle_logout)
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                    ft.Divider(),
-                    ft.Text(f"User ID: {self.current_user['id']}"),
-                    ft.Text(f"Email: {self.current_user['email']}"),
-                    ft.Text(f"Account Status: {'Active' if self.current_user['is_active'] else 'Inactive'}"),
-                    ft.Text(f"Member Since: {self.current_user['created_at'][:10]}"),
-                ]),
-                padding=20
-            )
-        )
-
-    async def login_user(self, email: str, password: str) -> Optional[dict]:
-        """Call the auth API to login user."""
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(
-                    "http://localhost:8000/api/v1/auth/token",
-                    data={"username": email, "password": password},
-                    timeout=10.0
-                )
-                if response.status_code == 200:
-                    return response.json()
-                return None
-            except httpx.RequestError:
-                return None
-
-    async def get_current_user(self, token: str) -> Optional[dict]:
-        """Get current user from API."""
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(
-                    "http://localhost:8000/api/v1/auth/me",
-                    headers={"Authorization": f"Bearer {token}"},
-                    timeout=10.0
-                )
-                if response.status_code == 200:
-                    return response.json()
-                return None
-            except httpx.RequestError:
-                return None
-
-async def main(page: ft.Page):
-    app = AuthApp(page)
-    await app.main()
-
-if __name__ == "__main__":
-    ft.app(target=main, port=8080)
-```
-
-
-## Testing Examples
-
-### CLI Testing Workflow
+Register via the API and get a token:
 
 ```bash
-# Setup test users
-my-app auth create-test-user --email "test@example.com" --password "test123"
-my-app auth create-test-users --count 5 --prefix "user"
+# Register
+curl -s -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "jane@example.com", "password": "Secret1234!", "full_name": "Jane Doe"}' \
+  | python3 -m json.tool
 
-# Verify users were created
-my-app auth list-users
+# Login
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/token \
+  -d "username=jane@example.com&password=Secret1234!" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
-# Test API endpoints
-curl -X POST http://localhost:8000/api/v1/auth/token \
-  -d "username=test@example.com&password=test12345"
+echo "Token: $TOKEN"
 
-# Use token for protected routes
-TOKEN="your_token_here"
-curl -X GET http://localhost:8000/api/v1/auth/me \
-  -H "Authorization: Bearer $TOKEN"
+# Verify token works
+curl -s http://localhost:8000/api/v1/auth/me \
+  -H "Authorization: Bearer $TOKEN" \
+  | python3 -m json.tool
 ```
 
-### Automated API Testing
+Expected `/me` response:
+
+```json
+{
+    "email": "jane@example.com",
+    "full_name": "Jane Doe",
+    "is_active": true,
+    "is_verified": false,
+    "role": "user",
+    "id": 1,
+    "last_login": "2026-03-30T12:00:00",
+    "created_at": "2026-03-30T12:00:00",
+    "updated_at": null
+}
+```
+
+---
+
+## 2. Password Reset Flow
+
+Two-step flow: request a token, then confirm with the new password.
+
+**Step 1 — request the reset token:**
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/auth/password-reset/request \
+  -H "Content-Type: application/json" \
+  -d '{"email": "jane@example.com"}' \
+  | python3 -m json.tool
+```
+
+```json
+{
+    "detail": "If an account exists, a reset token has been created"
+}
+```
+
+The response is always 200 regardless of whether the email exists, to prevent user enumeration.
+
+**Step 2 — retrieve the token from the database:**
+
+In production you would email this token. During development, query it directly:
+
+```bash
+# Connect to the local Postgres instance
+psql postgresql://postgres:postgres@localhost:5432/my-app \
+  -c "SELECT token, created_at, used FROM password_reset_token ORDER BY created_at DESC LIMIT 1;"
+```
+
+```
+               token                |       created_at       | used
+------------------------------------+------------------------+------
+ Xk9mP2qR7vN4wL1jC8dE5fA3bH6oK0nT | 2026-03-30 12:01:00    | f
+```
+
+**Step 3 — confirm the reset:**
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/auth/password-reset/confirm \
+  -H "Content-Type: application/json" \
+  -d '{"token": "Xk9mP2qR7vN4wL1jC8dE5fA3bH6oK0nT", "new_password": "NewSecret5678!"}' \
+  | python3 -m json.tool
+```
+
+```json
+{
+    "detail": "Password has been reset successfully"
+}
+```
+
+**Step 4 — verify login with the new password:**
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/auth/token \
+  -d "username=jane@example.com&password=NewSecret5678!" \
+  | python3 -m json.tool
+```
+
+```json
+{
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "token_type": "bearer"
+}
+```
+
+!!! note
+    The token is single-use. A second confirm with the same token returns `400 Bad Request: Invalid or expired token`.
+
+---
+
+## 3. Email Verification Flow
+
+A verification token is created automatically on registration. Tokens expire after 24 hours (configurable via `EMAIL_VERIFICATION_EXPIRE_HOURS`).
+
+**Step 1 — register (token created automatically):**
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "bob@example.com", "password": "Secret1234!", "full_name": "Bob Smith"}' \
+  | python3 -m json.tool
+```
+
+```json
+{
+    "email": "bob@example.com",
+    "full_name": "Bob Smith",
+    "is_active": true,
+    "is_verified": false,
+    "role": "user",
+    "id": 2,
+    ...
+}
+```
+
+Note `"is_verified": false` — the account works immediately but is unverified.
+
+**Step 2 — retrieve the verification token from the database:**
+
+```bash
+psql postgresql://postgres:postgres@localhost:5432/my-app \
+  -c "SELECT token, created_at, used FROM email_verification_token ORDER BY created_at DESC LIMIT 1;"
+```
+
+```
+               token                |       created_at       | used
+------------------------------------+------------------------+------
+ mQ3sW7xZ2kR9vN5pL8tA1cE4bD6oH0jY | 2026-03-30 12:05:00    | f
+```
+
+**Step 3 — verify the email:**
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/auth/verify-email \
+  -H "Content-Type: application/json" \
+  -d '{"token": "mQ3sW7xZ2kR9vN5pL8tA1cE4bD6oH0jY"}' \
+  | python3 -m json.tool
+```
+
+```json
+{
+    "detail": "Email has been verified successfully"
+}
+```
+
+**Step 4 — confirm `is_verified` is now true:**
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/token \
+  -d "username=bob@example.com&password=Secret1234!" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -s http://localhost:8000/api/v1/auth/me \
+  -H "Authorization: Bearer $TOKEN" \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print('is_verified:', d['is_verified'])"
+```
+
+```
+is_verified: True
+```
+
+---
+
+## 4. Rate Limiting
+
+The login, register, and password reset endpoints use a sliding window rate limiter. Exceeding the limit returns `429 Too Many Requests` with a `Retry-After` header.
+
+**Default limits** (configurable in `.env`):
+
+| Endpoint | Limit | Window |
+|----------|:-----:|:------:|
+| `POST /auth/token` | 5 requests | 60 seconds |
+| `POST /auth/register` | 3 requests | 60 seconds |
+| `POST /auth/password-reset/request` | 3 requests | 60 seconds |
+
+**Trigger the login rate limit:**
+
+```bash
+for i in {1..6}; do
+  echo "Attempt $i:"
+  curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8000/api/v1/auth/token \
+    -d "username=nobody@example.com&password=wrong"
+  echo
+done
+```
+
+```
+Attempt 1: 401
+Attempt 2: 401
+Attempt 3: 401
+Attempt 4: 401
+Attempt 5: 401
+Attempt 6: 429
+```
+
+**Full 429 response with headers:**
+
+```bash
+curl -v -X POST http://localhost:8000/api/v1/auth/token \
+  -d "username=nobody@example.com&password=wrong" 2>&1 | grep -E "HTTP|Retry-After|detail"
+```
+
+```
+< HTTP/1.1 429 Too Many Requests
+< Retry-After: 60
+{"detail":"Too many requests. Please try again later."}
+```
+
+**Adjust limits in `.env`:**
+
+```bash
+RATE_LIMIT_LOGIN_MAX=10
+RATE_LIMIT_LOGIN_WINDOW=60
+RATE_LIMIT_REGISTER_MAX=5
+RATE_LIMIT_REGISTER_WINDOW=60
+```
+
+---
+
+## 5. Account Lockout
+
+Accounts lock after 5 consecutive failed login attempts (configurable). The lockout lasts 15 minutes by default, then auto-clears on the next login attempt.
+
+**Trigger lockout with bad passwords:**
+
+```bash
+# First create a real account
+curl -s -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com", "password": "Correct1234!"}' > /dev/null
+
+# Submit 5 wrong passwords
+for i in {1..5}; do
+  echo "Failed attempt $i:"
+  curl -s -X POST http://localhost:8000/api/v1/auth/token \
+    -d "username=alice@example.com&password=WrongPass" \
+    | python3 -c "import sys,json; d=json.load(sys.stdin); print(' ', d.get('detail','ok'))"
+done
+```
+
+```
+Failed attempt 1:  Incorrect email or password
+Failed attempt 2:  Incorrect email or password
+Failed attempt 3:  Incorrect email or password
+Failed attempt 4:  Incorrect email or password
+Failed attempt 5:  Incorrect email or password
+```
+
+**Attempt 6 — even with the correct password, account is now locked:**
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/auth/token \
+  -d "username=alice@example.com&password=Correct1234!" \
+  | python3 -m json.tool
+```
+
+```json
+{
+    "detail": "Account temporarily locked due to too many failed login attempts. Please try again later."
+}
+```
+
+HTTP status is `403 Forbidden`.
+
+**Verify lockout in database:**
+
+```bash
+psql postgresql://postgres:postgres@localhost:5432/my-app \
+  -c "SELECT email, failed_login_attempts, locked_until FROM \"user\" WHERE email = 'alice@example.com';"
+```
+
+```
+       email          | failed_login_attempts |       locked_until
+----------------------+-----------------------+---------------------------
+ alice@example.com   |                     5 | 2026-03-30 12:20:00
+```
+
+**Auto-unlock:** After 15 minutes, the next login attempt clears `locked_until` automatically — no manual intervention needed.
+
+**Adjust thresholds in `.env`:**
+
+```bash
+ACCOUNT_LOCKOUT_ATTEMPTS=5
+ACCOUNT_LOCKOUT_MINUTES=15
+```
+
+---
+
+## 6. Token Revocation / Logout
+
+Logging out adds the token's JTI to an in-memory blacklist. Subsequent requests with the same token return `401 Unauthorized`.
+
+**Login and capture the token:**
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/token \
+  -d "username=jane@example.com&password=NewSecret5678!" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+```
+
+**Use the token (should return 200):**
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/api/v1/auth/me \
+  -H "Authorization: Bearer $TOKEN"
+# 200
+```
+
+**Logout (revoke the token):**
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/auth/logout \
+  -H "Authorization: Bearer $TOKEN" \
+  | python3 -m json.tool
+```
+
+```json
+{
+    "detail": "Logged out"
+}
+```
+
+**Attempt to use the revoked token (should return 401):**
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/api/v1/auth/me \
+  -H "Authorization: Bearer $TOKEN"
+# 401
+```
+
+!!! note
+    The blacklist is in-memory. Restarting the server clears it. Tokens issued before the restart remain technically valid until their `ACCESS_TOKEN_EXPIRE_MINUTES` window closes. For persistent revocation across restarts, store the blacklist in Redis.
+
+---
+
+## 7. Organization Management
+
+Requires `auth[org]` level. Demonstrates creating an org, adding members, updating roles, and deleting.
+
+**Create an admin user and login:**
+
+```bash
+# Promote jane to admin first
+ADMIN_TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/token \
+  -d "username=admin@example.com&password=Admin1234!" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+```
+
+**Create an organization:**
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/orgs \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Acme Corp", "slug": "acme-corp", "description": "Main organization"}' \
+  | python3 -m json.tool
+```
+
+```json
+{
+    "name": "Acme Corp",
+    "slug": "acme-corp",
+    "description": "Main organization",
+    "is_active": true,
+    "id": 1,
+    "created_at": "2026-03-30T12:30:00",
+    "updated_at": null
+}
+```
+
+The creator is automatically assigned the `owner` role.
+
+**Add a member directly by user ID:**
+
+```bash
+curl -s -X POST "http://localhost:8000/api/v1/orgs/1/members?user_id=2&role=member" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  | python3 -m json.tool
+```
+
+```json
+{
+    "id": 1,
+    "organization_id": 1,
+    "user_id": 2,
+    "role": "member",
+    "joined_at": "2026-03-30T12:31:00"
+}
+```
+
+**Bulk add members:**
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/orgs/1/members/bulk \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"user_ids": [3, 4, 5], "role": "member"}' \
+  | python3 -m json.tool
+```
+
+**Update a member's role:**
+
+```bash
+curl -s -X PATCH "http://localhost:8000/api/v1/orgs/1/members/2?role=admin" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  | python3 -m json.tool
+```
+
+**List members with full user details:**
+
+```bash
+curl -s http://localhost:8000/api/v1/orgs/1/members/details \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  | python3 -m json.tool
+```
+
+```json
+[
+    {
+        "user_id": 1,
+        "email": "admin@example.com",
+        "full_name": null,
+        "role": "owner",
+        "joined_at": "2026-03-30T12:30:00"
+    },
+    {
+        "user_id": 2,
+        "email": "bob@example.com",
+        "full_name": "Bob Smith",
+        "role": "admin",
+        "joined_at": "2026-03-30T12:31:00"
+    }
+]
+```
+
+**Transfer ownership to another member:**
+
+```bash
+# body.user_id is the new owner's user ID
+curl -s -X POST http://localhost:8000/api/v1/orgs/1/transfer-ownership \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": 2}' \
+  | python3 -m json.tool
+```
+
+```json
+{
+    "detail": "Ownership transferred"
+}
+```
+
+Only the current `owner` can call this endpoint.
+
+---
+
+## 8. Invite Flow
+
+Two scenarios: inviting an existing user (added immediately) and inviting a new user (pending until they register).
+
+### Invite an Existing User
+
+The user is added to the org instantly — no token acceptance required.
+
+```bash
+# bob@example.com already has an account (user_id: 2)
+curl -s -X POST http://localhost:8000/api/v1/orgs/1/invites \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "bob@example.com", "role": "member"}' \
+  | python3 -m json.tool
+```
+
+```json
+{
+    "id": 1,
+    "organization_id": 1,
+    "email": "bob@example.com",
+    "role": "member",
+    "status": "accepted",
+    "token": "...",
+    "created_at": "2026-03-30T12:35:00"
+}
+```
+
+Note `"status": "accepted"` — membership was created immediately.
+
+### Invite a New User (Pending)
+
+The user doesn't have an account yet. A pending invite is stored and resolved automatically when they register.
+
+**Step 1 — create the pending invite:**
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/orgs/1/invites \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "newcomer@example.com", "role": "member"}' \
+  | python3 -m json.tool
+```
+
+```json
+{
+    "id": 2,
+    "organization_id": 1,
+    "email": "newcomer@example.com",
+    "role": "member",
+    "status": "pending",
+    "token": "eR7tY2uI9oP4aS1dF6gH3jK8lZ5xCvBn",
+    "created_at": "2026-03-30T12:36:00"
+}
+```
+
+**Step 2 — check pending invites:**
+
+```bash
+curl -s http://localhost:8000/api/v1/orgs/1/invites \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  | python3 -m json.tool
+```
+
+**Step 3a — newcomer registers (auto-joins the org):**
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "newcomer@example.com", "password": "Welcome1234!"}' \
+  | python3 -m json.tool
+```
+
+The `accept_pending_invites` hook fires automatically during registration. The invite status changes to `accepted` and the user is a member immediately.
+
+**Step 3b (alternative) — accept invite explicitly by token:**
+
+Use this when `INVITE_ACCEPTANCE_MODE=token` or when you want a registered user to explicitly accept.
+
+```bash
+NEWCOMER_TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/token \
+  -d "username=newcomer@example.com&password=Welcome1234!" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -s -X POST http://localhost:8000/api/v1/auth/accept-invite \
+  -H "Authorization: Bearer $NEWCOMER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"token": "eR7tY2uI9oP4aS1dF6gH3jK8lZ5xCvBn"}' \
+  | python3 -m json.tool
+```
+
+```json
+{
+    "id": 2,
+    "organization_id": 1,
+    "email": "newcomer@example.com",
+    "role": "member",
+    "status": "accepted",
+    "token": "eR7tY2uI9oP4aS1dF6gH3jK8lZ5xCvBn",
+    "created_at": "2026-03-30T12:36:00"
+}
+```
+
+!!! note
+    In the default `email` mode, the authenticated user's email must match the invite email. In `token` mode, any authenticated user can accept any valid token.
+
+---
+
+## 9. Audit Logging
+
+Every significant auth action emits a structured JSON log event. Events flow through Python's standard `logging` module and appear in the application logs.
+
+**Example log output:**
+
+```
+INFO     audit:audit.py:18 {"event_type": "auth.user_registered", "actor_email": "jane@example.com", "target_type": "user", "target_id": 1, "timestamp": "2026-03-30T12:00:00"}
+INFO     audit:audit.py:18 {"event_type": "auth.login_success", "actor_email": "jane@example.com", "actor_id": 1, "ip_address": "127.0.0.1", "timestamp": "2026-03-30T12:00:05"}
+INFO     audit:audit.py:18 {"event_type": "auth.logout", "actor_id": 1, "timestamp": "2026-03-30T12:45:00"}
+INFO     audit:audit.py:18 {"event_type": "auth.account_locked", "actor_email": "alice@example.com", "timestamp": "2026-03-30T13:00:00"}
+INFO     audit:audit.py:18 {"event_type": "auth.org_created", "actor_id": 1, "target_type": "org", "target_id": 1, "timestamp": "2026-03-30T12:30:00"}
+INFO     audit:audit.py:18 {"event_type": "auth.member_added", "actor_id": 1, "org_id": 1, "target_type": "user", "target_id": 2, "timestamp": "2026-03-30T12:31:00"}
+INFO     audit:audit.py:18 {"event_type": "auth.invite_created", "actor_id": 1, "org_id": 1, "detail": "newcomer@example.com", "timestamp": "2026-03-30T12:36:00"}
+```
+
+**Tail logs during development:**
+
+```bash
+# When running via make serve, logs appear in the docker-compose output.
+# Filter for audit events only:
+docker compose logs -f backend | grep '"event_type"'
+```
+
+**Emit custom audit events from your own code:**
 
 ```python
-# tests/integration/test_auth_flow.py
-import pytest
-from httpx import AsyncClient
+from app.core.audit import AuditEmitter
 
-@pytest.mark.asyncio
-async def test_complete_auth_flow(async_client: AsyncClient):
-    """Test complete authentication flow."""
-
-    # Register new user
-    user_data = {
-        "email": "test@example.com",
-        "full_name": "Test User",
-        "password": "testpassword123"
-    }
-
-    response = await async_client.post("/api/v1/auth/register", json=user_data)
-    assert response.status_code == 200
-    user = response.json()
-    assert user["email"] == "test@example.com"
-
-    # Login with credentials
-    login_data = {
-        "username": "test@example.com",
-        "password": "testpassword123"
-    }
-    response = await async_client.post("/api/v1/auth/token", data=login_data)
-    assert response.status_code == 200
-    token_data = response.json()
-    token = token_data["access_token"]
-
-    # Access protected endpoint
-    headers = {"Authorization": f"Bearer {token}"}
-    response = await async_client.get("/api/v1/auth/me", headers=headers)
-    assert response.status_code == 200
-    profile = response.json()
-    assert profile["email"] == "test@example.com"
-
-@pytest.mark.asyncio
-async def test_invalid_credentials(async_client: AsyncClient):
-    """Test authentication with invalid credentials."""
-
-    # Try login with non-existent user
-    login_data = {
-        "username": "nonexistent@example.com",
-        "password": "wrongpassword"
-    }
-    response = await async_client.post("/api/v1/auth/token", data=login_data)
-    assert response.status_code == 401
-
-    # Try accessing protected endpoint without token
-    response = await async_client.get("/api/v1/auth/me")
-    assert response.status_code == 401
+audit = AuditEmitter()
+await audit.emit("myfeature.action_taken", actor_id=user.id, detail="extra context")
 ```
 
+**Full event reference:**
+
+| Event | Fired When |
+|-------|------------|
+| `auth.user_registered` | New user registers |
+| `auth.login_success` | Successful login |
+| `auth.login_failed` | Bad credentials supplied |
+| `auth.login_locked` | Login attempt on a locked account |
+| `auth.logout` | Token revoked via logout |
+| `auth.password_reset_requested` | Reset token created |
+| `auth.password_reset_confirmed` | Password changed via reset token |
+| `auth.email_verified` | Email verification token accepted |
+| `auth.user_updated` | User profile updated |
+| `auth.user_activated` | User re-activated by admin |
+| `auth.user_deactivated` | User deactivated by admin |
+| `auth.user_deleted` | User permanently deleted |
+| `auth.org_created` | Organization created |
+| `auth.org_updated` | Organization updated |
+| `auth.org_deleted` | Organization deleted |
+| `auth.org_ownership_transferred` | Ownership transferred to new owner |
+| `auth.member_added` | Member added to org |
+| `auth.member_removed` | Member removed from org |
+| `auth.member_role_updated` | Member's org role changed |
+| `auth.members_bulk_added` | Multiple members added at once |
+| `auth.invite_created` | Invite sent to email |
+| `auth.invite_accepted` | Invite accepted by user |
 
 ---
 
 **Next Steps:**
 
+- **[Auth Levels](levels.md)** - Feature comparison across Basic / RBAC / Org
 - **[API Reference](api.md)** - Complete endpoint documentation
-- **[Integration Guide](integration.md)** - Frontend/backend integration patterns
-- **[CLI Commands](cli.md)** - User management from command line
+- **[CLI Commands](cli.md)** - User management from the command line

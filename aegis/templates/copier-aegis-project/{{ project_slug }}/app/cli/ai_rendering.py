@@ -5,9 +5,8 @@ Provides consistent, beautiful output formatting across streaming
 and non-streaming modes using marko markdown parser with terminal rendering.
 """
 
-import re
-
 from app.cli.marko_terminal_renderer import TerminalRenderer
+from app.i18n import t
 from marko import Markdown
 from marko.ext.gfm import GFM
 from rich.console import Console
@@ -19,6 +18,10 @@ class StreamingMarkdownRenderer:
 
     Processes markdown content as it streams in, using marko to parse complete
     blocks and render them with beautiful ANSI styling for terminal output.
+
+    Uses unified line-buffering for all content, making it compatible with both
+    PydanticAI (word-aligned tokens) and LangChain (subword/character-level tokens).
+    Content is accumulated until newlines, then rendered as complete lines.
     """
 
     def __init__(self, console: Console):
@@ -31,94 +34,23 @@ class StreamingMarkdownRenderer:
         self.console = console
         self.buffer = ""
         self.in_code_block = False
-        self.code_buffer = []
+        self.code_buffer: list[str] = []
         self.code_lang = ""
         self.markdown = Markdown(extensions=[GFM], renderer=TerminalRenderer)
 
     def add_delta(self, delta: str) -> None:
         """
-        Process streaming delta and display formatted content with smart buffering.
+        Process streaming delta using unified line-buffering.
 
-        Uses line-buffering for markdown structures (code blocks, lists, tables)
-        and word-streaming for plain conversational text for smooth output.
+        Accumulates content until newlines, then renders complete lines.
+        This simple approach works correctly with any token boundary pattern,
+        whether word-aligned (PydanticAI) or character-level (LangChain).
 
         Args:
             delta: New text content to process
         """
-        # Add new content to buffer
         self.buffer += delta
-
-        # Smart buffering based on content type
-        if self.in_code_block or self._is_markdown_structure():
-            # Use line-buffering for markdown structures (safe, correct formatting)
-            self._process_complete_lines()
-        else:
-            # Use word-streaming for plain text (smooth, responsive)
-            self._stream_plain_text()
-
-    def _is_markdown_structure(self) -> bool:
-        """
-        Detect if buffer contains markdown structures requiring line-buffering.
-
-        Returns:
-            True if buffer contains markdown patterns, False for plain text
-        """
-        if not self.buffer.strip():
-            return False
-
-        # Get the current line being built (text after last newline)
-        current_line = self.buffer.split("\n")[-1].strip()
-
-        # Markdown patterns that need careful line-by-line handling
-        markdown_indicators = [
-            "```",  # Code blocks (critical!)
-            "#",  # Headers
-            "- ",  # Unordered lists
-            "* ",  # Unordered lists (alternate)
-            "+ ",  # Unordered lists (alternate)
-            "> ",  # Blockquotes
-            "|",  # Tables
-        ]
-
-        # Check if line starts with markdown
-        for indicator in markdown_indicators:
-            if current_line.startswith(indicator):
-                return True
-
-        # Check for numbered lists using regex (handles any number)
-        # Check for inline formatting that might break across words
-        # (bold/italic can be streamed word-by-word safely)
-        return bool(re.match(r"^\d+\. ", current_line))
-
-    def _stream_plain_text(self) -> None:
-        """
-        Stream plain text word-by-word for smooth, responsive output.
-
-        Renders complete words immediately while keeping incomplete words
-        in buffer. Falls back to line-buffering when newlines are encountered.
-        """
-        # If we hit a newline, process complete lines normally
-        if "\n" in self.buffer:
-            self._process_complete_lines()
-            return
-
-        # Word-level streaming for smooth plain text output
-        # Split on spaces to identify complete words
-        if " " in self.buffer:
-            # Split and find word boundaries
-            parts = self.buffer.rsplit(" ", 1)  # Split from right to keep last word
-
-            if len(parts) == 2:
-                complete_text, incomplete_word = parts
-
-                # Render complete text with trailing space
-                if complete_text:
-                    # For plain text, just write directly (no markdown parsing needed)
-                    self.console.file.write(complete_text + " ")
-                    self.console.file.flush()
-
-                # Keep incomplete word in buffer
-                self.buffer = incomplete_word
+        self._process_complete_lines()
 
     def _process_complete_lines(self) -> None:
         """Process any complete lines in the buffer."""
@@ -200,21 +132,20 @@ class StreamingMarkdownRenderer:
 
 def render_ai_header(console: Console, inline: bool = True) -> None:
     """
-    Render the AI response header.
+    Render the Illiana AI response header.
 
     Args:
         console: Rich console instance
-        inline: If True, use inline style (>), else use separate line style
+        inline: If True, use inline style, else use separate line style
 
     Examples:
-        >>> render_ai_header(console, inline=True)  # Outputs: "> "
-        >>> render_ai_header(console, inline=False) # Outputs: "> Response:"
+        >>> render_ai_header(console, inline=True)  # Outputs: "Illiana: "
+        >>> render_ai_header(console, inline=False) # Outputs: "Illiana:"
     """
     if inline:
-        console.print("> ", style="bright_blue", end="")
+        console.print(t("ai.header_inline"), style="bright_magenta", end="")
     else:
-        console.print("> ", style="bright_blue", end="")
-        console.print("Response:", style="bright_blue bold")
+        console.print(t("ai.header"), style="bright_magenta bold")
 
 
 def render_markdown_response(console: Console, content: str) -> None:
@@ -233,7 +164,7 @@ def render_markdown_response(console: Console, content: str) -> None:
         >>> render_markdown_response(console, "```python\\nprint('hi')\\n```")
     """
     if not content or not content.strip():
-        console.print("(No response content)", style="dim italic")
+        console.print(t("ai.no_response_content"), style="dim italic")
         return
 
     # Clean up excessive whitespace from AI responses
@@ -312,11 +243,13 @@ def render_conversation_metadata(
         ... )
     """
     console.print()  # Blank line for spacing
-    console.print(f"Conversation: {conversation_id}", style="dim")
+    console.print(f"{t('ai.conversation_label')} {conversation_id}", style="dim")
     if message_count:
-        console.print(f"Messages: {message_count}", style="dim")
+        console.print(f"{t('ai.messages_label')} {message_count}", style="dim")
     if response_time:
-        console.print(f"Response time: {response_time:.1f}ms", style="dim")
+        console.print(
+            f"{t('ai.response_time_label')} {response_time:.1f}ms", style="dim"
+        )
 
 
 def render_error_message(
@@ -334,9 +267,9 @@ def render_error_message(
         >>> render_error_message(console, "Connection failed")
         >>> render_error_message(console, "API key invalid", "Check your .env file")
     """
-    console.print(f"Error: {error}", style="red")
+    console.print(f"{t('shared.error')} {error}", style="red")
     if suggestion:
-        console.print(f"Tip: {suggestion}", style="yellow dim")
+        console.print(f"{t('ai.tip_label')} {suggestion}", style="yellow dim")
 
 
 def render_thinking_spinner(console: Console) -> tuple:
@@ -355,6 +288,6 @@ def render_thinking_spinner(console: Console) -> tuple:
     from rich.live import Live
     from rich.spinner import Spinner
 
-    spinner = Spinner("dots", text="Thinking...", style="bright_blue")
+    spinner = Spinner("dots", text=t("ai.thinking"), style="bright_blue")
     live = Live(spinner, console=console, refresh_per_second=12)
     return spinner, live

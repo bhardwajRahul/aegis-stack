@@ -11,6 +11,7 @@ from aegis.config.defaults import (
     SUPPORTED_PYTHON_VERSIONS,
     _generate_supported_versions,
     _parse_python_version_bounds,
+    version_to_git_tag,
 )
 
 
@@ -21,9 +22,9 @@ class TestParsePythonVersionBounds:
         """Test parsing actual aegis-stack pyproject.toml."""
         min_ver, max_ver = _parse_python_version_bounds()
 
-        # Should parse requires-python = ">=3.11,<3.14"
+        # Should parse requires-python = ">=3.11,<3.15"
         assert min_ver == "3.11"
-        assert max_ver == "3.13"  # <3.14 → max is 3.13
+        assert max_ver == "3.14"  # <3.15 → max is 3.14
 
     def test_parse_with_mock_pyproject(self, tmp_path: Path) -> None:
         """Test parsing with a mock pyproject.toml file."""
@@ -63,7 +64,7 @@ requires-python = ">=3.12,<3.15"
         assert isinstance(min_ver, str)
         assert isinstance(max_ver, str)
         assert min_ver == "3.11"
-        assert max_ver == "3.13"
+        assert max_ver == "3.14"
 
     def test_parse_handles_no_upper_bound(self) -> None:
         """Test parsing when there's no upper bound specified."""
@@ -94,15 +95,15 @@ class TestGenerateSupportedVersions:
 
     def test_generate_different_major_versions_fallback(self) -> None:
         """Test fallback when major versions differ (e.g., 3.x → 4.x)."""
-        versions = _generate_supported_versions("3.13", "4.0")
+        versions = _generate_supported_versions("3.14", "4.0")
         # Should fallback to hardcoded list
-        assert versions == ["3.11", "3.12", "3.13"]
+        assert versions == ["3.11", "3.12", "3.13", "3.14"]
 
     def test_generate_handles_invalid_format(self) -> None:
         """Test graceful handling of invalid version format."""
         versions = _generate_supported_versions("invalid", "also-invalid")
         # Should fallback to hardcoded list
-        assert versions == ["3.11", "3.12", "3.13"]
+        assert versions == ["3.11", "3.12", "3.13", "3.14"]
 
 
 class TestConfigurationConstants:
@@ -120,9 +121,13 @@ class TestConfigurationConstants:
         assert parts[1].isdigit()
 
     def test_default_python_version_current_value(self) -> None:
-        """Test DEFAULT_PYTHON_VERSION equals expected value."""
-        # Based on current pyproject.toml: requires-python = ">=3.11,<3.14"
-        # Should be max supported version: 3.13
+        """Test DEFAULT_PYTHON_VERSION equals expected value.
+
+        Hardcoded to 3.13 even though pyproject.toml supports up to 3.14
+        — see ``aegis/config/defaults.py`` for why (third-party 3.14
+        ecosystem gaps in openai/requests). When 3.14 is widely
+        compatible we can revert to ``_max_version``.
+        """
         assert DEFAULT_PYTHON_VERSION == "3.13"
 
     def test_supported_python_versions_is_list(self) -> None:
@@ -139,9 +144,9 @@ class TestConfigurationConstants:
 
     def test_supported_python_versions_current_value(self) -> None:
         """Test SUPPORTED_PYTHON_VERSIONS equals expected value."""
-        # Based on current pyproject.toml: requires-python = ">=3.11,<3.14"
-        # Should be ["3.11", "3.12", "3.13"]
-        assert SUPPORTED_PYTHON_VERSIONS == ["3.11", "3.12", "3.13"]
+        # Based on current pyproject.toml: requires-python = ">=3.11,<3.15"
+        # Should be ["3.11", "3.12", "3.13", "3.14"]
+        assert SUPPORTED_PYTHON_VERSIONS == ["3.11", "3.12", "3.13", "3.14"]
 
     def test_default_version_in_supported_versions(self) -> None:
         """Test DEFAULT_PYTHON_VERSION is in SUPPORTED_PYTHON_VERSIONS."""
@@ -154,6 +159,38 @@ class TestConfigurationConstants:
             tuple(map(int, v.split("."))) for v in SUPPORTED_PYTHON_VERSIONS
         ]
         assert versions_as_tuples == sorted(versions_as_tuples)
+
+
+class TestVersionToGitTag:
+    """Test version_to_git_tag() function."""
+
+    def test_rc_version(self) -> None:
+        """Test release candidate versions get dash inserted."""
+        assert version_to_git_tag("0.6.0rc1") == "v0.6.0-rc1"
+        assert version_to_git_tag("0.6.0rc2") == "v0.6.0-rc2"
+        assert version_to_git_tag("1.0.0rc10") == "v1.0.0-rc10"
+
+    def test_stable_version(self) -> None:
+        """Test stable versions are unchanged (just prefixed with v)."""
+        assert version_to_git_tag("0.5.4") == "v0.5.4"
+        assert version_to_git_tag("1.0.0") == "v1.0.0"
+
+    def test_alpha_version(self) -> None:
+        """Test alpha pre-release versions."""
+        assert version_to_git_tag("0.7.0alpha1") == "v0.7.0-alpha1"
+
+    def test_beta_version(self) -> None:
+        """Test beta pre-release versions."""
+        assert version_to_git_tag("0.7.0beta2") == "v0.7.0-beta2"
+
+    def test_dev_version(self) -> None:
+        """Test dev pre-release versions."""
+        assert version_to_git_tag("0.8.0dev1") == "v0.8.0-dev1"
+
+    def test_already_has_dash(self) -> None:
+        """Test versions that already contain a dash don't get double-dashed."""
+        # If someone passes "0.6.0-rc1" it should become "v0.6.0-rc1", not "v0.6.0--rc1"
+        assert version_to_git_tag("0.6.0-rc1") == "v0.6.0-rc1"
 
 
 class TestIntegration:
@@ -170,16 +207,24 @@ class TestIntegration:
         # Verify consistency
         assert min_ver in versions  # Min version is supported
         assert max_ver in versions  # Max version is supported
-        assert max_ver == DEFAULT_PYTHON_VERSION  # Default is max
+        # ``DEFAULT_PYTHON_VERSION`` is hardcoded (currently 3.13) rather
+        # than auto-derived from ``max_ver`` (currently 3.14), so it
+        # need not equal ``max_ver`` — but it MUST be in the supported
+        # set. See ``aegis/config/defaults.py`` for why.
+        assert DEFAULT_PYTHON_VERSION in versions
         assert versions == SUPPORTED_PYTHON_VERSIONS  # List matches generated
 
     def test_single_source_of_truth(self) -> None:
-        """Test that pyproject.toml is the single source of truth."""
-        # If we change pyproject.toml (in the future), these should change too
-        # This test verifies the parsing happens and values are derived
+        """Test that pyproject.toml is the single source of truth for SUPPORTED_PYTHON_VERSIONS.
+
+        ``DEFAULT_PYTHON_VERSION`` is intentionally hardcoded (not
+        derived) so we can keep generating projects on a stable Python
+        even when pyproject's upper bound advances faster than the
+        third-party ecosystem.
+        """
         min_ver, max_ver = _parse_python_version_bounds()
 
-        # These should be derived from parsing, not hardcoded
-        assert max_ver == DEFAULT_PYTHON_VERSION
+        # Min and max are derived from pyproject; default is independent.
         assert min_ver in SUPPORTED_PYTHON_VERSIONS
         assert max_ver in SUPPORTED_PYTHON_VERSIONS
+        assert DEFAULT_PYTHON_VERSION in SUPPORTED_PYTHON_VERSIONS

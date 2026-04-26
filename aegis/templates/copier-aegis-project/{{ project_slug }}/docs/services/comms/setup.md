@@ -89,7 +89,7 @@ After setting up your environment variables, verify everything works:
 
 ```bash
 # Check all services status
-{{ cookiecutter.project_slug }} comms status
+{{ project_slug }} comms status
 
 # Expected output:
 # Communications Service Status
@@ -119,7 +119,7 @@ After setting up your environment variables, verify everything works:
 ### Test Email
 
 ```bash
-{{ cookiecutter.project_slug }} comms email send your-email@example.com \
+{{ project_slug }} comms email send your-email@example.com \
   --subject "Test from Aegis Stack" \
   --text "This is a test email!"
 ```
@@ -128,7 +128,7 @@ After setting up your environment variables, verify everything works:
 
 ```bash
 # Note: Trial accounts can only send to verified numbers
-{{ cookiecutter.project_slug }} comms sms send "+1YOUR_VERIFIED_NUMBER" "Test from Aegis Stack"
+{{ project_slug }} comms sms send "+1YOUR_VERIFIED_NUMBER" "Test from Aegis Stack"
 ```
 
 ## Troubleshooting

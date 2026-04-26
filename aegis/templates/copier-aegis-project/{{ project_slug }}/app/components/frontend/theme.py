@@ -13,21 +13,32 @@ from app.components.frontend.styles import FontConfig
 
 @dataclass(frozen=True)
 class DarkColorPalette:
-    """Dark mode color palette for modern, sleek UI."""
+    """Dark mode color palette - official design system colors."""
 
-    BG_PRIMARY: str = "#000000"  # Pure black
-    BG_SECONDARY: str = "#1A1A1A"
-    BG_SELECTED: str = "#2E2E2E"
-    BG_HOVER: str = "#2A2A2A"
-    TEXT_PRIMARY_DEFAULT: str = "#E5E5E5"
-    TEXT_SECONDARY_DEFAULT: str = "#B0B0B0"
-    ACCENT: str = "#1A73E8"
-    ACCENT_SUCCESS: str = "#52D869"
-    ACCENT_STOP: str = "#E94E77"
-    ERROR: str = "#FF6B6B"
-    BORDER_PRIMARY: str = "#444444"
-    DISABLED_COLOR: str = "#7F7F7F"
-    FOCUS_COLOR: str = "#FF6347"
+    # Core colors
+    BG_PRIMARY: str = "#090B0D"  # Main page background
+    BG_SECONDARY: str = "#111418"  # Card backgrounds
+    BG_SELECTED: str = "#212530"  # Secondary/selected states
+    BG_HOVER: str = "#1A1D24"  # Muted/hover backgrounds
+
+    # Text colors
+    TEXT_PRIMARY_DEFAULT: str = "#EEF1F4"  # Main text (foreground)
+    TEXT_SECONDARY_DEFAULT: str = "#7E8A9A"  # Muted/placeholder text
+
+    # Brand colors
+    ACCENT: str = "#17CCBF"  # Primary teal/cyan
+    ACCENT_SECONDARY: str = "#248F87"  # Darker teal (secondary accent)
+
+    # Semantic colors
+    ACCENT_SUCCESS: str = "#22C55E"  # Success green
+    ACCENT_WARNING: str = "#F5A623"  # Warning orange/amber
+    ACCENT_STOP: str = "#E23E3E"  # Destructive/error red
+    ERROR: str = "#E23E3E"  # Alias for destructive
+
+    # UI elements
+    BORDER_PRIMARY: str = "#272C36"  # Borders, dividers
+    DISABLED_COLOR: str = "#7E8A9A"  # Same as muted text
+    FOCUS_COLOR: str = "#17CCBF"  # Teal focus
 
 
 @dataclass(frozen=True)
@@ -46,6 +57,9 @@ class LightColorPalette:
     ERROR: str = "#D32F2F"
     BORDER_PRIMARY: str = "#E0E3E7"
     DISABLED_COLOR: str = "#B0B0B0"
+    DIVIDER_COLOR: str = (
+        "#9E9E9E"  # Darker gray for dividers (better light mode visibility)
+    )
     FOCUS_COLOR: str = "#2563eb"
 
 
@@ -82,7 +96,7 @@ class AegisTheme:
         SUCCESS = DarkColorPalette.ACCENT_SUCCESS  # #52D869
         ERROR = DarkColorPalette.ERROR  # #FF6B6B
         WARNING = ft.Colors.AMBER_400
-        INFO = DarkColorPalette.ACCENT
+        INFO = ft.Colors.BLUE
 
         # Borders from ee-toolset
         BORDER_SUBTLE = DarkColorPalette.BORDER_PRIMARY
@@ -170,7 +184,7 @@ class AegisTheme:
             on_background=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
             surface=DarkColorPalette.BG_PRIMARY,
             on_surface=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            surface_variant=DarkColorPalette.BG_HOVER,
+            surface_variant=DarkColorPalette.BG_SECONDARY,
             on_surface_variant=DarkColorPalette.TEXT_SECONDARY_DEFAULT,
             # Outline colors
             outline=DarkColorPalette.BORDER_PRIMARY,
@@ -271,8 +285,8 @@ class AegisTheme:
             surface_variant=LightColorPalette.BG_HOVER,
             on_surface_variant=LightColorPalette.TEXT_SECONDARY_DEFAULT,
             # Outline colors
-            outline=LightColorPalette.BORDER_PRIMARY,
-            outline_variant=LightColorPalette.DISABLED_COLOR,
+            outline=LightColorPalette.DIVIDER_COLOR,
+            outline_variant=LightColorPalette.DIVIDER_COLOR,
             # Other colors
             shadow=ft.Colors.BLACK38,
             scrim=ft.Colors.BLACK54,
@@ -411,22 +425,22 @@ class ThemeManager:
     """
 
     class Colors:
-        """Color palette - optimized for dark mode with vibrant accents."""
+        """Color palette - official design system colors."""
 
-        # Primary Brand (Teal/Cyan - high-tech cyberpunk feel)
-        PRIMARY = ft.Colors.TEAL_400
-        PRIMARY_DARK = ft.Colors.TEAL_600
-        PRIMARY_LIGHT = ft.Colors.TEAL_200
+        # Primary Brand (Teal/Cyan - official)
+        PRIMARY = "#17CCBF"  # Primary teal/cyan
+        PRIMARY_DARK = "#248F87"  # Darker teal (secondary accent)
+        PRIMARY_LIGHT = "#5eead4"  # Lighter teal
 
         # Accent (Vibrant highlights for CTAs and emphasis)
-        ACCENT = ft.Colors.CYAN_400
-        ACCENT_GLOW = ft.Colors.CYAN_300
+        ACCENT = "#17CCBF"  # Same as primary
+        ACCENT_GLOW = "#17CCBF"  # Teal glow
 
         # Status Colors (Semantic feedback)
         SUCCESS = ft.Colors.GREEN_400
         WARNING = ft.Colors.AMBER_400
         ERROR = ft.Colors.RED_400
-        INFO = ft.Colors.BLUE_400
+        INFO = ft.Colors.BLUE
 
         # Surface Levels (Semantic - auto-adapt to light/dark mode)
         SURFACE_0 = ft.Colors.SURFACE  # Base background

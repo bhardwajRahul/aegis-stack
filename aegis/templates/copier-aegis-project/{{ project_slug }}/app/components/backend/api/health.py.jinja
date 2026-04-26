@@ -144,8 +144,8 @@ async def system_dashboard() -> dict[str, Any]:
                         for name, service in (
                             system_status.services_status.sub_components.items()
                             if system_status.services_status
-                            else {}
-                        ).items()
+                            else {}.items()
+                        )
                     }
                     if system_status.has_services
                     else {},

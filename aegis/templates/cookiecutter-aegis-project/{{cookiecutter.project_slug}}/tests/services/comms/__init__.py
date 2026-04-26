@@ -1,3 +1,0 @@
-"""
-Communications service test package.
-"""

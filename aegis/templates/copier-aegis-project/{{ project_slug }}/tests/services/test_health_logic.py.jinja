@@ -50,14 +50,14 @@ class TestComponentStatusPropagation:
         status = ComponentStatus(
             name="test_component",
             status=ComponentStatusType.WARNING,
-            message="Has warnings but still healthy",
+            message="Has warnings",
             response_time_ms=100.0,
         )
 
         assert status.name == "test_component"
-        assert status.healthy is True
+        assert status.healthy is False  # WARNING is not healthy
         assert status.status == ComponentStatusType.WARNING
-        assert status.message == "Has warnings but still healthy"
+        assert status.message == "Has warnings"
 
     def test_component_status_defaults_to_healthy(self) -> None:
         """Test that ComponentStatus defaults to HEALTHY status."""
@@ -105,7 +105,7 @@ class TestComponentStatusPropagation:
             }
         )
 
-        assert parent_component.healthy is True
+        assert parent_component.healthy is False  # WARNING is not healthy
         assert parent_component.status == ComponentStatusType.WARNING
         assert len(parent_component.sub_components) == 2
         assert (
@@ -188,8 +188,8 @@ class TestSystemStatusWarningPropagation:
                 "aegis.components.healthy_service" in system_status.healthy_components
             )
             assert (
-                "aegis.components.warning_service" in system_status.healthy_components
-            )  # WARNING is considered healthy
+                "aegis.components.warning_service" in system_status.unhealthy_components
+            )  # WARNING is NOT considered healthy
             assert (
                 "aegis.components.unhealthy_service"
                 in system_status.unhealthy_components
@@ -224,13 +224,13 @@ class TestSystemStatusWarningPropagation:
 
 
     @pytest.mark.asyncio
-    async def test_system_status_with_only_warnings_stays_healthy(self) -> None:
-        """Test that system with only warnings remains overall healthy."""
+    async def test_system_status_with_only_warnings_is_not_healthy(self) -> None:
+        """Test that system with warnings is not considered overall healthy."""
 
         mock_warning_component = AsyncMock(return_value=ComponentStatus(
             name="warning_service",
             status=ComponentStatusType.WARNING,
-            message="Service has warnings but functional",
+            message="Service has warnings",
         ))
 
         mock_system_metrics = {
@@ -261,13 +261,13 @@ class TestSystemStatusWarningPropagation:
 
             system_status = await get_system_status()
 
-            # System should remain healthy since warnings don't affect overall health
-            assert system_status.overall_healthy is True
+            # System is not healthy because WARNING is not healthy
+            assert system_status.overall_healthy is False
 
-            # But aegis component should propagate warning status
+            # Aegis component should have warning status and not be healthy
             aegis_component = system_status.components["aegis"]
             assert aegis_component.status == ComponentStatusType.WARNING
-            assert aegis_component.healthy is True
+            assert aegis_component.healthy is False
 
 
 class TestWorkerHealthLogic:
@@ -321,6 +321,8 @@ class TestWorkerHealthLogic:
         """Test warning propagation from queue -> queues -> worker."""
 
         # Simulate the propagation logic used in worker health check
+        # Note: WARNING status means healthy=False, so queues with WARNING
+        # are not considered healthy
         def check_warning_propagation(
             sub_components: dict[str, ComponentStatus]
         ) -> ComponentStatusType:
@@ -334,14 +336,16 @@ class TestWorkerHealthLogic:
                 for queue in sub_components.values()
             )
 
-            if has_warnings and queues_healthy:
-                return ComponentStatusType.WARNING
-            elif queues_healthy:
+            if queues_healthy:
                 return ComponentStatusType.HEALTHY
+            elif has_warnings:
+                # Some have warnings (not healthy), but not UNHEALTHY
+                return ComponentStatusType.WARNING
             else:
                 return ComponentStatusType.UNHEALTHY
 
-        # Test case: Some queues have warnings, all are healthy
+        # Test case: Some queues have warnings - since WARNING is not healthy,
+        # the overall status should be WARNING (not all queues are healthy)
         sub_components = {
             "media": ComponentStatus(
                 name="media",
@@ -435,8 +439,8 @@ class TestComponentMetadata:
 
         status = ComponentStatus(
             name="test_component",
-            status=ComponentStatusType.WARNING,
-            message="Component with warning",
+            status=ComponentStatusType.HEALTHY,
+            message="Component is healthy",
             response_time_ms=123.45,
             metadata={"key": "value", "number": 42},
             sub_components={
@@ -453,106 +457,106 @@ class TestComponentMetadata:
 
         # Verify structure
         assert status_dict["name"] == "test_component"
-        assert status_dict["healthy"] is True
-        assert status_dict["status"] == "warning"
-        assert status_dict["message"] == "Component with warning"
+        assert status_dict["healthy"] is True  # HEALTHY status has healthy=True
+        assert status_dict["status"] == "healthy"
+        assert status_dict["message"] == "Component is healthy"
         assert status_dict["response_time_ms"] == 123.45
         assert status_dict["metadata"]["key"] == "value"
         assert "sub1" in status_dict["sub_components"]
         assert status_dict["sub_components"]["sub1"]["status"] == "healthy"
 
 
-{%- if include_database %}
+{%- if include_database and database_engine == "sqlite" %}
 class TestDatabaseHealthCheck:
-    """Test database health check functionality."""
+    """Test SQLite database health check functionality.
+
+    Implementation lives in ``app.services.system.health_db_sqlite`` (the
+    ``health_db`` dispatcher re-exports it). Patches must target that module,
+    not the legacy ``app.services.system.health`` location, since
+    ``settings`` and ``sqlite3`` are imported there.
+    """
 
     @pytest.mark.asyncio
-    async def test_database_health_check_success(self, db_session) -> None:
-        """Test successful database health check with mocked database."""
-        from app.services.system.health import check_database_health
+    async def test_database_health_check_success(self, tmp_path) -> None:
+        """Run ``check_database_health`` end-to-end against a real on-disk SQLite.
 
-        # Mock everything to simulate successful database connection with
-        # enhanced metadata
-        with patch('app.services.system.health.settings') as mock_settings, \
-             patch('pathlib.Path.exists', return_value=True), \
-             patch('pathlib.Path.stat') as mock_stat, \
-             patch('app.core.db.db_session') as mock_db_session, \
-             patch('app.core.db.engine') as mock_engine, \
-             patch('app.services.system.health.sqlite3') as mock_sqlite3:
+        The previous version mocked ``app.core.db.db_session`` (sync) and
+        faked PRAGMA returns by hand, but the real implementation now uses
+        ``async with get_async_session()`` + ``await session.execute()`` —
+        the old MagicMock structure intercepted nothing.
 
-            mock_settings.DATABASE_URL = "sqlite:///./data/test.db"
-            mock_settings.DATABASE_ENGINE_ECHO = False
+        This rewrite spins up a real ``async_sessionmaker`` against a
+        ``tmp_path`` SQLite file and lets ``check_database_health`` run
+        end-to-end — exercising the full PRAGMA / schema / migration paths
+        instead of mock theater.
+        """
+        from contextlib import asynccontextmanager
+        from sqlalchemy.ext.asyncio import (
+            AsyncSession,
+            async_sessionmaker,
+            create_async_engine,
+        )
+        from sqlmodel import SQLModel
 
-            # Mock SQLite version
-            mock_sqlite3.sqlite_version = "3.43.2"
+        from app.services.system import health_db_sqlite
 
-            # Mock file size
-            mock_stat_result = MagicMock()
-            mock_stat_result.st_size = 8192
-            mock_stat.return_value = mock_stat_result
+        # Reset module-level caches so we exercise the live PRAGMA/schema paths
+        # rather than reading stale data from a previous test run.
+        health_db_sqlite._pragma_cache = None
+        health_db_sqlite._schema_cache = None
+        health_db_sqlite._migration_cache = None
 
-            # Mock engine pool
-            mock_engine.pool.size.return_value = 5
+        db_file = tmp_path / "health_check.db"
+        test_engine = create_async_engine(f"sqlite+aiosqlite:///{db_file}")
+        async with test_engine.begin() as conn:
+            await conn.run_sync(SQLModel.metadata.create_all)
 
-            # Mock successful db_session with PRAGMA queries
-            mock_session = MagicMock()
+        session_factory = async_sessionmaker(
+            bind=test_engine, class_=AsyncSession, expire_on_commit=False
+        )
 
-            # Mock PRAGMA query results
-            def mock_execute(query):
-                query_str = str(query).lower()
-                if "pragma foreign_keys" in query_str:
-                    result = MagicMock()
-                    result.fetchone.return_value = [1]  # foreign_keys = ON
-                    return result
-                elif "pragma journal_mode" in query_str:
-                    result = MagicMock()
-                    result.fetchone.return_value = ["delete"]  # journal_mode = delete
-                    return result
-                elif "pragma cache_size" in query_str:
-                    result = MagicMock()
-                    result.fetchone.return_value = [2000]  # cache_size = 2000
-                    return result
-                else:
-                    # For "SELECT 1" query
-                    return None
+        @asynccontextmanager
+        async def fake_get_async_session():
+            async with session_factory() as session:
+                yield session
 
-            mock_session.execute.side_effect = mock_execute
-            mock_db_session.return_value.__enter__ = MagicMock(
-                return_value=mock_session
-            )
-            mock_db_session.return_value.__exit__ = MagicMock(return_value=None)
+        fake_settings = MagicMock()
+        fake_settings.DATABASE_URL = f"sqlite:///{db_file}"
+        fake_settings.DATABASE_ENGINE_ECHO = False
 
-            result = await check_database_health()
+        try:
+            with patch.object(health_db_sqlite, "settings", fake_settings), \
+                 patch("app.core.db.get_async_session", fake_get_async_session):
+                result = await health_db_sqlite.check_database_health()
+        finally:
+            await test_engine.dispose()
 
-            # Test basic health status
-            assert result.name == "database"
-            assert result.status == ComponentStatusType.HEALTHY
-            assert result.message == "Database connection successful"
+        assert result.name == "database"
+        assert result.status == ComponentStatusType.HEALTHY
+        assert result.message == "Database connection successful"
 
-            # Test existing metadata fields
-            assert result.metadata["implementation"] == "sqlite"
-            assert result.metadata["database_exists"] is True
-            assert result.metadata["engine_echo"] is False
-            assert result.metadata["url"] == "sqlite:///./data/test.db"
+        assert result.metadata["implementation"] == "sqlite"
+        assert result.metadata["database_exists"] is True
+        assert result.metadata["engine_echo"] is False
+        assert result.metadata["url"] == f"sqlite:///{db_file}"
 
-            # Test enhanced metadata fields
-            assert result.metadata["version"] == "3.43.2"
-            assert result.metadata["file_size_bytes"] == 8192
-            assert result.metadata["file_size_human"] == "8.0 KB"
-            assert result.metadata["connection_pool_size"] == 5
+        # File-system metadata captured from the real tmp_path file
+        assert "version" in result.metadata
+        assert result.metadata["file_size_bytes"] >= 0
+        assert "file_size_human" in result.metadata
 
-            # Test PRAGMA settings
-            assert "pragma_settings" in result.metadata
-            pragma_settings = result.metadata["pragma_settings"]
-            assert pragma_settings["foreign_keys"] is True
-            assert pragma_settings["journal_mode"] == "delete"
-            assert pragma_settings["cache_size"] == 2000
-            assert result.metadata["wal_enabled"] is False
+        # PRAGMA settings come from real ``await session.execute(text("PRAGMA ..."))``
+        assert "pragma_settings" in result.metadata
+        pragma = result.metadata["pragma_settings"]
+        assert "foreign_keys" in pragma
+        assert "journal_mode" in pragma
+        assert "cache_size" in pragma
+        assert "wal_enabled" in result.metadata
 
     @pytest.mark.asyncio
     async def test_database_health_check_import_error(self) -> None:
         """Test database health check when db module not available."""
-        from app.services.system.health import check_database_health
+        from app.services.system.health_db_sqlite import check_database_health
 
         # Mock ImportError when trying to import db_session from app.core.db
         import builtins
@@ -576,10 +580,10 @@ class TestDatabaseHealthCheck:
     @pytest.mark.asyncio
     async def test_database_health_check_missing_file(self) -> None:
         """Test database health check when database file doesn't exist."""
-        from app.services.system.health import check_database_health
+        from app.services.system.health_db_sqlite import check_database_health
 
         # Patch settings.DATABASE_URL to point to non-existent file
-        with patch('app.services.system.health.settings') as mock_settings:
+        with patch('app.services.system.health_db_sqlite.settings') as mock_settings:
             mock_settings.DATABASE_URL = "sqlite:///./nonexistent/test.db"
 
             result = await check_database_health()
@@ -591,32 +595,45 @@ class TestDatabaseHealthCheck:
             assert "nonexistent/test.db" in result.metadata["expected_path"]
 
     @pytest.mark.asyncio
-    async def test_database_health_check_connection_failure(self) -> None:
-        """Test database health check when connection fails due to permissions."""
-        from app.services.system.health import check_database_health
+    async def test_database_health_check_connection_failure(
+        self, tmp_path
+    ) -> None:
+        """When the session opens but connectivity fails with the SQLite
+        "unable to open database file" signature, expect WARNING + the
+        file-not-accessible message (the function distinguishes that case
+        from a generic UNHEALTHY connection error).
+        """
+        from contextlib import asynccontextmanager
 
-        # Mock settings and Path.exists to simulate file exists but connection fails
-        with patch('app.services.system.health.settings') as mock_settings, \
-             patch('pathlib.Path.exists', return_value=True), \
-             patch('app.core.db.db_session') as mock_db_session:
+        from app.services.system import health_db_sqlite
 
-            # File exists but connection fails
-            mock_settings.DATABASE_URL = "sqlite:///./data/test.db"
+        health_db_sqlite._pragma_cache = None
+        health_db_sqlite._schema_cache = None
+        health_db_sqlite._migration_cache = None
 
-            # Mock db_session to simulate connection error
-            mock_session = MagicMock()
-            mock_session.execute.side_effect = Exception("unable to open database file")
-            mock_db_session.return_value.__enter__ = MagicMock(
-                return_value=mock_session
-            )
-            mock_db_session.return_value.__exit__ = MagicMock(return_value=None)
+        # The function checks ``Path(db_path).exists()`` before opening a
+        # session, so the file has to actually exist on disk for control
+        # to reach the session-failure branch.
+        db_file = tmp_path / "broken.db"
+        db_file.write_bytes(b"")
 
-            result = await check_database_health()
+        @asynccontextmanager
+        async def failing_session():
+            raise Exception("unable to open database file")
+            yield  # pragma: no cover - unreachable, satisfies asynccontextmanager
 
-            assert result.name == "database"
-            assert result.status == ComponentStatusType.WARNING
-            assert result.message == "Database file not accessible"
-            assert "unable to open database file" in result.metadata["error"]
+        fake_settings = MagicMock()
+        fake_settings.DATABASE_URL = f"sqlite:///{db_file}"
+        fake_settings.DATABASE_ENGINE_ECHO = False
+
+        with patch.object(health_db_sqlite, "settings", fake_settings), \
+             patch("app.core.db.get_async_session", failing_session):
+            result = await health_db_sqlite.check_database_health()
+
+        assert result.name == "database"
+        assert result.status == ComponentStatusType.WARNING
+        assert result.message == "Database file not accessible"
+        assert "unable to open database file" in result.metadata["error"]
 
     def test_database_status_metadata_structure(self) -> None:
         """Test that database health check includes proper metadata."""

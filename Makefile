@@ -137,18 +137,20 @@ help: ## Show this help message
 
 gif: ## Convert MP4 to high-quality GIF (usage: make gif INPUT=recording.mp4)
 ifndef INPUT
-	@echo "Usage: make gif INPUT=path/to/video.mp4 [OUTPUT=output.gif] [FPS=15] [WIDTH=1200]"
+	@echo "Usage: make gif INPUT=path/to/video.mp4 [OUTPUT=output.gif] [FPS=15] [WIDTH=1200] [START=0] [END=10]"
 	@echo ""
 	@echo "Options:"
 	@echo "  INPUT   - Required. Path to input MP4 file"
 	@echo "  OUTPUT  - Optional. Output GIF path (default: same name as input with .gif)"
 	@echo "  FPS     - Optional. Frames per second (default: 15, max 30)"
 	@echo "  WIDTH   - Optional. Output width in pixels (default: 1200)"
+	@echo "  START   - Optional. Start time in seconds (default: beginning)"
+	@echo "  END     - Optional. End time in seconds (default: end of video)"
 	@exit 1
 endif
 	@echo "🎬 Converting $(INPUT) to GIF..."
 	@mkdir -p .gif-frames
-	@ffmpeg -i "$(INPUT)" -vf "fps=$(or $(FPS),15),scale=$(or $(WIDTH),1200):-1:flags=lanczos" -y .gif-frames/frame_%04d.png
+	@ffmpeg $(if $(START),-ss $(START)) -i "$(INPUT)" $(if $(END),-to $(END)) -vf "fps=$(or $(FPS),15),scale=$(or $(WIDTH),1200):-1:flags=lanczos" -y .gif-frames/frame_%04d.png
 	@gifski -o "$(or $(OUTPUT),$(basename $(INPUT)).gif)" --fps $(or $(FPS),15) --quality 90 .gif-frames/*.png
 	@rm -rf .gif-frames
 	@echo "✅ Created: $(or $(OUTPUT),$(basename $(INPUT)).gif)"
@@ -237,8 +239,8 @@ test-template-with-components: ## Test template with scheduler component include
 
 clean-test-projects: ## Remove all generated test project directories
 	@echo "🧹 Cleaning up test projects..."
-	@chmod -R +w ../test-basic-stack ../test-component-stack ../test-worker-stack ../test-database-stack ../test-full-stack 2>/dev/null || true
-	@rm -rf ../test-basic-stack ../test-component-stack ../test-worker-stack ../test-database-stack ../test-full-stack 2>/dev/null || true
+	@chmod -R +w ../test-basic-stack ../test-component-stack ../test-worker-stack ../test-database-stack ../test-full-stack ../test-auth-stack ../test-ai-stack ../test-ai-memory-stack ../test-ai-sqlite-stack 2>/dev/null || true
+	@rm -rf ../test-basic-stack ../test-component-stack ../test-worker-stack ../test-database-stack ../test-full-stack ../test-auth-stack ../test-ai-stack ../test-ai-memory-stack ../test-ai-sqlite-stack 2>/dev/null || true
 	@echo "✅ Test projects cleaned up"
 
 # ============================================================================
@@ -263,6 +265,13 @@ test-stacks-build: ## Test all stacks build and pass checks (slow)
 	@uv run pytest tests/cli/test_stack_validation.py -v -m "slow" --tb=short
 	@echo "✅ All stacks build and pass quality checks!"
 
+test-stacks-quick: ## Run Phase 2 against base, everything, insights only (fast feedback)
+	@echo "⚡ Running stack validation against representative subset..."
+	@uv run pytest tests/cli/test_stack_validation.py::test_stack_full_validation \
+		-v -m "slow" --tb=short \
+		-k "base or everything or insights"
+	@echo "✅ Quick stack validation completed!"
+
 test-stacks-runtime: ## Test all stacks runtime integration with Docker (future)
 	@echo "🐳 Runtime integration testing not yet implemented"
 	@echo "ℹ️  Will test Docker Compose startup and health checks for all combinations"
@@ -275,11 +284,16 @@ test-stacks-full: ## Full stack matrix testing pipeline (comprehensive but slow)
 	@echo "📋 Phase 2: Stack Build and Validation Testing"
 	@make test-stacks-build
 	@echo ""
-	@echo "📋 Phase 3: Stack Runtime Testing (skipped - not implemented)"
-	@echo "ℹ️  Runtime testing will be added in future iterations"
+	@echo "📋 Phase 3: Kitchen Sink (everything stack: all services + components)"
+	@make test-everything
 	@echo ""
 	@echo "🎉 Complete stack matrix testing completed successfully!"
-	@echo "   All component combinations can generate, build, and pass quality checks"
+	@echo "   All component/service combinations can generate, build, and pass quality checks"
+
+test-everything: ## Generate and run ALL tests inside the kitchen-sink stack
+	@echo "🧪 Running full kitchen-sink stack test (all services + core components)..."
+	@uv run pytest tests/cli/test_stack_validation.py -v -m "slow" -k "everything" --tb=short
+	@echo "✅ Kitchen sink passes full validation."
 
 # Enhanced template testing with specific component combinations
 test-template-database: ## Test template with database component
@@ -349,6 +363,37 @@ test-template-ai: ## Test template with AI service
 	@echo "✅ AI service template test completed successfully!"
 	@echo "   Test project available in ../test-ai-stack/"
 
+test-template-ai-memory: ## Test AI service with memory backend (default)
+	@echo "🧠 Testing AI service with memory backend..."
+	@chmod -R +w ../test-ai-memory-stack 2>/dev/null || true
+	@rm -rf ../test-ai-memory-stack
+	@env -u VIRTUAL_ENV uv run aegis init test-ai-memory-stack --services ai --output-dir .. --no-interactive --force --yes
+	@echo "📦 Installing dependencies and CLI..."
+	@cd ../test-ai-memory-stack && chmod -R +w .venv 2>/dev/null || true && rm -rf .venv && env -u VIRTUAL_ENV uv sync --extra dev --extra docs
+	@cd ../test-ai-memory-stack && env -u VIRTUAL_ENV uv pip install -e .
+	@echo "🔍 Running validation checks..."
+	@cd ../test-ai-memory-stack && env -u VIRTUAL_ENV make check
+	@echo "🧪 Verifying memory backend..."
+	@test ! -f ../test-ai-memory-stack/app/models/conversation.py && echo "✅ No SQLModel conversation tables (memory mode)" || echo "❌ SQLModel tables should not exist in memory mode"
+	@grep -q '"persistence": "memory"' ../test-ai-memory-stack/app/services/ai/health.py && echo "✅ Health shows memory persistence" || echo "⚠️  Health persistence check failed"
+	@echo "✅ AI memory backend template test completed!"
+
+test-template-ai-sqlite: ## Test AI service with SQLite persistence
+	@echo "💾 Testing AI service with SQLite persistence..."
+	@chmod -R +w ../test-ai-sqlite-stack 2>/dev/null || true
+	@rm -rf ../test-ai-sqlite-stack
+	@env -u VIRTUAL_ENV uv run aegis init test-ai-sqlite-stack --services "ai[sqlite]" --output-dir .. --no-interactive --force --yes
+	@echo "📦 Installing dependencies and CLI..."
+	@cd ../test-ai-sqlite-stack && chmod -R +w .venv 2>/dev/null || true && rm -rf .venv && env -u VIRTUAL_ENV uv sync --extra dev --extra docs
+	@cd ../test-ai-sqlite-stack && env -u VIRTUAL_ENV uv pip install -e .
+	@echo "🔍 Running validation checks..."
+	@cd ../test-ai-sqlite-stack && env -u VIRTUAL_ENV make check
+	@echo "🧪 Verifying SQLite backend..."
+	@test -f ../test-ai-sqlite-stack/app/models/conversation.py && echo "✅ SQLModel conversation tables exist" || echo "❌ SQLModel tables missing"
+	@grep -q '"persistence": "sqlite"' ../test-ai-sqlite-stack/app/services/ai/health.py && echo "✅ Health shows sqlite persistence" || echo "⚠️  Health persistence check failed"
+	@grep -q 'from app.core.db import db_session' ../test-ai-sqlite-stack/app/services/ai/conversation.py && echo "✅ SQLite imports present" || echo "❌ SQLite imports missing"
+	@echo "✅ AI SQLite persistence template test completed!"
+
 test-template-full: ## Test template with all components (worker + scheduler + database)
 	@echo "🌟 Testing full component template..."
 	@chmod -R +w ../test-full-stack 2>/dev/null || true
@@ -380,52 +425,13 @@ endif
 	@echo "✅ $(COMPONENT) component generated successfully in ../test-$(COMPONENT)-quick/"
 	@echo "   Run 'cd ../test-$(COMPONENT)-quick && make check' to validate"
 
-# ============================================================================
-# PARITY TESTING - Cookiecutter vs Copier Template Comparison
-# ============================================================================
+# ``test-parity*`` and ``test-engines*`` targets were removed in PR #401
+# when Cookiecutter was retired — Copier is now the sole template engine,
+# so parity/dual-engine harnesses became dead weight. The backing
+# ``tests/test_template_parity.py`` + ``--engine=`` plugin no longer exist;
+# ``make test-stacks-full`` is the canonical full-coverage entry point.
 
-test-parity: ## Run all Cookiecutter vs Copier parity tests
-	@echo "🔍 Running template parity tests (Cookiecutter vs Copier)..."
-	@uv run pytest tests/test_template_parity.py -v
-
-test-parity-quick: ## Quick parity test (base project only)
-	@echo "⚡ Quick parity test - base project only..."
-	@uv run pytest tests/test_template_parity.py::TestTemplateParity::test_parity_base_project -v
-
-test-parity-components: ## Test parity for all component combinations
-	@echo "🧩 Testing parity for all component combinations..."
-	@uv run pytest tests/test_template_parity.py -k "scheduler or worker or database" -v
-
-test-parity-services: ## Test parity for all service combinations
-	@echo "🔧 Testing parity for all service combinations..."
-	@uv run pytest tests/test_template_parity.py -k "auth or ai" -v
-
-test-parity-full: ## Comprehensive parity test (all combinations)
-	@echo "🚀 Comprehensive parity testing..."
-	@uv run pytest tests/test_template_parity.py::TestTemplateParity::test_parity_kitchen_sink -v
-
-# ============================================================================
-# DUAL-ENGINE TESTING - Cookiecutter and Copier Template Matrix
-# ============================================================================
-
-test-engines: ## Run all tests with both template engines
-	@echo "🔧 Running tests with both Cookiecutter and Copier engines..."
-	@uv run pytest -v -m "not slow"
-
-test-engines-quick: ## Quick test with both engines (fast tests only)
-	@echo "⚡ Quick dual-engine test (fast tests only)..."
-	@uv run pytest -v -m "not slow" --engine=cookiecutter
-	@uv run pytest -v -m "not slow" --engine=copier
-
-test-engines-cookiecutter: ## Run tests with Cookiecutter engine only
-	@echo "🍪 Testing with Cookiecutter engine..."
-	@uv run pytest -v --engine=cookiecutter
-
-test-engines-copier: ## Run tests with Copier engine only
-	@echo "📋 Testing with Copier engine..."
-	@uv run pytest -v --engine=copier
-
-.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test gif gif-quick gif-demo redis-start redis-stop redis-cli redis-logs redis-stats redis-reset redis-queues redis-workers redis-failed redis-monitor redis-info test-template-quick test-template test-template-with-components test-template-database test-template-worker test-template-auth test-template-ai test-template-full test-component-quick test-stacks test-stacks-build test-stacks-runtime test-stacks-full clean-test-projects test-parity test-parity-quick test-parity-components test-parity-services test-parity-full test-engines test-engines-quick test-engines-cookiecutter test-engines-copier help
+.PHONY: test lint fix format typecheck check install clean docs-serve docs-build cli-test gif gif-quick gif-demo redis-start redis-stop redis-cli redis-logs redis-stats redis-reset redis-queues redis-workers redis-failed redis-monitor redis-info test-template-quick test-template test-template-with-components test-template-database test-template-worker test-template-auth test-template-ai test-template-full test-component-quick test-stacks test-stacks-build test-stacks-runtime test-stacks-full test-everything clean-test-projects help
 
 # Default target
 .DEFAULT_GOAL := help

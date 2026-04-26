@@ -17,8 +17,20 @@ class Settings(BaseSettings):
     `model_config` is used to specify that settings should be loaded from a .env file.
     """
 
+    # Project identity
+    PROJECT_NAME: str = "{{ project_slug }}"
+
     # Application environment: "dev" or "prod"
     APP_ENV: str = "dev"
+
+    # API docs auth (HTTP Basic). When both are set, /docs /redoc /openapi.json
+    # require these creds. When unset: open in dev, 404 in any other APP_ENV.
+    DOCS_USERNAME: str = ""
+    DOCS_PASSWORD: str = ""
+
+    # Public signup gate. When False, /register returns 403 and OAuth new-user
+    # creation is refused. Existing users still sign in normally.
+    REGISTRATION_ENABLED: bool = True
 
     # Log level for the application
     LOG_LEVEL: str = "INFO"
@@ -56,9 +68,27 @@ class Settings(BaseSettings):
     FLET_ASSETS_DIR: str = "assets"  # Directory for Flet static assets (images, etc.)
 
     # Authentication settings
+    AUTH_ENABLED: bool = False  # Set to true in production to enable auth
+    DEV_USER_ROLE: str = "admin"  # Role for synthetic dev user when AUTH_ENABLED=false
+    INVITE_ACCEPTANCE_MODE: str = "email"  # "email" requires email match, "token" allows anyone with token
     SECRET_KEY: str = "change-this-secret-key-in-production-use-env-variable"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    PASSWORD_RESET_EXPIRE_MINUTES: int = 60
+    EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
+
+    # Rate limiting settings
+    RATE_LIMIT_LOGIN_MAX: int = 5
+    RATE_LIMIT_LOGIN_WINDOW: int = 60
+    RATE_LIMIT_REGISTER_MAX: int = 3
+    RATE_LIMIT_REGISTER_WINDOW: int = 60
+
+    # Account lockout settings
+    ACCOUNT_LOCKOUT_ATTEMPTS: int = 5
+    ACCOUNT_LOCKOUT_MINUTES: int = 15
+
+    # Proxy trust settings
+    TRUST_PROXY_HEADERS: bool = False  # Set to True only behind a trusted reverse proxy
 
 {% if include_redis %}
     # Redis settings for arq background tasks
@@ -72,16 +102,26 @@ class Settings(BaseSettings):
         # If explicitly overridden for local use
         if self.REDIS_URL_LOCAL and not self.is_docker:
             return self.REDIS_URL_LOCAL
-        return self.REDIS_URL
 
-    @property 
-    def is_docker(self) -> bool:
-        """Detect if running inside Docker container."""
-        import os
-        return (
-            os.path.exists("/.dockerenv") or 
-            bool(os.getenv("DOCKER_CONTAINER"))
-        )
+        # Auto-translate Docker hostname to localhost when running outside Docker
+        if not self.is_docker:
+            from urllib.parse import urlparse, urlunparse
+
+            parsed = urlparse(self.REDIS_URL)
+            # Only translate the default Docker service hostname "redis"
+            if parsed.hostname == "redis":
+                # Reconstruct URL with localhost, preserving auth, port, path, etc.
+                netloc = "localhost"
+                if parsed.username:
+                    if parsed.password:
+                        netloc = f"{parsed.username}:{parsed.password}@localhost"
+                    else:
+                        netloc = f"{parsed.username}@localhost"
+                if parsed.port:
+                    netloc = f"{netloc}:{parsed.port}"
+                return urlunparse(parsed._replace(netloc=netloc))
+
+        return self.REDIS_URL
 {% endif %}
 
 {% if include_worker %}
@@ -97,16 +137,52 @@ class Settings(BaseSettings):
     # Worker health check settings
     WORKER_HEALTH_CHECK_INTERVAL: int = 15  # In seconds (default: 15)
 
+    # Task history retention (Redis Hashes auto-expire after this)
+    TASK_HISTORY_TTL_SECONDS: int = 86400  # 24 hours
+
     # PURE ARQ IMPLEMENTATION - NO CONFIGURATION NEEDED!
     # Worker configuration comes from individual WorkerSettings classes
     # in app/components/worker/queues/ - just import and use as arq intended!
 {% endif %}
 
 {% if include_database %}
-    # Database settings (SQLite)
+    # Database settings
+{% if database_engine == "postgres" %}
+    DATABASE_URL: str = "postgresql://postgres:postgres@postgres:5432/{{ project_slug }}"
+    DATABASE_URL_LOCAL: str | None = None  # Override for local CLI usage
+    DATABASE_ENGINE_ECHO: bool = False
+
+    @property
+    def database_url_effective(self) -> str:
+        """Get effective database URL, preferring local override when not in Docker."""
+        # If explicitly overridden for local use
+        if self.DATABASE_URL_LOCAL and not self.is_docker:
+            return self.DATABASE_URL_LOCAL
+
+        # Auto-translate Docker hostname to localhost when running outside Docker
+        if not self.is_docker:
+            from urllib.parse import urlparse, urlunparse
+
+            parsed = urlparse(self.DATABASE_URL)
+            # Only translate the default Docker service hostname "postgres"
+            if parsed.hostname == "postgres":
+                # Reconstruct URL with localhost, preserving auth, port, path, etc.
+                netloc = "localhost"
+                if parsed.username:
+                    if parsed.password:
+                        netloc = f"{parsed.username}:{parsed.password}@localhost"
+                    else:
+                        netloc = f"{parsed.username}@localhost"
+                if parsed.port:
+                    netloc = f"{netloc}:{parsed.port}"
+                return urlunparse(parsed._replace(netloc=netloc))
+
+        return self.DATABASE_URL
+{% else %}
     DATABASE_URL: str = "sqlite:///./data/app.db"
     DATABASE_ENGINE_ECHO: bool = False
     DATABASE_CONNECT_ARGS: dict[str, Any] = {"check_same_thread": False}
+{% endif %}
 {% endif %}
 
 {% if include_ai %}
@@ -117,7 +193,7 @@ class Settings(BaseSettings):
     AI_MODEL: str = "auto"  # Default model (public provider uses available models)
     AI_TEMPERATURE: float = 0.7
     AI_MAX_TOKENS: int = 1000
-    AI_TIMEOUT_SECONDS: float = 30.0
+    AI_TIMEOUT_SECONDS: float = 120.0
 
     # Provider API Keys (optional - many providers offer free tiers)
     OPENAI_API_KEY: str | None = None
@@ -127,9 +203,37 @@ class Settings(BaseSettings):
     MISTRAL_API_KEY: str | None = None
     COHERE_API_KEY: str | None = None
 
+    # Ollama settings (local LLM inference)
+{% if ollama_mode == "host" %}
+    OLLAMA_BASE_URL: str = "http://host.docker.internal:11434"  # Host mode default
+{% elif ollama_mode == "docker" %}
+    OLLAMA_BASE_URL: str = "http://ollama:11434"  # Docker mode default
+{% else %}
+    OLLAMA_BASE_URL: str = "http://localhost:11434"  # Default for local testing
+{% endif %}
+    OLLAMA_BASE_URL_LOCAL: str | None = None  # Override for local CLI usage
+    OLLAMA_API_KEY: str | None = None  # Optional, usually not needed
+
     # Conversation settings
     AI_MAX_CONVERSATION_LENGTH: int = 50  # Max messages per conversation
     AI_CONVERSATION_TIMEOUT_HOURS: int = 24  # Auto-cleanup old conversations
+{% if ai_voice %}
+
+    # Speech-to-Text (STT) Configuration
+    # Provider: openai_whisper, whisper_local, faster_whisper, groq_whisper
+    STT_PROVIDER: str = "openai_whisper"  # Default to OpenAI Whisper API
+    STT_MODEL: str | None = None  # Model name/size (provider-specific, None = default)
+    STT_LANGUAGE: str | None = None  # ISO 639-1 language code (None = auto-detect)
+    # For local providers (whisper_local, faster_whisper)
+    STT_DEVICE: str | None = None  # Device: 'cpu', 'cuda', 'mps' (None = auto-detect)
+
+    # Text-to-Speech (TTS) Configuration
+    # Provider: openai
+    TTS_PROVIDER: str = "openai"  # Default to OpenAI TTS API
+    TTS_MODEL: str | None = None  # Model: tts-1 (fast), tts-1-hd (quality). None = default
+    TTS_VOICE: str | None = None  # Voice: alloy, echo, fable, onyx, nova, shimmer. None = alloy
+    TTS_SPEED: float = 1.0  # Speech speed multiplier (0.25 to 4.0)
+{% endif %}
 {% endif %}
 
 {% if include_comms %}
@@ -145,15 +249,172 @@ class Settings(BaseSettings):
     TWILIO_MESSAGING_SERVICE_SID: str | None = None  # Required for toll-free SMS
 {% endif %}
 
+{% if include_payment %}
+    # Payment Service Configuration (Stripe)
+    # Sign up at https://dashboard.stripe.com; test keys are prefixed
+    # sk_test_ / pk_test_
+    STRIPE_SECRET_KEY: str | None = None  # Secret key (sk_test_... or sk_live_...)
+    STRIPE_WEBHOOK_SECRET: str | None = None  # Webhook signing secret (whsec_...)
+
+    # Default URLs Stripe redirects to after checkout. These are used when the
+    # POST /api/v1/payment/checkout request body does not provide success_url
+    # or cancel_url. The built-in defaults point at the bundled HTML pages
+    # served at /payment/success and /payment/cancel. Override for production.
+    PAYMENT_SUCCESS_URL: str = (
+        "http://localhost:8000/payment/success?session_id={CHECKOUT_SESSION_ID}"
+    )
+    PAYMENT_CANCEL_URL: str = "http://localhost:8000/payment/cancel"
+{% endif %}
+
+{% if include_insights %}
+    # Insights Service Configuration
+{% if insights_github %}
+    INSIGHT_GITHUB_TOKEN: str | None = None  # PAT with 'repo' scope
+    INSIGHT_GITHUB_OWNER: str = ""
+    INSIGHT_GITHUB_REPO: str = ""
+    INSIGHT_COLLECTION_GITHUB_HOURS: int = 6
+{% endif %}
+{% if insights_pypi %}
+    INSIGHT_PYPI_PACKAGE: str = ""
+    INSIGHT_COLLECTION_PYPI_HOURS: int = 24
+{% endif %}
+{% if insights_plausible %}
+    INSIGHT_PLAUSIBLE_API_KEY: str | None = None
+    INSIGHT_PLAUSIBLE_SITES: str = ""  # Comma-separated site IDs
+    INSIGHT_COLLECTION_PLAUSIBLE_HOURS: int = 24
+{% endif %}
+{% endif %}
+
+{% if include_observability %}
+    # Observability (Logfire)
+    # Set LOGFIRE_TOKEN to enable sending traces to Logfire cloud
+    # Get a write token from https://logfire.pydantic.dev (Project Settings > Write Tokens)
+    LOGFIRE_TOKEN: str | None = None
+
+    # Read token for Logfire Query API (enables trace analytics in the Overseer dashboard)
+    # Get from: Project Settings > Read Tokens in Logfire
+    LOGFIRE_READ_TOKEN: str | None = None
+
+    # Logfire project URL for linking to the dashboard
+    # e.g. "https://logfire.pydantic.dev/myorg/myproject"
+    LOGFIRE_PROJECT_URL: str | None = None
+{% endif %}
+
 {% if include_scheduler %}
     # Scheduler settings
     SCHEDULER_FORCE_UPDATE: bool = False  # Force update jobs from code on restart
+    SCHEDULER_TIMEZONE: str = "UTC"  # IANA timezone name; cron triggers inherit this
+{% endif %}
+
+{% if include_ingress %}
+    # Traefik Ingress settings
+    TRAEFIK_API_URL: str = "http://traefik:8080"  # Docker service name
+    TRAEFIK_API_URL_LOCAL: str | None = None  # Override for local CLI usage
+{% endif %}
+
+{% if ai_rag %}
+    # RAG Service Configuration
+    RAG_ENABLED: bool = True
+    RAG_PERSIST_DIRECTORY: str = "./data/chromadb"
+    RAG_EMBEDDING_PROVIDER: str = "sentence-transformers"  # or "openai"
+    RAG_EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"  # Better default
+    RAG_MODEL_CACHE_DIR: str | None = None  # None = system default, "./data/models" for local dev
+    RAG_CHUNK_SIZE: int = 2000
+    RAG_CHUNK_OVERLAP: int = 400
+    RAG_DEFAULT_TOP_K: int = 15
+    RAG_CHAT_TOP_K: int = 15  # Number of chunks for AI chat context
+{% endif %}
+
+{% if include_redis or database_engine == "postgres" or ollama_mode != "none" or include_ingress %}
+    @property
+    def is_docker(self) -> bool:
+        """Detect if running inside Docker container."""
+        import os
+        return (
+            os.path.exists("/.dockerenv") or
+            bool(os.getenv("DOCKER_CONTAINER"))
+        )
+{% endif %}
+
+{% if include_ai and ollama_mode != "none" %}
+    @property
+    def ollama_base_url_effective(self) -> str:
+        """Get effective Ollama URL, preferring local override when not in Docker."""
+        # If explicitly overridden for local use
+        if self.OLLAMA_BASE_URL_LOCAL and not self.is_docker:
+            return self.OLLAMA_BASE_URL_LOCAL
+
+        # Auto-translate Docker hostnames to localhost when running outside Docker
+        if not self.is_docker:
+            from urllib.parse import urlparse, urlunparse
+
+            parsed = urlparse(self.OLLAMA_BASE_URL)
+            # Translate Docker-specific hostnames to localhost
+            docker_hosts = {"ollama", "host.docker.internal"}
+            if parsed.hostname in docker_hosts:
+                netloc = "localhost"
+                if parsed.port:
+                    netloc = f"{netloc}:{parsed.port}"
+                return urlunparse(parsed._replace(netloc=netloc))
+
+        return self.OLLAMA_BASE_URL
+{% endif %}
+
+{% if include_ingress %}
+    @property
+    def traefik_api_url_effective(self) -> str:
+        """
+        Get effective Traefik API URL.
+
+        Prefers local override when not in Docker.
+        """
+        # If explicitly overridden for local use
+        if self.TRAEFIK_API_URL_LOCAL and not self.is_docker:
+            return self.TRAEFIK_API_URL_LOCAL
+
+        # Auto-translate Docker hostnames to localhost when running outside Docker
+        if not self.is_docker:
+            from urllib.parse import urlparse, urlunparse
+
+            parsed = urlparse(self.TRAEFIK_API_URL)
+            # Translate Docker-specific hostnames to localhost
+            if parsed.hostname == "traefik":
+                netloc = "localhost"
+                if parsed.port:
+                    netloc = f"{netloc}:{parsed.port}"
+                return urlunparse(parsed._replace(netloc=netloc))
+
+        return self.TRAEFIK_API_URL
 {% endif %}
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
+    def reload(self) -> None:
+        """
+        Reload settings from .env file in place.
+
+        Updates all field values from a fresh Settings instance,
+        allowing configuration changes to take effect without restart.
+        """
+        # Create a fresh Settings instance that reads from .env
+        new_settings = Settings()
+
+        # Update all field values in place
+        for field_name in self.model_fields:
+            setattr(self, field_name, getattr(new_settings, field_name))
+
 
 settings = Settings()
+
+
+def reload_settings() -> None:
+    """
+    Reload the global settings instance from .env file.
+
+    Call this after modifying the .env file to pick up changes
+    without restarting the application.
+    """
+    settings.reload()
 
 
 {% if include_worker %}

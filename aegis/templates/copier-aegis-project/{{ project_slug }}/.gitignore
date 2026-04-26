@@ -92,7 +92,12 @@ celerybeat-schedule
 
 # Environments
 .env
+.env.*
+!.env.example
 .venv
+
+# Aegis deploy config (contains server host/path/docker context)
+.aegis/
 env/
 venv/
 ENV/

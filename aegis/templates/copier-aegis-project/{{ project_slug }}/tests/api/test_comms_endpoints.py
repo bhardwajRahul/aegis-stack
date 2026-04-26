@@ -5,14 +5,18 @@ Tests for communications service API endpoints.
 from unittest.mock import patch
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 
 @pytest.fixture
-def test_client():
-    """Create a test client for the FastAPI app."""
-    from app.components.backend.main import app
+def test_client(app: FastAPI) -> TestClient:
+    """Create a test client for the FastAPI app.
 
+    Uses the top-level ``app`` fixture from ``tests/conftest.py`` (which
+    calls ``create_integrated_app()``) rather than a stale
+    ``app.components.backend.main`` import that no longer exists.
+    """
     return TestClient(app)
 
 

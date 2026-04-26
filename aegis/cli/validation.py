@@ -9,8 +9,8 @@ from pathlib import Path
 
 import typer
 
-from ..constants import Messages
 from ..core.copier_manager import is_copier_project
+from ..i18n import t
 
 
 def validate_copier_project(target_path: Path, command_name: str) -> None:
@@ -26,16 +26,18 @@ def validate_copier_project(target_path: Path, command_name: str) -> None:
     """
     if not is_copier_project(target_path):
         typer.secho(
-            f"Project at {target_path} was not generated with Copier.",
+            t("shared.not_copier_project", path=target_path),
             fg="red",
             err=True,
         )
+        from ..constants import Messages
+
         typer.echo(
             f"   {Messages.copier_only_command(command_name)}",
             err=True,
         )
         typer.echo(
-            "   To add components, regenerate the project with the new components included.",
+            f"   {t('shared.regenerate_hint')}",
             err=True,
         )
         raise typer.Exit(1)
@@ -53,10 +55,10 @@ def validate_git_repository(target_path: Path) -> None:
     """
     git_dir = target_path / ".git"
     if not git_dir.exists():
-        typer.secho(f"\n{Messages.GIT_NOT_INITIALIZED}", fg="red", err=True)
-        typer.echo(f"   {Messages.GIT_REQUIRED_HINT}", err=True)
-        typer.echo(f"   {Messages.GIT_INIT_HINT}", err=True)
-        typer.echo(f"   {Messages.GIT_MANUAL_INIT}", err=True)
+        typer.secho(f"\n{t('shared.git_not_initialized')}", fg="red", err=True)
+        typer.echo(f"   {t('shared.git_required')}", err=True)
+        typer.echo(f"   {t('shared.git_init_hint')}", err=True)
+        typer.echo(f"   {t('shared.git_manual_init')}", err=True)
         raise typer.Exit(1)
 
 
@@ -78,9 +80,9 @@ def parse_comma_separated_list(value: str, item_type: str = "item") -> list[str]
 
     if any(not item for item in items):
         if item_type == "component":
-            typer.secho(Messages.EMPTY_COMPONENT_NAME, fg="red", err=True)
+            typer.secho(t("shared.empty_component"), fg="red", err=True)
         elif item_type == "service":
-            typer.secho(Messages.EMPTY_SERVICE_NAME, fg="red", err=True)
+            typer.secho(t("shared.empty_service"), fg="red", err=True)
         else:
             typer.secho(f"Empty {item_type} name is not allowed", fg="red", err=True)
         raise typer.Exit(1)

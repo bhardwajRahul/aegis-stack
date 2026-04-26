@@ -413,10 +413,89 @@ aegis update
 
 ---
 
+## Month 7: Going Live
+
+Your app is stable, tested, and ready for users. Time to deploy.
+
+**Before Aegis Stack:**
+
+- Provision a server manually
+- Install Docker, configure firewall
+- Write deployment scripts
+- Set up a reverse proxy
+- Configure TLS certificates
+- Build a CI/CD pipeline
+
+**With Aegis Stack:**
+
+```bash
+# Add the ingress component (Traefik reverse proxy)
+aegis add ingress --project-path ./mvp-api
+```
+
+**Added:**
+
+- `traefik/traefik.yml` - Traefik reverse proxy configuration
+- `scripts/server-setup.sh` - Server provisioning script
+- `docker-compose.prod.yml` - Production compose overrides
+- Admin endpoint protection (IP allowlist middleware)
+- Automatic service discovery via Docker labels
+
+### First Deployment
+
+```bash
+# Point aegis at your server
+aegis deploy-init --host 203.0.113.50
+
+# Provision the server (Docker, firewall, directories)
+aegis deploy-setup
+
+# Ship it
+aegis deploy
+
+# Your app is live at http://203.0.113.50
+```
+
+### Adding HTTPS
+
+```bash
+# Enable TLS with Let's Encrypt
+aegis ingress-enable --domain myapp.com --email admin@myapp.com
+
+# Redeploy with TLS
+aegis deploy
+
+# Your app is live at https://myapp.com
+```
+
+### Day-to-Day Operations
+
+```bash
+# Push code changes
+aegis deploy
+
+# Check service health
+aegis deploy-status
+
+# Follow logs
+aegis deploy-logs
+
+# Debug inside a container
+aegis deploy-shell
+
+# Restart services after config change
+aegis deploy-restart
+```
+
+From Friday afternoon MVP to production HTTPS deployment — all without leaving your project.
+
+---
+
 ## Next Steps
 
 - **[CLI Reference](cli-reference.md)** - Complete `aegis add` and `aegis remove` documentation
 - **[Component Overview](components/index.md)** - Deep dive into available components
+- **[Deployment Guide](deployment/index.md)** - Full deployment command reference
 
 ---
 

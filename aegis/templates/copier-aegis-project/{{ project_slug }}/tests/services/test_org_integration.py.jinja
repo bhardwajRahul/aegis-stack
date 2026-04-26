@@ -1,0 +1,500 @@
+"""
+Integration tests for organization services.
+
+Tests org CRUD, membership management, and role-based access controls.
+"""
+{% if include_auth_org %}
+
+import pytest
+from app.models.org import (
+    OrgCreate,
+    Organization,
+    OrganizationMember,
+    ORG_ROLE_ADMIN,
+    ORG_ROLE_MEMBER,
+    ORG_ROLE_OWNER,
+)
+from app.models.user import User, UserCreate
+from app.services.auth.invite_service import InviteService
+from app.services.auth.membership_service import MembershipService
+from app.services.auth.org_service import OrgService
+from app.services.auth.user_service import UserService
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+
+class TestOrgServiceIntegration:
+    """Test organization service CRUD operations."""
+
+    @pytest.mark.asyncio
+    async def test_create_org(self, async_db_session: AsyncSession) -> None:
+        """Test creating an organization."""
+        org_service = OrgService(async_db_session)
+        org_data = OrgCreate(name="Test Org", slug="test-org")
+        org = await org_service.create_org(org_data)
+
+        assert org.id is not None
+        assert org.name == "Test Org"
+        assert org.slug == "test-org"
+        assert org.is_active is True
+        assert org.created_at is not None
+
+    @pytest.mark.asyncio
+    async def test_get_org_by_id(self, async_db_session: AsyncSession) -> None:
+        """Test retrieving an organization by ID."""
+        org_service = OrgService(async_db_session)
+        org = await org_service.create_org(OrgCreate(name="By ID", slug="by-id"))
+
+        retrieved = await org_service.get_org_by_id(org.id)
+        assert retrieved is not None
+        assert retrieved.id == org.id
+        assert retrieved.name == "By ID"
+
+    @pytest.mark.asyncio
+    async def test_get_org_by_slug(self, async_db_session: AsyncSession) -> None:
+        """Test retrieving an organization by slug."""
+        org_service = OrgService(async_db_session)
+        await org_service.create_org(OrgCreate(name="By Slug", slug="by-slug"))
+
+        retrieved = await org_service.get_org_by_slug("by-slug")
+        assert retrieved is not None
+        assert retrieved.slug == "by-slug"
+
+    @pytest.mark.asyncio
+    async def test_get_nonexistent_org(self, async_db_session: AsyncSession) -> None:
+        """Test retrieving a nonexistent organization returns None."""
+        org_service = OrgService(async_db_session)
+        assert await org_service.get_org_by_id(999) is None
+        assert await org_service.get_org_by_slug("nonexistent") is None
+
+    @pytest.mark.asyncio
+    async def test_update_org(self, async_db_session: AsyncSession) -> None:
+        """Test updating an organization."""
+        org_service = OrgService(async_db_session)
+        org = await org_service.create_org(OrgCreate(name="Original", slug="original"))
+
+        updated = await org_service.update_org(org.id, name="Updated")
+        assert updated is not None
+        assert updated.name == "Updated"
+        assert updated.updated_at is not None
+
+    @pytest.mark.asyncio
+    async def test_delete_org(self, async_db_session: AsyncSession) -> None:
+        """Test deleting an organization."""
+        org_service = OrgService(async_db_session)
+        org = await org_service.create_org(OrgCreate(name="Delete Me", slug="delete-me"))
+
+        success = await org_service.delete_org(org.id)
+        assert success is True
+        assert await org_service.get_org_by_id(org.id) is None
+
+    @pytest.mark.asyncio
+    async def test_delete_org_with_members(self, async_db_session: AsyncSession) -> None:
+        """Test deleting an org that has members cascades to remove members too."""
+        org_service = OrgService(async_db_session)
+        org = await org_service.create_org(
+            OrgCreate(name="Has Members", slug="has-members")
+        )
+
+        # Add some members
+        user_service = UserService(async_db_session)
+        users = [
+            await user_service.create_user(
+                UserCreate(
+                    email=f"deltest{i}@test.com",
+                    full_name=f"Del Test {i}",
+                    password="password123",
+                )
+            )
+            for i in range(3)
+        ]
+        membership_service = MembershipService(async_db_session)
+        for u in users:
+            await membership_service.add_member(org.id, u.id)
+
+        # Verify members exist
+        members = await membership_service.list_org_members(org.id)
+        assert len(members) == 3
+
+        # Delete org — should succeed and remove members
+        success = await org_service.delete_org(org.id)
+        assert success is True
+        assert await org_service.get_org_by_id(org.id) is None
+
+        # Members should be gone too
+        members = await membership_service.list_org_members(org.id)
+        assert len(members) == 0
+
+    @pytest.mark.asyncio
+    async def test_delete_nonexistent_org(self, async_db_session: AsyncSession) -> None:
+        """Test deleting a nonexistent organization returns False."""
+        org_service = OrgService(async_db_session)
+        assert await org_service.delete_org(999) is False
+
+    @pytest.mark.asyncio
+    async def test_list_orgs(self, async_db_session: AsyncSession) -> None:
+        """Test listing organizations."""
+        org_service = OrgService(async_db_session)
+        await org_service.create_org(OrgCreate(name="Org A", slug="org-a"))
+        await org_service.create_org(OrgCreate(name="Org B", slug="org-b"))
+
+        orgs = await org_service.list_orgs()
+        assert len(orgs) >= 2
+        slugs = {o.slug for o in orgs}
+        assert "org-a" in slugs
+        assert "org-b" in slugs
+
+
+class TestMembershipServiceIntegration:
+    """Test membership service operations."""
+
+    async def _create_user(
+        self, db: AsyncSession, email: str
+    ) -> "User":
+        """Helper to create a test user."""
+        from app.models.user import User
+        user_service = UserService(db)
+        return await user_service.create_user(
+            UserCreate(email=email, full_name="Test", password="password123")
+        )
+
+    async def _create_org(
+        self, db: AsyncSession, slug: str
+    ) -> Organization:
+        """Helper to create a test organization."""
+        org_service = OrgService(db)
+        return await org_service.create_org(OrgCreate(name=slug.title(), slug=slug))
+
+    @pytest.mark.asyncio
+    async def test_add_member(self, async_db_session: AsyncSession) -> None:
+        """Test adding a member to an organization."""
+        user = await self._create_user(async_db_session, "member1@test.com")
+        org = await self._create_org(async_db_session, "member-test")
+
+        membership_service = MembershipService(async_db_session)
+        member = await membership_service.add_member(org.id, user.id)
+
+        assert member.organization_id == org.id
+        assert member.user_id == user.id
+        assert member.role == ORG_ROLE_MEMBER
+        assert member.joined_at is not None
+
+    @pytest.mark.asyncio
+    async def test_add_member_with_role(self, async_db_session: AsyncSession) -> None:
+        """Test adding a member with a specific role."""
+        user = await self._create_user(async_db_session, "admin1@test.com")
+        org = await self._create_org(async_db_session, "role-test")
+
+        membership_service = MembershipService(async_db_session)
+        member = await membership_service.add_member(org.id, user.id, role=ORG_ROLE_ADMIN)
+
+        assert member.role == ORG_ROLE_ADMIN
+
+    @pytest.mark.asyncio
+    async def test_add_member_invalid_role(self, async_db_session: AsyncSession) -> None:
+        """Test adding a member with an invalid role raises ValueError."""
+        user = await self._create_user(async_db_session, "invalid@test.com")
+        org = await self._create_org(async_db_session, "invalid-role-test")
+
+        membership_service = MembershipService(async_db_session)
+        with pytest.raises(ValueError, match="Invalid org role"):
+            await membership_service.add_member(org.id, user.id, role="superadmin")
+
+    @pytest.mark.asyncio
+    async def test_get_member(self, async_db_session: AsyncSession) -> None:
+        """Test getting a specific membership."""
+        user = await self._create_user(async_db_session, "get-member@test.com")
+        org = await self._create_org(async_db_session, "get-member-test")
+
+        membership_service = MembershipService(async_db_session)
+        await membership_service.add_member(org.id, user.id)
+
+        member = await membership_service.get_member(org.id, user.id)
+        assert member is not None
+        assert member.user_id == user.id
+
+    @pytest.mark.asyncio
+    async def test_get_nonexistent_member(self, async_db_session: AsyncSession) -> None:
+        """Test getting a nonexistent membership returns None."""
+        membership_service = MembershipService(async_db_session)
+        assert await membership_service.get_member(999, 999) is None
+
+    @pytest.mark.asyncio
+    async def test_update_member_role(self, async_db_session: AsyncSession) -> None:
+        """Test updating a member's role."""
+        user = await self._create_user(async_db_session, "update-role@test.com")
+        org = await self._create_org(async_db_session, "update-role-test")
+
+        membership_service = MembershipService(async_db_session)
+        await membership_service.add_member(org.id, user.id)
+
+        updated = await membership_service.update_member_role(org.id, user.id, ORG_ROLE_ADMIN)
+        assert updated is not None
+        assert updated.role == ORG_ROLE_ADMIN
+
+    @pytest.mark.asyncio
+    async def test_remove_member(self, async_db_session: AsyncSession) -> None:
+        """Test removing a member from an organization."""
+        user = await self._create_user(async_db_session, "remove@test.com")
+        org = await self._create_org(async_db_session, "remove-test")
+
+        membership_service = MembershipService(async_db_session)
+        await membership_service.add_member(org.id, user.id)
+
+        success = await membership_service.remove_member(org.id, user.id)
+        assert success is True
+        assert await membership_service.get_member(org.id, user.id) is None
+
+    @pytest.mark.asyncio
+    async def test_remove_nonexistent_member(self, async_db_session: AsyncSession) -> None:
+        """Test removing a nonexistent member returns False."""
+        membership_service = MembershipService(async_db_session)
+        assert await membership_service.remove_member(999, 999) is False
+
+    @pytest.mark.asyncio
+    async def test_list_org_members(self, async_db_session: AsyncSession) -> None:
+        """Test listing all members of an organization."""
+        user1 = await self._create_user(async_db_session, "list1@test.com")
+        user2 = await self._create_user(async_db_session, "list2@test.com")
+        org = await self._create_org(async_db_session, "list-members-test")
+
+        membership_service = MembershipService(async_db_session)
+        await membership_service.add_member(org.id, user1.id, role=ORG_ROLE_OWNER)
+        await membership_service.add_member(org.id, user2.id)
+
+        members = await membership_service.list_org_members(org.id)
+        assert len(members) == 2
+        user_ids = {m.user_id for m in members}
+        assert user1.id in user_ids
+        assert user2.id in user_ids
+
+    @pytest.mark.asyncio
+    async def test_list_user_orgs(self, async_db_session: AsyncSession) -> None:
+        """Test listing all organizations a user belongs to."""
+        user = await self._create_user(async_db_session, "multi-org@test.com")
+        org1 = await self._create_org(async_db_session, "user-org-1")
+        org2 = await self._create_org(async_db_session, "user-org-2")
+
+        membership_service = MembershipService(async_db_session)
+        await membership_service.add_member(org1.id, user.id)
+        await membership_service.add_member(org2.id, user.id)
+
+        orgs = await membership_service.list_user_orgs(user.id)
+        assert len(orgs) == 2
+        slugs = {o.slug for o in orgs}
+        assert "user-org-1" in slugs
+        assert "user-org-2" in slugs
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members(self, async_db_session: AsyncSession) -> None:
+        """Test bulk-adding multiple users to an organization."""
+        users = [
+            await self._create_user(async_db_session, f"bulk{i}@test.com")
+            for i in range(5)
+        ]
+        org = await self._create_org(async_db_session, "bulk-test")
+
+        membership_service = MembershipService(async_db_session)
+        user_ids = [u.id for u in users]
+        added = await membership_service.bulk_add_members(org.id, user_ids)
+
+        assert len(added) == 5
+        members = await membership_service.list_org_members(org.id)
+        assert len(members) == 5
+        assert all(m.role == ORG_ROLE_MEMBER for m in members)
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_with_role(self, async_db_session: AsyncSession) -> None:
+        """Test bulk-adding members with a specific role."""
+        users = [
+            await self._create_user(async_db_session, f"bulkrole{i}@test.com")
+            for i in range(3)
+        ]
+        org = await self._create_org(async_db_session, "bulk-role-test")
+
+        membership_service = MembershipService(async_db_session)
+        user_ids = [u.id for u in users]
+        added = await membership_service.bulk_add_members(
+            org.id, user_ids, role=ORG_ROLE_ADMIN
+        )
+
+        assert len(added) == 3
+        assert all(m.role == ORG_ROLE_ADMIN for m in added)
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_skips_existing(self, async_db_session: AsyncSession) -> None:
+        """Test that bulk add skips users who are already members."""
+        users = [
+            await self._create_user(async_db_session, f"bulkskip{i}@test.com")
+            for i in range(4)
+        ]
+        org = await self._create_org(async_db_session, "bulk-skip-test")
+
+        membership_service = MembershipService(async_db_session)
+
+        # Add first two individually
+        await membership_service.add_member(org.id, users[0].id, role=ORG_ROLE_OWNER)
+        await membership_service.add_member(org.id, users[1].id)
+
+        # Bulk add all four — should only add the last two
+        all_ids = [u.id for u in users]
+        added = await membership_service.bulk_add_members(org.id, all_ids)
+
+        assert len(added) == 2
+        added_ids = {m.user_id for m in added}
+        assert users[2].id in added_ids
+        assert users[3].id in added_ids
+
+        # Verify existing members kept their original roles
+        owner = await membership_service.get_member(org.id, users[0].id)
+        assert owner is not None
+        assert owner.role == ORG_ROLE_OWNER
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_empty_list(self, async_db_session: AsyncSession) -> None:
+        """Test bulk add with empty list returns empty."""
+        org = await self._create_org(async_db_session, "bulk-empty-test")
+
+        membership_service = MembershipService(async_db_session)
+        added = await membership_service.bulk_add_members(org.id, [])
+
+        assert added == []
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_invalid_role(self, async_db_session: AsyncSession) -> None:
+        """Test bulk add with invalid role raises ValueError."""
+        org = await self._create_org(async_db_session, "bulk-invalid-test")
+
+        membership_service = MembershipService(async_db_session)
+        with pytest.raises(ValueError, match="Invalid org role"):
+            await membership_service.bulk_add_members(org.id, [1], role="superadmin")
+
+    @pytest.mark.asyncio
+    async def test_bulk_add_members_all_existing(self, async_db_session: AsyncSession) -> None:
+        """Test bulk add when all users are already members returns empty."""
+        users = [
+            await self._create_user(async_db_session, f"bulkall{i}@test.com")
+            for i in range(3)
+        ]
+        org = await self._create_org(async_db_session, "bulk-all-existing")
+
+        membership_service = MembershipService(async_db_session)
+        for u in users:
+            await membership_service.add_member(org.id, u.id)
+
+        # Bulk add the same users — should add none
+        all_ids = [u.id for u in users]
+        added = await membership_service.bulk_add_members(org.id, all_ids)
+
+        assert added == []
+
+
+class TestInviteServiceIntegration:
+    """Test invite service operations (AUTH-013)."""
+
+    async def _create_user(self, db: AsyncSession, email: str) -> "User":
+        from app.models.user import User
+        user_service = UserService(db)
+        return await user_service.create_user(
+            UserCreate(email=email, full_name="Test", password="password123")
+        )
+
+    async def _create_org(self, db: AsyncSession, slug: str) -> Organization:
+        org_service = OrgService(db)
+        return await org_service.create_org(OrgCreate(name=slug.title(), slug=slug))
+
+    @pytest.mark.asyncio
+    async def test_invite_new_user(self, async_db_session: AsyncSession) -> None:
+        """Inviting an email that doesn't exist creates a pending invite."""
+        owner = await self._create_user(async_db_session, "inv-owner@test.com")
+        org = await self._create_org(async_db_session, "inv-test")
+
+        invite_service = InviteService(async_db_session)
+        invite = await invite_service.create_invite(
+            org.id, "newuser@test.com", "member", owner.id
+        )
+
+        assert invite.status == "pending"
+        assert invite.email == "newuser@test.com"
+        assert invite.organization_id == org.id
+
+    @pytest.mark.asyncio
+    async def test_invite_existing_user_auto_adds(self, async_db_session: AsyncSession) -> None:
+        """Inviting an existing user immediately adds them to the org."""
+        owner = await self._create_user(async_db_session, "inv-owner2@test.com")
+        target = await self._create_user(async_db_session, "existing@test.com")
+        org = await self._create_org(async_db_session, "inv-existing")
+
+        invite_service = InviteService(async_db_session)
+        invite = await invite_service.create_invite(
+            org.id, "existing@test.com", "admin", owner.id
+        )
+
+        assert invite.status == "accepted"
+
+        membership_service = MembershipService(async_db_session)
+        member = await membership_service.get_member(org.id, target.id)
+        assert member is not None
+        assert member.role == "admin"
+
+    @pytest.mark.asyncio
+    async def test_pending_invite_accepted_on_registration(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Pending invite is accepted when the user registers."""
+        owner = await self._create_user(async_db_session, "inv-owner3@test.com")
+        org = await self._create_org(async_db_session, "inv-register")
+
+        invite_service = InviteService(async_db_session)
+        await invite_service.create_invite(
+            org.id, "future@test.com", "member", owner.id
+        )
+
+        new_user = await self._create_user(async_db_session, "future@test.com")
+        count = await invite_service.accept_pending_invites("future@test.com", new_user.id)
+
+        assert count == 1
+
+        membership_service = MembershipService(async_db_session)
+        member = await membership_service.get_member(org.id, new_user.id)
+        assert member is not None
+        assert member.role == "member"
+
+    @pytest.mark.asyncio
+    async def test_duplicate_invite_raises(self, async_db_session: AsyncSession) -> None:
+        """Cannot create duplicate pending invite for same email + org."""
+        owner = await self._create_user(async_db_session, "inv-owner4@test.com")
+        org = await self._create_org(async_db_session, "inv-dup")
+
+        invite_service = InviteService(async_db_session)
+        await invite_service.create_invite(org.id, "dup@test.com", "member", owner.id)
+
+        with pytest.raises(ValueError, match="Pending invite already exists"):
+            await invite_service.create_invite(org.id, "dup@test.com", "member", owner.id)
+
+    @pytest.mark.asyncio
+    async def test_list_pending_invites(self, async_db_session: AsyncSession) -> None:
+        """List only pending invites for an org."""
+        owner = await self._create_user(async_db_session, "inv-owner5@test.com")
+        org = await self._create_org(async_db_session, "inv-list")
+
+        invite_service = InviteService(async_db_session)
+        await invite_service.create_invite(org.id, "pending1@test.com", "member", owner.id)
+        await invite_service.create_invite(org.id, "pending2@test.com", "admin", owner.id)
+
+        pending = await invite_service.list_pending_invites(org.id)
+        assert len(pending) == 2
+        emails = {inv.email for inv in pending}
+        assert "pending1@test.com" in emails
+        assert "pending2@test.com" in emails
+
+    @pytest.mark.asyncio
+    async def test_no_pending_invites_returns_zero(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """accept_pending_invites returns 0 when no invites exist."""
+        invite_service = InviteService(async_db_session)
+        count = await invite_service.accept_pending_invites("nobody@test.com", 999)
+        assert count == 0
+{% else %}
+# Organization tests not included (auth_level != org)
+{% endif %}

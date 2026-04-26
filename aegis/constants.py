@@ -15,9 +15,11 @@ class ComponentNames:
     DATABASE = "database"
     BACKEND = "backend"
     FRONTEND = "frontend"
+    INGRESS = "ingress"
+    OBSERVABILITY = "observability"
 
     # Ordered list for interactive selection
-    INFRASTRUCTURE_ORDER = [REDIS, WORKER, SCHEDULER, DATABASE]
+    INFRASTRUCTURE_ORDER = [REDIS, WORKER, SCHEDULER, DATABASE, INGRESS, OBSERVABILITY]
 
 
 class StorageBackends:
@@ -33,12 +35,92 @@ class WorkerBackends:
 
     ARQ = "arq"
     TASKIQ = "taskiq"
+    DRAMATIQ = "dramatiq"
 
-    ALL = [ARQ, TASKIQ]
+    ALL = [ARQ, TASKIQ, DRAMATIQ]
+
+
+class AIFrameworks:
+    """AI framework options for the AI service."""
+
+    PYDANTIC_AI = "pydantic-ai"
+    LANGCHAIN = "langchain"
+
+    ALL = [PYDANTIC_AI, LANGCHAIN]
+
+
+class AIProviders:
+    """AI provider options for the AI service."""
+
+    # Provider identifiers
+    PUBLIC = "public"
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    GOOGLE = "google"
+    GROQ = "groq"
+    MISTRAL = "mistral"
+    COHERE = "cohere"
+    OLLAMA = "ollama"
+
+    # All valid providers (used for validation)
+    ALL = {PUBLIC, OPENAI, ANTHROPIC, GOOGLE, GROQ, MISTRAL, COHERE, OLLAMA}
+
+    # Default providers for bracket syntax (non-interactive)
+    DEFAULT = [PUBLIC]
+
+    # Default providers for interactive mode (free tier recommendations)
+    INTERACTIVE_DEFAULTS = [GROQ, GOOGLE]
+
+    # Provider display information: (id, display_name, description, pricing, is_recommended)
+    PROVIDER_INFO: list[tuple[str, str, str, str, bool]] = [
+        (OPENAI, "OpenAI", "GPT models", "Paid", False),
+        (ANTHROPIC, "Anthropic", "Claude models", "Paid", False),
+        (GOOGLE, "Google", "Gemini models", "Free tier", True),
+        (GROQ, "Groq", "Fast inference", "Free tier", True),
+        (MISTRAL, "Mistral", "Open models", "Mostly paid", False),
+        (COHERE, "Cohere", "Enterprise focus", "Limited free", False),
+        (OLLAMA, "Ollama", "Local inference", "Free (local)", True),
+    ]
+
+
+class PaymentProviders:
+    """Payment provider options for the payment service."""
+
+    STRIPE = "stripe"
+
+    ALL = [STRIPE]
+
+    DEFAULT = STRIPE
+
+
+class OllamaMode:
+    """Ollama deployment mode options."""
+
+    HOST = "host"  # Connect to Ollama running on host machine
+    DOCKER = "docker"  # Run Ollama in Docker container
+    NONE = "none"  # No Ollama (using cloud provider)
+
+    ALL = [HOST, DOCKER, NONE]
+
+    # Default URLs for each mode
+    HOST_URL = "http://host.docker.internal:11434"  # For Mac/Windows Docker
+    DOCKER_URL = "http://ollama:11434"  # For Docker service
+
+
+class AuthLevels:
+    """Auth level options for the auth service."""
+
+    BASIC = "basic"
+    RBAC = "rbac"
+    ORG = "org"
+
+    ALL = [BASIC, RBAC, ORG]
 
 
 class AnswerKeys:
     """Keys in Copier .copier-answers.yml configuration."""
+
+    ANSWERS_FILENAME = ".copier-answers.yml"
 
     # Component include flags
     SCHEDULER = "include_scheduler"
@@ -46,23 +128,47 @@ class AnswerKeys:
     REDIS = "include_redis"
     DATABASE = "include_database"
     CACHE = "include_cache"
+    INGRESS = "include_ingress"
+    OBSERVABILITY = "include_observability"
 
     # Service include flags
     AUTH = "include_auth"
     AI = "include_ai"
     COMMS = "include_comms"
+    INSIGHTS = "include_insights"
+    PAYMENT = "include_payment"
 
     # Service names (used for selection/lookup)
     SERVICE_AUTH = "auth"
     SERVICE_AI = "ai"
     SERVICE_COMMS = "comms"
+    SERVICE_INSIGHTS = "insights"
+    SERVICE_PAYMENT = "payment"
+
+    # Insights source flags
+    INSIGHTS_GITHUB = "insights_github"
+    INSIGHTS_PYPI = "insights_pypi"
+    INSIGHTS_PLAUSIBLE = "insights_plausible"
+    INSIGHTS_REDDIT = "insights_reddit"
+
+    # Payment configuration
+    PAYMENT_PROVIDER = "payment_provider"
 
     # Configuration values
     SCHEDULER_BACKEND = "scheduler_backend"
     SCHEDULER_WITH_PERSISTENCE = "scheduler_with_persistence"
     WORKER_BACKEND = "worker_backend"
     DATABASE_ENGINE = "database_engine"
+    AI_FRAMEWORK = "ai_framework"
     AI_PROVIDERS = "ai_providers"
+    AI_BACKEND = "ai_backend"
+    AI_WITH_PERSISTENCE = "ai_with_persistence"
+    AI_RAG = "ai_rag"
+    AUTH_LEVEL = "auth_level"
+    AUTH_RBAC = "include_auth_rbac"
+    AUTH_ORG = "include_auth_org"
+    AI_VOICE = "ai_voice"
+    OLLAMA_MODE = "ollama_mode"
     PROJECT_SLUG = "project_slug"
     SRC_PATH = "_src_path"
 
@@ -74,6 +180,20 @@ class AnswerKeys:
 
 class Messages:
     """User-facing CLI messages."""
+
+    # Section headers and separators
+    SEPARATOR_WIDTH = 40
+    SEPARATOR = "=" * SEPARATOR_WIDTH
+
+    SECTION_COMPONENT_SELECTION = "Component Selection"
+    SECTION_SERVICE_SELECTION = "Service Selection"
+    SECTION_COMPONENT_REMOVAL = "Component Removal"
+    SECTION_SERVICE_REMOVAL = "Service Removal Selection"
+    SECTION_SCHEDULER_PERSISTENCE = "Scheduler Persistence"
+    SECTION_DATABASE_ENGINE = "Database Engine"
+    SECTION_AI_FRAMEWORK = "AI Framework Selection"
+    SECTION_AI_BACKEND = "AI Conversation Persistence"
+    SECTION_AI_PROVIDERS = "AI Provider Selection"
 
     # Git validation
     GIT_NOT_INITIALIZED = "Project is not in a git repository"
@@ -111,23 +231,39 @@ class Messages:
     @classmethod
     def copier_only_command(cls, command_name: str) -> str:
         """Generate message for Copier-only command."""
-        return f"The 'aegis {command_name}' command only works with Copier-generated projects."
+        from .i18n import t
+
+        return t("shared.copier_only", command=command_name)
+
+    @classmethod
+    def print_section_header(cls, title: str, newline_before: bool = False) -> None:
+        """Print a section header with separator."""
+        import typer
+
+        if newline_before:
+            typer.echo()
+        typer.echo(title)
+        typer.echo(cls.SEPARATOR)
 
     @classmethod
     def print_next_steps(cls) -> None:
         """Print standard next steps message."""
         import typer
 
-        typer.echo(f"\n{cls.NEXT_STEPS_HEADER}")
-        typer.echo(cls.NEXT_STEP_MAKE_CHECK)
-        typer.echo(cls.NEXT_STEP_TEST)
-        typer.echo(cls.NEXT_STEP_COMMIT)
+        from .i18n import t
+
+        typer.echo(f"\n{t('shared.next_steps')}")
+        typer.echo(t("shared.next_make_check"))
+        typer.echo(t("shared.next_test"))
+        typer.echo(t("shared.next_commit"))
 
     @classmethod
     def print_review_changes(cls) -> None:
         """Print standard review changes message."""
         import typer
 
-        typer.echo(f"\n{cls.REVIEW_CHANGES_HEADER}")
-        typer.echo(cls.REVIEW_DOCKER_COMPOSE)
-        typer.echo(cls.REVIEW_PYPROJECT)
+        from .i18n import t
+
+        typer.echo(f"\n{t('shared.review_header')}")
+        typer.echo(t("shared.review_docker"))
+        typer.echo(t("shared.review_pyproject"))

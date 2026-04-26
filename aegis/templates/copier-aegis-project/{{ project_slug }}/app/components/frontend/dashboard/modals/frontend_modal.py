@@ -14,7 +14,9 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
+from app.services.system.ui import get_component_subtitle, get_component_title
 
+from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
 
@@ -296,7 +298,7 @@ class StatisticsSection(ft.Container):
                 stat_row("Component Status", status.value.upper()),
                 stat_row("Health Message", message),
                 stat_row("Response Time", f"{response_time:.2f}ms"),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE),
+                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
                 stat_row("Backend Integration", backend_dep),
             ],
             spacing=Theme.Spacing.XS,
@@ -325,9 +327,9 @@ class FrontendDetailDialog(BaseDetailPopup):
         sections = [
             OverviewSection(metadata),
             ConfigurationSection(metadata),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
             CapabilitiesSection(metadata),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
             StatisticsSection(component_data, page),
         ]
 
@@ -335,6 +337,8 @@ class FrontendDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text="Frontend",
+            title_text=get_component_title("frontend"),
+            subtitle_text=get_component_subtitle("frontend", metadata),
             sections=sections,
+            status_detail=get_status_detail(component_data),
         )

@@ -8,8 +8,13 @@ from app.core.log import logger
 
 
 async def system_health_check(ctx: dict[str, Any]) -> dict[str, str]:
-    """Simple system health check task."""
-    logger.info("Running system health check task")
+    """Verify worker connectivity and responsiveness.
+
+    Returns a timestamped health status to confirm the worker process
+    is alive and can execute tasks. Used by the scheduler for periodic
+    liveness monitoring.
+    """
+    logger.debug("Running system health check task")
 
     # Simple health check - just return current timestamp
     return {
@@ -20,7 +25,11 @@ async def system_health_check(ctx: dict[str, Any]) -> dict[str, str]:
 
 
 async def cleanup_temp_files(ctx: dict[str, Any]) -> dict[str, str]:
-    """Simple temp file cleanup task placeholder."""
+    """Remove stale temporary files from the working directory.
+
+    Placeholder for application-specific cleanup logic. Scans for
+    expired temp files, upload artifacts, and cache entries.
+    """
     logger.info("Running temp file cleanup task")
 
     # Placeholder for actual cleanup logic

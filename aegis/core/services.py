@@ -8,6 +8,9 @@ and metadata used for project generation and validation.
 from dataclasses import dataclass, field
 from enum import Enum
 
+from ..constants import ComponentNames
+from ..i18n import t
+
 
 class ServiceType(Enum):
     """Service type classifications."""
@@ -49,7 +52,7 @@ SERVICES: dict[str, ServiceSpec] = {
         name="auth",
         type=ServiceType.AUTH,
         description="User authentication and authorization with JWT tokens",
-        required_components=["backend", "database"],
+        required_components=[ComponentNames.BACKEND, ComponentNames.DATABASE],
         pyproject_deps=[
             "python-jose[cryptography]==3.3.0",
             "passlib[bcrypt]==1.7.4",
@@ -58,6 +61,7 @@ SERVICES: dict[str, ServiceSpec] = {
         template_files=[
             "app/components/backend/api/auth/",
             "app/models/user.py",
+            "app/models/org.py",
             "app/services/auth/",
             "app/core/security.py",
         ],
@@ -65,11 +69,10 @@ SERVICES: dict[str, ServiceSpec] = {
     "ai": ServiceSpec(
         name="ai",
         type=ServiceType.AI,
-        description="AI chatbot service with PydanticAI engine",
-        required_components=["backend"],
+        description="AI chatbot service with multi-framework support",
+        required_components=[ComponentNames.BACKEND],
         pyproject_deps=[
-            "pydantic-ai-slim[{AI_PROVIDERS}]==1.0.10",  # Dynamic providers
-            "httpx>=0.27.0",  # For API providers
+            "{AI_FRAMEWORK_DEPS}",  # Dynamic framework + provider deps
         ],
         template_files=[
             "app/services/ai/",
@@ -81,7 +84,7 @@ SERVICES: dict[str, ServiceSpec] = {
         name="comms",
         type=ServiceType.NOTIFICATION,
         description="Communications service with email (Resend), SMS and voice (Twilio)",
-        required_components=["backend"],
+        required_components=[ComponentNames.BACKEND],
         pyproject_deps=[
             "resend>=2.4.0",  # Email provider
             "twilio>=9.3.7",  # SMS/Voice provider
@@ -91,6 +94,43 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/services/comms/",
             "app/cli/comms.py",
             "app/components/backend/api/comms/",
+        ],
+    ),
+    "insights": ServiceSpec(
+        name="insights",
+        type=ServiceType.ANALYTICS,
+        description="Adoption metrics and analytics with automated data collection",
+        required_components=[
+            ComponentNames.BACKEND,
+            ComponentNames.DATABASE,
+            ComponentNames.SCHEDULER,
+        ],
+        recommended_components=[ComponentNames.WORKER],
+        pyproject_deps=[
+            "httpx>=0.27.0",  # HTTP client for API collectors
+        ],
+        template_files=[
+            "app/services/insights/",
+            "app/cli/insights.py",
+            "app/components/backend/api/insights/",
+        ],
+    ),
+    "payment": ServiceSpec(
+        name="payment",
+        type=ServiceType.PAYMENT,
+        description="Payment processing with Stripe (checkout, subscriptions, webhooks)",
+        required_components=[
+            ComponentNames.BACKEND,
+            ComponentNames.DATABASE,
+        ],
+        recommended_components=[ComponentNames.WORKER],
+        pyproject_deps=[
+            "stripe>=11.0.0",  # Stripe Python SDK
+        ],
+        template_files=[
+            "app/services/payment/",
+            "app/cli/payment.py",
+            "app/components/backend/api/payment/",
         ],
     ),
 }
@@ -147,7 +187,7 @@ def validate_service_dependencies(
 
     for service_name in selected_services:
         if service_name not in SERVICES:
-            errors.append(f"Unknown service: {service_name}")
+            errors.append(t("validation.unknown_service", name=service_name))
             continue
 
         service = SERVICES[service_name]

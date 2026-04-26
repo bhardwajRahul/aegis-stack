@@ -1,9 +1,9 @@
 [project]
 name = "aegis-stack"
-version = "0.4.0"
-description = "A production-ready Python foundation for builders who refuse to wait. Try: uvx aegis-stack init my-project"
+version = "0.6.11"
+description = "A production-ready FastAPI platform with modular components and a built-in control plane. Try: uvx aegis-stack init my-project"
 readme = "README.md"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11,<3.15"
 license = { text = "MIT" }
 authors = [{ name = "Leonard Bedner", email = "gamecoder99@gmail.com" }]
 keywords = [
@@ -32,18 +32,24 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Code Generators",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
     "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
     "Typing :: Typed",
 ]
 dependencies = [
-    "typer>=0.9.0",
-    "cookiecutter>=2.6.0",
-    "copier>=9.0.0",
+    # Pinned (not >=) because typer's newer releases use unquoted forward
+    # references (e.g. ``cls: type[TyperCommand] | None``) that fail at
+    # class-body evaluation on Python 3.11/3.12. CI runs on 3.11 — pin
+    # below the regressed range until typer ships a fix.
+    "typer==0.16.0",
+    "copier>=9.11.2",
     "rich>=13.0.0",
-    "pillow>=11.3.0",
+    "pillow>=12.2.0",
     "packaging>=24.0",
+    "filelock>=3.20.1",
+    "urllib3>=2.6.3",
 ]
 
 [project.urls]
@@ -54,19 +60,23 @@ Issues = "https://github.com/lbedner/aegis-stack/issues"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
+    "pytest>=9.0.3",
     "pytest-asyncio>=0.23.0",
     "ruff>=0.1.0",
-    "ty",
+    "ty>=0.0.8",  # Type checker
     "pre-commit>=3.7.0",
     "pip-audit>=2.6.0",
+    "sqlalchemy>=2.0.0",  # For migrate-fix integration tests
+    "alembic>=1.13.0",    # For migrate-fix integration tests
+    "opencc-python-reimplemented>=0.1.7",  # Simplified → Traditional Chinese conversion
 ]
 docs = [
     "mkdocs>=1.5.0",
     "mkdocs-material>=9.5.0",
     "mkdocstrings[python]>=0.24.0",
     "mkdocs-gen-files>=0.5.0",
-    "pymdown-extensions>=10.0.0",
+    "pygments>=2.20.0",
+    "pymdown-extensions>=10.21.0",
     "mkdocs-mermaid2-plugin>=1.1.0",
     "mkdocs-glightbox>=0.3.0",
 ]
@@ -127,10 +137,17 @@ addopts = ["-v", "--tb=short", "--strict-markers"]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
+    "postgres: marks tests requiring PostgreSQL (run with '-m postgres')",
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.ty.src]
 # Exclude template files and generated test projects from type checking
-exclude = ["aegis/templates/**", "test-project/**", "my-app/**", "test-*/**"]
+exclude = [
+    "aegis/templates/**",
+    "test-project/**",
+    "my-app/**",
+    "test-*/**",
+    "*-test/**",
+]

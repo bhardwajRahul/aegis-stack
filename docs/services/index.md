@@ -3,7 +3,7 @@
 Services are **business-level functionality** that your application provides to users. While Components handle infrastructure concerns (databases, workers, scheduling), Services implement specific business capabilities like authentication, payments, or AI integrations.
 
 !!! info "Services vs Components"
-    **Services** = What your app does (auth, payments, AI)
+    **Services** = What your app does (auth, AI, insights)
     **Components** = How your app works (database, workers, API)
 
 ## Service Architecture
@@ -14,13 +14,16 @@ graph TB
         Auth[🔐 Auth Service<br/>JWT + User Management<br/>Registration, Login, Profiles]
         AI[🤖 AI Service<br/>PydanticAI Integration<br/>Multi-Provider Chat]
         Comms[📧 Comms Service<br/>Email, SMS, Voice<br/>Resend + Twilio]
+        Payment[💳 Payment Service<br/>Stripe Integration<br/>Checkout, Subscriptions]
+        Insights[📊 Insights Service<br/>Adoption Metrics<br/>GitHub, PyPI, Plausible]
     end
 
     subgraph "Components Layer (Infrastructure)"
         Backend[⚡ Backend<br/>FastAPI Routes]
-        Database[💾 Database<br/>SQLite + SQLModel]
-        Worker[🔄 Worker<br/>arq + Redis]
+        Database[💾 Database<br/>SQLite / PostgreSQL]
+        Worker[🔄 Worker<br/>arq / Dramatiq / TaskIQ]
         Scheduler[⏰ Scheduler<br/>APScheduler]
+        Observability[🔍 Observability<br/>Logfire]
         Cache[🗄️ Cache<br/>Redis Sessions<br/>🚧 Coming Soon]
     end
 
@@ -28,10 +31,16 @@ graph TB
     Auth --> Database
     AI --> Backend
     Comms --> Backend
+    Payment --> Backend
+    Payment --> Database
+    Insights --> Backend
+    Insights --> Database
 
     style Auth fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style AI fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style Comms fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
+    style Payment fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
+    style Insights fill:#fff3e0,stroke:#f57c00,stroke-width:2px,stroke-dasharray: 5 5
     style Backend fill:#e1f5fe,stroke:#1976d2,stroke-width:2px
     style Database fill:#fff3e0,stroke:#f57c00,stroke-width:2px
     style Worker fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
@@ -85,7 +94,7 @@ graph LR
         AuthAPI["Auth API routes"]
         UserModel["User model"]
         JWT["JWT security"]
-        DB[SQLite database]
+        DB[Database]
         API[FastAPI app]
         UI[Flet frontend]
     end
@@ -117,9 +126,11 @@ graph LR
 
 | Service | Status | Description | Required Components |
 |---------|--------|-------------|-------------------|
+| **ai** | ✅ Available | Multi-provider AI chat with PydanticAI (OpenAI, Anthropic, Google, Groq, etc.) | backend |
 | **auth** | ✅ Available | User authentication and authorization with JWT tokens | backend, database |
-| **ai** | 🧪 Experimental | Multi-provider AI chat with PydanticAI (OpenAI, Anthropic, Google, Groq, etc.) | backend |
-| **comms** | 🧪 Experimental | Email (Resend), SMS, and voice calls (Twilio) | backend |
+| **comms** | ✅ Available | Email (Resend), SMS, and voice calls (Twilio) | backend |
+| **insights** | 🧪 Experimental | Adoption metrics tracking (GitHub, PyPI, Plausible, Reddit) | backend, database, scheduler |
+| **payment** | 🧪 Experimental | Stripe checkout, subscriptions, refunds, webhooks, disputes | backend, database |
 
 ## Service Categories
 
@@ -141,6 +152,10 @@ graph TB
         Push[push<br/>🚧 Future: Push Notifications]
     end
 
+    subgraph "📊 Analytics Services"
+        InsightsService[insights<br/>GitHub, PyPI, Plausible, Reddit]
+    end
+
     style AuthJWT fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style AuthOAuth fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
     style AuthSAML fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
@@ -148,6 +163,7 @@ graph TB
     style AILangChain fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
     style CommsService fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style Push fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
+    style InsightsService fill:#fff3e0,stroke:#f57c00,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
 ## Service Development Patterns
@@ -222,7 +238,8 @@ Authentication Services
 
 Payment Services
 ----------------------------------------
-  No services available yet.
+  payment      - Payment processing with Stripe (checkout, subscriptions, webhooks)
+               Requires components: backend, database
 
 AI & Machine Learning Services
 ----------------------------------------
@@ -250,8 +267,10 @@ Services automatically appear in the health dashboard alongside components, prov
 **Next Steps:**
 
 - **[Integration Patterns](../integration-patterns.md)** - How services integrate with components and architectural patterns
-- **[Authentication Service](auth/index.md)** - Complete JWT auth implementation
 - **[AI Service](ai/index.md)** - Multi-provider AI chat with PydanticAI
+- **[Authentication Service](auth/index.md)** - Complete JWT auth implementation
 - **[Communications Service](comms/index.md)** - Email, SMS, and voice via Resend/Twilio
+- **[Insights Service](insights/index.md)** - Adoption metrics tracking (GitHub, PyPI, Plausible, Reddit) *(experimental)*
+- **[Payment Service](payment/index.md)** - Payment processing with Stripe *(experimental)*
 - **[CLI Reference](../cli-reference.md)** - Service command reference
 - **[Components Overview](../components/index.md)** - Infrastructure layer

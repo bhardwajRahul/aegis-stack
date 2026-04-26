@@ -17,8 +17,9 @@ from pydantic import BaseModel, Field
 
 from aegis.config.shared_files import SHARED_TEMPLATE_FILES
 from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
+from aegis.i18n import t
 
-from .component_files import get_component_files, get_template_path
+from .component_files import get_component_files, get_copier_defaults, get_template_path
 from .copier_manager import is_copier_project, load_copier_answers
 from .verbosity import verbose_print
 
@@ -29,6 +30,35 @@ COPIER_ANSWERS_HEADER = (
 )
 PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
 JINJA_EXTENSION = ".jinja"
+
+# Files with conditional content that should be regenerated when components change.
+# These files are not user-editable and contain Jinja conditionals that depend on
+# which components/services are enabled.
+REGENERATE_ON_COMPONENT_CHANGE = {
+    "app/components/backend/api/deps.py",
+    "app/components/backend/api/routing.py",
+}
+
+# Files with Jinja conditionals that depend on auth level (basic/rbac/org).
+# Must be regenerated when upgrading auth level.
+REGENERATE_ON_AUTH_LEVEL_CHANGE = {
+    "app/models/user.py",
+    "app/models/org.py",
+    "app/core/security.py",
+    "app/services/auth/auth_service.py",
+    "app/services/auth/org_service.py",
+    "app/services/auth/membership_service.py",
+    "app/services/auth/invite_service.py",
+    "app/components/backend/api/auth/router.py",
+    "app/components/backend/api/orgs/router.py",
+    "app/components/backend/api/orgs/__init__.py",
+    "app/components/backend/api/deps.py",
+    "app/components/frontend/dashboard/modals/auth_modal.py",
+    "app/components/frontend/dashboard/modals/auth_users_tab.py",
+    "app/components/frontend/dashboard/modals/auth_orgs_tab.py",
+    "tests/services/test_org_integration.py",
+    "tests/api/test_org_endpoints.py",
+}
 
 
 class UpdateResult(BaseModel):
@@ -89,7 +119,13 @@ class ManualUpdater:
 
         self.project_path = project_path
         self.template_path = get_template_path()
-        self.answers = load_copier_answers(project_path)
+
+        # Backfill missing answer keys with copier.yml defaults before any
+        # rendering. Without this, undefined variables (e.g. ollama_mode missing
+        # from older projects) cause Jinja2 conditionals to inject unrelated
+        # component code. See: #504
+        copier_defaults = get_copier_defaults()
+        self.answers = {**copier_defaults, **load_copier_answers(project_path)}
 
         # Setup Jinja2 environment
         # Template files are at: template/{{ project_slug }}/...
@@ -128,7 +164,14 @@ class ManualUpdater:
             # Check if already enabled
             include_key = AnswerKeys.include_key(component)
             if self.answers.get(include_key) is True:
-                raise ValueError(f"Component '{component}' is already enabled")
+                # Allow auth level upgrades (basic → rbac → org)
+                is_auth_upgrade = (
+                    component == AnswerKeys.SERVICE_AUTH
+                    and additional_data
+                    and AnswerKeys.AUTH_LEVEL in additional_data
+                )
+                if not is_auth_upgrade:
+                    raise ValueError(f"Component '{component}' is already enabled")
 
             # Merge additional data
             update_data = additional_data or {}
@@ -157,6 +200,10 @@ class ManualUpdater:
                 # Continue to regenerate shared files even if no component files
             else:
                 # Render and copy each file for this component
+                typer.secho(
+                    f"   {t('updater.processing_files', count=len(component_files))}",
+                    fg=typer.colors.CYAN,
+                )
                 for file_path in component_files:
                     # Convert relative path to template path
                     # copier_files: "app/components/scheduler"
@@ -170,6 +217,11 @@ class ManualUpdater:
                         # Output path in project
                         output_path = self.project_path / file_path
                         rendered_files[output_path] = content
+                    else:
+                        typer.secho(
+                            f"   Warning: Template not found for: {file_path}",
+                            fg=typer.colors.YELLOW,
+                        )
 
                 # Copy files to project
                 for output_path, content in rendered_files.items():
@@ -180,8 +232,22 @@ class ManualUpdater:
 
                     # Check for conflicts
                     if output_path.exists():
-                        # For now, skip existing files
-                        # TODO: Implement conflict resolution
+                        # Some files have conditional content and must be regenerated
+                        is_auth_upgrade = (
+                            additional_data
+                            and AnswerKeys.AUTH_LEVEL in additional_data
+                            and relative_path in REGENERATE_ON_AUTH_LEVEL_CHANGE
+                        )
+                        if (
+                            relative_path in REGENERATE_ON_COMPONENT_CHANGE
+                            or is_auth_upgrade
+                        ):
+                            output_path.write_text(content)
+                            verbose_print(f"   Regenerated: {relative_path}")
+                            files_modified.append(relative_path)
+                            continue
+
+                        # For other files, skip existing to preserve user changes
                         verbose_print(f"   Skipping existing file: {relative_path}")
                         files_skipped.append(relative_path)
                         continue
@@ -381,7 +447,7 @@ class ManualUpdater:
         shared_files_backed_up: list[str] = []
         shared_files_need_manual_merge: list[str] = []
 
-        print("\nUpdating shared template files...")
+        print(f"\n{t('updater.updating_shared')}")
         for shared_file, policy in SHARED_TEMPLATE_FILES.items():
             template_file = f"{PROJECT_SLUG_PLACEHOLDER}/{shared_file}"
             output_path = self.project_path / shared_file
@@ -502,7 +568,7 @@ class ManualUpdater:
         - Code is auto-formatted
         - Imports are organized
         """
-        print("\nRunning post-generation tasks...")
+        print(f"\n{t('updater.running_postgen')}")
 
         # Run uv sync to update dependencies
         try:
@@ -512,7 +578,7 @@ class ManualUpdater:
                 check=True,
                 capture_output=True,
             )
-            print("   Dependencies synced (uv sync)")
+            print(f"   {t('updater.deps_synced')}")
         except subprocess.CalledProcessError as e:
             print(f"   Warning: Failed to sync dependencies: {e}")
 
@@ -524,7 +590,7 @@ class ManualUpdater:
                 check=True,
                 capture_output=True,
             )
-            print("   Code formatted (make fix)")
+            print(f"   {t('updater.code_formatted')}")
         except subprocess.CalledProcessError:
             typer.echo(
                 "   "

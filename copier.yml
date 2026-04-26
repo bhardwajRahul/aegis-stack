@@ -6,7 +6,7 @@
 # - Update support
 
 _min_copier_version: "9.0.0"
-_version: "0.4.0"
+_version: "0.6.11"
 
 # IMPORTANT: Template content is in subdirectory
 # This allows the template to be recognized as git-tracked (aegis-stack repo root has .git)
@@ -55,14 +55,25 @@ version:
   help: "Initial version"
   default: "0.1.0"
 
+aegis_version:
+  type: str
+  help: "Aegis Stack version (auto-injected)"
+  default: "0.0.0"
+
 python_version:
   type: str
   help: "Python version to use"
+  # Default 3.13 (not 3.14) because the 3.14 ecosystem still has gaps:
+  # openai 2.x circular-imports during pytest collection on 3.14, and
+  # requests' ``compat.py`` is missing ``JSONDecodeError`` on 3.14.
+  # 3.13 has been out long enough that all our deps work cleanly.
+  # Users can still opt into 3.14 explicitly when they want it.
   default: "3.13"
   choices:
     - "3.11"
     - "3.12"
     - "3.13"
+    - "3.14"
 
 # Component selection
 include_scheduler:
@@ -82,22 +93,55 @@ include_worker:
 
 worker_backend:
   type: str
-  help: "Worker backend (arq or taskiq)"
+  help: "Worker backend (arq, taskiq, or dramatiq)"
   default: "arq"
   choices:
     - "arq"
     - "taskiq"
+    - "dramatiq"
   when: "{{ include_worker }}"
 
 include_database:
   type: bool
-  help: "Include SQLModel database with SQLite?"
+  help: "Include SQLModel database?"
   default: false
+
+database_engine:
+  type: str
+  help: "Database engine"
+  default: "sqlite"
+  choices:
+    - "sqlite"
+    - "postgres"
+  # NOTE: No `when` clause - we need this value saved even when include_database=false
+  # so that templates can conditionally render based on engine type
 
 include_cache:
   type: bool
   help: "Include Redis cache component?"
   default: false
+
+include_ingress:
+  type: bool
+  help: "Include Traefik reverse proxy?"
+  default: false
+
+include_observability:
+  type: bool
+  help: "Include Logfire observability and tracing?"
+  default: false
+
+ingress_tls:
+  type: bool
+  help: "Enable TLS with Let's Encrypt?"
+  default: false
+  when: "{{ include_ingress }}"
+
+ingress_domain:
+  type: str
+  help: "Domain for TLS certificate (e.g., example.com)"
+  default: ""
+  when: "{{ include_ingress and ingress_tls }}"
 
 scheduler_backend:
   type: str
@@ -106,6 +150,7 @@ scheduler_backend:
   choices:
     - "memory"
     - "sqlite"
+    - "postgres"
   when: "{{ include_scheduler }}"
 
 scheduler_with_persistence:
@@ -120,10 +165,41 @@ include_auth:
   help: "Include authentication service with JWT?"
   default: false
 
+auth_level:
+  type: str
+  help: "Authentication level"
+  default: "basic"
+  choices:
+    - "basic"
+    - "rbac"
+    - "org"
+  when: "{{ include_auth }}"
+
+include_auth_rbac:
+  type: bool
+  help: "Include role-based access control?"
+  default: "{{ auth_level in ['rbac', 'org'] }}"
+  when: "{{ include_auth }}"
+
+include_auth_org:
+  type: bool
+  help: "Include multi-tenant organization support?"
+  default: "{{ auth_level == 'org' }}"
+  when: "{{ include_auth }}"
+
 include_ai:
   type: bool
-  help: "Include AI service with PydanticAI?"
+  help: "Include AI service?"
   default: false
+
+ai_framework:
+  type: str
+  help: "AI framework to use"
+  default: "pydantic-ai"
+  choices:
+    - "pydantic-ai"
+    - "langchain"
+  when: "{{ include_ai }}"
 
 ai_providers:
   type: str
@@ -131,15 +207,101 @@ ai_providers:
   default: "openai"
   when: "{{ include_ai }}"
 
+ai_backend:
+  type: str
+  help: "AI conversation storage backend"
+  default: "memory"
+  choices:
+    - "memory"
+    - "sqlite"
+    - "postgres"
+  when: "{{ include_ai }}"
+
+ai_with_persistence:
+  type: bool
+  help: "Enable AI conversation persistence?"
+  default: "{{ ai_backend in ['sqlite', 'postgres'] }}"
+  when: "{{ include_ai }}"
+
+ai_rag:
+  type: bool
+  help: "Enable RAG (Retrieval-Augmented Generation) for document indexing?"
+  default: false
+  when: "{{ include_ai }}"
+
+ai_voice:
+  type: bool
+  help: "Enable voice capabilities (TTS and STT)?"
+  default: false
+  when: "{{ include_ai }}"
+
+ollama_mode:
+  type: str
+  help: "Ollama deployment mode (host, docker, or none)"
+  default: "none"
+  choices:
+    - "host"
+    - "docker"
+    - "none"
+  # Note: No 'when' condition - always include for template access
+  # Defaults to "none" when AI not using ollama
+
+include_comms:
+  type: bool
+  help: "Include communications service (email/SMS)?"
+  default: false
+
+include_payment:
+  type: bool
+  help: "Include payment processing service (Stripe)?"
+  default: false
+
+payment_provider:
+  type: str
+  help: "Payment provider"
+  default: "stripe"
+  choices:
+    - "stripe"
+  when: "{{ include_payment }}"
+
+include_insights:
+  type: bool
+  help: "Include insights service (adoption metrics and analytics)?"
+  default: false
+
+insights_github:
+  type: bool
+  help: "Include GitHub Traffic + Stargazers data collection?"
+  default: true
+  when: "{{ include_insights }}"
+
+insights_pypi:
+  type: bool
+  help: "Include PyPI download stats collection?"
+  default: true
+  when: "{{ include_insights }}"
+
+insights_plausible:
+  type: bool
+  help: "Include Plausible docs analytics collection?"
+  default: false
+  when: "{{ include_insights }}"
+
+insights_reddit:
+  type: bool
+  help: "Include Reddit post tracking?"
+  default: false
+  when: "{{ include_insights }}"
+
 # Internal computed values (using Jinja2)
-_has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache }}"
+_has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache or include_ingress or include_observability }}"
 _include_migrations: "{{ include_auth }}"
 
 # Component-specific dependencies (computed)
 _scheduler_deps: "{% if include_scheduler %}apscheduler>=3.10.0{% endif %}"
 _redis_deps: "{% if include_redis %}redis>=5.0.0{% endif %}"
 _worker_deps: "{% if include_worker %}arq>=0.25.0{% endif %}"
-_database_deps: "{% if include_database %}sqlmodel>=0.0.14,sqlalchemy>=2.0.0,aiosqlite>=0.19.0{% endif %}"
+_database_deps: "{% if include_database %}sqlmodel>=0.0.14,sqlalchemy>=2.0.0{% if database_engine == 'sqlite' %},aiosqlite>=0.19.0{% endif %}{% if database_engine == 'postgres' %},asyncpg>=0.29.0,psycopg2-binary>=2.9.9{% endif %}{% endif %}"
 _cache_deps: "{% if include_cache %}redis[hiredis]>=5.0.0{% endif %}"
 
 # Service-specific dependencies (computed)

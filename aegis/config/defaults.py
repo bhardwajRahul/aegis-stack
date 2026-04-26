@@ -5,6 +5,7 @@ These values are derived from the aegis-stack pyproject.toml to maintain
 a single source of truth.
 """
 
+import re
 from pathlib import Path
 
 
@@ -12,15 +13,15 @@ def _parse_python_version_bounds() -> tuple[str, str]:
     """
     Parse Python version bounds from aegis-stack's pyproject.toml.
 
-    Extracts requires-python (e.g., ">=3.11,<3.14") and returns:
+    Extracts requires-python (e.g., ">=3.11,<3.15") and returns:
     - Lower bound (minimum supported): "3.11"
-    - Upper bound (maximum supported): "3.13" (derived from <3.14)
+    - Upper bound (maximum supported): "3.14" (derived from <3.15)
 
     Returns:
         Tuple of (min_version, max_version) as strings
 
     Note:
-        Falls back to ("3.11", "3.13") if parsing fails.
+        Falls back to ("3.11", "3.14") if parsing fails.
     """
     try:
         pyproject_path = Path(__file__).parent.parent.parent / "pyproject.toml"
@@ -49,7 +50,7 @@ def _parse_python_version_bounds() -> tuple[str, str]:
         pass
 
     # Fallback defaults
-    return ("3.11", "3.13")
+    return ("3.11", "3.14")
 
 
 def _generate_supported_versions(min_version: str, max_version: str) -> list[str]:
@@ -58,10 +59,10 @@ def _generate_supported_versions(min_version: str, max_version: str) -> list[str
 
     Args:
         min_version: Minimum version (e.g., "3.11")
-        max_version: Maximum version (e.g., "3.13")
+        max_version: Maximum version (e.g., "3.14")
 
     Returns:
-        List of version strings (e.g., ["3.11", "3.12", "3.13"])
+        List of version strings (e.g., ["3.11", "3.12", "3.13", "3.14"])
 
     Note:
         Only works for same major version. Falls back to hardcoded list
@@ -73,7 +74,7 @@ def _generate_supported_versions(min_version: str, max_version: str) -> list[str
 
         # Only works if same major version
         if min_parts[0] != max_parts[0]:
-            return ["3.11", "3.12", "3.13"]  # Fallback
+            return ["3.11", "3.12", "3.13", "3.14"]  # Fallback
 
         major = min_parts[0]
         min_minor = int(min_parts[1])
@@ -87,12 +88,42 @@ def _generate_supported_versions(min_version: str, max_version: str) -> list[str
 # Parse bounds from pyproject.toml (single source of truth)
 _min_version, _max_version = _parse_python_version_bounds()
 
-# Default Python version for generated projects (maximum supported)
-# Users can still specify --python-version 3.11 or 3.12 if desired
-DEFAULT_PYTHON_VERSION = _max_version
+# Default Python version for generated projects.
+#
+# Pinned to 3.13 (not the auto-derived max of 3.14) because the 3.14
+# ecosystem is still incomplete: openai 2.x has a circular import on
+# pytest collection under 3.14, and ``requests.compat`` is missing
+# ``JSONDecodeError``. Both break ``make check`` in matrix tests.
+# 3.13 has been out long enough that all our pinned deps work.
+# Users can still opt into 3.14 explicitly via ``--python-version 3.14``
+# (or 3.11 / 3.12 — anything in SUPPORTED_PYTHON_VERSIONS works).
+DEFAULT_PYTHON_VERSION = "3.13"
 
 # Supported Python versions (auto-generated from min to max)
 SUPPORTED_PYTHON_VERSIONS = _generate_supported_versions(_min_version, _max_version)
 
+
+def version_to_git_tag(version: str) -> str:
+    """
+    Convert a PEP 440 version string to a git tag.
+
+    PEP 440 uses no separator before pre-release identifiers (e.g., 0.6.0rc1),
+    but our git tags use a dash (e.g., v0.6.0-rc1).
+
+    Args:
+        version: PEP 440 version string (e.g., "0.6.0rc1", "0.5.4")
+
+    Returns:
+        Git tag string (e.g., "v0.6.0-rc1", "v0.5.4")
+    """
+    # Insert dash before pre-release identifiers: rc, alpha, beta, dev
+    # Negative lookbehind ensures we don't double-dash if already present
+    normalized = re.sub(r"(?<!-)(rc|alpha|beta|dev)(\d+)", r"-\1\2", version)
+    return f"v{normalized}"
+
+
 # GitHub URL for template source (used when installed via pip/uvx)
 GITHUB_TEMPLATE_URL = "gh:lbedner/aegis-stack"
+
+# GitHub repository URL (for commit links, documentation links, etc.)
+GITHUB_REPO_URL = "https://github.com/lbedner/aegis-stack"

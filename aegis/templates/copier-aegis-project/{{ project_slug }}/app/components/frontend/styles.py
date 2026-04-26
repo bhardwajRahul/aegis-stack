@@ -50,6 +50,25 @@ class ButtonColors:
 
 
 @dataclass(frozen=True)
+class PulseColors:
+    """Aegis Pulse palette — shared with the server-rendered web frontend.
+
+    Kept distinct from ``ColorPalette`` because Pulse is a deliberate
+    restyle (flat, monochrome-first, teal-accented) rather than a drop-in
+    replacement. New visuals that match the Pulse look should pull from
+    here; legacy styles keep using ``ColorPalette``.
+    """
+
+    BG: str = "#090B0D"
+    CARD: str = "#111418"
+    BORDER: str = "#272C36"
+    TEXT: str = "#EEF1F4"
+    MUTED: str = "#7E8A9A"
+    TEAL: str = "#17CCBF"
+    AMBER: str = "#F59E0B"
+
+
+@dataclass(frozen=True)
 class FontConfig:
     """Typography configuration for consistent text styling."""
 
@@ -65,7 +84,7 @@ class FontConfig:
 class ButtonTextStyle:
     """Text styling for buttons."""
 
-    weight: str = ft.FontWeight.W_400
+    weight: str = ft.FontWeight.W_400  # type: ignore[assignment]
     size: int = 16
     font_family: str = FontConfig.FAMILY_PRIMARY
 
@@ -103,7 +122,7 @@ class PrimaryTextStyle(TextStyle):
     color: str = ColorPalette.TEXT_PRIMARY_DEFAULT
     font_family: str = FontConfig.FAMILY_PRIMARY
     size: int = FontConfig.SIZE_PRIMARY
-    weight: str = ft.FontWeight.W_400
+    weight: str = ft.FontWeight.W_400  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
@@ -113,7 +132,7 @@ class SecondaryTextStyle(TextStyle):
     color: str = ColorPalette.TEXT_SECONDARY_DEFAULT
     font_family: str = FontConfig.FAMILY_PRIMARY
     size: int = FontConfig.SIZE_SECONDARY
-    weight: str = ft.FontWeight.W_400
+    weight: str = ft.FontWeight.W_400  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
@@ -123,7 +142,7 @@ class ConfirmationTextStyle(TextStyle):
     color: str = ColorPalette.ERROR
     font_family: str = FontConfig.FAMILY_PRIMARY
     size: int = FontConfig.SIZE_SECONDARY
-    weight: str = ft.FontWeight.W_400
+    weight: str = ft.FontWeight.W_400  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
@@ -133,28 +152,28 @@ class TitleTextStyle(TextStyle):
     color: str = ColorPalette.TEXT_PRIMARY_DEFAULT
     font_family: str = FontConfig.FAMILY_PRIMARY
     size: int = FontConfig.HEADER_SIZE
-    weight: str = ft.FontWeight.W_700
+    weight: str = ft.FontWeight.W_700  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
 class ModalTitle(PrimaryTextStyle):
     """Text style for modal titles."""
 
-    weight: str = ft.FontWeight.W_700
+    weight: str = ft.FontWeight.W_700  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
 class ModalSubtitle(SecondaryTextStyle):
     """Text style for modal subtitles."""
 
-    weight: str = ft.FontWeight.W_400
+    weight: str = ft.FontWeight.W_400  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
 class TertiaryLabel(PrimaryTextStyle):
     """Small label text style."""
 
-    weight: str = ft.FontWeight.W_600
+    weight: str = ft.FontWeight.W_600  # type: ignore[assignment]
     size: int = FontConfig.SIZE_TERTIARY
 
 
@@ -162,21 +181,21 @@ class TertiaryLabel(PrimaryTextStyle):
 class SidebarLabelHeadingStyle(PrimaryTextStyle):
     """Text style for sidebar headings."""
 
-    weight: str = ft.FontWeight.W_700
+    weight: str = ft.FontWeight.W_700  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
 class SidebarLabelStyle(SecondaryTextStyle):
     """Text style for sidebar labels."""
 
-    weight: str = ft.FontWeight.W_400
+    weight: str = ft.FontWeight.W_400  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
 class SliderLabelStyle(SecondaryTextStyle):
     """Text style for slider labels."""
 
-    weight: str = ft.FontWeight.W_700
+    weight: str = ft.FontWeight.W_700  # type: ignore[assignment]
 
 
 @dataclass(frozen=True)
@@ -285,4 +304,84 @@ ELEVATED_BUTTON_LOGOUT_STYLE = create_button_style(
     hover_bgcolor=ButtonColors.DELETE_BORDER_HOVERED,
     focus_bgcolor=ButtonColors.DELETE_DEFAULT,
     active_bgcolor=ft.Colors.with_opacity(0.8, ButtonColors.DELETE_DEFAULT),
+)
+
+
+# -- Pulse buttons -----------------------------------------------------------
+# Flat, outlined, tinted-fill buttons matching the Aegis Pulse web frontend.
+# Differ from ``create_button_style`` above: no drop-shadow / elevation,
+# visible border, translucent accent fill. Use for new surfaces that should
+# feel "intentional and modern" rather than Material-elevated.
+
+
+PulseButtonTextStyle = ButtonTextStyle(size=13)
+"""Pulse uses text-sm (13px); body-weight, not bold."""
+
+
+def create_pulse_button_style(accent: str) -> ft.ButtonStyle:
+    """Build a flat, accent-tinted Pulse button style.
+
+    Mirrors the Tailwind recipe
+    ``bg-{accent}/10 border border-{accent} hover:bg-{accent}/20``
+    used in the Pulse templates (see ``components/landing/hero.html``).
+    """
+    return ft.ButtonStyle(
+        color={
+            ft.ControlState.DEFAULT: PulseColors.TEXT,
+            ft.ControlState.HOVERED: ft.Colors.WHITE,
+            ft.ControlState.FOCUSED: ft.Colors.WHITE,
+            ft.ControlState.PRESSED: ft.Colors.WHITE,
+            ft.ControlState.DISABLED: PulseColors.MUTED,
+        },
+        bgcolor={
+            ft.ControlState.DEFAULT: ft.Colors.with_opacity(0.10, accent),
+            ft.ControlState.HOVERED: ft.Colors.with_opacity(0.20, accent),
+            ft.ControlState.FOCUSED: ft.Colors.with_opacity(0.15, accent),
+            ft.ControlState.PRESSED: ft.Colors.with_opacity(0.25, accent),
+            ft.ControlState.DISABLED: ft.Colors.with_opacity(0.05, accent),
+        },
+        side={
+            ft.ControlState.DEFAULT: ft.BorderSide(1, accent),
+            ft.ControlState.HOVERED: ft.BorderSide(1, accent),
+            ft.ControlState.DISABLED: ft.BorderSide(
+                1, ft.Colors.with_opacity(0.4, accent)
+            ),
+        },
+        shape=ft.RoundedRectangleBorder(radius=8),
+        padding=ft.padding.symmetric(horizontal=20, vertical=10),
+        elevation=0,
+        overlay_color=ft.Colors.TRANSPARENT,
+        animation_duration=150,
+    )
+
+
+PULSE_BUTTON_TEAL_STYLE = create_pulse_button_style(PulseColors.TEAL)
+PULSE_BUTTON_AMBER_STYLE = create_pulse_button_style(PulseColors.AMBER)
+
+
+PULSE_BUTTON_MUTED_STYLE = ft.ButtonStyle(
+    # Matches the "Dashboard" header link in Pulse's base.html:
+    # ``text-aegis-muted border border-aegis-border hover:text-white
+    # hover:border-aegis-muted`` — a subtle neutral button for secondary
+    # actions (Cancel, Copy) that shouldn't compete with the primary CTA.
+    color={
+        ft.ControlState.DEFAULT: PulseColors.MUTED,
+        ft.ControlState.HOVERED: ft.Colors.WHITE,
+        ft.ControlState.FOCUSED: ft.Colors.WHITE,
+        ft.ControlState.PRESSED: ft.Colors.WHITE,
+        ft.ControlState.DISABLED: ft.Colors.with_opacity(0.4, PulseColors.MUTED),
+    },
+    bgcolor=ft.Colors.TRANSPARENT,
+    side={
+        ft.ControlState.DEFAULT: ft.BorderSide(1, PulseColors.BORDER),
+        ft.ControlState.HOVERED: ft.BorderSide(1, PulseColors.MUTED),
+        ft.ControlState.DISABLED: ft.BorderSide(
+            1, ft.Colors.with_opacity(0.4, PulseColors.BORDER)
+        ),
+    },
+    shape=ft.RoundedRectangleBorder(radius=8),
+    padding=ft.padding.symmetric(horizontal=20, vertical=10),
+    elevation=0,
+    overlay_color=ft.Colors.TRANSPARENT,
+    animation_duration=150,
 )

@@ -1,0 +1,51 @@
+name: Stack Matrix
+
+# Runs the full 13-stack generate → install → lint → typecheck → pytest
+# pipeline. This is the slow tier — gated off the default ``ci.yml`` run so
+# day-to-day PRs stay fast, but it fires on any PR touching template or
+# core-engine code (where drift lands) and nightly to catch anything that
+# merged without touching a gated path.
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'aegis/templates/**'
+      - 'aegis/core/**'
+      - 'aegis/cli/**'
+      - 'tests/cli/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/stack-matrix.yml'
+  schedule:
+    # 07:00 UTC daily — catches drift merged via PRs that didn't match the
+    # path filter above (e.g. docs-only PRs that inadvertently move a
+    # template Jinja file).
+    - cron: '0 7 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: stack-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stack-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run full stack matrix
+        run: make test-stacks-full

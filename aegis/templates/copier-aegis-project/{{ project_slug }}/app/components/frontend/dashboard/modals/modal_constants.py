@@ -4,7 +4,7 @@
 class ModalLayout:
     """Modal layout constants."""
 
-    DEFAULT_WIDTH = 900
+    DEFAULT_WIDTH = 1100
     DEFAULT_HEIGHT = 700
     SECTION_DIVIDER_HEIGHT = 20
 

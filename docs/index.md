@@ -3,6 +3,7 @@
 
 **Build production-ready Python applications with your chosen components and services.**
 
+[![GitHub Stars](https://img.shields.io/github/stars/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack)
 [![CI](https://github.com/lbedner/aegis-stack/workflows/CI/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/ci.yml)
 [![Documentation](https://github.com/lbedner/aegis-stack/workflows/Deploy%20Documentation/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/docs.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
@@ -69,18 +70,21 @@ Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your S
 ### Infrastructure Components
 | Component | Purpose | Status |
 |-----------|---------|--------|
-| **Core** (FastAPI + Flet) | Web API + Frontend | ✅ **Always Included** |
-| **Database** | SQLite + SQLModel ORM | ✅ **Available** |
+| **Core** (FastAPI + Flet) | Web API + Overseer | ✅ **Always Included** |
+| **Database** | SQLite or PostgreSQL + SQLModel ORM | ✅ **Available** |
 | **Scheduler** | Background tasks, cron jobs | ✅ **Available** |
-| **Worker** | Async task queues (arq + Redis) | 🧪 **Experimental** |
+| **Worker** | Task queues (arq, Dramatiq, or TaskIQ) | ✅ **Available** |
+| **Observability** | Tracing, metrics, logging (Logfire) | ✅ **Available** |
 | **Cache** | Redis caching and sessions | 🚧 **Coming Soon** |
 
 ### Business Services
 | Service | Purpose | Status |
 |---------|---------|--------|
-| **[Auth](services/auth/index.md)** | User authentication & JWT | ✅ **Available** |
 | **[AI](services/ai/index.md)** | Multi-provider AI chat | 🧪 **Experimental** |
+| **[Auth](services/auth/index.md)** | User authentication & JWT | ✅ **Available** |
 | **[Comms](services/comms/index.md)** | Email, SMS, voice calls | 🧪 **Experimental** |
+| **[Insights](services/insights/index.md)** | Adoption metrics (GitHub, PyPI, Plausible, Reddit) | 🧪 **Experimental** |
+| **[Payment](services/payment/index.md)** | Stripe checkout, subscriptions, refunds, disputes | 🧪 **Experimental** |
 
 ## See It In Action
 
