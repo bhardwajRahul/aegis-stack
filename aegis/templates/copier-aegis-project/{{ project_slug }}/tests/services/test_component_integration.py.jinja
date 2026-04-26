@@ -24,7 +24,7 @@ from app.services.system.health import (
 from app.services.system.health import check_cache_health
 {% endif %}
 {%- if include_database %}
-from app.services.system.health import check_database_health
+from app.services.system.health_db import check_database_health
 {% endif %}
 {%- if include_worker %}
 from app.services.system.health import check_worker_health

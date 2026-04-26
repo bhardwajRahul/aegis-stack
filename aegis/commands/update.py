@@ -38,6 +38,72 @@ from ..core.version_compatibility import get_cli_version, get_project_template_v
 from ..i18n import t
 
 
+def _detect_existing_features(target_path: Path) -> dict[str, bool]:
+    """Reconstruct ``include_*`` and sub-feature flags from project structure.
+
+    Older template versions didn't have today's full set of questions in
+    ``copier.yml`` (e.g. ``include_insights`` was added after 0.6.10), so
+    those flags are missing from older ``.copier-answers.yml`` files.
+    During ``aegis update -y``, copier silently uses the template's
+    ``default: false`` for any missing flag — which means a project that
+    *clearly* has ``app/services/insights/`` on disk gets re-rendered as
+    if it never had insights, deleting service files and breaking the
+    project.
+
+    To prevent that, we walk the project structure and re-derive a flag
+    set from what's actually installed. The caller persists those inferred
+    values into ``.copier-answers.yml`` BEFORE invoking copier update, so
+    copier reads them as part of the project's stored answers instead of
+    falling back to template defaults for newly-added questions. Writing
+    them to the answers file (rather than passing via
+    ``run_update(data=...)``) means every downstream step in the same
+    update run — copier render, ``cleanup_components``,
+    ``sync_template_changes``, ``run_post_generation_tasks`` — sees one
+    consistent picture. Earlier iterations of this fix passed the flags
+    only via ``data=`` and ``cleanup_components`` then re-read the stale
+    answers and deleted service files anyway.
+    """
+    app = target_path / "app"
+
+    # Service directory presence → include_<service>
+    service_flags = {
+        "include_auth": app / "services" / "auth",
+        "include_ai": app / "services" / "ai",
+        "include_comms": app / "services" / "comms",
+        "include_insights": app / "services" / "insights",
+        "include_payment": app / "services" / "payment",
+    }
+
+    # Component directory/file presence → include_<component>
+    component_flags = {
+        "include_database": app / "core" / "db.py",
+        "include_redis": app / "components" / "redis",
+        "include_worker": app / "components" / "worker",
+        "include_scheduler": app / "components" / "scheduler",
+    }
+
+    detected: dict[str, bool] = {}
+    for flag, path in {**service_flags, **component_flags}.items():
+        if path.exists():
+            detected[flag] = True
+
+    # Insights sub-flags — the collector files alone aren't a reliable
+    # signal because older template versions shipped them all
+    # unconditionally. The actual signal of "this source is wired up" is
+    # whether ``collector_service.py`` registers it. Using that here means
+    # we won't resurrect collectors the user never opted into AND we won't
+    # tear down collectors they actively use.
+    collector_service = app / "services" / "insights" / "collector_service.py"
+    if collector_service.exists():
+        service_src = collector_service.read_text()
+        detected["insights_github"] = "GitHubTrafficCollector" in service_src
+        detected["insights_pypi"] = "PyPICollector" in service_src
+        detected["insights_plausible"] = "PlausibleCollector" in service_src
+        detected["insights_reddit"] = "RedditCollector" in service_src
+
+    return detected
+
+
 def _get_template_changed_files(
     template_root: Path,
     from_ref: str,
@@ -358,6 +424,88 @@ def update_command(
                 target_ref,
             )
 
+        # Persist feature flags inferred from project structure into the
+        # answers file BEFORE copier runs. Older answers files are missing
+        # questions that were added later (e.g. ``include_insights`` was
+        # added after 0.6.10), and ``defaults=True`` would silently use the
+        # template's ``default: false`` for those — wiping service files
+        # the user is actively using. By writing the inferred flags into
+        # ``.copier-answers.yml`` first, every downstream step (copier
+        # render, cleanup_components, sync_template_changes,
+        # post_generation_tasks) sees the correct state.
+        # See ``_detect_existing_features`` for full reasoning + scope.
+        detected_flags = _detect_existing_features(target_path)
+        if detected_flags:
+            answers_path = target_path / ".copier-answers.yml"
+            if answers_path.exists():
+                with open(answers_path) as f:
+                    current_answers = yaml.safe_load(f) or {}
+                # setdefault: only fill in MISSING flags. Don't overwrite an
+                # explicit ``False`` from a user who deliberately removed
+                # a service.
+                changed = False
+                for flag, value in detected_flags.items():
+                    if flag not in current_answers:
+                        current_answers[flag] = value
+                        changed = True
+                if changed:
+                    with open(answers_path, "w") as f:
+                        yaml.safe_dump(
+                            current_answers,
+                            f,
+                            default_flow_style=False,
+                            sort_keys=False,
+                        )
+                    # Copier requires a clean git tree, so commit the
+                    # backfill. If the commit fails (e.g. blocked by a
+                    # pre-commit hook) the working tree is left dirty —
+                    # which would cause copier to fail with a confusing
+                    # error several steps later. Verify the tree is clean
+                    # post-commit and abort with a clear message if not.
+                    try:
+                        subprocess.run(
+                            ["git", "add", ".copier-answers.yml"],
+                            cwd=target_path,
+                            check=True,
+                            capture_output=True,
+                        )
+                        subprocess.run(
+                            [
+                                "git",
+                                "commit",
+                                "-m",
+                                "Backfill missing copier flags from project structure",
+                            ],
+                            cwd=target_path,
+                            check=True,
+                            capture_output=True,
+                        )
+                    except subprocess.CalledProcessError as exc:
+                        # ``git commit`` exits non-zero when there's
+                        # nothing to commit too — that's harmless. Only
+                        # abort if the answers file is actually dirty.
+                        status = subprocess.run(
+                            ["git", "status", "--porcelain", ".copier-answers.yml"],
+                            cwd=target_path,
+                            capture_output=True,
+                            text=True,
+                        )
+                        if status.stdout.strip():
+                            stderr = (
+                                (exc.stderr or b"")
+                                .decode("utf-8", errors="replace")
+                                .strip()
+                            )
+                            typer.secho(
+                                "Failed to commit backfilled .copier-answers.yml; "
+                                "aborting because copier requires a clean git tree.",
+                                fg="red",
+                                err=True,
+                            )
+                            if stderr:
+                                typer.echo(stderr, err=True)
+                            raise typer.Exit(1) from exc
+
         # Run Copier update with git-aware merge
         # NOTE: We do NOT pass src_path - Copier reads it from .copier-answers.yml
         # This is critical for Copier's git tracking detection to work correctly
@@ -374,6 +522,9 @@ def update_command(
         typer.echo(t("update.updating_to", version=target_version_display))
 
         # Load answers for cleanup and post-generation tasks
+        # (the answers file was already backfilled with detected flags
+        # above, so it has every ``include_*`` value cleanup_components
+        # needs to make correct decisions.)
         answers = load_copier_answers(target_path)
 
         # Clean up nested directory if Copier created one
