@@ -44,7 +44,7 @@ class BaseDetailPopup(BasePopup):
         page: ft.Page,
         component_data: ComponentStatus,
         title_text: str,
-        sections: list[ft.Control] | None = None,
+        sections: list[ft.Control],
         subtitle_text: str | None = None,
         status_detail: str | None = None,
         width: int = ModalLayout.DEFAULT_WIDTH,
@@ -57,9 +57,7 @@ class BaseDetailPopup(BasePopup):
         Args:
             component_data: ComponentStatus containing component health and metrics
             title_text: Title text (e.g., "Scheduler Details")
-            sections: List of section controls to display in modal body.
-                If omitted, _build_sections() is called instead — subclasses
-                that want live refresh on reopen should override that hook.
+            sections: List of section controls to display in modal body
             subtitle_text: Optional subtitle text (e.g., "Web Framework")
             status_detail: Optional detail text for status badge (e.g., "2/3 online")
             width: Modal width in pixels (default: 900)
@@ -71,18 +69,27 @@ class BaseDetailPopup(BasePopup):
         self.title_text = title_text
         self.subtitle_text = subtitle_text
         self.status_detail = status_detail
-        self._scrollable = scrollable
         self._status_tag: StatusTag | None = None
         self._title_row: ft.Row | None = None
-        self._sections_container: ft.Container | None = None
 
-        sections = sections if sections is not None else self._build_sections()
-
-        sections_container = ft.Container(
-            content=self._wrap_sections(sections),
-            expand=True,
-        )
-        self._sections_container = sections_container
+        # Build sections container - scrollable or direct based on parameter
+        if scrollable:
+            sections_container = ft.Container(
+                content=ft.Column(
+                    sections,
+                    spacing=0,
+                    scroll=ft.ScrollMode.AUTO,
+                ),
+                expand=True,
+            )
+        else:
+            # For tabs or content that manages its own scrolling
+            sections_container = ft.Container(
+                content=sections[0]
+                if len(sections) == 1
+                else ft.Column(sections, spacing=0),
+                expand=True,
+            )
 
         # Build modal content with title, sections, and close button
         modal_content = ft.Column(
@@ -136,45 +143,6 @@ class BaseDetailPopup(BasePopup):
                 offset=ft.Offset(0, 4),
             ),
         )
-
-    def _build_sections(self) -> list[ft.Control]:
-        """Hook for subclasses to (re)build sections from `self.component_data`.
-
-        Override this to enable refresh-on-reopen via `update_data()`. Default
-        returns an empty list, which makes `update_data()` a no-op for
-        subclasses that pass `sections=` directly to `__init__`.
-        """
-        return []
-
-    def _wrap_sections(self, sections: list[ft.Control]) -> ft.Control:
-        """Wrap sections for the modal body, respecting `scrollable`."""
-        if self._scrollable:
-            return ft.Column(sections, spacing=0, scroll=ft.ScrollMode.AUTO)
-        # Non-scrollable path (e.g. tabs manage their own scrolling): preserve
-        # the legacy single-child layout so a lone Tabs control isn't wrapped.
-        if len(sections) == 1:
-            return sections[0]
-        return ft.Column(sections, spacing=0)
-
-    def update_data(self, component_data: ComponentStatus) -> None:
-        """Refresh the modal from fresh component data.
-
-        Rebuilds sections via `_build_sections()` and refreshes the status tag
-        (preserving the previous `status_detail` — subclasses override this
-        method and call `update_status` again if they re-derive the detail).
-        No-op on section contents for subclasses that haven't overridden
-        `_build_sections()`.
-        """
-        self.component_data = component_data
-        self.update_status(component_data.status, self.status_detail)
-
-        new_sections = self._build_sections()
-        if new_sections and self._sections_container is not None:
-            self._sections_container.content = self._wrap_sections(new_sections)
-
-        # Push changes to Flet client — page.update() alone doesn't
-        # propagate to controls inside page.overlay popups.
-        self.update()
 
     def _create_title(self) -> ft.Control:
         """

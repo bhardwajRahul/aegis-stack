@@ -251,7 +251,8 @@ class Settings(BaseSettings):
 
 {% if include_payment %}
     # Payment Service Configuration (Stripe)
-    # Sign up at https://dashboard.stripe.com; test keys are prefixed sk_test_ / pk_test_
+    # Sign up at https://dashboard.stripe.com; test keys are prefixed
+    # sk_test_ / pk_test_
     STRIPE_SECRET_KEY: str | None = None  # Secret key (sk_test_... or sk_live_...)
     STRIPE_WEBHOOK_SECRET: str | None = None  # Webhook signing secret (whsec_...)
 

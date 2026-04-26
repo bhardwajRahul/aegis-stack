@@ -4,8 +4,6 @@
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
-
-SLUG_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
 from fastapi.security import OAuth2PasswordBearer
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -16,7 +14,11 @@ from app.components.backend.api.deps import (
     get_membership_service,
     get_org_service,
 )
-from app.components.backend.api.utils import raise_bad_request, raise_not_found, validate_role
+from app.components.backend.api.utils import (
+    raise_bad_request,
+    raise_not_found,
+    validate_role,
+)
 from app.core.audit import AuditEmitter
 from app.core.config import settings
 from app.models.org import (
@@ -35,11 +37,17 @@ from app.models.org import (
     TransferOwnershipRequest,
     UserMembershipResponse,
 )
-from app.services.auth.auth_service import get_current_user_from_token{% if include_auth_rbac %}, require_role{% endif %}
-
+from app.services.auth.auth_service import (
+    get_current_user_from_token,
+{%- if include_auth_rbac %}
+    require_role,
+{%- endif %}
+)
 from app.services.auth.invite_service import InviteService
 from app.services.auth.membership_service import MembershipService
 from app.services.auth.org_service import OrgService
+
+SLUG_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
 
 router = APIRouter(prefix="/orgs", tags=["organizations"])
 
@@ -108,7 +116,10 @@ async def create_org(
     if not SLUG_PATTERN.match(org_data.slug):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid slug format. Must be lowercase alphanumeric with hyphens, cannot start or end with a hyphen.",
+            detail=(
+                "Invalid slug format. Must be lowercase alphanumeric "
+                "with hyphens, cannot start or end with a hyphen."
+            ),
         )
 
     # Check slug uniqueness

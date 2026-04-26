@@ -191,8 +191,12 @@ def quick_cpu_test_cmd(
     wait: bool = typer.Option(True, "--wait/--no-wait", help=lazy_t("loadtest.opt_wait_short")),
 ) -> None:
     rprint(f"[bold blue]{t('loadtest.quick_cpu_title')}[/bold blue]")
-    rprint(f"[cyan]{t('loadtest.tasks_label')}[/cyan] {t('loadtest.quick_cpu_tasks', count=num_tasks)}")
-    rprint(f"[cyan]{t('loadtest.work_type_label')}[/cyan] {t('loadtest.quick_cpu_work')}")
+    tasks_label = t("loadtest.tasks_label")
+    tasks_msg = t("loadtest.quick_cpu_tasks", count=num_tasks)
+    work_label = t("loadtest.work_type_label")
+    work_msg = t("loadtest.quick_cpu_work")
+    rprint(f"[cyan]{tasks_label}[/cyan] {tasks_msg}")
+    rprint(f"[cyan]{work_label}[/cyan] {work_msg}")
 
     try:
         # Use single asyncio.run() for both enqueue and wait to avoid
@@ -200,7 +204,9 @@ def quick_cpu_test_cmd(
         task_id, result = asyncio.run(
             _run_quick_test_and_wait(quick_cpu_test, num_tasks, wait)
         )
-        rprint(f"[green]{t('loadtest.cpu_started')}[/green] {t('loadtest.task_id_label')} {task_id}")
+        started_msg = t("loadtest.cpu_started")
+        id_label = t("loadtest.task_id_label")
+        rprint(f"[green]{started_msg}[/green] {id_label} {task_id}")
 
         if wait:
             if result is None:
@@ -231,8 +237,12 @@ def quick_io_test_cmd(
     wait: bool = typer.Option(True, "--wait/--no-wait", help=lazy_t("loadtest.opt_wait_short")),
 ) -> None:
     rprint(f"[bold blue]{t('loadtest.quick_io_title')}[/bold blue]")
-    rprint(f"[cyan]{t('loadtest.tasks_label')}[/cyan] {t('loadtest.quick_io_tasks', count=num_tasks)}")
-    rprint(f"[cyan]{t('loadtest.work_type_label')}[/cyan] {t('loadtest.quick_io_work')}")
+    tasks_label = t("loadtest.tasks_label")
+    tasks_msg = t("loadtest.quick_io_tasks", count=num_tasks)
+    work_label = t("loadtest.work_type_label")
+    work_msg = t("loadtest.quick_io_work")
+    rprint(f"[cyan]{tasks_label}[/cyan] {tasks_msg}")
+    rprint(f"[cyan]{work_label}[/cyan] {work_msg}")
 
     try:
         # Use single asyncio.run() for both enqueue and wait to avoid
@@ -240,7 +250,9 @@ def quick_io_test_cmd(
         task_id, result = asyncio.run(
             _run_quick_test_and_wait(quick_io_test, num_tasks, wait)
         )
-        rprint(f"[green]{t('loadtest.io_started')}[/green] {t('loadtest.task_id_label')} {task_id}")
+        started_msg = t("loadtest.io_started")
+        id_label = t("loadtest.task_id_label")
+        rprint(f"[green]{started_msg}[/green] {id_label} {task_id}")
 
         if wait:
             if result is None:
@@ -271,8 +283,12 @@ def quick_memory_test_cmd(
     wait: bool = typer.Option(True, "--wait/--no-wait", help=lazy_t("loadtest.opt_wait_short")),
 ) -> None:
     rprint(f"[bold blue]{t('loadtest.quick_memory_title')}[/bold blue]")
-    rprint(f"[cyan]{t('loadtest.tasks_label')}[/cyan] {t('loadtest.quick_memory_tasks', count=num_tasks)}")
-    rprint(f"[cyan]{t('loadtest.work_type_label')}[/cyan] {t('loadtest.quick_memory_work')}")
+    tasks_label = t("loadtest.tasks_label")
+    tasks_msg = t("loadtest.quick_memory_tasks", count=num_tasks)
+    work_label = t("loadtest.work_type_label")
+    work_msg = t("loadtest.quick_memory_work")
+    rprint(f"[cyan]{tasks_label}[/cyan] {tasks_msg}")
+    rprint(f"[cyan]{work_label}[/cyan] {work_msg}")
 
     try:
         # Use single asyncio.run() for both enqueue and wait to avoid
@@ -280,7 +296,9 @@ def quick_memory_test_cmd(
         task_id, result = asyncio.run(
             _run_quick_test_and_wait(quick_memory_test, num_tasks, wait)
         )
-        rprint(f"[green]{t('loadtest.memory_started')}[/green] {t('loadtest.task_id_label')} {task_id}")
+        started_msg = t("loadtest.memory_started")
+        id_label = t("loadtest.task_id_label")
+        rprint(f"[green]{started_msg}[/green] {id_label} {task_id}")
 
         if wait:
             if result is None:
@@ -351,8 +369,10 @@ def show_test_type_info(
             _display_test_type_info(test_type, info)
         except ValueError:
             rprint(f"[red]{t('loadtest.unknown_type')}[/red] {test_type}")
+            types_label = t("loadtest.available_types_list")
             rprint(
-                f"[yellow]{t('loadtest.available_types_list')}[/yellow] cpu_intensive, io_simulation, "
+                f"[yellow]{types_label}[/yellow] "
+                "cpu_intensive, io_simulation, "
                 "memory_operations, failure_testing"
             )
             raise typer.Exit(1)
@@ -389,33 +409,60 @@ def _display_test_configuration(config: LoadTestConfiguration, test_type: str) -
 
     test_info = _get_test_type_info_i18n(LoadTestTypes(test_type))
 
+    tasks_detail = t(
+        "loadtest.config_tasks_detail",
+        count=config.num_tasks,
+        type=test_type,
+    )
+    batch_detail = t(
+        "loadtest.config_batch_detail", size=config.batch_size
+    )
+    delay_detail = t(
+        "loadtest.config_delay_detail", ms=config.delay_ms
+    )
+    info_name = test_info.get("name", "")
+    info_desc = test_info.get("description", "")
+    info_perf = test_info.get("performance_signature", "")
+    info_conc = test_info.get("concurrency_impact", "")
     config_text = (
         f"[bold cyan]{t('loadtest.config_title')}[/bold cyan]\n\n"
-        f"[cyan]{t('loadtest.config_tasks')}[/cyan] {t('loadtest.config_tasks_detail', count=config.num_tasks, type=test_type)}\n"
-        f"[cyan]{t('loadtest.config_batching')}[/cyan] {t('loadtest.config_batch_detail', size=config.batch_size)}\n"
-        f"[cyan]{t('loadtest.config_delay')}[/cyan] {t('loadtest.config_delay_detail', ms=config.delay_ms)}\n"
-        f"[cyan]{t('loadtest.config_queue')}[/cyan] {config.target_queue}\n\n"
+        f"[cyan]{t('loadtest.config_tasks')}[/cyan] {tasks_detail}\n"
+        f"[cyan]{t('loadtest.config_batching')}[/cyan] {batch_detail}\n"
+        f"[cyan]{t('loadtest.config_delay')}[/cyan] {delay_detail}\n"
+        f"[cyan]{t('loadtest.config_queue')}[/cyan]"
+        f" {config.target_queue}\n\n"
         f"[bold yellow]{t('loadtest.type_details_title')}[/bold yellow]\n"
-        f"[yellow]{t('loadtest.type_name')}[/yellow] {test_info.get('name', '')}\n"
-        f"[yellow]{t('loadtest.type_description')}[/yellow] {test_info.get('description', '')}\n"
-        f"[yellow]{t('loadtest.type_performance')}[/yellow] {test_info.get('performance_signature', '')}\n"
-        f"[yellow]{t('loadtest.type_concurrency')}[/yellow] {test_info.get('concurrency_impact', '')}"
+        f"[yellow]{t('loadtest.type_name')}[/yellow] {info_name}\n"
+        f"[yellow]{t('loadtest.type_description')}[/yellow] {info_desc}\n"
+        f"[yellow]{t('loadtest.type_performance')}[/yellow] {info_perf}\n"
+        f"[yellow]{t('loadtest.type_concurrency')}[/yellow] {info_conc}"
     )
 
-    console.print(Panel(config_text, title=t("loadtest.panel_setup"), border_style="blue"))
+    console.print(
+        Panel(
+            config_text,
+            title=t("loadtest.panel_setup"),
+            border_style="blue",
+        )
+    )
 
 
 def _display_test_type_info(test_type: str, info: dict[str, Any]) -> None:
     """Display detailed information about a specific test type."""
 
+    info_name = info.get("name", "")
+    info_desc = info.get("description", "")
+    info_perf = info.get("performance_signature", "")
+    info_duration = info.get("typical_duration_ms", "")
+    info_conc = info.get("concurrency_impact", "")
     info_text = (
-        f"[bold cyan]{info.get('name', '')}[/bold cyan]\n\n"
+        f"[bold cyan]{info_name}[/bold cyan]\n\n"
         f"[bold yellow]{t('loadtest.type_description')}[/bold yellow]\n"
-        f"{info.get('description', '')}\n\n"
+        f"{info_desc}\n\n"
         f"[bold yellow]{t('loadtest.type_performance')}[/bold yellow]\n"
-        f"{info.get('performance_signature', '')}\n"
-        f"[yellow]{t('loadtest.typical_duration')}[/yellow] {info.get('typical_duration_ms', '')}\n"
-        f"[yellow]{t('loadtest.type_concurrency')}[/yellow] {info.get('concurrency_impact', '')}"
+        f"{info_perf}\n"
+        f"[yellow]{t('loadtest.typical_duration')}[/yellow] {info_duration}\n"
+        f"[yellow]{t('loadtest.type_concurrency')}[/yellow] {info_conc}"
     )
 
     console.print(

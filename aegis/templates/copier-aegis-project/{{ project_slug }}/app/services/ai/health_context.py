@@ -317,7 +317,8 @@ class HealthContext(BaseModel):
             queued = worker_info.get("total_queued", 0)
             completed = worker_info.get("total_completed", 0)
             lines.append(
-                f"Workers: {active}/{configured} active, {queued} queued, {completed} completed"
+                f"Workers: {active}/{configured} active, "
+                f"{queued} queued, {completed} completed"
             )
 
         # Scheduler
@@ -330,9 +331,10 @@ class HealthContext(BaseModel):
         # AI service
         ai_info = self._extract_ai_service_info()
         if ai_info:
-            lines.append(
-                f"AI: {ai_info.get('status', 'unknown')}, {ai_info.get('provider', '?')}/{ai_info.get('model', '?')}"
-            )
+            ai_status = ai_info.get("status", "unknown")
+            ai_provider = ai_info.get("provider", "?")
+            ai_model = ai_info.get("model", "?")
+            lines.append(f"AI: {ai_status}, {ai_provider}/{ai_model}")
 
         # Ollama
         ollama_info = self._extract_ollama_info()

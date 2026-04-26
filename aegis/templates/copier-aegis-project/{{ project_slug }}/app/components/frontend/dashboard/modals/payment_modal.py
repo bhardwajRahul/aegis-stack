@@ -79,7 +79,8 @@ _DISPUTE_STATUS_COLORS: dict[str, str] = {
 def _fmt_amount(amount_cents: int, currency: str = "usd") -> str:
     """Render a cents amount as a currency string."""
     symbol = "$" if currency.lower() == "usd" else ""
-    return f"{symbol}{amount_cents / 100:,.2f} {currency.upper() if not symbol else ''}".strip()
+    suffix = "" if symbol else currency.upper()
+    return f"{symbol}{amount_cents / 100:,.2f} {suffix}".strip()
 
 
 def _fmt_datetime(iso_str: str | None) -> str:
@@ -737,7 +738,10 @@ class DisputesTab(ft.Container):
             )
         else:
             body = EmptyStatePlaceholder(
-                message="No disputes. Trigger one with `stripe trigger charge.dispute.created`."
+                message=(
+                    "No disputes. Trigger one with "
+                    "`stripe trigger charge.dispute.created`."
+                )
             )
 
         header_text = (

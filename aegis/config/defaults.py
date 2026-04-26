@@ -88,9 +88,16 @@ def _generate_supported_versions(min_version: str, max_version: str) -> list[str
 # Parse bounds from pyproject.toml (single source of truth)
 _min_version, _max_version = _parse_python_version_bounds()
 
-# Default Python version for generated projects (maximum supported)
-# Users can still specify --python-version 3.11 or 3.12 if desired
-DEFAULT_PYTHON_VERSION = _max_version
+# Default Python version for generated projects.
+#
+# Pinned to 3.13 (not the auto-derived max of 3.14) because the 3.14
+# ecosystem is still incomplete: openai 2.x has a circular import on
+# pytest collection under 3.14, and ``requests.compat`` is missing
+# ``JSONDecodeError``. Both break ``make check`` in matrix tests.
+# 3.13 has been out long enough that all our pinned deps work.
+# Users can still opt into 3.14 explicitly via ``--python-version 3.14``
+# (or 3.11 / 3.12 — anything in SUPPORTED_PYTHON_VERSIONS works).
+DEFAULT_PYTHON_VERSION = "3.13"
 
 # Supported Python versions (auto-generated from min to max)
 SUPPORTED_PYTHON_VERSIONS = _generate_supported_versions(_min_version, _max_version)

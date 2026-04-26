@@ -331,7 +331,8 @@ def _create_ollama_agent(
     # imported at module level so tests can patch them on this module
     # directly (``@patch("app.services.ai.providers.AsyncOpenAI")``).
     try:
-        # Get Ollama base URL from settings (uses effective URL for Docker/local auto-detection)
+        # Get Ollama base URL from settings (effective URL for
+    # Docker/local auto-detection)
         base_url = settings.ollama_base_url_effective
 
         # Create OpenAI client pointing to Ollama's OpenAI-compatible endpoint
@@ -655,7 +656,8 @@ def _create_ollama_llm(config: AIServiceConfig, settings: Any):
     """Create Ollama chat model using OpenAI-compatible endpoint."""
     from langchain_openai import ChatOpenAI
 
-    # Get Ollama base URL from settings (uses effective URL for Docker/local auto-detection)
+    # Get Ollama base URL from settings (effective URL for
+    # Docker/local auto-detection)
     base_url = settings.ollama_base_url_effective
 
     return ChatOpenAI(

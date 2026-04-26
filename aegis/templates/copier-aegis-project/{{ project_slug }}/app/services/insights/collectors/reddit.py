@@ -5,6 +5,7 @@ Lightweight collector — primarily manual entry via CLI/API.
 Stores post stats as snapshot rows with metadata.
 """
 
+import logging
 from datetime import datetime
 
 import httpx
@@ -12,7 +13,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ..constants import MetricKeys, Periods, SourceKeys
 from ..schemas import RedditPostMetadata
-from .base import BaseCollector, CollectionResult, today
+from .base import BaseCollector, CollectionResult
+
+logger = logging.getLogger(__name__)
 
 
 class RedditCollector(BaseCollector):
@@ -30,7 +33,9 @@ class RedditCollector(BaseCollector):
         return CollectionResult(
             source_key=self.source_key,
             success=True,
-            error="Reddit collection is on-demand only. Use add_post() or refresh_post().",
+            error=(
+                "Reddit collection is on-demand only. Use add_post() or refresh_post()."
+            ),
         )
 
     async def add_post(self, url: str) -> CollectionResult:
@@ -71,12 +76,12 @@ class RedditCollector(BaseCollector):
                 url=url,
             )
 
-            _today = today()
+            today = _today()
             upvotes = post_data.get("ups", 0)
 
             await self.upsert_metric(
                 metric_type=post_type,
-                date=_today,
+                date=today,
                 value=float(upvotes),
                 period=Periods.EVENT,
                 metadata=metadata.model_dump(),
@@ -88,6 +93,7 @@ class RedditCollector(BaseCollector):
 
             from ..models import InsightEvent
 
+            # Only create event if one doesn't exist for this post
             existing_events = await self.db.exec(
                 select(InsightEvent).where(InsightEvent.event_type == "reddit_post")
             )
@@ -98,11 +104,13 @@ class RedditCollector(BaseCollector):
             if not already_tracked:
                 subreddit = post_data.get("subreddit", "")
                 title = post_data.get("title", "")
+                from datetime import datetime
+
                 created = post_data.get("created_utc", 0)
                 post_date = (
                     datetime.fromtimestamp(created).replace(tzinfo=None)
                     if created
-                    else _today
+                    else today
                 )
 
                 event = InsightEvent(
@@ -114,11 +122,45 @@ class RedditCollector(BaseCollector):
                 self.db.add(event)
 
             await self.db.commit()
-            return self._success(rows_written)
+
+            logger.info(
+                "Reddit post added: %s (%d upvotes)",
+                post_id,
+                upvotes,
+            )
+
+            return CollectionResult(
+                source_key=self.source_key,
+                success=True,
+                rows_written=rows_written,
+            )
 
         except httpx.HTTPStatusError as e:
-            return self._error(f"Reddit API error: {e.response.status_code}")
+            error_msg = f"Reddit API error: {e.response.status_code}"
+            logger.error(error_msg)
+            return CollectionResult(
+                source_key=self.source_key,
+                success=False,
+                error=error_msg,
+            )
         except (KeyError, IndexError) as e:
-            return self._error(f"Failed to parse Reddit response: {e}")
+            error_msg = f"Failed to parse Reddit response: {e}"
+            logger.error(error_msg)
+            return CollectionResult(
+                source_key=self.source_key,
+                success=False,
+                error=error_msg,
+            )
         except Exception as e:
-            return self._error(f"Reddit post tracking failed: {e}")
+            error_msg = f"Reddit post tracking failed: {e}"
+            logger.error(error_msg)
+            return CollectionResult(
+                source_key=self.source_key,
+                success=False,
+                error=error_msg,
+            )
+
+
+def _today() -> datetime:
+    """Get today as a midnight datetime (no timezone)."""
+    return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)

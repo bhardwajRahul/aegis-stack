@@ -188,7 +188,8 @@ class StripeProvider(BasePaymentProvider):
             )
 
         try:
-            balance = stripe.Balance.retrieve()
+            # Probe API connectivity; result intentionally discarded.
+            stripe.Balance.retrieve()
             is_test = self._api_key.startswith("sk_test_")
             return ProviderHealth(
                 provider_key=self.provider_key,

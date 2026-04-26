@@ -7,11 +7,13 @@ Uses /stats/timeseries for daily breakdowns (supports backfill).
 Per-day country + page breakdowns stored for range-aware display.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta  # noqa: I001
+import logging
 
 import httpx
-from app.core.config import settings
 from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.config import settings
 
 from ..constants import MetricKeys, Periods, SourceKeys
 from ..schemas import (
@@ -21,7 +23,9 @@ from ..schemas import (
     PlausibleTopCountriesMetadata,
     PlausibleTopPagesMetadata,
 )
-from .base import BaseCollector, CollectionResult, today
+from .base import BaseCollector, CollectionResult
+
+logger = logging.getLogger(__name__)
 
 PLAUSIBLE_API = "https://plausible.io/api/v1"
 
@@ -46,11 +50,12 @@ class PlausibleCollector(BaseCollector):
         api_key = settings.INSIGHT_PLAUSIBLE_API_KEY
         sites_str = settings.INSIGHT_PLAUSIBLE_SITES
 
-        if err := self._validate_config(
-            INSIGHT_PLAUSIBLE_API_KEY=api_key,
-            INSIGHT_PLAUSIBLE_SITES=sites_str,
-        ):
-            return err
+        if not api_key or not sites_str:
+            return CollectionResult(
+                source_key=self.source_key,
+                success=False,
+                error="Missing INSIGHT_PLAUSIBLE_API_KEY or INSIGHT_PLAUSIBLE_SITES",
+            )
 
         sites = [s.strip() for s in sites_str.split(",") if s.strip()]
         headers = {"Authorization": f"Bearer {api_key}"}
@@ -66,10 +71,10 @@ class PlausibleCollector(BaseCollector):
             pages_type = await self.get_metric_type(MetricKeys.TOP_PAGES)
             countries_type = await self.get_metric_type(MetricKeys.TOP_COUNTRIES)
 
-            _today = today()
-            start_date = _today - timedelta(days=lookback_days - 1)
+            today = _today()
+            start_date = today - timedelta(days=lookback_days - 1)
             date_range = (
-                f"{start_date.strftime('%Y-%m-%d')},{_today.strftime('%Y-%m-%d')}"
+                f"{start_date.strftime('%Y-%m-%d')},{today.strftime('%Y-%m-%d')}"
             )
 
             async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
@@ -195,17 +200,45 @@ class PlausibleCollector(BaseCollector):
                         rows_skipped += 0 if created else 1
 
             await self.db.commit()
-            return self._success(rows_written, rows_skipped)
+
+            logger.info(
+                "Plausible collected for %d sites (%d days, %d active): %d written, %d skipped",  # noqa: E501
+                len(sites),
+                lookback_days,
+                len(active_days),
+                rows_written,
+                rows_skipped,
+            )
+
+            return CollectionResult(
+                source_key=self.source_key,
+                success=True,
+                rows_written=rows_written,
+                rows_skipped=rows_skipped,
+            )
 
         except httpx.HTTPStatusError as e:
-            return self._error(
-                f"Plausible API error: {e.response.status_code}",
-                rows_written,
-                rows_skipped,
+            error_msg = f"Plausible API error: {e.response.status_code}"
+            logger.error(error_msg)
+            return CollectionResult(
+                source_key=self.source_key,
+                success=False,
+                rows_written=rows_written,
+                rows_skipped=rows_skipped,
+                error=error_msg,
             )
         except Exception as e:
-            return self._error(
-                f"Plausible collection failed: {e}",
-                rows_written,
-                rows_skipped,
+            error_msg = f"Plausible collection failed: {e}"
+            logger.error(error_msg)
+            return CollectionResult(
+                source_key=self.source_key,
+                success=False,
+                rows_written=rows_written,
+                rows_skipped=rows_skipped,
+                error=error_msg,
             )
+
+
+def _today() -> datetime:
+    """Get today as a midnight datetime (no timezone)."""
+    return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)

@@ -650,7 +650,7 @@ def _decode_slowlog_arg(arg: Any) -> str:
         return arg.decode("utf-8", errors="replace")
     if isinstance(arg, str):
         return arg
-    if isinstance(arg, (list, tuple)):
+    if isinstance(arg, list | tuple):
         # redis-py can return args as list of ints (ASCII byte values)
         try:
             return bytes(arg).decode("utf-8", errors="replace")
@@ -661,7 +661,7 @@ def _decode_slowlog_arg(arg: Any) -> str:
 
 def _decode_slowlog_command(command: Any) -> str:
     """Decode a SLOWLOG command entry to a human-readable string."""
-    if isinstance(command, (list, tuple)):
+    if isinstance(command, list | tuple):
         return " ".join(_decode_slowlog_arg(arg) for arg in command)
     if isinstance(command, bytes):
         return command.decode("utf-8", errors="replace")

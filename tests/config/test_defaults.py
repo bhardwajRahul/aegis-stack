@@ -121,10 +121,14 @@ class TestConfigurationConstants:
         assert parts[1].isdigit()
 
     def test_default_python_version_current_value(self) -> None:
-        """Test DEFAULT_PYTHON_VERSION equals expected value."""
-        # Based on current pyproject.toml: requires-python = ">=3.11,<3.15"
-        # Should be max supported version: 3.14
-        assert DEFAULT_PYTHON_VERSION == "3.14"
+        """Test DEFAULT_PYTHON_VERSION equals expected value.
+
+        Hardcoded to 3.13 even though pyproject.toml supports up to 3.14
+        — see ``aegis/config/defaults.py`` for why (third-party 3.14
+        ecosystem gaps in openai/requests). When 3.14 is widely
+        compatible we can revert to ``_max_version``.
+        """
+        assert DEFAULT_PYTHON_VERSION == "3.13"
 
     def test_supported_python_versions_is_list(self) -> None:
         """Test SUPPORTED_PYTHON_VERSIONS is a list."""
@@ -203,16 +207,24 @@ class TestIntegration:
         # Verify consistency
         assert min_ver in versions  # Min version is supported
         assert max_ver in versions  # Max version is supported
-        assert max_ver == DEFAULT_PYTHON_VERSION  # Default is max
+        # ``DEFAULT_PYTHON_VERSION`` is hardcoded (currently 3.13) rather
+        # than auto-derived from ``max_ver`` (currently 3.14), so it
+        # need not equal ``max_ver`` — but it MUST be in the supported
+        # set. See ``aegis/config/defaults.py`` for why.
+        assert DEFAULT_PYTHON_VERSION in versions
         assert versions == SUPPORTED_PYTHON_VERSIONS  # List matches generated
 
     def test_single_source_of_truth(self) -> None:
-        """Test that pyproject.toml is the single source of truth."""
-        # If we change pyproject.toml (in the future), these should change too
-        # This test verifies the parsing happens and values are derived
+        """Test that pyproject.toml is the single source of truth for SUPPORTED_PYTHON_VERSIONS.
+
+        ``DEFAULT_PYTHON_VERSION`` is intentionally hardcoded (not
+        derived) so we can keep generating projects on a stable Python
+        even when pyproject's upper bound advances faster than the
+        third-party ecosystem.
+        """
         min_ver, max_ver = _parse_python_version_bounds()
 
-        # These should be derived from parsing, not hardcoded
-        assert max_ver == DEFAULT_PYTHON_VERSION
+        # Min and max are derived from pyproject; default is independent.
         assert min_ver in SUPPORTED_PYTHON_VERSIONS
         assert max_ver in SUPPORTED_PYTHON_VERSIONS
+        assert DEFAULT_PYTHON_VERSION in SUPPORTED_PYTHON_VERSIONS

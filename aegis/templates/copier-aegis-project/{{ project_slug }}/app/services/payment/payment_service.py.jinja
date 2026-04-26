@@ -396,7 +396,9 @@ class PaymentService:
             WebhookEventType.SUBSCRIPTION_CREATED: self._handle_subscription_event,
             WebhookEventType.SUBSCRIPTION_UPDATED: self._handle_subscription_event,
             WebhookEventType.SUBSCRIPTION_DELETED: self._handle_subscription_deleted,
-            WebhookEventType.EARLY_FRAUD_WARNING_CREATED: self._handle_early_fraud_warning,
+            WebhookEventType.EARLY_FRAUD_WARNING_CREATED: (
+                self._handle_early_fraud_warning
+            ),
             WebhookEventType.DISPUTE_CREATED: self._handle_dispute_event,
             WebhookEventType.DISPUTE_UPDATED: self._handle_dispute_event,
             WebhookEventType.DISPUTE_CLOSED: self._handle_dispute_event,

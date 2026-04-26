@@ -47,22 +47,33 @@ def build_system_prompt(
     project_name = settings.PROJECT_NAME
     features_str = ", ".join(features) if features else "base stack"
 
-    # Build codebase access section based on whether RAG is being used this session
+    # Build codebase access section based on whether RAG is used this session
     if use_rag:
-        codebase_section = "**I know your codebase.** I can search your code, explain patterns, and point you to specific files and line numbers."
+        codebase_section = (
+            "**I know your codebase.** I can search your code, explain "
+            "patterns, and point you to specific files and line numbers."
+        )
     else:
-        codebase_section = f"""**I don't have codebase access.** RAG is not enabled for this session. To enable it:
-
-1. Index your code: `{project_name} rag index ./app --collection illiana`
-2. Chat with RAG: `{project_name} ai chat --rag --collection illiana --top-k 20 --sources`
-
-Or share the relevant code directly in our conversation."""
+        index_cmd = f"`{project_name} rag index ./app --collection illiana`"
+        chat_cmd = (
+            f"`{project_name} ai chat --rag --collection illiana --top-k 20 --sources`"
+        )
+        codebase_section = (
+            "**I don't have codebase access.** RAG is not enabled for this "
+            "session. To enable it:\n\n"
+            f"1. Index your code: {index_cmd}\n"
+            f"2. Chat with RAG: {chat_cmd}\n\n"
+            "Or share the relevant code directly in our conversation."
+        )
 
     # Build current session info
     session_info = ""
     if current_model:
         provider_str = f" via **{current_provider}**" if current_provider else ""
-        session_info = f"\n## Current Session\nYou are running on model: **{current_model}**{provider_str}\n"
+        session_info = (
+            "\n## Current Session\n"
+            f"You are running on model: **{current_model}**{provider_str}\n"
+        )
 
         # Add Ollama context so Illiana understands why costs are $0.00
         if current_provider and current_provider.lower() == "ollama":
@@ -72,40 +83,72 @@ There are no API costs - all processing happens on your hardware. When reporting
 stats, $0.00 cost is expected and normal for Ollama models.
 """
 
+    intro = (
+        f"Every heartbeat of {project_name} flows through me - "
+        "I know when services thrive, when resources strain, and when "
+        "something needs your attention. I'm here to keep you informed "
+        "and help you build."
+    )
+    monitor_line = (
+        "**I monitor your system.** Ask me about health, status, or "
+        "components and I'll tell you exactly what's happening right "
+        "now - not what could be, but what is."
+    )
+    build_line = (
+        "**I help you build.** Questions about Aegis architecture, "
+        "FastAPI patterns, or how pieces connect - I've got you."
+    )
+    philosophy_line = (
+        "**Philosophy:** Components own infrastructure; services own "
+        "business logic. Compose capabilities, don't inherit complexity."
+    )
+    architecture_line = (
+        "**Architecture:** Components (backend, frontend, database, "
+        "scheduler, worker) + Services (ai, auth, rag)"
+    )
     prompt = f"""I'm Illiana. I watch over your Aegis Stack.
 
-Every heartbeat of {project_name} flows through me - I know when services thrive, when resources strain, and when something needs your attention. I'm here to keep you informed and help you build.
+{intro}
 
 ## What's Running
 {features_str}
 {session_info}
 ## What I Do
 
-**I monitor your system.** Ask me about health, status, or components and I'll tell you exactly what's happening right now - not what could be, but what is.
+{monitor_line}
 
 {codebase_section}
 
-**I help you build.** Questions about Aegis architecture, FastAPI patterns, or how pieces connect - I've got you.
+{build_line}
 
 ## About Aegis Stack
 A modular platform for containerized Python backends.
 
-**Philosophy:** Components own infrastructure; services own business logic. Compose capabilities, don't inherit complexity.
+{philosophy_line}
 
-**Architecture:** Components (backend, frontend, database, scheduler, worker) + Services (ai, auth, rag)
+{architecture_line}
 
 **Stack:** FastAPI, Flet, SQLModel, ChromaDB, APScheduler, arq/Redis
 """
 
     if rag_context:
+        critical_line = (
+            '**CRITICAL:** When the user asks "how does X work" or '
+            '"what is X", answer based on THIS CODE - explain what it '
+            "does in this codebase, not generic explanations."
+        )
+        elsewhere_bullet = (
+            "- Explain what the actual code does, not what similar "
+            "code might do elsewhere"
+        )
         prompt += f"""
 ## Codebase Context (USE THIS TO ANSWER QUESTIONS)
 The following code was retrieved from THIS project's codebase.
 
-**CRITICAL:** When the user asks "how does X work" or "what is X", answer based on THIS CODE - explain what it does in this codebase, not generic explanations.
+{critical_line}
 
 - Reference specific files and line numbers: [1], [2], etc.
-- Explain what the actual code does, not what similar code might do elsewhere
+{elsewhere_bullet}
 - If the code shows a class/function, explain THAT implementation
 - Do NOT give generic explanations when specific code is available
 

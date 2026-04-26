@@ -129,7 +129,7 @@ lint: ## Check code style with ruff
 
 fix: ## Auto-fix linting and formatting issues
 	@echo "Auto-fixing code issues..."
-	@uv run ruff check . --fix
+	@-uv run ruff check . --fix
 	@uv run ruff format .
 
 format: ## Format code with ruff

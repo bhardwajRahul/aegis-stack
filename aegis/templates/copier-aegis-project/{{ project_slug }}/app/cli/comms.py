@@ -74,15 +74,24 @@ def status() -> None:
     status_color = (
         typer.colors.GREEN if email_status["configured"] else typer.colors.RED
     )
-    typer.echo(
-        f"  {t('comms.status_label')} {typer.style(t('comms.configured') if email_status['configured'] else t('comms.not_configured'), fg=status_color)}"
+    status_label = t("comms.status_label")
+    status_text = (
+        t("comms.configured")
+        if email_status["configured"]
+        else t("comms.not_configured")
     )
-    typer.echo(
-        f"  {t('comms.api_key_label')} {typer.style(t('comms.set') if email_status['api_key_set'] else t('comms.not_set'), fg=typer.colors.GREEN if email_status['api_key_set'] else typer.colors.RED)}"
+    typer.echo(f"  {status_label} {typer.style(status_text, fg=status_color)}")
+    api_key_label = t("comms.api_key_label")
+    api_key_text = t("comms.set") if email_status["api_key_set"] else t("comms.not_set")
+    api_key_color = (
+        typer.colors.GREEN if email_status["api_key_set"] else typer.colors.RED
     )
-    typer.echo(
-        f"  {t('comms.from_email_label')} {email_status['from_email'] or typer.style(t('comms.not_set'), fg=typer.colors.RED)}"
+    typer.echo(f"  {api_key_label} {typer.style(api_key_text, fg=api_key_color)}")
+    from_label = t("comms.from_email_label")
+    from_value = email_status["from_email"] or typer.style(
+        t("comms.not_set"), fg=typer.colors.RED
     )
+    typer.echo(f"  {from_label} {from_value}")
 
     if email_errors:
         for error in email_errors:
@@ -97,21 +106,33 @@ def status() -> None:
 
     typer.secho(f"\n{t('comms.sms_twilio_header')}", fg=typer.colors.CYAN, bold=True)
     status_color = typer.colors.GREEN if sms_status["configured"] else typer.colors.RED
-    typer.echo(
-        f"  {t('comms.status_label')} {typer.style(t('comms.configured') if sms_status['configured'] else t('comms.not_configured'), fg=status_color)}"
+    status_label = t("comms.status_label")
+    status_text = (
+        t("comms.configured") if sms_status["configured"] else t("comms.not_configured")
     )
-    typer.echo(
-        f"  {t('comms.account_sid_label')} {typer.style(t('comms.set') if sms_status['account_sid_set'] else t('comms.not_set'), fg=typer.colors.GREEN if sms_status['account_sid_set'] else typer.colors.RED)}"
+    typer.echo(f"  {status_label} {typer.style(status_text, fg=status_color)}")
+    sid_label = t("comms.account_sid_label")
+    sid_text = t("comms.set") if sms_status["account_sid_set"] else t("comms.not_set")
+    sid_color = (
+        typer.colors.GREEN if sms_status["account_sid_set"] else typer.colors.RED
     )
-    typer.echo(
-        f"  {t('comms.auth_token_label')} {typer.style(t('comms.set') if sms_status['auth_token_set'] else t('comms.not_set'), fg=typer.colors.GREEN if sms_status['auth_token_set'] else typer.colors.RED)}"
+    typer.echo(f"  {sid_label} {typer.style(sid_text, fg=sid_color)}")
+    auth_label = t("comms.auth_token_label")
+    auth_text = t("comms.set") if sms_status["auth_token_set"] else t("comms.not_set")
+    auth_color = (
+        typer.colors.GREEN if sms_status["auth_token_set"] else typer.colors.RED
     )
-    typer.echo(
-        f"  {t('comms.messaging_service_label')} {typer.style(t('comms.set') if sms_status.get('messaging_service_sid_set') else t('comms.not_set'), fg=typer.colors.GREEN if sms_status.get('messaging_service_sid_set') else typer.colors.RED)}"
+    typer.echo(f"  {auth_label} {typer.style(auth_text, fg=auth_color)}")
+    msg_label = t("comms.messaging_service_label")
+    msg_set = sms_status.get("messaging_service_sid_set")
+    msg_text = t("comms.set") if msg_set else t("comms.not_set")
+    msg_color = typer.colors.GREEN if msg_set else typer.colors.RED
+    typer.echo(f"  {msg_label} {typer.style(msg_text, fg=msg_color)}")
+    phone_label = t("comms.phone_number_label")
+    phone_value = sms_status["phone_number"] or typer.style(
+        t("comms.not_set"), fg=typer.colors.RED
     )
-    typer.echo(
-        f"  {t('comms.phone_number_label')} {sms_status['phone_number'] or typer.style(t('comms.not_set'), fg=typer.colors.RED)}"
-    )
+    typer.echo(f"  {phone_label} {phone_value}")
 
     if sms_errors:
         for error in sms_errors:
@@ -126,18 +147,30 @@ def status() -> None:
 
     typer.secho(f"\n{t('comms.voice_twilio_header')}", fg=typer.colors.CYAN, bold=True)
     status_color = typer.colors.GREEN if call_status["configured"] else typer.colors.RED
-    typer.echo(
-        f"  {t('comms.status_label')} {typer.style(t('comms.configured') if call_status['configured'] else t('comms.not_configured'), fg=status_color)}"
+    status_label = t("comms.status_label")
+    status_text = (
+        t("comms.configured")
+        if call_status["configured"]
+        else t("comms.not_configured")
     )
-    typer.echo(
-        f"  {t('comms.account_sid_label')} {typer.style(t('comms.set') if call_status['account_sid_set'] else t('comms.not_set'), fg=typer.colors.GREEN if call_status['account_sid_set'] else typer.colors.RED)}"
+    typer.echo(f"  {status_label} {typer.style(status_text, fg=status_color)}")
+    sid_label = t("comms.account_sid_label")
+    sid_text = t("comms.set") if call_status["account_sid_set"] else t("comms.not_set")
+    sid_color = (
+        typer.colors.GREEN if call_status["account_sid_set"] else typer.colors.RED
     )
-    typer.echo(
-        f"  {t('comms.auth_token_label')} {typer.style(t('comms.set') if call_status['auth_token_set'] else t('comms.not_set'), fg=typer.colors.GREEN if call_status['auth_token_set'] else typer.colors.RED)}"
+    typer.echo(f"  {sid_label} {typer.style(sid_text, fg=sid_color)}")
+    auth_label = t("comms.auth_token_label")
+    auth_text = t("comms.set") if call_status["auth_token_set"] else t("comms.not_set")
+    auth_color = (
+        typer.colors.GREEN if call_status["auth_token_set"] else typer.colors.RED
     )
-    typer.echo(
-        f"  {t('comms.phone_number_label')} {call_status['phone_number'] or typer.style(t('comms.not_set'), fg=typer.colors.RED)}"
+    typer.echo(f"  {auth_label} {typer.style(auth_text, fg=auth_color)}")
+    phone_label = t("comms.phone_number_label")
+    phone_value = call_status["phone_number"] or typer.style(
+        t("comms.not_set"), fg=typer.colors.RED
     )
+    typer.echo(f"  {phone_label} {phone_value}")
 
     if call_errors:
         for error in call_errors:
@@ -215,15 +248,12 @@ async def _email_send(
         )
 
         typer.secho(t("comms.email_sent"), fg=typer.colors.GREEN, bold=True)
-        typer.echo(
-            f"{typer.style(t('comms.message_id_label'), fg=typer.colors.CYAN)} {result.id}"
-        )
-        typer.echo(
-            f"{typer.style(t('comms.to_label'), fg=typer.colors.CYAN)} {', '.join(result.to)}"
-        )
-        typer.echo(
-            f"{typer.style(t('comms.subject_label'), fg=typer.colors.CYAN)} {subject}"
-        )
+        msg_id_label = typer.style(t("comms.message_id_label"), fg=typer.colors.CYAN)
+        typer.echo(f"{msg_id_label} {result.id}")
+        to_label = typer.style(t("comms.to_label"), fg=typer.colors.CYAN)
+        typer.echo(f"{to_label} {', '.join(result.to)}")
+        subject_label = typer.style(t("comms.subject_label"), fg=typer.colors.CYAN)
+        typer.echo(f"{subject_label} {subject}")
 
     except EmailConfigurationError as e:
         typer.secho(
@@ -252,15 +282,12 @@ async def _sms_send(to: str, body: str) -> None:
         result = await send_sms_simple(to=to, body=body)
 
         typer.secho(t("comms.sms_sent"), fg=typer.colors.GREEN, bold=True)
-        typer.echo(
-            f"{typer.style(t('comms.message_sid_label'), fg=typer.colors.CYAN)} {result.sid}"
-        )
-        typer.echo(
-            f"{typer.style(t('comms.to_label'), fg=typer.colors.CYAN)} {result.to}"
-        )
-        typer.echo(
-            f"{typer.style(t('comms.segments_label'), fg=typer.colors.CYAN)} {result.segments}"
-        )
+        sid_label = typer.style(t("comms.message_sid_label"), fg=typer.colors.CYAN)
+        typer.echo(f"{sid_label} {result.sid}")
+        to_label = typer.style(t("comms.to_label"), fg=typer.colors.CYAN)
+        typer.echo(f"{to_label} {result.to}")
+        seg_label = typer.style(t("comms.segments_label"), fg=typer.colors.CYAN)
+        typer.echo(f"{seg_label} {result.segments}")
 
     except SMSConfigurationError as e:
         typer.secho(
@@ -296,15 +323,12 @@ async def _call_make(to: str, twiml_url: str, timeout: int) -> None:
         result = await make_call(request)
 
         typer.secho(t("comms.call_initiated"), fg=typer.colors.GREEN, bold=True)
-        typer.echo(
-            f"{typer.style(t('comms.call_sid_label'), fg=typer.colors.CYAN)} {result.sid}"
-        )
-        typer.echo(
-            f"{typer.style(t('comms.to_label'), fg=typer.colors.CYAN)} {result.to}"
-        )
-        typer.echo(
-            f"{typer.style(t('comms.call_status_label'), fg=typer.colors.CYAN)} {result.status}"
-        )
+        sid_label = typer.style(t("comms.call_sid_label"), fg=typer.colors.CYAN)
+        typer.echo(f"{sid_label} {result.sid}")
+        to_label = typer.style(t("comms.to_label"), fg=typer.colors.CYAN)
+        typer.echo(f"{to_label} {result.to}")
+        status_label = typer.style(t("comms.call_status_label"), fg=typer.colors.CYAN)
+        typer.echo(f"{status_label} {result.status}")
 
     except CallConfigurationError as e:
         typer.secho(

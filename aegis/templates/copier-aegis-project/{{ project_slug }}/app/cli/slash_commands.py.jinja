@@ -344,7 +344,8 @@ class SlashCommandHandler:
 
         model = args[0]
 {% if ai_backend != "memory" %}
-        # Use set_active_model which auto-detects provider from model (requires LLM catalog)
+        # Use set_active_model which auto-detects provider from model
+        # (requires LLM catalog)
         from app.services.ai.llm_service import set_active_model
 
         result = await set_active_model(model)
@@ -359,7 +360,12 @@ class SlashCommandHandler:
 
         # Build message
         if result.provider_updated:
-            msg = f"[green]{t('slash.switched_to', provider=result.vendor, model=model)}[/green]"
+            switched = t(
+                "slash.switched_to",
+                provider=result.vendor,
+                model=model,
+            )
+            msg = f"[green]{switched}[/green]"
             return CommandResult(
                 success=True,
                 message=msg,

@@ -5,7 +5,8 @@ Contains seed data for LLM vendors, models, deployments, and pricing (Dec 2024 r
 Architecture:
 - LLMVendor: API providers (OpenAI, Anthropic, LLM7.io, etc.)
 - LargeLanguageModel: Unique models (gpt-4o-mini exists ONCE, owned by OpenAI)
-- LLMDeployment: Which vendors offer which models (LLM7.io deploys gpt-4o-mini via proxy)
+- LLMDeployment: Which vendors offer which models (LLM7.io deploys
+  gpt-4o-mini via proxy)
 - LLMPrice: Per vendor-model pricing (OpenAI charges $0.15, LLM7.io charges $0.00)
 """
 

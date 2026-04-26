@@ -145,8 +145,11 @@ def _generate_fix_migration(diffs: list[tuple]) -> Path | None:
                     ref_cols = [c.name for c in fk.referred_table.primary_key.columns]
                 ref_col_strs = [f"'{ref_table}.{rc}'" for rc in ref_cols]
                 local_col_strs = [f"'{lc}'" for lc in local_cols]
+                local_joined = ", ".join(local_col_strs)
+                ref_joined = ", ".join(ref_col_strs)
                 items.append(
-                    f"        sa.ForeignKeyConstraint([{', '.join(local_col_strs)}], [{', '.join(ref_col_strs)}]),"
+                    "        sa.ForeignKeyConstraint("
+                    f"[{local_joined}], [{ref_joined}]),"
                 )
             items_block = "\n".join(items)
             upgrade_lines.append(
@@ -157,7 +160,8 @@ def _generate_fix_migration(diffs: list[tuple]) -> Path | None:
                 idx_cols = [c.name for c in idx.columns]
                 unique_str = ", unique=True" if idx.unique else ""
                 upgrade_lines.append(
-                    f"    op.create_index('{idx.name}', '{table.name}', {idx_cols}{unique_str})"
+                    f"    op.create_index('{idx.name}', "
+                    f"'{table.name}', {idx_cols}{unique_str})"
                 )
             downgrade_lines.append(f"    op.drop_table('{table.name}')")
 
@@ -177,7 +181,7 @@ def _generate_fix_migration(diffs: list[tuple]) -> Path | None:
                     val = py_default.arg
                     if isinstance(val, bool):
                         col_str += f", server_default=sa.text('{str(val).lower()}')"
-                    elif isinstance(val, (int, float)):
+                    elif isinstance(val, int | float):
                         col_str += f", server_default=sa.text('{val}')"
                     elif isinstance(val, str):
                         col_str += f", server_default=sa.text(\"'{val}'\")"

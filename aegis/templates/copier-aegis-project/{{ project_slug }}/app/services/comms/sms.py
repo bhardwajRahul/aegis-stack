@@ -147,7 +147,8 @@ def get_sms_status() -> dict[str, Any]:
     phone_number_set = bool(settings.TWILIO_PHONE_NUMBER)
     messaging_service_sid_set = bool(settings.TWILIO_MESSAGING_SERVICE_SID)
 
-    # SMS is configured if we have credentials and either messaging service or phone number
+    # SMS is configured if we have credentials and either a messaging
+    # service or a phone number
     configured = (
         account_sid_set
         and auth_token_set

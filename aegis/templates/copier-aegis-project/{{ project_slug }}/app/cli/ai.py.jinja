@@ -391,7 +391,8 @@ def use_provider(
         existing_key = get_existing_api_key(provider)
 
         if not existing_key:
-            console.print(f"  [yellow]![/yellow] {t('ai.no_api_key_configured', var=env_var_name)}")
+            warning = t("ai.no_api_key_configured", var=env_var_name)
+            console.print(f"  [yellow]![/yellow] {warning}")
             console.print()
             console.print(f"[yellow]{t('ai.consider_running')}[/yellow]")
             console.print(
@@ -526,8 +527,8 @@ def chat(
             typer.echo("\nChat interrupted", err=True)
             raise typer.Exit(1)
         except Exception as e:
-            error_str = str(e)
 {% if ai_rag %}
+            error_str = str(e)
             # Provide helpful guidance for RAG collection errors
             if "No RAG collection specified" in error_str:
                 console.print()
@@ -649,7 +650,9 @@ def voice(
             # Validate file exists
             audio_path = Path(audio_file)
             if not audio_path.exists():
-                console.print(f"[red]{t('shared.error')}[/red] {t('ai.file_not_found', path=audio_file)}")
+                err_label = t("shared.error")
+                detail = t("ai.file_not_found", path=audio_file)
+                console.print(f"[red]{err_label}[/red] {detail}")
                 raise typer.Exit(1)
 
             # Determine audio format
@@ -658,7 +661,9 @@ def voice(
                 audio_format = AudioFormat(ext)
             except ValueError:
                 supported = ", ".join(f.value for f in AudioFormat)
-                console.print(f"[red]{t('shared.error')}[/red] {t('ai.unsupported_format', ext=ext)}")
+                err_label = t("shared.error")
+                detail = t("ai.unsupported_format", ext=ext)
+                console.print(f"[red]{err_label}[/red] {detail}")
                 console.print(f"[dim]{t('ai.supported_formats', formats=supported)}[/dim]")
                 raise typer.Exit(1)
 
@@ -704,11 +709,19 @@ def voice(
             console.print(f"  {result.transcription.text}")
 
             if result.transcription.language:
-                console.print(f"  [dim]{t('ai.language_label', lang=result.transcription.language)}[/dim]")
-            if result.transcription.duration_seconds:
-                console.print(
-                    f"  [dim]{t('ai.speech_duration', duration=f'{result.transcription.duration_seconds:.1f}')}[/dim]"
+                lang_label = t(
+                    "ai.language_label",
+                    lang=result.transcription.language,
                 )
+                console.print(f"  [dim]{lang_label}[/dim]")
+            if result.transcription.duration_seconds:
+                duration_str = (
+                    f"{result.transcription.duration_seconds:.1f}"
+                )
+                duration_label = t(
+                    "ai.speech_duration", duration=duration_str
+                )
+                console.print(f"  [dim]{duration_label}[/dim]")
 
             console.print()
             console.print(f"[bold green]{t('ai.response_label')}[/bold green]")
@@ -725,9 +738,11 @@ def voice(
 
             if result.conversation_id:
                 console.print()
-                console.print(
-                    f"[dim]{t('ai.conversation_id_label', id=result.conversation_id[:8])}...[/dim]"
+                conv_label = t(
+                    "ai.conversation_id_label",
+                    id=result.conversation_id[:8],
                 )
+                console.print(f"[dim]{conv_label}...[/dim]")
 
         except KeyboardInterrupt:
             typer.echo(f"\n{t('ai.cancelled')}", err=True)
@@ -794,7 +809,12 @@ def record(
             sample_rate = int(device_info['default_samplerate'])
             channels = 1  # Mono
 
-            console.print(f"[dim]{t('ai.using_mic', name=device_info['name'], rate=sample_rate)}[/dim]")
+            mic_label = t(
+                "ai.using_mic",
+                name=device_info["name"],
+                rate=sample_rate,
+            )
+            console.print(f"[dim]{mic_label}[/dim]")
 
             # Determine output path
             if output:
@@ -850,8 +870,11 @@ def record(
                         minutes = int(elapsed // 60)
                         seconds = int(elapsed % 60)
                         # Use regular print with \r for proper carriage return
+                        timer_str = (
+                            f"{minutes:02d}:{seconds:02d}"
+                        )
                         print(
-                            f"\r  \033[91m●\033[0m Recording: {minutes:02d}:{seconds:02d}",
+                            f"\r  \033[91m●\033[0m Recording: {timer_str}",
                             end="",
                             flush=True,
                         )
@@ -880,7 +903,13 @@ def record(
             # Save to WAV file
             sf.write(str(audio_path), audio_data, sample_rate)
 
-            console.print(f"[dim]{t('ai.audio_saved', path=str(audio_path), size=f'{audio_path.stat().st_size:,}')}[/dim]")
+            size_str = f"{audio_path.stat().st_size:,}"
+            saved_label = t(
+                "ai.audio_saved",
+                path=str(audio_path),
+                size=size_str,
+            )
+            console.print(f"[dim]{saved_label}[/dim]")
 
             # Read audio file
             with open(audio_path, "rb") as f:
@@ -949,9 +978,11 @@ def record(
 
                 if chat_result.metadata.get("conversation_id"):
                     console.print()
-                    console.print(
-                        f"[dim]{t('ai.conversation_id_label', id=chat_result.metadata['conversation_id'][:8])}...[/dim]"
+                    conv_label = t(
+                        "ai.conversation_id_label",
+                        id=chat_result.metadata["conversation_id"][:8],
                     )
+                    console.print(f"[dim]{conv_label}...[/dim]")
 
                 # Play TTS response if requested
                 if voice_response:
@@ -1047,7 +1078,9 @@ def transcribe(
             # Validate file exists
             audio_path = Path(audio_file)
             if not audio_path.exists():
-                console.print(f"[red]{t('shared.error')}[/red] {t('ai.file_not_found', path=audio_file)}")
+                err_label = t("shared.error")
+                detail = t("ai.file_not_found", path=audio_file)
+                console.print(f"[red]{err_label}[/red] {detail}")
                 raise typer.Exit(1)
 
             # Determine audio format
@@ -1056,7 +1089,9 @@ def transcribe(
                 audio_format = AudioFormat(ext)
             except ValueError:
                 supported = ", ".join(f.value for f in AudioFormat)
-                console.print(f"[red]{t('shared.error')}[/red] {t('ai.unsupported_format', ext=ext)}")
+                err_label = t("shared.error")
+                detail = t("ai.unsupported_format", ext=ext)
+                console.print(f"[red]{err_label}[/red] {detail}")
                 console.print(f"[dim]{t('ai.supported_formats', formats=supported)}[/dim]")
                 raise typer.Exit(1)
 
@@ -1208,7 +1243,11 @@ def speak(
             console.print(f"  [dim]{t('ai.speech_size', size=f'{len(result.audio):,}')}[/dim]")
 
             if result.duration_seconds:
-                console.print(f"  [dim]{t('ai.speech_duration', duration=f'{result.duration_seconds:.1f}')}[/dim]")
+                duration_str = f"{result.duration_seconds:.1f}"
+                duration_label = t(
+                    "ai.speech_duration", duration=duration_str
+                )
+                console.print(f"  [dim]{duration_label}[/dim]")
 
         except KeyboardInterrupt:
             typer.echo(f"\n{t('ai.cancelled')}", err=True)
@@ -1362,12 +1401,20 @@ def usage(
     # Display functions
     def display_summary_panel(stats: UsageStatsResponse) -> None:
         success_color = get_success_color(stats.success_rate)
+        tokens_label = t("ai.usage_total_tokens")
+        cost_label = t("ai.usage_total_cost")
+        requests_label = t("ai.usage_total_requests")
+        rate_label = t("ai.usage_success_rate")
+        tokens_str = format_number(stats.total_tokens)
+        cost_str = format_cost(stats.total_cost)
+        requests_str = format_number(stats.total_requests)
+        rate_str = format_percentage(stats.success_rate)
         summary_lines = [
-            f"[bold cyan]{t('ai.usage_total_tokens')}[/bold cyan]   {format_number(stats.total_tokens)}",
-            f"[bold cyan]{t('ai.usage_total_cost')}[/bold cyan]     {format_cost(stats.total_cost)}",
-            f"[bold cyan]{t('ai.usage_total_requests')}[/bold cyan] {format_number(stats.total_requests)}",
-            f"[bold cyan]{t('ai.usage_success_rate')}[/bold cyan]   "
-            f"[{success_color}]{format_percentage(stats.success_rate)}[/{success_color}]",
+            f"[bold cyan]{tokens_label}[/bold cyan]   {tokens_str}",
+            f"[bold cyan]{cost_label}[/bold cyan]     {cost_str}",
+            f"[bold cyan]{requests_label}[/bold cyan] {requests_str}",
+            f"[bold cyan]{rate_label}[/bold cyan]   "
+            f"[{success_color}]{rate_str}[/{success_color}]",
         ]
         console.print(
             Panel(
@@ -1388,8 +1435,14 @@ def usage(
         console.print(f"\n[bold blue]{t('ai.token_breakdown')}[/bold blue]")
         input_str = format_number(stats.input_tokens)
         output_str = format_number(stats.output_tokens)
-        console.print(f"  [cyan]{t('ai.input_tokens')}[/cyan]  {input_str:>12} ({input_pct:.0f}%)")
-        console.print(f"  [cyan]{t('ai.output_tokens')}[/cyan] {output_str:>12} ({output_pct:.0f}%)")
+        in_label = t("ai.input_tokens")
+        out_label = t("ai.output_tokens")
+        console.print(
+            f"  [cyan]{in_label}[/cyan]  {input_str:>12} ({input_pct:.0f}%)"
+        )
+        console.print(
+            f"  [cyan]{out_label}[/cyan] {output_str:>12} ({output_pct:.0f}%)"
+        )
         bar_width = 40
         input_bars = int((input_pct / 100) * bar_width)
         output_bars = bar_width - input_bars
@@ -1646,7 +1699,11 @@ async def _interactive_chat_session(
     ai_config = get_ai_config(settings)
 
     console.print()
-    console.print(f"[bold bright_magenta]Illiana[/bold bright_magenta] [dim]v{__aegis_version__}[/dim]")
+    banner = (
+        f"[bold bright_magenta]Illiana[/bold bright_magenta] "
+        f"[dim]v{__aegis_version__}[/dim]"
+    )
+    console.print(banner)
     console.print()
 
     # Boot steps with brief delays for effect
@@ -1654,7 +1711,12 @@ async def _interactive_chat_session(
     await asyncio.sleep(0.15)
     console.print(f" [green]{t('ai.ok')}[/green]")
 
-    console.print(f"  [dim]>[/dim] {t('ai.connecting_to', provider=get_provider_display_name(ai_config.provider))}", end="")
+    provider_name = get_provider_display_name(ai_config.provider)
+    connecting_label = t("ai.connecting_to", provider=provider_name)
+    console.print(
+        f"  [dim]>[/dim] {connecting_label}",
+        end="",
+    )
     # Warm up the agent (lazy imports, model initialization)
     from app.services.ai.providers import get_agent
     _ = get_agent(ai_config, settings)
@@ -1694,7 +1756,12 @@ async def _interactive_chat_session(
             console.print(f"[green]{t('ai.health_ok', pct=health_pct)}[/green]")
         else:
             unhealthy_count = len(status.unhealthy_components)
-            console.print(f"[yellow]{t('ai.health_degraded', pct=health_pct, count=unhealthy_count)}[/yellow]")
+            degraded_label = t(
+                "ai.health_degraded",
+                pct=health_pct,
+                count=unhealthy_count,
+            )
+            console.print(f"[yellow]{degraded_label}[/yellow]")
     except Exception:
         console.print(f"[dim]{t('ai.health_na')}[/dim]")
 
@@ -1948,9 +2015,15 @@ async def _interactive_chat_session(
             except ProviderNotInstalledError as e:
                 # Clean display for missing provider
                 console.print()
-                console.print(f"[yellow]{t('ai.provider_not_installed', provider=e.provider)}[/yellow]")
+                missing_label = t(
+                    "ai.provider_not_installed", provider=e.provider
+                )
+                console.print(f"[yellow]{missing_label}[/yellow]")
                 console.print()
-                console.print(f"[green]{t('ai.run_to_install', command=e.cli_command)}[/green]")
+                install_label = t(
+                    "ai.run_to_install", command=e.cli_command
+                )
+                console.print(f"[green]{install_label}[/green]")
                 console.print()
             except Exception as stream_error:
                 console.print(f"[red]{t('shared.error')} {stream_error}[/red]")
@@ -2156,9 +2229,13 @@ async def _stream_chat_response(
     except ProviderNotInstalledError as e:
         # Clean display for missing provider - no need to re-raise
         console.print()
-        console.print(f"[yellow]{t('ai.provider_not_installed', provider=e.provider)}[/yellow]")
+        missing_label = t(
+            "ai.provider_not_installed", provider=e.provider
+        )
+        console.print(f"[yellow]{missing_label}[/yellow]")
         console.print()
-        console.print(f"[green]{t('ai.run_to_install', command=e.cli_command)}[/green]")
+        install_label = t("ai.run_to_install", command=e.cli_command)
+        console.print(f"[green]{install_label}[/green]")
         console.print()
         return None
 
