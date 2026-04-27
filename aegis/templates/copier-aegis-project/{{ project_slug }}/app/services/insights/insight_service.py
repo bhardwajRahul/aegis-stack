@@ -14,6 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from .constants import MetricKeys, Periods
 from .models import (
+    EventOrigin,
     InsightEvent,
     InsightMetric,
     InsightMetricType,
@@ -262,12 +263,18 @@ class InsightService:
         event_date: date | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> InsightEvent:
-        """Create a new contextual event."""
+        """Create a new contextual event.
+
+        Origin is `USER` — this method is only called from user-initiated
+        paths (CLI `insights event`). Collectors construct `InsightEvent`
+        directly and set origin explicitly.
+        """
         event = InsightEvent(
             date=datetime.combine(event_date or date.today(), datetime.min.time()),
             event_type=event_type,
             description=description,
             metadata_=metadata or {},
+            origin=EventOrigin.USER,
         )
         self.db.add(event)
         await self.db.flush()

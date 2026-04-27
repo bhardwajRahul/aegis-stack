@@ -115,8 +115,10 @@ class TestGitHubTrafficCollectorSuccess:
         # 2 clones entries * 2 metrics (clones + unique_cloners) = 4
         # 2 views entries * 2 metrics (views + unique_visitors) = 4
         # 1 referrers row + 1 paths row = 2
-        # Total = 10
-        assert result.rows_written == 10
+        # 4 server-side 14d rolling totals (clones_14d, clones_14d_unique,
+        #   views_14d, views_14d_unique) — one row each, latest day = 4
+        # Total = 14
+        assert result.rows_written == 14
         assert result.rows_skipped == 0
         assert result.error is None
 
@@ -234,7 +236,8 @@ class TestGitHubTrafficCollectorDeduplication:
                 result1 = await collector.collect()
 
             assert result1.success is True
-            assert result1.rows_written == 10
+            # Same total as test_collect_success (10 base + 4 14d rolling).
+            assert result1.rows_written == 14
             assert result1.rows_skipped == 0
 
             # Second collection with same data
@@ -253,7 +256,7 @@ class TestGitHubTrafficCollectorDeduplication:
 
             assert result2.success is True
             assert result2.rows_written == 0  # All rows already exist
-            assert result2.rows_skipped == 10
+            assert result2.rows_skipped == 14
 
 
 # ---------------------------------------------------------------------------

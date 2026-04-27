@@ -5,6 +5,8 @@ Collects clones, views, referrers, and popular paths from the GitHub Traffic API
 GitHub retains only 14 days of data — this collector persists it before expiry.
 """
 
+import logging
+from datetime import datetime
 from typing import Any
 
 import httpx
@@ -13,7 +15,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ..constants import MetricKeys, Periods, SourceKeys
 from ..schemas import PopularPathEntry, PopularPathsMetadata, ReferrerEntry
-from .base import BaseCollector, CollectionResult, parse_github_date, today
+from .base import BaseCollector, CollectionResult
+
+logger = logging.getLogger(__name__)
 
 GITHUB_API = "https://api.github.com"
 
@@ -34,12 +38,12 @@ class GitHubTrafficCollector(BaseCollector):
         owner = settings.INSIGHT_GITHUB_OWNER
         repo = settings.INSIGHT_GITHUB_REPO
 
-        if err := self._validate_config(
-            INSIGHT_GITHUB_TOKEN=token,
-            INSIGHT_GITHUB_OWNER=owner,
-            INSIGHT_GITHUB_REPO=repo,
-        ):
-            return err
+        if not token or not owner or not repo:
+            return CollectionResult(
+                source_key=self.source_key,
+                success=False,
+                error="Missing INSIGHT_GITHUB_TOKEN, INSIGHT_GITHUB_OWNER, or INSIGHT_GITHUB_REPO",
+            )
 
         headers = {
             "Authorization": f"Bearer {token}",
@@ -63,11 +67,23 @@ class GitHubTrafficCollector(BaseCollector):
                 for resp in [clones_resp, views_resp, referrers_resp, paths_resp]:
                     resp.raise_for_status()
 
-                written, skipped = await self._process_clones(clones_resp.json())
+                clones_data = clones_resp.json()
+                views_data = views_resp.json()
+
+                written, skipped = await self._process_clones(clones_data)
                 rows_written += written
                 rows_skipped += skipped
 
-                written, skipped = await self._process_views(views_resp.json())
+                written, skipped = await self._process_views(views_data)
+                rows_written += written
+                rows_skipped += skipped
+
+                # Capture GitHub's top-level 14-day rolling totals as their
+                # own daily time series. This is the number GitHub shows on
+                # the repo Traffic page; we previously discarded it.
+                written, skipped = await self._process_rolling_totals(
+                    clones_data, views_data
+                )
                 rows_written += written
                 rows_skipped += skipped
 
@@ -80,19 +96,41 @@ class GitHubTrafficCollector(BaseCollector):
                 rows_skipped += skipped
 
             await self.db.commit()
-            return self._success(rows_written, rows_skipped)
 
-        except httpx.HTTPStatusError as e:
-            return self._error(
-                f"GitHub API error: {e.response.status_code} {e.response.text[:200]}",
+            logger.info(
+                "GitHub traffic collected: %d written, %d skipped",
                 rows_written,
                 rows_skipped,
             )
+
+            return CollectionResult(
+                source_key=self.source_key,
+                success=True,
+                rows_written=rows_written,
+                rows_skipped=rows_skipped,
+            )
+
+        except httpx.HTTPStatusError as e:
+            error_msg = (
+                f"GitHub API error: {e.response.status_code} {e.response.text[:200]}"
+            )
+            logger.error(error_msg)
+            return CollectionResult(
+                source_key=self.source_key,
+                success=False,
+                rows_written=rows_written,
+                rows_skipped=rows_skipped,
+                error=error_msg,
+            )
         except Exception as e:
-            return self._error(
-                f"GitHub traffic collection failed: {e}",
-                rows_written,
-                rows_skipped,
+            error_msg = f"GitHub traffic collection failed: {e}"
+            logger.error(error_msg)
+            return CollectionResult(
+                source_key=self.source_key,
+                success=False,
+                rows_written=rows_written,
+                rows_skipped=rows_skipped,
+                error=error_msg,
             )
 
     async def _process_clones(self, data: dict[str, Any]) -> tuple[int, int]:
@@ -104,7 +142,7 @@ class GitHubTrafficCollector(BaseCollector):
         skipped = 0
 
         for entry in data.get("clones", []):
-            date = parse_github_date(entry["timestamp"])
+            date = _parse_github_date(entry["timestamp"])
 
             _, created = await self.upsert_metric(
                 metric_type=clones_type,
@@ -135,7 +173,7 @@ class GitHubTrafficCollector(BaseCollector):
         skipped = 0
 
         for entry in data.get("views", []):
-            date = parse_github_date(entry["timestamp"])
+            date = _parse_github_date(entry["timestamp"])
 
             _, created = await self.upsert_metric(
                 metric_type=views_type,
@@ -157,6 +195,41 @@ class GitHubTrafficCollector(BaseCollector):
 
         return written, skipped
 
+    async def _process_rolling_totals(
+        self,
+        clones_data: dict[str, Any],
+        views_data: dict[str, Any],
+    ) -> tuple[int, int]:
+        """Persist GitHub's server-side 14-day rolling totals.
+
+        The /traffic/clones and /traffic/views responses carry two
+        top-level fields — `count` (total over the window) and `uniques`
+        (distinct count over the window). GitHub computes both against
+        their 14-day retention, so `uniques` is a real distinct count,
+        NOT a sum of per-day uniques. Recording one row per day gives
+        us a chart of how the rolling window itself evolves.
+        """
+        rolling_values = {
+            MetricKeys.CLONES_14D: clones_data.get("count", 0),
+            MetricKeys.CLONES_14D_UNIQUE: clones_data.get("uniques", 0),
+            MetricKeys.VIEWS_14D: views_data.get("count", 0),
+            MetricKeys.VIEWS_14D_UNIQUE: views_data.get("uniques", 0),
+        }
+        today = _today()
+        written = 0
+        skipped = 0
+        for key, value in rolling_values.items():
+            mt = await self.get_metric_type(key)
+            _, created = await self.upsert_metric(
+                metric_type=mt,
+                date=today,
+                value=float(value),
+                period=Periods.DAILY,
+            )
+            written += 1 if created else 0
+            skipped += 0 if created else 1
+        return written, skipped
+
     async def _process_referrers(self, data: list[dict[str, Any]]) -> tuple[int, int]:
         """Process referrers — single snapshot row with typed referrer entries."""
         referrers_type = await self.get_metric_type(MetricKeys.REFERRERS)
@@ -169,10 +242,10 @@ class GitHubTrafficCollector(BaseCollector):
             )
             referrer_map[entry["referrer"]] = validated.model_dump()
 
-        _today = today()
+        today = _today()
         _, created = await self.upsert_metric(
             metric_type=referrers_type,
-            date=_today,
+            date=today,
             value=float(len(data)),
             period=Periods.DAILY,
             metadata=referrer_map,
@@ -198,13 +271,24 @@ class GitHubTrafficCollector(BaseCollector):
             ]
         )
 
-        _today = today()
+        today = _today()
         _, created = await self.upsert_metric(
             metric_type=paths_type,
-            date=_today,
+            date=today,
             value=float(len(data)),
             period=Periods.DAILY,
             metadata=paths.model_dump(),
         )
 
         return (1, 0) if created else (0, 1)
+
+
+def _parse_github_date(timestamp: str) -> datetime:
+    """Parse GitHub API timestamp (ISO 8601) to date-only datetime."""
+    dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    return dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+
+
+def _today() -> datetime:
+    """Get today as a midnight datetime (no timezone)."""
+    return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)

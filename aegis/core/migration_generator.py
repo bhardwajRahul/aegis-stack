@@ -111,6 +111,37 @@ AUTH_MIGRATION = ServiceMigrationSpec(
             ],
             indexes=[IndexSpec("ix_user_email", ["email"], unique=True)],
         ),
+        # UserOAuthIdentity - links a user to a third-party identity.
+        # One user can have many identities (GitHub + Google). The
+        # (provider, provider_user_id) pair is unique to prevent identity
+        # hijacking across accounts.
+        TableSpec(
+            name="user_oauth_identity",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("provider", "sa.String(32)", nullable=False),
+                # Stored as string to avoid caring whether the provider
+                # uses int IDs (GitHub) or UUIDs (some others).
+                ColumnSpec("provider_user_id", "sa.String(128)", nullable=False),
+                ColumnSpec("provider_username", "sa.String(128)", nullable=True),
+                ColumnSpec("provider_email", "sa.String(255)", nullable=True),
+                ColumnSpec("avatar_url", "sa.String(512)", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec(
+                    "uq_user_oauth_identity_provider_pid",
+                    ["provider", "provider_user_id"],
+                    unique=True,
+                ),
+                IndexSpec("ix_user_oauth_identity_user_id", ["user_id"]),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["user_id"], "user", ["id"]),
+            ],
+        ),
     ],
 )
 
@@ -606,7 +637,9 @@ INSIGHTS_MIGRATION = ServiceMigrationSpec(
                 ForeignKeySpec(["metric_type_id"], "insight_metric_type", ["id"]),
             ],
         ),
-        # InsightEvent - contextual markers
+        # InsightEvent - contextual markers. The user-coupled
+        # `created_by_user_id` column + FK + index are added by the
+        # `insights_auth_link` migration when auth is also included.
         TableSpec(
             name="insight_event",
             columns=[
@@ -615,11 +648,80 @@ INSIGHTS_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec("event_type", "sa.String(64)", nullable=False),
                 ColumnSpec("description", "sa.String(1024)", nullable=False),
                 ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                # `origin` distinguishes collector output from user-created
+                # annotations so the API/UI only exposes user rows for editing
+                # and collector cleanups stay scoped to their own rows.
+                ColumnSpec(
+                    "origin", "sa.String(16)", nullable=False, default="'collector'"
+                ),
                 ColumnSpec("created_at", "sa.DateTime()", nullable=False),
             ],
             indexes=[
                 IndexSpec("ix_insight_event_date", ["date"]),
                 IndexSpec("ix_insight_event_type_date", ["event_type", "date"]),
+                IndexSpec("ix_insight_event_origin", ["origin"]),
+                IndexSpec("ix_insight_event_origin_date", ["origin", "date"]),
+            ],
+        ),
+    ],
+)
+
+# Insights + Auth: glue migration that adds the user-FK column to
+# insight_event and creates the user-scoped `insight_goal` table. Only runs
+# when both services are included; runs after both base migrations so the
+# `user` table exists when the FK is created.
+INSIGHTS_AUTH_LINK_MIGRATION = ServiceMigrationSpec(
+    service_name="insights_auth_link",
+    description="Link insight_event/insight_goal to user.id (auth + insights)",
+    tables=[
+        # InsightGoal - per-user metric goals (target value + window/date,
+        # status). Goals are scoped to a user and a project_slug; many goals
+        # per user is supported. See goal_service for progress calculation.
+        TableSpec(
+            name="insight_goal",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("source_project_slug", "sa.String(64)", nullable=False),
+                ColumnSpec("metric_key", "sa.String(64)", nullable=False),
+                ColumnSpec("kind", "sa.String(16)", nullable=False),
+                ColumnSpec("target_value", "sa.Float()", nullable=False),
+                ColumnSpec("window_days", "sa.Integer()", nullable=True),
+                ColumnSpec("target_date", "sa.Date()", nullable=True),
+                ColumnSpec(
+                    "status", "sa.String(16)", nullable=False, default="'active'"
+                ),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_insight_goal_user_id", ["user_id"]),
+                IndexSpec(
+                    "ix_insight_goal_source_project_slug",
+                    ["source_project_slug"],
+                ),
+                IndexSpec("ix_insight_goal_metric_key", ["metric_key"]),
+                IndexSpec("ix_insight_goal_user_status", ["user_id", "status"]),
+                IndexSpec(
+                    "ix_insight_goal_project_metric",
+                    ["source_project_slug", "metric_key"],
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["user_id"], "user", ["id"]),
+            ],
+        ),
+    ],
+    alter_tables=[
+        AlterTableSpec(
+            name="insight_event",
+            add_columns=[
+                # Audit trail for user-created events. Null on collector and
+                # CLI-created rows.
+                ColumnSpec("created_by_user_id", "sa.Integer()", nullable=True),
+            ],
+            add_foreign_keys=[
+                ForeignKeySpec(["created_by_user_id"], "user", ["id"]),
             ],
         ),
     ],
@@ -814,6 +916,7 @@ MIGRATION_SPECS: dict[str, ServiceMigrationSpec] = {
     "payment": PAYMENT_MIGRATION,
     "payment_auth_link": PAYMENT_AUTH_LINK_MIGRATION,
     "insights": INSIGHTS_MIGRATION,
+    "insights_auth_link": INSIGHTS_AUTH_LINK_MIGRATION,
 }
 
 # ============================================================================
@@ -867,12 +970,15 @@ def upgrade() -> None:
 
 {% endfor %}
 {% for alter in alter_tables %}
-    # Alter {{ alter.name }} table
+    # Alter {{ alter.name }} table — batch_alter_table is required for
+    # SQLite, which doesn't support ALTER for FK constraints. Postgres
+    # treats it as plain ALTER, so this is portable across both backends.
+    with op.batch_alter_table('{{ alter.name }}') as batch_op:
 {% for column in alter.add_columns %}
-    op.add_column('{{ alter.name }}', sa.Column('{{ column.name }}', {{ column.type }}, nullable={{ column.nullable }}{% if column.server_default %}, server_default={{ column.server_default }}{% endif %}))
+        batch_op.add_column(sa.Column('{{ column.name }}', {{ column.type }}, nullable={{ column.nullable }}{% if column.server_default %}, server_default={{ column.server_default }}{% endif %}))
 {% endfor %}
 {% for fk in alter.add_foreign_keys %}
-    op.create_foreign_key('fk_{{ alter.name }}_{{ fk.columns[0] }}_{{ fk.ref_table }}', '{{ alter.name }}', '{{ fk.ref_table }}', {{ fk.columns }}, {{ fk.ref_columns }})
+        batch_op.create_foreign_key('fk_{{ alter.name }}_{{ fk.columns[0] }}_{{ fk.ref_table }}', '{{ fk.ref_table }}', {{ fk.columns }}, {{ fk.ref_columns }})
 {% endfor %}
 
 {% endfor %}
@@ -880,11 +986,12 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Reverse {{ service_name }} migration."""
 {% for alter in alter_tables|reverse %}
+    with op.batch_alter_table('{{ alter.name }}') as batch_op:
 {% for fk in alter.add_foreign_keys|reverse %}
-    op.drop_constraint('fk_{{ alter.name }}_{{ fk.columns[0] }}_{{ fk.ref_table }}', '{{ alter.name }}', type_='foreignkey')
+        batch_op.drop_constraint('fk_{{ alter.name }}_{{ fk.columns[0] }}_{{ fk.ref_table }}', type_='foreignkey')
 {% endfor %}
 {% for column in alter.add_columns|reverse %}
-    op.drop_column('{{ alter.name }}', '{{ column.name }}')
+        batch_op.drop_column('{{ column.name }}')
 {% endfor %}
 {% endfor %}
 {% for table in tables|reverse %}
@@ -1194,7 +1301,8 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
 
     # Insights service (always needs database)
     include_insights = context.get("include_insights")
-    if include_insights == "yes" or include_insights is True:
+    include_insights_on = include_insights == "yes" or include_insights is True
+    if include_insights_on:
         services.append("insights")
 
     # Payment service (always needs database)
@@ -1209,6 +1317,12 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     include_auth_on = include_auth == "yes" or include_auth is True
     if include_payment_on and include_auth_on:
         services.append("payment_auth_link")
+
+    # Insights + Auth: add insight_event.created_by_user_id FK and
+    # create the user-scoped insight_goal table. Runs after both base
+    # migrations so the `user` table exists when the FK is created.
+    if include_insights_on and include_auth_on:
+        services.append("insights_auth_link")
 
     return services
 

@@ -131,6 +131,12 @@ dev = [
     "types-psutil==7.0.0.20250801",
     "pre-commit==4.2.0",
     "pip-audit==2.9.0",
+{%- if include_database and database_engine != 'sqlite' %}
+    # Tests use in-memory SQLite for speed/isolation regardless of the
+    # production backend, so aiosqlite is required as a test dep even when
+    # the app itself runs on Postgres.
+    "aiosqlite>=0.19.0",
+{%- endif %}
 {%- if include_worker %}
     # Development auto-reload for workers
     "watchdog==4.0.2",

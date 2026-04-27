@@ -13,7 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from ..constants import MetricKeys, Periods, SourceKeys
 from ..models import InsightMetric
 from ..schemas import ActivitySummaryMetadata, ForkEventMetadata, ReleaseEventMetadata2
-from .base import BaseCollector, CollectionResult, clickhouse_query, logger, parse_date
+from .base import BaseCollector, CollectionResult, clickhouse_query, parse_date
 
 # Event type mapping from ClickHouse enum to ActivitySummaryMetadata fields
 EVENT_TYPE_MAP = {
@@ -61,51 +61,18 @@ class GitHubEventsCollector(BaseCollector):
             activity_type = await self.get_metric_type(MetricKeys.ACTIVITY_SUMMARY)
 
             async with httpx.AsyncClient(timeout=30.0) as client:
-                # Forks — from GitHub REST API (complete list)
-                # ClickHouse misses some forks, so we use the API as primary source
-                from ..models import InsightEvent
-
-                token = settings.INSIGHT_GITHUB_TOKEN
-                fork_actors: list[tuple[str, str]] = []  # (actor, date_str)
-                if token:
-                    headers = {
-                        "Authorization": f"Bearer {token}",
-                        "Accept": "application/vnd.github+json",
-                        "X-GitHub-Api-Version": "2022-11-28",
-                    }
-                    page = 1
-                    while True:
-                        resp = await client.get(
-                            f"https://api.github.com/repos/{owner}/{repo}/forks",
-                            headers=headers,
-                            params={"per_page": 100, "page": page, "sort": "oldest"},
-                        )
-                        resp.raise_for_status()
-                        forks_page = resp.json()
-                        if not forks_page:
-                            break
-                        for fork in forks_page:
-                            actor = fork.get("owner", {}).get("login", "")
-                            created = fork.get("created_at", "")[:10]
-                            if actor and created:
-                                fork_actors.append((actor, created))
-                        if len(forks_page) < 100:
-                            break
-                        page += 1
-                else:
-                    # Fallback to ClickHouse if no GitHub token
-                    fork_data = await clickhouse_query(
-                        client,
-                        f"""
-                        SELECT actor_login, toDate(created_at) as day
-                        FROM github.github_events
-                        WHERE repo_name = '{repo_name}'
-                          AND event_type = 'ForkEvent'
-                          AND created_at >= '2020-01-01'
-                        ORDER BY day DESC
-                    """,
-                    )
-                    fork_actors = [(row[0], row[1]) for row in fork_data]
+                # Forks — individual events
+                fork_data = await clickhouse_query(
+                    client,
+                    f"""
+                    SELECT actor_login, toDate(created_at) as day
+                    FROM github.github_events
+                    WHERE repo_name = '{repo_name}'
+                      AND event_type = 'ForkEvent'
+                      AND created_at >= today() - 90
+                    ORDER BY day DESC
+                """,
+                )
 
                 # Get existing fork actors to skip duplicates
                 existing_forks = await self.db.exec(
@@ -120,13 +87,14 @@ class GitHubEventsCollector(BaseCollector):
                     if isinstance(m, dict)
                 }
 
-                for actor, date_str in fork_actors:
+                for row in fork_data:
+                    actor = row[0]
                     if actor in existing_actors:
                         rows_skipped += 1
                         continue
 
-                    date = parse_date(date_str)
-                    metadata = ForkEventMetadata(actor=actor, date=date_str)
+                    date = parse_date(row[1])
+                    metadata = ForkEventMetadata(actor=actor, date=row[1])
                     await self.upsert_metric(
                         metric_type=forks_type,
                         date=date,
@@ -135,30 +103,6 @@ class GitHubEventsCollector(BaseCollector):
                         metadata=metadata.model_dump(),
                     )
                     rows_written += 1
-
-                # Create InsightEvent for new forks (Recent Activity)
-                existing_fork_events = await self.db.exec(
-                    select(InsightEvent).where(InsightEvent.event_type == "fork")
-                )
-                existing_fork_event_actors = {
-                    (ev.metadata_ or {}).get("actor", "")
-                    for ev in existing_fork_events.all()
-                }
-                events_created = 0
-                for i, (actor, date_str) in enumerate(fork_actors, 1):
-                    if actor in existing_fork_event_actors:
-                        continue
-                    self.db.add(
-                        InsightEvent(
-                            date=parse_date(date_str),
-                            event_type="fork",
-                            description=f"Fork #{i}",
-                            metadata_={"actor": actor, "number": i},
-                        )
-                    )
-                    events_created += 1
-                if events_created:
-                    logger.info("Fork events created: %d", events_created)
 
                 # Releases — individual events
                 release_data = await clickhouse_query(
@@ -169,7 +113,7 @@ class GitHubEventsCollector(BaseCollector):
                     FROM github.github_events
                     WHERE repo_name = '{repo_name}'
                       AND event_type = 'ReleaseEvent'
-                      AND created_at >= '2020-01-01'
+                      AND created_at >= today() - 90
                     ORDER BY day DESC
                 """,
                 )

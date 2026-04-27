@@ -10,7 +10,6 @@ from sqlmodel import Session, select
 from .constants import MetricKeys, SourceKeys, Units
 from .models import InsightMetricType, InsightSource
 
-
 # ---------------------------------------------------------------------------
 # Source definitions
 # ---------------------------------------------------------------------------
@@ -73,6 +72,12 @@ DEFAULT_METRIC_TYPES: dict[str, list[dict]] = {
         {"key": MetricKeys.UNIQUE_VISITORS, "display_name": "Unique Visitors", "unit": Units.COUNT},
         {"key": MetricKeys.REFERRERS, "display_name": "Referrers", "unit": Units.JSON},
         {"key": MetricKeys.POPULAR_PATHS, "display_name": "Popular Paths", "unit": Units.JSON},
+        # GitHub's server-side 14-day rolling totals (top-level `count` /
+        # `uniques` on /traffic/clones and /traffic/views). One row per day.
+        {"key": MetricKeys.CLONES_14D, "display_name": "Clones (14d)", "unit": Units.COUNT},
+        {"key": MetricKeys.CLONES_14D_UNIQUE, "display_name": "Unique Cloners (14d)", "unit": Units.COUNT},
+        {"key": MetricKeys.VIEWS_14D, "display_name": "Views (14d)", "unit": Units.COUNT},
+        {"key": MetricKeys.VIEWS_14D_UNIQUE, "display_name": "Unique Visitors (14d)", "unit": Units.COUNT},
     ],
     SourceKeys.GITHUB_STARS: [
         {"key": MetricKeys.NEW_STAR, "display_name": "New Star", "unit": Units.COUNT},
@@ -98,6 +103,8 @@ DEFAULT_METRIC_TYPES: dict[str, list[dict]] = {
         {"key": MetricKeys.AVG_DURATION, "display_name": "Avg Duration", "unit": Units.SECONDS},
         {"key": MetricKeys.BOUNCE_RATE, "display_name": "Bounce Rate", "unit": Units.PERCENTAGE},
         {"key": MetricKeys.TOP_PAGES, "display_name": "Top Pages", "unit": Units.JSON},
+        {"key": MetricKeys.TOP_COUNTRIES, "display_name": "Top Countries", "unit": Units.JSON},
+        {"key": MetricKeys.TOP_SOURCES, "display_name": "Top Sources", "unit": Units.JSON},
     ],
     SourceKeys.REDDIT: [
         {"key": MetricKeys.POST_STATS, "display_name": "Post Stats", "unit": Units.JSON},

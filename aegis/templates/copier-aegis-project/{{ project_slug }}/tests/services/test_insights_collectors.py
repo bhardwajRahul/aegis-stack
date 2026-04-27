@@ -42,6 +42,13 @@ async def _seed_github_traffic(
         MetricKeys.UNIQUE_VISITORS,
         MetricKeys.REFERRERS,
         MetricKeys.POPULAR_PATHS,
+        # GitHub server-computed 14-day rolling totals — collector writes these
+        # alongside the per-day metrics, so they must exist for collect() to
+        # succeed.
+        MetricKeys.CLONES_14D,
+        MetricKeys.CLONES_14D_UNIQUE,
+        MetricKeys.VIEWS_14D,
+        MetricKeys.VIEWS_14D_UNIQUE,
     ]:
         mt = InsightMetricType(
             source_id=source.id,  # type: ignore[arg-type]

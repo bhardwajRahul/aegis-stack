@@ -7,27 +7,38 @@ Uses /stats/timeseries for daily breakdowns (supports backfill).
 Per-day country + page breakdowns stored for range-aware display.
 """
 
-from datetime import datetime, timedelta  # noqa: I001
 import logging
+from datetime import datetime, timedelta
 
 import httpx
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.core.config import settings
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ..constants import MetricKeys, Periods, SourceKeys
 from ..schemas import (
     PlausibleCountryEntry,
     PlausiblePageEntry,
     PlausibleSiteMetadata,
+    PlausibleSourceEntry,
     PlausibleTopCountriesMetadata,
     PlausibleTopPagesMetadata,
+    PlausibleTopSourcesMetadata,
 )
 from .base import BaseCollector, CollectionResult
 
 logger = logging.getLogger(__name__)
 
 PLAUSIBLE_API = "https://plausible.io/api/v1"
+PLAUSIBLE_API_V2 = "https://plausible.io/api/v2"
+
+# Order MUST match the index-based reads from `metrics` in v2 /query responses.
+PAGE_METRICS = [
+    "visitors",
+    "pageviews",
+    "bounce_rate",
+    "time_on_page",
+    "scroll_depth",
+]
 
 
 class PlausibleCollector(BaseCollector):
@@ -70,6 +81,7 @@ class PlausibleCollector(BaseCollector):
             bounce_type = await self.get_metric_type(MetricKeys.BOUNCE_RATE)
             pages_type = await self.get_metric_type(MetricKeys.TOP_PAGES)
             countries_type = await self.get_metric_type(MetricKeys.TOP_COUNTRIES)
+            sources_type = await self.get_metric_type(MetricKeys.TOP_SOURCES)
 
             today = _today()
             start_date = today - timedelta(days=lookback_days - 1)
@@ -103,8 +115,23 @@ class PlausibleCollector(BaseCollector):
                             continue
                         day_dt = datetime.strptime(day_str, "%Y-%m-%d")
 
-                        visitors = day_data.get("visitors") or 0
-                        if visitors > 0:
+                        metric_vals = {
+                            key: day_data.get(key) or 0
+                            for key in (
+                                "visitors",
+                                "pageviews",
+                                "visit_duration",
+                                "bounce_rate",
+                            )
+                        }
+
+                        # Zero-visitor days are real data points — writing
+                        # them keeps the dashboard timeseries continuous and
+                        # distinguishable from "the collector broke". We
+                        # previously skipped these to avoid zero-padding
+                        # pre-install backfills, but with lookback_days=1
+                        # in normal operation we never see pre-install dates.
+                        if metric_vals["visitors"] > 0:
                             active_days.append(day_str)
 
                         for mt, key in [
@@ -113,11 +140,10 @@ class PlausibleCollector(BaseCollector):
                             (duration_type, "visit_duration"),
                             (bounce_type, "bounce_rate"),
                         ]:
-                            value = day_data.get(key) or 0
                             _, created = await self.upsert_metric(
                                 metric_type=mt,
                                 date=day_dt,
-                                value=float(value),
+                                value=float(metric_vals[key]),
                                 period=Periods.DAILY,
                                 metadata=site_meta,
                             )
@@ -128,36 +154,50 @@ class PlausibleCollector(BaseCollector):
                     for day_str in active_days:
                         day_dt = datetime.strptime(day_str, "%Y-%m-%d")
 
-                        # Pages
-                        pages_resp = await client.get(
-                            f"{PLAUSIBLE_API}/stats/breakdown",
-                            params={
+                        # Pages — v2 /query endpoint. v1's /stats/breakdown
+                        # doesn't support scroll_depth at all, so we need
+                        # v2 for the full engagement picture.
+                        pages_resp = await client.post(
+                            f"{PLAUSIBLE_API_V2}/query",
+                            json={
                                 "site_id": site,
-                                "period": "day",
-                                "date": day_str,
-                                "property": "event:page",
-                                "metrics": "visitors,visit_duration",
-                                "limit": 20,
+                                "date_range": [day_str, day_str],
+                                "dimensions": ["event:page"],
+                                "metrics": PAGE_METRICS,
+                                "pagination": {"limit": 20},
                             },
                         )
                         pages_resp.raise_for_status()
-                        page_results = pages_resp.json().get("results", [])
+                        page_rows = pages_resp.json().get("results", [])
+
+                        def _metric(row: dict, name: str) -> float | None:
+                            # v2 returns `metrics` as a list matching the
+                            # request order. None-tolerant so disabled
+                            # features (e.g., scroll_depth on non-engagement
+                            # sites) land as None rather than 0.
+                            try:
+                                return row["metrics"][PAGE_METRICS.index(name)]
+                            except (KeyError, ValueError, IndexError):
+                                return None
 
                         pages_metadata = PlausibleTopPagesMetadata(
                             site=site,
                             pages=[
                                 PlausiblePageEntry(
-                                    url=p.get("page", ""),
-                                    visitors=p.get("visitors", 0),
-                                    time_s=p.get("visit_duration"),
+                                    url=(r.get("dimensions") or [""])[0],
+                                    visitors=int(_metric(r, "visitors") or 0),
+                                    pageviews=int(_metric(r, "pageviews") or 0),
+                                    bounce_rate=_metric(r, "bounce_rate"),
+                                    time_s=_metric(r, "time_on_page"),
+                                    scroll=_metric(r, "scroll_depth"),
                                 )
-                                for p in page_results
+                                for r in page_rows
                             ],
                         )
                         _, created = await self.upsert_metric(
                             metric_type=pages_type,
                             date=day_dt,
-                            value=float(len(page_results)),
+                            value=float(len(page_rows)),
                             period=Periods.DAILY,
                             metadata=pages_metadata.model_dump(),
                         )
@@ -199,10 +239,45 @@ class PlausibleCollector(BaseCollector):
                         rows_written += 1 if created else 0
                         rows_skipped += 0 if created else 1
 
+                        # Sources (referrer breakdown — Direct/None, Google, github.com, ...)
+                        sources_resp = await client.get(
+                            f"{PLAUSIBLE_API}/stats/breakdown",
+                            params={
+                                "site_id": site,
+                                "period": "day",
+                                "date": day_str,
+                                "property": "visit:source",
+                                "metrics": "visitors",
+                                "limit": 20,
+                            },
+                        )
+                        sources_resp.raise_for_status()
+                        source_results = sources_resp.json().get("results", [])
+
+                        sources_metadata = PlausibleTopSourcesMetadata(
+                            site=site,
+                            sources=[
+                                PlausibleSourceEntry(
+                                    source=s.get("source", ""),
+                                    visitors=s.get("visitors", 0),
+                                )
+                                for s in source_results
+                            ],
+                        )
+                        _, created = await self.upsert_metric(
+                            metric_type=sources_type,
+                            date=day_dt,
+                            value=float(len(source_results)),
+                            period=Periods.DAILY,
+                            metadata=sources_metadata.model_dump(),
+                        )
+                        rows_written += 1 if created else 0
+                        rows_skipped += 0 if created else 1
+
             await self.db.commit()
 
             logger.info(
-                "Plausible collected for %d sites (%d days, %d active): %d written, %d skipped",  # noqa: E501
+                "Plausible collected for %d sites (%d days, %d active): %d written, %d skipped",
                 len(sites),
                 lookback_days,
                 len(active_days),

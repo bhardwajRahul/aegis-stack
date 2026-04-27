@@ -13,6 +13,8 @@ Usage:
     profile = StarProfileMetadata.model_validate(metric.metadata_)
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -130,8 +132,10 @@ class PlausiblePageEntry(BaseModel):
 
     url: str
     visitors: int = Field(default=0, ge=0)
+    pageviews: int = Field(default=0, ge=0)
     time_s: float | None = None  # Time on page in seconds
-    scroll: float | None = None  # Scroll depth percentage
+    scroll: float | None = None  # Scroll depth percentage (0-100)
+    bounce_rate: float | None = None  # Per-page bounce rate (0-100)
 
 
 class PlausibleTopPagesMetadata(BaseModel):
@@ -153,6 +157,21 @@ class PlausibleTopCountriesMetadata(BaseModel):
 
     site: str
     countries: list[PlausibleCountryEntry] = Field(default_factory=list)
+
+
+class PlausibleSourceEntry(BaseModel):
+    """Single traffic source (Direct/None, Google, github.com, etc.)."""
+
+    source: str
+    visitors: int = Field(default=0, ge=0)
+
+
+class PlausibleTopSourcesMetadata(BaseModel):
+    """Metadata for the top_sources metric type — referrer breakdown
+    from Plausible's `visit:source` property."""
+
+    site: str
+    sources: list[PlausibleSourceEntry] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -249,11 +268,11 @@ class BulkInsightsResponse(BaseModel):
 
     model_config = {"arbitrary_types_allowed": True}
 
-    daily: dict[str, list["InsightMetric"]]
-    events: dict[str, list["InsightMetric"]]
-    insight_events: list["InsightEvent"]
-    sources: list["InsightSource"]
-    latest: dict[str, "InsightMetric | None"]
+    daily: dict[str, list[InsightMetric]]
+    events: dict[str, list[InsightMetric]]
+    insight_events: list[InsightEvent]
+    sources: list[InsightSource]
+    latest: dict[str, InsightMetric | None]
 
     def model_post_init(self, __context: Any) -> None:
         """Coerce date strings to datetime after construction from JSON."""
@@ -277,7 +296,7 @@ class BulkInsightsResponse(BaseModel):
 
 
 # Resolve forward references after models are defined
-from app.services.insights.models import (  # noqa: E402
+from app.services.insights.models import (  # noqa: E402, F401
     InsightEvent,
     InsightMetric,
     InsightSource,

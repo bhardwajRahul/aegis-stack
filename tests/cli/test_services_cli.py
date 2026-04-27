@@ -97,7 +97,7 @@ class TestServicesOptionIntegration:
 
     def test_init_with_valid_service(self):
         """Test init command with valid service."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
                 "init",
                 "test-auth-service",
@@ -139,7 +139,7 @@ class TestServicesOptionIntegration:
 
     def test_init_with_multiple_services(self):
         """Test init command with multiple services (when more are available)."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
                 "init",
                 "test-multi-service",
@@ -156,7 +156,7 @@ class TestServicesOptionIntegration:
 
     def test_init_with_empty_service_name(self):
         """Test init command with empty service name."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
                 "init",
                 "test-empty",
@@ -175,7 +175,7 @@ class TestServicesOptionIntegration:
 
     def test_init_with_services_and_components_together(self):
         """Test init command with both services and components specified."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
                 "init",
                 "test-combined",
@@ -218,7 +218,7 @@ class TestServicesOptionIntegration:
 
     def test_init_services_disables_interactive_mode(self):
         """Test that specifying services disables interactive mode."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
                 "init",
                 "test-non-interactive",
@@ -353,7 +353,7 @@ class TestServicesIntegrationWithExistingFeatures:
 
     def test_services_work_with_force_flag(self):
         """Test that services work with --force flag."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             project_path = Path(temp_dir) / "test-force-service"
             project_path.mkdir()  # Create directory to test force
 
@@ -374,7 +374,7 @@ class TestServicesIntegrationWithExistingFeatures:
 
     def test_services_work_with_custom_output_dir(self):
         """Test that services work with custom output directory."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             custom_dir = Path(temp_dir) / "custom"
             custom_dir.mkdir()
 
@@ -433,7 +433,7 @@ class TestServicesErrorHandling:
 
     def test_service_with_whitespace(self):
         """Test service names with whitespace."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
                 "init",
                 "test-whitespace",
@@ -453,7 +453,7 @@ class TestServiceComponentCompatibilityValidation:
 
     def test_services_with_compatible_explicit_components_success(self):
         """Test that services work when user provides compatible explicit components."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
                 "init",
                 "test-compatible",
@@ -496,7 +496,7 @@ class TestServiceComponentCompatibilityValidation:
 
     def test_services_with_no_explicit_components_auto_add(self):
         """Test that services auto-add components when user doesn't provide --components."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
                 "init",
                 "test-auto-add",
@@ -579,7 +579,7 @@ class TestAuthServiceMigrationIntegration:
 
     def test_auth_service_cli_output_mentions_migrations(self):
         """Test that CLI output for auth service mentions migration infrastructure."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
                 "init",
                 "test-auth-migration-mention",
@@ -608,7 +608,7 @@ class TestAuthServiceMigrationIntegration:
 
     def test_auth_service_includes_database_automatically(self):
         """Test that auth service automatically includes database and shows clear messaging."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
                 "init",
                 "test-auth-auto-db",
@@ -638,7 +638,7 @@ class TestAuthServiceMigrationIntegration:
 
     def test_database_only_excludes_migration_infrastructure(self):
         """Test that database component alone does not include migration infrastructure."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
                 "init",
                 "test-db-only-no-migration",
@@ -681,7 +681,7 @@ class TestAuthServiceMigrationIntegration:
 
     def test_auth_service_file_generation_completeness(self):
         """Test that auth service generates all expected migration and auth files."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
                 "init",
                 "test-auth-completeness",
@@ -716,7 +716,7 @@ class TestAuthServiceMigrationIntegration:
 
     def test_auth_service_dependency_chain_validation(self):
         """Test that auth service dependency chain is properly validated and resolved."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
                 "init",
                 "test-auth-dependencies",
@@ -755,7 +755,7 @@ class TestAIServiceDependencyValidation:
 
     def test_ai_service_langchain_deps_shown_in_cli(self) -> None:
         """Test that LangChain dependencies appear in CLI output with ai[langchain]."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
                 "init",
                 "test-ai-langchain",
@@ -789,7 +789,7 @@ class TestAIServiceDependencyValidation:
         is pydantic-ai. Unlike bracket syntax (e.g., ai[langchain]), the framework
         info is not echoed to output, but the correct dependencies should appear.
         """
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             result = run_aegis_command(
                 "init",
                 "test-ai-pydantic",

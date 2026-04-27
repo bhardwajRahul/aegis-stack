@@ -38,6 +38,7 @@ async def _seed_plausible(
         MetricKeys.BOUNCE_RATE,
         MetricKeys.TOP_PAGES,
         MetricKeys.TOP_COUNTRIES,
+        MetricKeys.TOP_SOURCES,
     ]:
         mt = InsightMetricType(
             source_id=source.id,  # type: ignore[arg-type]
@@ -68,9 +69,8 @@ class TestPlausibleCollectorSuccess:
         mock_client = AsyncMock()
 
         async def mock_get(url: str, **kwargs):
-            """Mock Plausible API responses."""
+            """Mock Plausible v1 GET endpoints (timeseries + breakdown)."""
             if "timeseries" in url:
-                # Daily timeseries metrics
                 return MagicMock(
                     json=lambda: {
                         "results": [
@@ -94,34 +94,51 @@ class TestPlausibleCollectorSuccess:
                 )
             elif "breakdown" in url:
                 params = kwargs.get("params", {})
-                if "event:page" in params.get("property", ""):
-                    # Top pages
+                prop = params.get("property", "")
+                if "visit:source" in prop:
                     return MagicMock(
                         json=lambda: {
                             "results": [
-                                {
-                                    "page": "/docs",
-                                    "visitors": 60,
-                                    "visit_duration": 120,
-                                },
-                                {"page": "/", "visitors": 40, "visit_duration": 30},
+                                {"source": "Direct / None", "visitors": 50},
+                                {"source": "github.com", "visitors": 30},
                             ]
                         },
                         raise_for_status=lambda: None,
                     )
-                else:
-                    # Top countries
-                    return MagicMock(
-                        json=lambda: {
-                            "results": [
-                                {"country": "United States", "visitors": 70},
-                                {"country": "Canada", "visitors": 30},
-                            ]
+                # Default: visit:country
+                return MagicMock(
+                    json=lambda: {
+                        "results": [
+                            {"country": "United States", "visitors": 70},
+                            {"country": "Canada", "visitors": 30},
+                        ]
+                    },
+                    raise_for_status=lambda: None,
+                )
+
+        async def mock_post(url: str, **kwargs):
+            """Mock Plausible v2 POST /query (page engagement breakdown)."""
+            return MagicMock(
+                json=lambda: {
+                    "results": [
+                        # `dimensions` is a list per request order; `metrics`
+                        # matches PAGE_METRICS = [visitors, pageviews,
+                        # bounce_rate, time_on_page, scroll_depth].
+                        {
+                            "dimensions": ["/docs"],
+                            "metrics": [60, 150, 35.0, 120.0, 75.0],
                         },
-                        raise_for_status=lambda: None,
-                    )
+                        {
+                            "dimensions": ["/"],
+                            "metrics": [40, 100, 40.0, 30.0, 50.0],
+                        },
+                    ]
+                },
+                raise_for_status=lambda: None,
+            )
 
         mock_client.get = mock_get
+        mock_client.post = mock_post
 
         with patch(
             "app.services.insights.collectors.plausible.httpx.AsyncClient"
@@ -236,7 +253,14 @@ class TestPlausibleCollectorSuccess:
                     raise_for_status=lambda: None,
                 )
 
+        async def mock_post(url: str, **kwargs):
+            return MagicMock(
+                json=lambda: {"results": []},
+                raise_for_status=lambda: None,
+            )
+
         mock_client.get = mock_get
+        mock_client.post = mock_post
 
         with patch(
             "app.services.insights.collectors.plausible.httpx.AsyncClient"

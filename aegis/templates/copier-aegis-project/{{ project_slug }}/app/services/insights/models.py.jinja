@@ -1,0 +1,368 @@
+"""
+Insight service database models.
+
+Six tables:
+- InsightSource: Lookup table for data sources (GitHub, PyPI, Plausible, Reddit)
+- InsightMetricType: Lookup table for metric types, FK to source
+- InsightMetric: Time-series data, FK to metric type, JSONB metadata
+- InsightRecord: All-time records/milestones per metric type
+- InsightEvent: Contextual markers (releases, posts, external events)
+- Goal: User-defined targets for metrics (absolute / delta / rate)
+"""
+
+from datetime import UTC, date, datetime
+from enum import StrEnum
+from typing import Any
+
+{% if include_auth %}
+# InsightEvent declares a FK to the `user` table (see `created_by_user_id`
+# below). Importing User here ensures its SQLModel metadata is registered
+# before any code in a non-webserver process — e.g. the scheduler — tries
+# to flush an InsightEvent. Without this, SQLAlchemy raises
+# NoReferencedTableError("user") because the scheduler's import chain
+# never touches the auth module that otherwise pulls User in.
+# noqa is because the symbol is only referenced by a FK string at commit
+# time, not by Python code here.
+from app.models.user import User  # noqa: F401
+{% endif %}
+from sqlalchemy import JSON, Column, Index, String, UniqueConstraint
+from sqlmodel import Field, Relationship, SQLModel
+
+# ---------------------------------------------------------------------------
+# Lookup: InsightSource
+# ---------------------------------------------------------------------------
+
+
+class InsightSource(SQLModel, table=True):
+    """Data source for insight collection (e.g., GitHub, PyPI, Plausible)."""
+
+    __tablename__ = "insight_source"
+
+    id: int | None = Field(default=None, primary_key=True)
+    key: str = Field(unique=True, index=True, max_length=64)
+    display_name: str = Field(max_length=128)
+    collection_interval_hours: int | None = Field(default=None)
+    requires_auth: bool = Field(default=False)
+    enabled: bool = Field(default=True)
+    last_collected_at: datetime | None = Field(default=None)
+    metadata_: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column("metadata", JSON)
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+
+    # Relationships
+    metric_types: list["InsightMetricType"] = Relationship(back_populates="source")  # noqa: F821
+
+
+# ---------------------------------------------------------------------------
+# Lookup: InsightMetricType
+# ---------------------------------------------------------------------------
+
+
+class InsightMetricType(SQLModel, table=True):
+    """Type of metric collected by a source (e.g., clones, unique_cloners)."""
+
+    __tablename__ = "insight_metric_type"
+    __table_args__ = (
+        UniqueConstraint("source_id", "key", name="uq_metric_type_source_key"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    source_id: int = Field(foreign_key="insight_source.id", index=True)
+    key: str = Field(index=True, max_length=64)
+    display_name: str = Field(max_length=128)
+    unit: str = Field(max_length=32)  # count, seconds, percentage, ratio, json
+    metadata_: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column("metadata", JSON)
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+
+    # Relationships
+    source: InsightSource = Relationship(back_populates="metric_types")
+    metrics: list["InsightMetric"] = Relationship(back_populates="metric_type")  # noqa: F821
+    records: list["InsightRecord"] = Relationship(back_populates="metric_type")  # noqa: F821
+
+
+# ---------------------------------------------------------------------------
+# Time-series: InsightMetric
+# ---------------------------------------------------------------------------
+
+
+class InsightMetric(SQLModel, table=True):
+    """Single metric data point. The core time-series table."""
+
+    __tablename__ = "insight_metric"
+    __table_args__ = (
+        # THE primary query pattern: "get clones for last 14 days"
+        Index("ix_insight_metric_type_date", "metric_type_id", "date"),
+        # Secondary: "all metrics for this date"
+        Index("ix_insight_metric_date", "date"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    date: datetime = Field(index=False)  # Covered by compound indexes above
+    metric_type_id: int = Field(foreign_key="insight_metric_type.id", index=True)
+    value: float = Field(default=0.0)
+    period: str = Field(max_length=32)  # daily, cumulative, snapshot, event
+    metadata_: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column("metadata", JSON)
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+
+    # Relationships
+    metric_type: InsightMetricType = Relationship(back_populates="metrics")
+
+
+# ---------------------------------------------------------------------------
+# Records: InsightRecord
+# ---------------------------------------------------------------------------
+
+
+class InsightRecord(SQLModel, table=True):
+    """All-time record for a metric type. Updated in place when broken."""
+
+    __tablename__ = "insight_record"
+
+    id: int | None = Field(default=None, primary_key=True)
+    metric_type_id: int = Field(
+        foreign_key="insight_metric_type.id", unique=True, index=True
+    )
+    value: float = Field(default=0.0)
+    date_achieved: datetime
+    previous_value: float | None = Field(default=None)
+    previous_date: datetime | None = Field(default=None)
+    context: str | None = Field(default=None, max_length=512)
+    metadata_: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column("metadata", JSON)
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+
+    # Relationships
+    metric_type: InsightMetricType = Relationship(back_populates="records")
+
+
+# ---------------------------------------------------------------------------
+# Goals: enums + Goal
+# ---------------------------------------------------------------------------
+
+
+class GoalKind(StrEnum):
+    """How a goal is evaluated.
+
+    - ABSOLUTE: reach `target_value` for `metric_key` by `target_date`.
+    - DELTA:    gain `target_value` over the `window_days` ending at `target_date`.
+    - RATE:     sustain `target_value` per `window_days` (rolling; target_date optional).
+    """
+
+    ABSOLUTE = "absolute"
+    DELTA = "delta"
+    RATE = "rate"
+
+
+class GoalStatus(StrEnum):
+    """Lifecycle state for a goal."""
+
+    ACTIVE = "active"
+    ACHIEVED = "achieved"
+    ABANDONED = "abandoned"
+
+
+class GoalMetric(StrEnum):
+    """User-facing metric keys a goal can track.
+
+    Values are `source.metric` pairs resolved at query time to the underlying
+    (InsightSource, InsightMetricType) tuple by the goal service. Kept separate
+    from `MetricKeys` / `SourceKeys` so the goal surface stays narrow — we only
+    expose metrics that make sense as goal targets (countable, monotonic or
+    summable), not every collector field.
+    """
+
+    # GitHub
+    GITHUB_STARS = "github.stars"
+    GITHUB_CLONES = "github.clones"
+    GITHUB_UNIQUE_CLONERS = "github.unique_cloners"
+    GITHUB_VIEWS = "github.views"
+    GITHUB_UNIQUE_VISITORS = "github.unique_visitors"
+    GITHUB_FORKS = "github.forks"
+    GITHUB_RELEASES = "github.releases"
+
+    # PyPI
+    PYPI_DOWNLOADS = "pypi.downloads"
+
+    # Docs (Plausible)
+    DOCS_VISITORS = "docs.visitors"
+    DOCS_PAGEVIEWS = "docs.pageviews"
+
+
+# ---------------------------------------------------------------------------
+# Goals: Goal
+# ---------------------------------------------------------------------------
+
+{% if include_auth %}
+
+class Goal(SQLModel, table=True):
+    """User-defined target for an insight metric.
+
+    Progress is *derived* from the existing time-series in `insight_metric` —
+    no snapshot table. Scoping via `source_project_slug` is multi-repo-ready:
+    when the rest of the insights stack grows real project scoping, the slug
+    column can be migrated to a real FK in a single pass.
+    """
+
+    __tablename__ = "insight_goal"
+    __table_args__ = (
+        Index("ix_insight_goal_user_status", "user_id", "status"),
+        Index("ix_insight_goal_project_metric", "source_project_slug", "metric_key"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+
+    # Multi-repo-ready scoping. Free-form slug today; promote to FK later.
+    source_project_slug: str = Field(max_length=64, index=True)
+
+    metric_key: GoalMetric = Field(
+        sa_column=Column("metric_key", String(64), nullable=False, index=True)
+    )
+    kind: GoalKind = Field(sa_column=Column("kind", String(16), nullable=False))
+    target_value: float
+
+    # Required for DELTA and RATE; ignored for ABSOLUTE.
+    window_days: int | None = Field(default=None)
+    # Required for ABSOLUTE; optional deadline for DELTA/RATE.
+    target_date: date | None = Field(default=None)
+
+    status: GoalStatus = Field(
+        default=GoalStatus.ACTIVE,
+        sa_column=Column(
+            "status", String(16), nullable=False, default=GoalStatus.ACTIVE.value
+        ),
+    )
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+{% endif %}
+
+
+# ---------------------------------------------------------------------------
+# Events: InsightEvent
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Event display labels — single source of truth for turning `event_type`
+# strings (collector output + UserEventType enum values) into human-friendly
+# labels. Used by the API to attach `display_type` to each event response so
+# the UI never has to handle snake_case.
+# ---------------------------------------------------------------------------
+
+EVENT_TYPE_LABELS: dict[str, str] = {
+    # User-created types (mirrors UserEventType)
+    "note": "Note",
+    "milestone": "Milestone",
+    "release": "Release",
+    "announcement": "Announcement",
+    "external": "External",
+    # Collector-emitted types
+    "reddit_post": "Reddit post",
+    "star": "Star",
+    "fork": "Fork",
+    "feature": "Feature",
+    "localization": "Localization",
+    "anomaly_github": "GitHub anomaly",
+    "milestone_github": "GitHub milestone",
+    "milestone_pypi": "PyPI milestone",
+    "milestone_plausible": "Plausible milestone",
+}
+
+
+def event_type_display(event_type: str) -> str:
+    """Friendly label for an event_type. Unknown types get title-cased
+    with underscores→spaces as a sensible fallback."""
+    if event_type in EVENT_TYPE_LABELS:
+        return EVENT_TYPE_LABELS[event_type]
+    return event_type.replace("_", " ").title()
+
+
+class UserEventType(StrEnum):
+    """Event types the user can select when creating an event in the UI/CLI.
+
+    Collector-origin events keep free-form `event_type` strings (driven by
+    collector code); this enum only constrains user-created rows, validated
+    at the service/API boundary.
+    """
+
+    NOTE = "note"
+    MILESTONE = "milestone"
+    RELEASE = "release"
+    ANNOUNCEMENT = "announcement"
+    EXTERNAL = "external"
+
+
+class EventOrigin(StrEnum):
+    """Where an event came from — distinguishes collector output from user-
+    created annotations so collector cleanups don't wipe hand-curated entries
+    and the UI only exposes `user` rows for editing."""
+
+    COLLECTOR = "collector"
+    USER = "user"
+
+
+class InsightEvent(SQLModel, table=True):
+    """Contextual marker explaining why a metric changed.
+
+    Rows come from two origins: collectors emit `COLLECTOR`-origin events
+    automatically, and authed users create `USER`-origin events via the
+    events API / CLI. Collector queries filter on origin to stay insulated
+    from hand-curated rows.
+    """
+
+    __tablename__ = "insight_event"
+    __table_args__ = (
+        Index("ix_insight_event_date", "date"),
+        Index("ix_insight_event_type_date", "event_type", "date"),
+        Index("ix_insight_event_origin_date", "origin", "date"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    date: datetime
+    event_type: str = Field(
+        max_length=64, sa_column=Column("event_type", String(64), nullable=False)
+    )  # reddit_post, release, localization, external (collector); UserEventType (user)
+    description: str = Field(max_length=1024)
+    metadata_: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column("metadata", JSON)
+    )
+    origin: EventOrigin = Field(
+        default=EventOrigin.COLLECTOR,
+        sa_column=Column(
+            "origin",
+            String(16),
+            nullable=False,
+            default=EventOrigin.COLLECTOR.value,
+            index=True,
+        ),
+    )
+{% if include_auth %}
+    created_by_user_id: int | None = Field(
+        default=None, foreign_key="user.id", index=True
+    )
+{% endif %}
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )

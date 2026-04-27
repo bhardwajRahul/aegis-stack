@@ -1,0 +1,95 @@
+"""Pydantic request/response schemas for the goals API.
+
+Gated on `include_auth` because goals are scoped to a user (via the
+`Goal.user_id` FK), and the `Goal` model itself only ships when auth is
+included.
+"""
+{% if include_auth %}
+from datetime import date, datetime
+
+from app.services.insights.models import GoalKind, GoalMetric, GoalStatus
+from pydantic import BaseModel, Field
+
+
+class GoalMetricCatalogEntry(BaseModel):
+    """One entry in the GET /goals/metrics catalog — drives the UI dropdown."""
+
+    key: GoalMetric
+    label: str
+    source_label: str
+    unit: str
+
+
+class GoalMetricCurrentValue(BaseModel):
+    """Response shape for GET /goals/current — the live value for a metric.
+
+    Used by the create form to show "Currently: N" and to guard against
+    creating ABSOLUTE goals whose target is already below the current value.
+    The value is kind-aware: ABSOLUTE returns sum-to-today; DELTA and RATE
+    return the aggregate over the rolling window.
+    """
+
+    metric_key: GoalMetric
+    current_value: float
+    window_days: int | None = None  # echoed so the UI can render "in last N days"
+
+
+class GoalCreate(BaseModel):
+    """Payload for POST /goals."""
+
+    source_project_slug: str = Field(min_length=1, max_length=64)
+    metric_key: GoalMetric
+    kind: GoalKind
+    target_value: float = Field(gt=0)
+    window_days: int | None = Field(default=None, gt=0)
+    target_date: date | None = None
+
+
+class GoalUpdate(BaseModel):
+    """Payload for PATCH /goals/{id}. All fields optional."""
+
+    metric_key: GoalMetric | None = None
+    kind: GoalKind | None = None
+    target_value: float | None = Field(default=None, gt=0)
+    window_days: int | None = Field(default=None, gt=0)
+    target_date: date | None = None
+    status: GoalStatus | None = None
+    source_project_slug: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+class GoalResponse(BaseModel):
+    """Wire shape for a goal."""
+
+    id: int
+    user_id: int
+    source_project_slug: str
+    metric_key: GoalMetric
+    kind: GoalKind
+    target_value: float
+    window_days: int | None
+    target_date: date | None
+    status: GoalStatus
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class GoalProgressResponse(BaseModel):
+    """Progress snapshot for a goal."""
+
+    goal_id: int
+    current_value: float
+    baseline_value: float
+    target_value: float
+    percent: float
+    on_track: bool
+    days_remaining: int | None
+
+
+class GoalWithProgressResponse(BaseModel):
+    """A goal + its current progress — used by list-with-progress endpoint."""
+
+    goal: GoalResponse
+    progress: GoalProgressResponse
+{% endif %}
