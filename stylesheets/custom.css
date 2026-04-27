@@ -1,5 +1,13 @@
 /* Custom styles for Aegis Stack documentation */
 
+/* Alternating row striping for tables (matches GitHub) */
+.md-typeset table:not([class]) tbody tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.025);
+}
+[data-md-color-scheme="default"] .md-typeset table:not([class]) tbody tr:nth-child(even) {
+    background-color: rgba(0, 0, 0, 0.025);
+}
+
 /* Make all tables stretch to full width */
 .md-typeset table {
     width: 100%;
