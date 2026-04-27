@@ -12,6 +12,8 @@ from aegis.core.migration_generator import (
     AUTH_MIGRATION,
     AUTH_RBAC_MIGRATION,
     AUTH_TOKENS_MIGRATION,
+    INSIGHTS_AUTH_LINK_MIGRATION,
+    INSIGHTS_MIGRATION,
     MIGRATION_SPECS,
     ORG_MIGRATION,
     VOICE_MIGRATION,
@@ -398,9 +400,11 @@ class TestMigrationSpecs:
         """Test auth migration spec is defined."""
         assert "auth" in MIGRATION_SPECS
         assert AUTH_MIGRATION.service_name == "auth"
-        assert len(AUTH_MIGRATION.tables) == 1
-        assert AUTH_MIGRATION.tables[0].name == "user"
-        column_names = [col.name for col in AUTH_MIGRATION.tables[0].columns]
+        assert len(AUTH_MIGRATION.tables) == 2
+
+        user_table = AUTH_MIGRATION.tables[0]
+        assert user_table.name == "user"
+        column_names = [col.name for col in user_table.columns]
         assert "email" in column_names
         assert "hashed_password" in column_names
         assert "is_verified" in column_names
@@ -409,6 +413,23 @@ class TestMigrationSpecs:
         assert "locked_until" in column_names
         # Only role is in RBAC migration
         assert "role" not in column_names
+
+        # OAuth identity table — links a user to a third-party identity
+        # (GitHub, Google, etc.). Composite (provider, provider_user_id) is
+        # unique to prevent identity hijacking across accounts.
+        oauth_table = AUTH_MIGRATION.tables[1]
+        assert oauth_table.name == "user_oauth_identity"
+        oauth_cols = [col.name for col in oauth_table.columns]
+        assert "user_id" in oauth_cols
+        assert "provider" in oauth_cols
+        assert "provider_user_id" in oauth_cols
+        assert "provider_email" in oauth_cols
+        assert oauth_table.foreign_keys[0].ref_table == "user"
+        # Composite uniqueness on (provider, provider_user_id)
+        unique_indexes = [idx for idx in oauth_table.indexes if idx.unique]
+        assert any(
+            idx.columns == ["provider", "provider_user_id"] for idx in unique_indexes
+        )
 
     def test_auth_rbac_spec_exists(self) -> None:
         """Test auth RBAC migration spec is defined with alter_tables."""
@@ -422,6 +443,67 @@ class TestMigrationSpecs:
         # is_verified and last_login are in base auth, not rbac
         assert "is_verified" not in col_names
         assert "last_login" not in col_names
+
+    def test_insights_spec_exists(self) -> None:
+        """Test insights migration spec is defined.
+
+        Asserts the consolidated shape after pulse's migrations 005 + 007 were
+        folded into a single spec. The user-coupled `created_by_user_id` and
+        `insight_goal` table live in INSIGHTS_AUTH_LINK_MIGRATION (separate
+        test below) so a project can ship insights without auth.
+        """
+        assert "insights" in MIGRATION_SPECS
+        assert INSIGHTS_MIGRATION.service_name == "insights"
+
+        table_names = [t.name for t in INSIGHTS_MIGRATION.tables]
+        assert table_names == [
+            "insight_source",
+            "insight_metric_type",
+            "insight_metric",
+            "insight_record",
+            "insight_event",
+        ]
+
+        # `origin` distinguishes collector output from user-created
+        # annotations — folded into base spec from pulse migration 007 so
+        # fresh projects get the column at CREATE TABLE time, not via ALTER.
+        event_table = next(
+            t for t in INSIGHTS_MIGRATION.tables if t.name == "insight_event"
+        )
+        event_cols = [c.name for c in event_table.columns]
+        assert "origin" in event_cols
+        # The user-coupled column belongs to the link spec, not here.
+        assert "created_by_user_id" not in event_cols
+
+    def test_insights_auth_link_spec_exists(self) -> None:
+        """Test insights+auth link migration spec is defined.
+
+        Mirrors the existing payment_auth_link pattern: the spec only
+        applies when both auth and insights are included, and both base
+        migrations have already created their tables (so the user FK has
+        somewhere to point).
+        """
+        assert "insights_auth_link" in MIGRATION_SPECS
+        assert INSIGHTS_AUTH_LINK_MIGRATION.service_name == "insights_auth_link"
+
+        # New table: insight_goal (per-user metric goals, FK to user)
+        assert len(INSIGHTS_AUTH_LINK_MIGRATION.tables) == 1
+        goal_table = INSIGHTS_AUTH_LINK_MIGRATION.tables[0]
+        assert goal_table.name == "insight_goal"
+        goal_cols = [c.name for c in goal_table.columns]
+        assert "user_id" in goal_cols
+        assert "metric_key" in goal_cols
+        assert "kind" in goal_cols
+        assert "target_value" in goal_cols
+        assert goal_table.foreign_keys[0].ref_table == "user"
+
+        # Alter: add created_by_user_id + FK to insight_event
+        assert len(INSIGHTS_AUTH_LINK_MIGRATION.alter_tables) == 1
+        alter = INSIGHTS_AUTH_LINK_MIGRATION.alter_tables[0]
+        assert alter.name == "insight_event"
+        added_cols = [c.name for c in alter.add_columns]
+        assert "created_by_user_id" in added_cols
+        assert alter.add_foreign_keys[0].ref_table == "user"
 
     def test_ai_spec_exists(self) -> None:
         """Test AI migration spec is defined."""

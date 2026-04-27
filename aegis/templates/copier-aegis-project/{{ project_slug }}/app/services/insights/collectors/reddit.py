@@ -33,9 +33,7 @@ class RedditCollector(BaseCollector):
         return CollectionResult(
             source_key=self.source_key,
             success=True,
-            error=(
-                "Reddit collection is on-demand only. Use add_post() or refresh_post()."
-            ),
+            error="Reddit collection is on-demand only. Use add_post() or refresh_post().",
         )
 
     async def add_post(self, url: str) -> CollectionResult:

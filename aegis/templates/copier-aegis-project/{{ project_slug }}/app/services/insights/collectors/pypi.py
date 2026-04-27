@@ -56,12 +56,11 @@ class PyPICollector(BaseCollector):
     def source_key(self) -> str:
         return SourceKeys.PYPI
 
-    async def collect(self, lookback_days: int = 14) -> CollectionResult:
-        """Collect daily totals + per-day dimensional breakdowns over a window.
+    async def collect(self, lookback_days: int = 14) -> CollectionResult:  # noqa: ARG002
+        """Collect daily totals + per-day dimensional breakdowns.
 
-        Args:
-            lookback_days: Number of past days to query. Defaults to 14
-                (matches the GitHub Traffic API's own retention window).
+        ``lookback_days`` is accepted for API parity with other collectors but
+        currently ignored — pypi pulls a fixed 14-day window.
         """
         package = settings.INSIGHT_PYPI_PACKAGE
 
@@ -115,7 +114,7 @@ class PyPICollector(BaseCollector):
                     f"""
                     SELECT date, installer, sum(count) as downloads
                     FROM {FULL_TABLE}
-                    WHERE project = '{package}' AND date >= today() - {lookback_days}
+                    WHERE project = '{package}' AND date >= today() - 14
                     GROUP BY date, installer
                     ORDER BY date
                 """,
@@ -183,7 +182,7 @@ class PyPICollector(BaseCollector):
                     f"""
                     SELECT date, country_code, sum(count) as downloads
                     FROM {FULL_TABLE}
-                    WHERE project = '{package}' AND date >= today() - {lookback_days}
+                    WHERE project = '{package}' AND date >= today() - 14
                     GROUP BY date, country_code
                     ORDER BY date
                 """,
@@ -210,43 +209,32 @@ class PyPICollector(BaseCollector):
                     rows_written += 1 if created else 0
                     rows_skipped += 0 if created else 1
 
-                # Per-day version breakdown with human/bot split.
-                # ``sumIf`` partitions in SQL so we get total + human in
-                # one query (vs. fetching all rows and partitioning in
-                # Python). Bot installers (mirrors, automated clients)
-                # are filtered using the same ``BOT_INSTALLERS`` set used
-                # for daily_humans above.
-                bot_list = ", ".join(f"'{b}'" for b in BOT_INSTALLERS)
+                # Per-day version breakdown
                 version_data = await self._query(
                     client,
                     f"""
-                    SELECT
-                        date,
-                        version,
-                        sum(count) as total,
-                        sumIf(count, installer NOT IN ({bot_list})) as human
+                    SELECT date, version, sum(count) as downloads
                     FROM {FULL_TABLE}
-                    WHERE project = '{package}' AND date >= today() - {lookback_days}
+                    WHERE project = '{package}' AND date >= today() - 14
                     GROUP BY date, version
                     ORDER BY date
                 """,
                 )
 
-                daily_versions: dict[str, dict[str, PyPIVersionDetail]] = {}
+                daily_versions: dict[str, dict[str, int]] = {}
                 for row in version_data:
                     day = row[0]
-                    version = row[1]
-                    total = int(row[2])
-                    human = int(row[3])
                     if day not in daily_versions:
                         daily_versions[day] = {}
-                    daily_versions[day][version] = PyPIVersionDetail(
-                        total=total, human=human
-                    )
+                    daily_versions[day][row[1]] = int(row[2])
 
                 for day, versions in daily_versions.items():
                     date = _parse_date(day)
-                    metadata = PyPIDownloadMetadata(versions=versions)
+                    metadata = PyPIDownloadMetadata(
+                        versions={
+                            v: PyPIVersionDetail(total=c) for v, c in versions.items()
+                        }
+                    )
                     _, created = await self.upsert_metric(
                         metric_type=version_type,
                         date=date,
@@ -263,7 +251,7 @@ class PyPICollector(BaseCollector):
                     f"""
                     SELECT date, type, sum(count) as downloads
                     FROM {FULL_TABLE}
-                    WHERE project = '{package}' AND date >= today() - {lookback_days}
+                    WHERE project = '{package}' AND date >= today() - 14
                     GROUP BY date, type
                     ORDER BY date
                 """,

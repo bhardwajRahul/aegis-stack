@@ -5,6 +5,7 @@ Collects star events with user profiles stored as JSONB metadata.
 Only fetches profiles for new stars not already in the database.
 """
 
+import logging
 from datetime import datetime
 
 import httpx
@@ -15,7 +16,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from ..constants import MetricKeys, Periods, SourceKeys
 from ..models import InsightMetric
 from ..schemas import StarProfileMetadata
-from .base import BaseCollector, CollectionResult, parse_github_date, today
+from .base import BaseCollector, CollectionResult
+
+logger = logging.getLogger(__name__)
 
 GITHUB_API = "https://api.github.com"
 
@@ -36,12 +39,12 @@ class GitHubStarsCollector(BaseCollector):
         owner = settings.INSIGHT_GITHUB_OWNER
         repo = settings.INSIGHT_GITHUB_REPO
 
-        if err := self._validate_config(
-            INSIGHT_GITHUB_TOKEN=token,
-            INSIGHT_GITHUB_OWNER=owner,
-            INSIGHT_GITHUB_REPO=repo,
-        ):
-            return err
+        if not token or not owner or not repo:
+            return CollectionResult(
+                source_key=self.source_key,
+                success=False,
+                error="Missing INSIGHT_GITHUB_TOKEN, INSIGHT_GITHUB_OWNER, or INSIGHT_GITHUB_REPO",
+            )
 
         headers = {
             "Authorization": f"Bearer {token}",
@@ -94,7 +97,7 @@ class GitHubStarsCollector(BaseCollector):
 
                         profile = await self._fetch_profile(client, user_data)
 
-                        date = parse_github_date(starred_at) if starred_at else today()
+                        date = _parse_star_date(starred_at)
                         await self.upsert_metric(
                             metric_type=star_type,
                             date=date,
@@ -158,19 +161,41 @@ class GitHubStarsCollector(BaseCollector):
                 self.db.add(event)
 
             await self.db.commit()
-            return self._success(rows_written, rows_skipped)
 
-        except httpx.HTTPStatusError as e:
-            return self._error(
-                f"GitHub API error: {e.response.status_code} {e.response.text[:200]}",
+            logger.info(
+                "GitHub stars collected: %d new, %d existing",
                 rows_written,
                 rows_skipped,
             )
+
+            return CollectionResult(
+                source_key=self.source_key,
+                success=True,
+                rows_written=rows_written,
+                rows_skipped=rows_skipped,
+            )
+
+        except httpx.HTTPStatusError as e:
+            error_msg = (
+                f"GitHub API error: {e.response.status_code} {e.response.text[:200]}"
+            )
+            logger.error(error_msg)
+            return CollectionResult(
+                source_key=self.source_key,
+                success=False,
+                rows_written=rows_written,
+                rows_skipped=rows_skipped,
+                error=error_msg,
+            )
         except Exception as e:
-            return self._error(
-                f"GitHub stars collection failed: {e}",
-                rows_written,
-                rows_skipped,
+            error_msg = f"GitHub stars collection failed: {e}"
+            logger.error(error_msg)
+            return CollectionResult(
+                source_key=self.source_key,
+                success=False,
+                rows_written=rows_written,
+                rows_skipped=rows_skipped,
+                error=error_msg,
             )
 
     async def _fetch_profile(
@@ -214,3 +239,11 @@ class GitHubStarsCollector(BaseCollector):
             account_age_years=round(account_age, 1) if account_age else None,
             github_pro=profile_data.get("plan", {}).get("name", "") == "pro",
         )
+
+
+def _parse_star_date(timestamp: str) -> datetime:
+    """Parse starred_at timestamp to date-only datetime."""
+    if not timestamp:
+        return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    return dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)

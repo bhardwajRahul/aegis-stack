@@ -493,6 +493,10 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/services/test_auth_service.py")
         remove_file(project_path, "tests/services/test_auth_integration.py")
         remove_file(project_path, "tests/models/test_user.py")
+        # Goal service is auth-coupled (Goal.user_id FK to user table), so its
+        # tests are only meaningful when auth is on. The source file lives
+        # under app/services/insights/ but follows the auth cleanup path.
+        remove_file(project_path, "tests/services/test_goal_service.py")
         # Note: alembic removal is handled below based on whether ANY service needs migrations
 
     # Remove auth org files if org level not selected (but auth is enabled)
@@ -664,6 +668,10 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/services/test_collector_pypi.py")
         remove_file(project_path, "tests/services/test_collector_plausible.py")
         remove_file(project_path, "tests/services/test_collector_reddit.py")
+        # Goal service tests import from app.services.insights, so they
+        # must be removed whenever insights is off — not just when auth is
+        # off (the auth-coupled cleanup above handles the auth-off path).
+        remove_file(project_path, "tests/services/test_goal_service.py")
         remove_file(project_path, "tests/api/test_insights_endpoints.py")
         remove_file(project_path, "tests/test_bulk_response.py")
         remove_file(project_path, "tests/test_cache_integration.py")
