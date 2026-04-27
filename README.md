@@ -7,11 +7,11 @@
 [![Documentation](https://github.com/lbedner/aegis-stack/workflows/Deploy%20Documentation/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/docs.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-orange.json)](https://github.com/copier-org/copier)
-
+<br>
 [![Monthly Downloads](https://img.shields.io/pypi/dm/aegis-stack)](https://pypi.org/project/aegis-stack/)
 [![Total Downloads](https://static.pepy.tech/badge/aegis-stack)](https://pepy.tech/project/aegis-stack)
 [![PyPI - Top 10% 2026](https://img.shields.io/badge/PyPI-Top_10%25_2026-2ea043)](https://clickpy.clickhouse.com/dashboard/aegis-stack?min_date=2026-01-01&max_date=2026-12-31)
-
+<br>
 [![Commits per Month](https://img.shields.io/github/commit-activity/m/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
 [![Total Commits](https://img.shields.io/github/commit-activity/t/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
 [![Last Commit](https://img.shields.io/github/last-commit/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
@@ -24,72 +24,84 @@ No time for health checks, proper testing, or clean architecture. Just enough ti
 
 ![Aegis Stack Quick Start Demo](docs/images/aegis-demo.gif)
 
-A production-ready FastAPI platform with modular components and a built-in control plane.
+**Ship FastAPI apps that grow with you.**
 
-## Prerequisites
-
-- **Python 3.11+**
-- **Docker & Docker Compose** - Required for the standard development workflow (`make serve`). Generated projects use Docker for consistent environments and service dependencies (Redis for workers, health monitoring, etc.).
+Aegis Stack scaffolds complete FastAPI applications with auth, payments, workers, AI, and a built-in control plane. Add what you need, remove what you don't, update when the framework improves.
 
 ## Quick Start
 
 ```bash
-# Run instantly without installation
-uvx aegis-stack init my-api
-
-# Create with user authentication
-uvx aegis-stack init user-app --services auth
-
-# Create with background processing
-uvx aegis-stack init task-processor --components scheduler,worker
-
-# Start building
-cd my-api && make serve
+uvx aegis-stack init my-api && cd my-api && make serve
 ```
 
-> **CLI language support:** Use `aegis --lang zh` for Simplified Chinese (简体中文), or set `AEGIS_LANG=zh`.
+<details>
+<summary><strong>More examples</strong></summary>
+
+```bash
+# Add user authentication out of the box
+uvx aegis-stack init user-app --services auth
+
+# Add background processing + scheduling
+uvx aegis-stack init task-processor --components scheduler,worker
+
+# Everything wired up at init
+uvx aegis-stack init full-app --services auth,payment,comms --components worker,scheduler
+```
+
+</details>
+
+> **CLI in 9 languages:** English, German, Spanish, French, Japanese, Korean, Russian, Simplified Chinese, Traditional Chinese. Use `aegis --lang <code>` or set `AEGIS_LANG`.
 
 **Installation alternatives:** See the [Installation Guide](https://lbedner.github.io/aegis-stack/installation/) for `uv tool install`, `pip install`, and development setup.
 
-## Overseer - Your Application's Control Plane
+## Customizing Your Stack
 
-![Overseer](docs/images/overseer-demo.gif)
+**Components** are infrastructure pieces (database, workers, scheduler, cache). **Services** are business capabilities (auth, AI, payments, comms).
 
-<sub>[Live Demo: sector-7g.dev/dashboard](https://sector-7g.dev/dashboard/)</sub>
+**Don't worry about what you pick today.** Add anything later with a single command, remove what you outgrow, no rework required.
 
-**[Overseer](https://lbedner.github.io/aegis-stack/overseer/)** is the embedded control plane that ships with every Aegis Stack project.
+### Components
 
-It gives you full runtime visibility into your system - components, services, infrastructure, and data flows - through a single dashboard. No external tooling, no vendor integrations, no setup.
+| Component | What you get | |
+|---|---|---|
+| **[Core](https://lbedner.github.io/aegis-stack/components/)** | FastAPI + Flet + Typer | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
+| **[Database](https://lbedner.github.io/aegis-stack/components/database/)** | Postgres or SQLite + SQLModel ORM | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Worker](https://lbedner.github.io/aegis-stack/components/worker/)** | Pluggable Arq, Taskiq, or Dramatiq | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Scheduler](https://lbedner.github.io/aegis-stack/components/scheduler/)** | APScheduler with persistent jobs | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Cache](https://lbedner.github.io/aegis-stack/components/)** | Redis for caching, sessions, pub/sub | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Ingress](https://lbedner.github.io/aegis-stack/components/ingress/)** | Traefik v3 reverse proxy with TLS | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Observability](https://lbedner.github.io/aegis-stack/components/observability/)** | Pydantic Logfire tracing + metrics + logging | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Inference](https://lbedner.github.io/aegis-stack/components/)** | Local AI models via Ollama | ![Optional](https://img.shields.io/badge/-optional-blue) |
 
-Inspect worker queues, scheduled jobs, database schema and migrations, AI token usage, auth sessions - everything your application is doing, in real time.
+### Services
 
-Every Aegis project ships with its own control plane from day one.
+| Service | What you get | |
+|---|---|---|
+| **[Auth](https://lbedner.github.io/aegis-stack/services/auth/)** | JWT sessions, RBAC, multi-tenant Organizations | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[AI](https://lbedner.github.io/aegis-stack/services/ai/)** | Conversational agents, RAG, model catalog, TTS and STT (PydanticAI / LangChain across 7 providers) | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Comms](https://lbedner.github.io/aegis-stack/services/comms/)** | Transactional email (Resend) + SMS / voice (Twilio) | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Payments](https://lbedner.github.io/aegis-stack/services/payment/)** | Stripe checkout, subscriptions, refunds, disputes | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Insights](https://lbedner.github.io/aegis-stack/services/insights/)** | Adoption metrics across GitHub, PyPI, Plausible, Reddit | ![Optional](https://img.shields.io/badge/-optional-blue) |
 
-## CLI - First-Class System Interface
+Components compose into capabilities you didn't have to build:
 
-![CLI Demo](docs/images/cli-demo.gif)
+```mermaid
+graph LR
+    Auth[Auth] --> A[User-specific AI conversations]
+    AI[AI] --> A
+    AI --> B[Persistent history &<br/>token analytics]
+    DB[(Database)] --> B
+    AI --> C[Background AI pipelines]
+    Worker[Worker] --> C
+    Scheduler[Scheduler] --> D[Persistent job scheduling]
+    DB --> D
+```
 
-The Aegis CLI is a first-class interface to your running system.
-
-It goes beyond simple health checks, exposing rich, component-specific commands for inspecting and understanding your application from the terminal.
-
-Query worker queues, scheduler activity, database state, AI usage, and service configuration, all without leaving the CLI.
-
-The same system intelligence that powers Overseer and Illiana is available here, optimized for terminal workflows.
-
-## Illiana - Optional System Operator
-
-![Illiana Demo](docs/images/illiana-demo.gif)
-
-When the AI service is enabled, Aegis exposes an additional interface: **Illiana**.
-
-Illiana is a conversational interface that answers questions about your running system using live telemetry and optional RAG over your codebase.
-
-She is not required to use Aegis Stack, and nothing in the system depends on her being present. When enabled, she becomes another way, alongside the CLI and Overseer, to understand what your application is doing and why.
+[Components Docs →](https://lbedner.github.io/aegis-stack/components/) · [Services Docs →](https://lbedner.github.io/aegis-stack/services/)
 
 ## Your Stack Grows With You
 
-**Your choices aren't permanent.** Start with what you need today, add components when requirements change, remove what you outgrow.
+**Your choices aren't permanent.** Start with what you need today, add when requirements change, remove what you outgrow.
 
 ```bash
 # Monday: Ship MVP
@@ -110,32 +122,51 @@ aegis update
 
 | Starter | Add Later? | Remove Later? | Git Conflicts? |
 |-----------|------------|---------------|----------------|
-| **Others** | ❌ Locked at init | ❌ Manual deletion | ⚠️ High risk |
-| **Aegis Stack** | ✅ One command | ✅ One command | ✅ Auto-handled |
+| **Others** | Locked at init | Manual deletion | High risk |
+| **Aegis Stack** | One command | One command | Auto-handled |
 
 ![Component Evolution Demo](docs/images/aegis-evolution-demo.gif)
 
 Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your Stack](https://lbedner.github.io/aegis-stack/evolving-your-stack/)** for the complete guide.
 
-## Available Components & Services
+## Overseer - Your Application's Control Plane
 
-**Components** (infrastructure)
+![Overseer](docs/images/overseer-demo.gif)
 
-- **Core** → FastAPI + Pydantic V2 + Uvicorn
-- **Database** → Postgres / SQLite
-- **Cache/Queue** → Redis
-- **Scheduler** → APScheduler
-- **Worker** → Arq / Taskiq / Dramatiq
+<sub>[Live Demo: sector-7g.dev/dashboard](https://sector-7g.dev/dashboard/)</sub>
 
-**Services** (business logic)
+**[Overseer](https://lbedner.github.io/aegis-stack/overseer/)** is the embedded control plane that ships with every Aegis Stack project.
 
-- **AI** → PydanticAI / LangChain
-- **Auth** → JWT authentication
-- **Comms** → Resend + Twilio
-- **Insights** → Adoption metrics (GitHub, PyPI, Plausible) *(experimental)*
-- **Payment** → Stripe checkout, subscriptions, refunds, disputes *(experimental)*
+- Live health of every component and service in one view
+- Worker queues, scheduled jobs, recent runs
+- Database schema, tables, and migration state
+- AI token usage and conversation history
+- Auth sessions and user activity
+- No external tooling, no vendor integrations, no setup
 
-[Components Docs →](https://lbedner.github.io/aegis-stack/components/) | [Services Docs →](https://lbedner.github.io/aegis-stack/services/)
+## CLI - First-Class System Interface
+
+![CLI Demo](docs/images/cli-demo.gif)
+
+The Aegis CLI is a first-class interface to your running system. Not just a health check, but a full inspection layer.
+
+- Component-aware commands for every running subsystem
+- Inspect worker queues, scheduler runs, database state
+- Query AI usage, auth sessions, service configuration
+- Same data Overseer sees, terminal-native
+- Built into every generated project, no extra installs
+
+## Illiana - Optional System Operator
+
+![Illiana Demo](docs/images/illiana-demo.gif)
+
+When the AI service is enabled, Aegis exposes an additional interface: **Illiana**, a conversational operator over your running system.
+
+- Ask questions in plain language about live system state
+- Backed by live telemetry from Overseer and the CLI
+- Optional RAG over your codebase for code-aware answers
+- Opt-in: only available when the AI service is on
+- Nothing in the stack depends on her being there
 
 ## Learn More
 
