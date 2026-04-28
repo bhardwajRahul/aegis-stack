@@ -9,7 +9,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import flet as ft
-import httpx
 from app.components.frontend.controls import (
     ConfirmDialog,
     DataTable,
@@ -18,8 +17,12 @@ from app.components.frontend.controls import (
     SecondaryText,
     Tag,
 )
+from app.components.frontend.controls.snack_bar import (
+    ErrorSnackBar,
+    SuccessSnackBar,
+)
+from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
-from app.core.config import settings
 
 
 def _format_relative_time(timestamp_str: str) -> str:
@@ -196,53 +199,33 @@ class AuthUsersTab(ft.Container):
 
     async def _load_users(self) -> None:
         """Fetch users from API and update the UI."""
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"http://localhost:{settings.PORT}/api/v1/auth/users",
-                    timeout=10.0,
-                )
-
-                if response.status_code == 200:
-                    users = response.json()
+        api = get_session_state(self.page).api_client
+        users = await api.get("/api/v1/auth/users")
+        if users is None:
+            self._render_error("Could not load users.")
+            return
+        if not isinstance(users, list):
+            self._render_error("Unexpected response shape from /auth/users.")
+            return
 {% if include_auth_org %}
-                    user_orgs = await self._load_user_orgs(client)
-                    self._render_users(users, user_orgs=user_orgs)
+        user_orgs = await self._load_user_orgs()
+        self._render_users(users, user_orgs=user_orgs)
 {% else %}
-                    self._render_users(users)
+        self._render_users(users)
 {% endif %}
-                elif response.status_code == 401:
-                    self._render_error("Authentication required")
-                else:
-                    self._render_error(f"API returned status {response.status_code}")
-
-        except httpx.TimeoutException:
-            self._render_error("Request timed out")
-        except httpx.ConnectError:
-            self._render_error("Could not connect to backend API")
-        except Exception as e:
-            self._render_error(str(e))
 
 {% if include_auth_org %}
-    async def _load_user_orgs(
-        self, client: httpx.AsyncClient
-    ) -> dict[int, list[str]]:
+    async def _load_user_orgs(self) -> dict[int, list[str]]:
         """Fetch all memberships and build user_id -> [org_name] mapping."""
-        try:
-            response = await client.get(
-                f"http://localhost:{settings.PORT}/api/v1/orgs/memberships",
-                timeout=10.0,
-            )
-            if response.status_code == 200:
-                memberships = response.json()
-                user_orgs: dict[int, list[str]] = {}
-                for m in memberships:
-                    uid = m["user_id"]
-                    user_orgs.setdefault(uid, []).append(m["org_name"])
-                return user_orgs
-        except Exception:
-            pass
-        return {}
+        api = get_session_state(self.page).api_client
+        memberships = await api.get("/api/v1/orgs/memberships")
+        if not isinstance(memberships, list):
+            return {}
+        user_orgs: dict[int, list[str]] = {}
+        for m in memberships:
+            uid = m["user_id"]
+            user_orgs.setdefault(uid, []).append(m["org_name"])
+        return user_orgs
 
 {% endif %}
     def _render_users(
@@ -388,67 +371,41 @@ class AuthUsersTab(ft.Container):
 
     async def _toggle_user(self, action: str, user_id: int) -> None:
         """Enable or disable a user via API."""
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.patch(
-                    f"http://localhost:{settings.PORT}/api/v1/auth/users/{user_id}/{action}",
-                    timeout=10.0,
-                )
+        api = get_session_state(self.page).api_client
+        status, body = await api.request_with_status(
+            "PATCH", f"/api/v1/auth/users/{user_id}/{action}"
+        )
 
-                if response.status_code == 200:
-                    action_text = "enabled" if action == "activate" else "disabled"
-                    self.page.open(
-                        ft.SnackBar(content=ft.Text(f"User {action_text} successfully"))
-                    )
-                    await self._load_users()
-                elif response.status_code == 400:
-                    self.page.open(
-                        ft.SnackBar(
-                            content=ft.Text("Cannot modify your own account"),
-                            bgcolor=Theme.Colors.ERROR,
-                        )
-                    )
-                else:
-                    self.page.open(
-                        ft.SnackBar(
-                            content=ft.Text(f"Failed: {response.text}"),
-                            bgcolor=Theme.Colors.ERROR,
-                        )
-                    )
-        except Exception as e:
-            self.page.open(
-                ft.SnackBar(content=ft.Text(f"Error: {e}"), bgcolor=Theme.Colors.ERROR)
+        if status == 200:
+            verb = "enabled" if action == "activate" else "disabled"
+            SuccessSnackBar(f"User {verb}").launch(self.page)
+            await self._load_users()
+        elif status == 400:
+            ErrorSnackBar("Cannot modify your own account.").launch(self.page)
+        else:
+            detail = (
+                body.get("detail")
+                if isinstance(body, dict) and body.get("detail")
+                else f"status {status}"
             )
+            ErrorSnackBar(f"Update failed: {detail}").launch(self.page)
 
     async def _delete_user(self, user_id: int) -> None:
         """Delete a user via API."""
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.delete(
-                    f"http://localhost:{settings.PORT}/api/v1/auth/users/{user_id}",
-                    timeout=10.0,
-                )
+        api = get_session_state(self.page).api_client
+        status, body = await api.request_with_status(
+            "DELETE", f"/api/v1/auth/users/{user_id}"
+        )
 
-                if response.status_code == 204:
-                    self.page.open(
-                        ft.SnackBar(content=ft.Text("User deleted successfully"))
-                    )
-                    await self._load_users()
-                elif response.status_code == 400:
-                    self.page.open(
-                        ft.SnackBar(
-                            content=ft.Text("Cannot delete your own account"),
-                            bgcolor=Theme.Colors.ERROR,
-                        )
-                    )
-                else:
-                    self.page.open(
-                        ft.SnackBar(
-                            content=ft.Text(f"Failed: {response.text}"),
-                            bgcolor=Theme.Colors.ERROR,
-                        )
-                    )
-        except Exception as e:
-            self.page.open(
-                ft.SnackBar(content=ft.Text(f"Error: {e}"), bgcolor=Theme.Colors.ERROR)
+        if status == 204:
+            SuccessSnackBar("User deleted").launch(self.page)
+            await self._load_users()
+        elif status == 400:
+            ErrorSnackBar("Cannot delete your own account.").launch(self.page)
+        else:
+            detail = (
+                body.get("detail")
+                if isinstance(body, dict) and body.get("detail")
+                else f"status {status}"
             )
+            ErrorSnackBar(f"Delete failed: {detail}").launch(self.page)

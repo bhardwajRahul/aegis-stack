@@ -1,0 +1,15 @@
+{% if include_auth -%}
+"""Reusable auth controls (OAuth buttons, branding panel)."""
+
+{% if include_oauth -%}
+from app.components.frontend.controls.auth.oauth_button import OAuthButton
+{%- endif %}
+from app.components.frontend.controls.auth.branding_panel import BrandingPanel
+
+__all__ = [
+    "BrandingPanel",
+    {% if include_oauth -%}
+    "OAuthButton",
+    {%- endif %}
+]
+{%- endif %}

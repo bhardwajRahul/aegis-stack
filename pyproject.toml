@@ -99,6 +99,13 @@ exclude = ["/.github", "/stacks", "/test-*", "*.pyc", "__pycache__"]
 [tool.ruff]
 line-length = 88
 target-version = "py311"
+# Mirrors ``[tool.ty.src].exclude``: skip generated/template files and
+# any locally-generated test stacks.
+extend-exclude = [
+    "aegis/templates",
+    "test-project",
+    "my-app",
+]
 
 [tool.ruff.lint]
 select = [

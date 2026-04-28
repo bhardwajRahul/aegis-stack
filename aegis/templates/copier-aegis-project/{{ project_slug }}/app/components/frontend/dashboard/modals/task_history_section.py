@@ -21,7 +21,6 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.core.config import settings
 from app.core.log import logger
 
 from .modal_sections import format_duration_ms, format_timestamp
@@ -581,51 +580,41 @@ class TaskHistorySection(ft.Container):
             self._loading_indicator.update()
 
         try:
-            import httpx
+            from app.components.frontend.state.session_state import (
+                get_session_state,
+            )
 
-            base_url = f"http://localhost:{settings.PORT}"
+            api = get_session_state(self.page).api_client
             queue = self._current_queue
             params = self._build_query_params()
 
-            async with httpx.AsyncClient(timeout=10) as client:
-                if queue == "all":
-                    # Fetch from all queues and merge
-                    all_tasks: list[dict[str, str]] = []
-                    total = 0
-                    try:
-                        from app.core.config import get_available_queues
+            if queue == "all":
+                # Fetch from all queues and merge
+                all_tasks: list[dict[str, str]] = []
+                total = 0
+                try:
+                    from app.core.config import get_available_queues
 
-                        queues = get_available_queues()
-                    except Exception:
-                        queues = []
-                    for q in queues:
-                        try:
-                            resp = await client.get(
-                                f"{base_url}/api/v1/tasks/history/{q}",
-                                params=params,
-                            )
-                            if resp.status_code == 200:
-                                data = resp.json()
-                                all_tasks.extend(data.get("tasks", []))
-                                total += data.get("total", 0)
-                        except Exception:
-                            pass
-                    # Sort merged results by enqueued_at descending
-                    all_tasks.sort(key=lambda t: t.get("enqueued_at", ""), reverse=True)
-                    tasks = all_tasks[:PAGE_SIZE]
-                    self._total = total
+                    queues = get_available_queues()
+                except Exception:
+                    queues = []
+                for q in queues:
+                    data = await api.get(f"/api/v1/tasks/history/{q}", params=params)
+                    if isinstance(data, dict):
+                        all_tasks.extend(data.get("tasks", []))
+                        total += data.get("total", 0)
+                # Sort merged results by enqueued_at descending
+                all_tasks.sort(key=lambda t: t.get("enqueued_at", ""), reverse=True)
+                tasks = all_tasks[:PAGE_SIZE]
+                self._total = total
+            else:
+                data = await api.get(f"/api/v1/tasks/history/{queue}", params=params)
+                if isinstance(data, dict):
+                    tasks = data.get("tasks", [])
+                    self._total = data.get("total", 0)
                 else:
-                    resp = await client.get(
-                        f"{base_url}/api/v1/tasks/history/{queue}",
-                        params=params,
-                    )
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        tasks = data.get("tasks", [])
-                        self._total = data.get("total", 0)
-                    else:
-                        tasks = []
-                        self._total = 0
+                    tasks = []
+                    self._total = 0
 
             # Build rows
             rows = [_build_task_row(t) for t in tasks]

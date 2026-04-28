@@ -3,10 +3,15 @@ Reusable form field components for Aegis Stack dashboard.
 
 Provides theme-aware form inputs with consistent styling for labels,
 text fields, secret fields (with visibility toggle), and action buttons.
+
+Variants:
+- ``"default"`` — Material-themed inputs (current behavior).
+- ``"pulse"`` — Pulse aesthetic: dark CARD bg, teal focus border, caps
+  tracked label. Use this on Pulse-styled views like the login form.
 """
 
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import Any, Literal
 
 import flet as ft
 from app.components.frontend.controls.buttons import (
@@ -14,7 +19,55 @@ from app.components.frontend.controls.buttons import (
     ElevatedUpdateButton,
 )
 from app.components.frontend.controls.text import LabelText
+from app.components.frontend.styles import PulseColors
 from app.components.frontend.theme import AegisTheme as Theme
+
+FormVariant = Literal["default", "pulse"]
+_PULSE_LABEL_STYLE = ft.TextStyle(letter_spacing=1.6)
+
+
+def _build_label(text: str, variant: FormVariant) -> ft.Control:
+    """Pick the right label widget for the variant."""
+    if variant == "pulse":
+        return LabelText(
+            text.upper(),
+            color=PulseColors.MUTED,
+            size=10,
+            weight=ft.FontWeight.W_500,
+            style=_PULSE_LABEL_STYLE,
+        )
+    return LabelText(text)
+
+
+def _input_kwargs(variant: FormVariant, error: str | None) -> dict[str, Any]:
+    """Per-variant ft.TextField kwargs (border, bg, text colors).
+
+    Pulse variant matches the web frontend's
+    ``border border-aegis-border rounded px-3 py-2 text-sm`` recipe —
+    14px text, 12px horizontal padding, 4px corner radius. Height pinned
+    to 40 so fields visually align with ``PulseButton``.
+    """
+    if variant == "pulse":
+        return {
+            "border_color": PulseColors.BORDER if not error else "#E94E77",
+            "focused_border_color": PulseColors.TEAL,
+            "cursor_color": PulseColors.TEAL,
+            "bgcolor": PulseColors.CARD,
+            "text_style": ft.TextStyle(color=PulseColors.TEXT, size=14),
+            "hint_style": ft.TextStyle(color=PulseColors.MUTED, size=14),
+            "border_radius": 4,
+            "filled": True,
+            "content_padding": ft.padding.symmetric(horizontal=12, vertical=10),
+            "height": 40,
+        }
+    return {
+        "border_radius": Theme.Components.INPUT_RADIUS,
+        "bgcolor": ft.Colors.SURFACE,
+        "border_color": Theme.Colors.ERROR if error else ft.Colors.OUTLINE,
+        "focused_border_color": Theme.Colors.PRIMARY,
+        "text_size": 13,
+        "content_padding": ft.padding.symmetric(horizontal=12, vertical=10),
+    }
 
 
 class FormTextField(ft.Container):
@@ -34,9 +87,18 @@ class FormTextField(ft.Container):
         value: str = "",
         hint: str = "",
         on_change: Callable[[ft.ControlEvent], None] | None = None,
+        # Flet's TextField accepts both sync and async on_submit at runtime.
+        on_submit: (
+            Callable[[ft.ControlEvent], Awaitable[None] | None] | None
+        ) = None,
         error: str | None = None,
         disabled: bool = False,
         width: int | None = None,
+        variant: FormVariant = "default",
+        keyboard_type: str | None = None,
+        autofocus: bool = False,
+        password: bool = False,
+        can_reveal_password: bool = False,
     ) -> None:
         """
         Initialize form text field.
@@ -46,44 +108,53 @@ class FormTextField(ft.Container):
             value: Initial value for the field
             hint: Placeholder/hint text when field is empty
             on_change: Callback when field value changes
+            on_submit: Callback when the user presses enter
             error: Error message to display below field (None = no error)
             disabled: Whether the field is disabled
             width: Optional fixed width for the field
+            variant: Style variant (``"default"`` or ``"pulse"``)
+            keyboard_type: Optional ``ft.KeyboardType`` (e.g. EMAIL)
+            autofocus: Focus this field on mount
+            password: Mask the value
+            can_reveal_password: Add Flet's built-in reveal toggle
         """
         super().__init__()
 
         self._label = label
         self._error = error
         self._on_change = on_change
+        self._variant = variant
 
-        # Create the text field
+        # Outer Container takes the explicit width so siblings (buttons,
+        # dividers) can match it.
+        if width is not None:
+            self.width = width
+
         self._text_field = ft.TextField(
             value=value,
             hint_text=hint,
             on_change=self._handle_change,
+            on_submit=on_submit,
             disabled=disabled,
-            border_radius=Theme.Components.INPUT_RADIUS,
-            bgcolor=ft.Colors.SURFACE,
-            border_color=Theme.Colors.ERROR if error else ft.Colors.OUTLINE,
-            focused_border_color=Theme.Colors.PRIMARY,
-            text_size=13,
-            content_padding=ft.padding.symmetric(horizontal=12, vertical=10),
+            keyboard_type=keyboard_type,
+            autofocus=autofocus,
+            password=password,
+            can_reveal_password=can_reveal_password,
             expand=width is None,
             width=width,
+            **_input_kwargs(variant, error),
         )
 
-        # Build content
         self._build_content()
 
     def _build_content(self) -> None:
         """Build the form field content with label and optional error."""
         children: list[ft.Control] = [
-            LabelText(self._label),
+            _build_label(self._label, self._variant),
             ft.Container(height=4),
             self._text_field,
         ]
 
-        # Add error text if present
         if self._error:
             children.append(ft.Container(height=4))
             children.append(
@@ -94,11 +165,7 @@ class FormTextField(ft.Container):
                 )
             )
 
-        self.content = ft.Column(
-            children,
-            spacing=0,
-            tight=True,
-        )
+        self.content = ft.Column(children, spacing=0, tight=True)
 
     def _handle_change(self, e: ft.ControlEvent) -> None:
         """Handle text field change events."""
@@ -120,10 +187,12 @@ class FormTextField(ft.Container):
     def set_error(self, error: str | None) -> None:
         """Set or clear the error message."""
         self._error = error
-        # Update border color based on error state
-        self._text_field.border_color = (
-            Theme.Colors.ERROR if error else ft.Colors.OUTLINE
-        )
+        if self._variant == "pulse":
+            self._text_field.border_color = "#E94E77" if error else PulseColors.BORDER
+        else:
+            self._text_field.border_color = (
+                Theme.Colors.ERROR if error else ft.Colors.OUTLINE
+            )
         self._build_content()
         if self.page:
             self.update()
@@ -399,8 +468,8 @@ class FormActionButtons(ft.Row):
 
     def __init__(
         self,
-        on_save: Callable[[], Any],
-        on_cancel: Callable[[], Any],
+        on_save: Callable[[], Awaitable[None]],
+        on_cancel: Callable[[], Awaitable[None]],
         save_text: str = "Save",
         cancel_text: str = "Cancel",
         saving: bool = False,
@@ -409,11 +478,11 @@ class FormActionButtons(ft.Row):
         Initialize form action buttons.
 
         Args:
-            on_save: Callback when save button is clicked
-            on_cancel: Callback when cancel button is clicked
-            save_text: Text for the save button
-            cancel_text: Text for the cancel button
-            saving: Whether save operation is in progress (shows loading)
+            on_save: Async callback when save button is clicked.
+            on_cancel: Async callback when cancel button is clicked.
+            save_text: Text for the save button.
+            cancel_text: Text for the cancel button.
+            saving: Whether save operation is in progress (shows loading).
         """
         self._on_save = on_save
         self._on_cancel = on_cancel
@@ -441,9 +510,9 @@ class FormActionButtons(ft.Row):
             alignment=ft.MainAxisAlignment.END,
         )
 
-    def _handle_save(self) -> None:
+    async def _handle_save(self) -> None:
         """Handle save button click."""
-        self._on_save()
+        await self._on_save()
 
     def set_saving(self, saving: bool) -> None:
         """Update the saving state."""

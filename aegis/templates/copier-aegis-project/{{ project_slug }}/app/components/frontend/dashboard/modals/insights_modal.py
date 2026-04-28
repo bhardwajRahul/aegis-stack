@@ -3904,9 +3904,9 @@ class InsightsDetailDialog(BaseDetailPopup):
 
     async def _load_and_build(self) -> None:
         """Fetch bulk data from API and build all tabs."""
-        from app.core.client import APIClient
+        from app.components.frontend.state.session_state import get_session_state
 
-        client = APIClient()
+        client = get_session_state(self.page).api_client
         raw = await client.get("/api/v1/insights/all")
         if not raw:
             self._tabs_container.content = SecondaryText(

@@ -1,0 +1,88 @@
+"""
+Page-level event handlers for the Overseer.
+
+Each handler is a thin entry point wired to a Flet ``page.on_*`` slot in
+``main()``. They keep the entrypoint clean and give us one place to add
+cross-cutting concerns (logging, error UI) per event.
+
+- ``on_connect`` fires when the WebSocket connects (initial load + browser
+  refresh + reconnect after a transient drop). When the user refreshes,
+  this is our cue to call ``current_view.on_refresh()``{% if include_auth %} or
+  redirect to ``/login`` if the session no longer has a valid token{% endif %}.
+- ``on_disconnect`` fires on tab close / lost connection. Logging only.
+- ``on_error`` fires on uncaught Flet runtime errors. Logging only.
+- ``on_resize`` fires on viewport changes. Right now nothing UI-level
+  depends on it, but the hook is reserved for closing overlay menus
+  later.
+"""
+
+from __future__ import annotations
+
+import flet as ft
+
+from app.core.log import logger
+
+{% if include_auth -%}
+from app.components.frontend.auth.storage import is_authenticated
+from app.components.frontend.core.routing import redirect_to_login
+{%- endif %}
+
+
+async def on_connect(event: ft.ControlEvent) -> None:
+    page: ft.Page = event.page
+    logger.info(
+        "page.on_connect",
+        route=page.route,
+        session_id=page.session_id,
+    )
+
+    {% if include_auth -%}
+    # Refresh-or-redirect: if the user refreshes the browser on a
+    # protected route and their token has expired, kick them to login.
+    if not await is_authenticated(page):
+        redirect_to_login(page)
+        return
+    {%- endif %}
+
+    # Browser refresh path: tell the active view to reload its data.
+    if page.views:
+        current = page.views[-1]
+        if hasattr(current, "on_refresh"):
+            try:
+                await current.on_refresh()
+            except Exception:
+                logger.exception(
+                    "page.on_connect.refresh_failed",
+                    view=type(current).__name__,
+                )
+
+
+async def on_disconnect(event: ft.ControlEvent) -> None:
+    page: ft.Page = event.page
+    logger.info(
+        "page.on_disconnect",
+        route=page.route,
+        session_id=page.session_id,
+    )
+
+
+async def on_error(event: ft.ControlEvent) -> None:
+    page: ft.Page = event.page
+    logger.error(
+        "page.on_error",
+        data=event.data,
+        route=page.route,
+        session_id=page.session_id,
+    )
+
+
+async def on_resize(event: ft.ControlEvent) -> None:
+    page: ft.Page = event.page
+    logger.debug(
+        "page.on_resize",
+        width=page.width,
+        height=page.height,
+        session_id=page.session_id,
+    )
+    # Reserved for closing overlay menus / dropdowns when the viewport
+    # changes. No-op for now.

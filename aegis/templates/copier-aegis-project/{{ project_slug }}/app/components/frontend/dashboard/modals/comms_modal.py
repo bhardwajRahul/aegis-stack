@@ -300,14 +300,14 @@ class EmailTab(ft.Container):
         if self.page:
             self.update()
 
-    def _cancel_edit(self) -> None:
+    async def _cancel_edit(self) -> None:
         """Cancel edit mode and return to view mode."""
         self._edit_mode = False
         self._build_content()
         if self.page:
             self.update()
 
-    def _save_config(self) -> None:
+    async def _save_config(self) -> None:
         """Save the configuration to .env and reload settings."""
         # Validate fields
         api_key = self._api_key_field.value.strip()
@@ -329,7 +329,7 @@ class EmailTab(ft.Container):
 
         if not updates:
             # Nothing changed
-            self._cancel_edit()
+            await self._cancel_edit()
             return
 
         # Write to .env
@@ -648,14 +648,14 @@ class TwilioTab(ft.Container):
         if self.page:
             self.update()
 
-    def _cancel_edit(self) -> None:
+    async def _cancel_edit(self) -> None:
         """Cancel edit mode and return to view mode."""
         self._edit_mode = False
         self._build_content()
         if self.page:
             self.update()
 
-    def _save_config(self) -> None:
+    async def _save_config(self) -> None:
         """Save the configuration to .env and reload settings."""
         # Get field values
         account_sid = self._account_sid_field.value.strip()
@@ -683,7 +683,7 @@ class TwilioTab(ft.Container):
 
         if not updates:
             # Nothing changed
-            self._cancel_edit()
+            await self._cancel_edit()
             return
 
         # Write to .env

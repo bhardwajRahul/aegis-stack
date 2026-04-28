@@ -1,0 +1,79 @@
+{% if include_auth -%}
+"""
+Encrypted JWT storage for the Flet frontend.
+
+Tokens are stored encrypted in `page.client_storage` and cached on the page
+object (per-session memory) to avoid repeated decryption on every API call.
+
+Everything here is async-only.
+"""
+
+from __future__ import annotations
+
+import flet as ft
+from flet.security import decrypt, encrypt
+
+from app.core.config import settings
+from app.core.log import logger
+
+STORAGE_KEY = "aegis.auth.token"
+PAGE_ATTR_TOKEN = "_aegis_auth_token"
+
+
+async def save_token(page: ft.Page, raw_token: str) -> None:
+    """Encrypt + persist a JWT and prime the page-cache for this session."""
+    encrypted = encrypt(raw_token, settings.SECRET_KEY)
+    await page.client_storage.set_async(STORAGE_KEY, encrypted)
+    setattr(page, PAGE_ATTR_TOKEN, raw_token)
+    logger.info("auth.storage.token_saved", session_id=page.session_id)
+
+
+async def load_token(page: ft.Page) -> str | None:
+    """
+    Return the decrypted raw JWT for this session, or None if missing.
+
+    Reads from the per-page cache first; falls back to client_storage and
+    primes the cache on hit.
+    """
+    cached = getattr(page, PAGE_ATTR_TOKEN, None)
+    if cached:
+        return cached
+
+    encrypted = await page.client_storage.get_async(STORAGE_KEY)
+    if not encrypted:
+        return None
+
+    try:
+        raw_token = decrypt(encrypted, settings.SECRET_KEY)
+    except Exception as exc:
+        logger.warning(
+            "auth.storage.decrypt_failed",
+            session_id=page.session_id,
+            error=str(exc),
+        )
+        await clear_token(page)
+        return None
+
+    setattr(page, PAGE_ATTR_TOKEN, raw_token)
+    return raw_token
+
+
+async def clear_token(page: ft.Page) -> None:
+    """Drop the token from both storage and the page cache."""
+    if hasattr(page, PAGE_ATTR_TOKEN):
+        delattr(page, PAGE_ATTR_TOKEN)
+    try:
+        await page.client_storage.remove_async(STORAGE_KEY)
+    except Exception as exc:
+        logger.warning(
+            "auth.storage.clear_failed",
+            session_id=page.session_id,
+            error=str(exc),
+        )
+    logger.info("auth.storage.token_cleared", session_id=page.session_id)
+
+
+async def is_authenticated(page: ft.Page) -> bool:
+    """True if a token exists on this session (validity is enforced by the API)."""
+    return await load_token(page) is not None
+{%- endif %}
