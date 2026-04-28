@@ -15,6 +15,8 @@ Provides commonly used section patterns across component detail modals:
 from __future__ import annotations
 
 import contextlib  # noqa: I001
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any
 
 import flet as ft
@@ -580,6 +582,496 @@ class PieChartCard(ft.Container):
             ],
             spacing=8,
         )
+
+
+# ---------------------------------------------------------------------------
+# Date range chip strip
+# ---------------------------------------------------------------------------
+
+
+class DateRangeChips(ft.Container):
+    """Row of small selectable pills for picking a date-range window.
+
+    Mirrors the aegis-pulse `alpine_date_range` macro: tightly-padded
+    chips with a light teal-fill / teal-border on the selected pill and
+    the standard MetricCard surface treatment on the others. Owns its
+    own selection state so the parent tab only has to wire up an
+    ``on_change(days)`` callback - the in-place restyle on click stays
+    inside the control.
+
+    Example:
+        chips = DateRangeChips(
+            options=[("7d", 7), ("14d", 14), ("1m", 30), ("All", 9999)],
+            selected_days=14,
+            on_change=lambda d: tab._on_range_change(d),
+        )
+    """
+
+    _BORDER_RADIUS = 4
+
+    def __init__(
+        self,
+        *,
+        options: list[tuple[str, int]],
+        selected_days: int,
+        on_change: Callable[[int], None],
+    ) -> None:
+        super().__init__()
+        self._options = options
+        self._selected_days = selected_days
+        self._on_change = on_change
+
+        self._chips: list[ft.Container] = []
+        for label, days in options:
+            self._chips.append(
+                ft.Container(
+                    content=ft.Text(
+                        label,
+                        size=11,
+                        weight=self._weight(days == selected_days),
+                        color=self._text_color(days == selected_days),
+                    ),
+                    bgcolor=self._bgcolor(days == selected_days),
+                    border=self._border(days == selected_days),
+                    border_radius=self._BORDER_RADIUS,
+                    padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                    on_click=lambda _e, d=days: self._handle_click(d),
+                    ink=True,
+                )
+            )
+
+        self.content = ft.Row(self._chips, spacing=6)
+
+    def set_selected(self, days: int) -> None:
+        """Update the active pill in place without rebuilding."""
+        self._selected_days = days
+        for (_label, d), chip in zip(self._options, self._chips, strict=False):
+            is_active = d == days
+            chip.bgcolor = self._bgcolor(is_active)
+            chip.border = self._border(is_active)
+            chip.content.weight = self._weight(is_active)
+            chip.content.color = self._text_color(is_active)
+
+    def _handle_click(self, days: int) -> None:
+        self.set_selected(days)
+        self._on_change(days)
+
+    @staticmethod
+    def _bgcolor(is_active: bool) -> str:
+        # Inactive pills sit on the page background (transparent) so the
+        # range strip reads as outlined controls rather than a row of
+        # cards - matches the aegis-pulse htmx version. Active pill
+        # gets the light teal fill to mark the selection.
+        return (
+            ft.Colors.with_opacity(0.10, ChartColors.TEAL)
+            if is_active
+            else ft.Colors.TRANSPARENT
+        )
+
+    @staticmethod
+    def _border(is_active: bool) -> ft.Border:
+        return ft.border.all(0.5, ChartColors.TEAL if is_active else ft.Colors.OUTLINE)
+
+    @staticmethod
+    def _weight(is_active: bool) -> ft.FontWeight:
+        return ft.FontWeight.W_600 if is_active else ft.FontWeight.W_400
+
+    @staticmethod
+    def _text_color(is_active: bool) -> str:
+        return ft.Colors.ON_SURFACE if is_active else ft.Colors.ON_SURFACE_VARIANT
+
+
+# ---------------------------------------------------------------------------
+# Chart palette - exact tokens lifted from the aegis-pulse `THEME`
+# (web_frontend/static/js/charts.js). Any chart in this codebase pulls
+# its colors from here so the visual language stays in lockstep with
+# the SaaS frontend; if the brand teal changes there, it changes here.
+# ---------------------------------------------------------------------------
+
+
+class ChartColors:
+    """Aegis chart palette.
+
+    The cool ramp (teal -> sky) is the data palette - primary series gets
+    teal, the second series picks the next ramp color that gives the most
+    perceptual separation. Warm signals (amber, success, error) stay
+    sparing, reserved for highlight / delta semantics.
+    """
+
+    # Brand / primary
+    TEAL = "#17CCBF"
+
+    # Cool ramp - used in this order for multi-series charts
+    CYAN = "#06B6D4"
+    BLUE = "#3B82F6"
+    INDIGO = "#6366F1"
+    VIOLET = "#8B5CF6"
+    PURPLE = "#A855F7"
+    SKY = "#0EA5E9"
+
+    # Warm signals - highlight / delta only, never the default series color
+    AMBER = "#F59E0B"
+    SUCCESS = "#22C55E"
+    ERROR = "#EF4444"
+
+    # Legacy aliases - kept so any code that referenced the older pink
+    # accent for releases keeps rendering
+    PINK = "#EC4899"
+
+    # Muted fallback (also used as the secondary surface text token in
+    # the htmx side; reused here as the palette's "neutral" slot)
+    MUTED = "#7E8A9A"
+
+
+def chart_tooltip_kwargs() -> dict[str, Any]:
+    """Shared tooltip styling for any chart control (LineChart, BarChart).
+
+    Filled SURFACE_1 panel with the same outline-variant border used by
+    every card surface in the modal. Use as ``**kwargs`` on the chart
+    constructor; chart-specific extras (e.g. LineChart's
+    ``tooltip_show_on_top_of_chart_box_area``) layer in alongside.
+    """
+    # NB: Flet's constructor kwarg is `tooltip_tooltip_border_side` even
+    # though the runtime attribute is `tooltip_border_side`. Passing the
+    # short form raises `TypeError: ... got an unexpected keyword argument
+    # 'tooltip_border_side'` on Flet 0.28. Keep the doubled prefix.
+    return {
+        "tooltip_bgcolor": Theme.Colors.SURFACE_1,
+        "tooltip_tooltip_border_side": ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+        "tooltip_rounded_radius": 8,
+        "tooltip_padding": 10,
+        "tooltip_max_content_width": 200,
+        "tooltip_fit_inside_vertically": True,
+        "tooltip_fit_inside_horizontally": True,
+    }
+
+
+class ChartPoint:
+    """Standard chart-point shapes used by every chart in the modal.
+
+    ``ft.ChartCirclePoint`` is a Flet value type, not a Control - it can't
+    be subclassed via the component model - so this class is a namespace
+    of factory methods rather than a real custom control. Compose them
+    directly into ``ft.LineChartData(point=...)`` or
+    ``ft.LineChartDataPoint(point=...)`` so every chart in the project
+    uses the same point geometry without re-defining radii/strokes inline.
+    """
+
+    @staticmethod
+    def dot(color: str = ft.Colors.ON_SURFACE) -> ft.ChartCirclePoint:
+        """Small marker drawn at every data point on a visible series.
+
+        Default color is the on-surface foreground so the dots read on
+        any line color. Pass the line color (or any other) to bias the
+        dot toward / away from the curve.
+        """
+        return ft.ChartCirclePoint(radius=3, color=color, stroke_width=0)
+
+    @staticmethod
+    def highlight(
+        color: str = ChartColors.AMBER,
+    ) -> ft.ChartCirclePoint:
+        """Larger marker for points that match a selected event chip on
+        the parent tab. Stroked in the on-surface color so it pops on
+        any series color underneath."""
+        return ft.ChartCirclePoint(
+            radius=7,
+            color=color,
+            stroke_width=2,
+            stroke_color=ft.Colors.ON_SURFACE,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Line chart card
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class LineSeries:
+    """One line on a `LineChartCard`.
+
+    `points` is a list of (x_index, y_value) pairs - x is the position
+    on the shared date axis owned by the parent card, y is whatever the
+    metric is. `tooltips` is parallel to `points`; ``None`` means no
+    per-point tooltip.
+
+    `fill=True` paints a 15%-opacity area under the line - the
+    star-history / hero-trend treatment. `stroke_width` defaults to 2;
+    bump to 3 for headline series that should read above the others.
+    `show_in_legend=False` hides the series from the legend (used for
+    annotation overlays like release markers that aren't real data).
+
+    `highlighted_indices` marks specific data points (by their index in
+    `points`) for emphasis - typically driven by event-chip selection on
+    the parent tab. Each marked point renders as a 7-px circle in
+    `highlight_color` so the viewer's eye is drawn to dates that
+    correspond to the currently selected event chip on the parent tab.
+    """
+
+    label: str
+    color: str
+    points: list[tuple[int, float]]
+    fill: bool = False
+    stroke_width: int = 2
+    tooltips: list[str] | None = None
+    show_in_legend: bool = True
+    highlighted_indices: frozenset[int] = field(default_factory=frozenset)
+    highlight_color: str = (
+        "#F59E0B"  # ChartColors.AMBER - keep dataclass self-contained
+    )
+
+
+class LineChartCard(ft.Container):
+    """Card-styled line chart with a title, optional subtitle, the chart
+    body, and a legend. Owns its own surface treatment (matches
+    `MetricCard`: SURFACE_CONTAINER_HIGHEST, 0.5px OUTLINE border, the
+    standard CARD_RADIUS) so a tab composing this control doesn't have
+    to wrap it again.
+
+    Example:
+        LineChartCard(
+            title="Daily Cloners",
+            subtitle="unique people / clones per day",
+            x_labels=[d.date for d in daily],
+            series=[
+                LineSeries(
+                    label="Clones",
+                    color="#2563eb",
+                    points=[(i, d.clones) for i, d in enumerate(daily)],
+                    tooltips=[f"Clones: {d.clones:,}" for d in daily],
+                ),
+                LineSeries(
+                    label="Unique Cloners",
+                    color="#7c3aed",
+                    points=[(i, d.unique_cloners) for i, d in enumerate(daily)],
+                ),
+            ],
+        )
+    """
+
+    def __init__(
+        self,
+        *,
+        title: str,
+        series: list[LineSeries],
+        x_labels: list[str],
+        subtitle: str = "",
+        height: int = 240,
+        min_y: float = 0,
+        event_annotations: list[list[str]] | None = None,
+    ) -> None:
+        super().__init__()
+
+        chart_data: list[ft.LineChartData] = [self._make_series(s) for s in series]
+
+        # Event-annotation overlay. When the parent tab passes a list of
+        # event labels per x-position, we render a transparent series at
+        # ``min_y`` whose only job is to surface a muted-grey tooltip
+        # entry on dates that have events. Each event-bearing point gets
+        # an invisible (transparent) ChartCirclePoint so Flet has a real
+        # hover target - without it, a stroke_width=0 series sometimes
+        # gets dropped from the multi-series tooltip stack on hover.
+        if event_annotations is not None:
+            overlay_points: list[ft.LineChartDataPoint] = []
+            muted_style = ft.TextStyle(
+                color=ft.Colors.ON_SURFACE_VARIANT,
+                size=Theme.Typography.BODY_SMALL,
+            )
+            for i, evs in enumerate(event_annotations):
+                if evs:
+                    overlay_points.append(
+                        ft.LineChartDataPoint(
+                            i,
+                            min_y,
+                            tooltip="\n".join(evs),
+                            show_tooltip=True,
+                            tooltip_style=muted_style,
+                            point=ft.ChartCirclePoint(
+                                radius=2,
+                                color=ft.Colors.TRANSPARENT,
+                                stroke_width=0,
+                            ),
+                        )
+                    )
+                else:
+                    overlay_points.append(
+                        ft.LineChartDataPoint(i, min_y, show_tooltip=False)
+                    )
+            chart_data.append(
+                ft.LineChartData(
+                    data_points=overlay_points,
+                    stroke_width=0,
+                    color=ft.Colors.TRANSPARENT,
+                )
+            )
+
+        # Y-axis range - driven by the visible (legend-shown) series so
+        # annotation overlays at y=0 don't squash the scale.
+        visible_values = [y for s in series if s.show_in_legend for _, y in s.points]
+        max_val = max(visible_values) if visible_values else 1
+        step = self._smart_step(max_val - min_y)
+        max_y = int((max_val // step + 1) * step) if step else int(max_val + 1)
+
+        # Bottom-axis labels: reuse just the date strings; the parent
+        # owns the x-coordinate semantics.
+        bottom_labels = [
+            ft.ChartAxisLabel(
+                value=i,
+                label=ft.Text(label[-5:], size=9, color=ft.Colors.ON_SURFACE_VARIANT),
+            )
+            for i, label in enumerate(x_labels)
+            # Show ~8 ticks evenly distributed plus the last day.
+            if i % max(1, len(x_labels) // 8) == 0 or i == len(x_labels) - 1
+        ]
+
+        # Y-axis ticks rendered explicitly so they pick up the same
+        # small + muted styling as the bottom axis. Without this, Flet
+        # falls back to its default-styled auto-labels which are larger
+        # and use the default text color.
+        left_labels = []
+        if step > 0:
+            tick = int(min_y) + (step - (int(min_y) % step) if int(min_y) % step else 0)
+            while tick <= max_y:
+                left_labels.append(
+                    ft.ChartAxisLabel(
+                        value=tick,
+                        label=ft.Text(
+                            f"{int(tick):,}",
+                            size=9,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                    )
+                )
+                tick += step
+
+        chart = ft.LineChart(
+            data_series=chart_data,
+            left_axis=ft.ChartAxis(labels_size=50, labels=left_labels),
+            bottom_axis=ft.ChartAxis(labels_size=50, labels=bottom_labels),
+            horizontal_grid_lines=ft.ChartGridLines(
+                interval=step,
+                color=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE),
+                width=1,
+            ),
+            **chart_tooltip_kwargs(),
+            tooltip_show_on_top_of_chart_box_area=True,
+            point_line_start=0,
+            point_line_end=float("inf"),
+            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+            interactive=True,
+            min_y=min_y,
+            max_y=max_y,
+            min_x=0,
+            max_x=max(0, len(x_labels) - 1),
+            height=height,
+            expand=True,
+        )
+
+        legend_items = [(s.color, s.label) for s in series if s.show_in_legend]
+        legend = ft.Row(
+            [
+                ft.Row(
+                    [
+                        ft.Container(
+                            width=10, height=10, bgcolor=color, border_radius=5
+                        ),
+                        SecondaryText(label, size=Theme.Typography.BODY_SMALL),
+                    ],
+                    spacing=4,
+                )
+                for color, label in legend_items
+            ],
+            spacing=16,
+            alignment=ft.MainAxisAlignment.CENTER,
+        )
+
+        # Title row dropped - chart cards now lead with the chart
+        # itself; the legend underneath labels each series. ``title``
+        # / ``subtitle`` parameters stay on the constructor so callers
+        # don't have to change, but they're not rendered.
+        self.content = ft.Column(
+            [chart, legend],
+            spacing=Theme.Spacing.SM,
+        )
+        self.padding = Theme.Spacing.MD
+        self.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
+        self.border = ft.border.all(0.5, ft.Colors.OUTLINE)
+        self.border_radius = Theme.Components.CARD_RADIUS
+
+    @staticmethod
+    def _make_series(s: LineSeries) -> ft.LineChartData:
+        """Build a `LineChartData` with the project's standard line
+        styling - curved, radius-3 circle points, rounded stroke caps -
+        plus an optional 15%-opacity below-line fill.
+
+        Indices in ``s.highlighted_indices`` get a per-point ChartCirclePoint
+        override (radius 7, ``s.highlight_color``, white stroke) so the
+        viewer's eye is drawn to dates that correspond to the currently
+        selected event chip on the parent tab.
+
+        Two subtle behaviors that matter for annotation overlays (e.g. a
+        release marker series rendered at y=0 with no visible line):
+          * Per-point tooltips that are empty/None pass ``show_tooltip=False``
+            so non-event dates don't surface a blank entry next to the
+            real metric tooltip.
+          * Series with ``stroke_width=0`` skip the series-level point dot
+            so the overlay series stays truly invisible - only its
+            tooltips matter.
+        """
+        highlight_point = ChartPoint.highlight(s.highlight_color)
+
+        def _point_kwargs(i: int) -> dict[str, Any]:
+            """Per-point overrides. ``show_tooltip`` is set explicitly in
+            both branches because Flet treats the absence of a tooltip
+            string differently from an opt-in `show_tooltip=True`; the
+            OLD chart code relied on the explicit form and tooltips
+            stopped surfacing when the refactor leaned on the default."""
+            kw: dict[str, Any] = {}
+            if i in s.highlighted_indices:
+                kw["point"] = highlight_point
+            tip = s.tooltips[i] if s.tooltips else None
+            if tip:
+                kw["tooltip"] = tip
+                kw["show_tooltip"] = True
+            else:
+                kw["show_tooltip"] = False
+            return kw
+
+        data_points = [
+            ft.LineChartDataPoint(x, y, **_point_kwargs(i))
+            for i, (x, y) in enumerate(s.points)
+        ]
+        kwargs: dict[str, Any] = {
+            "data_points": data_points,
+            "stroke_width": s.stroke_width,
+            "color": s.color,
+        }
+        # Visible-line styling only applies when the series actually
+        # draws a stroke. For annotation overlays (stroke_width=0) this
+        # block is intentionally skipped - they're invisible tooltip
+        # carriers, and applying line styling can change how Flet
+        # registers their points in the tooltip stack.
+        if s.stroke_width > 0:
+            kwargs["curved"] = True
+            kwargs["stroke_cap_round"] = True
+            kwargs["point"] = ChartPoint.dot(
+                s.color if s.fill else ft.Colors.ON_SURFACE
+            )
+            if s.fill:
+                kwargs["below_line_bgcolor"] = ft.Colors.with_opacity(0.15, s.color)
+        return ft.LineChartData(**kwargs)
+
+    @staticmethod
+    def _smart_step(value_range: float) -> int:
+        """Pick a nice y-axis interval based on the data magnitude."""
+        if value_range <= 20:
+            return 5
+        if value_range <= 100:
+            return 10
+        if value_range <= 500:
+            return 50
+        return 100
 
 
 class FlowConnector(ft.Container):

@@ -204,6 +204,71 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 ```
 
+### Social Login (OAuth)
+
+Add the `oauth` modifier to the `auth[...]` bracket syntax to wire up
+GitHub and Google sign-in alongside the existing JWT password flow.
+The modifier composes with the level slot, so any of these work:
+
+```bash
+# Basic auth + OAuth
+aegis init my-app --services auth[oauth] --components database
+
+# RBAC + OAuth (order doesn't matter)
+aegis init my-app --services auth[rbac,oauth] --components database
+
+# Org + OAuth, with explicit engine
+aegis init my-app --services auth[org,oauth,postgres] --components database
+```
+
+What you get:
+
+- `GET /api/v1/auth/oauth/github/start` and `/google/start` —
+  Authlib-driven `state` + PKCE redirects.
+- `GET /api/v1/auth/oauth/{provider}/callback` — exchanges the code,
+  upserts a local user (linking by email when an account already
+  exists), and 303s to `/app` (or to the same-origin `?next=` path
+  the user came in with). The JWT is set in an HttpOnly
+  `aegis_session` cookie so a browser-driven 303 leaves the user
+  signed in.
+- `GET /api/v1/auth/oauth/connections` and
+  `DELETE /api/v1/auth/oauth/connections/{provider}` — list and
+  unlink linked identities. The disconnect route refuses to remove
+  the last sign-in method to avoid lock-out.
+
+Each provider is enabled independently — leaving its client ID/secret
+blank turns just that provider off (the route returns 503), so you
+can ship with GitHub configured and add Google later.
+
+```bash
+# .env
+GITHUB_OAUTH_CLIENT_ID=...
+GITHUB_OAUTH_CLIENT_SECRET=...
+GOOGLE_OAUTH_CLIENT_ID=...
+GOOGLE_OAUTH_CLIENT_SECRET=...
+
+# Backs starlette's SessionMiddleware — Authlib stashes the OAuth
+# state + PKCE verifier here between /start and /callback.
+OAUTH_SESSION_SECRET=replace-me-with-a-strong-random-string
+```
+
+Callback URLs to register on each provider:
+
+| Provider | Callback URL                                                        |
+|----------|---------------------------------------------------------------------|
+| GitHub   | `https://your-domain/api/v1/auth/oauth/github/callback`             |
+| Google   | `https://your-domain/api/v1/auth/oauth/google/callback`             |
+
+API clients keep using `Authorization: Bearer ...` — the cookie path
+is parallel, not exclusive.
+
+!!! note "Frontend integration is on you (for now)"
+    The backend ships ready-to-use; sign-in buttons are not wired into
+    the generated Flet frontend yet. Point a button at
+    `/api/v1/auth/oauth/{provider}/start` (via `page.launch_url(...)`
+    in Flet, or a plain anchor in any HTML view) and the rest of the
+    flow is server-side.
+
 ## Next Steps
 
 | Topic | Description |

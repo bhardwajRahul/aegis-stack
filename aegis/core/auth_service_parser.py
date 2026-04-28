@@ -1,11 +1,15 @@
 """
 Auth service bracket syntax parser.
 
-Parses auth[level, engine] syntax where values are detected by type:
+Parses auth[level, engine, modifier] syntax where values are detected
+by type:
+
 - Levels: basic, rbac, org
 - Engines: sqlite, postgres
+- Modifiers: oauth (boolean toggle for social login)
 
-Order doesn't matter. Defaults: basic, (no engine override).
+Order doesn't matter. Defaults: basic, (no engine override), no
+modifiers.
 """
 
 from dataclasses import dataclass
@@ -15,6 +19,10 @@ from ..constants import AuthLevels, StorageBackends
 # Valid values for detection
 LEVELS = set(AuthLevels.ALL)
 ENGINES = {StorageBackends.SQLITE, StorageBackends.POSTGRES}
+# Modifiers are bracket tokens that flip a boolean on the config — they
+# coexist with the level + engine slots rather than replacing them. Add
+# new modifiers here when adding bracket-toggleable auth features.
+MODIFIERS = {"oauth"}
 
 DEFAULT_LEVEL = AuthLevels.BASIC
 
@@ -25,6 +33,7 @@ class AuthServiceConfig:
 
     level: str
     engine: str | None = None
+    oauth: bool = False
 
 
 def parse_auth_service_config(service_string: str) -> AuthServiceConfig:
@@ -76,17 +85,21 @@ def parse_auth_service_config(service_string: str) -> AuthServiceConfig:
 
     found_levels: list[str] = []
     found_engines: list[str] = []
+    found_modifiers: list[str] = []
 
     for value in values:
         if value in LEVELS:
             found_levels.append(value)
         elif value in ENGINES:
             found_engines.append(value)
+        elif value in MODIFIERS:
+            found_modifiers.append(value)
         else:
             raise ValueError(
                 f"Unknown value '{value}' in auth[...] syntax. "
                 f"Valid levels: {', '.join(sorted(LEVELS))}. "
-                f"Valid engines: {', '.join(sorted(ENGINES))}."
+                f"Valid engines: {', '.join(sorted(ENGINES))}. "
+                f"Valid modifiers: {', '.join(sorted(MODIFIERS))}."
             )
 
     if len(found_levels) > 1:
@@ -101,10 +114,22 @@ def parse_auth_service_config(service_string: str) -> AuthServiceConfig:
             f"Choose one of: {', '.join(sorted(ENGINES))}."
         )
 
+    # Modifiers are flags — repeating one is a typo, not a different
+    # selection, so reject it the same way duplicate levels/engines are
+    # rejected.
+    if len(found_modifiers) != len(set(found_modifiers)):
+        duplicates = sorted(
+            {m for m in found_modifiers if found_modifiers.count(m) > 1}
+        )
+        raise ValueError(
+            f"Duplicate modifier(s) in auth[...] syntax: {', '.join(duplicates)}."
+        )
+
     level = found_levels[0] if found_levels else DEFAULT_LEVEL
     engine = found_engines[0] if found_engines else None
+    oauth = "oauth" in found_modifiers
 
-    return AuthServiceConfig(level=level, engine=engine)
+    return AuthServiceConfig(level=level, engine=engine, oauth=oauth)
 
 
 def is_auth_service_with_options(service_string: str) -> bool:

@@ -920,3 +920,44 @@ class TestGenerateVoiceMigration:
         # Verify chain
         voice_content = result[2].read_text()
         assert "down_revision = '002'" in voice_content
+
+
+class TestCheckConstraintRendering:
+    """Test that ``CheckConstraintSpec`` entries make it into the
+    rendered migration output.
+
+    The auth spec defines a CHECK constraint on the
+    ``user_oauth_identity.provider`` column to keep the column locked
+    to the supported provider list at the database level (project
+    convention is VARCHAR + CHECK rather than native Postgres enums,
+    for SQLite parity).
+    """
+
+    def test_auth_migration_includes_oauth_provider_check(self, tmp_path: Path) -> None:
+        """Generated auth migration must render the OAuth provider check."""
+        from aegis.core.migration_generator import generate_migration
+
+        migration_path = generate_migration(tmp_path, "auth")
+        assert migration_path is not None
+        content = migration_path.read_text()
+
+        # The CHECK constraint goes through the new template branch in
+        # ``migration_generator.py`` — assert the rendered output.
+        assert "sa.CheckConstraint(" in content
+        assert "ck_user_oauth_identity_provider" in content
+        assert "provider IN ('github', 'google')" in content
+
+    def test_specs_without_check_constraints_skip_block(self, tmp_path: Path) -> None:
+        """Specs without CHECK constraints render no ``sa.CheckConstraint``.
+
+        Guards against the ``{% for chk %}`` loop accidentally emitting
+        empty / malformed output for tables that don't declare any.
+        """
+        from aegis.core.migration_generator import generate_migration
+
+        # AI migration uses no CHECK constraints (yet) — sanity-check it.
+        migration_path = generate_migration(tmp_path, "ai")
+        assert migration_path is not None
+        content = migration_path.read_text()
+
+        assert "sa.CheckConstraint(" not in content

@@ -167,6 +167,7 @@ class AnswerKeys:
     AUTH_LEVEL = "auth_level"
     AUTH_RBAC = "include_auth_rbac"
     AUTH_ORG = "include_auth_org"
+    AUTH_OAUTH = "include_oauth"
     AI_VOICE = "ai_voice"
     OLLAMA_MODE = "ollama_mode"
     PROJECT_SLUG = "project_slug"

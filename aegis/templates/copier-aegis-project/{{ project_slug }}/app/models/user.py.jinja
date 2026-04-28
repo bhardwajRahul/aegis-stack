@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 from pydantic import EmailStr
-from sqlalchemy import Column, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -30,6 +30,13 @@ class UserOAuthIdentity(SQLModel, table=True):
         UniqueConstraint(
             "provider", "provider_user_id",
             name="uq_user_oauth_identity_provider_pid",
+        ),
+        # Project convention: VARCHAR + CHECK constraint for enum-like
+        # columns instead of native PG enum types — keeps SQLite parity
+        # and makes adding/removing values a normal Alembic migration.
+        CheckConstraint(
+            "provider IN ('github', 'google')",
+            name="ck_user_oauth_identity_provider",
         ),
     )
 

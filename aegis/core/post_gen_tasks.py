@@ -499,6 +499,17 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/services/test_goal_service.py")
         # Note: alembic removal is handled below based on whether ANY service needs migrations
 
+    # Remove OAuth (social login) files when not selected. Auth-only
+    # projects without OAuth still have ``OAuthProvider`` /
+    # ``UserOAuthIdentity`` SQLModels in ``app/models/user.py`` (the
+    # tables ship with the auth migration unconditionally), but the
+    # routes, middleware, settings, and tests are scoped here.
+    if not is_enabled(AnswerKeys.AUTH_OAUTH):
+        remove_file(project_path, "app/components/backend/api/auth/oauth.py")
+        remove_file(project_path, "app/components/backend/middleware/session.py")
+        remove_file(project_path, "tests/api/test_oauth_endpoints.py")
+        remove_file(project_path, "tests/services/test_oauth_user_service.py")
+
     # Remove auth org files if org level not selected (but auth is enabled)
     if is_enabled(AnswerKeys.AUTH) and not is_enabled(AnswerKeys.AUTH_ORG):
         remove_file(project_path, "app/models/org.py")

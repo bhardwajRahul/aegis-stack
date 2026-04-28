@@ -209,30 +209,46 @@ class PyPICollector(BaseCollector):
                     rows_written += 1 if created else 0
                     rows_skipped += 0 if created else 1
 
-                # Per-day version breakdown
+                # Per-day version breakdown - group by installer too so we
+                # can split human vs bot per-version. Without the
+                # installer dimension every version row in the UI shows
+                # Human=0 / Bot=Total even though the daily totals do
+                # have the split.
                 version_data = await self._query(
                     client,
                     f"""
-                    SELECT date, version, sum(count) as downloads
+                    SELECT date, version, installer, sum(count) as downloads
                     FROM {FULL_TABLE}
                     WHERE project = '{package}' AND date >= today() - 14
-                    GROUP BY date, version
+                    GROUP BY date, version, installer
                     ORDER BY date
                 """,
                 )
 
-                daily_versions: dict[str, dict[str, int]] = {}
+                daily_versions: dict[str, dict[str, dict[str, int]]] = {}
                 for row in version_data:
                     day = row[0]
+                    version = row[1]
+                    installer = row[2]
+                    count = int(row[3])
+
                     if day not in daily_versions:
                         daily_versions[day] = {}
-                    daily_versions[day][row[1]] = int(row[2])
+                    if version not in daily_versions[day]:
+                        daily_versions[day][version] = {"total": 0, "human": 0}
+
+                    daily_versions[day][version]["total"] += count
+                    if installer not in BOT_INSTALLERS:
+                        daily_versions[day][version]["human"] += count
 
                 for day, versions in daily_versions.items():
                     date = _parse_date(day)
                     metadata = PyPIDownloadMetadata(
                         versions={
-                            v: PyPIVersionDetail(total=c) for v, c in versions.items()
+                            v: PyPIVersionDetail(
+                                total=counts["total"], human=counts["human"]
+                            )
+                            for v, counts in versions.items()
                         }
                     )
                     _, created = await self.upsert_metric(

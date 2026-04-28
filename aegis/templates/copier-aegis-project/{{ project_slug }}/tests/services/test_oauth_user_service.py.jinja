@@ -1,0 +1,175 @@
+{% if include_oauth -%}
+"""Tests for ``UserService.upsert_from_oauth`` — the meat of OAuth.
+
+Covers the three resolution paths:
+
+1. Existing ``(provider, provider_user_id)`` row -> return that user
+   and refresh display metadata.
+2. New identity but email matches an existing local user -> link the
+   identity to that user (account linking) and flip ``is_verified``
+   if the local account hadn't verified yet.
+3. Brand-new user -> create with ``hashed_password=""`` (OAuth-only)
+   and link. Refused with ``RegistrationClosed`` when
+   ``settings.REGISTRATION_ENABLED`` is False.
+
+These are direct service-level tests (no HTTP mocking), so they
+exercise the business logic without coupling to Authlib's
+authorize-redirect machinery.
+"""
+
+import pytest
+from app.core.config import settings
+from app.models.user import OAuthProvider, User, UserCreate, UserOAuthIdentity
+from app.services.auth.user_service import RegistrationClosed, UserService
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+
+class TestUpsertFromOauth:
+    """``upsert_from_oauth`` — the three resolution paths."""
+
+    @pytest.mark.asyncio
+    async def test_creates_new_user_when_none_exists(
+        self, async_db_session: AsyncSession
+    ):
+        """Brand-new email + brand-new identity -> create both."""
+        user_service = UserService(async_db_session)
+        user = await user_service.upsert_from_oauth(
+            provider=OAuthProvider.GITHUB,
+            provider_user_id="123456",
+            email="newuser@example.com",
+            provider_username="newuser",
+            avatar_url="https://avatar.example/newuser.png",
+        )
+
+        assert user.id is not None
+        assert user.email == "newuser@example.com"
+        assert user.full_name == "newuser"
+        assert user.hashed_password == ""  # OAuth-only sentinel
+        assert user.is_verified is True  # provider already confirmed
+
+        # Identity row was linked.
+        stmt = select(UserOAuthIdentity).where(
+            UserOAuthIdentity.user_id == user.id
+        )
+        identity = (await async_db_session.exec(stmt)).first()
+        assert identity is not None
+        assert identity.provider == OAuthProvider.GITHUB
+        assert identity.provider_user_id == "123456"
+        assert identity.provider_username == "newuser"
+
+    @pytest.mark.asyncio
+    async def test_returns_linked_user_when_identity_exists(
+        self, async_db_session: AsyncSession
+    ):
+        """Second sign-in for the same identity -> same user, metadata refreshed."""
+        user_service = UserService(async_db_session)
+        first = await user_service.upsert_from_oauth(
+            provider=OAuthProvider.GITHUB,
+            provider_user_id="999",
+            email="repeat@example.com",
+            provider_username="old_handle",
+            avatar_url="https://avatar.example/old.png",
+        )
+
+        second = await user_service.upsert_from_oauth(
+            provider=OAuthProvider.GITHUB,
+            provider_user_id="999",
+            email="repeat@example.com",
+            provider_username="new_handle",
+            avatar_url="https://avatar.example/new.png",
+        )
+
+        assert second.id == first.id
+
+        stmt = select(UserOAuthIdentity).where(
+            UserOAuthIdentity.user_id == first.id
+        )
+        identity = (await async_db_session.exec(stmt)).first()
+        assert identity.provider_username == "new_handle"
+        assert identity.avatar_url == "https://avatar.example/new.png"
+
+    @pytest.mark.asyncio
+    async def test_links_to_existing_user_by_email(
+        self, async_db_session: AsyncSession
+    ):
+        """Existing password user signs in with OAuth using same email -> link."""
+        user_service = UserService(async_db_session)
+        existing = await user_service.create_user(
+            UserCreate(
+                email="bridge@example.com",
+                full_name="Bridge User",
+                password="originalpassword",
+            )
+        )
+        # Existing user starts unverified; OAuth should flip the flag
+        # since the provider has already confirmed the email.
+        assert existing.is_verified is False
+
+        oauth_user = await user_service.upsert_from_oauth(
+            provider=OAuthProvider.GOOGLE,
+            provider_user_id="google-sub-1",
+            email="bridge@example.com",
+            provider_username="Bridge User",
+        )
+
+        assert oauth_user.id == existing.id
+        assert oauth_user.is_verified is True  # auto-promoted
+        # Password is preserved — user can still log in with either method.
+        assert oauth_user.hashed_password == existing.hashed_password
+
+    @pytest.mark.asyncio
+    async def test_email_normalized_to_lowercase(
+        self, async_db_session: AsyncSession
+    ):
+        """Provider may return mixed-case email; we store lowercase."""
+        user_service = UserService(async_db_session)
+        user = await user_service.upsert_from_oauth(
+            provider=OAuthProvider.GITHUB,
+            provider_user_id="42",
+            email="  MixedCase@Example.COM  ",
+        )
+        assert user.email == "mixedcase@example.com"
+
+    @pytest.mark.asyncio
+    async def test_refuses_new_user_when_registration_closed(
+        self, async_db_session: AsyncSession
+    ):
+        """``REGISTRATION_ENABLED=False`` blocks net-new accounts."""
+        prior = settings.REGISTRATION_ENABLED
+        settings.REGISTRATION_ENABLED = False
+        try:
+            user_service = UserService(async_db_session)
+            with pytest.raises(RegistrationClosed):
+                await user_service.upsert_from_oauth(
+                    provider=OAuthProvider.GITHUB,
+                    provider_user_id="closed-1",
+                    email="walledoff@example.com",
+                )
+        finally:
+            settings.REGISTRATION_ENABLED = prior
+
+    @pytest.mark.asyncio
+    async def test_existing_user_signs_in_when_registration_closed(
+        self, async_db_session: AsyncSession
+    ):
+        """Linked-identity path is unaffected by ``REGISTRATION_ENABLED``."""
+        user_service = UserService(async_db_session)
+        existing = await user_service.upsert_from_oauth(
+            provider=OAuthProvider.GITHUB,
+            provider_user_id="grandfathered-1",
+            email="grandfathered@example.com",
+        )
+
+        prior = settings.REGISTRATION_ENABLED
+        settings.REGISTRATION_ENABLED = False
+        try:
+            again = await user_service.upsert_from_oauth(
+                provider=OAuthProvider.GITHUB,
+                provider_user_id="grandfathered-1",
+                email="grandfathered@example.com",
+            )
+            assert again.id == existing.id
+        finally:
+            settings.REGISTRATION_ENABLED = prior
+{%- endif %}

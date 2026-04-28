@@ -97,6 +97,13 @@ def setup_logging() -> None:
         logging.WARNING
     )  # Suppress HTTP request logs from health checks
 
+    # Stripe SDK logs every API call at INFO ("Request to Stripe api" /
+    # "Stripe API response"). The 60s health-probe cache keeps real
+    # call rate to ~1/min/process, but each call is two lines and dev
+    # restarts wipe the cache, so the log is still chatty. Errors
+    # still surface at WARNING+.
+    logging.getLogger("stripe").setLevel(logging.WARNING)
+
     # Suppress RAG service logs (CLI uses progress bar instead)
     logging.getLogger("app.services.rag").setLevel(logging.WARNING)
 

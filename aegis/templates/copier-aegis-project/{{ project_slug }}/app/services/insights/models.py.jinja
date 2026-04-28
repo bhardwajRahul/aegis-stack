@@ -25,7 +25,7 @@ from typing import Any
 # time, not by Python code here.
 from app.models.user import User  # noqa: F401
 {% endif %}
-from sqlalchemy import JSON, Column, Index, String, UniqueConstraint
+from sqlalchemy import JSON, CheckConstraint, Column, Index, String, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 # ---------------------------------------------------------------------------
@@ -224,6 +224,26 @@ class Goal(SQLModel, table=True):
     __table_args__ = (
         Index("ix_insight_goal_user_status", "user_id", "status"),
         Index("ix_insight_goal_project_metric", "source_project_slug", "metric_key"),
+        # Enum-style guardrails. Project convention: VARCHAR + CHECK
+        # constraint instead of native PG enum types so adding/removing
+        # values is a simple migration on both SQLite and Postgres.
+        CheckConstraint(
+            "kind IN ('absolute', 'delta', 'rate')",
+            name="ck_insight_goal_kind",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'achieved', 'abandoned')",
+            name="ck_insight_goal_status",
+        ),
+        CheckConstraint(
+            "metric_key IN ("
+            "'github.stars', 'github.clones', 'github.unique_cloners', "
+            "'github.views', 'github.unique_visitors', 'github.forks', "
+            "'github.releases', 'pypi.downloads', 'docs.visitors', "
+            "'docs.pageviews'"
+            ")",
+            name="ck_insight_goal_metric_key",
+        ),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -337,6 +357,10 @@ class InsightEvent(SQLModel, table=True):
         Index("ix_insight_event_date", "date"),
         Index("ix_insight_event_type_date", "event_type", "date"),
         Index("ix_insight_event_origin_date", "origin", "date"),
+        CheckConstraint(
+            "origin IN ('collector', 'user')",
+            name="ck_insight_event_origin",
+        ),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -348,8 +372,14 @@ class InsightEvent(SQLModel, table=True):
     metadata_: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column("metadata", JSON)
     )
-    origin: EventOrigin = Field(
-        default=EventOrigin.COLLECTOR,
+    # Stored as a plain str on the Pydantic side (column is also plain
+    # String(16)) — typing the field as `EventOrigin` causes Pydantic to
+    # emit `PydanticSerializationUnexpectedValue` for every row in the
+    # response, since SQLAlchemy hands back a raw str on hydration. The
+    # `EventOrigin` class is kept above purely as a constants holder and
+    # the value space is enforced at the DB level by `ck_insight_event_origin`.
+    origin: str = Field(
+        default=EventOrigin.COLLECTOR.value,
         sa_column=Column(
             "origin",
             String(16),
