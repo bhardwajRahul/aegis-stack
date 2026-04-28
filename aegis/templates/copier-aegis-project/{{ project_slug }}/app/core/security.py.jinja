@@ -7,6 +7,15 @@ from typing import Any
 import bcrypt
 from app.core.config import settings
 from jose import JWTError, jwt
+{% if include_oauth %}
+from fastapi import Response
+
+# Cookie name used to carry the JWT in browser flows (login form POST and
+# the OAuth callback redirect). Browsers can't set an Authorization
+# header on a 303 redirect, so a cookie is the only way to leave the
+# user signed in after a server-side redirect.
+SESSION_COOKIE_NAME = "aegis_session"
+{% endif %}
 
 
 def _truncate_password(password: str) -> str:
@@ -59,6 +68,43 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     truncated = _truncate_password(plain_password)
     return bcrypt.checkpw(truncated.encode("utf-8"), hashed_password.encode("utf-8"))
 
+{% if include_oauth %}
+
+def set_session_cookie(response: Response, token: str) -> None:
+    """Attach the JWT to the response as an HttpOnly session cookie.
+
+    Used by the OAuth callback so a browser-driven 303 redirect leaves
+    the user signed in.
+
+    Secure-flag policy:
+    - If ``SESSION_COOKIE_SECURE`` is explicitly set, honor it.
+    - Otherwise, infer from ``APP_ENV``: off in dev (so the cookie works
+      over plain ``http://localhost``), on everywhere else.
+    Setting ``SESSION_COOKIE_SECURE=false`` in a non-dev env is the
+    escape hatch for running prod over HTTP without TLS — browsers
+    refuse Secure cookies on insecure origins, which otherwise breaks
+    sign-in.
+    """
+    secure = (
+        settings.SESSION_COOKIE_SECURE
+        if settings.SESSION_COOKIE_SECURE is not None
+        else settings.APP_ENV != "dev"
+    )
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        token,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        samesite="lax",
+        secure=secure,
+        path="/",
+    )
+
+
+def clear_session_cookie(response: Response) -> None:
+    """Drop the session cookie. Used by /logout."""
+    response.delete_cookie(SESSION_COOKIE_NAME, path="/")
+{% endif %}
 {% if include_auth_rbac %}
 
 # Role constants

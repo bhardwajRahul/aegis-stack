@@ -16,6 +16,20 @@ from app.core.security import get_password_hash
 from app.models.org import OrganizationMember, OrgInvite
 {% endif %}
 from app.models.user import EmailVerificationToken, PasswordResetToken, User, UserCreate
+{% if include_oauth %}
+from app.models.user import OAuthProvider, UserOAuthIdentity
+
+
+class RegistrationClosed(Exception):
+    """Raised by ``upsert_from_oauth`` when a brand-new user attempts to
+    sign in via OAuth and ``settings.REGISTRATION_ENABLED`` is False.
+
+    Exists so the OAuth callback can translate this into a friendly
+    redirect (``/login?oauth_error=signup_closed``) instead of a 500.
+    Existing users who already have an OAuthIdentity link, or whose
+    email matches an existing local account, sign in normally.
+    """
+{% endif %}
 
 
 class UserService:
@@ -234,6 +248,106 @@ class UserService:
         await self.db.refresh(user)
         return False
 
+{% if include_oauth %}
+    async def upsert_from_oauth(
+        self,
+        *,
+        provider: OAuthProvider,
+        provider_user_id: str,
+        email: str,
+        provider_username: str | None = None,
+        avatar_url: str | None = None,
+    ) -> User:
+        """Resolve an OAuth callback to a local user, creating one if needed.
+
+        Three paths:
+        1. ``(provider, provider_user_id)`` already linked → return the linked
+           user, opportunistically refreshing display metadata.
+        2. Identity is new but ``email`` matches an existing user → link the
+           identity to that user. Bridges previously password-only accounts
+           into OAuth without forcing a separate sign-up.
+        3. Neither exists → create a new user (no password,
+           ``is_verified=True`` since the provider already confirmed the
+           email) and link. Refused with ``RegistrationClosed`` when
+           ``settings.REGISTRATION_ENABLED`` is False.
+        """
+        email = email.lower().strip()
+
+        # Path 1: existing linked identity.
+        stmt = select(UserOAuthIdentity).where(
+            UserOAuthIdentity.provider == provider,
+            UserOAuthIdentity.provider_user_id == provider_user_id,
+        )
+        result = await self.db.exec(stmt)
+        identity = result.first()
+        if identity is not None:
+            user = await self.get_user_by_id(identity.user_id)
+            if user is None:
+                # Identity row orphaned from a hard-deleted user — shouldn't
+                # happen thanks to ON DELETE CASCADE, but treat defensively.
+                await self.db.delete(identity)
+                await self.db.commit()
+            else:
+                # Refresh display metadata (username can change on GitHub,
+                # avatar definitely can).
+                identity.provider_username = provider_username
+                identity.provider_email = email
+                identity.avatar_url = avatar_url
+                identity.updated_at = datetime.now(UTC).replace(tzinfo=None)
+                self.db.add(identity)
+                await self.db.commit()
+                return user
+
+        # Path 2: email matches an existing account — link into it.
+        user = await self.get_user_by_email(email)
+        if user is not None:
+            self.db.add(
+                UserOAuthIdentity(
+                    user_id=user.id,
+                    provider=provider,
+                    provider_user_id=provider_user_id,
+                    provider_username=provider_username,
+                    provider_email=email,
+                    avatar_url=avatar_url,
+                )
+            )
+            # Provider already verified the email; flip the local account if
+            # it hasn't been verified yet.
+            if not user.is_verified:
+                user.is_verified = True
+                self.db.add(user)
+            await self.db.commit()
+            return user
+
+        # Path 3: brand-new user.
+        if not settings.REGISTRATION_ENABLED:
+            raise RegistrationClosed()
+        user = User(
+            email=email,
+            full_name=provider_username or email.split("@")[0],
+            # OAuth-only accounts can't password-login; the column is
+            # NOT NULL so we store an empty string as a sentinel.
+            hashed_password="",
+            is_active=True,
+            is_verified=True,  # provider guarantees email ownership
+        )
+        self.db.add(user)
+        await self.db.flush()  # need user.id for the identity row
+        self.db.add(
+            UserOAuthIdentity(
+                user_id=user.id,
+                provider=provider,
+                provider_user_id=provider_user_id,
+                provider_username=provider_username,
+                provider_email=email,
+                avatar_url=avatar_url,
+            )
+        )
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
+{% endif %}
     async def verify_email(self, token: str) -> None:
         """Verify a user's email using a valid verification token.
 

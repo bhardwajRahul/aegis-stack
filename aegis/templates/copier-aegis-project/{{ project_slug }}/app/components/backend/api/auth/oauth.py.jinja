@@ -1,0 +1,373 @@
+{% if include_oauth -%}
+"""OAuth sign-in routes.
+
+Same flow for every provider (GitHub, Google, ...):
+
+1. Client hits ``GET /auth/oauth/{provider}/start`` -> Authlib generates
+   ``state`` + PKCE, stashes them in the session, redirects to the
+   provider's authorize URL.
+2. User approves -> provider redirects to
+   ``/auth/oauth/{provider}/callback`` with ``code`` and echoed
+   ``state``.
+3. We exchange the code for a token, fetch the user's profile +
+   verified email, upsert the local user (linking by email if an
+   account already exists), issue our own JWT, stamp it into the
+   HttpOnly ``aegis_session`` cookie, and 303 to ``/app`` (or to the
+   ``?next=`` path stashed in session).
+
+GitHub uses two REST calls: profile + emails endpoint (emails are
+separate from the profile payload). Google uses OIDC: a single
+``userinfo`` claim on the token returns name + email + verified flag
+together.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import httpx
+from app.components.backend.api.deps import get_async_db, get_user_service
+from app.core.config import settings
+from app.core.log import logger
+from app.core.security import create_access_token, set_session_cookie
+from app.models.user import OAuthProvider, User, UserOAuthIdentity
+from app.services.auth.deps import get_current_active_user
+from app.services.auth.user_service import RegistrationClosed, UserService
+from authlib.integrations.starlette_client import OAuth, OAuthError
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse, Response
+from pydantic import BaseModel
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+router = APIRouter(prefix="/auth/oauth", tags=["auth"])
+
+
+# Bound on every external HTTP call to a provider. The OAuth flow is
+# user-initiated, so a stuck request leaves a tab spinning until the
+# server gives up - 10s is a sane upper bound that's still well above
+# normal latency. Tune per deployment via ``OAUTH_HTTP_TIMEOUT`` if
+# providers in your region are slow.
+_OAUTH_HTTP_TIMEOUT = httpx.Timeout(10.0)
+
+
+def _build_oauth() -> OAuth:
+    """Build a fresh Authlib OAuth registry from current settings.
+
+    Re-evaluated on each ``/start`` and ``/callback`` rather than cached
+    at module import time so ``reload_settings()`` (in
+    ``app/core/config.py``) picks up new ``GITHUB_OAUTH_CLIENT_ID`` /
+    ``GOOGLE_OAUTH_CLIENT_ID`` values without an app restart. The
+    registry itself is just a couple of dict allocations - cheap enough
+    to rebuild per OAuth request, which is a low-QPS path.
+    """
+    oauth = OAuth()
+    oauth.register(
+        name="github",
+        client_id=settings.GITHUB_OAUTH_CLIENT_ID,
+        client_secret=settings.GITHUB_OAUTH_CLIENT_SECRET,
+        access_token_url="https://github.com/login/oauth/access_token",
+        authorize_url="https://github.com/login/oauth/authorize",
+        api_base_url="https://api.github.com/",
+        # ``read:user`` exposes the profile; ``user:email`` is separate
+        # and needed to fetch the primary + verified email, which
+        # GitHub does not always include in the profile payload.
+        client_kwargs={"scope": "read:user user:email"},
+    )
+    oauth.register(
+        name="google",
+        client_id=settings.GOOGLE_OAUTH_CLIENT_ID,
+        client_secret=settings.GOOGLE_OAUTH_CLIENT_SECRET,
+        # Google ships a discovery document. Authlib reads it to
+        # populate authorize_url, access_token_url, jwks_uri, etc. -
+        # so we don't hand-copy the endpoints (which Google
+        # occasionally rotates).
+        server_metadata_url=(
+            "https://accounts.google.com/.well-known/openid-configuration"
+        ),
+        client_kwargs={"scope": "openid email profile"},
+    )
+    return oauth
+
+
+def _require_provider_configured(
+    provider: str, client_id: str, client_secret: str
+) -> None:
+    """Guard for routes — fail cleanly when an OAuth provider isn't set up."""
+    if not (client_id and client_secret):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"{provider} OAuth is not configured on this server.",
+        )
+
+
+def _require_github_configured() -> None:
+    _require_provider_configured(
+        "GitHub",
+        settings.GITHUB_OAUTH_CLIENT_ID,
+        settings.GITHUB_OAUTH_CLIENT_SECRET,
+    )
+
+
+def _require_google_configured() -> None:
+    _require_provider_configured(
+        "Google",
+        settings.GOOGLE_OAUTH_CLIENT_ID,
+        settings.GOOGLE_OAUTH_CLIENT_SECRET,
+    )
+
+
+def _safe_next(candidate: str | None) -> str:
+    """Same-origin guard for the post-OAuth ``next`` redirect target.
+
+    Rejects anything that could redirect off-site (protocol-relative
+    URLs, escaped backslashes, etc.).
+    """
+    if not candidate or not candidate.startswith("/"):
+        return ""
+    if candidate.startswith("//") or candidate.startswith("/\\") or "\\" in candidate:
+        return ""
+    return candidate
+
+
+def _finalize_oauth_signin(request: Request, user: User) -> RedirectResponse:
+    """Shared post-OAuth tail: mint the JWT, set the session cookie, pop
+    the stashed ``next`` (if any) and 303 there. Provider-agnostic."""
+    jwt = create_access_token({"sub": user.email})
+    nxt = _safe_next(request.session.pop("oauth_next", ""))
+    response = RedirectResponse(
+        url=nxt or "/app",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    set_session_cookie(response, jwt)
+    return response
+
+
+@router.get("/github/start")
+async def github_start(request: Request, next: str = "") -> RedirectResponse:
+    """Kick off the GitHub authorization flow.
+
+    ``next`` (when same-origin) is stashed in the session so the
+    callback can redirect the user back to the page they were trying
+    to reach before getting bounced to /login.
+    """
+    _require_github_configured()
+    nxt = _safe_next(next)
+    if nxt:
+        request.session["oauth_next"] = nxt
+    redirect_uri = str(request.url_for("github_callback"))
+    return await _build_oauth().github.authorize_redirect(request, redirect_uri)
+
+
+@router.get("/github/callback", name="github_callback")
+async def github_callback(
+    request: Request,
+    user_service: UserService = Depends(get_user_service),
+) -> RedirectResponse:
+    """Exchange the code for a token and sign the user in."""
+    _require_github_configured()
+
+    try:
+        token: dict[str, Any] = await _build_oauth().github.authorize_access_token(
+            request
+        )
+    except OAuthError as exc:
+        logger.warning("GitHub OAuth exchange failed: %s", exc)
+        return RedirectResponse(url="/login?oauth_error=1", status_code=302)
+
+    # Fetch profile + primary email (both hit api.github.com).
+    try:
+        async with httpx.AsyncClient(
+            headers={
+                "Authorization": f"Bearer {token['access_token']}",
+                "Accept": "application/vnd.github+json",
+            },
+            timeout=_OAUTH_HTTP_TIMEOUT,
+        ) as client:
+            profile_resp = await client.get("https://api.github.com/user")
+            emails_resp = await client.get("https://api.github.com/user/emails")
+    except httpx.TimeoutException as exc:
+        logger.warning("GitHub profile/email fetch timed out: %s", exc)
+        return RedirectResponse(url="/login?oauth_error=1", status_code=302)
+
+    if profile_resp.status_code != 200 or emails_resp.status_code != 200:
+        logger.warning(
+            "GitHub profile/email fetch failed: profile=%d emails=%d",
+            profile_resp.status_code,
+            emails_resp.status_code,
+        )
+        return RedirectResponse(url="/login?oauth_error=1", status_code=302)
+
+    profile = profile_resp.json()
+    emails = emails_resp.json()
+
+    # Pick the primary, verified email. Fall back to any verified one,
+    # or the profile email if neither list entry is flagged verified.
+    primary_email = (
+        next(
+            (e["email"] for e in emails if e.get("primary") and e.get("verified")),
+            None,
+        )
+        or next((e["email"] for e in emails if e.get("verified")), None)
+        or profile.get("email")
+    )
+
+    if not primary_email:
+        logger.warning(
+            "GitHub OAuth: user %s has no verified email accessible",
+            profile.get("login"),
+        )
+        return RedirectResponse(
+            url="/login?oauth_error=no_email", status_code=302
+        )
+
+    try:
+        user = await user_service.upsert_from_oauth(
+            provider=OAuthProvider.GITHUB,
+            provider_user_id=str(profile["id"]),
+            email=primary_email,
+            provider_username=profile.get("login"),
+            avatar_url=profile.get("avatar_url"),
+        )
+    except RegistrationClosed:
+        return RedirectResponse(
+            url="/login?oauth_error=signup_closed", status_code=302
+        )
+    return _finalize_oauth_signin(request, user)
+
+
+@router.get("/google/start")
+async def google_start(request: Request, next: str = "") -> RedirectResponse:
+    """Kick off the Google authorization flow. Same ``next``-stashing
+    pattern as GitHub — keeps the post-login landing consistent."""
+    _require_google_configured()
+    nxt = _safe_next(next)
+    if nxt:
+        request.session["oauth_next"] = nxt
+    redirect_uri = str(request.url_for("google_callback"))
+    return await _build_oauth().google.authorize_redirect(request, redirect_uri)
+
+
+@router.get("/google/callback", name="google_callback")
+async def google_callback(
+    request: Request,
+    user_service: UserService = Depends(get_user_service),
+) -> RedirectResponse:
+    """Exchange the code, parse the OIDC userinfo, link/create the user."""
+    _require_google_configured()
+
+    try:
+        token: dict[str, Any] = await _build_oauth().google.authorize_access_token(
+            request
+        )
+    except OAuthError as exc:
+        logger.warning("Google OAuth exchange failed: %s", exc)
+        return RedirectResponse(url="/login?oauth_error=1", status_code=302)
+
+    # Google returns the user profile in the ``userinfo`` claim
+    # alongside the access token (OIDC id_token); no extra HTTP
+    # round-trip needed.
+    profile = token.get("userinfo") or {}
+    primary_email = (
+        profile.get("email") if profile.get("email_verified") else None
+    )
+
+    if not primary_email:
+        logger.warning(
+            "Google OAuth: user %s has no verified email accessible",
+            profile.get("sub", "?"),
+        )
+        return RedirectResponse(
+            url="/login?oauth_error=no_email", status_code=302
+        )
+
+    try:
+        user = await user_service.upsert_from_oauth(
+            provider=OAuthProvider.GOOGLE,
+            provider_user_id=str(profile["sub"]),
+            email=primary_email,
+            provider_username=profile.get("name") or profile.get("given_name"),
+            avatar_url=profile.get("picture"),
+        )
+    except RegistrationClosed:
+        return RedirectResponse(
+            url="/login?oauth_error=signup_closed", status_code=302
+        )
+    return _finalize_oauth_signin(request, user)
+
+
+# ---------------------------------------------------------------------------
+# Connection management — list + disconnect. Provider-parameterized so a
+# new provider plugs in with zero route changes.
+# ---------------------------------------------------------------------------
+
+
+class OAuthConnectionResponse(BaseModel):
+    """One row of a user's linked third-party identities."""
+
+    provider: OAuthProvider
+    provider_username: str | None = None
+    provider_email: str | None = None
+    avatar_url: str | None = None
+
+
+@router.get("/connections", response_model=list[OAuthConnectionResponse])
+async def list_connections(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> list[OAuthConnectionResponse]:
+    """List the caller's linked third-party identities."""
+    stmt = select(UserOAuthIdentity).where(
+        UserOAuthIdentity.user_id == current_user.id
+    )
+    rows = (await db.exec(stmt)).all()
+    return [
+        OAuthConnectionResponse.model_validate(r, from_attributes=True)
+        for r in rows
+    ]
+
+
+@router.delete(
+    "/connections/{provider}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def disconnect(
+    provider: OAuthProvider,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_async_db),
+) -> Response:
+    """Unlink a provider from the caller's account.
+
+    Refuses to disconnect if it would lock the user out — i.e., they
+    have no password AND no other OAuth identities. Caller must set a
+    password first or link another provider.
+    """
+    stmt = select(UserOAuthIdentity).where(
+        UserOAuthIdentity.user_id == current_user.id,
+    )
+    all_identities = list((await db.exec(stmt)).all())
+    target = next(
+        (i for i in all_identities if i.provider == provider), None
+    )
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No {provider.value} connection to disconnect.",
+        )
+
+    has_password = bool(current_user.hashed_password)
+    other_identities = [i for i in all_identities if i.id != target.id]
+    if not has_password and not other_identities:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Set a password or link another provider first — "
+                "this is your only sign-in method."
+            ),
+        )
+
+    await db.delete(target)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+{%- endif %}

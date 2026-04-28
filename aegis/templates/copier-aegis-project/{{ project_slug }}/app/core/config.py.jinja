@@ -90,6 +90,29 @@ class Settings(BaseSettings):
     # Proxy trust settings
     TRUST_PROXY_HEADERS: bool = False  # Set to True only behind a trusted reverse proxy
 
+{% if include_oauth %}
+    # OAuth social login (GitHub + Google).
+    # Provider client IDs/secrets — leave blank to disable a provider; the
+    # /auth/oauth/{provider}/start route returns 503 when its credentials
+    # are missing, so a deployment can ship with the flag on but enable
+    # providers one at a time as their OAuth apps are provisioned.
+    GITHUB_OAUTH_CLIENT_ID: str = ""
+    GITHUB_OAUTH_CLIENT_SECRET: str = ""
+    GOOGLE_OAUTH_CLIENT_ID: str = ""
+    GOOGLE_OAUTH_CLIENT_SECRET: str = ""
+
+    # Starlette SessionMiddleware secret — Authlib stashes the OAuth
+    # `state` + PKCE verifier here between /start and /callback. MUST be
+    # overridden in any non-dev deployment; rotating this invalidates
+    # all in-flight OAuth handshakes (no impact on already-issued JWTs).
+    OAUTH_SESSION_SECRET: str = "change-this-oauth-session-secret-in-production"
+
+    # HttpOnly session cookie holding the JWT after OAuth/login. None =
+    # auto (off in dev, on otherwise). Set to False to run prod over HTTP
+    # without TLS — browsers refuse Secure cookies on insecure origins.
+    SESSION_COOKIE_SECURE: bool | None = None
+{% endif %}
+
 {% if include_redis %}
     # Redis settings for arq background tasks
     REDIS_URL: str = "redis://redis:6379"  # Docker service name by default
@@ -283,6 +306,15 @@ class Settings(BaseSettings):
     INSIGHT_PLAUSIBLE_SITES: str = ""  # Comma-separated site IDs
     INSIGHT_COLLECTION_PLAUSIBLE_HOURS: int = 24
 {% endif %}
+
+    # Editorial metadata for the Overview project hero — read by
+    # `view_service._project_info()`. All optional; the project hero is
+    # hidden when no GitHub repo and no project name are set. Lives
+    # outside the source-specific blocks because it's project-level
+    # metadata, not tied to any particular collector.
+    INSIGHT_PROJECT_NAME: str = ""
+    INSIGHT_PROJECT_DESCRIPTION: str = ""
+    INSIGHT_PROJECT_HOMEPAGE: str = ""
 {% endif %}
 
 {% if include_observability %}

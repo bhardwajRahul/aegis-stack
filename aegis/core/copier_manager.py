@@ -120,6 +120,8 @@ def generate_with_copier(
         AnswerKeys.AUTH_LEVEL: template_context.get(AnswerKeys.AUTH_LEVEL, "basic"),
         AnswerKeys.AUTH_RBAC: template_context.get(AnswerKeys.AUTH_RBAC, "no") == "yes",
         AnswerKeys.AUTH_ORG: template_context.get(AnswerKeys.AUTH_ORG, "no") == "yes",
+        AnswerKeys.AUTH_OAUTH: template_context.get(AnswerKeys.AUTH_OAUTH, "no")
+        == "yes",
         AnswerKeys.AI: template_context.get(AnswerKeys.AI, "no") == "yes",
         AnswerKeys.COMMS: template_context.get(AnswerKeys.COMMS, "no") == "yes",
         AnswerKeys.AI_FRAMEWORK: template_context.get(
@@ -232,8 +234,17 @@ def generate_with_copier(
         if template_version:
             answers["_template_version"] = template_version
 
-        # Persist conditional choice fields that Copier omits
-        for key in (AnswerKeys.WORKER_BACKEND, AnswerKeys.SCHEDULER_BACKEND):
+        # Persist conditional choice fields that Copier omits.
+        # ``include_oauth`` is gated on ``include_auth`` (``when:`` in
+        # copier.yml) so Copier strips it from the answers file even
+        # when explicitly set in ``data``. Without this patch,
+        # ``aegis update`` and any other tooling reading the answers
+        # file can't tell whether OAuth was selected at init time.
+        for key in (
+            AnswerKeys.WORKER_BACKEND,
+            AnswerKeys.SCHEDULER_BACKEND,
+            AnswerKeys.AUTH_OAUTH,
+        ):
             if key in copier_data:
                 answers[key] = copier_data[key]
 

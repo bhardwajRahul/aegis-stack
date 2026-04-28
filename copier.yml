@@ -187,6 +187,12 @@ include_auth_org:
   default: "{{ auth_level == 'org' }}"
   when: "{{ include_auth }}"
 
+include_oauth:
+  type: bool
+  help: "Include OAuth social login (GitHub + Google)?"
+  default: false
+  when: "{{ include_auth }}"
+
 include_ai:
   type: bool
   help: "Include AI service?"

@@ -1,0 +1,39 @@
+{% if include_oauth -%}
+"""
+Auto-discovered SessionMiddleware for OAuth flows.
+
+Authlib's authorize-redirect stashes the OAuth ``state`` and PKCE
+verifier in the starlette session between ``/start`` and
+``/callback``; without this middleware the round-trip can't be
+verified. Only registered when OAuth social login is enabled.
+"""
+
+from app.core.config import settings
+from fastapi import FastAPI
+from starlette.middleware.sessions import SessionMiddleware
+
+
+def register_middleware(app: FastAPI) -> None:
+    """Auto-discovered middleware registration.
+
+    The ``https_only`` policy mirrors ``set_session_cookie()`` in
+    ``app/core/security.py`` so the session and JWT cookies follow the
+    same rules: honor ``SESSION_COOKIE_SECURE`` when explicitly set,
+    otherwise default based on ``APP_ENV``. Setting it to False is the
+    escape hatch for running prod over plain HTTP — without this branch
+    the OAuth ``/start`` -> ``/callback`` round-trip silently fails on
+    such deployments because the browser refuses Secure cookies on
+    insecure origins.
+    """
+    https_only = (
+        settings.SESSION_COOKIE_SECURE
+        if settings.SESSION_COOKIE_SECURE is not None
+        else settings.APP_ENV != "dev"
+    )
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=settings.OAUTH_SESSION_SECRET,
+        same_site="lax",
+        https_only=https_only,
+    )
+{%- endif %}

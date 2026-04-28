@@ -54,6 +54,18 @@ class ForeignKeySpec:
 
 
 @dataclass
+class CheckConstraintSpec:
+    """Specification for a CHECK constraint on a table.
+
+    Used to enforce enum-style allowed values without a native PG enum type.
+    Rendered into ``op.create_table`` so it works on both SQLite and Postgres.
+    """
+
+    name: str
+    sqltext: str  # e.g. "origin IN ('collector', 'user')"
+
+
+@dataclass
 class TableSpec:
     """Specification for a database table."""
 
@@ -61,6 +73,7 @@ class TableSpec:
     columns: list[ColumnSpec]
     indexes: list[IndexSpec] = field(default_factory=list)
     foreign_keys: list[ForeignKeySpec] = field(default_factory=list)
+    check_constraints: list[CheckConstraintSpec] = field(default_factory=list)
 
 
 @dataclass
@@ -140,6 +153,12 @@ AUTH_MIGRATION = ServiceMigrationSpec(
             ],
             foreign_keys=[
                 ForeignKeySpec(["user_id"], "user", ["id"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    name="ck_user_oauth_identity_provider",
+                    sqltext="provider IN ('github', 'google')",
+                ),
             ],
         ),
     ],
@@ -662,6 +681,12 @@ INSIGHTS_MIGRATION = ServiceMigrationSpec(
                 IndexSpec("ix_insight_event_origin", ["origin"]),
                 IndexSpec("ix_insight_event_origin_date", ["origin", "date"]),
             ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    name="ck_insight_event_origin",
+                    sqltext="origin IN ('collector', 'user')",
+                ),
+            ],
         ),
     ],
 )
@@ -709,6 +734,27 @@ INSIGHTS_AUTH_LINK_MIGRATION = ServiceMigrationSpec(
             ],
             foreign_keys=[
                 ForeignKeySpec(["user_id"], "user", ["id"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    name="ck_insight_goal_kind",
+                    sqltext="kind IN ('absolute', 'delta', 'rate')",
+                ),
+                CheckConstraintSpec(
+                    name="ck_insight_goal_status",
+                    sqltext="status IN ('active', 'achieved', 'abandoned')",
+                ),
+                CheckConstraintSpec(
+                    name="ck_insight_goal_metric_key",
+                    sqltext=(
+                        "metric_key IN ("
+                        "'github.stars', 'github.clones', 'github.unique_cloners', "
+                        "'github.views', 'github.unique_visitors', 'github.forks', "
+                        "'github.releases', 'pypi.downloads', 'docs.visitors', "
+                        "'docs.pageviews'"
+                        ")"
+                    ),
+                ),
             ],
         ),
     ],
@@ -956,11 +1002,15 @@ def upgrade() -> None:
         sa.Column('{{ column.name }}', {{ column.type }}, nullable={{ column.nullable }}{{ pk_attr }}{{ default_attr }}),
 {% endfor %}
 {% if table.primary_keys %}
-        sa.PrimaryKeyConstraint({% for pk in table.primary_keys %}'{{ pk }}'{% if not loop.last %}, {% endif %}{% endfor %}){% if table.foreign_keys %},{% endif %}
+        sa.PrimaryKeyConstraint({% for pk in table.primary_keys %}'{{ pk }}'{% if not loop.last %}, {% endif %}{% endfor %}){% if table.foreign_keys or table.check_constraints %},{% endif %}
 
 {% endif %}
 {% for fk in table.foreign_keys %}
-        sa.ForeignKeyConstraint({{ fk.columns }}, ['{{ fk.ref_table }}.{{ fk.ref_columns[0] }}']){% if not loop.last %},{% endif %}
+        sa.ForeignKeyConstraint({{ fk.columns }}, ['{{ fk.ref_table }}.{{ fk.ref_columns[0] }}']){% if not loop.last or table.check_constraints %},{% endif %}
+
+{% endfor %}
+{% for chk in table.check_constraints %}
+        sa.CheckConstraint("{{ chk.sqltext }}", name='{{ chk.name }}'){% if not loop.last %},{% endif %}
 
 {% endfor %}
     )
@@ -1117,6 +1167,10 @@ def _render_migration(
                         "ref_columns": fk.ref_columns,
                     }
                     for fk in table.foreign_keys
+                ],
+                "check_constraints": [
+                    {"name": chk.name, "sqltext": chk.sqltext}
+                    for chk in table.check_constraints
                 ],
                 "primary_keys": primary_keys,
             }

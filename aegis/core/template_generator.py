@@ -123,7 +123,13 @@ class TemplateGenerator:
                     user_specified_ai_backend = True
                 break
 
-        # Extract auth level from auth[level] format in services
+        # OAuth social login (GitHub + Google) — opt-in via the
+        # ``auth[oauth]`` modifier in the bracket syntax (composes with
+        # ``auth[rbac,oauth]`` etc.). Defaults off so projects that
+        # don't ask for it don't pay for the extra routes and deps.
+        self.include_oauth: bool = False
+
+        # Extract auth level (and oauth modifier) from auth[...] format in services
         self.auth_level = AuthLevels.BASIC  # Default to basic
         self._user_specified_auth_level = False
         for service in self.selected_services:
@@ -132,6 +138,7 @@ class TemplateGenerator:
                     auth_config = parse_auth_service_config(service)
                     self.auth_level = auth_config.level
                     self._user_specified_auth_level = True
+                    self.include_oauth = auth_config.oauth
                 break
 
         # Extract insights sources from insights[sources] format in services
@@ -237,6 +244,11 @@ class TemplateGenerator:
             if auth_level in (AuthLevels.RBAC, AuthLevels.ORG)
             else "no",
             AnswerKeys.AUTH_ORG: "yes" if auth_level == AuthLevels.ORG else "no",
+            # OAuth social login (GitHub + Google) — opt-in via the
+            # ``auth[oauth]`` modifier in the bracket syntax (composes
+            # with ``auth[rbac,oauth]`` etc.). Defaults off so existing
+            # flows aren't surprised by extra routes and dependencies.
+            AnswerKeys.AUTH_OAUTH: "yes" if self.include_oauth else "no",
             AnswerKeys.AI: "yes"
             if any(
                 extract_base_service_name(s) == AnswerKeys.SERVICE_AI
