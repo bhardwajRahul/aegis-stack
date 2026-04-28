@@ -986,4 +986,102 @@ MESSAGES: dict[str, str] = {
     "insights.reddit_added": "Reddit post added ({count} rows)",
     "insights.reddit_failed": "Failed: {error}",
     "insights.event_logged": "Event logged: [{event_type}] {description}",
+    "insights.opt_lookback_days": "Days to fetch (for backfill). Default 1 = today only.",
+    "insights.opt_event_date": "Event date (YYYY-MM-DD). Defaults to today.",
+    "insights.opt_event_category": "Milestone category (e.g., daily_clones, pypi_daily).",
+    "insights.invalid_date_format": "Invalid date format: {date}. Use YYYY-MM-DD.",
+    "insights.today": "today",
+    "insights.event_logged_with_date": "Event logged: [{event_type}] {description} ({date})",
+    # ── Payment ──────────────────────────────────────────────────────
+    "payment.help": "Payments and billing",
+    # Commands
+    "payment.help_status": "Show payment provider status and summary",
+    "payment.help_transactions": "List recent transactions",
+    "payment.help_disputes": "List chargebacks and early fraud warnings",
+    "payment.help_seed": (
+        "Seed fake payment data for dashboard/CLI testing (dev only). "
+        "Populates transactions, subscriptions, and disputes covering every "
+        "UI state so you can eyeball the dashboard without live Stripe calls."
+    ),
+    "payment.help_webhook": "Forward Stripe webhooks to the local server (requires stripe-cli)",
+    "payment.help_trigger": "Trigger a Stripe test event and clean up the fixtures it creates",
+    # Args
+    "payment.arg_event": "Event type, e.g. checkout.session.completed",
+    # Options
+    "payment.opt_limit": "Number of transactions to show",
+    "payment.opt_status": "Filter by status",
+    "payment.opt_dispute_status": (
+        "Filter by status: open, warning_issued, needs_response, "
+        "under_review, won, lost, charge_refunded, warning_closed"
+    ),
+    "payment.opt_reset": "Wipe existing payment rows (except the provider) before seeding.",
+    "payment.opt_clear": "Only wipe; do not re-seed.",
+    "payment.opt_port": "Local webserver port",
+    "payment.opt_no_cleanup": "Skip the fixture sweep (leave test Products/Prices active)",
+    # Status badges
+    "payment.mode_test": "TEST",
+    "payment.mode_live": "LIVE",
+    "payment.connected": "Connected",
+    "payment.disconnected": "Disconnected",
+    # Status panel
+    "payment.status_title": "Payment Service Status",
+    "payment.col_provider": "Provider",
+    "payment.col_mode": "Mode",
+    "payment.col_status": "Status",
+    "payment.col_api_version": "API Version",
+    "payment.col_transactions": "Transactions",
+    "payment.col_revenue": "Revenue",
+    "payment.col_active_subs": "Active Subscriptions",
+    "payment.col_open_disputes": "Open Disputes",
+    "payment.warning": "Warning:",
+    # Transactions
+    "payment.no_transactions": "No transactions found.",
+    "payment.transactions_title": "Transactions ({total} total)",
+    "payment.col_id": "ID",
+    "payment.col_type": "Type",
+    "payment.col_amount": "Amount",
+    "payment.col_currency": "Currency",
+    "payment.col_date": "Date",
+    # Disputes
+    "payment.no_disputes": "No disputes found.",
+    "payment.disputes_title": "Disputes",
+    "payment.disputes_title_filtered": "Disputes ({status})",
+    "payment.disputes_count": "{title} ({count} total)",
+    "payment.col_txn": "Txn",
+    "payment.col_provider_id": "Provider ID",
+    "payment.col_reason": "Reason",
+    "payment.col_due": "Due",
+    "payment.col_created": "Created",
+    # Seed
+    "payment.wiped_rows": "Wiped existing payment rows.",
+    "payment.nothing_to_do": "Nothing to do:",
+    "payment.seed_success": "Fake payment data seeded.",
+    "payment.col_kind": "Kind",
+    "payment.col_count": "Count",
+    "payment.seed_view_via_dashboard": "View via the dashboard (click the Payment card) or:",
+    # Webhook
+    "payment.stripe_cli_not_found": "stripe-cli not found on PATH.",
+    "payment.install_homebrew": "Install with Homebrew:",
+    "payment.install_scoop": "Install with Scoop:",
+    "payment.install_other": "See: [bold]https://stripe.com/docs/stripe-cli#install[/bold]",
+    "payment.then_authenticate": "Then authenticate with: [bold]stripe login[/bold]",
+    "payment.forwarding": "Forwarding Stripe webhooks → [bold]{target}[/bold]",
+    "payment.press_ctrl_c": "Press Ctrl-C to stop.",
+    # Trigger
+    "payment.stripe_install_brief": (
+        "Install with: [bold]brew install stripe/stripe-cli/stripe[/bold] (macOS) "
+        "or see https://stripe.com/docs/stripe-cli#install"
+    ),
+    "payment.stripe_secret_missing": "STRIPE_SECRET_KEY is not set in .env",
+    "payment.refuse_live_key": (
+        "Refusing to run trigger against a live key. This command is test-mode only."
+    ),
+    "payment.triggering": "Triggering [bold]{event}[/bold]...",
+    "payment.trigger_exited": "stripe trigger exited with code {code}",
+    "payment.skipping_cleanup": "Skipping fixture cleanup (--no-cleanup).",
+    "payment.cleaned_up": "Cleaned up [bold]{products}[/bold] fixture product(s) and [bold]{prices}[/bold] price(s)",
+    "payment.no_fixture_debris": "No fixture debris found to clean up.",
+    "payment.could_not_archive_price": "Could not archive {id}: {error}",
+    "payment.could_not_archive_product": "Could not archive {id}: {error}",
+    "payment.fixture_cleanup_aborted": "Fixture cleanup aborted: {error}",
 }
