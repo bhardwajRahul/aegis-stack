@@ -17,6 +17,18 @@ from ..constants import (
 )
 from ..i18n import t
 from .file_manifest import FileManifest
+from .migration_generator import (
+    AI_MIGRATION,
+    AUTH_MIGRATION,
+    AUTH_RBAC_MIGRATION,
+    AUTH_TOKENS_MIGRATION,
+    INSIGHTS_AUTH_LINK_MIGRATION,
+    INSIGHTS_MIGRATION,
+    ORG_MIGRATION,
+    PAYMENT_AUTH_LINK_MIGRATION,
+    PAYMENT_MIGRATION,
+    VOICE_MIGRATION,
+)
 from .option_spec import OptionMode, OptionSpec
 from .plugin_spec import PluginKind, PluginSpec
 
@@ -58,6 +70,16 @@ SERVICES: dict[str, ServiceSpec] = {
         type=ServiceType.AUTH,
         description="User authentication and authorization with JWT tokens",
         required_components=[ComponentNames.BACKEND, ComponentNames.DATABASE],
+        # R4-A: migrations declared on the spec. Pre-R4 these lived in a
+        # MIGRATION_SPECS dict literal in migration_generator.py; that dict
+        # is now derived from this list (and from the migrations field on
+        # the AI / payment / insights specs).
+        migrations=[
+            AUTH_MIGRATION,
+            AUTH_RBAC_MIGRATION,
+            ORG_MIGRATION,
+            AUTH_TOKENS_MIGRATION,
+        ],
         # Bracket-syntax options: auth[level, engine, oauth]
         # e.g. auth[rbac], auth[org,postgres], auth[basic,oauth]
         options=[
@@ -132,6 +154,8 @@ SERVICES: dict[str, ServiceSpec] = {
         type=ServiceType.AI,
         description="AI chatbot service with multi-framework support",
         required_components=[ComponentNames.BACKEND],
+        # R4-A: migrations declared on the spec.
+        migrations=[AI_MIGRATION, VOICE_MIGRATION],
         # Bracket-syntax options: ai[framework, backend, providers..., flags...]
         # e.g. ai[langchain,sqlite,openai], ai[pydantic-ai,postgres,rag,voice]
         options=[
@@ -256,6 +280,8 @@ SERVICES: dict[str, ServiceSpec] = {
             ComponentNames.SCHEDULER,
         ],
         recommended_components=[ComponentNames.WORKER],
+        # R4-A: migrations declared on the spec.
+        migrations=[INSIGHTS_MIGRATION, INSIGHTS_AUTH_LINK_MIGRATION],
         # Bracket-syntax options: insights[sources...]
         # e.g. insights[github,pypi,plausible,reddit]
         options=[
@@ -312,6 +338,8 @@ SERVICES: dict[str, ServiceSpec] = {
             ComponentNames.DATABASE,
         ],
         recommended_components=[ComponentNames.WORKER],
+        # R4-A: migrations declared on the spec.
+        migrations=[PAYMENT_MIGRATION, PAYMENT_AUTH_LINK_MIGRATION],
         pyproject_deps=[
             "stripe>=11.0.0",  # Stripe Python SDK
         ],
