@@ -5,10 +5,11 @@ This module defines all available components, their dependencies, and metadata
 used for project generation and validation.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
 from .file_manifest import FileManifest
+from .plugin_spec import PluginKind, PluginSpec
 
 
 class ComponentType(Enum):
@@ -30,24 +31,18 @@ class SchedulerBackend(str, Enum):
 CORE_COMPONENTS = ["backend", "frontend"]
 
 
-@dataclass
-class ComponentSpec:
-    """Specification for a single component."""
+@dataclass(kw_only=True)
+class ComponentSpec(PluginSpec):
+    """Component-flavoured PluginSpec — back-compat alias for pre-R2 callers.
 
-    name: str
-    type: ComponentType
-    description: str
-    requires: list[str] = field(default_factory=list)  # Hard dependencies
-    recommends: list[str] = field(default_factory=list)  # Soft dependencies
-    conflicts: list[str] = field(default_factory=list)  # Mutual exclusions
-    docker_services: list[str] = field(default_factory=list)
-    pyproject_deps: list[str] = field(default_factory=list)
-    template_files: list[str] = field(default_factory=list)
-    # R1 file manifest used by cleanup_components(). The legacy
-    # post_gen_tasks.get_component_file_mapping() dict is still maintained
-    # separately, so this manifest must be kept aligned with it by hand
-    # until R2 derives the mapping from manifests. See file_manifest.py.
-    files: FileManifest = field(default_factory=FileManifest)
+    Subclasses ``PluginSpec`` and pins ``kind`` to ``COMPONENT`` by default.
+    Legacy field names ``requires`` / ``recommends`` continue to work for
+    *read* access via the property aliases on ``PluginSpec``; constructions
+    in this file use the canonical ``required_components`` /
+    ``recommended_components`` names. R2 of the plugin system refactor.
+    """
+
+    kind: PluginKind = PluginKind.COMPONENT
 
 
 # Component registry - single source of truth
@@ -85,7 +80,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         name="worker",
         type=ComponentType.INFRASTRUCTURE,
         description="Background task processing (arq, Dramatiq, or TaskIQ)",
-        requires=["redis"],  # Hard dependency
+        required_components=["redis"],  # Hard dependency
         pyproject_deps=["arq==0.25.0"],
         docker_services=["worker-system", "worker-load-test"],
         template_files=["app/components/worker/"],
@@ -154,7 +149,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         type=ComponentType.INFRASTRUCTURE,
         description="Traefik reverse proxy and load balancer",
         docker_services=["traefik"],
-        recommends=["backend"],
+        recommended_components=["backend"],
         files=FileManifest(
             primary=[
                 "traefik",

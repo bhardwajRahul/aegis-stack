@@ -5,12 +5,13 @@ This module defines all available services (auth, payment, AI, etc.), their depe
 and metadata used for project generation and validation.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
 from ..constants import ComponentNames
 from ..i18n import t
 from .file_manifest import FileManifest
+from .plugin_spec import PluginKind, PluginSpec
 
 
 class ServiceType(Enum):
@@ -24,32 +25,17 @@ class ServiceType(Enum):
     STORAGE = "storage"  # File storage and CDN
 
 
-@dataclass
-class ServiceSpec:
-    """Specification for a single service."""
+@dataclass(kw_only=True)
+class ServiceSpec(PluginSpec):
+    """Service-flavoured PluginSpec — back-compat alias for pre-R2 callers.
 
-    name: str
-    type: ServiceType
-    description: str
-    required_components: list[str] = field(
-        default_factory=list
-    )  # Components this service needs
-    recommended_components: list[str] = field(
-        default_factory=list
-    )  # Soft component dependencies
-    required_services: list[str] = field(
-        default_factory=list
-    )  # Other services this service needs
-    conflicts: list[str] = field(default_factory=list)  # Mutual exclusions
-    pyproject_deps: list[str] = field(
-        default_factory=list
-    )  # Python packages for this service
-    template_files: list[str] = field(default_factory=list)  # Template files to include
-    # R1 file manifest used by cleanup_components(). The legacy
-    # post_gen_tasks.get_component_file_mapping() dict is still maintained
-    # separately, so this manifest must be kept aligned with it by hand
-    # until R2 derives the mapping from manifests. See file_manifest.py.
-    files: FileManifest = field(default_factory=FileManifest)
+    Subclasses ``PluginSpec`` and pins ``kind`` to ``SERVICE`` by default, so
+    ``ServiceSpec(name=..., type=..., description=...)`` still works without
+    naming the kind. R2 of the plugin system refactor; see
+    ``aegis/core/plugin_spec.py`` for the unified type.
+    """
+
+    kind: PluginKind = PluginKind.SERVICE
 
 
 # Service registry - single source of truth for all available services

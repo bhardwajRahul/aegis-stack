@@ -1,10 +1,13 @@
 """
-Declarative file manifest per service / component spec.
+Declarative file manifest per ``PluginSpec``.
 
 R1 of the plugin system refactor. Centralises the per-spec file
 ownership needed for declarative cleanup, replacing the **Pattern A**
 imperative blocks ("if X is not selected, remove these files") that
 were scattered through ``aegis/core/post_gen_tasks.py``.
+
+Consumed by every ``PluginSpec`` (in-tree services and components today;
+third-party plugins under R2+). See ``aegis/core/plugin_spec.py``.
 
 What R1 does NOT do (deliberately deferred to R2):
 
