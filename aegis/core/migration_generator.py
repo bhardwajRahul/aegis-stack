@@ -951,19 +951,55 @@ PAYMENT_AUTH_LINK_MIGRATION = ServiceMigrationSpec(
     ],
 )
 
-# Registry of all service migrations
-MIGRATION_SPECS: dict[str, ServiceMigrationSpec] = {
-    "auth": AUTH_MIGRATION,
-    "auth_rbac": AUTH_RBAC_MIGRATION,
-    "auth_org": ORG_MIGRATION,
-    "auth_tokens": AUTH_TOKENS_MIGRATION,
-    "ai": AI_MIGRATION,
-    "ai_voice": VOICE_MIGRATION,
-    "payment": PAYMENT_MIGRATION,
-    "payment_auth_link": PAYMENT_AUTH_LINK_MIGRATION,
-    "insights": INSIGHTS_MIGRATION,
-    "insights_auth_link": INSIGHTS_AUTH_LINK_MIGRATION,
-}
+# Registry of all service migrations.
+#
+# R4-A: derived lazily from each ``PluginSpec.migrations`` list (see
+# ``aegis/core/services.py`` for the in-tree declarations and
+# ``aegis/core/migration_spec.py`` for the plugin-author-facing facade).
+# Pre-R4 this was a literal ``dict[str, ServiceMigrationSpec]`` here;
+# moving it onto the specs lets third-party plugins ship their own
+# migrations without forking core, while preserving the same
+# ``MIGRATION_SPECS["auth"]`` lookup shape for existing callers
+# (``copier_manager.py``, ``add_service.py``, the test suite).
+#
+# Lazy because ``services.py`` imports the named ``*_MIGRATION``
+# constants from this module — eager construction here would create a
+# circular import at module load time. ``__getattr__`` defers the
+# ``services`` import until first access of ``MIGRATION_SPECS``, by
+# which point the services registry is fully built.
+
+_MIGRATION_SPECS_CACHE: dict[str, ServiceMigrationSpec] | None = None
+
+
+def _get_migration_specs() -> dict[str, ServiceMigrationSpec]:
+    """Return the (lazily built) migration registry.
+
+    Plugins discovered via entry points (Phase B of the plugin system)
+    will need to invalidate ``_MIGRATION_SPECS_CACHE`` after registering
+    new specs; for R4-A the in-tree registry is static, so the dict is
+    built once and reused.
+    """
+    global _MIGRATION_SPECS_CACHE
+    if _MIGRATION_SPECS_CACHE is None:
+        from .migration_spec import collect_migrations
+        from .services import SERVICES
+
+        _MIGRATION_SPECS_CACHE = collect_migrations(SERVICES.values())
+    return _MIGRATION_SPECS_CACHE
+
+
+def __getattr__(name: str) -> Any:
+    """Module-level lazy access for ``MIGRATION_SPECS``.
+
+    Used when callers do ``from migration_generator import MIGRATION_SPECS``;
+    code inside this module references the cache via ``_get_migration_specs()``
+    instead, since module-level ``__getattr__`` does not fire for internal
+    name lookups.
+    """
+    if name == "MIGRATION_SPECS":
+        return _get_migration_specs()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # ============================================================================
 # Migration File Template
@@ -1241,10 +1277,11 @@ def generate_migration(project_path: Path, service_name: str) -> Path | None:
     Returns:
         Path to the generated migration file, or None if service not found
     """
-    if service_name not in MIGRATION_SPECS:
+    migration_specs = _get_migration_specs()
+    if service_name not in migration_specs:
         return None
 
-    spec = MIGRATION_SPECS[service_name]
+    spec = migration_specs[service_name]
     versions_dir = get_versions_dir(project_path)
 
     # Ensure versions directory exists
@@ -1280,9 +1317,10 @@ def generate_migrations_for_services(
         List of paths to generated migration files
     """
     generated = []
+    migration_specs = _get_migration_specs()
 
     for service_name in services:
-        if service_name not in MIGRATION_SPECS:
+        if service_name not in migration_specs:
             continue
 
         # Skip if migration already exists

@@ -88,6 +88,12 @@ class PluginSpec:
     # circular import; ``OptionSpec`` is only referenced by parsers.
     options: list[Any] = field(default_factory=list)
 
+    # Database migrations (R4-A) — see aegis/core/migration_spec.py.
+    # Each entry is a ``ServiceMigrationSpec`` declaring tables/columns
+    # for the plugin. Typed as ``list[Any]`` to avoid a runtime cycle
+    # (``migration_generator.py`` imports stay one-way).
+    migrations: list[Any] = field(default_factory=list)
+
     # Plugin metadata
     version: str = "0.0.0"
     verified: bool = True
