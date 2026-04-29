@@ -5,17 +5,24 @@ This module handles service dependency resolution, converting service selections
 to their required components and validating service-to-component compatibility.
 """
 
-from ..constants import AnswerKeys, ComponentNames, StorageBackends
 from ..i18n import t
-from .ai_service_parser import is_ai_service_with_options, parse_ai_service_config
-from .auth_service_parser import is_auth_service_with_options, parse_auth_service_config
 from .component_utils import extract_base_component_name, extract_base_service_name
 from .dependency_resolver import DependencyResolver
-from .insights_service_parser import (
-    is_insights_service_with_options,
-    parse_insights_service_config,
-)
+from .option_spec import compute_auto_requires, is_spec_with_options, parse_options
 from .services import SERVICES, get_service_dependencies
+
+
+def _normalise_bracket_variants(components: set[str]) -> set[str]:
+    """Drop plain ``name`` when ``name[variant]`` is also present.
+
+    e.g. ``{"backend", "database", "database[postgres]"}`` becomes
+    ``{"backend", "database[postgres]"}``. Pre-R3 this was an
+    auth-specific ``discard("database")`` step inside the resolver;
+    R3 generalises it so any spec with bracket-variant auto_requires
+    works without the resolver having per-service knowledge.
+    """
+    bracketed_bases = {extract_base_component_name(c) for c in components if "[" in c}
+    return {c for c in components if "[" in c or c not in bracketed_bases}
 
 
 class ServiceResolver:
@@ -53,30 +60,23 @@ class ServiceResolver:
             service_deps = get_service_dependencies(base_service)
             service_required_components.update(service_deps)
 
-            # Handle AI service with persistence backend (from bracket syntax)
-            if base_service == AnswerKeys.SERVICE_AI and is_ai_service_with_options(
-                service
-            ):
-                ai_config = parse_ai_service_config(service)
-                if ai_config.backend != StorageBackends.MEMORY:
-                    # Auto-add database component for AI persistence
-                    database_component = (
-                        f"{ComponentNames.DATABASE}[{ai_config.backend}]"
-                    )
-                    service_required_components.add(database_component)
+            # R3: bracket-syntax options can declare auto_requires rules on
+            # their OptionSpec. Parse the spec string and let each option
+            # contribute components to add. Replaces the per-service
+            # if-blocks (AI persistence-backend → database[backend]; auth
+            # engine override → database[engine]).
+            spec = SERVICES.get(base_service)
+            if spec is not None and is_spec_with_options(service):
+                parsed = parse_options(service, spec)
+                service_required_components.update(compute_auto_requires(spec, parsed))
 
-            # Handle Auth service with engine override (from bracket syntax)
-            if base_service == AnswerKeys.SERVICE_AUTH and is_auth_service_with_options(
-                service
-            ):
-                auth_config = parse_auth_service_config(service)
-                if auth_config.engine:
-                    # Replace plain "database" with engine-specific version
-                    service_required_components.discard(ComponentNames.DATABASE)
-                    database_component = (
-                        f"{ComponentNames.DATABASE}[{auth_config.engine}]"
-                    )
-                    service_required_components.add(database_component)
+        # When a bracket-variant component (e.g. database[postgres]) is
+        # present, drop the plain base name (e.g. database) — they describe
+        # the same component, and the variant wins. This generalises the
+        # previous auth-specific "discard then add" pattern.
+        service_required_components = _normalise_bracket_variants(
+            service_required_components
+        )
 
         # Convert to list and resolve component-to-component dependencies
         component_list = list(service_required_components)
@@ -111,36 +111,21 @@ class ServiceResolver:
                 errors.append(t("validation.unknown_service", name=base_service))
                 continue
 
-            # Validate AI service bracket syntax if provided
-            if base_service == AnswerKeys.SERVICE_AI and is_ai_service_with_options(
-                service
-            ):
-                try:
-                    ai_config = parse_ai_service_config(service)
-                    valid_backends = [
-                        StorageBackends.MEMORY,
-                        StorageBackends.SQLITE,
-                        StorageBackends.POSTGRES,
-                    ]
-                    if ai_config.backend not in valid_backends:
-                        errors.append(
-                            f"Invalid backend '{ai_config.backend}' for AI service. "
-                            f"Valid options: {', '.join(valid_backends)}"
-                        )
-                except ValueError as e:
-                    errors.append(f"Invalid AI service syntax: {e}")
-
-            # Validate insights service bracket syntax if provided
-            if (
-                base_service == AnswerKeys.SERVICE_INSIGHTS
-                and is_insights_service_with_options(service)
-            ):
-                try:
-                    parse_insights_service_config(service)
-                except ValueError as e:
-                    errors.append(f"Invalid insights service syntax: {e}")
-
             spec = SERVICES[base_service]
+
+            # Generic bracket-syntax validation (R3): any service that has
+            # bracket-syntax options gets validated up-front, so
+            # resolve_service_dependencies() can call parse_options() without
+            # raising mid-resolution. Pre-R3 this was per-service (AI and
+            # insights had explicit blocks; auth's parse errors leaked
+            # through). Choice validation (e.g. "backend must be memory /
+            # sqlite / postgres") is now handled inside parse_options
+            # itself, which is why no service-specific checks remain here.
+            if is_spec_with_options(service):
+                try:
+                    parse_options(service, spec)
+                except ValueError as e:
+                    errors.append(f"Invalid {base_service} service syntax: {e}")
 
             # Check service conflicts
             if spec.conflicts:

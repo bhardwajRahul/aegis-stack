@@ -83,6 +83,11 @@ class PluginSpec:
     # File ownership for cleanup (R1)
     files: FileManifest = field(default_factory=FileManifest)
 
+    # Bracket-syntax options (R3) — see aegis/core/option_spec.py.
+    # ``list[Any]`` rather than ``list[OptionSpec]`` to avoid a runtime
+    # circular import; ``OptionSpec`` is only referenced by parsers.
+    options: list[Any] = field(default_factory=list)
+
     # Plugin metadata
     version: str = "0.0.0"
     verified: bool = True

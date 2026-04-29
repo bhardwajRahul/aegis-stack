@@ -8,9 +8,16 @@ and metadata used for project generation and validation.
 from dataclasses import dataclass
 from enum import Enum
 
-from ..constants import ComponentNames
+from ..constants import (
+    AIFrameworks,
+    AIProviders,
+    AuthLevels,
+    ComponentNames,
+    StorageBackends,
+)
 from ..i18n import t
 from .file_manifest import FileManifest
+from .option_spec import OptionMode, OptionSpec
 from .plugin_spec import PluginKind, PluginSpec
 
 
@@ -33,6 +40,12 @@ class ServiceSpec(PluginSpec):
     ``ServiceSpec(name=..., type=..., description=...)`` still works without
     naming the kind. R2 of the plugin system refactor; see
     ``aegis/core/plugin_spec.py`` for the unified type.
+
+    ``kw_only=True`` is required: ``PluginSpec`` has a required ``kind`` field
+    followed by defaulted fields, and overriding ``kind`` with a default in
+    this subclass would otherwise violate the "required field after default"
+    dataclass rule. Pre-R2 callers all used keyword construction (verified
+    by AST scan), so no real call sites are affected.
     """
 
     kind: PluginKind = PluginKind.SERVICE
@@ -45,6 +58,34 @@ SERVICES: dict[str, ServiceSpec] = {
         type=ServiceType.AUTH,
         description="User authentication and authorization with JWT tokens",
         required_components=[ComponentNames.BACKEND, ComponentNames.DATABASE],
+        # Bracket-syntax options: auth[level, engine, oauth]
+        # e.g. auth[rbac], auth[org,postgres], auth[basic,oauth]
+        options=[
+            OptionSpec(
+                name="level",
+                mode=OptionMode.SINGLE,
+                choices=list(AuthLevels.ALL),
+                default=AuthLevels.BASIC,
+            ),
+            OptionSpec(
+                name="engine",
+                mode=OptionMode.SINGLE,
+                choices=[StorageBackends.SQLITE, StorageBackends.POSTGRES],
+                default=None,
+                # Auto-add engine-specific database; service_resolver
+                # normalisation drops the plain `database` already in
+                # required_components when a bracket variant is added.
+                auto_requires=lambda v: [f"{ComponentNames.DATABASE}[{v}]"]
+                if v
+                else [],
+            ),
+            OptionSpec(
+                name="oauth",
+                mode=OptionMode.FLAG,
+                choices=["oauth"],
+                default=False,
+            ),
+        ],
         pyproject_deps=[
             "python-jose[cryptography]==3.3.0",
             "passlib[bcrypt]==1.7.4",
@@ -91,6 +132,48 @@ SERVICES: dict[str, ServiceSpec] = {
         type=ServiceType.AI,
         description="AI chatbot service with multi-framework support",
         required_components=[ComponentNames.BACKEND],
+        # Bracket-syntax options: ai[framework, backend, providers..., flags...]
+        # e.g. ai[langchain,sqlite,openai], ai[pydantic-ai,postgres,rag,voice]
+        options=[
+            OptionSpec(
+                name="framework",
+                mode=OptionMode.SINGLE,
+                choices=list(AIFrameworks.ALL),
+                default=AIFrameworks.PYDANTIC_AI,
+            ),
+            OptionSpec(
+                name="backend",
+                mode=OptionMode.SINGLE,
+                choices=[
+                    StorageBackends.MEMORY,
+                    StorageBackends.SQLITE,
+                    StorageBackends.POSTGRES,
+                ],
+                default=StorageBackends.MEMORY,
+                # Persistence backends auto-add the matching database engine.
+                auto_requires=lambda v: [f"{ComponentNames.DATABASE}[{v}]"]
+                if v != StorageBackends.MEMORY
+                else [],
+            ),
+            OptionSpec(
+                name="providers",
+                mode=OptionMode.MULTI,
+                choices=sorted(AIProviders.ALL),
+                default=list(AIProviders.DEFAULT),
+            ),
+            OptionSpec(
+                name="rag",
+                mode=OptionMode.FLAG,
+                choices=["rag"],
+                default=False,
+            ),
+            OptionSpec(
+                name="voice",
+                mode=OptionMode.FLAG,
+                choices=["voice"],
+                default=False,
+            ),
+        ],
         pyproject_deps=[
             "{AI_FRAMEWORK_DEPS}",  # Dynamic framework + provider deps
         ],
@@ -173,6 +256,16 @@ SERVICES: dict[str, ServiceSpec] = {
             ComponentNames.SCHEDULER,
         ],
         recommended_components=[ComponentNames.WORKER],
+        # Bracket-syntax options: insights[sources...]
+        # e.g. insights[github,pypi,plausible,reddit]
+        options=[
+            OptionSpec(
+                name="sources",
+                mode=OptionMode.MULTI,
+                choices=["github", "pypi", "plausible", "reddit"],
+                default=["github", "pypi"],
+            ),
+        ],
         pyproject_deps=[
             "httpx>=0.27.0",  # HTTP client for API collectors
         ],

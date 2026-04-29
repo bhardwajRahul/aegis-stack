@@ -63,18 +63,34 @@ class TestParseInsightsServiceConfig:
         assert config.sources == ["reddit"]
 
     def test_unknown_source_raises(self) -> None:
-        """Unknown source name raises ValueError."""
-        with pytest.raises(ValueError, match="Unknown source 'stripe'"):
+        """Unknown source name raises ValueError.
+
+        Wording shifted from "Unknown source" to the generic
+        "Unknown value" / "Valid sources" form when the parsing layer
+        was unified under aegis/core/option_spec.py (R3); the source
+        name still appears in the message for grep-ability.
+        """
+        with pytest.raises(ValueError, match="Unknown value 'stripe'.*Valid sources"):
             parse_insights_service_config("insights[github,stripe]")
 
     def test_duplicate_source_raises(self) -> None:
-        """Duplicate source raises ValueError."""
-        with pytest.raises(ValueError, match="Duplicate source 'github'"):
+        """Duplicate source raises ValueError.
+
+        Wording shifted to the generic "Duplicate value(s) for 'sources'"
+        form under R3.
+        """
+        with pytest.raises(
+            ValueError, match=r"Duplicate value\(s\) for 'sources'.*github"
+        ):
             parse_insights_service_config("insights[github,github]")
 
     def test_wrong_service_name_raises(self) -> None:
-        """Non-insights service string raises ValueError."""
-        with pytest.raises(ValueError, match="Expected 'insights' service"):
+        """Non-insights service string raises ValueError.
+
+        Generic parser wording is "Expected 'insights' or 'insights[options]'
+        format" rather than "Expected 'insights' service" — same intent.
+        """
+        with pytest.raises(ValueError, match="Expected 'insights'"):
             parse_insights_service_config("auth[basic]")
 
     def test_malformed_brackets_raises(self) -> None:
