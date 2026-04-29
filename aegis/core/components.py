@@ -40,6 +40,12 @@ class ComponentSpec(PluginSpec):
     *read* access via the property aliases on ``PluginSpec``; constructions
     in this file use the canonical ``required_components`` /
     ``recommended_components`` names. R2 of the plugin system refactor.
+
+    ``kw_only=True`` is required: ``PluginSpec`` has a required ``kind`` field
+    followed by defaulted fields, and overriding ``kind`` with a default in
+    this subclass would otherwise violate the "required field after default"
+    dataclass rule. Pre-R2 callers all used keyword construction (verified
+    by AST scan), so no real call sites are affected.
     """
 
     kind: PluginKind = PluginKind.COMPONENT
