@@ -10,6 +10,7 @@ from enum import Enum
 
 from ..constants import ComponentNames
 from ..i18n import t
+from .file_manifest import FileManifest
 
 
 class ServiceType(Enum):
@@ -44,6 +45,11 @@ class ServiceSpec:
         default_factory=list
     )  # Python packages for this service
     template_files: list[str] = field(default_factory=list)  # Template files to include
+    # R1 file manifest used by cleanup_components(). The legacy
+    # post_gen_tasks.get_component_file_mapping() dict is still maintained
+    # separately, so this manifest must be kept aligned with it by hand
+    # until R2 derives the mapping from manifests. See file_manifest.py.
+    files: FileManifest = field(default_factory=FileManifest)
 
 
 # Service registry - single source of truth for all available services
@@ -65,6 +71,34 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/services/auth/",
             "app/core/security.py",
         ],
+        files=FileManifest(
+            # Mirrors cleanup_components() lines 486-499 (auth NOT enabled)
+            # PLUS lines 685-692 (auth dashboard cleanup, same condition).
+            # alembic removal is cross-spec (line 707-720), stays inline.
+            primary=[
+                "app/components/backend/api/auth",
+                "app/models/user.py",
+                "app/services/auth",
+                "app/core/security.py",
+                "app/cli/auth.py",
+                "tests/api/test_auth_endpoints.py",
+                "tests/services/test_auth_service.py",
+                "tests/services/test_auth_integration.py",
+                "tests/models/test_user.py",
+                # Goal service is auth-coupled (Goal.user_id FK to user table);
+                # cleanup_components removes it on the auth-off path. Note: it
+                # is also removed on the insights-off path (kept consistent
+                # there too), so duplicate removal is fine — apply_cleanup_path
+                # is idempotent on missing files.
+                "tests/services/test_goal_service.py",
+                # Frontend dashboard files
+                "app/components/frontend/dashboard/cards/auth_card.py",
+                "app/components/frontend/dashboard/modals/auth_modal.py",
+            ],
+            # Auth org-level cleanup (cleanup_components lines 503-514) is
+            # inline because it gates on "auth enabled AND auth_org off",
+            # not just on a single AnswerKey. Move into extras under R2.
+        ),
     ),
     "ai": ServiceSpec(
         name="ai",
@@ -79,6 +113,40 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/cli/ai.py",
             "app/components/backend/api/ai/",
         ],
+        files=FileManifest(
+            # Mirrors cleanup_components() lines 517-542 (AI NOT enabled).
+            # NOTE: the analytics tab, llm catalog tab, and rag tab are NOT
+            # in this list — cleanup_components() does not remove them on
+            # AI-off (they are removed in other paths: AI memory backend,
+            # ollama=none, AI_RAG off respectively). R1 preserves that.
+            primary=[
+                "app/components/backend/api/ai",
+                "app/services/ai",
+                "app/cli/ai.py",
+                "app/cli/ai_rendering.py",
+                "app/cli/marko_terminal_renderer.py",
+                "app/cli/chat_completer.py",
+                "app/cli/slash_commands.py",
+                "app/cli/llm.py",
+                "app/cli/status_line.py",
+                "app/core/formatting.py",
+                "tests/api/test_ai_endpoints.py",
+                "tests/services/test_conversation_persistence.py",
+                "tests/cli/test_ai_rendering.py",
+                "tests/cli/test_conversation_memory.py",
+                "tests/cli/test_chat_completer.py",
+                "tests/cli/test_llm_cli.py",
+                "tests/cli/test_slash_commands.py",
+                "tests/cli/test_status_line.py",
+                "tests/services/ai",
+                "app/components/frontend/dashboard/cards/ai_card.py",
+                "app/components/frontend/dashboard/modals/ai_modal.py",
+                "app/models/conversation.py",
+            ],
+            # AI sub-features (ai_rag, ai_voice, AI memory backend, ollama
+            # mode) are gated by various AnswerKeys / option values; their
+            # cleanup remains inline in cleanup_components for R1.
+        ),
     ),
     "comms": ServiceSpec(
         name="comms",
@@ -95,6 +163,19 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/cli/comms.py",
             "app/components/backend/api/comms/",
         ],
+        files=FileManifest(
+            primary=[
+                "app/components/backend/api/comms",
+                "app/services/comms",
+                "app/cli/comms.py",
+                "tests/api/test_comms_endpoints.py",
+                "tests/services/comms",
+                "docs/services/comms",
+                # Frontend dashboard files
+                "app/components/frontend/dashboard/cards/comms_card.py",
+                "app/components/frontend/dashboard/modals/comms_modal.py",
+            ],
+        ),
     ),
     "insights": ServiceSpec(
         name="insights",
@@ -114,6 +195,34 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/cli/insights.py",
             "app/components/backend/api/insights/",
         ],
+        files=FileManifest(
+            # Mirrors cleanup_components() lines 654-683 (insights NOT enabled).
+            primary=[
+                "app/components/backend/api/insights",
+                "app/services/insights",
+                "app/components/backend/api/insights.py",
+                "app/cli/insights.py",
+                "tests/services/test_insights_service.py",
+                "tests/services/test_insights_collectors.py",
+                "tests/services/test_insight_service.py",
+                "tests/services/test_query_service.py",
+                "tests/services/test_collector_service.py",
+                "tests/services/test_collector_github_traffic.py",
+                "tests/services/test_collector_github_events.py",
+                "tests/services/test_collector_github_stars.py",
+                "tests/services/test_collector_pypi.py",
+                "tests/services/test_collector_plausible.py",
+                "tests/services/test_collector_reddit.py",
+                # Goal service tests — also removed on the auth-off path;
+                # double-removal is fine (apply_cleanup_path is idempotent).
+                "tests/services/test_goal_service.py",
+                "tests/api/test_insights_endpoints.py",
+                "tests/test_bulk_response.py",
+                "tests/test_cache_integration.py",
+                "app/components/frontend/dashboard/cards/insights_card.py",
+                "app/components/frontend/dashboard/modals/insights_modal.py",
+            ],
+        ),
     ),
     "payment": ServiceSpec(
         name="payment",
@@ -132,6 +241,25 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/cli/payment.py",
             "app/components/backend/api/payment/",
         ],
+        files=FileManifest(
+            primary=[
+                "app/components/backend/api/payment",
+                "app/services/payment",
+                "app/cli/payment.py",
+                "tests/services/test_payment_service.py",
+                "tests/services/test_payment_models.py",
+                "tests/services/test_payment_catalog.py",
+                "tests/services/test_payment_webhook_forwarder.py",
+                "tests/cli/test_payment_trigger.py",
+                "tests/api/test_payment_endpoints.py",
+                # Backend lifecycle hooks (auto-forward stripe-cli webhooks in dev)
+                "app/components/backend/startup/payment_webhook_forwarder.py",
+                "app/components/backend/shutdown/payment_webhook_forwarder.py",
+                # Frontend dashboard files
+                "app/components/frontend/dashboard/cards/payment_card.py",
+                "app/components/frontend/dashboard/modals/payment_modal.py",
+            ],
+        ),
     ),
 }
 
