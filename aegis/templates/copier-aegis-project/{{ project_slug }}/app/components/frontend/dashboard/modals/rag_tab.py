@@ -9,7 +9,6 @@ from collections.abc import Callable
 from typing import Any
 
 import flet as ft
-import httpx
 from app.components.frontend.controls import (
     BodyText,
     H3Text,
@@ -17,7 +16,6 @@ from app.components.frontend.controls import (
     Tag,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.core.config import settings
 
 from .modal_sections import EmptyStatePlaceholder, MetricCard
 
@@ -295,25 +293,14 @@ class RAGCollectionsTableSection(ft.Container):
         if not card:
             return
 
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"http://localhost:{settings.PORT}/api/v1/rag/collections/{collection_name}/files",
-                    timeout=10.0,
-                )
+        from app.components.frontend.state.session_state import get_session_state
 
-                if response.status_code == 200:
-                    data = response.json()
-                    card.set_files(data.get("files", []))
-                else:
-                    card.set_error(f"API returned {response.status_code}")
-
-        except httpx.TimeoutException:
-            card.set_error("Request timed out")
-        except httpx.ConnectError:
-            card.set_error("Could not connect to API")
-        except Exception as e:
-            card.set_error(str(e))
+        api = get_session_state(self.page).api_client
+        data = await api.get(f"/api/v1/rag/collections/{collection_name}/files")
+        if not isinstance(data, dict):
+            card.set_error("Could not load files.")
+            return
+        card.set_files(data.get("files", []))
 
 
 class RAGStatsSection(ft.Container):
@@ -567,15 +554,15 @@ class SearchPreviewSection(ft.Container):
         )
         self.padding = Theme.Spacing.MD
 
-    def _on_search_submit(self, e: ft.ControlEvent) -> None:
+    async def _on_search_submit(self, e: ft.ControlEvent) -> None:
         """Handle Enter key in search field."""
-        self._do_search()
+        await self._do_search()
 
-    def _on_search_click(self, e: ft.ControlEvent) -> None:
+    async def _on_search_click(self, e: ft.ControlEvent) -> None:
         """Handle search button click."""
-        self._do_search()
+        await self._do_search()
 
-    def _do_search(self) -> None:
+    async def _do_search(self) -> None:
         """Trigger the search."""
         query = self._search_input.value
         collection = self._collection_dropdown.value
@@ -588,7 +575,7 @@ class SearchPreviewSection(ft.Container):
             self._show_status("Please select a collection")
             return
 
-        self.page.run_task(self._execute_search, query.strip(), collection)
+        await self._execute_search(query.strip(), collection)
 
     def _show_status(self, message: str) -> None:
         """Show a status message."""
@@ -606,42 +593,23 @@ class SearchPreviewSection(ft.Container):
 
     async def _execute_search(self, query: str, collection: str) -> None:
         """Execute semantic search via API."""
+        from app.components.frontend.state.session_state import get_session_state
+
         self._show_loading()
-
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"http://localhost:{settings.PORT}/api/v1/rag/search",
-                    json={
-                        "query": query,
-                        "collection_name": collection,
-                        "top_k": 5,
-                    },
-                    timeout=30.0,
-                )
-
-                self._loading.visible = False
-
-                if response.status_code == 200:
-                    data = response.json()
-                    results = data.get("results", [])
-
-                    if not results:
-                        self._show_status("No results found")
-                    else:
-                        self._display_results(results)
-                else:
-                    self._show_status(f"Search failed: {response.status_code}")
-
-        except httpx.TimeoutException:
-            self._loading.visible = False
-            self._show_status("Search timed out")
-        except httpx.ConnectError:
-            self._loading.visible = False
-            self._show_status("Could not connect to API")
-        except Exception as e:
-            self._loading.visible = False
-            self._show_status(f"Error: {str(e)}")
+        api = get_session_state(self.page).api_client
+        data = await api.post(
+            "/api/v1/rag/search",
+            json={"query": query, "collection_name": collection, "top_k": 5},
+        )
+        self._loading.visible = False
+        if not isinstance(data, dict):
+            self._show_status("Search failed.")
+            return
+        results = data.get("results", [])
+        if not results:
+            self._show_status("No results found")
+        else:
+            self._display_results(results)
 
     def _display_results(self, results: list[dict[str, Any]]) -> None:
         """Display search results in 2-column grid."""
@@ -699,65 +667,34 @@ class RAGTab(ft.Container):
 
     async def _load_status(self) -> None:
         """Fetch RAG status from API and update the UI."""
-        try:
-            async with httpx.AsyncClient() as client:
-                # Fetch health status
-                health_response = await client.get(
-                    f"http://localhost:{settings.PORT}/api/v1/rag/health",
-                    timeout=10.0,
-                )
+        from app.components.frontend.state.session_state import get_session_state
 
-                if health_response.status_code != 200:
-                    self._render_error(
-                        f"API returned status {health_response.status_code}"
+        api = get_session_state(self.page).api_client
+
+        health_data = await api.get("/api/v1/rag/health")
+        if not isinstance(health_data, dict):
+            self._render_error("Could not load RAG health.")
+            return
+
+        collection_names = await api.get("/api/v1/rag/collections")
+        collections: list[dict[str, Any]] = []
+        if isinstance(collection_names, list):
+            for name in collection_names:
+                detail = await api.get(f"/api/v1/rag/collections/{name}")
+                if isinstance(detail, dict):
+                    collections.append(
+                        {
+                            "name": detail.get("name", name),
+                            "doc_count": detail.get("doc_count", 0),
+                            "chunk_count": detail.get("count", 0),
+                        }
                     )
-                    return
+                else:
+                    collections.append(
+                        {"name": name, "doc_count": "?", "chunk_count": "?"}
+                    )
 
-                health_data = health_response.json()
-
-                # Fetch collection names
-                collections_response = await client.get(
-                    f"http://localhost:{settings.PORT}/api/v1/rag/collections",
-                    timeout=10.0,
-                )
-
-                collections: list[dict[str, Any]] = []
-                if collections_response.status_code == 200:
-                    collection_names = collections_response.json()
-
-                    # Fetch details for each collection
-                    for name in collection_names:
-                        try:
-                            detail_response = await client.get(
-                                f"http://localhost:{settings.PORT}/api/v1/rag/collections/{name}",
-                                timeout=5.0,
-                            )
-                            if detail_response.status_code == 200:
-                                detail = detail_response.json()
-                                collections.append(
-                                    {
-                                        "name": detail.get("name", name),
-                                        "doc_count": detail.get("doc_count", 0),
-                                        "chunk_count": detail.get("count", 0),
-                                    }
-                                )
-                            else:
-                                collections.append(
-                                    {"name": name, "doc_count": "?", "chunk_count": "?"}
-                                )
-                        except Exception:
-                            collections.append(
-                                {"name": name, "doc_count": "?", "chunk_count": "?"}
-                            )
-
-                self._render_status(health_data, collections)
-
-        except httpx.TimeoutException:
-            self._render_error("Request timed out")
-        except httpx.ConnectError:
-            self._render_error("Could not connect to backend API")
-        except Exception as e:
-            self._render_error(str(e))
+        self._render_status(health_data, collections)
 
     def _render_status(
         self, data: dict[str, Any], collections: list[dict[str, Any]]

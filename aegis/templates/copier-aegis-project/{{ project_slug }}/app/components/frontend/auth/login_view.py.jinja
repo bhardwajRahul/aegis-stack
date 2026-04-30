@@ -1,0 +1,272 @@
+{% if include_auth -%}
+"""
+Login view for the Overseer.
+
+Composes the form inline in ``__init__`` — no ``_build_*`` methods, the
+layout is read top-to-bottom. Reuses the shared building blocks:
+``FormTextField`` (pulse variant), ``PulseButton``, ``BrandingPanel``,
+``LabeledDivider``{% if include_oauth %}, ``OAuthButton``{% endif %}.
+
+Auth flow:
+- Submit POSTs ``/api/v1/auth/token`` via ``APIClient.post_form``.
+- On 200, the JWT is stored via ``save_token`` and we ``page.go(/)``.
+  The router's auth guard then permits the dashboard.
+- On 401 / network failure, an ``ErrorSnackBar`` surfaces the reason and
+  the form re-enables.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import flet as ft
+
+from app.components.frontend.auth.storage import save_token
+from app.components.frontend.controls.auth.branding_panel import BrandingPanel
+{% if include_oauth -%}
+from app.components.frontend.controls.auth.oauth_button import OAuthButton
+{%- endif %}
+from app.components.frontend.controls.buttons import PulseButton
+from app.components.frontend.controls.form_fields import FormTextField
+from app.components.frontend.controls.labeled_divider import LabeledDivider
+from app.components.frontend.controls.snack_bar import ErrorSnackBar
+from app.components.frontend.controls.text import (
+    BodyText,
+    DisplayText,
+    SecondaryText,
+)
+from app.components.frontend.controls.views.base import BaseView
+from app.components.frontend.core.routes import DASHBOARD_ROUTE
+from app.components.frontend.state.session_state import get_session_state
+from app.components.frontend.styles import PulseColors
+from app.core.log import logger
+
+_PROJECT_NAME = "{{ project_name }}"
+_PROJECT_TAGLINE = (
+    {% if project_description -%}
+    "{{ project_description | replace('"', '\\"') }}"
+    {%- else -%}
+    "Know how your stack is really doing."
+    {%- endif %}
+)
+_FORM_MAX_WIDTH = 360
+
+
+class LoginView(BaseView):
+    """Full-bleed sign-in surface. No shell."""
+
+    def __init__(self, *, page: ft.Page, route: str) -> None:
+        super().__init__(
+            page=page,
+            route=route,
+            padding=0,
+            bgcolor=PulseColors.BG,
+            spacing=0,
+        )
+
+        # ---- form fields & buttons ----
+        self._email = FormTextField(
+            label="Email",
+            hint="you@domain.com",
+            keyboard_type=ft.KeyboardType.EMAIL,
+            autofocus=True,
+            variant="pulse",
+            width=_FORM_MAX_WIDTH,
+        )
+        self._password = FormTextField(
+            label="Password",
+            hint="••••••••",
+            password=True,
+            can_reveal_password=True,
+            variant="pulse",
+            width=_FORM_MAX_WIDTH,
+            on_submit=self._handle_submit,
+        )
+        self._error = ft.Text(
+            value="",
+            color="#E94E77",
+            size=12,
+            visible=False,
+        )
+        self._submit = PulseButton(
+            text="Sign in",
+            on_click_callable=self._handle_submit,
+        )
+        # PulseButton's BaseElevatedButton parent drops **kwargs, so set
+        # width directly. Match the form fields' width (~360).
+        self._submit.width = _FORM_MAX_WIDTH
+
+        # ---- left column: brand → form → footer ----
+        brand = ft.Row(
+            controls=[
+                ft.Container(
+                    width=8, height=8,
+                    bgcolor=PulseColors.TEAL, border_radius=4,
+                ),
+                BodyText(
+                    f"Overseer · {_PROJECT_NAME}",
+                    color=PulseColors.TEXT,
+                    weight=ft.FontWeight.W_600,
+                ),
+            ],
+            spacing=10,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+
+        form_block = ft.Column(
+            controls=[
+                DisplayText("Welcome back", color=PulseColors.TEXT),
+                SecondaryText(
+                    "Sign in to your dashboard.", color=PulseColors.MUTED
+                ),
+                ft.Container(height=16),
+                self._email,
+                self._password,
+                self._error,
+                self._submit,
+                {% if include_oauth -%}
+                ft.Container(height=16),
+                LabeledDivider("OR", width=_FORM_MAX_WIDTH),
+                ft.Container(height=8),
+                OAuthButton(
+                    provider="github",
+                    label="Continue with GitHub",
+                    on_click=lambda _: self._launch_oauth("github"),
+                    width=_FORM_MAX_WIDTH,
+                ),
+                OAuthButton(
+                    provider="google",
+                    label="Continue with Google",
+                    on_click=lambda _: self._launch_oauth("google"),
+                    width=_FORM_MAX_WIDTH,
+                ),
+                {%- endif %}
+            ],
+            spacing=14,
+            tight=True,
+            horizontal_alignment=ft.CrossAxisAlignment.START,
+        )
+
+        footer = SecondaryText(
+            "Signups are closed right now.",
+            color=PulseColors.MUTED,
+            size=12,
+            opacity=0.7,
+        )
+
+        left = ft.Container(
+            content=ft.Column(
+                controls=[
+                    brand,
+                    ft.Container(expand=1),
+                    form_block,
+                    ft.Container(expand=2),
+                    footer,
+                ],
+                expand=True,
+                horizontal_alignment=ft.CrossAxisAlignment.START,
+                spacing=0,
+            ),
+            col={"xs": 12, "md": 5, "lg": 5, "xl": 4},
+            bgcolor=PulseColors.BG,
+            padding=ft.padding.symmetric(horizontal=64, vertical=48),
+            expand=True,
+        )
+
+        # ---- right column: branding panel ----
+        right = ft.Container(
+            content=BrandingPanel(
+                project_name=_PROJECT_NAME, tagline=_PROJECT_TAGLINE
+            ),
+            col={"xs": 0, "md": 7, "lg": 7, "xl": 8},
+            bgcolor=PulseColors.BG,
+            expand=True,
+        )
+
+        self.controls = [
+            ft.ResponsiveRow(
+                controls=[left, right],
+                spacing=0,
+                run_spacing=0,
+                expand=True,
+            ),
+        ]
+
+    # ---- lifecycle ----
+
+    async def on_enter(self, params: dict[str, Any]) -> None:
+        # Surface any session-expiry hint passed via query param.
+        if params.get("reason") == "expired":
+            ErrorSnackBar("Your session expired. Sign in again.").launch(self.page)
+
+    async def on_refresh(self) -> None:
+        # Login is stateless — nothing to reload.
+        return None
+
+    # ---- handlers ----
+
+    {% if include_oauth -%}
+    def _launch_oauth(self, provider: str) -> None:
+        from app.core.config import settings
+
+        url = (
+            f"http://localhost:{settings.PORT}"
+            f"/api/v1/auth/oauth/{provider}/start"
+        )
+        logger.info("auth.login.oauth_launch", provider=provider, url=url)
+        try:
+            self.page.launch_url(url)
+        except Exception as exc:
+            logger.warning("auth.login.oauth_launch_failed", error=str(exc))
+            ErrorSnackBar(f"Could not open {provider} login.").launch(self.page)
+    {%- endif %}
+
+    async def _handle_submit(self, *_: Any) -> None:
+        # Called from both ``PulseButton`` (no args) and ``ft.TextField.on_submit``
+        # (single ControlEvent arg). ``*_`` accepts both signatures.
+        email = self._email.value.strip()
+        password = self._password.value
+        if not email or not password:
+            self._show_error("Email and password are required.")
+            return
+
+        self._submit.disabled = True
+        self._error.visible = False
+        self._submit.update()
+        self._error.update()
+
+        api = get_session_state(self.page).api_client
+        try:
+            payload = await api.post_form(
+                "/api/v1/auth/token",
+                {"username": email, "password": password},
+            )
+        except Exception as exc:
+            logger.warning("auth.login.network_error", error=str(exc))
+            ErrorSnackBar("Could not reach the server.").launch(self.page)
+            self._submit.disabled = False
+            self._submit.update()
+            return
+
+        if not payload or not isinstance(payload, dict):
+            self._show_error("Invalid email or password.")
+            self._submit.disabled = False
+            self._submit.update()
+            return
+
+        token = payload.get("access_token")
+        if not isinstance(token, str) or not token:
+            self._show_error("Server response was missing a token.")
+            self._submit.disabled = False
+            self._submit.update()
+            return
+
+        await save_token(self.page, token)
+        logger.info("auth.login.success", session_id=self.page.session_id)
+        self.page.go(DASHBOARD_ROUTE)
+
+    def _show_error(self, message: str) -> None:
+        self._error.value = message
+        self._error.visible = True
+        self._error.update()
+{%- endif %}

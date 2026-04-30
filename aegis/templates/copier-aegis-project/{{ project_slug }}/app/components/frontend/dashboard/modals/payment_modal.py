@@ -12,7 +12,6 @@ from datetime import datetime
 from typing import Any
 
 import flet as ft
-import httpx
 from app.components.frontend import styles
 from app.components.frontend.controls import (
     BodyText,
@@ -190,29 +189,19 @@ class OverviewTab(ft.Container):
 
     async def _load_revenue(self) -> None:
         """Fetch the timeseries and swap in the teal line chart."""
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"http://localhost:{settings.PORT}"
-                    f"/api/v1/payment/revenue-timeseries"
-                    f"?days={self._REVENUE_WINDOW_DAYS}",
-                    timeout=10.0,
-                )
-        except Exception as e:
-            self._chart_container.content = self._empty_state(
-                f"Could not load chart: {e}"
-            )
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        data = await api.get(
+            "/api/v1/payment/revenue-timeseries",
+            params={"days": self._REVENUE_WINDOW_DAYS},
+        )
+        if not isinstance(data, dict):
+            self._chart_container.content = self._empty_state("Could not load chart.")
             self._refresh_chart()
             return
 
-        if response.status_code != 200:
-            self._chart_container.content = self._empty_state(
-                f"Revenue request failed (HTTP {response.status_code})"
-            )
-            self._refresh_chart()
-            return
-
-        points = response.json().get("points", [])
+        points = data.get("points", [])
         if not points or all(p["amount_cents"] == 0 for p in points):
             self._chart_container.content = self._empty_state(
                 f"No revenue yet in the last {self._REVENUE_WINDOW_DAYS} days"
@@ -453,7 +442,7 @@ class TransactionsTab(ft.Container):
 
         captured = txn
 
-        def handle_refund_click() -> None:
+        async def handle_refund_click() -> None:
             self._open_refund_dialog(captured)
 
         return BaseIconButton(
@@ -490,11 +479,11 @@ class TransactionsTab(ft.Container):
         )
         dialog_holder: dict[str, ft.AlertDialog] = {}
 
-        def close_dialog() -> None:
+        async def close_dialog() -> None:
             page.close(dialog_holder["dialog"])
 
         async def do_refund() -> None:
-            close_dialog()
+            await close_dialog()
 
             amount_cents: int | None = None
             raw_amount = amount_field.value.strip()
@@ -519,23 +508,22 @@ class TransactionsTab(ft.Container):
             if amount_cents is not None:
                 payload["amount"] = amount_cents
 
-            try:
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        f"http://localhost:{settings.PORT}/api/v1/payment/refund/{txn_id}",
-                        json=payload,
-                        timeout=15.0,
-                    )
-            except Exception as e:
-                page.open(
-                    ft.SnackBar(
-                        content=ft.Text(f"Refund error: {e}"),
-                        bgcolor=Theme.Colors.ERROR,
-                    )
-                )
-                return
+            from app.components.frontend.controls.snack_bar import (
+                ErrorSnackBar,
+                SuccessSnackBar,
+            )
+            from app.components.frontend.state.session_state import (
+                get_session_state,
+            )
 
-            if response.status_code == 200:
+            api = get_session_state(page).api_client
+            status, body = await api.request_with_status(
+                "POST",
+                f"/api/v1/payment/refund/{txn_id}",
+                json=payload,
+            )
+
+            if status == 200:
                 # Invalidate so the next dashboard refresh shows updated status.
                 try:
                     from app.services.payment.health import (
@@ -546,36 +534,19 @@ class TransactionsTab(ft.Container):
                 except Exception:
                     pass
 
-                page.open(
-                    ft.SnackBar(
-                        content=ft.Text(
-                            f"Refund issued for transaction #{txn_id}. "
-                            "Dashboard will update on next refresh."
-                        ),
-                        bgcolor=Theme.Colors.SUCCESS,
-                    )
-                )
-            elif response.status_code == 404:
-                page.open(
-                    ft.SnackBar(
-                        content=ft.Text("Transaction not found"),
-                        bgcolor=Theme.Colors.ERROR,
-                    )
-                )
+                SuccessSnackBar(
+                    f"Refund issued for transaction #{txn_id}. "
+                    "Dashboard will update on next refresh."
+                ).launch(page)
+            elif status == 404:
+                ErrorSnackBar("Transaction not found.").launch(page)
             else:
-                try:
-                    detail = response.json().get("detail", response.text)
-                except Exception:
-                    detail = response.text
-                page.open(
-                    ft.SnackBar(
-                        content=ft.Text(f"Refund failed: {detail}"),
-                        bgcolor=Theme.Colors.ERROR,
-                    )
+                detail = (
+                    body.get("detail")
+                    if isinstance(body, dict) and body.get("detail")
+                    else f"status {status}"
                 )
-
-        def on_refund_clicked() -> None:
-            page.run_task(do_refund)
+                ErrorSnackBar(f"Refund failed: {detail}").launch(page)
 
         dialog = ft.AlertDialog(
             modal=True,
@@ -598,7 +569,7 @@ class TransactionsTab(ft.Container):
                     variant="muted",
                 ),
                 PulseButton(
-                    on_click_callable=on_refund_clicked,
+                    on_click_callable=do_refund,
                     text="Issue Refund",
                     variant="amber",
                 ),
@@ -822,9 +793,11 @@ class ActionsTab(ft.Container):
         # Result display (hidden until we have a checkout_url).
         self._result_container = ft.Container(visible=False)
 
-        # Submit button
+        # Submit button — pass the async handler directly. The
+        # ``_on_create_clicked`` wrapper that called ``page.run_task`` is
+        # gone; ``BaseElevatedButton`` awaits async callables natively.
         submit_button = PulseButton(
-            on_click_callable=self._on_create_clicked,
+            on_click_callable=self._create_checkout,
             text="Create checkout session",
             variant="teal",
         )
@@ -888,23 +861,15 @@ class ActionsTab(ft.Container):
 
     async def _load_catalog(self) -> None:
         """Fetch active prices and rebuild the dropdown options."""
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"http://localhost:{settings.PORT}/api/v1/payment/catalog",
-                    timeout=10.0,
-                )
-        except Exception as e:
-            self._price_id.set_error(f"Failed to load catalog: {e}")
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        data = await api.get("/api/v1/payment/catalog")
+        if not isinstance(data, dict):
+            self._price_id.set_error("Failed to load catalog.")
             return
 
-        if response.status_code != 200:
-            self._price_id.set_error(
-                f"Catalog request failed (HTTP {response.status_code})"
-            )
-            return
-
-        entries = response.json().get("entries", [])
+        entries = data.get("entries", [])
         self._catalog_entries = entries
 
         if not entries:
@@ -955,9 +920,6 @@ class ActionsTab(ft.Container):
         if self.page:
             quantity_field.update()
 
-    def _on_create_clicked(self) -> None:
-        self.page.run_task(self._create_checkout)
-
     async def _create_checkout(self) -> None:
         page = self.page
         if not page:
@@ -990,36 +952,23 @@ class ActionsTab(ft.Container):
         if cancel_url:
             payload["cancel_url"] = cancel_url
 
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"http://localhost:{settings.PORT}/api/v1/payment/checkout",
-                    json=payload,
-                    timeout=15.0,
-                )
-        except Exception as e:
-            page.open(
-                ft.SnackBar(
-                    content=ft.Text(f"Checkout error: {e}"),
-                    bgcolor=Theme.Colors.ERROR,
-                )
-            )
-            return
+        from app.components.frontend.controls.snack_bar import ErrorSnackBar
+        from app.components.frontend.state.session_state import get_session_state
 
-        if response.status_code == 200:
-            data = response.json()
-            self._render_success(data)
+        api = get_session_state(page).api_client
+        status, body = await api.request_with_status(
+            "POST", "/api/v1/payment/checkout", json=payload
+        )
+
+        if status == 200 and isinstance(body, dict):
+            self._render_success(body)
         else:
-            try:
-                detail = response.json().get("detail", response.text)
-            except Exception:
-                detail = response.text
-            page.open(
-                ft.SnackBar(
-                    content=ft.Text(f"Checkout failed: {detail}"),
-                    bgcolor=Theme.Colors.ERROR,
-                )
+            detail = (
+                body.get("detail")
+                if isinstance(body, dict) and body.get("detail")
+                else f"status {status}"
             )
+            ErrorSnackBar(f"Checkout failed: {detail}").launch(page)
 
     def _render_success(self, data: dict[str, Any]) -> None:
         """Replace the result container with the checkout_url affordances."""
@@ -1027,14 +976,18 @@ class ActionsTab(ft.Container):
         session_id = data.get("session_id", "")
         checkout_url = data.get("checkout_url", "")
 
-        def open_checkout() -> None:
+        async def open_checkout() -> None:
             if checkout_url and page:
                 page.launch_url(checkout_url)
 
-        def copy_url() -> None:
+        async def copy_url() -> None:
             if page and checkout_url:
                 page.set_clipboard(checkout_url)
-                page.open(ft.SnackBar(content=ft.Text("Checkout URL copied")))
+                from app.components.frontend.controls.snack_bar import (
+                    SuccessSnackBar,
+                )
+
+                SuccessSnackBar("Checkout URL copied").launch(page)
 
         self._result_container.content = ft.Container(
             padding=ft.padding.all(Theme.Spacing.MD),

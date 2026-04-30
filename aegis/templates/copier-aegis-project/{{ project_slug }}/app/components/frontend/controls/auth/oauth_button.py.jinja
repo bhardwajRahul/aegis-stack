@@ -1,0 +1,88 @@
+{% if include_oauth -%}
+"""
+OAuth provider button — outlined Pulse-styled button with the provider's
+brand mark and a "Continue with X" label.
+
+Used by the login form when ``include_oauth=true``. Brand SVGs live in
+``assets/icons/`` (one source of truth, also used elsewhere if other
+views need provider icons later).
+"""
+
+from __future__ import annotations
+
+import base64
+from pathlib import Path
+from typing import Any, Callable, Literal
+
+import flet as ft
+
+from app.components.frontend.controls.text import BodyText
+from app.components.frontend.styles import PULSE_BUTTON_MUTED_STYLE, PulseColors
+from app.core.log import logger
+
+Provider = Literal["github", "google"]
+_ICON_FILES: dict[str, str] = {
+    "github": "github.svg",
+    "google": "google.svg",
+}
+
+
+def _load_icon_base64(provider: str) -> str:
+    """Read ``assets/icons/<provider>.svg`` and return base64."""
+    filename = _ICON_FILES.get(provider)
+    if filename is None:
+        return ""
+    try:
+        # oauth_button.py -> auth -> controls -> frontend -> components -> app -> project
+        path = (
+            Path(__file__).parent.parent.parent.parent.parent.parent
+            / "assets"
+            / "icons"
+            / filename
+        )
+        with open(path, "rb") as fh:
+            return base64.b64encode(fh.read()).decode()
+    except Exception as exc:
+        logger.warning(
+            "auth.oauth_button.icon_load_failed",
+            provider=provider,
+            error=str(exc),
+        )
+        return ""
+
+
+class OAuthButton(ft.OutlinedButton):
+    """Pulse-styled outlined button for an OAuth provider."""
+
+    def __init__(
+        self,
+        *,
+        provider: Provider,
+        label: str,
+        on_click: Callable[[Any], Any],
+        width: int | None = None,
+        height: int = 40,
+    ) -> None:
+        icon_b64 = _load_icon_base64(provider)
+        icon: ft.Control
+        if icon_b64:
+            icon = ft.Image(src_base64=icon_b64, width=16, height=16)
+        else:
+            icon = ft.Icon(ft.Icons.LOGIN, color=PulseColors.TEXT, size=16)
+
+        super().__init__(
+            content=ft.Row(
+                controls=[
+                    icon,
+                    BodyText(label, color=PulseColors.TEXT, size=13),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=10,
+                tight=True,
+            ),
+            on_click=on_click,
+            style=PULSE_BUTTON_MUTED_STYLE,
+            width=width,
+            height=height,
+        )
+{%- endif %}

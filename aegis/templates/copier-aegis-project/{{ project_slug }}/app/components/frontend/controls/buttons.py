@@ -5,12 +5,15 @@ Provides reusable, theme-aware button components with consistent styling,
 hover effects, and semantic variants for common actions.
 """
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict
+from typing import Any
 
 import flet as ft
 from app.components.frontend import styles
 from app.components.frontend.controls.text import BodyText, H3Text
+
+AsyncClickCallable = Callable[[], Awaitable[None]]
 
 
 class BaseElevatedButton(ft.ElevatedButton):
@@ -22,11 +25,16 @@ class BaseElevatedButton(ft.ElevatedButton):
     - Fast animations (100ms)
     - Consistent height and padding
     - Theme-aware colors
+
+    ``on_click_callable`` MUST be an ``async`` no-arg callable. Aegis is
+    async-first; sync handlers are only allowed on the ``on_route`` page
+    handler. A sync callable here will raise ``TypeError`` at click time
+    because the dispatcher awaits the result.
     """
 
     def __init__(
         self,
-        on_click_callable: Callable,
+        on_click_callable: AsyncClickCallable,
         style: ft.ButtonStyle,
         text: str,
         text_style: styles.ButtonTextStyle,
@@ -40,7 +48,11 @@ class BaseElevatedButton(ft.ElevatedButton):
         self.text_style = text_style
         self.args = args
         self.content = ft.Text(self.text, **asdict(self.text_style))
-        self.on_click = lambda _: self.on_click_callable()
+
+        async def _dispatch_click(_: ft.ControlEvent) -> None:
+            await self.on_click_callable()
+
+        self.on_click = _dispatch_click
         self.on_hover = self.on_hover_event  # type: ignore[assignment]
         self.kwargs = kwargs
         self.height = 36  # Consistent button height
@@ -187,10 +199,10 @@ class BaseIconButton(ft.IconButton):
 
     def __init__(
         self,
-        on_click_callable: Callable,
+        on_click_callable: Callable[..., Awaitable[None]],
         icon: str,
         icon_color: str | None = None,
-        get_param_callable: Callable | None = None,
+        get_param_callable: Callable[[], Any] | None = None,
         tooltip: str | None = None,
         disabled: bool = False,
         *args,
@@ -210,17 +222,18 @@ class BaseIconButton(ft.IconButton):
         self.icon_color = self.enabled_color if not disabled else self.disabled_color
         self.default_tooltip = tooltip
         self.tooltip = tooltip if not disabled else None
-        self.on_click = lambda e: self.on_click_event(e)
+        self.on_click = self.on_click_event
         self.disabled = disabled
 
-    def on_click_event(self, e: ft.ControlEvent) -> None:
-        """Handle click events with optional parameter passing."""
-        if not self.disabled:
-            param = self.get_param_callable() if self.get_param_callable else None
-            if param:
-                self.on_click_callable(param)
-            else:
-                self.on_click_callable()
+    async def on_click_event(self, e: ft.ControlEvent) -> None:
+        """Dispatch the async click handler. ``on_click_callable`` MUST be async."""
+        if self.disabled:
+            return
+        param = self.get_param_callable() if self.get_param_callable else None
+        if param:
+            await self.on_click_callable(param)
+        else:
+            await self.on_click_callable()
 
     def update_state(self, disabled: bool) -> None:
         """Update button disabled state and visual appearance."""

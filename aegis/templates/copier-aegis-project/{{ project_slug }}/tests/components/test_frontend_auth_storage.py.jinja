@@ -1,0 +1,133 @@
+{% if include_auth -%}
+"""Tests for the encrypted JWT storage helpers (frontend, async-only)."""
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from app.components.frontend.auth.storage import (
+    PAGE_ATTR_TOKEN,
+    STORAGE_KEY,
+    clear_token,
+    is_authenticated,
+    load_token,
+    save_token,
+)
+
+
+class _FakePage:
+    """Minimal stand-in for ft.Page that respects real getattr semantics."""
+
+    def __init__(self) -> None:
+        self.session_id = "test-session"
+        self.client_storage = MagicMock()
+        self.client_storage.get_async = AsyncMock(return_value=None)
+        self.client_storage.set_async = AsyncMock(return_value=None)
+        self.client_storage.remove_async = AsyncMock(return_value=None)
+
+
+def _make_page() -> _FakePage:
+    return _FakePage()
+
+
+@pytest.mark.asyncio
+async def test_save_token_encrypts_and_writes_storage_and_page_cache() -> None:
+    page = _make_page()
+    with (
+        patch(
+            "app.components.frontend.auth.storage.encrypt",
+            return_value="ENC(tok)",
+        ),
+        patch(
+            "app.components.frontend.auth.storage.settings.SECRET_KEY",
+            "secret",
+        ),
+    ):
+        await save_token(page, "raw-jwt")
+
+    page.client_storage.set_async.assert_awaited_once_with(STORAGE_KEY, "ENC(tok)")
+    assert getattr(page, PAGE_ATTR_TOKEN) == "raw-jwt"
+
+
+@pytest.mark.asyncio
+async def test_load_token_returns_cached_value_without_touching_storage() -> None:
+    page = _make_page()
+    setattr(page, PAGE_ATTR_TOKEN, "cached-jwt")
+
+    result = await load_token(page)
+
+    assert result == "cached-jwt"
+    page.client_storage.get_async.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_load_token_decrypts_from_storage_and_primes_cache() -> None:
+    page = _make_page()
+    page.client_storage.get_async = AsyncMock(return_value="ENC(tok)")
+    with (
+        patch(
+            "app.components.frontend.auth.storage.decrypt",
+            return_value="raw-jwt",
+        ),
+        patch(
+            "app.components.frontend.auth.storage.settings.SECRET_KEY",
+            "secret",
+        ),
+    ):
+        result = await load_token(page)
+
+    assert result == "raw-jwt"
+    assert getattr(page, PAGE_ATTR_TOKEN) == "raw-jwt"
+
+
+@pytest.mark.asyncio
+async def test_load_token_returns_none_when_storage_empty() -> None:
+    page = _make_page()
+    result = await load_token(page)
+    assert result is None
+    assert not hasattr(page, PAGE_ATTR_TOKEN)
+
+
+@pytest.mark.asyncio
+async def test_load_token_clears_on_decrypt_failure() -> None:
+    page = _make_page()
+    page.client_storage.get_async = AsyncMock(return_value="ENC(bad)")
+    with (
+        patch(
+            "app.components.frontend.auth.storage.decrypt",
+            side_effect=ValueError("bad cipher"),
+        ),
+        patch(
+            "app.components.frontend.auth.storage.settings.SECRET_KEY",
+            "secret",
+        ),
+    ):
+        result = await load_token(page)
+
+    assert result is None
+    page.client_storage.remove_async.assert_awaited_once_with(STORAGE_KEY)
+
+
+@pytest.mark.asyncio
+async def test_clear_token_drops_cache_and_storage() -> None:
+    page = _make_page()
+    setattr(page, PAGE_ATTR_TOKEN, "raw-jwt")
+
+    await clear_token(page)
+
+    assert not hasattr(page, PAGE_ATTR_TOKEN)
+    page.client_storage.remove_async.assert_awaited_once_with(STORAGE_KEY)
+
+
+@pytest.mark.asyncio
+async def test_is_authenticated_true_when_token_present() -> None:
+    page = _make_page()
+    setattr(page, PAGE_ATTR_TOKEN, "raw-jwt")
+    assert await is_authenticated(page) is True
+
+
+@pytest.mark.asyncio
+async def test_is_authenticated_false_when_no_token() -> None:
+    page = _make_page()
+    assert await is_authenticated(page) is False
+{%- endif %}
