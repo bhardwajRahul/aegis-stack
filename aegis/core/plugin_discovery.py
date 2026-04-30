@@ -98,10 +98,19 @@ def discover_plugins() -> list[PluginSpec]:
 
     Caching: result is memoised at module level. Tests should call
     :func:`clear_cache` after patching ``entry_points``.
+
+    In-tree-vs-external collision: an external plugin claiming a name
+    already used by an in-tree service or component is rejected with a
+    stderr warning and excluded from the result. The user keeps using
+    the first-party feature; the third-party package is invisible to
+    Aegis until renamed. Soft-skip rather than hard-error keeps a
+    misnamed install from breaking the core CLI.
     """
     global _DISCOVERED_PLUGINS
     if _DISCOVERED_PLUGINS is not None:
         return list(_DISCOVERED_PLUGINS)
+
+    in_tree_names = _in_tree_spec_names()
 
     discovered: list[PluginSpec] = []
     # plugin.name -> entry-point name that registered it. Used to make the
@@ -114,6 +123,14 @@ def discover_plugins() -> list[PluginSpec]:
     for ep in _entry_points_for(PLUGIN_ENTRY_POINT_GROUP):
         spec = _load_plugin_spec(ep)
         if spec is None:
+            continue
+
+        if spec.name in in_tree_names:
+            _warn(
+                f"plugin {spec.name!r} declared by entry point {ep.name!r} "
+                f"collides with an in-tree {in_tree_names[spec.name]}; "
+                f"ignoring (rename the plugin to register it)."
+            )
             continue
 
         # Name collisions across plugins are a real bug — two installed
@@ -131,6 +148,24 @@ def discover_plugins() -> list[PluginSpec]:
 
     _DISCOVERED_PLUGINS = discovered
     return list(discovered)
+
+
+def _in_tree_spec_names() -> dict[str, str]:
+    """Return ``{name: 'service' | 'component'}`` for every in-tree spec.
+
+    Lazy-imported to keep ``plugin_discovery`` from depending on the
+    services/components registries at module load time (would create a
+    cycle: services.py imports migration_generator which imports services).
+    """
+    from .components import COMPONENTS
+    from .services import SERVICES
+
+    out: dict[str, str] = {}
+    for name in SERVICES:
+        out[name] = "service"
+    for name in COMPONENTS:
+        out[name] = "component"
+    return out
 
 
 def _load_plugin_spec(ep: EntryPoint) -> PluginSpec | None:
