@@ -1,20 +1,18 @@
 {% if include_auth -%}
 """
-Login view for the Overseer.
+Register view for the Overseer.
 
-Composes the form inline in ``__init__`` — no ``_build_*`` methods, the
-layout is read top-to-bottom. The two-column shell (brand mark, branding
-panel, footer) is delegated to ``AuthShell`` so this file can stay
-focused on the sign-in fields and submit logic.
+Mirrors ``LoginView``'s shape — same ``AuthShell`` chrome — and the form
+column composes the four registration fields (full name, email, password,
+confirm password) plus a submit. POSTs ``/api/v1/auth/register`` via
+``APIClient.request_with_status`` so the caller can branch on:
 
-Auth flow:
-- Submit POSTs ``/api/v1/auth/token`` via ``APIClient.post_form``.
-- On 200, the backend issues an HttpOnly ``aegis_session`` cookie that
-  lands in the per-session ``APIClient``'s cookie jar automatically.
-  We just navigate to ``/``; the router's auth guard then permits the
-  dashboard via a ``/auth/me`` round-trip.
-- On 401 / network failure, an ``ErrorSnackBar`` surfaces the reason and
-  the form re-enables.
+- ``200``  — registered. The backend has already set the HttpOnly
+              session cookie on the response; we just navigate to ``/``.
+- ``400``  — email already registered (validation failure).
+- ``403``  — registration disabled by config (``REGISTRATION_ENABLED``).
+- ``422``  — schema validation failure (password too short, bad email).
+- otherwise — generic error surfaced via ``ErrorSnackBar``.
 """
 
 from __future__ import annotations
@@ -29,8 +27,13 @@ from app.components.frontend.controls.auth.oauth_button import OAuthButton
 {%- endif %}
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.form_fields import FormTextField
+{% if include_oauth -%}
 from app.components.frontend.controls.labeled_divider import LabeledDivider
-from app.components.frontend.controls.snack_bar import ErrorSnackBar
+{%- endif %}
+from app.components.frontend.controls.snack_bar import (
+    ErrorSnackBar,
+    SuccessSnackBar,
+)
 from app.components.frontend.controls.text import (
     DisplayText,
     SecondaryText,
@@ -38,7 +41,7 @@ from app.components.frontend.controls.text import (
 from app.components.frontend.controls.views.base import BaseView
 from app.components.frontend.core.routes import (
     DASHBOARD_ROUTE,
-    REGISTER_ROUTE,
+    LOGIN_ROUTE,
 )
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.styles import PulseColors
@@ -55,8 +58,8 @@ _PROJECT_TAGLINE = (
 _FORM_MAX_WIDTH = 360
 
 
-class LoginView(BaseView):
-    """Full-bleed sign-in surface."""
+class RegisterView(BaseView):
+    """Full-bleed registration surface."""
 
     def __init__(self, *, page: ft.Page, route: str) -> None:
         super().__init__(
@@ -68,16 +71,30 @@ class LoginView(BaseView):
         )
 
         # ---- form fields & buttons ----
+        self._full_name = FormTextField(
+            label="Name",
+            hint="Jane Doe",
+            autofocus=True,
+            variant="pulse",
+            width=_FORM_MAX_WIDTH,
+        )
         self._email = FormTextField(
             label="Email",
             hint="you@domain.com",
             keyboard_type=ft.KeyboardType.EMAIL,
-            autofocus=True,
             variant="pulse",
             width=_FORM_MAX_WIDTH,
         )
         self._password = FormTextField(
             label="Password",
+            hint="At least 8 characters",
+            password=True,
+            can_reveal_password=True,
+            variant="pulse",
+            width=_FORM_MAX_WIDTH,
+        )
+        self._confirm = FormTextField(
+            label="Confirm password",
             hint="••••••••",
             password=True,
             can_reveal_password=True,
@@ -92,7 +109,7 @@ class LoginView(BaseView):
             visible=False,
         )
         self._submit = PulseButton(
-            text="Sign in",
+            text="Create account",
             on_click_callable=self._handle_submit,
         )
         self._submit.width = _FORM_MAX_WIDTH
@@ -100,13 +117,16 @@ class LoginView(BaseView):
         # ---- form column ----
         form_block = ft.Column(
             controls=[
-                DisplayText("Welcome back", color=PulseColors.TEXT),
+                DisplayText("Create your account", color=PulseColors.TEXT),
                 SecondaryText(
-                    "Sign in to your dashboard.", color=PulseColors.MUTED
+                    "Get started in a few seconds.",
+                    color=PulseColors.MUTED,
                 ),
                 ft.Container(height=16),
+                self._full_name,
                 self._email,
                 self._password,
+                self._confirm,
                 self._error,
                 self._submit,
                 {% if include_oauth -%}
@@ -115,13 +135,13 @@ class LoginView(BaseView):
                 ft.Container(height=8),
                 OAuthButton(
                     provider="github",
-                    label="Continue with GitHub",
+                    label="Sign up with GitHub",
                     on_click=lambda _: self._launch_oauth("github"),
                     width=_FORM_MAX_WIDTH,
                 ),
                 OAuthButton(
                     provider="google",
-                    label="Continue with Google",
+                    label="Sign up with Google",
                     on_click=lambda _: self._launch_oauth("google"),
                     width=_FORM_MAX_WIDTH,
                 ),
@@ -132,17 +152,17 @@ class LoginView(BaseView):
             horizontal_alignment=ft.CrossAxisAlignment.START,
         )
 
-        # ---- footer: register link ----
+        # ---- footer: back to sign in ----
         footer = ft.Row(
             controls=[
                 SecondaryText(
-                    "New here?",
+                    "Already have an account?",
                     color=PulseColors.MUTED,
                     size=12,
                 ),
                 ft.TextButton(
-                    text="Create an account",
-                    on_click=self._goto_register,
+                    text="Sign in",
+                    on_click=self._goto_login,
                     style=ft.ButtonStyle(
                         color=PulseColors.TEAL,
                         padding=ft.padding.all(0),
@@ -166,18 +186,15 @@ class LoginView(BaseView):
     # ---- lifecycle ----
 
     async def on_enter(self, params: dict[str, Any]) -> None:
-        # Surface any session-expiry hint passed via query param.
-        if params.get("reason") == "expired":
-            ErrorSnackBar("Your session expired. Sign in again.").launch(self.page)
+        return None
 
     async def on_refresh(self) -> None:
-        # Login is stateless — nothing to reload.
         return None
 
     # ---- handlers ----
 
-    def _goto_register(self, _: Any) -> None:
-        self.page.go(REGISTER_ROUTE)
+    def _goto_login(self, _: Any) -> None:
+        self.page.go(LOGIN_ROUTE)
 
     {% if include_oauth -%}
     def _launch_oauth(self, provider: str) -> None:
@@ -187,21 +204,28 @@ class LoginView(BaseView):
             f"http://localhost:{settings.PORT}"
             f"/api/v1/auth/oauth/{provider}/start"
         )
-        logger.info("auth.login.oauth_launch", provider=provider, url=url)
+        logger.info("auth.register.oauth_launch", provider=provider, url=url)
         try:
             self.page.launch_url(url)
         except Exception as exc:
-            logger.warning("auth.login.oauth_launch_failed", error=str(exc))
+            logger.warning("auth.register.oauth_launch_failed", error=str(exc))
             ErrorSnackBar(f"Could not open {provider} login.").launch(self.page)
     {%- endif %}
 
     async def _handle_submit(self, *_: Any) -> None:
-        # Called from both ``PulseButton`` (no args) and
-        # ``ft.TextField.on_submit`` (single ControlEvent arg).
+        full_name = self._full_name.value.strip() or None
         email = self._email.value.strip()
         password = self._password.value
+        confirm = self._confirm.value
+
         if not email or not password:
             self._show_error("Email and password are required.")
+            return
+        if len(password) < 8:
+            self._show_error("Password must be at least 8 characters.")
+            return
+        if password != confirm:
+            self._show_error("Passwords do not match.")
             return
 
         self._submit.disabled = True
@@ -210,28 +234,68 @@ class LoginView(BaseView):
         self._error.update()
 
         api = get_session_state(self.page).api_client
+        body: dict[str, Any] = {"email": email, "password": password}
+        if full_name:
+            body["full_name"] = full_name
+
         try:
-            payload = await api.post_form(
-                "/api/v1/auth/token",
-                {"username": email, "password": password},
+            status, payload = await api.request_with_status(
+                "POST", "/api/v1/auth/register", json=body
             )
         except Exception as exc:
-            logger.warning("auth.login.network_error", error=str(exc))
+            logger.warning("auth.register.network_error", error=str(exc))
             ErrorSnackBar("Could not reach the server.").launch(self.page)
             self._submit.disabled = False
             self._submit.update()
             return
 
-        if not payload or not isinstance(payload, dict):
-            self._show_error("Invalid email or password.")
-            self._submit.disabled = False
-            self._submit.update()
+        if status == 200 or status == 201:
+            # Backend set the HttpOnly session cookie on the register
+            # response — the APIClient's jar already has it. Navigate
+            # straight to the dashboard.
+            SuccessSnackBar("Welcome aboard.").launch(self.page)
+            logger.info(
+                "auth.register.success",
+                session_id=self.page.session_id,
+            )
+            self.page.go(DASHBOARD_ROUTE)
             return
 
-        # The session cookie is now in the APIClient's jar; navigate
-        # and let the router's auth guard verify it via ``/auth/me``.
-        logger.info("auth.login.success", session_id=self.page.session_id)
-        self.page.go(DASHBOARD_ROUTE)
+        if status == 400:
+            detail = self._extract_detail(payload, "Email already registered.")
+            self._show_error(detail)
+        elif status == 403:
+            self._show_error(
+                self._extract_detail(payload, "Registration is disabled.")
+            )
+        elif status == 422:
+            self._show_error(
+                self._extract_detail(payload, "Please check your inputs.")
+            )
+        elif status == 0:
+            ErrorSnackBar("Could not reach the server.").launch(self.page)
+        else:
+            self._show_error(
+                self._extract_detail(payload, f"Registration failed (status {status}).")
+            )
+
+        self._submit.disabled = False
+        self._submit.update()
+
+    @staticmethod
+    def _extract_detail(payload: Any, fallback: str) -> str:
+        if isinstance(payload, dict):
+            detail = payload.get("detail")
+            if isinstance(detail, str) and detail:
+                return detail
+            # FastAPI 422 returns a list of error dicts.
+            if isinstance(detail, list) and detail:
+                first = detail[0]
+                if isinstance(first, dict):
+                    msg = first.get("msg")
+                    if isinstance(msg, str) and msg:
+                        return msg
+        return fallback
 
     def _show_error(self, message: str) -> None:
         self._error.value = message

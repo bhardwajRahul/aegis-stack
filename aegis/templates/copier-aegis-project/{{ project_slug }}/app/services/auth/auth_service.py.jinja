@@ -7,11 +7,11 @@ from app.services.auth.user_service import UserService
 from fastapi import HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 {% if include_auth_rbac %}
-from fastapi import Depends
+from fastapi import Cookie, Depends
 from fastapi.security import OAuth2PasswordBearer
 
 from app.components.backend.api.deps import get_async_db
-from app.core.security import VALID_ROLES
+from app.core.security import SESSION_COOKIE_NAME, VALID_ROLES
 {% endif %}
 
 def _build_dev_user() -> User:
@@ -97,11 +97,15 @@ def require_role(*required_roles: str):
             raise ValueError(f"Invalid role: {role}. Valid roles: {VALID_ROLES}")
 
     async def dependency(
-        token: str | None = Depends(_oauth2_scheme),
+        bearer_token: str | None = Depends(_oauth2_scheme),
+        aegis_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
         db: AsyncSession = Depends(get_async_db),
     ) -> User:
         if not settings.AUTH_ENABLED:
             return _build_dev_user()
+        # Cookie wins (browser flows are the primary path); bearer is the
+        # fallback for CLIs and tests. Mirrors ``get_session_token``.
+        token = aegis_session or bearer_token
         user = await get_current_user_from_token(token, db)
         if user.role not in required_roles:
             raise HTTPException(

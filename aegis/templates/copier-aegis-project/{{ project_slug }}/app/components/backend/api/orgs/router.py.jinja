@@ -4,7 +4,6 @@
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.backend.api.deps import (
@@ -43,6 +42,7 @@ from app.services.auth.auth_service import (
     require_role,
 {%- endif %}
 )
+from app.services.auth.deps import get_session_token
 from app.services.auth.invite_service import InviteService
 from app.services.auth.membership_service import MembershipService
 from app.services.auth.org_service import OrgService
@@ -51,11 +51,9 @@ SLUG_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
 
 router = APIRouter(prefix="/orgs", tags=["organizations"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
-
 
 async def _get_current_user(
-    token: str | None = Depends(oauth2_scheme),
+    token: str | None = Depends(get_session_token),
     db: AsyncSession = Depends(get_async_db),
 ):
     """Get authenticated user."""

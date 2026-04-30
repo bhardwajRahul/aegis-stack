@@ -22,12 +22,12 @@ from app.services.payment.constants import PAYMENT_COMPONENT_NAME
 {% endif %}
 {% if include_auth %}
 from app.components.frontend.auth.login_view import LoginView
-from app.components.frontend.auth.storage import (
-    PAGE_ATTR_TOKEN,
-    clear_token,
+from app.components.frontend.auth.register_view import RegisterView
+from app.components.frontend.auth.session import (
     is_authenticated,
+    sign_out,
 )
-from app.components.frontend.core.routes import LOGIN_ROUTE
+from app.components.frontend.core.routes import LOGIN_ROUTE, REGISTER_ROUTE
 {% endif %}
 from app.components.frontend.controls.views.base import BaseView
 from app.components.frontend.controls.views.legacy_dashboard import (
@@ -509,14 +509,13 @@ async def setup_dashboard(view: BaseView) -> None:
         """
         Sign the current session out.
 
-        Clears the token and asks the router to navigate to ``/login``.
-        The router fires ``view.on_leave`` on this view (cancelling the
-        refresh + SSE tasks tracked on ``view._tasks``) before mounting
-        ``LoginView``.
+        Calls ``/auth/logout`` (revokes server-side + drops the cookie),
+        then navigates to ``/login``. The router fires ``view.on_leave``
+        on this view (cancelling the refresh + SSE tasks tracked on
+        ``view._tasks``) before mounting ``LoginView``.
         """
         logger.info("auth.logout", session_id=page.session_id)
-        await clear_token(page)
-        page.go(LOGIN_ROUTE)
+        await sign_out(page)
 
     logout_button = ft.IconButton(
         icon=ft.Icons.LOGOUT,
@@ -1174,20 +1173,14 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
         page.title = "Aegis Stack - System Dashboard"
 
         # APIClient: the single canonical HTTP client for the frontend.
-        # Bearer token is pulled from the encrypted page-cache; a 401 from
-        # any call routes the user back to /login.
+        # The HttpOnly ``aegis_session`` cookie rides on the underlying
+        # httpx cookie jar — there is no manual token plumbing in Python.
+        # A 401 from any call routes the user back to /login.
         {% if include_auth -%}
-        def _get_token() -> str | None:
-            return getattr(page, PAGE_ATTR_TOKEN, None)
-
         async def _on_unauthorized() -> None:
-            await clear_token(page)
-            page.go(LOGIN_ROUTE)
+            await sign_out(page)
 
-        api_client = APIClient(
-            get_token=_get_token,
-            on_unauthorized=_on_unauthorized,
-        )
+        api_client = APIClient(on_unauthorized=_on_unauthorized)
         {%- else -%}
         api_client = APIClient()
         {%- endif %}
@@ -1200,6 +1193,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
         register_route(DASHBOARD_ROUTE, LegacyDashboardView)
         {% if include_auth -%}
         register_route(LOGIN_ROUTE, LoginView)
+        register_route(REGISTER_ROUTE, RegisterView)
         {%- endif %}
 
         # Wire page event handlers. ``async`` Flet handlers are dispatched

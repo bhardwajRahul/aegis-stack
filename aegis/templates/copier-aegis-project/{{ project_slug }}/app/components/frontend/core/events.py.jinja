@@ -23,7 +23,7 @@ import flet as ft
 from app.core.log import logger
 
 {% if include_auth -%}
-from app.components.frontend.auth.storage import is_authenticated
+from app.components.frontend.auth.session import is_authenticated
 from app.components.frontend.core.routing import redirect_to_login
 {%- endif %}
 
@@ -64,6 +64,19 @@ async def on_disconnect(event: ft.ControlEvent) -> None:
         route=page.route,
         session_id=page.session_id,
     )
+    # NOTE: do NOT ``aclose()`` the per-session APIClient here. Flet
+    # fires ``on_disconnect`` on transient WebSocket blips too — the
+    # session_id stays the same and ``on_connect`` fires moments later
+    # against the *same* SessionState. Closing the httpx client on
+    # disconnect would leave the post-reconnect call to ``/auth/me``
+    # hitting a closed client.
+    #
+    # ``APIClient.aclose()`` is intentionally caller-driven instead:
+    # it runs from ``clear_session_state(page)`` (the one place
+    # SessionState is destroyed on purpose). Flet 0.28 doesn't expose
+    # a true session-destroyed hook, so anything more eager would be a
+    # hack. In practice the connection pool drains via Python GC when
+    # the page object is collected.
 
 
 async def on_error(event: ft.ControlEvent) -> None:

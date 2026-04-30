@@ -32,7 +32,7 @@ from app.components.frontend.core.routes import PUBLIC_ROUTES
 from app.core.log import logger
 
 {% if include_auth -%}
-from app.components.frontend.auth.storage import is_authenticated
+from app.components.frontend.auth.session import is_authenticated
 from app.components.frontend.core.routes import LOGIN_ROUTE
 {%- endif %}
 

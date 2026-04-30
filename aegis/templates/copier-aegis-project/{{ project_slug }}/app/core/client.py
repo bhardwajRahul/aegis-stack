@@ -2,13 +2,27 @@
 Shared HTTP client for internal API calls.
 
 Used by frontend components to call backend API endpoints. Provides
-consistent base URL, timeout, error handling, JSON parsing, automatic
-bearer-token attachment, and an unauthorized callback for triggering
+consistent base URL, timeout, error handling, JSON parsing, persistent
+session cookies, and an unauthorized callback for triggering
 session-level logout.
 
 This is the **One True Client** for the Aegis frontend — every server
 call from a view, modal, or service should go through it. Raw
 ``httpx.AsyncClient`` use outside this module is a code smell.
+
+Auth model
+----------
+The client holds a long-lived ``httpx.AsyncClient`` whose cookie jar
+persists across requests. When the backend issues ``Set-Cookie:
+aegis_session=...`` (e.g. from ``/auth/token``, ``/auth/register``,
+or the OAuth callback), it lands in this jar and is automatically
+sent back on every subsequent call. Logout drops the cookie via
+``/auth/logout`` *and* clears the jar locally.
+
+Each Flet session gets its own ``APIClient`` (constructed in
+``init_session_state``) so cookie jars do not bleed across users.
+The ``aclose()`` method releases the underlying connection pool;
+call it from ``on_disconnect`` or ``clear_session_state``.
 """
 
 import inspect
@@ -20,24 +34,49 @@ import httpx
 from app.core.config import settings
 from app.core.log import logger
 
-TokenProvider = Callable[[], str | None] | Callable[[], Awaitable[str | None]]
 UnauthorizedHandler = Callable[[], None] | Callable[[], Awaitable[None]]
 
 
 class APIClient:
-    """HTTP client for internal API calls."""
+    """HTTP client for internal API calls.
+
+    Cookie jar-backed session: the underlying ``httpx.AsyncClient`` is
+    created once and kept alive for the life of the Flet session.
+    Anything the backend stores in cookies (notably ``aegis_session``)
+    rides along on every subsequent call.
+    """
 
     def __init__(
         self,
         base_url: str | None = None,
         timeout: float = 10.0,
-        get_token: TokenProvider | None = None,
         on_unauthorized: UnauthorizedHandler | None = None,
     ) -> None:
         self.base_url = base_url or f"http://localhost:{settings.PORT}"
         self.timeout = timeout
-        self.get_token = get_token
         self.on_unauthorized = on_unauthorized
+        # Re-entry guard. If ``on_unauthorized`` itself triggers another
+        # 401 (the canonical case: ``sign_out`` calls ``/auth/logout``,
+        # which 401s when the cookie is already stale — which is exactly
+        # when the handler fires), we'd recurse forever. The flag stays
+        # True for the lifetime of the outermost handler invocation so
+        # nested 401s short-circuit.
+        self._in_unauthorized = False
+        # ``follow_redirects`` lets the OAuth callback chain (303 → /)
+        # work end-to-end if a server-side caller ever uses it. Cookie
+        # jar is built into ``httpx.AsyncClient``.
+        self._client = httpx.AsyncClient(
+            timeout=timeout,
+            follow_redirects=True,
+        )
+
+    async def aclose(self) -> None:
+        """Release the underlying connection pool. Call on session teardown."""
+        await self._client.aclose()
+
+    def clear_cookies(self) -> None:
+        """Drop every cookie in the jar. Used on logout to defang any stale session."""
+        self._client.cookies.clear()
 
     async def get(
         self, endpoint: str, params: dict[str, Any] | None = None
@@ -72,7 +111,7 @@ class APIClient:
         POST a ``multipart/form-data`` body.
 
         ``files`` shape matches httpx: ``{field_name: (filename, bytes, mime)}``.
-        Bearer token + 401 → ``on_unauthorized`` are handled the same as
+        Cookies + 401 → ``on_unauthorized`` are handled the same as
         the JSON-bodied methods. ``Content-Type`` is **not** set manually —
         httpx infers ``multipart/form-data; boundary=…`` from ``files=``.
         """
@@ -102,7 +141,7 @@ class APIClient:
 
         Use this when the caller needs to branch on specific status codes
         (e.g. 204 success vs 403 forbidden, or 200 vs 400 validation).
-        Bearer token is still attached and 401 still fires
+        Cookies are still attached and 401 still fires
         ``on_unauthorized`` — the caller just additionally sees the code.
 
         Returns:
@@ -111,29 +150,25 @@ class APIClient:
         """
         url = f"{self.base_url}{endpoint}"
         headers: dict[str, str] = {}
-        token = await self._resolve_token()
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
         if form_data is not None:
             headers["Content-Type"] = "application/x-www-form-urlencoded"
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.request(
-                    method,
-                    url,
-                    params=params,
-                    json=json,
-                    data=form_data,
-                    headers=headers,
-                )
-                if response.status_code == 401:
-                    await self._emit_unauthorized()
-                if response.status_code == 204 or not response.content:
-                    return response.status_code, None
-                try:
-                    return response.status_code, response.json()
-                except Exception:
-                    return response.status_code, None
+            response = await self._client.request(
+                method,
+                url,
+                params=params,
+                json=json,
+                data=form_data,
+                headers=headers,
+            )
+            if response.status_code == 401:
+                await self._emit_unauthorized()
+            if response.status_code == 204 or not response.content:
+                return response.status_code, None
+            try:
+                return response.status_code, response.json()
+            except Exception:
+                return response.status_code, None
         except httpx.TimeoutException:
             logger.error("api_client.timeout", url=url, method=method)
         except httpx.ConnectError:
@@ -153,9 +188,8 @@ class APIClient:
         Open a streaming response (used for SSE).
 
         Yields the raw ``httpx.Response`` so the caller can iterate via
-        ``response.aiter_lines()`` or ``response.aiter_bytes()``. Bearer
-        token is attached automatically; a 401 fires
-        ``on_unauthorized``.
+        ``response.aiter_lines()`` or ``response.aiter_bytes()``. Cookies
+        are attached automatically; a 401 fires ``on_unauthorized``.
 
         Example::
 
@@ -164,33 +198,21 @@ class APIClient:
                     ...
         """
         url = f"{self.base_url}{endpoint}"
-        headers: dict[str, str] = dict(kwargs.pop("headers", None) or {})
-        token = await self._resolve_token()
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
-
-        async with (
-            httpx.AsyncClient(timeout=self.timeout) as client,
-            client.stream(method, url, headers=headers, **kwargs) as response,
-        ):
+        async with self._client.stream(method, url, **kwargs) as response:
             if response.status_code == 401:
                 await self._emit_unauthorized()
             yield response
 
-    async def _resolve_token(self) -> str | None:
-        if self.get_token is None:
-            return None
-        result = self.get_token()
-        if inspect.isawaitable(result):
-            return await result
-        return result
-
     async def _emit_unauthorized(self) -> None:
-        if self.on_unauthorized is None:
+        if self.on_unauthorized is None or self._in_unauthorized:
             return
-        result = self.on_unauthorized()
-        if inspect.isawaitable(result):
-            await result
+        self._in_unauthorized = True
+        try:
+            result = self.on_unauthorized()
+            if inspect.isawaitable(result):
+                await result
+        finally:
+            self._in_unauthorized = False
 
     async def _request(
         self,
@@ -203,28 +225,24 @@ class APIClient:
     ) -> dict | list | None:
         url = f"{self.base_url}{endpoint}"
         headers: dict[str, str] = {}
-        token = await self._resolve_token()
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
         if form_data is not None:
             headers["Content-Type"] = "application/x-www-form-urlencoded"
         # NOTE: do NOT set Content-Type for ``files=`` — httpx generates
         # the multipart boundary itself. Setting it here would clobber it.
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.request(
-                    method,
-                    url,
-                    params=params,
-                    json=json,
-                    data=form_data,
-                    files=files,
-                    headers=headers,
-                )
-                response.raise_for_status()
-                if response.status_code == 204:
-                    return None
-                return response.json()
+            response = await self._client.request(
+                method,
+                url,
+                params=params,
+                json=json,
+                data=form_data,
+                files=files,
+                headers=headers,
+            )
+            response.raise_for_status()
+            if response.status_code == 204:
+                return None
+            return response.json()
         except httpx.TimeoutException:
             logger.error("api_client.timeout", url=url, method=method)
         except httpx.HTTPStatusError as e:

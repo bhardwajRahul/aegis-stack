@@ -1,20 +1,15 @@
 """Auth dependencies for FastAPI route injection."""
 
 from app.components.backend.api.deps import get_async_db
+from app.core.security import SESSION_COOKIE_NAME
 from app.models.user import User
 from app.services.auth.auth_service import get_current_user_from_token
-{% if include_oauth %}
-from app.core.security import SESSION_COOKIE_NAME
 from fastapi import Cookie, Depends
-{% else %}
-from fastapi import Depends
-{% endif %}
 from fastapi.security import OAuth2PasswordBearer
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
 
-{% if include_oauth %}
 
 async def get_session_token(
     bearer_token: str | None = Depends(oauth2_scheme),
@@ -23,9 +18,9 @@ async def get_session_token(
     """Extract the JWT from either the session cookie or a Bearer header.
 
     Browser flows rely on the HttpOnly ``aegis_session`` cookie set by
-    the OAuth callback; API clients keep using
-    ``Authorization: Bearer ...``. Cookie wins if both are present
-    (browser flows are the primary path).
+    ``/auth/token``, ``/auth/register``, and the OAuth callback. API
+    clients keep using ``Authorization: Bearer ...``. Cookie wins if
+    both are present, since browser flows are the primary path.
     """
     return aegis_session or bearer_token
 
@@ -36,12 +31,3 @@ async def get_current_active_user(
 ) -> User:
     """Get the current authenticated user. Raises 401 if not authenticated."""
     return await get_current_user_from_token(token, db)
-{% else %}
-
-async def get_current_active_user(
-    token: str | None = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_async_db),
-) -> User:
-    """Get the current authenticated user. Raises 401 if not authenticated."""
-    return await get_current_user_from_token(token, db)
-{% endif %}

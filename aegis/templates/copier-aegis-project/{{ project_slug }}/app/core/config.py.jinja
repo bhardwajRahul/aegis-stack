@@ -90,6 +90,15 @@ class Settings(BaseSettings):
     # Proxy trust settings
     TRUST_PROXY_HEADERS: bool = False  # Set to True only behind a trusted reverse proxy
 
+    # HttpOnly session cookie holding the JWT after login / register /
+    # OAuth callback. None = auto (off in dev, on otherwise). Set to
+    # False to run prod over HTTP without TLS — browsers refuse Secure
+    # cookies on insecure origins. Read by ``set_session_cookie`` in
+    # ``app.core.security``, which fires for every browser-side auth
+    # surface (not just OAuth), so this setting must exist whenever
+    # ``include_auth`` is true.
+    SESSION_COOKIE_SECURE: bool | None = None
+
 {% if include_oauth %}
     # OAuth social login (GitHub + Google).
     # Provider client IDs/secrets — leave blank to disable a provider; the
@@ -106,11 +115,6 @@ class Settings(BaseSettings):
     # overridden in any non-dev deployment; rotating this invalidates
     # all in-flight OAuth handshakes (no impact on already-issued JWTs).
     OAUTH_SESSION_SECRET: str = "change-this-oauth-session-secret-in-production"
-
-    # HttpOnly session cookie holding the JWT after OAuth/login. None =
-    # auto (off in dev, on otherwise). Set to False to run prod over HTTP
-    # without TLS — browsers refuse Secure cookies on insecure origins.
-    SESSION_COOKIE_SECURE: bool | None = None
 {% endif %}
 
 {% if include_redis %}
