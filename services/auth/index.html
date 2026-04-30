@@ -1780,6 +1780,15 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#social-login-oauth" class="md-nav__link">
+    <span class="md-ellipsis">
+      Social Login (OAuth)
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2867,6 +2876,15 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#social-login-oauth" class="md-nav__link">
+    <span class="md-ellipsis">
+      Social Login (OAuth)
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3080,6 +3098,76 @@
 </span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Generate password hash.&quot;&quot;&quot;</span>
 </span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>    <span class="k">return</span> <span class="n">pwd_context</span><span class="o">.</span><span class="n">hash</span><span class="p">(</span><span class="n">password</span><span class="p">)</span>
 </span></code></pre></div>
+<h3 id="social-login-oauth">Social Login (OAuth)</h3>
+<p>Add the <code>oauth</code> modifier to the <code>auth[...]</code> bracket syntax to wire up
+GitHub and Google sign-in alongside the existing JWT password flow.
+The modifier composes with the level slot, so any of these work:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Basic auth + OAuth</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--services<span class="w"> </span>auth<span class="o">[</span>oauth<span class="o">]</span><span class="w"> </span>--components<span class="w"> </span>database
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># RBAC + OAuth (order doesn&#39;t matter)</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--services<span class="w"> </span>auth<span class="o">[</span>rbac,oauth<span class="o">]</span><span class="w"> </span>--components<span class="w"> </span>database
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="c1"># Org + OAuth, with explicit engine</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--services<span class="w"> </span>auth<span class="o">[</span>org,oauth,postgres<span class="o">]</span><span class="w"> </span>--components<span class="w"> </span>database
+</span></code></pre></div>
+<p>What you get:</p>
+<ul>
+<li><code>GET /api/v1/auth/oauth/github/start</code> and <code>/google/start</code> —
+  Authlib-driven <code>state</code> + PKCE redirects.</li>
+<li><code>GET /api/v1/auth/oauth/{provider}/callback</code> — exchanges the code,
+  upserts a local user (linking by email when an account already
+  exists), and 303s to <code>/app</code> (or to the same-origin <code>?next=</code> path
+  the user came in with). The JWT is set in an HttpOnly
+  <code>aegis_session</code> cookie so a browser-driven 303 leaves the user
+  signed in.</li>
+<li><code>GET /api/v1/auth/oauth/connections</code> and
+  <code>DELETE /api/v1/auth/oauth/connections/{provider}</code> — list and
+  unlink linked identities. The disconnect route refuses to remove
+  the last sign-in method to avoid lock-out.</li>
+</ul>
+<p>Each provider is enabled independently — leaving its client ID/secret
+blank turns just that provider off (the route returns 503), so you
+can ship with GitHub configured and add Google later.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># .env</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nv">GITHUB_OAUTH_CLIENT_ID</span><span class="o">=</span>...
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="nv">GITHUB_OAUTH_CLIENT_SECRET</span><span class="o">=</span>...
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="nv">GOOGLE_OAUTH_CLIENT_ID</span><span class="o">=</span>...
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="nv">GOOGLE_OAUTH_CLIENT_SECRET</span><span class="o">=</span>...
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="c1"># Backs starlette&#39;s SessionMiddleware — Authlib stashes the OAuth</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="c1"># state + PKCE verifier here between /start and /callback.</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="nv">OAUTH_SESSION_SECRET</span><span class="o">=</span>replace-me-with-a-strong-random-string
+</span></code></pre></div>
+<p>Callback URLs to register on each provider:</p>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Callback URL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GitHub</td>
+<td><code>https://your-domain/api/v1/auth/oauth/github/callback</code></td>
+</tr>
+<tr>
+<td>Google</td>
+<td><code>https://your-domain/api/v1/auth/oauth/google/callback</code></td>
+</tr>
+</tbody>
+</table>
+<p>API clients keep using <code>Authorization: Bearer ...</code> — the cookie path
+is parallel, not exclusive.</p>
+<div class="admonition note">
+<p class="admonition-title">Frontend integration is on you (for now)</p>
+<p>The backend ships ready-to-use; sign-in buttons are not wired into
+the generated Flet frontend yet. Point a button at
+<code>/api/v1/auth/oauth/{provider}/start</code> (via <code>page.launch_url(...)</code>
+in Flet, or a plain anchor in any HTML view) and the rest of the
+flow is server-side.</p>
+</div>
 <h2 id="next-steps">Next Steps</h2>
 <table>
 <thead>
