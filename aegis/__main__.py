@@ -116,6 +116,30 @@ app.command(name="deploy-restart")(deploy_restart_command)
 app.command(name="deploy-shell")(deploy_shell_command)
 
 
+# R5: mount plugin-provided sub-apps under `aegis <plugin> ...`.
+# Each plugin declares a typer.Typer via the `aegis.plugins.cli` entry
+# point group; see aegis/core/plugin_discovery.py. Discovery is
+# error-tolerant — a malformed plugin warns to stderr and is skipped,
+# so a broken third-party install never breaks the core CLI.
+def _mount_plugin_cli_apps(target_app: typer.Typer) -> None:
+    """Discover plugin CLI sub-apps and mount them under ``target_app``.
+
+    Pulled out as a function (taking ``target_app`` rather than reading the
+    module-level ``app``) so tests can verify the mount path against a
+    fresh Typer instance without re-running module import.
+    """
+    from .core.plugin_discovery import discover_plugin_cli_apps
+
+    reserved = {cmd.name for cmd in target_app.registered_commands if cmd.name}
+    reserved.update(grp.name for grp in target_app.registered_groups if grp.name)
+
+    for plugin_name, sub_app in discover_plugin_cli_apps(reserved).items():
+        target_app.add_typer(sub_app, name=plugin_name)
+
+
+_mount_plugin_cli_apps(app)
+
+
 # This is what runs when you do: aegis
 if __name__ == "__main__":
     app()

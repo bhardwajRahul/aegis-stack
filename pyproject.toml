@@ -85,6 +85,21 @@ docs = [
 aegis = "aegis.__main__:app"
 aegis-stack = "aegis.__main__:app"
 
+# Plugin entry-point groups consumed by aegis/core/plugin_discovery.py.
+# Aegis itself ships nothing in these groups; the empty declarations
+# document the contract for plugin authors and let `pip show -f
+# aegis-stack` surface them. A third-party plugin's pyproject.toml
+# declares its own entries:
+#
+#   [project.entry-points."aegis.plugins"]
+#   scraper = "aegis_plugin_scraper:get_spec"
+#
+#   [project.entry-points."aegis.plugins.cli"]
+#   scraper = "aegis_plugin_scraper.cli:app"
+[project.entry-points."aegis.plugins"]
+
+[project.entry-points."aegis.plugins.cli"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
