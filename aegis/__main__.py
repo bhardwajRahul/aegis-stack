@@ -103,10 +103,12 @@ app.command(name="update")(update_command)
 # Ingress commands
 app.command(name="ingress-enable")(ingress_enable_command)
 
-# Plugin inspection / installation commands (#769).
+# Plugin inspection commands (#769).
 # Mounted before R5's plugin-defined sub-apps so its name is "reserved"
 # from the perspective of plugin discovery (a plugin called "plugins"
-# would collide with this surface).
+# would collide with this surface). There is intentionally no
+# ``plugins install``: putting bytes on disk is ``pip install``;
+# project-configuration is ``aegis add`` (#771).
 app.add_typer(plugins_app, name="plugins")
 
 # Deploy commands

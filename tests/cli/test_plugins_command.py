@@ -286,3 +286,115 @@ class TestCheckCompatIntegration:
         ext = _make_external_spec("scraper")
         report = check_compat(ext, None)
         assert report.status is CompatStatus.NOT_IN_PROJECT
+
+
+# ---------------------------------------------------------------------
+# Round-3 review fixes
+# ---------------------------------------------------------------------
+
+
+class TestResolveAnswersErrorHandling:
+    """`_resolve_answers` must surface real errors but not break inspection.
+
+    Round-3 fix: a corrupt or unreadable ``.copier-answers.yml`` previously
+    fell into a bare ``except Exception`` and silently downgraded compat
+    checks to ``NOT_IN_PROJECT``. We now warn to stderr and return None,
+    so the rest of ``plugins list`` still runs.
+    """
+
+    def test_handles_corrupt_yaml_with_stderr_warning(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        from aegis.commands.plugins import _resolve_answers
+
+        # YAML with a tab indent under a mapping key — invalid, parser raises.
+        (tmp_path / ".copier-answers.yml").write_text(
+            "_template_version: 0.6.11\n"
+            "include_auth: true\n"
+            "broken_block:\n"
+            "\tkey: value\n"
+        )
+        result = _resolve_answers(tmp_path)
+        assert result is None
+        err = capsys.readouterr().err
+        assert "Could not read" in err
+        assert "Compat checks will be skipped" in err
+
+    def test_missing_file_returns_none_silently(self, tmp_path: Path, capsys) -> None:
+        from aegis.commands.plugins import _resolve_answers
+
+        result = _resolve_answers(tmp_path)
+        assert result is None
+        # No noise on the absent-file path — that's the "not an Aegis
+        # project" case, expected and silent.
+        assert capsys.readouterr().err == ""
+
+
+class TestPluginsListEscapesMarkup:
+    """Round-3 fix: plugin-supplied ``[brackets]`` in name/description must
+    not be parsed as Rich markup tags in the table output."""
+
+    def test_list_escapes_brackets_in_description(self, runner: CliRunner) -> None:
+        ext = PluginSpec(
+            name="bracketsplugin",
+            kind=PluginKind.SERVICE,
+            description="ships [scary] markup tags",
+            version="0.1.0",
+            verified=False,
+        )
+        with _patch_discovery([ext]):
+            result = runner.invoke(plugins_app, ["list", "--verbose"])
+        assert result.exit_code == 0
+        # Literal brackets render — they would have been dropped by Rich
+        # before the escape was added.
+        assert "[scary]" in result.stdout
+
+    def test_info_escapes_brackets_in_description(self, runner: CliRunner) -> None:
+        ext = PluginSpec(
+            name="bracketsplugin",
+            kind=PluginKind.SERVICE,
+            description="ships [scary] markup tags",
+            version="0.1.0",
+            verified=False,
+        )
+        with _patch_discovery([ext]):
+            result = runner.invoke(plugins_app, ["info", "bracketsplugin"])
+        assert result.exit_code == 0
+        assert "[scary]" in result.stdout
+
+
+class TestInfoCliIndicatorRespectsReserved:
+    """Round-3 fix: ``info``'s ``CLI: yes/no`` line must mirror the
+    mount-time reserved-name filter, not the raw discovery."""
+
+    def test_cli_indicator_says_no_when_collides_with_core_command(
+        self, runner: CliRunner
+    ) -> None:
+        import typer as _typer
+
+        ext = PluginSpec(
+            name="init",  # collides with core `aegis init`
+            kind=PluginKind.SERVICE,
+            description="evil-twin",
+            version="0.1.0",
+            verified=False,
+        )
+        # Plugin claims a CLI sub-app, but mount-time filter would reject
+        # it. info should reflect that.
+        sub_app = _typer.Typer()
+
+        with (
+            _patch_discovery([ext]),
+            patch(
+                "aegis.commands.plugins.discover_plugin_cli_apps",
+                # Mimic real behaviour: filter applies → init is rejected
+                side_effect=lambda reserved_names=None: (
+                    {}
+                    if reserved_names and "init" in reserved_names
+                    else {"init": sub_app}
+                ),
+            ),
+        ):
+            result = runner.invoke(plugins_app, ["info", "init"])
+        assert result.exit_code == 0
+        assert "CLI: no" in result.stdout

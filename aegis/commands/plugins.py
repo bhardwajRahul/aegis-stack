@@ -31,6 +31,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
+from rich.markup import escape as _escape
 
 from ..core.components import COMPONENTS
 from ..core.plugin_compat import CompatStatus, check_compat
@@ -51,11 +52,11 @@ plugins_app = typer.Typer(
 
 
 def _all_specs() -> tuple[list[PluginSpec], list[PluginSpec]]:
-    """Return (in_tree_specs, external_specs).
+    """Return ``(in_tree_specs, external_specs)``.
 
-    In-tree are sorted alphabetically; external preserves discovery order
-    after de-duplication (already alphabetical-ish in practice but we
-    sort to keep the listing deterministic).
+    Both groups are sorted alphabetically by ``spec.name`` so CLI output
+    stays deterministic across invocations and across machines (entry-
+    point discovery order is install-order-dependent and not stable).
     """
     in_tree = sorted(
         list(SERVICES.values()) + list(COMPONENTS.values()),
@@ -71,7 +72,17 @@ def _resolve_answers(project_path: Path | None) -> dict | None:
     Auto-detects a project at the cwd when ``project_path`` is None and
     a ``.copier-answers.yml`` exists there. Otherwise returns ``None``
     (compat checks degrade to ``NOT_IN_PROJECT``).
+
+    Exception handling is narrow: ``FileNotFoundError`` returns ``None``
+    silently (the existence check above usually catches this, but
+    ``load_copier_answers`` may raise it on race). Genuine read or
+    parse failures (``OSError``, ``yaml.YAMLError``) emit a stderr
+    warning so the user knows compat checks were skipped — but we
+    don't bail with a non-zero exit, since this is an inspection
+    command and the rest of the listing is still useful.
     """
+    import yaml
+
     candidate = project_path or Path.cwd()
     answers_file = candidate / ".copier-answers.yml"
     if not answers_file.exists():
@@ -80,7 +91,14 @@ def _resolve_answers(project_path: Path | None) -> dict | None:
         from ..core.copier_manager import load_copier_answers
 
         return load_copier_answers(candidate)
-    except Exception:
+    except FileNotFoundError:
+        return None
+    except (OSError, yaml.YAMLError) as exc:
+        typer.secho(
+            f"Could not read {answers_file}: {exc}. Compat checks will be skipped.",
+            err=True,
+            fg=typer.colors.YELLOW,
+        )
         return None
 
 
@@ -100,6 +118,23 @@ def _status_marker(status: CompatStatus) -> str:
 
 def _kind_label(spec: PluginSpec) -> str:
     return spec.kind.value if isinstance(spec.kind, PluginKind) else str(spec.kind)
+
+
+def _core_command_reserved_names() -> set[str]:
+    """Names already taken by core CLI commands and groups.
+
+    Mirrors the reserved set passed at mount time in
+    ``aegis/__main__.py:_mount_plugin_cli_apps`` so that ``aegis plugins
+    info``'s ``CLI: yes/no`` indicator matches what would actually
+    happen if the plugin's CLI sub-app were mounted. Lazy-imports
+    ``aegis.__main__`` to avoid a circular at module load — by the time
+    any CLI command runs, ``__main__`` is fully imported.
+    """
+    from aegis.__main__ import app
+
+    reserved = {cmd.name for cmd in app.registered_commands if cmd.name}
+    reserved.update(grp.name for grp in app.registered_groups if grp.name)
+    return reserved
 
 
 # ---------------------------------------------------------------------
@@ -148,15 +183,19 @@ def plugins_list_command(
                 is_in_tree=in_tree_flag,
                 discovered_plugin_names=discovered_names,
             )
+            # Plugin-supplied strings (name/description/detail) get escaped
+            # because Rich treats literal ``[...]`` as markup tags. Status
+            # markers are core-controlled and stay raw so their colour
+            # markup still applies.
             row = [
                 _status_marker(report.status),
-                spec.name,
-                spec.version,
-                _kind_label(spec),
+                _escape(spec.name),
+                _escape(spec.version),
+                _escape(_kind_label(spec)),
             ]
             if verbose:
-                row.append(spec.description)
-            row.append(report.detail)
+                row.append(_escape(spec.description))
+            row.append(_escape(report.detail))
             table.add_row(*row)
         console.print(table)
 
@@ -217,11 +256,19 @@ def plugins_info_command(
         discovered_plugin_names=discovered_names,
     )
 
-    cli_apps = discover_plugin_cli_apps()
+    # Pass the reserved set so the CLI indicator matches mount-time
+    # reality: a plugin whose name collides with a core command (init,
+    # add, deploy, ...) is filtered out at mount and reported here as
+    # "CLI: no" rather than misleading users with "CLI: yes".
+    cli_apps = discover_plugin_cli_apps(_core_command_reserved_names())
     has_cli = name in cli_apps
 
     lines: list[str] = []
-    header = f"[bold cyan]{spec.name}[/bold cyan] {spec.version}"
+    # Plugin-supplied strings (name/description) get escaped so a plugin
+    # whose metadata happens to contain ``[brackets]`` doesn't get its
+    # name eaten by Rich's markup parser. Core-controlled markup tags
+    # (`[bold cyan]`, `[green]`, …) stay raw.
+    header = f"[bold cyan]{_escape(spec.name)}[/bold cyan] {_escape(spec.version)}"
     if is_in_tree:
         header += "  [green](first-party)[/green]"
     elif spec.verified:
@@ -229,7 +276,7 @@ def plugins_info_command(
     else:
         header += "  [yellow](community — unverified)[/yellow]"
     lines.append(header)
-    lines.append(f"[dim]{spec.description}[/dim]")
+    lines.append(f"[dim]{_escape(spec.description)}[/dim]")
     lines.append("")
     lines.append(f"  Kind:           {_kind_label(spec)}")
     if spec.type is not None:
@@ -237,22 +284,24 @@ def plugins_info_command(
         lines.append(f"  Type:           {type_value}")
 
     if spec.required_components:
-        lines.append(f"  Requires comp:  {', '.join(spec.required_components)}")
+        lines.append(
+            f"  Requires comp:  {_escape(', '.join(spec.required_components))}"
+        )
     if spec.recommended_components:
-        lines.append(f"  Recommends:     {', '.join(spec.recommended_components)}")
+        lines.append(
+            f"  Recommends:     {_escape(', '.join(spec.recommended_components))}"
+        )
     if spec.required_services:
-        lines.append(f"  Requires svcs:  {', '.join(spec.required_services)}")
+        lines.append(f"  Requires svcs:  {_escape(', '.join(spec.required_services))}")
     if spec.required_plugins:
-        lines.append(f"  Requires plug:  {', '.join(spec.required_plugins)}")
+        lines.append(f"  Requires plug:  {_escape(', '.join(spec.required_plugins))}")
     if spec.conflicts:
-        lines.append(f"  Conflicts:      {', '.join(spec.conflicts)}")
+        lines.append(f"  Conflicts:      {_escape(', '.join(spec.conflicts))}")
     if spec.pyproject_deps:
-        # Escape because deps like ``python-jose[cryptography]==3.3.0``
-        # contain literal square brackets that Rich would otherwise
-        # parse as markup tags and silently drop.
-        from rich.markup import escape
-
-        deps_preview = ", ".join(escape(d) for d in spec.pyproject_deps[:5])
+        # Module-level _escape import handles deps like
+        # ``python-jose[cryptography]==3.3.0`` that contain literal
+        # square brackets Rich would otherwise treat as markup.
+        deps_preview = ", ".join(_escape(d) for d in spec.pyproject_deps[:5])
         more = (
             f" (+{len(spec.pyproject_deps) - 5} more)"
             if len(spec.pyproject_deps) > 5
@@ -265,11 +314,13 @@ def plugins_info_command(
         lines.append("[bold]Options[/bold]")
         for opt in spec.options:
             mode = getattr(opt.mode, "value", str(opt.mode))
-            choices = ", ".join(opt.choices) if opt.choices else "—"
-            default = opt.default if opt.default not in (None, []) else "—"
+            choices = _escape(", ".join(opt.choices)) if opt.choices else "—"
+            default = (
+                _escape(str(opt.default)) if opt.default not in (None, []) else "—"
+            )
             auto = " (has auto_requires)" if opt.auto_requires else ""
             lines.append(
-                f"  {opt.name:<10} [{mode:<6}]  choices: {choices}  "
+                f"  {_escape(opt.name):<10} [{mode:<6}]  choices: {choices}  "
                 f"default: {default}{auto}"
             )
         lines.append("")
@@ -285,7 +336,7 @@ def plugins_info_command(
 
     lines.append("")
     lines.append(
-        f"[bold]Compat[/bold]  {_status_marker(report.status)} {report.detail}"
+        f"[bold]Compat[/bold]  {_status_marker(report.status)} {_escape(report.detail)}"
     )
 
     console.print(Panel("\n".join(lines), expand=False))

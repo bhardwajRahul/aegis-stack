@@ -175,9 +175,9 @@ def _is_present(name: str, answers: dict[str, Any], plugins: set[str]) -> bool:
 def _installed_plugins(answers: dict[str, Any]) -> set[str]:
     """Pull the list of installed plugin names from the answers file.
 
-    Future-compatible with the ``_plugins`` answer key that ``aegis plugin
-    add`` (#771) will write. Returns an empty set today since no project
-    has plugins recorded yet.
+    Future-compatible with the ``_plugins`` answer key that ``aegis add``
+    (#771) will write for plugins. Returns an empty set today since no
+    project has plugins recorded yet.
     """
     raw = answers.get("_plugins") or []
     if isinstance(raw, list):
