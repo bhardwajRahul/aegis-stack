@@ -28,6 +28,7 @@ from .commands.deploy import (
 )
 from .commands.ingress import ingress_enable_command
 from .commands.init import init_command
+from .commands.plugins import plugins_app
 from .commands.remove import remove_command
 from .commands.remove_service import remove_service_command
 from .commands.services import services_command
@@ -101,6 +102,14 @@ app.command(name="update")(update_command)
 
 # Ingress commands
 app.command(name="ingress-enable")(ingress_enable_command)
+
+# Plugin inspection commands (#769).
+# Mounted before R5's plugin-defined sub-apps so its name is "reserved"
+# from the perspective of plugin discovery (a plugin called "plugins"
+# would collide with this surface). There is intentionally no
+# ``plugins install``: putting bytes on disk is ``pip install``;
+# project-configuration is ``aegis add`` (#771).
+app.add_typer(plugins_app, name="plugins")
 
 # Deploy commands
 app.command(name="deploy-init")(deploy_init_command)
