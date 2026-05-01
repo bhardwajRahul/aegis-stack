@@ -46,7 +46,7 @@ Infrastructure (singletons, no DB dependency):
   └─────────────────┘  └─────────────────┘  └─────────────────┘
 ```
 
-`UserService`, `OrgService`, `MembershipService`, and `InviteService` each accept an `AsyncSession` in their constructor. Use the dependency functions in `deps.py` to get properly scoped instances — never instantiate services directly in endpoints.
+`UserService`, `OrgService`, `MembershipService`, and `InviteService` each accept an `AsyncSession` in their constructor. Use the dependency functions in `deps.py` to get properly scoped instances. Never instantiate services directly in endpoints.
 
 ---
 
@@ -72,7 +72,7 @@ class UserService:
 | `delete_user` | `(user_id: int) -> bool` | Permanent delete. Cleans up memberships and invites first. |
 | `list_users` | `() -> list[User]` | All users, newest first. |
 | `find_existing_emails_with_prefix` | `(prefix: str, domain: str) -> list[str]` | Find emails matching `prefix*@domain`. Used by CLI to auto-increment test users. |
-| `create_password_reset_token` | `(email: str) -> str \| None` | Create a `PasswordResetToken` record, return the token string. Returns `None` if user not found — callers should not reveal this. |
+| `create_password_reset_token` | `(email: str) -> str \| None` | Create a `PasswordResetToken` record, return the token string. Returns `None` if user not found, callers should not reveal this. |
 | `reset_password` | `(token: str, new_password: str) -> None` | Validate token, set new hashed password, mark token used. Raises `ValueError` on invalid/expired token. |
 | `create_email_verification_token` | `(user_id: int) -> str` | Create an `EmailVerificationToken` record, return the token string. |
 | `verify_email` | `(token: str) -> None` | Set `user.is_verified=True`, mark token used. Raises `ValueError` on invalid/expired token. |
@@ -247,7 +247,7 @@ async def list_member_details(
 
 ## InviteService
 
-Handles org invitations. Invites can be sent to users who don't yet have an account — pending invites are automatically accepted when the user registers.
+Handles org invitations. Invites can be sent to users who don't yet have an account, pending invites are automatically accepted when the user registers.
 
 ```python
 class InviteService:
@@ -272,8 +272,8 @@ create_invite()
                                                         │
                             ┌───────────────────────────┘
                             ▼
-        accept_pending_invites()  — called at registration
-        accept_invite_by_token()  — called from invite link
+        accept_pending_invites()  ─ called at registration
+        accept_invite_by_token()  ─ called from invite link
                             │
                             └─  MembershipService.add_member()
                                 invite.status = "accepted"
@@ -456,7 +456,7 @@ async def logout(current_user: User = Depends(get_current_user), token: str = ..
     return {"status": "logged out"}
 ```
 
-The blacklist is consulted automatically in `get_current_user_from_token` — you do not need to check it manually in your endpoints.
+The blacklist is consulted automatically in `get_current_user_from_token`, you do not need to check it manually in your endpoints.
 
 !!! warning "Process-local storage"
     `TokenBlacklist` is in-memory and not shared across processes. In multi-worker deployments, revoked tokens may still be accepted by other workers. For production multi-process environments, replace the backend with a Redis-backed implementation.
@@ -496,7 +496,7 @@ async def deactivate_user(
     return UserResponse.model_validate(user)
 ```
 
-**Standard event type naming:** `<domain>.<action>` — for example `auth.login_success`, `org.member_added`, `user.password_reset`.
+**Standard event type naming:** `<domain>.<action>`, for example `auth.login_success`, `org.member_added`, `user.password_reset`.
 
 ---
 

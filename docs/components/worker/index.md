@@ -3,13 +3,13 @@
 Background task processing with your choice of worker backend: [arq](https://arq-docs.helpmanual.io/) (default), [Dramatiq](https://dramatiq.io/), or [TaskIQ](https://taskiq-python.github.io/).
 
 !!! info "Adding Worker to Your Project"
-    **Interactive** — the CLI prompts you to pick a backend when you select the worker component:
+    **Interactive**: the CLI prompts you to pick a backend when you select the worker component:
     ```bash
     aegis init my-project           # interactive mode prompts for backend
     aegis add worker --interactive  # same for existing projects
     ```
 
-    **Non-interactive** — specify the backend with bracket syntax:
+    **Non-interactive**: specify the backend with bracket syntax.
     ```bash
     # arq (default)
     aegis init my-project --components worker --no-interactive -y
@@ -90,7 +90,7 @@ Try the dashboard at [http://localhost:8000/dashboard](http://localhost:8000/das
 
 ### Overseer Dashboard
 
-The Overseer dashboard provides real-time worker monitoring — queue status, job counts, and worker health at a glance:
+The Overseer dashboard provides real-time worker monitoring, queue status, job counts, and worker health at a glance:
 
 <img src="../../images/overseer_worker_2.gif" alt="Overseer Worker Dashboard">
 

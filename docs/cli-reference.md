@@ -488,10 +488,10 @@ aegis deploy-init [OPTIONS]
 
 **Options:**
 
-- `--host, -h TEXT` — Server IP address or hostname
-- `--user, -u TEXT` — SSH user for deployment (default: `root`)
-- `--path, -p TEXT` — Deployment path on server (default: `/opt/{project-name}`)
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--host, -h TEXT`, Server IP address or hostname
+- `--user, -u TEXT`, SSH user for deployment (default: `root`)
+- `--path, -p TEXT`, Deployment path on server (default: `/opt/{project-name}`)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -512,7 +512,7 @@ aegis deploy-setup [OPTIONS]
 
 **Options:**
 
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -532,10 +532,10 @@ aegis deploy [OPTIONS]
 
 **Options:**
 
-- `--build / --no-build` — Build images before deploying (default: `--build`)
-- `--backup / --no-backup` — Create backup before deploying (default: `--backup`)
-- `--health-check / --no-health-check` — Run health check after deploying (default: `--health-check`)
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--build / --no-build`, Build images before deploying (default: `--build`)
+- `--backup / --no-backup`, Create backup before deploying (default: `--backup`)
+- `--health-check / --no-health-check`, Run health check after deploying (default: `--health-check`)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -557,7 +557,7 @@ aegis deploy-backup [OPTIONS]
 
 **Options:**
 
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -577,7 +577,7 @@ aegis deploy-backups [OPTIONS]
 
 **Options:**
 
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -597,8 +597,8 @@ aegis deploy-rollback [OPTIONS]
 
 **Options:**
 
-- `--backup, -b TEXT` — Backup timestamp to rollback to (default: latest)
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--backup, -b TEXT`, Backup timestamp to rollback to (default: latest)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -619,9 +619,9 @@ aegis deploy-logs [OPTIONS]
 
 **Options:**
 
-- `--follow / --no-follow, -f` — Follow log output (default: `--follow`)
-- `--service, -s TEXT` — Show logs for a specific service
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--follow / --no-follow, -f`, Follow log output (default: `--follow`)
+- `--service, -s TEXT`, Show logs for a specific service
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -643,7 +643,7 @@ aegis deploy-status [OPTIONS]
 
 **Options:**
 
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -663,7 +663,7 @@ aegis deploy-stop [OPTIONS]
 
 **Options:**
 
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -683,7 +683,7 @@ aegis deploy-restart [OPTIONS]
 
 **Options:**
 
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -703,8 +703,8 @@ aegis deploy-shell [OPTIONS]
 
 **Options:**
 
-- `--service, -s TEXT` — Service to connect to (default: `webserver`)
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--service, -s TEXT`, Service to connect to (default: `webserver`)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -725,10 +725,10 @@ aegis ingress-enable [OPTIONS]
 
 **Options:**
 
-- `--domain, -d TEXT` — Domain name for TLS certificate (e.g., `example.com`)
-- `--email, -e TEXT` — Email for Let's Encrypt certificate notifications
-- `--project-path, -p TEXT` — Path to the project (default: current directory)
-- `--yes, -y` — Skip confirmation prompts
+- `--domain, -d TEXT`, Domain name for TLS certificate (e.g., `example.com`)
+- `--email, -e TEXT`, Email for Let's Encrypt certificate notifications
+- `--project-path, -p TEXT`, Path to the project (default: current directory)
+- `--yes, -y`, Skip confirmation prompts
 
 **Examples:**
 ```bash

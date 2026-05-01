@@ -1,7 +1,7 @@
 # Payment Service
 
 !!! warning "Experimental Service"
-    Payment is currently experimental. The checkout, subscription, refund, and dispute flows are wired up end-to-end and covered by tests, but the schema, API surface, and auth-integration behavior may still change before the first stable release. Generated projects ship with a working `payment_dispute` table, per-user scoping when auth is included, and default landing pages — but treat anything beyond that as subject to change.
+    Payment is currently experimental. The checkout, subscription, refund, and dispute flows are wired up end-to-end and covered by tests, but the schema, API surface, and auth-integration behavior may still change before the first stable release. Generated projects ship with a working `payment_dispute` table, per-user scoping when auth is included, and default landing pages, but treat anything beyond that as subject to change.
 
 Payment processing with Stripe: checkout sessions, subscriptions, webhooks, and refunds.
 

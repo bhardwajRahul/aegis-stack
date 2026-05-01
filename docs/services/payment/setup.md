@@ -34,7 +34,7 @@ Unlike the secret key, the webhook signing secret is tied to a specific webhook 
 
 ### Local development
 
-**If you're running the Overseer webserver** (`make serve` or `docker compose up`), webhook forwarding is automatic when `stripe-cli` is installed on your PATH, you're authenticated (`stripe login`), and `STRIPE_SECRET_KEY` is a test key. On startup the app launches `stripe listen` as a supervised subprocess, captures the ephemeral signing secret from its stdout, and injects it into the payment provider at runtime — no `.env` edit needed. You'll see:
+**If you're running the Overseer webserver** (`make serve` or `docker compose up`), webhook forwarding is automatic when `stripe-cli` is installed on your PATH, you're authenticated (`stripe login`), and `STRIPE_SECRET_KEY` is a test key. On startup the app launches `stripe listen` as a supervised subprocess, captures the ephemeral signing secret from its stdout, and injects it into the payment provider at runtime, no `.env` edit needed. You'll see:
 
 ```
 Stripe webhook forwarder started: stripe listen → /api/v1/payment/webhook
@@ -45,8 +45,8 @@ in the server logs. Shutting down the webserver terminates the subprocess cleanl
 
 The auto-forwarder is skipped when any of the following is true, so your setup wins:
 
-- `STRIPE_WEBHOOK_SECRET` is already set in `.env` (explicit override — you're using a tunnel like ngrok or the Stripe dashboard endpoint).
-- `STRIPE_SECRET_KEY` is a live key (`sk_live_...`) — production uses the Stripe dashboard webhook, never a local subprocess.
+- `STRIPE_WEBHOOK_SECRET` is already set in `.env` (explicit override, you're using a tunnel like ngrok or the Stripe dashboard endpoint).
+- `STRIPE_SECRET_KEY` is a live key (`sk_live_...`). Production uses the Stripe dashboard webhook, never a local subprocess.
 - `stripe-cli` isn't on PATH, or the user hasn't run `stripe login`.
 
 **Foreground alternative**: if you'd rather run the forwarder in a dedicated terminal (easier to watch event logs), the CLI helper is still available:
@@ -61,7 +61,7 @@ It shells to `stripe listen --forward-to localhost:8000/api/v1/payment/webhook` 
 > Ready! Your webhook signing secret is whsec_...
 ```
 
-Copy that `whsec_...` value into `.env` as `STRIPE_WEBHOOK_SECRET` and restart the webserver — doing so disables the auto-forwarder so you don't end up with two listeners.
+Copy that `whsec_...` value into `.env` as `STRIPE_WEBHOOK_SECRET` and restart the webserver. Doing so disables the auto-forwarder so you don't end up with two listeners.
 
 See [CLI Commands → webhook](cli.md#webhook) for details including platform-specific `stripe-cli` install instructions.
 
@@ -198,12 +198,12 @@ When you're ready to accept real payments:
 
 **`You specified 'payment' mode but passed a recurring price`**: your Price was configured as recurring in Stripe but you sent `"mode": "payment"` in the checkout request. Either change `mode` to `"subscription"` or create a separate one-off Price for single charges.
 
-**Webhook signature verification fails**: the `STRIPE_WEBHOOK_SECRET` in `.env` must match the signing secret for the specific endpoint delivering events. Local `stripe listen` and production dashboard webhooks have **different** secrets; don't mix them. If the Overseer auto-forwarder is running, the runtime-captured secret wins over `.env` — unset `STRIPE_WEBHOOK_SECRET` to let the auto-forwarder manage it, or set it explicitly to disable auto-forwarding.
+**Webhook signature verification fails**: the `STRIPE_WEBHOOK_SECRET` in `.env` must match the signing secret for the specific endpoint delivering events. Local `stripe listen` and production dashboard webhooks have **different** secrets; don't mix them. If the Overseer auto-forwarder is running, the runtime-captured secret wins over `.env`, unset `STRIPE_WEBHOOK_SECRET` to let the auto-forwarder manage it, or set it explicitly to disable auto-forwarding.
 
 **Auto-forwarder skipped, events never arrive**: check the server logs for one of these lines:
 
-- `Stripe CLI not installed; skipping auto-webhook-forwarder` — install stripe-cli (`brew install stripe/stripe-cli/stripe` on macOS) or run `my-app payment webhook` manually.
-- `Stripe CLI is installed but not authenticated` — run `stripe login` once, then restart the webserver.
-- `STRIPE_SECRET_KEY is not a test key` — the auto-forwarder only runs in test mode; live deployments must configure a production webhook endpoint in the Stripe dashboard.
+- `Stripe CLI not installed; skipping auto-webhook-forwarder`, install stripe-cli (`brew install stripe/stripe-cli/stripe` on macOS) or run `my-app payment webhook` manually.
+- `Stripe CLI is installed but not authenticated`: run `stripe login` once, then restart the webserver.
+- `STRIPE_SECRET_KEY is not a test key`, the auto-forwarder only runs in test mode; live deployments must configure a production webhook endpoint in the Stripe dashboard.
 
-**Docker compose**: the webserver image installs `stripe-cli` when the payment service is included (see the `Install stripe-cli` block in `Dockerfile`). The auto-forwarder authenticates via `--api-key $STRIPE_SECRET_KEY` at runtime, so no interactive `stripe login` is needed inside the container. If you see `Stripe CLI not installed` from a compose run, your image was built before this feature landed — rebuild it with `docker compose build --no-cache webserver`.
+**Docker compose**: the webserver image installs `stripe-cli` when the payment service is included (see the `Install stripe-cli` block in `Dockerfile`). The auto-forwarder authenticates via `--api-key $STRIPE_SECRET_KEY` at runtime, so no interactive `stripe login` is needed inside the container. If you see `Stripe CLI not installed` from a compose run, your image was built before this feature landed, rebuild it with `docker compose build --no-cache webserver`.

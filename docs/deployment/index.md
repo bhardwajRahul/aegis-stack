@@ -60,7 +60,7 @@ health_check:
 | `health_check.retries` | Number of health check attempts (default: `3`) |
 | `health_check.auto_rollback` | Auto-rollback on failed health check (default: `true`) |
 
-All `backup` and `health_check` fields are optional — missing fields use defaults. Existing `deploy.yml` files work without changes.
+All `backup` and `health_check` fields are optional, missing fields use defaults. Existing `deploy.yml` files work without changes.
 
 !!! tip "Git-ignore deploy config"
     Add `.aegis/` to your `.gitignore` to keep deployment config out of version control. `deploy-init` will remind you if it's missing.
@@ -80,10 +80,10 @@ aegis deploy-init [OPTIONS]
 
 **Options:**
 
-- `--host, -h TEXT` — Server IP address or hostname (prompted if not provided)
-- `--user, -u TEXT` — SSH user for deployment (default: `root`)
-- `--path, -p TEXT` — Deployment path on server (default: `/opt/{project-name}`)
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--host, -h TEXT`, Server IP address or hostname (prompted if not provided)
+- `--user, -u TEXT`, SSH user for deployment (default: `root`)
+- `--path, -p TEXT`, Deployment path on server (default: `/opt/{project-name}`)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -110,7 +110,7 @@ aegis deploy-setup [OPTIONS]
 
 **Options:**
 
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **What it does:**
 
@@ -146,10 +146,10 @@ aegis deploy [OPTIONS]
 
 **Options:**
 
-- `--build / --no-build` — Build Docker images before deploying (default: `--build`)
-- `--backup / --no-backup` — Create backup before deploying (default: `--backup`)
-- `--health-check / --no-health-check` — Run health check after deploying (default: `--health-check`)
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--build / --no-build`, Build Docker images before deploying (default: `--build`)
+- `--backup / --no-backup`, Create backup before deploying (default: `--backup`)
+- `--health-check / --no-health-check`, Run health check after deploying (default: `--health-check`)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **What it does:**
 
@@ -160,22 +160,22 @@ aegis deploy [OPTIONS]
 5. **Builds and starts services** with production compose overrides
 6. **Restarts Traefik** if the ingress component is present (ensures container re-discovery)
 7. **Runs health check** against `/health/` endpoint
-8. **Auto-rollback** if health check fails — restores the backup from step 1
+8. **Auto-rollback** if health check fails, restores the backup from step 1
 
 **Excluded from sync:**
 
 Files and directories excluded from the rsync transfer:
 
-- `.git` — Git history
-- `__pycache__` — Python cache
-- `.venv` — Virtual environment
-- `*.pyc` — Compiled Python files
-- `.pytest_cache` — Test cache
-- `.ruff_cache` — Linter cache
-- `data/` — Local database files
-- `.env` — Environment file (copied separately)
-- `.aegis/` — Deploy configuration
-- `backups/` — Server-side backups
+- `.git`, Git history
+- `__pycache__`, Python cache
+- `.venv`, Virtual environment
+- `*.pyc`, Compiled Python files
+- `.pytest_cache`, Test cache
+- `.ruff_cache`, Linter cache
+- `data/`, Local database files
+- `.env`, Environment file (copied separately)
+- `.aegis/`, Deploy configuration
+- `backups/`, Server-side backups
 
 **Examples:**
 ```bash
@@ -202,7 +202,7 @@ aegis deploy-backup [OPTIONS]
 
 **Options:**
 
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **What it does:**
 
@@ -231,7 +231,7 @@ aegis deploy-backups [OPTIONS]
 
 **Options:**
 
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Example output:**
 ```
@@ -259,8 +259,8 @@ aegis deploy-rollback [OPTIONS]
 
 **Options:**
 
-- `--backup, -b TEXT` — Backup timestamp to rollback to (default: latest)
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--backup, -b TEXT`, Backup timestamp to rollback to (default: latest)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **What it does:**
 
@@ -292,9 +292,9 @@ aegis deploy-logs [OPTIONS]
 
 **Options:**
 
-- `--follow / --no-follow, -f` — Follow log output in real-time (default: `--follow`)
-- `--service, -s TEXT` — Show logs for a specific service
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--follow / --no-follow, -f`, Follow log output in real-time (default: `--follow`)
+- `--service, -s TEXT`, Show logs for a specific service
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -323,7 +323,7 @@ aegis deploy-status [OPTIONS]
 
 **Options:**
 
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -345,7 +345,7 @@ aegis deploy-stop [OPTIONS]
 
 **Options:**
 
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -367,7 +367,7 @@ aegis deploy-restart [OPTIONS]
 
 **Options:**
 
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -389,8 +389,8 @@ aegis deploy-shell [OPTIONS]
 
 **Options:**
 
-- `--service, -s TEXT` — Service to connect to (default: `webserver`)
-- `--project-path TEXT` — Path to the project (default: current directory)
+- `--service, -s TEXT`, Service to connect to (default: `webserver`)
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
@@ -423,10 +423,10 @@ aegis ingress-enable [OPTIONS]
 
 **Options:**
 
-- `--domain, -d TEXT` — Domain name for the TLS certificate (e.g., `example.com`)
-- `--email, -e TEXT` — Email for Let's Encrypt certificate notifications
-- `--project-path, -p TEXT` — Path to the project (default: current directory)
-- `--yes, -y` — Skip confirmation prompts
+- `--domain, -d TEXT`, Domain name for the TLS certificate (e.g., `example.com`)
+- `--email, -e TEXT`, Email for Let's Encrypt certificate notifications
+- `--project-path, -p TEXT`, Path to the project (default: current directory)
+- `--yes, -y`, Skip confirmation prompts
 
 **What it does:**
 
@@ -567,6 +567,6 @@ aegis deploy-shell
 
 ## Next Steps
 
-- **[Ingress Component](../components/ingress.md)** — Traefik configuration, routing, and admin protection
-- **[CLI Reference](../cli-reference.md)** — Complete command reference
-- **[Evolving Your Stack](../evolving-your-stack.md)** — Adding components and deploying over time
+- **[Ingress Component](../components/ingress.md)**, Traefik configuration, routing, and admin protection
+- **[CLI Reference](../cli-reference.md)**, Complete command reference
+- **[Evolving Your Stack](../evolving-your-stack.md)**, Adding components and deploying over time

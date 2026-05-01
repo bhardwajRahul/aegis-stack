@@ -17,7 +17,7 @@ uv sync && source .venv/bin/activate
 # Start all services (PostgreSQL + API)
 make serve
 
-# In a second terminal — create test users
+# In a second terminal, create test users
 my-app auth create-test-user --email "admin@example.com" --password "Admin1234!"
 my-app auth create-test-users --count 3 --prefix "user"
 
@@ -69,7 +69,7 @@ Expected `/me` response:
 
 Two-step flow: request a token, then confirm with the new password.
 
-**Step 1 — request the reset token:**
+**Step 1, request the reset token:**
 
 ```bash
 curl -s -X POST http://localhost:8000/api/v1/auth/password-reset/request \
@@ -86,7 +86,7 @@ curl -s -X POST http://localhost:8000/api/v1/auth/password-reset/request \
 
 The response is always 200 regardless of whether the email exists, to prevent user enumeration.
 
-**Step 2 — retrieve the token from the database:**
+**Step 2, retrieve the token from the database:**
 
 In production you would email this token. During development, query it directly:
 
@@ -102,7 +102,7 @@ psql postgresql://postgres:postgres@localhost:5432/my-app \
  Xk9mP2qR7vN4wL1jC8dE5fA3bH6oK0nT | 2026-03-30 12:01:00    | f
 ```
 
-**Step 3 — confirm the reset:**
+**Step 3, confirm the reset:**
 
 ```bash
 curl -s -X POST http://localhost:8000/api/v1/auth/password-reset/confirm \
@@ -117,7 +117,7 @@ curl -s -X POST http://localhost:8000/api/v1/auth/password-reset/confirm \
 }
 ```
 
-**Step 4 — verify login with the new password:**
+**Step 4, verify login with the new password:**
 
 ```bash
 curl -s -X POST http://localhost:8000/api/v1/auth/token \
@@ -141,7 +141,7 @@ curl -s -X POST http://localhost:8000/api/v1/auth/token \
 
 A verification token is created automatically on registration. Tokens expire after 24 hours (configurable via `EMAIL_VERIFICATION_EXPIRE_HOURS`).
 
-**Step 1 — register (token created automatically):**
+**Step 1, register (token created automatically):**
 
 ```bash
 curl -s -X POST http://localhost:8000/api/v1/auth/register \
@@ -162,9 +162,9 @@ curl -s -X POST http://localhost:8000/api/v1/auth/register \
 }
 ```
 
-Note `"is_verified": false` — the account works immediately but is unverified.
+Note `"is_verified": false`, the account works immediately but is unverified.
 
-**Step 2 — retrieve the verification token from the database:**
+**Step 2, retrieve the verification token from the database:**
 
 ```bash
 psql postgresql://postgres:postgres@localhost:5432/my-app \
@@ -177,7 +177,7 @@ psql postgresql://postgres:postgres@localhost:5432/my-app \
  mQ3sW7xZ2kR9vN5pL8tA1cE4bD6oH0jY | 2026-03-30 12:05:00    | f
 ```
 
-**Step 3 — verify the email:**
+**Step 3, verify the email:**
 
 ```bash
 curl -s -X POST http://localhost:8000/api/v1/auth/verify-email \
@@ -192,7 +192,7 @@ curl -s -X POST http://localhost:8000/api/v1/auth/verify-email \
 }
 ```
 
-**Step 4 — confirm `is_verified` is now true:**
+**Step 4, confirm `is_verified` is now true:**
 
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/token \
@@ -295,7 +295,7 @@ Failed attempt 4:  Incorrect email or password
 Failed attempt 5:  Incorrect email or password
 ```
 
-**Attempt 6 — even with the correct password, account is now locked:**
+**Attempt 6, even with the correct password, account is now locked:**
 
 ```bash
 curl -s -X POST http://localhost:8000/api/v1/auth/token \
@@ -324,7 +324,7 @@ psql postgresql://postgres:postgres@localhost:5432/my-app \
  alice@example.com   |                     5 | 2026-03-30 12:20:00
 ```
 
-**Auto-unlock:** After 15 minutes, the next login attempt clears `locked_until` automatically — no manual intervention needed.
+**Auto-unlock:** After 15 minutes, the next login attempt clears `locked_until` automatically, no manual intervention needed.
 
 **Adjust thresholds in `.env`:**
 
@@ -509,7 +509,7 @@ Two scenarios: inviting an existing user (added immediately) and inviting a new 
 
 ### Invite an Existing User
 
-The user is added to the org instantly — no token acceptance required.
+The user is added to the org instantly, no token acceptance required.
 
 ```bash
 # bob@example.com already has an account (user_id: 2)
@@ -532,13 +532,13 @@ curl -s -X POST http://localhost:8000/api/v1/orgs/1/invites \
 }
 ```
 
-Note `"status": "accepted"` — membership was created immediately.
+Note `"status": "accepted"`, membership was created immediately.
 
 ### Invite a New User (Pending)
 
 The user doesn't have an account yet. A pending invite is stored and resolved automatically when they register.
 
-**Step 1 — create the pending invite:**
+**Step 1, create the pending invite:**
 
 ```bash
 curl -s -X POST http://localhost:8000/api/v1/orgs/1/invites \
@@ -560,7 +560,7 @@ curl -s -X POST http://localhost:8000/api/v1/orgs/1/invites \
 }
 ```
 
-**Step 2 — check pending invites:**
+**Step 2, check pending invites:**
 
 ```bash
 curl -s http://localhost:8000/api/v1/orgs/1/invites \
@@ -568,7 +568,7 @@ curl -s http://localhost:8000/api/v1/orgs/1/invites \
   | python3 -m json.tool
 ```
 
-**Step 3a — newcomer registers (auto-joins the org):**
+**Step 3a, newcomer registers (auto-joins the org):**
 
 ```bash
 curl -s -X POST http://localhost:8000/api/v1/auth/register \
@@ -579,7 +579,7 @@ curl -s -X POST http://localhost:8000/api/v1/auth/register \
 
 The `accept_pending_invites` hook fires automatically during registration. The invite status changes to `accepted` and the user is a member immediately.
 
-**Step 3b (alternative) — accept invite explicitly by token:**
+**Step 3b (alternative), accept invite explicitly by token:**
 
 Use this when `INVITE_ACCEPTANCE_MODE=token` or when you want a registered user to explicitly accept.
 

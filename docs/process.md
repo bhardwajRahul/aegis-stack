@@ -21,7 +21,7 @@ The test suite spins up every valid combination...base stack, scheduler, worker,
 
 The secret is the architecture. Because everything is template-driven and modular, testing is just regeneration + validation. The templates ARE the product.
 
-When I added the scheduler component, I followed the same pattern as worker. Auth service? Same pattern. AI service? Same pattern. Each time, the tests validated it worked with every other component—not just in isolation, but in combination.
+When I added the scheduler component, I followed the same pattern as worker. Auth service? Same pattern. AI service? Same pattern. Each time, the tests validated it worked with every other component, not just in isolation, but in combination.
 
 Here's the thing that surprised me: adding new components gets *easier* over time, not harder. That's the foundation. Not "good enough for now" code that becomes technical debt. Actual tested, validated, proven patterns I can build on with confidence.
 
