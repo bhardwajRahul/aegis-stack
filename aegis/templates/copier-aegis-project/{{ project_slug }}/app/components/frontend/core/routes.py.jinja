@@ -10,10 +10,11 @@ from __future__ import annotations
 DASHBOARD_ROUTE: str = "/"
 {% if include_auth -%}
 LOGIN_ROUTE: str = "/login"
+REGISTER_ROUTE: str = "/register"
 {%- endif %}
 
 {% if include_auth -%}
-PUBLIC_ROUTES: tuple[str, ...] = (LOGIN_ROUTE,)
+PUBLIC_ROUTES: tuple[str, ...] = (LOGIN_ROUTE, REGISTER_ROUTE)
 """Routes that do not require authentication."""
 {%- else -%}
 PUBLIC_ROUTES: tuple[str, ...] = ()

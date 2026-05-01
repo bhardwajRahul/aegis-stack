@@ -1,0 +1,85 @@
+{% if include_auth -%}
+"""
+Cookie-backed session helpers for the Flet frontend.
+
+Auth model
+----------
+The backend issues an HttpOnly ``aegis_session`` cookie on
+``/auth/token``, ``/auth/register``, and the OAuth callback. That
+cookie lives in the per-session ``APIClient``'s underlying httpx
+cookie jar — never in ``page.client_storage`` and never on the
+``page`` object directly. The Flet Python server holds the jar; the
+browser never sees the cookie in Flet mode (it would in an htmx
+front-end, but the backend behavior is identical).
+
+This module exposes two operations:
+
+- ``is_authenticated(page)`` — round-trip ``/auth/me`` and report whether
+  the cookie is currently honored. Cheap (single GET), authoritative
+  (server is the source of truth), and naturally surfaces token
+  expiry / blacklist hits as "not signed in".
+- ``sign_out(page)`` — call ``/auth/logout`` to revoke server-side, drop
+  the cookie jar locally, clear ``SessionState``, and route to /login.
+
+Everything here is async-only.
+"""
+
+from __future__ import annotations
+
+import flet as ft
+
+from app.components.frontend.core.routes import LOGIN_ROUTE
+from app.components.frontend.state.session_state import get_session_state
+from app.core.log import logger
+
+
+async def is_authenticated(page: ft.Page) -> bool:
+    """
+    Return True if the current session cookie is honored by the backend.
+
+    Hits ``/auth/me``: a 200 means the cookie is valid and the session
+    is live; anything else (401, network error, missing cookie) is
+    treated as not signed in. The router calls this on initial nav and
+    on every protected route change.
+    """
+    state = get_session_state(page)
+    payload = await state.api_client.get("/api/v1/auth/me")
+    if isinstance(payload, dict) and payload:
+        # Cache the user on the session so views don't re-fetch.
+        state.current_user = payload
+        return True
+    return False
+
+
+async def sign_out(page: ft.Page) -> None:
+    """
+    Sign the user out: revoke server-side, drop local cookies, clear
+    the user payload, and route to /login.
+
+    Keeps ``SessionState`` and ``APIClient`` alive — the Flet session
+    itself is still connected, only the auth state is reset. Tolerant
+    of partial failures: even if the call to ``/auth/logout`` fails,
+    the local jar is still cleared so the user lands in a clean
+    unauthenticated state.
+    """
+    state = get_session_state(page)
+    api = state.api_client
+
+    try:
+        await api.post("/api/v1/auth/logout")
+    except Exception as exc:
+        logger.warning(
+            "auth.sign_out.server_call_failed",
+            session_id=page.session_id,
+            error=str(exc),
+        )
+
+    # Defang any stale cookie copy still in the jar locally — even if
+    # the server-side delete-cookie response was honored, this is
+    # belt-and-braces against a partial-failure replay.
+    api.clear_cookies()
+    state.current_user = None
+
+    logger.info("auth.sign_out.complete", session_id=page.session_id)
+    page.go(LOGIN_ROUTE)
+{%- endif %}

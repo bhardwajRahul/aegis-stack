@@ -1,6 +1,6 @@
 """Tests for SessionState — the per-session shared resources container."""
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from app.components.frontend.state.session_state import (
@@ -19,9 +19,20 @@ def _make_page() -> MagicMock:
     return page
 
 
+def _mock_api_client() -> MagicMock:
+    """Mocked APIClient — avoids spinning up a real httpx connection pool.
+
+    These tests don't exercise client behavior, just that SessionState
+    stores/retrieves/clears it. Using a mock keeps them fast and leak-free.
+    """
+    client = MagicMock(spec=APIClient)
+    client.aclose = AsyncMock()
+    return client
+
+
 def test_init_attaches_session_state_to_page_data() -> None:
     page = _make_page()
-    api_client = APIClient(base_url="http://test")
+    api_client = _mock_api_client()
 
     state = init_session_state(page, api_client=api_client)
 
@@ -34,7 +45,7 @@ def test_init_creates_page_data_dict_when_missing() -> None:
     page = _make_page()
     page.data = None
 
-    init_session_state(page, api_client=APIClient(base_url="http://test"))
+    init_session_state(page, api_client=_mock_api_client())
 
     assert page.data is not None
     assert "session_state" in page.data
@@ -42,7 +53,7 @@ def test_init_creates_page_data_dict_when_missing() -> None:
 
 def test_get_returns_attached_state() -> None:
     page = _make_page()
-    state = init_session_state(page, api_client=APIClient(base_url="http://test"))
+    state = init_session_state(page, api_client=_mock_api_client())
 
     assert get_session_state(page) is state
 
@@ -60,26 +71,28 @@ def test_get_raises_when_page_data_missing_key() -> None:
         get_session_state(page)
 
 
-def test_clear_removes_session_state() -> None:
+@pytest.mark.asyncio
+async def test_clear_removes_session_state() -> None:
     page = _make_page()
-    init_session_state(page, api_client=APIClient(base_url="http://test"))
+    init_session_state(page, api_client=_mock_api_client())
 
-    clear_session_state(page)
+    await clear_session_state(page)
 
     assert "session_state" not in page.data
     with pytest.raises(RuntimeError):
         get_session_state(page)
 
 
-def test_clear_is_idempotent_when_not_initialized() -> None:
+@pytest.mark.asyncio
+async def test_clear_is_idempotent_when_not_initialized() -> None:
     page = _make_page()
     # Should not raise
-    clear_session_state(page)
+    await clear_session_state(page)
 
 
 def test_ad_hoc_get_set() -> None:
     page = _make_page()
-    state = init_session_state(page, api_client=APIClient(base_url="http://test"))
+    state = init_session_state(page, api_client=_mock_api_client())
 
     assert state.get("missing") is None
     assert state.get("missing", "default") == "default"
@@ -90,7 +103,7 @@ def test_ad_hoc_get_set() -> None:
 
 def test_session_state_holds_page_reference() -> None:
     page = _make_page()
-    state = init_session_state(page, api_client=APIClient(base_url="http://test"))
+    state = init_session_state(page, api_client=_mock_api_client())
 
     # SessionState IS the canonical home for the page reference.
     assert state.page is page

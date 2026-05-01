@@ -88,8 +88,27 @@ def init_session_state(
     return state
 
 
-def clear_session_state(page: ft.Page) -> None:
-    """Remove the SessionState. Used during logout / session teardown."""
-    if page.data is not None and _SESSION_KEY in page.data:
-        del page.data[_SESSION_KEY]
-        logger.info("session_state.cleared", session_id=page.session_id)
+async def clear_session_state(page: ft.Page) -> None:
+    """Remove the SessionState. Used during a hard session teardown.
+
+    ``aclose()``s the per-session ``APIClient`` first so the underlying
+    httpx connection pool is released — this is the one code path where
+    we tear SessionState down on purpose, so it's the right place for
+    deterministic cleanup. Sign-out does NOT call this (the user can
+    sign back in without losing the page); transient WebSocket blips
+    do NOT call this (Flet would re-create the page); only true
+    end-of-session teardown.
+    """
+    if page.data is None or _SESSION_KEY not in page.data:
+        return
+    state: SessionState = page.data[_SESSION_KEY]
+    try:
+        await state.api_client.aclose()
+    except Exception as exc:
+        logger.warning(
+            "session_state.aclose_failed",
+            session_id=page.session_id,
+            error=str(exc),
+        )
+    del page.data[_SESSION_KEY]
+    logger.info("session_state.cleared", session_id=page.session_id)
