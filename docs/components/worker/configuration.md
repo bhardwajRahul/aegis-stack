@@ -413,21 +413,21 @@ When running CLI commands locally (outside Docker), the system automatically use
     # Example: 2 processes x 8 threads = 16 concurrent messages per container
     ```
 
-    **I/O-bound workloads** — increase threads:
+    **I/O-bound workloads**: increase threads.
 
     ```bash
     WORKER_PROCESSES=1
     WORKER_THREADS=32    # Async actors spend most time awaiting I/O
     ```
 
-    **CPU-bound workloads** — increase processes:
+    **CPU-bound workloads**: increase processes.
 
     ```bash
     WORKER_PROCESSES=4   # One per CPU core
     WORKER_THREADS=4     # Fewer threads per process
     ```
 
-    **Mixed workloads** — balanced:
+    **Mixed workloads**: balanced.
 
     ```bash
     WORKER_PROCESSES=2
@@ -648,9 +648,9 @@ REDIS_SOCKET_KEEPALIVE = True
 
     **Event types:**
 
-    - `worker.started` / `worker.stopped` — Worker lifecycle
-    - `job.enqueued` — Task enqueued (from client side)
-    - `job.started` / `job.completed` / `job.failed` — Task execution
+    - `worker.started` / `worker.stopped`, Worker lifecycle
+    - `job.enqueued`, Task enqueued (from client side)
+    - `job.started` / `job.completed` / `job.failed`, Task execution
 
     ```python
     class EventPublishMiddleware(TaskiqMiddleware):

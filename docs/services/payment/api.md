@@ -16,7 +16,7 @@ When auth is included, the authenticated user's ID is forwarded to every query a
 
 - `GET /transactions`, `GET /subscriptions`, `GET /disputes` return only rows tied to the current user's `PaymentCustomer`.
 - `GET /transactions/{id}`, `GET /disputes/{id}` return `404` for rows owned by another user (indistinguishable from a missing row on purpose).
-- `POST /refund/{id}` and `POST /subscriptions/{id}/cancel` return `404` for rows owned by another user — users can't refund or cancel each other's payments.
+- `POST /refund/{id}` and `POST /subscriptions/{id}/cancel` return `404` for rows owned by another user, users can't refund or cancel each other's payments.
 - `POST /checkout` upserts a `PaymentCustomer` for the authenticated user on first use, then reuses the `provider_customer_id` on every subsequent checkout so Stripe sees one customer per app user.
 
 ### Anonymous flow (no auth)

@@ -64,7 +64,9 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 
 | Component | What you get | |
 |---|---|---|
-| **[Core](https://lbedner.github.io/aegis-stack/components/)** | FastAPI + Flet + Typer | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
+| **[Backend](https://lbedner.github.io/aegis-stack/components/webserver/)** | FastAPI + lifecycle hooks | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
+| **[Frontend](https://lbedner.github.io/aegis-stack/components/frontend/)** | Flet, ships with the Overseer system dashboard | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
+| **[CLI](https://lbedner.github.io/aegis-stack/cli-reference/)** | Typer, first-class system interface | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
 | **[Database](https://lbedner.github.io/aegis-stack/components/database/)** | Postgres or SQLite + SQLModel ORM | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Worker](https://lbedner.github.io/aegis-stack/components/worker/)** | Pluggable Arq, Taskiq, or Dramatiq | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Scheduler](https://lbedner.github.io/aegis-stack/components/scheduler/)** | APScheduler with persistent jobs | ![Optional](https://img.shields.io/badge/-optional-blue) |
@@ -77,7 +79,7 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 
 | Service | What you get | |
 |---|---|---|
-| **[Auth](https://lbedner.github.io/aegis-stack/services/auth/)** | JWT sessions, RBAC, multi-tenant Organizations | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Auth](https://lbedner.github.io/aegis-stack/services/auth/)** | JWT cookie sessions, GitHub/Google sign-in, RBAC, multi-tenant Organizations | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[AI](https://lbedner.github.io/aegis-stack/services/ai/)** | Conversational agents, RAG, model catalog, TTS and STT (PydanticAI / LangChain across 7 providers) | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Comms](https://lbedner.github.io/aegis-stack/services/comms/)** | Transactional email (Resend) + SMS / voice (Twilio) | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Payments](https://lbedner.github.io/aegis-stack/services/payment/)** | Stripe checkout, subscriptions, refunds, disputes | ![Optional](https://img.shields.io/badge/-optional-blue) |

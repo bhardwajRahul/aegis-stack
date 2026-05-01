@@ -248,7 +248,7 @@ This moves the dispute from `needs_response` to `under_review` on Stripe's side;
 
 ## Extending Webhook Handling
 
-The default webhook handler persists common events to the database. To add custom application logic (send a welcome email on first payment, grant a feature flag on subscription start, etc.), override the specific event handler rather than the top-level `handle_webhook` — each `_handle_*` method receives the full `WebhookEvent` with the original Stripe payload, while `handle_webhook` returns only a small acknowledgement dict.
+The default webhook handler persists common events to the database. To add custom application logic (send a welcome email on first payment, grant a feature flag on subscription start, etc.), override the specific event handler rather than the top-level `handle_webhook`. Each `_handle_*` method receives the full `WebhookEvent` with the original Stripe payload, while `handle_webhook` returns only a small acknowledgement dict.
 
 ```python
 # In your own application code, subclass PaymentService and replace

@@ -64,7 +64,7 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 
 ### POST /auth/token
 
-Login and receive a JWT access token. Follows the OAuth2 password flow — email is passed as `username` in form data.
+Login and receive a JWT access token. Follows the OAuth2 password flow; email is passed as `username` in form data.
 
 **Auth:** None
 **Rate limited:** Yes
@@ -73,7 +73,7 @@ Login and receive a JWT access token. Follows the OAuth2 password flow — email
 
 | Field | Type | Required |
 |-------|------|----------|
-| `username` | `string` | Yes — pass email here |
+| `username` | `string` | Yes, pass email here |
 | `password` | `string` | Yes |
 
 **Response: `200 OK`**
@@ -81,7 +81,7 @@ Login and receive a JWT access token. Follows the OAuth2 password flow — email
 | Field | Type |
 |-------|------|
 | `access_token` | `string` |
-| `token_type` | `string` — always `"bearer"` |
+| `token_type` | `string`, always `"bearer"` |
 
 **Status codes:**
 
@@ -109,7 +109,7 @@ Get the current authenticated user's profile.
 
 **Auth:** Bearer token required
 
-**Response: `200 OK`** — `UserResponse` (see schema above)
+**Response: `200 OK`**, `UserResponse` (see schema above)
 
 **Status codes:**
 
@@ -137,7 +137,7 @@ Get a specific user by ID.
 |-----------|------|-------------|
 | `user_id` | `integer` | User ID |
 
-**Response: `200 OK`** — `UserResponse`
+**Response: `200 OK`**, `UserResponse`
 
 **Status codes:**
 
@@ -172,7 +172,7 @@ Update a user's profile. Caller must be the user themselves or an admin.
 |-----------|------|----------|-------------|
 | `full_name` | `string` | No | New display name |
 
-**Response: `200 OK`** — `UserResponse`
+**Response: `200 OK`**, `UserResponse`
 
 **Status codes:**
 
@@ -328,9 +328,9 @@ Accept an org invite by token. The invite must have been issued to the authentic
 
 | Field | Type | Required |
 |-------|------|----------|
-| `token` | `string` | Yes — invite token |
+| `token` | `string` | Yes, invite token |
 
-**Response: `200 OK`** — `InviteResponse`
+**Response: `200 OK`**, `InviteResponse`
 
 | Field | Type |
 |-------|------|
@@ -367,9 +367,9 @@ These endpoints require elevated roles (`admin` or `moderator`).
 
 List all users. Requires `admin` or `moderator` role.
 
-**Auth:** Bearer token — `admin` or `moderator`
+**Auth:** Bearer token, `admin` or `moderator`
 
-**Response: `200 OK`** — `list[UserResponse]`
+**Response: `200 OK`**, `list[UserResponse]`
 
 **Status codes:**
 
@@ -390,7 +390,7 @@ curl http://localhost:8000/api/v1/auth/users \
 
 Deactivate a user account. Requires `admin` role.
 
-**Auth:** Bearer token — `admin`
+**Auth:** Bearer token, `admin`
 
 **Path parameters:**
 
@@ -398,7 +398,7 @@ Deactivate a user account. Requires `admin` role.
 |-----------|------|-------------|
 | `user_id` | `integer` | User to deactivate |
 
-**Response: `200 OK`** — `UserResponse` with `is_active: false`
+**Response: `200 OK`**, `UserResponse` with `is_active: false`
 
 **Status codes:**
 
@@ -420,7 +420,7 @@ curl -X PATCH http://localhost:8000/api/v1/auth/users/42/deactivate \
 
 Reactivate a deactivated user account. Requires `admin` role.
 
-**Auth:** Bearer token — `admin`
+**Auth:** Bearer token, `admin`
 
 **Path parameters:**
 
@@ -428,7 +428,7 @@ Reactivate a deactivated user account. Requires `admin` role.
 |-----------|------|-------------|
 | `user_id` | `integer` | User to activate |
 
-**Response: `200 OK`** — `UserResponse` with `is_active: true`
+**Response: `200 OK`**, `UserResponse` with `is_active: true`
 
 **Status codes:**
 
@@ -450,7 +450,7 @@ curl -X PATCH http://localhost:8000/api/v1/auth/users/42/activate \
 
 Permanently delete a user. Requires `admin` role.
 
-**Auth:** Bearer token — `admin`
+**Auth:** Bearer token, `admin`
 
 **Path parameters:**
 
@@ -493,11 +493,11 @@ Create a new organization. The creator is automatically added as `owner`.
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `name` | `string` | Yes | Display name |
-| `slug` | `string` | Yes | Unique URL identifier — lowercase alphanumeric with hyphens, cannot start/end with a hyphen |
+| `slug` | `string` | Yes | Unique URL identifier, lowercase alphanumeric with hyphens, cannot start/end with a hyphen |
 | `description` | `string` | No | |
 | `is_active` | `boolean` | No | Defaults to `true` |
 
-**Response: `201 Created`** — `OrgResponse`
+**Response: `201 Created`**, `OrgResponse`
 
 | Field | Type |
 |-------|------|
@@ -532,7 +532,7 @@ List organizations the current user belongs to.
 
 **Auth:** Bearer token required
 
-**Response: `200 OK`** — `list[OrgResponse]`
+**Response: `200 OK`**, `list[OrgResponse]`
 
 **Status codes:**
 
@@ -552,9 +552,9 @@ curl http://localhost:8000/api/v1/orgs \
 
 List all organizations in the system. Requires `admin` role.
 
-**Auth:** Bearer token — `admin`
+**Auth:** Bearer token, `admin`
 
-**Response: `200 OK`** — `list[OrgResponse]`
+**Response: `200 OK`**, `list[OrgResponse]`
 
 **Status codes:**
 
@@ -575,9 +575,9 @@ curl http://localhost:8000/api/v1/orgs/all \
 
 List all memberships across all orgs with org name and slug. Requires `admin` role.
 
-**Auth:** Bearer token — `admin`
+**Auth:** Bearer token, `admin`
 
-**Response: `200 OK`** — `list[UserMembershipResponse]`
+**Response: `200 OK`**, `list[UserMembershipResponse]`
 
 | Field | Type |
 |-------|------|
@@ -605,7 +605,7 @@ curl http://localhost:8000/api/v1/orgs/memberships \
 
 Get organization details. Requires membership in the org.
 
-**Auth:** Bearer token — any org member
+**Auth:** Bearer token, any org member
 
 **Path parameters:**
 
@@ -613,7 +613,7 @@ Get organization details. Requires membership in the org.
 |-----------|------|-------------|
 | `org_id` | `integer` | Organization ID |
 
-**Response: `200 OK`** — `OrgResponse`
+**Response: `200 OK`**, `OrgResponse`
 
 **Status codes:**
 
@@ -635,7 +635,7 @@ curl http://localhost:8000/api/v1/orgs/1 \
 
 Update organization name or description. Requires `admin` or `owner` org role.
 
-**Auth:** Bearer token — org `admin` or `owner`
+**Auth:** Bearer token, org `admin` or `owner`
 
 **Path parameters:**
 
@@ -650,7 +650,7 @@ Update organization name or description. Requires `admin` or `owner` org role.
 | `name` | `string` | No | New display name |
 | `description` | `string` | No | New description |
 
-**Response: `200 OK`** — `OrgResponse`
+**Response: `200 OK`**, `OrgResponse`
 
 **Status codes:**
 
@@ -673,7 +673,7 @@ curl -X PATCH "http://localhost:8000/api/v1/orgs/1?name=Acme+Inc" \
 
 Delete an organization. Requires `owner` org role.
 
-**Auth:** Bearer token — org `owner`
+**Auth:** Bearer token, org `owner`
 
 **Path parameters:**
 
@@ -703,7 +703,7 @@ curl -X DELETE http://localhost:8000/api/v1/orgs/1 \
 
 Transfer org ownership to another existing member. Caller must be the current `owner`.
 
-**Auth:** Bearer token — org `owner`
+**Auth:** Bearer token, org `owner`
 
 **Path parameters:**
 
@@ -745,7 +745,7 @@ curl -X POST http://localhost:8000/api/v1/orgs/1/transfer-ownership \
 
 List organization members. Requires membership.
 
-**Auth:** Bearer token — any org member
+**Auth:** Bearer token, any org member
 
 **Path parameters:**
 
@@ -753,7 +753,7 @@ List organization members. Requires membership.
 |-----------|------|-------------|
 | `org_id` | `integer` | Organization ID |
 
-**Response: `200 OK`** — `list[MemberResponse]`
+**Response: `200 OK`**, `list[MemberResponse]`
 
 | Field | Type |
 |-------|------|
@@ -782,7 +782,7 @@ curl http://localhost:8000/api/v1/orgs/1/members \
 
 List members with enriched user data (email and name). Requires membership.
 
-**Auth:** Bearer token — any org member
+**Auth:** Bearer token, any org member
 
 **Path parameters:**
 
@@ -790,7 +790,7 @@ List members with enriched user data (email and name). Requires membership.
 |-----------|------|-------------|
 | `org_id` | `integer` | Organization ID |
 
-**Response: `200 OK`** — `list[MemberDetailResponse]`
+**Response: `200 OK`**, `list[MemberDetailResponse]`
 
 | Field | Type |
 |-------|------|
@@ -819,7 +819,7 @@ curl http://localhost:8000/api/v1/orgs/1/members/details \
 
 Add a single member to the organization. Requires `admin` or `owner` org role.
 
-**Auth:** Bearer token — org `admin` or `owner`
+**Auth:** Bearer token, org `admin` or `owner`
 
 **Path parameters:**
 
@@ -832,9 +832,9 @@ Add a single member to the organization. Requires `admin` or `owner` org role.
 | Parameter | Type | Required | Notes |
 |-----------|------|----------|-------|
 | `user_id` | `integer` | Yes | User to add |
-| `role` | `string` | No | Defaults to `"member"` — valid: `owner`, `admin`, `member` |
+| `role` | `string` | No | Defaults to `"member"`, valid: `owner`, `admin`, `member` |
 
-**Response: `201 Created`** — `MemberResponse`
+**Response: `201 Created`**, `MemberResponse`
 
 **Status codes:**
 
@@ -856,7 +856,7 @@ curl -X POST "http://localhost:8000/api/v1/orgs/1/members?user_id=42&role=admin"
 
 Add multiple members at once, all with the same role. Requires `admin` or `owner` org role. Skips users already in the org.
 
-**Auth:** Bearer token — org `admin` or `owner`
+**Auth:** Bearer token, org `admin` or `owner`
 
 **Path parameters:**
 
@@ -869,9 +869,9 @@ Add multiple members at once, all with the same role. Requires `admin` or `owner
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `user_ids` | `list[integer]` | Yes | User IDs to add |
-| `role` | `string` | No | Defaults to `"member"` — valid: `owner`, `admin`, `member` |
+| `role` | `string` | No | Defaults to `"member"`, valid: `owner`, `admin`, `member` |
 
-**Response: `201 Created`** — `list[MemberResponse]` (newly added members only)
+**Response: `201 Created`**, `list[MemberResponse]` (newly added members only)
 
 **Status codes:**
 
@@ -895,7 +895,7 @@ curl -X POST http://localhost:8000/api/v1/orgs/1/members/bulk \
 
 Update a member's role. Requires `admin` or `owner` org role.
 
-**Auth:** Bearer token — org `admin` or `owner`
+**Auth:** Bearer token, org `admin` or `owner`
 
 **Path parameters:**
 
@@ -910,7 +910,7 @@ Update a member's role. Requires `admin` or `owner` org role.
 |-----------|------|----------|-------|
 | `role` | `string` | Yes | Valid: `owner`, `admin`, `member` |
 
-**Response: `200 OK`** — `MemberResponse`
+**Response: `200 OK`**, `MemberResponse`
 
 **Status codes:**
 
@@ -931,9 +931,9 @@ curl -X PATCH "http://localhost:8000/api/v1/orgs/1/members/42?role=admin" \
 
 ### DELETE /orgs/{org_id}/members/{user_id}
 
-Remove a member from the organization. The `owner` cannot be removed — transfer ownership first. Requires `admin` or `owner` org role.
+Remove a member from the organization. The `owner` cannot be removed, transfer ownership first. Requires `admin` or `owner` org role.
 
-**Auth:** Bearer token — org `admin` or `owner`
+**Auth:** Bearer token, org `admin` or `owner`
 
 **Path parameters:**
 
@@ -964,7 +964,7 @@ curl -X DELETE http://localhost:8000/api/v1/orgs/1/members/42 \
 
 Invite a user to the org by email. If the user already has an account, they are added immediately and the invite is marked as accepted. For pending invites (user doesn't exist yet), they auto-join on registration or can accept explicitly via `POST /auth/accept-invite`. Requires `admin` or `owner` org role.
 
-**Auth:** Bearer token — org `admin` or `owner`
+**Auth:** Bearer token, org `admin` or `owner`
 
 **Path parameters:**
 
@@ -977,9 +977,9 @@ Invite a user to the org by email. If the user already has an account, they are 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `email` | `string` | Yes | Invitee's email |
-| `role` | `string` | No | Defaults to `"member"` — valid: `owner`, `admin`, `member` |
+| `role` | `string` | No | Defaults to `"member"`, valid: `owner`, `admin`, `member` |
 
-**Response: `201 Created`** — `InviteResponse`
+**Response: `201 Created`**, `InviteResponse`
 
 **Status codes:**
 
@@ -1003,7 +1003,7 @@ curl -X POST http://localhost:8000/api/v1/orgs/1/invites \
 
 List pending invites for an organization. Requires `admin` or `owner` org role.
 
-**Auth:** Bearer token — org `admin` or `owner`
+**Auth:** Bearer token, org `admin` or `owner`
 
 **Path parameters:**
 
@@ -1011,7 +1011,7 @@ List pending invites for an organization. Requires `admin` or `owner` org role.
 |-----------|------|-------------|
 | `org_id` | `integer` | Organization ID |
 
-**Response: `200 OK`** — `list[InviteResponse]`
+**Response: `200 OK`**, `list[InviteResponse]`
 
 **Status codes:**
 
@@ -1035,7 +1035,7 @@ curl http://localhost:8000/api/v1/orgs/1/invites \
 | `200` | Success |
 | `201` | Resource created |
 | `204` | Success, no content |
-| `400` | Bad request — validation or business rule failure |
+| `400` | Bad request, validation or business rule failure |
 | `401` | Not authenticated |
 | `403` | Authenticated but lacks required role or org permission |
 | `404` | Resource not found |
@@ -1046,6 +1046,6 @@ curl http://localhost:8000/api/v1/orgs/1/invites \
 
 **See also:**
 
-- **[Integration Guide](integration.md)** — How to integrate auth into your app
-- **[CLI Commands](cli.md)** — Manage users and orgs from the command line
-- **[Examples](examples.md)** — Complete implementation examples
+- **[Integration Guide](integration.md)**, How to integrate auth into your app
+- **[CLI Commands](cli.md)**, Manage users and orgs from the command line
+- **[Examples](examples.md)**, Complete implementation examples

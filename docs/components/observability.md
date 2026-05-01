@@ -5,7 +5,7 @@
 
 <img src="../../images/observability_exceptions.png" alt="Observability - Exception tracking with full stack traces">
 
-Distributed tracing, metrics, and log correlation with [Pydantic Logfire](https://logfire.pydantic.dev/) — auto-instruments your application and adapts to whichever components you have enabled.
+Distributed tracing, metrics, and log correlation with [Pydantic Logfire](https://logfire.pydantic.dev/). Auto-instruments your application and adapts to whichever components you have enabled.
 
 !!! info "Adding Observability to Your Project"
     ```bash
@@ -18,13 +18,13 @@ Distributed tracing, metrics, and log correlation with [Pydantic Logfire](https:
 When you include the observability component, your project gets:
 
 - **Pydantic Logfire integration** with automatic configuration
-- **FastAPI instrumentation** — traces every request (health/dashboard endpoints excluded)
-- **HTTPX instrumentation** — traces outbound HTTP calls
-- **SQLAlchemy instrumentation** — auto-enabled when the database component is present
-- **Redis instrumentation** — auto-enabled when the redis component is present
+- **FastAPI instrumentation**: traces every request (health/dashboard endpoints excluded)
+- **HTTPX instrumentation**: traces outbound HTTP calls
+- **SQLAlchemy instrumentation**: auto-enabled when the database component is present
+- **Redis instrumentation**: auto-enabled when the redis component is present
 - **Health check integration** with the Overseer dashboard, including Logfire Query API analytics
 - **Dashboard card + detail modal** with trace metrics, slowest spans, and exception tracking
-- **Graceful degradation** — works without a cloud token (local instrumentation only)
+- **Graceful degradation**: works without a cloud token (local instrumentation only)
 
 ## Generated Files
 
@@ -96,7 +96,7 @@ graph TB
     style Modal fill:#e8f5e8
 ```
 
-The middleware is auto-discovered by the backend hook system — no manual registration needed. On startup it configures Logfire with your project name and environment, then instruments each available integration.
+The middleware is auto-discovered by the backend hook system, no manual registration needed. On startup it configures Logfire with your project name and environment, then instruments each available integration.
 
 When `LOGFIRE_TOKEN` is set, traces are sent to Logfire cloud. Without a token, instrumentation still runs locally (useful for development and structured logging).
 
@@ -128,7 +128,7 @@ Observability automatically adapts its instrumentation based on which components
 | **Database** | `logfire.instrument_sqlalchemy()` | SQL queries via the shared engine |
 | **Redis** | `logfire.instrument_redis()` | Redis commands and pub/sub |
 
-This is handled at template generation time — the `logfire[fastapi,httpx]` dependency automatically includes extras like `sqlalchemy` and `redis` when those components are present.
+This is handled at template generation time, the `logfire[fastapi,httpx]` dependency automatically includes extras like `sqlalchemy` and `redis` when those components are present.
 
 ## Overseer Integration
 
@@ -145,17 +145,17 @@ The card displays real-time Logfire status:
 
 Clicking the card opens a detail modal with four tabs:
 
-**Overview** — Key metrics (traces, spans, exceptions, latency) plus a bar chart of the slowest spans:
+**Overview**, Key metrics (traces, spans, exceptions, latency) plus a bar chart of the slowest spans:
 
 <img src="../../images/observability_overview.png" alt="Observability Overview Tab">
 
-**Slowest Spans** — Full table with avg, p95, and max latency per span type, with error counts highlighted in red:
+**Slowest Spans**, Full table with avg, p95, and max latency per span type, with error counts highlighted in red:
 
 <img src="../../images/observability_slowest_spans.png" alt="Observability Slowest Spans Tab">
 
-**Exceptions** — Expandable table of exceptions from the last 24 hours, grouped by type. Click to expand and see the full stack trace.
+**Exceptions**, Expandable table of exceptions from the last 24 hours, grouped by type. Click to expand and see the full stack trace.
 
-**Config** — Service name, cloud status, Query API availability, and project URL link
+**Config**, Service name, cloud status, Query API availability, and project URL link
 
 ### Health Check
 
@@ -171,6 +171,6 @@ Results are cached for 2 minutes with a 5-minute backoff on failure to respect r
 
 ## Next Steps
 
-- **[Component Overview](./index.md)** — Understanding Aegis Stack's component architecture
-- **[Integration Patterns](../integration-patterns.md)** — How components work together
-- **[Pydantic Logfire Documentation](https://logfire.pydantic.dev/)** — Complete Logfire reference
+- **[Component Overview](./index.md)**, Understanding Aegis Stack's component architecture
+- **[Integration Patterns](../integration-patterns.md)**, How components work together
+- **[Pydantic Logfire Documentation](https://logfire.pydantic.dev/)**, Complete Logfire reference

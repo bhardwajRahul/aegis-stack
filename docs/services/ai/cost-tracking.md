@@ -2,7 +2,7 @@
 
 ![Usage Analytics](../../images/usage.png)
 
-Every AI request is automatically tracked — tokens consumed, cost calculated, and success or failure recorded. No instrumentation required. The data is available immediately via API and visualized in the frontend analytics dashboard.
+Every AI request is automatically tracked, tokens consumed, cost calculated, and success or failure recorded. No instrumentation required. The data is available immediately via API and visualized in the frontend analytics dashboard.
 
 !!! info "Requires Database Backend"
     Cost tracking is only active when the AI service is configured with a database backend:
@@ -244,7 +244,7 @@ This means Illiana can answer questions like:
 `format_for_prompt(compact=True)` produces a condensed version for smaller models (Ollama), keeping the system prompt short.
 
 !!! note "Ollama Zero-Cost"
-    Illiana knows that Ollama models report `$0.00` cost by design — local inference has no per-token billing. She won't flag zero cost as an anomaly.
+    Illiana knows that Ollama models report `$0.00` cost by design, local inference has no per-token billing. She won't flag zero cost as an anomaly.
 
 ---
 

@@ -3,7 +3,7 @@
 How different parts of Aegis Stack connect and communicate.
 
 !!! info "About This Guide"
-    This page explains the **architectural patterns** used throughout Aegis Stack. The business logic layer pattern described here applies to all services—whether built-in Aegis Services (auth, ai) that you add via `--services` or custom business services you write yourself.
+    This page explains the **architectural patterns** used throughout Aegis Stack. The business logic layer pattern described here applies to all services, whether built-in Aegis Services (auth, ai) that you add via `--services` or custom business services you write yourself.
 
     For information about **which Aegis Services are available**, see **[Services Overview](services/index.md)**.
 

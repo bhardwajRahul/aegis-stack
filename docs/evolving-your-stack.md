@@ -487,7 +487,7 @@ aegis deploy-shell
 aegis deploy-restart
 ```
 
-From Friday afternoon MVP to production HTTPS deployment — all without leaving your project.
+From Friday afternoon MVP to production HTTPS deployment, all without leaving your project.
 
 ---
 
