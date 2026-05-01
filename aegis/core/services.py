@@ -30,7 +30,13 @@ from .migration_generator import (
     VOICE_MIGRATION,
 )
 from .option_spec import OptionMode, OptionSpec
-from .plugin_spec import PluginKind, PluginSpec
+from .plugin_spec import (
+    FrontendWidgetWiring,
+    PluginKind,
+    PluginSpec,
+    PluginWiring,
+    RouterWiring,
+)
 
 
 class ServiceType(Enum):
@@ -70,6 +76,50 @@ SERVICES: dict[str, ServiceSpec] = {
         type=ServiceType.AUTH,
         description="User authentication and authorization with JWT tokens",
         required_components=[ComponentNames.BACKEND, ComponentNames.DATABASE],
+        # Round 7 wiring: routers + dashboard card/modal. Mirrors what
+        # ``app/components/backend/api/routing.py.jinja`` and the
+        # ``cards/__init__.py.jinja`` / ``modals/__init__.py.jinja``
+        # currently inject via Jinja conditionals on include_auth /
+        # include_oauth / include_auth_org. Predicates here read those
+        # same flags from the merged options dict (see PluginWiring docs).
+        wiring=PluginWiring(
+            routers=[
+                RouterWiring(
+                    module="app.components.backend.api.auth.router",
+                    symbol="router",
+                    alias="auth_router",
+                    prefix="/api/v1",
+                ),
+                RouterWiring(
+                    module="app.components.backend.api.auth.oauth",
+                    symbol="router",
+                    alias="oauth_router",
+                    prefix="/api/v1",
+                    when=lambda opts: bool(opts.get("include_oauth")),
+                ),
+                RouterWiring(
+                    module="app.components.backend.api.orgs.router",
+                    symbol="router",
+                    alias="org_router",
+                    prefix="/api/v1",
+                    when=lambda opts: bool(opts.get("include_auth_org")),
+                ),
+            ],
+            dashboard_cards=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.cards.auth_card",
+                    symbol="AuthCard",
+                    modal_id="auth_modal",
+                ),
+            ],
+            dashboard_modals=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.modals.auth_modal",
+                    symbol="AuthModal",
+                    modal_id="auth_modal",
+                ),
+            ],
+        ),
         # R4-A: migrations declared on the spec. Pre-R4 these lived in a
         # MIGRATION_SPECS dict literal in migration_generator.py; that dict
         # is now derived from this list (and from the migrations field on
@@ -154,6 +204,58 @@ SERVICES: dict[str, ServiceSpec] = {
         type=ServiceType.AI,
         description="AI chatbot service with multi-framework support",
         required_components=[ComponentNames.BACKEND],
+        # Round 7 wiring: 4 conditional routers + dashboard card/modal.
+        # Predicates read both this plugin's options ("voice", "rag")
+        # and broader project state ("ai_backend", "ollama_mode") from
+        # the merged opts dict. Mirrors routing.py.jinja lines 21-29 +
+        # 65-73.
+        wiring=PluginWiring(
+            routers=[
+                RouterWiring(
+                    module="app.components.backend.api.ai.router",
+                    symbol="router",
+                    alias="ai_router",
+                ),
+                RouterWiring(
+                    module="app.components.backend.api.voice.router",
+                    symbol="router",
+                    alias="voice_router",
+                    prefix="/api/v1",
+                    when=lambda opts: bool(opts.get("ai_voice")),
+                ),
+                RouterWiring(
+                    module="app.components.backend.api.llm.router",
+                    symbol="router",
+                    alias="llm_router",
+                    prefix="/api/v1",
+                    when=lambda opts: (
+                        opts.get("ai_backend") != "memory"
+                        and opts.get("ollama_mode") != "none"
+                    ),
+                ),
+                RouterWiring(
+                    module="app.components.backend.api.rag.router",
+                    symbol="router",
+                    alias="rag_router",
+                    prefix="/api/v1",
+                    when=lambda opts: bool(opts.get("ai_rag")),
+                ),
+            ],
+            dashboard_cards=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.cards.ai_card",
+                    symbol="AICard",
+                    modal_id="ai_modal",
+                ),
+            ],
+            dashboard_modals=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.modals.ai_modal",
+                    symbol="AIModal",
+                    modal_id="ai_modal",
+                ),
+            ],
+        ),
         # R4-A: migrations declared on the spec.
         migrations=[AI_MIGRATION, VOICE_MIGRATION],
         # Bracket-syntax options: ai[framework, backend, providers..., flags...]
@@ -246,6 +348,31 @@ SERVICES: dict[str, ServiceSpec] = {
         type=ServiceType.NOTIFICATION,
         description="Communications service with email (Resend), SMS and voice (Twilio)",
         required_components=[ComponentNames.BACKEND],
+        # Round 7 wiring: single router + dashboard card/modal.
+        wiring=PluginWiring(
+            routers=[
+                RouterWiring(
+                    module="app.components.backend.api.comms.router",
+                    symbol="router",
+                    alias="comms_router",
+                    prefix="/api/v1",
+                ),
+            ],
+            dashboard_cards=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.cards.comms_card",
+                    symbol="CommsCard",
+                    modal_id="comms_modal",
+                ),
+            ],
+            dashboard_modals=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.modals.comms_modal",
+                    symbol="CommsModal",
+                    modal_id="comms_modal",
+                ),
+            ],
+        ),
         pyproject_deps=[
             "resend>=2.4.0",  # Email provider
             "twilio>=9.3.7",  # SMS/Voice provider
@@ -280,6 +407,33 @@ SERVICES: dict[str, ServiceSpec] = {
             ComponentNames.SCHEDULER,
         ],
         recommended_components=[ComponentNames.WORKER],
+        # Round 7 wiring: insights router lives in api/insights.py (not
+        # api/insights/router.py); see routing.py.jinja:34.
+        wiring=PluginWiring(
+            routers=[
+                RouterWiring(
+                    module="app.components.backend.api.insights",
+                    symbol="router",
+                    alias="insights_router",
+                    prefix="/api/v1",
+                    tags=["insights"],
+                ),
+            ],
+            dashboard_cards=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.cards.insights_card",
+                    symbol="InsightsCard",
+                    modal_id="insights_modal",
+                ),
+            ],
+            dashboard_modals=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.modals.insights_modal",
+                    symbol="InsightsModal",
+                    modal_id="insights_modal",
+                ),
+            ],
+        ),
         # R4-A: migrations declared on the spec.
         migrations=[INSIGHTS_MIGRATION, INSIGHTS_AUTH_LINK_MIGRATION],
         # Bracket-syntax options: insights[sources...]
@@ -338,6 +492,37 @@ SERVICES: dict[str, ServiceSpec] = {
             ComponentNames.DATABASE,
         ],
         recommended_components=[ComponentNames.WORKER],
+        # Round 7 wiring: 2 routers (API + pages) + dashboard card/modal.
+        # Mirrors routing.py.jinja:36-38 + 80-83.
+        wiring=PluginWiring(
+            routers=[
+                RouterWiring(
+                    module="app.components.backend.api.payment.router",
+                    symbol="router",
+                    alias="payment_router",
+                    prefix="/api/v1",
+                ),
+                RouterWiring(
+                    module="app.components.backend.api.payment.pages",
+                    symbol="router",
+                    alias="payment_pages_router",
+                ),
+            ],
+            dashboard_cards=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.cards.payment_card",
+                    symbol="PaymentCard",
+                    modal_id="payment_modal",
+                ),
+            ],
+            dashboard_modals=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.modals.payment_modal",
+                    symbol="PaymentModal",
+                    modal_id="payment_modal",
+                ),
+            ],
+        ),
         # R4-A: migrations declared on the spec.
         migrations=[PAYMENT_MIGRATION, PAYMENT_AUTH_LINK_MIGRATION],
         pyproject_deps=[

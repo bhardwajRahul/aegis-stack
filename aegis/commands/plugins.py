@@ -1,10 +1,10 @@
 """
 ``aegis plugins`` CLI commands (#769).
 
-Inspection and installation surface for the plugin system. Built on
-``discover_plugins`` (#768) and ``check_compat`` (this PR), so the same
-metadata declared on every ``PluginSpec`` (R1-R4-A) renders into a
-useful pre-flight tool — not just a passive list of names.
+Inspection surface for the plugin system. Built on ``discover_plugins``
+(#768) and ``check_compat`` (this PR), so the same metadata declared on
+every ``PluginSpec`` (R1-R4-A) renders into a useful pre-flight tool —
+not just a passive list of names.
 
 Commands:
 

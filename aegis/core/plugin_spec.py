@@ -19,6 +19,7 @@ plugin needs them, not speculatively.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -34,6 +35,146 @@ class PluginKind(Enum):
 
     COMPONENT = "component"
     """Infrastructure plugin (database, redis, worker, frontend, ...)."""
+
+
+# ---------------------------------------------------------------------
+# PluginWiring — declarative injection-point hooks (round 7 of #770/#771)
+# ---------------------------------------------------------------------
+#
+# Each shared template file (routing.py, deps.py, dashboard cards / modals,
+# config.py settings, ...) iterates the project's plugins list with
+# ``{% for entry in p.wiring.X %}`` to emit per-plugin imports + wiring
+# calls. Each list field on ``PluginWiring`` is a list because plugins
+# routinely have several mounts of the same kind: auth alone has three
+# routers (auth_router always, oauth_router gated, org_router gated);
+# payment has two; AI has up to four.
+#
+# Per-entry ``when`` predicate filters at serialize time. The ``_plugins``
+# list written to ``.copier-answers.yml`` only contains entries whose
+# ``when`` returned True; templates iterate without conditional logic.
+#
+# Predicate signature: ``(opts: dict) -> bool`` where ``opts`` is the
+# plugin's parsed bracket-syntax options *merged with* the project's
+# Copier answers. Plugin options shadow project answers on key collision.
+# This lets a plugin gate on its own option (``opts["oauth"]``) or on
+# broader project state (``opts["ollama_mode"]``) with the same API.
+#
+# In-tree services currently key their predicates off the legacy answer
+# keys (``include_oauth``, ``ai_backend``, ``ai_voice``, ``ai_rag``, ...)
+# rather than parsed-option names (``oauth``, ``backend``, ``voice``,
+# ``rag``). That's deliberate: those keys live in ``.copier-answers.yml``
+# from the existing ``aegis add-service`` flow, and the parity test is
+# happy with them. When ``aegis add scraper[playwright]`` lands in
+# round 8b, that command will normalise parsed option keys onto the
+# corresponding answer keys before serialising, so predicates keep
+# reading from a single namespace.
+
+
+@dataclass
+class RouterWiring:
+    """How a plugin's FastAPI router is mounted in ``include_routers``."""
+
+    module: str
+    """Import path of the module exposing the router, e.g.
+    ``"aegis_plugin_scraper.api"``."""
+
+    symbol: str = "router"
+    """Name of the ``APIRouter`` instance inside that module."""
+
+    alias: str | None = None
+    """Local alias used in the rendered ``from MODULE import SYMBOL as ALIAS``
+    line, and as the bare name in ``app.include_router(ALIAS, ...)``. Required
+    when a plugin has multiple routers that share a ``symbol`` (auth has 3,
+    all with ``symbol=router``): the alias is what disambiguates them in the
+    generated import block.
+
+    If left ``None``, ``plugin_composer.serialize_plugin_to_answer`` fills
+    in ``f"{plugin_name}_{symbol}"`` before the answers file is written,
+    so templates can rely on the serialized ``alias`` always being a
+    non-null Python identifier."""
+
+    prefix: str = ""
+    """URL prefix for ``app.include_router(prefix=...)``. Convention is
+    ``"/api/v1"`` or ``"/api/v1/<plugin-name>"``."""
+
+    tags: list[str] = field(default_factory=list)
+    """OpenAPI tags applied to the mounted router."""
+
+    when: Callable[[dict[str, Any]], bool] | None = None
+    """Optional gate; see module-level note for predicate semantics."""
+
+
+@dataclass
+class FrontendWidgetWiring:
+    """How a plugin's dashboard card or modal registers with the frontend."""
+
+    module: str
+    """Import path, e.g. ``"aegis_plugin_scraper.frontend"``."""
+
+    symbol: str
+    """Class name, e.g. ``"ScraperCard"`` or ``"ScraperModal"``."""
+
+    modal_id: str | None = None
+    """For cards: id of the modal this card opens (key into ``modal_map``).
+    For modals: the id this modal is registered as. Pair card + modal by
+    using the same ``modal_id`` on both."""
+
+    when: Callable[[dict[str, Any]], bool] | None = None
+
+
+@dataclass
+class SymbolWiring:
+    """Generic ``from MODULE import SYMBOL`` shape.
+
+    Reused for several wiring kinds where the template only needs to
+    know "import this name from this module" (settings mixins, FastAPI
+    dependency providers, etc.).
+    """
+
+    module: str
+    symbol: str
+    when: Callable[[dict[str, Any]], bool] | None = None
+
+
+@dataclass
+class HealthCheckWiring:
+    """How a plugin contributes a row to the dashboard health-check table."""
+
+    module: str
+    symbol: str
+    label: str
+    """Human-readable label shown in the dashboard health row."""
+
+    when: Callable[[dict[str, Any]], bool] | None = None
+
+
+@dataclass
+class PluginWiring:
+    """Optional injection-point hooks attached to a ``PluginSpec``.
+
+    Every list defaults empty. A plugin not participating in a hook
+    leaves the list empty; the corresponding template loop renders
+    nothing.
+    """
+
+    routers: list[RouterWiring] = field(default_factory=list)
+    """Backend FastAPI router mounts."""
+
+    dashboard_cards: list[FrontendWidgetWiring] = field(default_factory=list)
+    """Frontend dashboard cards."""
+
+    dashboard_modals: list[FrontendWidgetWiring] = field(default_factory=list)
+    """Frontend dashboard modals."""
+
+    settings_mixins: list[SymbolWiring] = field(default_factory=list)
+    """Pydantic settings mixin classes composed into the project's
+    ``Settings`` model at class-definition time."""
+
+    deps_providers: list[SymbolWiring] = field(default_factory=list)
+    """FastAPI dependency provider modules (``Depends(...)`` callables)."""
+
+    health_checks: list[HealthCheckWiring] = field(default_factory=list)
+    """Dashboard health-check rows."""
 
 
 @dataclass(kw_only=True)
@@ -93,6 +234,10 @@ class PluginSpec:
     # for the plugin. Typed as ``list[Any]`` to avoid a runtime cycle
     # (``migration_generator.py`` imports stay one-way).
     migrations: list[Any] = field(default_factory=list)
+
+    # Injection-point hooks (round 7) — see PluginWiring above for the
+    # declarative shapes consumed by template rendering and the composer.
+    wiring: PluginWiring = field(default_factory=PluginWiring)
 
     # Plugin metadata
     version: str = "0.0.0"
