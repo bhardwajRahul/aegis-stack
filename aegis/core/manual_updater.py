@@ -597,19 +597,21 @@ class ManualUpdater:
         Returns:
             Rendered content, or None if template not found
         """
-        # Try with .jinja extension
+        # Render .jinja templates through Jinja2.
         try:
             template = self.jinja_env.get_template(f"{template_file}{JINJA_EXTENSION}")
             return template.render(context)
         except TemplateNotFound:
             pass
 
-        # Try without extension
-        try:
-            template = self.jinja_env.get_template(template_file)
-            return template.render(context)
-        except TemplateNotFound:
-            return None
+        # Non-.jinja files are copied verbatim — same contract Copier uses.
+        # Rendering them through Jinja2 breaks any source that legitimately
+        # contains brace syntax (Python f-string {{...}} escapes, Alpine/HTMX
+        # attributes, CSS in inline strings, etc.).
+        raw_path = self.template_path / template_file
+        if raw_path.is_file():
+            return raw_path.read_text()
+        return None
 
     def install_plugin_template_tree(self, plugin_module_name: str) -> list[str]:
         """Render the plugin's template tree into the project.
