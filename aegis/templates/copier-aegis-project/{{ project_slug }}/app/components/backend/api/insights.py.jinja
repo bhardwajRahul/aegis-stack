@@ -3,6 +3,14 @@
 Insights API endpoints.
 
 Provides bulk data loading for the Overseer dashboard and external consumers.
+{%- if insights_per_user %}
+
+Multi-tenant when ``insights_per_user`` is on: every signed-in user
+owns a set of ``Project`` rows, each with its own GitHub repo / PyPI
+package / Plausible site / etc. Project CRUD lives here; per-project
+view + goals + events routes live in their own modules and use
+``get_owned_project`` to enforce ownership.
+{%- endif %}
 """
 
 from fastapi import APIRouter, Depends
@@ -13,6 +21,23 @@ from app.services.insights.query_service import InsightQueryService
 from app.services.insights.schemas import BulkInsightsResponse
 {%- if include_auth %}
 from app.services.auth.deps import get_current_active_user
+{%- endif %}
+{%- if insights_per_user %}
+from fastapi import HTTPException, status
+
+from app.models.user import User
+from app.services.insights.deps import (
+    get_owned_project,
+    get_project_service,
+)
+from app.services.insights.models import Project
+from app.services.insights.project_schemas import (
+    ProjectCreate,
+    ProjectResponse,
+    ProjectUpdate,
+    mask_credential,
+)
+from app.services.insights.project_service import ProjectService
 {%- endif %}
 
 router = APIRouter(prefix="/insights", tags=["insights"])
@@ -35,4 +60,143 @@ async def get_all_insights(
     result = await qs.load_all()
     cache.set(CACHE_KEY, result)
     return result
+
+{%- if insights_per_user %}
+
+# Per-project insights data — same shape as ``/insights/all`` but
+# scoped to a single project. The dashboard uses this once a user has
+# at least one project; the global ``/insights/all`` stays as the
+# shared / single-tenant entry point.
+
+
+@router.get(
+    "/projects/{slug}/all",
+    response_model=BulkInsightsResponse,
+)
+async def get_project_insights(
+    project: Project = Depends(get_owned_project),
+    cache: CacheService = Depends(get_cache),
+    qs: InsightQueryService = Depends(get_query_service),
+) -> BulkInsightsResponse:
+    """Bulk-load insights data for a single owned project."""
+    cache_key = f"insights:project:{project.id}:all"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    # Bind the existing query service to this project for the request.
+    qs.project_id = project.id
+    result = await qs.load_all()
+    cache.set(cache_key, result)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Project CRUD — multi-tenant config + ownership enforcement.
+# ---------------------------------------------------------------------------
+
+
+def _to_response(project: Project) -> ProjectResponse:
+    """Project SQLModel → ProjectResponse with masked credentials.
+
+    The service hands back plaintext credentials; we mask them at the
+    API boundary so a regular GET never leaks the actual secret.
+    """
+    return ProjectResponse(
+        id=project.id,  # type: ignore[arg-type]
+        slug=project.slug,
+        name=project.name,
+        owner_user_id=project.owner_user_id,
+        github_owner=project.github_owner,
+        github_repo=project.github_repo,
+        github_token_masked=mask_credential(project.github_token),
+        pypi_package=project.pypi_package,
+        plausible_site=project.plausible_site,
+        plausible_api_key_masked=mask_credential(project.plausible_api_key),
+        reddit_subreddits=project.reddit_subreddits,
+        created_at=project.created_at,
+        updated_at=project.updated_at,
+    )
+
+
+@router.post(
+    "/projects",
+    response_model=ProjectResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_project(
+    body: ProjectCreate,
+    current_user: User = Depends(get_current_active_user),
+    service: ProjectService = Depends(get_project_service),
+) -> ProjectResponse:
+    """Create a new project owned by the signed-in user.
+
+    409 if a project with this slug already exists for the owner.
+    """
+    existing = await service.get_by_slug_for_user(
+        body.slug,
+        current_user.id,  # type: ignore[arg-type]
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"You already have a project with slug '{body.slug}'",
+        )
+    project = await service.create(
+        owner_user_id=current_user.id,  # type: ignore[arg-type]
+        **body.model_dump(),
+    )
+    return _to_response(project)
+
+
+@router.get("/projects", response_model=list[ProjectResponse])
+async def list_projects(
+    current_user: User = Depends(get_current_active_user),
+    service: ProjectService = Depends(get_project_service),
+) -> list[ProjectResponse]:
+    """List all projects owned by the signed-in user, newest first."""
+    projects = await service.list_for_user(current_user.id)  # type: ignore[arg-type]
+    return [_to_response(p) for p in projects]
+
+
+@router.get("/projects/{slug}", response_model=ProjectResponse)
+async def get_project(
+    project: Project = Depends(get_owned_project),
+) -> ProjectResponse:
+    """Get one project by slug. 404 if not found or not owner."""
+    return _to_response(project)
+
+
+@router.patch("/projects/{slug}", response_model=ProjectResponse)
+async def update_project(
+    body: ProjectUpdate,
+    project: Project = Depends(get_owned_project),
+    service: ProjectService = Depends(get_project_service),
+) -> ProjectResponse:
+    """Partial update. Only fields present in the body are touched."""
+    # ``exclude_unset=True`` so unset fields don't overwrite with None.
+    updates = body.model_dump(exclude_unset=True)
+    updated = await service.update(
+        project.slug,
+        project.owner_user_id,
+        **updates,
+    )
+    # The dep already verified ownership; update can't return None here
+    # unless the row was deleted between the dep and the update call,
+    # which is an edge case we treat as 404.
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+    return _to_response(updated)
+
+
+@router.delete("/projects/{slug}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_project(
+    project: Project = Depends(get_owned_project),
+    service: ProjectService = Depends(get_project_service),
+) -> None:
+    """Delete a project + cascade-delete its metrics, events, and goals."""
+    await service.delete(project.slug, project.owner_user_id)
+{%- endif %}
 {%- endif %}

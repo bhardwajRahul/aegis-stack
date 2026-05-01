@@ -9,6 +9,8 @@ import pytest
 from app.services.insights.collectors.pypi import PyPICollector
 from app.services.insights.constants import MetricKeys, Periods, SourceKeys
 from app.services.insights.models import InsightMetric, InsightMetricType, InsightSource
+
+from ._collector_fixtures import collector_kwargs, seed_project_for_collector
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -65,6 +67,7 @@ class TestPyPICollectorSuccess:
     async def test_collect_success(self, async_db_session: AsyncSession) -> None:
         """Happy path: collect PyPI downloads with dimensional breakdowns."""
         await _seed_pypi(async_db_session)
+        project = await seed_project_for_collector(async_db_session, pypi_package="aegis-stack")
 
         mock_client = AsyncMock()
 
@@ -139,7 +142,7 @@ class TestPyPICollectorSuccess:
             ) as mock_settings:
                 mock_settings.INSIGHT_PYPI_PACKAGE = "aegis-stack"
 
-                collector = PyPICollector(async_db_session)
+                collector = PyPICollector(async_db_session, **collector_kwargs(project))
                 result = await collector.collect(lookback_days=14)
 
         assert result.success is True
@@ -155,11 +158,12 @@ class TestPyPICollectorSuccess:
     async def test_collect_missing_config(self, async_db_session: AsyncSession) -> None:
         """Missing INSIGHT_PYPI_PACKAGE returns error."""
         await _seed_pypi(async_db_session)
+        project = await seed_project_for_collector(async_db_session, pypi_package=None)
 
         with patch("app.services.insights.collectors.pypi.settings") as mock_settings:
             mock_settings.INSIGHT_PYPI_PACKAGE = None
 
-            collector = PyPICollector(async_db_session)
+            collector = PyPICollector(async_db_session, **collector_kwargs(project))
             result = await collector.collect()
 
         assert result.success is False
@@ -169,6 +173,7 @@ class TestPyPICollectorSuccess:
     async def test_collect_api_error(self, async_db_session: AsyncSession) -> None:
         """HTTP error from ClickHouse is handled gracefully."""
         await _seed_pypi(async_db_session)
+        project = await seed_project_for_collector(async_db_session, pypi_package="aegis-stack")
 
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(side_effect=Exception("Connection timeout"))
@@ -183,7 +188,7 @@ class TestPyPICollectorSuccess:
             ) as mock_settings:
                 mock_settings.INSIGHT_PYPI_PACKAGE = "aegis-stack"
 
-                collector = PyPICollector(async_db_session)
+                collector = PyPICollector(async_db_session, **collector_kwargs(project))
                 result = await collector.collect()
 
         assert result.success is False
@@ -193,14 +198,17 @@ class TestPyPICollectorSuccess:
     async def test_deduplication(self, async_db_session: AsyncSession) -> None:
         """Second collect doesn't duplicate daily rows."""
         source, metric_types = await _seed_pypi(async_db_session)
+        project = await seed_project_for_collector(async_db_session, pypi_package="aegis-stack")
         daily_type = metric_types[MetricKeys.DOWNLOADS_DAILY]
 
         # Pre-populate a daily row
+        project_kwargs = {'project_id': project.id} if project is not None else {}
         existing_daily = InsightMetric(
             date=datetime(2026, 4, 11),
             metric_type_id=daily_type.id,  # type: ignore[arg-type]
             value=700.0,
             period=Periods.DAILY,
+            **project_kwargs,
         )
         async_db_session.add(existing_daily)
         await async_db_session.commit()
@@ -246,7 +254,7 @@ class TestPyPICollectorSuccess:
             ) as mock_settings:
                 mock_settings.INSIGHT_PYPI_PACKAGE = "aegis-stack"
 
-                collector = PyPICollector(async_db_session)
+                collector = PyPICollector(async_db_session, **collector_kwargs(project))
                 result = await collector.collect(lookback_days=14)
 
         assert result.success is True

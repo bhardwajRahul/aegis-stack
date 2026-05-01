@@ -49,9 +49,6 @@ BOT_INSTALLERS = {
 class PyPICollector(BaseCollector):
     """Collects PyPI download stats from ClickHouse public dataset."""
 
-    def __init__(self, db: AsyncSession) -> None:
-        super().__init__(db)
-
     @property
     def source_key(self) -> str:
         return SourceKeys.PYPI
@@ -62,7 +59,14 @@ class PyPICollector(BaseCollector):
         ``lookback_days`` is accepted for API parity with other collectors but
         currently ignored — pypi pulls a fixed 14-day window.
         """
+        {% if insights_per_user -%}
+        if self.project is not None:
+            package = self.project.pypi_package
+        else:
+            package = settings.INSIGHT_PYPI_PACKAGE
+        {% else -%}
         package = settings.INSIGHT_PYPI_PACKAGE
+        {%- endif %}
 
         if not package:
             return CollectionResult(

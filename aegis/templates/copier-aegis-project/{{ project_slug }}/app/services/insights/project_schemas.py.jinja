@@ -1,0 +1,86 @@
+{% if insights_per_user -%}
+"""Pydantic request/response schemas for the project CRUD API."""
+
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+
+# Slug rules: lowercase letters, digits, hyphens; can't start or end
+# with a hyphen; 3-64 chars. Restrictive on purpose — slugs go in URLs.
+_SLUG_PATTERN = r"^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$"
+
+
+class ProjectCreate(BaseModel):
+    """Payload for ``POST /insights/projects``.
+
+    Owner is taken from ``current_user``; never trust a client-supplied
+    owner. Credential fields (``github_token``, ``plausible_api_key``)
+    are encrypted at rest by the service layer.
+    """
+
+    slug: str = Field(min_length=3, max_length=64, pattern=_SLUG_PATTERN)
+    name: str = Field(min_length=1, max_length=128)
+    github_owner: str | None = Field(default=None, max_length=64)
+    github_repo: str | None = Field(default=None, max_length=128)
+    github_token: str | None = Field(default=None, max_length=512)
+    pypi_package: str | None = Field(default=None, max_length=128)
+    plausible_site: str | None = Field(default=None, max_length=256)
+    plausible_api_key: str | None = Field(default=None, max_length=512)
+    reddit_subreddits: str | None = Field(default=None, max_length=256)
+
+
+class ProjectUpdate(BaseModel):
+    """Payload for ``PATCH /insights/projects/{slug}``. All fields optional.
+
+    The slug is part of the URL and cannot be changed via update.
+    Owner cannot change in v1 (org-sharing is v2).
+    """
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    github_owner: str | None = Field(default=None, max_length=64)
+    github_repo: str | None = Field(default=None, max_length=128)
+    github_token: str | None = Field(default=None, max_length=512)
+    pypi_package: str | None = Field(default=None, max_length=128)
+    plausible_site: str | None = Field(default=None, max_length=256)
+    plausible_api_key: str | None = Field(default=None, max_length=512)
+    reddit_subreddits: str | None = Field(default=None, max_length=256)
+
+
+class ProjectResponse(BaseModel):
+    """Wire shape for a project.
+
+    Credential fields are returned **masked** (last 4 chars only) so a
+    compromised token doesn't fall out of a regular API response. The
+    caller can still know whether a credential is set without seeing it.
+    Use the dedicated edit form / endpoint to update.
+    """
+
+    id: int
+    slug: str
+    name: str
+    owner_user_id: int
+    github_owner: str | None
+    github_repo: str | None
+    github_token_masked: str | None
+    pypi_package: str | None
+    plausible_site: str | None
+    plausible_api_key_masked: str | None
+    reddit_subreddits: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+def mask_credential(plaintext: str | None) -> str | None:
+    """Return a display-safe version of a credential.
+
+    ``None`` and empty strings stay as-is; anything else collapses to
+    ``"***" + last 4 chars`` so the UI can render "set" vs "not set"
+    without exposing the value.
+    """
+    if not plaintext:
+        return plaintext
+    if len(plaintext) <= 4:
+        return "***"
+    return f"***{plaintext[-4:]}"
+{%- endif %}

@@ -133,16 +133,19 @@ class TestMigrationSpecsLazy:
 
 
 class TestInTreeRegistry:
-    """The pre-R4 MIGRATION_SPECS literal had 10 entries:
+    """The pre-R4 MIGRATION_SPECS literal had 10 entries. #660 originally
+    added ``insights_auth_link`` and ``insights_projects`` as separate
+    layered migrations; both have since been folded back into a single
+    context-aware ``insights`` spec, so the canonical key set is:
 
       auth, auth_rbac, auth_org, auth_tokens, ai, ai_voice,
-      payment, payment_auth_link, insights, insights_auth_link.
+      payment, payment_auth_link, insights.
 
     R4-A derives the same set from ``SERVICES``. These tests guard
     that mapping so a future spec edit can't silently lose a migration.
     """
 
-    def test_all_ten_legacy_keys_present(self) -> None:
+    def test_all_legacy_keys_present(self) -> None:
         result = collect_migrations(SERVICES.values())
         assert set(result.keys()) == {
             "auth",
@@ -154,7 +157,6 @@ class TestInTreeRegistry:
             "payment",
             "payment_auth_link",
             "insights",
-            "insights_auth_link",
         }
 
     def test_each_migration_is_a_servicemigrationspec(self) -> None:

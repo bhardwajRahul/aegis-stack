@@ -1,10 +1,9 @@
 """Pydantic request/response schemas for the goals API.
 
-Gated on `include_auth` because goals are scoped to a user (via the
-`Goal.user_id` FK), and the `Goal` model itself only ships when auth is
-included.
+Gated on `insights_per_user` because the `Goal` model carries a
+`project_id` FK and only ships when per-user mode is enabled.
 """
-{% if include_auth %}
+{% if insights_per_user %}
 from datetime import date, datetime
 
 from app.services.insights.models import GoalKind, GoalMetric, GoalStatus
@@ -35,9 +34,13 @@ class GoalMetricCurrentValue(BaseModel):
 
 
 class GoalCreate(BaseModel):
-    """Payload for POST /goals."""
+    """Payload for POST /projects/{slug}/goals.
 
-    source_project_slug: str = Field(min_length=1, max_length=64)
+    Project context comes from the URL path (`{slug}`), so the body
+    only carries the goal-specific fields. The handler resolves the
+    project from the URL and stamps `project_id` server-side.
+    """
+
     metric_key: GoalMetric
     kind: GoalKind
     target_value: float = Field(gt=0)
@@ -46,7 +49,12 @@ class GoalCreate(BaseModel):
 
 
 class GoalUpdate(BaseModel):
-    """Payload for PATCH /goals/{id}. All fields optional."""
+    """Payload for PATCH /projects/{slug}/goals/{id}. All fields optional.
+
+    Note: `project_id` cannot be changed via update — to move a goal
+    between projects, delete and recreate. Keeps the ownership /
+    cascade semantics straightforward.
+    """
 
     metric_key: GoalMetric | None = None
     kind: GoalKind | None = None
@@ -54,7 +62,6 @@ class GoalUpdate(BaseModel):
     window_days: int | None = Field(default=None, gt=0)
     target_date: date | None = None
     status: GoalStatus | None = None
-    source_project_slug: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class GoalResponse(BaseModel):
@@ -62,7 +69,7 @@ class GoalResponse(BaseModel):
 
     id: int
     user_id: int
-    source_project_slug: str
+    project_id: int
     metric_key: GoalMetric
     kind: GoalKind
     target_value: float

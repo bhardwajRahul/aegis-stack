@@ -1,5 +1,13 @@
 """
 Collector service — orchestrates data collection across all enabled sources.
+{% if insights_per_user %}
+
+Multi-tenant: each ``CollectorService`` instance is bound to a single
+``Project`` (passed in on construction). The scheduler iterates over
+projects and runs one ``CollectorService`` per project. Collectors and
+record-detection both stamp ``project_id`` so cross-project rows stay
+isolated.
+{% endif %}
 """
 
 import logging
@@ -9,6 +17,9 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from .collectors.base import BaseCollector, CollectionResult
+{% if insights_per_user -%}
+from .models import Project
+{%- endif %}
 {% if insights_github %}
 from .collectors.github_events import GitHubEventsCollector
 from .collectors.github_stars import GitHubStarsCollector
@@ -48,10 +59,34 @@ COLLECTOR_REGISTRY: dict[str, type[BaseCollector]] = {
 
 
 class CollectorService:
-    """Orchestrates data collection across all enabled sources."""
+    """Orchestrates data collection across all enabled sources.
+    {% if insights_per_user %}
 
-    def __init__(self, db: AsyncSession) -> None:
+    Bind to a project on construction; collectors then stamp every
+    metric/event row with that project's id. ``project=None`` is the
+    single-tenant fallback (env-var-driven), preserved for tooling
+    and the auth=off mode.
+    {% endif %}
+    """
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        {% if insights_per_user -%}
+        project: Project | None = None,
+        {%- endif %}
+    ) -> None:
         self.db = db
+        {% if insights_per_user -%}
+        self.project = project
+        {%- endif %}
+
+    {% if insights_per_user -%}
+    @property
+    def project_id(self) -> int | None:
+        """Convenience accessor mirroring ``BaseCollector.project_id``."""
+        return self.project.id if self.project is not None else None
+    {%- endif %}
 
     async def collect_all(self) -> dict[str, CollectionResult]:
         """Run all enabled collectors. Returns results keyed by source key."""
@@ -103,7 +138,12 @@ class CollectorService:
     async def _run_collector(self, source_key: str, **kwargs: Any) -> CollectionResult:
         """Instantiate and run a collector."""
         collector_cls = COLLECTOR_REGISTRY[source_key]
-        collector = collector_cls(self.db)
+        collector = collector_cls(
+            self.db,
+            {% if insights_per_user -%}
+            project=self.project,
+            {%- endif %}
+        )
 
         logger.info("Running collector for '%s'", source_key)
 
@@ -121,10 +161,13 @@ class CollectorService:
 
                 # Invalidate the dashboard / API bulk cache so consumers see
                 # fresh data without waiting for the TTL to expire. Mirrors
-                # the key used by app/components/backend/api/insights.py
-                # (`CACHE_KEY = "insights:all"`).
+                # the keys used by app/components/backend/api/insights.py.
                 from app.core.cache import cache
                 cache.invalidate("insights:all")
+                {% if insights_per_user -%}
+                if self.project_id is not None:
+                    cache.invalidate(f"insights:project:{self.project_id}:all")
+                {%- endif %}
 
                 # Check for new records
                 new_records = await self._check_records(source_key)
@@ -196,7 +239,7 @@ class CollectorService:
             if not mt:
                 continue
 
-            result = await self.db.exec(
+            top_stmt = (
                 select(InsightMetric.date, InsightMetric.value)
                 .where(
                     InsightMetric.metric_type_id == mt.id,
@@ -205,6 +248,13 @@ class CollectorService:
                 .order_by(InsightMetric.value.desc())
                 .limit(1)
             )
+            {% if insights_per_user -%}
+            if self.project_id is not None:
+                top_stmt = top_stmt.where(
+                    InsightMetric.project_id == self.project_id
+                )
+            {%- endif %}
+            result = await self.db.exec(top_stmt)
             top_row = result.first()
             if not top_row:
                 continue
@@ -215,10 +265,16 @@ class CollectorService:
             if record_value == 0:
                 continue
 
-            existing = (await self.db.exec(
-                select(InsightEvent)
-                .where(InsightEvent.event_type == check["event_type"])
-            )).all()
+            existing_events_stmt = select(InsightEvent).where(
+                InsightEvent.event_type == check["event_type"]
+            )
+            {% if insights_per_user -%}
+            if self.project_id is not None:
+                existing_events_stmt = existing_events_stmt.where(
+                    InsightEvent.project_id == self.project_id
+                )
+            {%- endif %}
+            existing = (await self.db.exec(existing_events_stmt)).all()
 
             current_record = 0
             for ev in existing:
@@ -236,6 +292,9 @@ class CollectorService:
                     event_type=check["event_type"],
                     description=desc,
                     metadata_={"category": check["category"]},
+                    {% if insights_per_user -%}
+                    project_id=self.project_id,
+                    {%- endif %}
                 )
                 self.db.add(event)
                 await self.db.commit()
@@ -265,7 +324,7 @@ class CollectorService:
                 if not mt:
                     continue
 
-                latest = (await self.db.exec(
+                latest_stmt = (
                     select(InsightMetric)
                     .where(
                         InsightMetric.metric_type_id == mt.id,
@@ -273,7 +332,14 @@ class CollectorService:
                     )
                     .order_by(InsightMetric.date.desc())
                     .limit(1)
-                )).first()
+                )
+                {% if insights_per_user -%}
+                if self.project_id is not None:
+                    latest_stmt = latest_stmt.where(
+                        InsightMetric.project_id == self.project_id
+                    )
+                {%- endif %}
+                latest = (await self.db.exec(latest_stmt)).first()
                 if not latest:
                     continue
 
@@ -281,11 +347,16 @@ class CollectorService:
                 if rolling_value == 0:
                     continue
 
-                existing = (await self.db.exec(
-                    select(InsightEvent).where(
-                        InsightEvent.event_type == check["event_type"],
+                existing_events_stmt = select(InsightEvent).where(
+                    InsightEvent.event_type == check["event_type"],
+                )
+                {% if insights_per_user -%}
+                if self.project_id is not None:
+                    existing_events_stmt = existing_events_stmt.where(
+                        InsightEvent.project_id == self.project_id
                     )
-                )).all()
+                {%- endif %}
+                existing = (await self.db.exec(existing_events_stmt)).all()
 
                 current_record = 0
                 for ev in existing:
@@ -303,6 +374,9 @@ class CollectorService:
                         event_type=check["event_type"],
                         description=desc,
                         metadata_={"category": check["category"]},
+                        {% if insights_per_user -%}
+                        project_id=self.project_id,
+                        {%- endif %}
                     )
                     self.db.add(event)
                     await self.db.commit()

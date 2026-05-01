@@ -5,10 +5,10 @@ Progress is derived live from `insight_metric` time-series; no snapshot table.
 The resolver in `goal_catalog` maps user-facing `metric_key` values to the
 underlying (source_key, metric_type_key) tuple used by queries.
 
-Gated on `include_auth` because the `Goal` model carries a `user_id` FK and
-only ships when auth is included.
+Gated on `insights_per_user` because the `Goal` model carries a
+`project_id` FK and only ships when per-user mode is enabled.
 """
-{% if include_auth %}
+{% if insights_per_user %}
 import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -91,7 +91,7 @@ class GoalService:
         self,
         *,
         user_id: int,
-        source_project_slug: str,
+        project_id: int,
         metric_key: GoalMetric,
         kind: GoalKind,
         target_value: float,
@@ -103,7 +103,7 @@ class GoalService:
 
         goal = Goal(
             user_id=user_id,
-            source_project_slug=source_project_slug,
+            project_id=project_id,
             metric_key=metric_key,
             kind=kind,
             target_value=target_value,
@@ -121,7 +121,12 @@ class GoalService:
         user_id: int,
         **updates: object,
     ) -> Goal | None:
-        """Partial update. Only known fields are applied."""
+        """Partial update. Only known fields are applied.
+
+        ``project_id`` is intentionally NOT in the allow-list — moving a
+        goal across projects changes ownership semantics and cascade
+        boundaries; force callers to delete and re-create instead.
+        """
         goal = await self.get(goal_id, user_id)
         if goal is None:
             return None
@@ -133,7 +138,6 @@ class GoalService:
             "window_days",
             "target_date",
             "status",
-            "source_project_slug",
         }
         for field, value in updates.items():
             if field in allowed:

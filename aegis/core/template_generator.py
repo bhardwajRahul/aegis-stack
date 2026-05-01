@@ -141,15 +141,17 @@ class TemplateGenerator:
                     self.include_oauth = auth_config.oauth
                 break
 
-        # Extract insights sources from insights[sources] format in services
+        # Extract insights sources + per_user flag from insights[...] format
         from .insights_service_parser import DEFAULT_SOURCES
 
         self.insights_sources: list[str] = DEFAULT_SOURCES.copy()
+        self.insights_per_user: bool = False
         for service in self.selected_services:
             if extract_base_service_name(service) == SERVICE_INSIGHTS:
                 if is_insights_service_with_options(service):
                     insights_config = parse_insights_service_config(service)
                     self.insights_sources = insights_config.sources
+                    self.insights_per_user = insights_config.per_user
                 break
 
         # Auto-detect: if AI service selected AND database available AND no explicit backend,
@@ -287,6 +289,7 @@ class TemplateGenerator:
             AnswerKeys.INSIGHTS_REDDIT: "yes"
             if "reddit" in self.insights_sources
             else "no",
+            AnswerKeys.INSIGHTS_PER_USER: "yes" if self.insights_per_user else "no",
             # AI backend selection for conversation persistence
             AnswerKeys.AI_BACKEND: self.ai_backend,
             # AI persistence flag for backwards compatibility with template conditionals

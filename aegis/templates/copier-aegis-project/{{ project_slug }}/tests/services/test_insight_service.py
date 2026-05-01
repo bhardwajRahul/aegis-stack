@@ -12,6 +12,7 @@ from app.services.insights.models import (
     InsightMetricType,
     InsightSource,
 )
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 # ---------------------------------------------------------------------------
@@ -49,6 +50,34 @@ async def _seed_metric_type(
     return mt
 
 
+async def _ensure_project(session: AsyncSession) -> object | None:
+    """Lazily create (or reuse) a Project for this test session.
+
+    Returns ``None`` in auth=off builds (no Project model exists), so
+    metrics can be inserted without ``project_id`` in single-tenant mode.
+    """
+    try:
+        from app.models.user import User
+        from app.services.insights.models import Project
+    except ImportError:
+        return None
+    result = await session.exec(select(Project).limit(1))
+    existing = result.first()
+    if existing is not None:
+        return existing
+    user = User(
+        email="insight-service-test@example.com",
+        full_name="Insight Service Test",
+        hashed_password="x",
+    )
+    session.add(user)
+    await session.flush()
+    project = Project(slug="isvc", name="isvc", owner_user_id=user.id)  # type: ignore[arg-type]
+    session.add(project)
+    await session.flush()
+    return project
+
+
 async def _seed_metric(
     session: AsyncSession,
     metric_type: InsightMetricType,
@@ -57,11 +86,14 @@ async def _seed_metric(
     period: str = Periods.DAILY,
 ) -> InsightMetric:
     """Create a metric row for testing."""
+    project = await _ensure_project(session)
+    project_kwargs = {"project_id": project.id} if project is not None else {}
     metric = InsightMetric(
         date=date,
         metric_type_id=metric_type.id,  # type: ignore[arg-type]
         value=value,
         period=period,
+        **project_kwargs,
     )
     session.add(metric)
     await session.flush()
@@ -231,7 +263,11 @@ class TestEvents:
     @pytest.mark.asyncio
     async def test_add_event(self, async_db_session: AsyncSession) -> None:
         """Can create a contextual event."""
-        service = InsightService(async_db_session)
+        project = await _ensure_project(async_db_session)
+        service_kwargs = (
+            {"project_id": project.id} if project is not None else {}  # type: ignore[union-attr]
+        )
+        service = InsightService(async_db_session, **service_kwargs)
 
         event = await service.add_event(
             event_type="release",
@@ -246,7 +282,11 @@ class TestEvents:
     @pytest.mark.asyncio
     async def test_get_events(self, async_db_session: AsyncSession) -> None:
         """Can retrieve events."""
-        service = InsightService(async_db_session)
+        project = await _ensure_project(async_db_session)
+        service_kwargs = (
+            {"project_id": project.id} if project is not None else {}  # type: ignore[union-attr]
+        )
+        service = InsightService(async_db_session, **service_kwargs)
 
         await service.add_event("release", "v1")
         await service.add_event("reddit_post", "NWN post")

@@ -9,6 +9,8 @@ import pytest
 from app.services.insights.collectors.github_events import GitHubEventsCollector
 from app.services.insights.constants import MetricKeys, Periods, SourceKeys
 from app.services.insights.models import InsightMetric, InsightMetricType, InsightSource
+
+from ._collector_fixtures import collector_kwargs, seed_project_for_collector
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -62,6 +64,7 @@ class TestGitHubEventsCollectorSuccess:
     async def test_collect_success(self, async_db_session: AsyncSession) -> None:
         """Happy path: collect forks, releases, stars, activity summary."""
         await _seed_github_events(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack")
 
         # Mock httpx.AsyncClient
         mock_client = AsyncMock()
@@ -129,7 +132,7 @@ class TestGitHubEventsCollectorSuccess:
                 mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
                 mock_settings.INSIGHT_GITHUB_REPO = "aegis-stack"
 
-                collector = GitHubEventsCollector(async_db_session)
+                collector = GitHubEventsCollector(async_db_session, **collector_kwargs(project))
                 result = await collector.collect()
 
         assert result.success is True
@@ -144,6 +147,7 @@ class TestGitHubEventsCollectorSuccess:
     async def test_collect_missing_config(self, async_db_session: AsyncSession) -> None:
         """Missing INSIGHT_GITHUB_OWNER or INSIGHT_GITHUB_REPO returns error."""
         await _seed_github_events(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner=None, github_repo=None)
 
         with patch(
             "app.services.insights.collectors.github_events.settings"
@@ -151,7 +155,7 @@ class TestGitHubEventsCollectorSuccess:
             mock_settings.INSIGHT_GITHUB_OWNER = None
             mock_settings.INSIGHT_GITHUB_REPO = "aegis-stack"
 
-            collector = GitHubEventsCollector(async_db_session)
+            collector = GitHubEventsCollector(async_db_session, **collector_kwargs(project))
             result = await collector.collect()
 
         assert result.success is False
@@ -161,6 +165,7 @@ class TestGitHubEventsCollectorSuccess:
     async def test_collect_api_error(self, async_db_session: AsyncSession) -> None:
         """HTTP error from ClickHouse is handled gracefully."""
         await _seed_github_events(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack")
 
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(
@@ -179,7 +184,7 @@ class TestGitHubEventsCollectorSuccess:
                 mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
                 mock_settings.INSIGHT_GITHUB_REPO = "aegis-stack"
 
-                collector = GitHubEventsCollector(async_db_session)
+                collector = GitHubEventsCollector(async_db_session, **collector_kwargs(project))
                 result = await collector.collect()
 
         assert result.success is False
@@ -189,15 +194,18 @@ class TestGitHubEventsCollectorSuccess:
     async def test_deduplication_forks(self, async_db_session: AsyncSession) -> None:
         """Second collect doesn't duplicate fork rows."""
         source, metric_types = await _seed_github_events(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack")
         forks_type = metric_types[MetricKeys.FORKS]
 
         # Pre-populate an existing fork
+        project_kwargs = {'project_id': project.id} if project is not None else {}
         existing_fork = InsightMetric(
             date=datetime(2026, 4, 11),
             metric_type_id=forks_type.id,  # type: ignore[arg-type]
             value=1.0,
             period=Periods.EVENT,
             metadata_={"actor": "user1", "date": "2026-04-11"},
+            **project_kwargs,
         )
         async_db_session.add(existing_fork)
         await async_db_session.commit()
@@ -239,7 +247,7 @@ class TestGitHubEventsCollectorSuccess:
                 mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
                 mock_settings.INSIGHT_GITHUB_REPO = "aegis-stack"
 
-                collector = GitHubEventsCollector(async_db_session)
+                collector = GitHubEventsCollector(async_db_session, **collector_kwargs(project))
                 result = await collector.collect()
 
         assert result.success is True

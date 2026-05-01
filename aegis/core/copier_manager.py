@@ -155,6 +155,10 @@ def generate_with_copier(
             AnswerKeys.INSIGHTS_REDDIT, "no"
         )
         == "yes",
+        AnswerKeys.INSIGHTS_PER_USER: template_context.get(
+            AnswerKeys.INSIGHTS_PER_USER, "no"
+        )
+        == "yes",
         AnswerKeys.PAYMENT: template_context.get(AnswerKeys.PAYMENT, "no") == "yes",
         AnswerKeys.PAYMENT_PROVIDER: template_context.get(
             AnswerKeys.PAYMENT_PROVIDER, PaymentProviders.DEFAULT
@@ -295,11 +299,15 @@ def generate_with_copier(
             "ai_backend": ai_backend_str,
             "ai_voice": ai_voice_enabled,
             "include_insights": is_insights_included,
+            "insights_per_user": copier_data.get(AnswerKeys.INSIGHTS_PER_USER, False)
+            is True,
             "include_payment": is_payment_included,
         }
         services = get_services_needing_migrations(context)
         if services:
-            generated = generate_migrations_for_services(project_path, services)
+            generated = generate_migrations_for_services(
+                project_path, services, context
+            )
             for migration_path in generated:
                 print(f"Generated migration: {migration_path.name}")
 

@@ -3,6 +3,14 @@ Scheduler jobs for insight data collection.
 
 Each enabled source gets a scheduled job that runs its collector
 at the configured interval.
+{% if insights_per_user %}
+
+Multi-tenant when ``auth`` is on: each job iterates over every project
+that has the relevant source configured (e.g. ``project.github_repo``
+set for the GitHub jobs) and runs one ``CollectorService`` per project.
+A project with no source set is silently skipped — collectors are only
+useful when their config is present.
+{% endif %}
 """
 
 import logging
@@ -11,8 +19,44 @@ from app.core.db import get_async_session
 
 from .collector_service import CollectorService
 from .constants import SourceKeys
+{% if insights_per_user -%}
+from .project_service import ProjectService
+{%- endif %}
 
 logger = logging.getLogger(__name__)
+
+
+async def _run_one(
+    session,
+    source_key: str,
+    {% if insights_per_user -%}
+    project=None,
+    {%- endif %}
+) -> None:
+    """Run a single source collection and log the outcome.
+
+    Used by all per-source job entry points so logging and error handling
+    stay consistent across sources.
+    """
+    {% if insights_per_user -%}
+    service = CollectorService(session, project=project)
+    suffix = f" (project={project.slug})" if project is not None else ""
+    {% else -%}
+    service = CollectorService(session)
+    suffix = ""
+    {%- endif %}
+    result = await service.collect_source(source_key)
+    if result.success:
+        logger.info(
+            "%s%s: %d written, %d skipped",
+            source_key,
+            suffix,
+            result.rows_written,
+            result.rows_skipped,
+        )
+    else:
+        logger.error("%s%s collection failed: %s", source_key, suffix, result.error)
+
 
 {% if insights_github %}
 
@@ -21,48 +65,48 @@ async def collect_github_traffic_job() -> None:
     """Scheduled job: collect GitHub traffic data."""
     logger.info("Running scheduled GitHub traffic collection")
     async with get_async_session() as session:
-        service = CollectorService(session)
-        result = await service.collect_source(SourceKeys.GITHUB_TRAFFIC)
-        if result.success:
-            logger.info(
-                "GitHub traffic: %d written, %d skipped",
-                result.rows_written,
-                result.rows_skipped,
-            )
-        else:
-            logger.error("GitHub traffic collection failed: %s", result.error)
+        {% if insights_per_user -%}
+        projects = await ProjectService(session).list_with_github()
+        if not projects:
+            logger.info("No projects with GitHub configured; skipping")
+            return
+        for project in projects:
+            await _run_one(session, SourceKeys.GITHUB_TRAFFIC, project=project)
+        {% else -%}
+        await _run_one(session, SourceKeys.GITHUB_TRAFFIC)
+        {%- endif %}
 
 
 async def collect_github_stars_job() -> None:
     """Scheduled job: collect GitHub stargazer data."""
     logger.info("Running scheduled GitHub stars collection")
     async with get_async_session() as session:
-        service = CollectorService(session)
-        result = await service.collect_source(SourceKeys.GITHUB_STARS)
-        if result.success:
-            logger.info(
-                "GitHub stars: %d written, %d skipped",
-                result.rows_written,
-                result.rows_skipped,
-            )
-        else:
-            logger.error("GitHub stars collection failed: %s", result.error)
+        {% if insights_per_user -%}
+        projects = await ProjectService(session).list_with_github()
+        if not projects:
+            logger.info("No projects with GitHub configured; skipping")
+            return
+        for project in projects:
+            await _run_one(session, SourceKeys.GITHUB_STARS, project=project)
+        {% else -%}
+        await _run_one(session, SourceKeys.GITHUB_STARS)
+        {%- endif %}
 
 
 async def collect_github_events_job() -> None:
     """Scheduled job: collect GitHub events from ClickHouse."""
     logger.info("Running scheduled GitHub events collection")
     async with get_async_session() as session:
-        service = CollectorService(session)
-        result = await service.collect_source(SourceKeys.GITHUB_EVENTS)
-        if result.success:
-            logger.info(
-                "GitHub events: %d written, %d skipped",
-                result.rows_written,
-                result.rows_skipped,
-            )
-        else:
-            logger.error("GitHub events collection failed: %s", result.error)
+        {% if insights_per_user -%}
+        projects = await ProjectService(session).list_with_github()
+        if not projects:
+            logger.info("No projects with GitHub configured; skipping")
+            return
+        for project in projects:
+            await _run_one(session, SourceKeys.GITHUB_EVENTS, project=project)
+        {% else -%}
+        await _run_one(session, SourceKeys.GITHUB_EVENTS)
+        {%- endif %}
 {% endif %}
 {% if insights_pypi %}
 
@@ -71,16 +115,16 @@ async def collect_pypi_job() -> None:
     """Scheduled job: collect PyPI download stats."""
     logger.info("Running scheduled PyPI collection")
     async with get_async_session() as session:
-        service = CollectorService(session)
-        result = await service.collect_source(SourceKeys.PYPI)
-        if result.success:
-            logger.info(
-                "PyPI: %d written, %d skipped",
-                result.rows_written,
-                result.rows_skipped,
-            )
-        else:
-            logger.error("PyPI collection failed: %s", result.error)
+        {% if insights_per_user -%}
+        projects = await ProjectService(session).list_with_pypi()
+        if not projects:
+            logger.info("No projects with PyPI configured; skipping")
+            return
+        for project in projects:
+            await _run_one(session, SourceKeys.PYPI, project=project)
+        {% else -%}
+        await _run_one(session, SourceKeys.PYPI)
+        {%- endif %}
 {% endif %}
 {% if insights_plausible %}
 
@@ -89,22 +133,42 @@ async def collect_plausible_job() -> None:
     """Scheduled job: collect Plausible analytics."""
     logger.info("Running scheduled Plausible collection")
     async with get_async_session() as session:
-        service = CollectorService(session)
-        result = await service.collect_source(SourceKeys.PLAUSIBLE)
-        if result.success:
-            logger.info(
-                "Plausible: %d written, %d skipped",
-                result.rows_written,
-                result.rows_skipped,
-            )
-        else:
-            logger.error("Plausible collection failed: %s", result.error)
+        {% if insights_per_user -%}
+        projects = await ProjectService(session).list_with_plausible()
+        if not projects:
+            logger.info("No projects with Plausible configured; skipping")
+            return
+        for project in projects:
+            await _run_one(session, SourceKeys.PLAUSIBLE, project=project)
+        {% else -%}
+        await _run_one(session, SourceKeys.PLAUSIBLE)
+        {%- endif %}
 {% endif %}
 
 
 async def collect_all_job() -> None:
-    """Scheduled job: run all enabled collectors."""
+    """Scheduled job: run all enabled collectors.
+    {% if insights_per_user %}
+
+    Multi-tenant: dispatches each per-source job which in turn iterates
+    its own project list. A project that only has GitHub configured is
+    silently skipped by the PyPI job, etc.
+    {% endif %}
+    """
     logger.info("Running scheduled collection for all enabled sources")
+    {% if insights_per_user -%}
+    {% if insights_github -%}
+    await collect_github_traffic_job()
+    await collect_github_stars_job()
+    await collect_github_events_job()
+    {%- endif %}
+    {% if insights_pypi -%}
+    await collect_pypi_job()
+    {%- endif %}
+    {% if insights_plausible -%}
+    await collect_plausible_job()
+    {%- endif %}
+    {% else -%}
     async with get_async_session() as session:
         service = CollectorService(session)
         results = await service.collect_all()
@@ -118,3 +182,4 @@ async def collect_all_job() -> None:
                 )
             else:
                 logger.error("%s failed: %s", source_key, result.error)
+    {%- endif %}

@@ -1,0 +1,281 @@
+{% if insights_per_user -%}
+"""Tests for ProjectService — CRUD + transparent credential encryption.
+
+The service is the only layer that touches encrypt/decrypt. Tests
+verify both halves of the contract: the DB row holds ciphertext, and
+the in-memory object handed back to callers holds plaintext.
+"""
+
+from __future__ import annotations
+
+import pytest
+from app.core.encryption import decrypt_secret
+from app.models.user import User
+from app.services.insights.models import Project
+from app.services.insights.project_service import ProjectService
+from sqlalchemy import text
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+
+async def _seed_user(session: AsyncSession, email: str = "u@example.com") -> User:
+    user = User(email=email, full_name="Test", hashed_password="x")
+    session.add(user)
+    await session.flush()
+    return user
+
+
+async def _raw_project_row(session: AsyncSession, slug: str) -> dict:
+    """Bypass the service to read what's actually persisted in the row."""
+    result = await session.exec(
+        text("SELECT github_token, plausible_api_key FROM project WHERE slug = :slug"),
+        params={"slug": slug},
+    )
+    row = result.first()
+    assert row is not None
+    return {"github_token": row[0], "plausible_api_key": row[1]}
+
+
+# ---------------------------------------------------------------------------
+# create
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_persists_credentials_encrypted_in_db(
+    async_db_session: AsyncSession,
+) -> None:
+    user = await _seed_user(async_db_session)
+    service = ProjectService(async_db_session)
+
+    await service.create(
+        owner_user_id=user.id,  # type: ignore[arg-type]
+        slug="my-project",
+        name="My Project",
+        github_token="ghp_abc123",
+        plausible_api_key="pk_xyz789",
+    )
+
+    row = await _raw_project_row(async_db_session, "my-project")
+    assert row["github_token"] != "ghp_abc123"
+    assert row["plausible_api_key"] != "pk_xyz789"
+    # And they're recoverable through the encryption layer.
+    assert decrypt_secret(row["github_token"]) == "ghp_abc123"
+    assert decrypt_secret(row["plausible_api_key"]) == "pk_xyz789"
+
+
+@pytest.mark.asyncio
+async def test_create_returns_plaintext_to_caller(
+    async_db_session: AsyncSession,
+) -> None:
+    user = await _seed_user(async_db_session)
+    service = ProjectService(async_db_session)
+
+    project = await service.create(
+        owner_user_id=user.id,  # type: ignore[arg-type]
+        slug="p", name="P", github_token="ghp_abc",
+    )
+
+    assert project.github_token == "ghp_abc"
+
+
+@pytest.mark.asyncio
+async def test_create_handles_no_credentials(
+    async_db_session: AsyncSession,
+) -> None:
+    """Empty credential fields stay None (don't get encrypted as None)."""
+    user = await _seed_user(async_db_session)
+    service = ProjectService(async_db_session)
+
+    project = await service.create(
+        owner_user_id=user.id, slug="p", name="P",  # type: ignore[arg-type]
+    )
+
+    assert project.github_token is None
+    assert project.plausible_api_key is None
+
+
+# ---------------------------------------------------------------------------
+# get_by_slug_for_user / get_by_id_for_user
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_by_slug_returns_decrypted_credentials(
+    async_db_session: AsyncSession,
+) -> None:
+    user = await _seed_user(async_db_session)
+    service = ProjectService(async_db_session)
+    await service.create(
+        owner_user_id=user.id,  # type: ignore[arg-type]
+        slug="p", name="P", github_token="ghp_secret",
+    )
+
+    fetched = await service.get_by_slug_for_user("p", user.id)  # type: ignore[arg-type]
+
+    assert fetched is not None
+    assert fetched.github_token == "ghp_secret"
+
+
+@pytest.mark.asyncio
+async def test_get_by_slug_returns_none_for_non_owner(
+    async_db_session: AsyncSession,
+) -> None:
+    owner = await _seed_user(async_db_session, "owner@x.com")
+    intruder = await _seed_user(async_db_session, "intruder@x.com")
+    service = ProjectService(async_db_session)
+    await service.create(
+        owner_user_id=owner.id,  # type: ignore[arg-type]
+        slug="p", name="P",
+    )
+
+    fetched = await service.get_by_slug_for_user("p", intruder.id)  # type: ignore[arg-type]
+
+    assert fetched is None
+
+
+@pytest.mark.asyncio
+async def test_get_by_id_returns_none_for_non_owner(
+    async_db_session: AsyncSession,
+) -> None:
+    owner = await _seed_user(async_db_session, "owner@x.com")
+    intruder = await _seed_user(async_db_session, "intruder@x.com")
+    service = ProjectService(async_db_session)
+    project = await service.create(
+        owner_user_id=owner.id, slug="p", name="P",  # type: ignore[arg-type]
+    )
+
+    fetched = await service.get_by_id_for_user(
+        project.id, intruder.id  # type: ignore[arg-type]
+    )
+
+    assert fetched is None
+
+
+# ---------------------------------------------------------------------------
+# list_for_user
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_for_user_filters_by_owner(
+    async_db_session: AsyncSession,
+) -> None:
+    a = await _seed_user(async_db_session, "a@x.com")
+    b = await _seed_user(async_db_session, "b@x.com")
+    service = ProjectService(async_db_session)
+    await service.create(owner_user_id=a.id, slug="a1", name="a1")  # type: ignore[arg-type]
+    await service.create(owner_user_id=a.id, slug="a2", name="a2")  # type: ignore[arg-type]
+    await service.create(owner_user_id=b.id, slug="b1", name="b1")  # type: ignore[arg-type]
+
+    a_projects = await service.list_for_user(a.id)  # type: ignore[arg-type]
+
+    slugs = {p.slug for p in a_projects}
+    assert slugs == {"a1", "a2"}
+
+
+# ---------------------------------------------------------------------------
+# update
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_update_re_encrypts_changed_credentials(
+    async_db_session: AsyncSession,
+) -> None:
+    user = await _seed_user(async_db_session)
+    service = ProjectService(async_db_session)
+    await service.create(
+        owner_user_id=user.id,  # type: ignore[arg-type]
+        slug="p", name="P", github_token="ghp_old",
+    )
+
+    updated = await service.update(
+        "p", user.id, github_token="ghp_new",  # type: ignore[arg-type]
+    )
+
+    assert updated is not None
+    assert updated.github_token == "ghp_new"
+    row = await _raw_project_row(async_db_session, "p")
+    assert decrypt_secret(row["github_token"]) == "ghp_new"
+
+
+@pytest.mark.asyncio
+async def test_update_ignores_unknown_fields(
+    async_db_session: AsyncSession,
+) -> None:
+    user = await _seed_user(async_db_session)
+    service = ProjectService(async_db_session)
+    project = await service.create(
+        owner_user_id=user.id, slug="p", name="P",  # type: ignore[arg-type]
+    )
+    original_owner = project.owner_user_id
+
+    updated = await service.update(
+        "p",
+        user.id,  # type: ignore[arg-type]
+        bogus_field="ignored",  # not in allow-list
+        id=999,  # not in allow-list
+        name="Updated",
+    )
+
+    assert updated is not None
+    assert updated.name == "Updated"
+    # Owner unchanged (no path to mutate it via update())
+    assert updated.owner_user_id == original_owner
+    assert updated.slug == "p"
+
+
+@pytest.mark.asyncio
+async def test_update_returns_none_for_non_owner(
+    async_db_session: AsyncSession,
+) -> None:
+    owner = await _seed_user(async_db_session, "owner@x.com")
+    intruder = await _seed_user(async_db_session, "intruder@x.com")
+    service = ProjectService(async_db_session)
+    await service.create(
+        owner_user_id=owner.id, slug="p", name="P",  # type: ignore[arg-type]
+    )
+
+    result = await service.update(
+        "p", intruder.id, name="hijacked",  # type: ignore[arg-type]
+    )
+
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# delete
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_delete_removes_project(async_db_session: AsyncSession) -> None:
+    user = await _seed_user(async_db_session)
+    service = ProjectService(async_db_session)
+    await service.create(
+        owner_user_id=user.id, slug="p", name="P",  # type: ignore[arg-type]
+    )
+
+    deleted = await service.delete("p", user.id)  # type: ignore[arg-type]
+
+    assert deleted is True
+    assert await service.get_by_slug_for_user("p", user.id) is None  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_delete_returns_false_for_non_owner(
+    async_db_session: AsyncSession,
+) -> None:
+    owner = await _seed_user(async_db_session, "owner@x.com")
+    intruder = await _seed_user(async_db_session, "intruder@x.com")
+    service = ProjectService(async_db_session)
+    await service.create(
+        owner_user_id=owner.id, slug="p", name="P",  # type: ignore[arg-type]
+    )
+
+    deleted = await service.delete("p", intruder.id)  # type: ignore[arg-type]
+
+    assert deleted is False
+    # Still there for the real owner.
+    assert await service.get_by_slug_for_user("p", owner.id) is not None  # type: ignore[arg-type]
+{%- endif %}
