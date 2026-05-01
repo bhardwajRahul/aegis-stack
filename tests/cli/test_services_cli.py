@@ -739,9 +739,10 @@ class TestAuthServiceMigrationIntegration:
                 "\n\n"
             )[0]
 
-            # Auth-specific dependencies
+            # Auth-specific dependencies. ``passlib[bcrypt]`` was replaced
+            # by ``bcrypt`` directly in the template; the spec mirrors that.
             assert "python-jose[cryptography]" in deps_section
-            assert "passlib[bcrypt]" in deps_section
+            assert "bcrypt" in deps_section
             assert "python-multipart" in deps_section
 
             # Database dependencies (auto-included)

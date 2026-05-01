@@ -1,9 +1,15 @@
 """Auth dependencies for FastAPI route injection."""
 
-from app.components.backend.api.deps import get_async_db
+from app.core.db import get_async_db
 from app.core.security import SESSION_COOKIE_NAME
 from app.models.user import User
 from app.services.auth.auth_service import get_current_user_from_token
+from app.services.auth.user_service import UserService
+{%- if include_auth_org %}
+from app.services.auth.invite_service import InviteService
+from app.services.auth.membership_service import MembershipService
+from app.services.auth.org_service import OrgService
+{%- endif %}
 from fastapi import Cookie, Depends
 from fastapi.security import OAuth2PasswordBearer
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -31,3 +37,33 @@ async def get_current_active_user(
 ) -> User:
     """Get the current authenticated user. Raises 401 if not authenticated."""
     return await get_current_user_from_token(token, db)
+
+
+async def get_user_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> UserService:
+    """Provide a UserService instance."""
+    return UserService(db)
+{%- if include_auth_org %}
+
+
+async def get_org_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> OrgService:
+    """Provide an OrgService instance."""
+    return OrgService(db)
+
+
+async def get_membership_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> MembershipService:
+    """Provide a MembershipService instance."""
+    return MembershipService(db)
+
+
+async def get_invite_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> InviteService:
+    """Provide an InviteService instance."""
+    return InviteService(db)
+{%- endif %}

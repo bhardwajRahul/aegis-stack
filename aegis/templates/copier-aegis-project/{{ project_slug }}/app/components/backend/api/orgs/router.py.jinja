@@ -6,9 +6,9 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.components.backend.api.deps import (
-    get_async_db,
-    get_audit,
+from app.core.audit import get_audit
+from app.core.db import get_async_db
+from app.services.auth.deps import (
     get_invite_service,
     get_membership_service,
     get_org_service,

@@ -160,10 +160,11 @@ class TestServicesRegistry:
         assert "backend" in auth_spec.required_components
         assert "database" in auth_spec.required_components
 
-        # Should have authentication-related dependencies
+        # Should have authentication-related dependencies. ``passlib`` was
+        # replaced by ``bcrypt`` in the template — the spec mirrors that.
         deps_str = " ".join(auth_spec.pyproject_deps)
         assert "python-jose" in deps_str
-        assert "passlib" in deps_str
+        assert "bcrypt" in deps_str
 
     def test_auth_service_template_files(self):
         """Test that auth service specifies template files."""

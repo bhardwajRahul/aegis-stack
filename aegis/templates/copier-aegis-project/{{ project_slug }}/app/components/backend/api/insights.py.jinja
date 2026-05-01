@@ -7,7 +7,7 @@ Provides bulk data loading for the Overseer dashboard and external consumers.
 
 from fastapi import APIRouter, Depends
 
-from app.components.backend.api.deps import get_query_service
+from app.services.insights.deps import get_query_service
 from app.core.cache import CacheService, get_cache
 from app.services.insights.query_service import InsightQueryService
 from app.services.insights.schemas import BulkInsightsResponse

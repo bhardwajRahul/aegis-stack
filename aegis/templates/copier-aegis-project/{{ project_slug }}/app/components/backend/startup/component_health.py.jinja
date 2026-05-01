@@ -562,4 +562,13 @@ async def startup_hook() -> None:
     logger.info("Payment service health check registered")
     {%- endif %}
 
+    {%- for p in _plugins | default([]) %}
+    {%- for h in p.wiring.health_checks %}
+    # Register {{ h.label }} service health check (plugin)
+    from {{ h.module }} import {{ h.symbol }}
+    register_service_health_check("{{ h.label }}", {{ h.symbol }})
+    logger.info("{{ h.label }} service health check registered")
+    {%- endfor %}
+    {%- endfor %}
+
     logger.info("Service health detection complete")

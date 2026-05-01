@@ -21,6 +21,7 @@ from aegis.i18n import t
 
 from .component_files import get_component_files, get_copier_defaults, get_template_path
 from .copier_manager import is_copier_project, load_copier_answers
+from .plugin_template_resolver import get_plugin_template_root
 from .verbosity import verbose_print
 
 # Constants
@@ -532,6 +533,74 @@ class ManualUpdater:
             return template.render(context)
         except TemplateNotFound:
             return None
+
+    def install_plugin_template_tree(self, plugin_module_name: str) -> list[str]:
+        """Render the plugin's template tree into the project.
+
+        Plugins ship a ``<package>/templates/{{ project_slug }}/...``
+        directory parallel to aegis-stack's own. This method locates
+        that tree via :func:`plugin_template_resolver.get_plugin_template_root`,
+        renders every ``*.jinja`` file through a fresh Jinja2 environment
+        rooted at the plugin's templates dir (so ``include`` / ``extends``
+        resolve against the plugin's tree, not aegis-stack's), and writes
+        the rendered output at the corresponding relative path under
+        ``self.project_path``.
+
+        The render context is the project's current ``self.answers``,
+        so plugin templates can branch on the same project state that
+        aegis-stack templates do (``include_database``, ``database_engine``,
+        etc.).
+
+        Returns the list of relative paths written. Empty list when the
+        plugin ships no templates (pure-code plugin).
+
+        Existing files are overwritten. Per-file conflict policy lives at
+        the calling level (``aegis add`` in round 8b); for now this is
+        used by tests and by future ``aegis add`` once it lands.
+
+        **Filesystem-only.** Uses ``Path.rglob`` and ``FileSystemLoader``
+        on the resolver's returned path, which requires a real on-disk
+        directory. Zipped wheels are not supported today — see
+        ``plugin_template_resolver`` for the rationale.
+        """
+        template_root = get_plugin_template_root(plugin_module_name)
+        if template_root is None:
+            return []
+
+        # Plugin templates mirror aegis-stack's: every file is nested
+        # under ``{{ project_slug }}/`` so the rendered path is naturally
+        # rooted at the project tree.
+        project_slug_dir = template_root / PROJECT_SLUG_PLACEHOLDER
+        if not project_slug_dir.is_dir():
+            return []
+
+        plugin_env = Environment(
+            loader=FileSystemLoader(str(template_root)),
+            trim_blocks=False,
+            lstrip_blocks=False,
+        )
+
+        files_written: list[str] = []
+        for source_file in sorted(project_slug_dir.rglob(f"*{JINJA_EXTENSION}")):
+            # Path relative to the project slug dir → relative path
+            # inside the target project. Strip the ``.jinja`` suffix
+            # since the rendered file shouldn't keep it.
+            rel_inside_slug = source_file.relative_to(project_slug_dir)
+            out_rel = rel_inside_slug.with_suffix("")
+            out_path = self.project_path / out_rel
+
+            # Jinja2 needs the template name relative to the loader's
+            # root (template_root, not project_slug_dir) so it can
+            # resolve includes against sibling files.
+            template_name = str(source_file.relative_to(template_root))
+            template = plugin_env.get_template(template_name)
+            content = template.render(self.answers)
+
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(content)
+            files_written.append(str(out_rel))
+
+        return files_written
 
     def _save_answers(self, answers: dict[str, Any]) -> None:
         """

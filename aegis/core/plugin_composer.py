@@ -82,6 +82,14 @@ def serialize_plugin_to_answer(
         "version": spec.version,
         "verified": spec.verified,
         "options": dict(plugin_options or {}),
+        # Packaging metadata — flat lists templates iterate to emit
+        # pyproject.toml deps and docker-compose service blocks. Not
+        # under ``wiring`` because these aren't injection-point hooks
+        # (they don't have ``when`` predicates and don't need
+        # serialize-time filtering); they're declarative packaging
+        # data the plugin ships unconditionally.
+        "pyproject_deps": list(spec.pyproject_deps),
+        "docker_services": list(spec.docker_services),
         "wiring": _serialize_wiring(spec.wiring, opts, spec.name),
     }
 

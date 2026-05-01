@@ -1,0 +1,14 @@
+"""Payment dependencies for FastAPI route injection."""
+
+from fastapi import Depends
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.db import get_async_db
+from app.services.payment.payment_service import PaymentService
+
+
+async def get_payment_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> PaymentService:
+    """Provide a PaymentService instance."""
+    return PaymentService(db)

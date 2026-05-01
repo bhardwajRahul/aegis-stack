@@ -26,7 +26,8 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-from app.components.backend.api.deps import get_async_db, get_user_service
+from app.core.db import get_async_db
+from app.services.auth.deps import get_user_service
 from app.core.config import settings
 from app.core.log import logger
 from app.core.security import create_access_token, set_session_cookie
