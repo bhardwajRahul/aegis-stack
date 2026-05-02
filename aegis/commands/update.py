@@ -561,18 +561,33 @@ def update_command(
             for conflict_file in sync_result.conflicts:
                 typer.echo(f"      - {conflict_file}")
 
-        # Run post-generation tasks
-        # Determine what services need migrations
-        include_auth = answers.get(AnswerKeys.AUTH, False)
-        include_ai = answers.get(AnswerKeys.AI, False)
-        ai_backend = answers.get(AnswerKeys.AI_BACKEND, "memory")
-        ai_needs_migrations = include_ai and ai_backend != "memory"
-        include_migrations = include_auth or ai_needs_migrations
+        # Run post-generation tasks — but skip when conflicts exist.
+        # ``run_post_generation_tasks`` calls ``uv sync``, which will fail
+        # if any conflicted file (e.g. ``pyproject.toml``) still has
+        # ``<<<<<<<`` markers. That failure is expected, but it surfaces as
+        # a hard ``DependencyInstallationError`` that bubbles up to the
+        # outer ``except`` handler and triggers a rollback — wiping the
+        # merged state we just produced. Skip post-gen on conflicts so the
+        # user can resolve them without losing the merge.
+        if sync_result.conflicts:
+            typer.echo(t("update.skipping_postgen_conflicts"))
+            # Conflicts mean the update isn't done — the user still has
+            # ``<<<<<<<`` markers to resolve and ``uv sync`` to run.
+            # Routing through ``tasks_success = False`` flips the result
+            # banner to the yellow "partial success" branch (line 605-609)
+            # AND keeps the backup tag alive (gated on this flag below).
+            tasks_success = False
+        else:
+            include_auth = answers.get(AnswerKeys.AUTH, False)
+            include_ai = answers.get(AnswerKeys.AI, False)
+            ai_backend = answers.get(AnswerKeys.AI_BACKEND, "memory")
+            ai_needs_migrations = include_ai and ai_backend != "memory"
+            include_migrations = include_auth or ai_needs_migrations
 
-        typer.echo(t("update.running_postgen"))
-        tasks_success = run_post_generation_tasks(
-            target_path, include_migrations=include_migrations
-        )
+            typer.echo(t("update.running_postgen"))
+            tasks_success = run_post_generation_tasks(
+                target_path, include_migrations=include_migrations
+            )
 
         # Update __aegis_version__ directly (Copier doesn't re-render unchanged files)
         init_file = target_path / "app" / "__init__.py"
@@ -611,9 +626,16 @@ def update_command(
             report = format_conflict_report(conflicts)
             typer.secho(report, fg="yellow")
 
-        # Cleanup backup tag on success
-        if backup_tag:
+        # Cleanup backup tag on a fully clean update only. With
+        # ``sync_result.conflicts`` outstanding, the user still has work
+        # to do (resolve markers, re-run ``uv sync``). If their
+        # resolution goes wrong, the backup tag is the only rollback
+        # path — deleting it here would defeat the safety net.
+        if backup_tag and tasks_success:
             cleanup_backup_tag(target_path, backup_tag)
+        elif backup_tag and sync_result.conflicts:
+            typer.echo("")
+            typer.echo(f"   Backup tag preserved: {backup_tag}")
 
     except Exception as e:
         typer.echo("")
