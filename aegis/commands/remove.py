@@ -17,8 +17,98 @@ from ..core.components import COMPONENTS, CORE_COMPONENTS
 from ..core.copier_manager import load_copier_answers
 from ..core.dependency_resolver import DependencyResolver
 from ..core.manual_updater import ManualUpdater
+from ..core.plugin_compat import reverse_dependents
+from ..core.plugin_discovery import discover_plugins
+from ..core.plugin_spec import PluginSpec
+from ..core.services import SERVICES
 from ..core.version_compatibility import validate_version_compatibility
 from ..i18n import t
+
+
+def _resolve_plugin_for_remove(name: str) -> PluginSpec | None:
+    """Match a bare plugin name against discovered external plugins."""
+    for plugin in discover_plugins():
+        if plugin.name == name:
+            return plugin
+    return None
+
+
+def _uninstall_plugin(
+    name: str,
+    target_path: Path,
+    yes: bool,
+    force: bool,
+) -> None:
+    """Run the full ``aegis remove <plugin>`` flow for an external plugin.
+
+    Mirrors the component remove flow's structure but routes through
+    ``ManualUpdater.remove_plugin`` and adds a reverse-dependency check
+    that the existing ``remove-service`` lacks.
+    """
+    plugin_spec = _resolve_plugin_for_remove(name)
+    if plugin_spec is None:
+        typer.secho(f"Plugin not found: {name!r}", fg="red", err=True)
+        raise typer.Exit(1)
+
+    answers = load_copier_answers(target_path)
+
+    # Reverse-dep check: refuse to remove a plugin that other installed
+    # specs depend on. ``--force`` bypasses (escape hatch for known
+    # situations the user has already reasoned about). Candidates span
+    # services, components, and external plugins — components can
+    # carry ``required_plugins`` too, so leaving them out would let a
+    # silent-broken removal slip through.
+    candidates: list = (
+        list(SERVICES.values()) + list(COMPONENTS.values()) + list(discover_plugins())
+    )
+    dependents = reverse_dependents(plugin_spec.name, candidates, answers)
+    if dependents and not force:
+        typer.secho(
+            f"Cannot remove {plugin_spec.name!r}: still required by "
+            f"{', '.join(repr(d) for d in dependents)}",
+            fg="red",
+            err=True,
+        )
+        typer.echo(
+            "   Remove dependents first, or pass --force to override.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    if dependents and force:
+        typer.secho(
+            f"Forcing removal despite reverse dependents: "
+            f"{', '.join(repr(d) for d in dependents)}",
+            fg="yellow",
+        )
+
+    typer.echo(f"\n{t('remove.plugin_removing', name=plugin_spec.name)}")
+    if not yes and not typer.confirm(
+        t("remove.plugin_confirm", name=plugin_spec.name), default=False
+    ):
+        typer.secho(t("shared.operation_cancelled"), fg="red")
+        raise typer.Exit(0)
+
+    updater = ManualUpdater(target_path)
+    result = updater.remove_plugin(plugin_spec)
+
+    if not result.success:
+        typer.secho(
+            f"\nPlugin remove failed: {result.error_message}",
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    typer.secho(
+        f"\n{t('remove.plugin_success', name=plugin_spec.name)}",
+        fg="green",
+    )
+    if plugin_spec.migrations:
+        typer.echo(
+            "   Note: plugin database tables remain in your database. "
+            "Run alembic downgrade manually to drop them, or leave them "
+            "in place to preserve data."
+        )
 
 
 def _translated_desc(name: str, fallback: str) -> str:
@@ -90,6 +180,30 @@ def remove_command(
         typer.echo(f"   {t('remove.usage_hint')}", err=True)
         typer.echo(f"   {t('remove.interactive_hint')}", err=True)
         raise typer.Exit(1)
+
+    # Plugin / service dispatch — single-name args only. Services
+    # forward to the existing remove-service implementation (Phase 2
+    # of #771: unify the entry point, defer the implementation-merge).
+    if components and "," not in components:
+        if _resolve_plugin_for_remove(components) is not None:
+            _uninstall_plugin(components, target_path, yes, force)
+            return
+
+        # Bracket-tolerant base extraction for symmetry with
+        # ``aegis add`` — users sometimes type bracket syntax even on
+        # remove out of habit.
+        service_base = components.split("[", 1)[0].strip()
+        if service_base in SERVICES:
+            from .remove_service import remove_service_command
+
+            remove_service_command(
+                services=components,
+                interactive=False,
+                project_path=str(target_path),
+                yes=yes,
+                force=force,
+            )
+            return
 
     # Interactive mode
     if interactive:

@@ -18,6 +18,7 @@ checking is a no-op here.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -175,14 +176,23 @@ def _is_present(name: str, answers: dict[str, Any], plugins: set[str]) -> bool:
 def _installed_plugins(answers: dict[str, Any]) -> set[str]:
     """Pull the list of installed plugin names from the answers file.
 
-    Future-compatible with the ``_plugins`` answer key that ``aegis add``
-    (#771) will write for plugins. Returns an empty set today since no
-    project has plugins recorded yet.
+    ``_plugins`` entries are dicts (from
+    :func:`plugin_composer.serialize_plugin_to_answer`) with a ``name``
+    field. Strings are accepted as a back-compat fallback for any
+    pre-Round-8 ``_plugins`` legacy data still in the wild.
     """
     raw = answers.get("_plugins") or []
-    if isinstance(raw, list):
-        return {_plugin_name_only(str(item)) for item in raw}
-    return set()
+    if not isinstance(raw, list):
+        return set()
+    names: set[str] = set()
+    for item in raw:
+        if isinstance(item, dict):
+            name = item.get("name")
+            if isinstance(name, str):
+                names.add(name)
+        elif isinstance(item, str):
+            names.add(_plugin_name_only(item))
+    return names
 
 
 def _plugin_name_only(constraint: str) -> str:
@@ -191,3 +201,49 @@ def _plugin_name_only(constraint: str) -> str:
         if sep in constraint:
             return constraint.split(sep, 1)[0].strip()
     return constraint.strip()
+
+
+def reverse_dependents(
+    target_name: str,
+    candidates: Iterable[Any],
+    answers: dict[str, Any],
+) -> list[str]:
+    """Return the names of installed services / plugins that depend on
+    ``target_name``.
+
+    Used by ``aegis remove`` to refuse a destructive removal that would
+    leave dangling ``required_services`` / ``required_plugins`` /
+    ``required_components`` references in still-installed specs.
+
+    Args:
+        target_name: The name of the spec being removed (e.g. ``"auth"``,
+            ``"scraper"``).
+        candidates: Every spec that *could* be installed (typically the
+            union of ``SERVICES``, ``COMPONENTS``, and discovered
+            external plugins).
+        answers: The project's ``.copier-answers.yml`` content.
+
+    Returns:
+        Names of currently-installed candidates whose declared
+        dependencies include ``target_name``. Empty list when nothing
+        depends on it (safe to remove).
+    """
+    plugins = _installed_plugins(answers)
+
+    dependents: list[str] = []
+    for cand in candidates:
+        cand_name = getattr(cand, "name", None)
+        if cand_name is None or cand_name == target_name:
+            continue
+        if not _is_present(cand_name, answers, plugins):
+            continue
+
+        deps: list[str] = []
+        deps.extend(getattr(cand, "required_services", []) or [])
+        deps.extend(getattr(cand, "required_plugins", []) or [])
+        deps.extend(getattr(cand, "required_components", []) or [])
+
+        if any(_plugin_name_only(d) == target_name for d in deps):
+            dependents.append(cand_name)
+
+    return dependents

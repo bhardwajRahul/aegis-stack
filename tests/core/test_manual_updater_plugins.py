@@ -49,6 +49,120 @@ def fake_project(tmp_path: Path) -> Path:
     return project
 
 
+class TestAddRemovePluginRoundTrip:
+    """End-to-end add → answers updated, files dropped → remove → answers
+    cleaned, files gone. Mocks out the post-gen hook (``uv sync`` /
+    ``make fix``) since the synthetic project isn't a real package."""
+
+    def test_add_writes_plugins_entry(
+        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from aegis_plugin_test.spec import get_spec
+
+        monkeypatch.setattr(
+            ManualUpdater, "_run_post_generation_tasks", lambda self: None
+        )
+        # Skip shared file regen — synthetic project has no shared
+        # template files; we're only verifying answers + plugin tree.
+        monkeypatch.setattr(
+            ManualUpdater,
+            "_regenerate_shared_files",
+            lambda self, ans: ([], [], []),
+        )
+
+        updater = ManualUpdater(fake_project)
+        result = updater.add_plugin(
+            spec=get_spec(),
+            plugin_module_name="aegis_plugin_test",
+        )
+
+        assert result.success
+        # Plugin entry present in answers + persisted to disk.
+        assert any(p.get("name") == "test_plugin" for p in updater.answers["_plugins"])
+
+    def test_remove_drops_entry_and_files(
+        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from aegis_plugin_test.spec import get_spec
+
+        monkeypatch.setattr(
+            ManualUpdater, "_run_post_generation_tasks", lambda self: None
+        )
+        monkeypatch.setattr(
+            ManualUpdater,
+            "_regenerate_shared_files",
+            lambda self, ans: ([], [], []),
+        )
+
+        updater = ManualUpdater(fake_project)
+        spec = get_spec()
+        updater.add_plugin(spec=spec, plugin_module_name="aegis_plugin_test")
+        plugin_dir = fake_project / "app" / "services" / "test_plugin"
+        assert plugin_dir.exists()
+
+        # Re-bind: ManualUpdater caches answers at construction, and
+        # ``_save_answers`` mutates ``self.answers``, so the existing
+        # instance is fine for remove. But constructing a fresh updater
+        # mirrors how the CLI works (separate add / remove invocations).
+        updater = ManualUpdater(fake_project)
+        result = updater.remove_plugin(spec)
+
+        assert result.success
+        assert not plugin_dir.exists()
+        assert not any(
+            p.get("name") == "test_plugin"
+            for p in (updater.answers.get("_plugins") or [])
+        )
+
+    def test_remove_uninstalled_plugin_fails_cleanly(
+        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from aegis_plugin_test.spec import get_spec
+
+        monkeypatch.setattr(
+            ManualUpdater, "_run_post_generation_tasks", lambda self: None
+        )
+        monkeypatch.setattr(
+            ManualUpdater,
+            "_regenerate_shared_files",
+            lambda self, ans: ([], [], []),
+        )
+
+        updater = ManualUpdater(fake_project)
+        result = updater.remove_plugin(get_spec())
+
+        assert not result.success
+        assert "not installed" in (result.error_message or "")
+
+    def test_add_is_idempotent(
+        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Adding the same plugin twice replaces the entry rather than
+        duplicating it."""
+        from aegis_plugin_test.spec import get_spec
+
+        monkeypatch.setattr(
+            ManualUpdater, "_run_post_generation_tasks", lambda self: None
+        )
+        monkeypatch.setattr(
+            ManualUpdater,
+            "_regenerate_shared_files",
+            lambda self, ans: ([], [], []),
+        )
+
+        updater = ManualUpdater(fake_project)
+        spec = get_spec()
+        updater.add_plugin(spec=spec, plugin_module_name="aegis_plugin_test")
+        # Re-bind so we read latest answers from disk.
+        updater = ManualUpdater(fake_project)
+        updater.add_plugin(spec=spec, plugin_module_name="aegis_plugin_test")
+
+        plugin_entries = [
+            p for p in updater.answers["_plugins"] if p.get("name") == "test_plugin"
+        ]
+        assert len(plugin_entries) == 1
+
+
 class TestInstallPluginTemplateTree:
     def test_renders_plugin_files_into_project(self, fake_project: Path) -> None:
         updater = ManualUpdater(fake_project)

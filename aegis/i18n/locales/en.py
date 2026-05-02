@@ -275,6 +275,9 @@ MESSAGES: dict[str, str] = {
     "add.success": "Components added successfully!",
     "add.failed_component": "Failed to add {component}: {error}",
     "add.failed": "Failed to add components: {error}",
+    "add.plugin_installing": "Installing plugin: {name}",
+    "add.plugin_confirm": "Add plugin {name} to this project?",
+    "add.plugin_success": "Plugin {name} installed.",
     "add.invalid_format": "Invalid component format: {error}",
     "add.bracket_override": (
         "Bracket syntax 'scheduler[{engine}]' overrides --backend {backend}"
@@ -325,6 +328,9 @@ MESSAGES: dict[str, str] = {
     "remove.failed_component": "Failed to remove {component}: {error}",
     "remove.success": "Components removed successfully!",
     "remove.failed": "Failed to remove components: {error}",
+    "remove.plugin_removing": "Removing plugin: {name}",
+    "remove.plugin_confirm": "Remove plugin {name} from this project?",
+    "remove.plugin_success": "Plugin {name} removed.",
     # ── Manual updater ─────────────────────────────────────────────────
     "updater.processing_files": "Processing {count} component files...",
     "updater.updating_shared": "Updating shared template files...",
