@@ -7,14 +7,12 @@ from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.components.backend.api.deps import (
-    get_async_db,
-    get_audit,
-    get_user_service,
+from app.core.audit import get_audit
+from app.core.db import get_async_db
+from app.services.auth.deps import get_user_service
 {% if include_auth_org %}
-    get_invite_service,
+from app.services.auth.deps import get_invite_service
 {% endif %}
-)
 from app.components.backend.middleware.rate_limit import (
     login_limiter,
     password_reset_limiter,

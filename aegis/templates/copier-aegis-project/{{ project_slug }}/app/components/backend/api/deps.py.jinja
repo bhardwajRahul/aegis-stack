@@ -1,150 +1,43 @@
-"""FastAPI dependencies for the backend API."""
+"""FastAPI dependencies for the backend API.
+
+Thin re-export shim. The actual definitions live next to the things
+they depend on:
+
+* ``get_db`` / ``get_async_db`` — ``app.core.db`` (next to the engine
+  factories and ``SessionLocal`` / ``AsyncSessionLocal``).
+* ``get_audit`` — ``app.core.audit`` (next to the singleton
+  ``audit_emitter``).
+* Per-service ``get_<svc>_service`` providers — ``app.services.<svc>.deps``
+  (each service owns its own deps file).
+
+Re-exporting here keeps ``from app.components.backend.api.deps import X``
+working for any code that still uses the api-namespace import path.
+In-tree code now imports directly from the source modules; this shim
+exists for plugin authors and any external code that prefers the
+single canonical "all deps" import surface.
+"""
 {% if include_database %}
-
-from collections.abc import AsyncGenerator, Generator
-
-from fastapi import Depends
-from sqlmodel import Session
-from sqlmodel.ext.asyncio.session import AsyncSession
-
-from app.core.audit import AuditEmitter, audit_emitter
-from app.core.db import AsyncSessionLocal, SessionLocal
-{% if include_auth %}
-from app.services.auth.user_service import UserService
-{% endif %}
-{% if include_auth_org %}
-from app.services.auth.invite_service import InviteService
-from app.services.auth.membership_service import MembershipService
-from app.services.auth.org_service import OrgService
-{% endif %}
-{% if include_insights %}
-from app.services.insights.collector_service import CollectorService
-from app.services.insights.insight_service import InsightService
-from app.services.insights.query_service import InsightQueryService
-{% endif %}
-{% if include_payment %}
-from app.services.payment.payment_service import PaymentService
-{% endif %}
-
-
-def get_db() -> Generator[Session]:
-    """
-    Database dependency that provides a database session.
-
-    This dependency is used in FastAPI route functions to get access to
-    the database. It automatically handles session lifecycle - creating,
-    yielding, and closing the session properly.
-
-    Usage:
-        @router.get("/example")
-        def example_endpoint(db: Session = Depends(get_db)):
-            # Use db for database operations
-            pass
-
-    Yields:
-        Session: SQLModel database session
-    """
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-async def get_async_db() -> AsyncGenerator[AsyncSession]:
-    """
-    Async database dependency that provides an async database session.
-
-    This dependency is used in async FastAPI route functions to get access to
-    the database with non-blocking I/O operations. It automatically handles
-    session lifecycle - creating, yielding, committing and closing the session properly.
-
-    Usage:
-        @router.get("/example")
-        async def example_endpoint(db: AsyncSession = Depends(get_async_db)):
-            # Use db for async database operations with await
-            result = await db.exec(select(MyModel))
-            return result.first()
-
-    Yields:
-        AsyncSession: SQLModel async database session
-    """
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-{% if include_auth %}
-
-
-async def get_user_service(
-    db: AsyncSession = Depends(get_async_db),
-) -> UserService:
-    """Provide a UserService instance."""
-    return UserService(db)
-{% endif %}
-{% if include_auth_org %}
-
-
-async def get_org_service(
-    db: AsyncSession = Depends(get_async_db),
-) -> OrgService:
-    """Provide an OrgService instance."""
-    return OrgService(db)
-
-
-async def get_membership_service(
-    db: AsyncSession = Depends(get_async_db),
-) -> MembershipService:
-    """Provide a MembershipService instance."""
-    return MembershipService(db)
-
-
-async def get_invite_service(
-    db: AsyncSession = Depends(get_async_db),
-) -> InviteService:
-    """Provide an InviteService instance."""
-    return InviteService(db)
-{% endif %}
-
-
-{% if include_insights %}
-
-
-async def get_insight_service(
-    db: AsyncSession = Depends(get_async_db),
-) -> InsightService:
-    """Provide an InsightService instance."""
-    return InsightService(db)
-
-
-async def get_collector_service(
-    db: AsyncSession = Depends(get_async_db),
-) -> CollectorService:
-    """Provide a CollectorService instance."""
-    return CollectorService(db)
-
-
-async def get_query_service(
-    db: AsyncSession = Depends(get_async_db),
-) -> InsightQueryService:
-    """Provide an InsightQueryService instance."""
-    return InsightQueryService(session=db)
-{% endif %}
-{% if include_payment %}
-
-
-async def get_payment_service(
-    db: AsyncSession = Depends(get_async_db),
-) -> PaymentService:
-    """Provide a PaymentService instance."""
-    return PaymentService(db)
-{% endif %}
-
-
-def get_audit() -> AuditEmitter:
-    """Provide the audit emitter singleton."""
-    return audit_emitter
+from app.core.audit import get_audit
+from app.core.db import get_async_db, get_db
+{%- if include_auth %}
+from app.services.auth.deps import get_user_service
+{%- endif %}
+{%- if include_auth_org %}
+from app.services.auth.deps import get_org_service
+from app.services.auth.deps import get_membership_service
+from app.services.auth.deps import get_invite_service
+{%- endif %}
+{%- if include_insights %}
+from app.services.insights.deps import get_insight_service
+from app.services.insights.deps import get_collector_service
+from app.services.insights.deps import get_query_service
+{%- endif %}
+{%- if include_payment %}
+from app.services.payment.deps import get_payment_service
+{%- endif %}
+{%- for p in _plugins | default([]) %}
+{%- for d in p.wiring.deps_providers %}
+from {{ d.module }} import {{ d.symbol }}
+{%- endfor %}
+{%- endfor %}
 {% endif %}

@@ -1,0 +1,30 @@
+"""Insights dependencies for FastAPI route injection."""
+
+from fastapi import Depends
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.db import get_async_db
+from app.services.insights.collector_service import CollectorService
+from app.services.insights.insight_service import InsightService
+from app.services.insights.query_service import InsightQueryService
+
+
+async def get_insight_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> InsightService:
+    """Provide an InsightService instance."""
+    return InsightService(db)
+
+
+async def get_collector_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> CollectorService:
+    """Provide a CollectorService instance."""
+    return CollectorService(db)
+
+
+async def get_query_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> InsightQueryService:
+    """Provide an InsightQueryService instance."""
+    return InsightQueryService(session=db)

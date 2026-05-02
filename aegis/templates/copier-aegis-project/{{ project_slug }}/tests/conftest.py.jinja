@@ -58,7 +58,7 @@ def client_with_db(
     app: FastAPI, db_session: Session
 ) -> Generator[TestClient, None, None]:
     """Create a test client with database dependency override."""
-    from app.components.backend.api.deps import get_db
+    from app.core.db import get_db
 
     def get_test_db() -> Generator[Session, None, None]:
         yield db_session
@@ -187,7 +187,7 @@ async def async_client_with_db(
     app: FastAPI, async_db_session: AsyncSession
 ) -> AsyncGenerator[TestClient, None]:
     """Create a test client with async database dependency override."""
-    from app.components.backend.api.deps import get_async_db
+    from app.core.db import get_async_db
 
     async def get_test_async_db() -> AsyncGenerator[AsyncSession, None]:
         yield async_db_session

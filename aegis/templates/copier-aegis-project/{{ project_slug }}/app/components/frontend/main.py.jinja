@@ -81,13 +81,18 @@ from .dashboard.cards import (
     SchedulerCard,
 {% endif %}
     ServerCard,
-{% if include_auth or include_ai or include_comms or include_payment %}
+{% if include_auth or include_ai or include_comms or include_insights or include_payment or _plugins %}
     ServicesCard,
 {% endif %}
 {% if include_worker %}
     WorkerCard,
 {% endif %}
 )
+{%- for p in _plugins | default([]) %}
+{%- for c in p.wiring.dashboard_cards %}
+from {{ c.module }} import {{ c.symbol }}
+{%- endfor %}
+{%- endfor %}
 from .dashboard.cards.card_utils import create_health_status_indicator
 from .dashboard.diagram import DiagramView
 from .dashboard.status_overview import StatusOverviewPanel
@@ -855,7 +860,13 @@ async def setup_dashboard(view: BaseView) -> None:
             elif component_name == f"{SERVICE_PREFIX}{PAYMENT_COMPONENT_NAME}":
                 return PaymentCard(component_data).build()
 {% endif %}
-{% if include_auth or include_ai or include_comms or include_payment %}
+{%- for p in _plugins | default([]) %}
+{%- for c in p.wiring.dashboard_cards %}
+            elif component_name in ("{{ c.modal_id }}", f"{SERVICE_PREFIX}{{ c.modal_id }}"):
+                return {{ c.symbol }}(component_data).build()
+{%- endfor %}
+{%- endfor %}
+{% if include_auth or include_ai or include_comms or include_insights or include_payment or _plugins %}
             elif component_name.startswith("service_"):
                 # For other services, use generic ServicesCard for now
                 return ServicesCard(component_data).build()

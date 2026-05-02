@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 import stripe
-from app.components.backend.api.deps import get_payment_service
+from app.services.payment.deps import get_payment_service
 from app.services.payment.constants import (
     ProviderKeys,
     TransactionStatus,

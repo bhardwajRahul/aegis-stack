@@ -36,6 +36,7 @@ from .plugin_spec import (
     PluginSpec,
     PluginWiring,
     RouterWiring,
+    SymbolWiring,
 )
 
 
@@ -109,14 +110,45 @@ SERVICES: dict[str, ServiceSpec] = {
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.cards.auth_card",
                     symbol="AuthCard",
-                    modal_id="auth_modal",
+                    modal_id="auth",
                 ),
             ],
             dashboard_modals=[
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.modals.auth_modal",
-                    symbol="AuthModal",
-                    modal_id="auth_modal",
+                    symbol="AuthDetailDialog",
+                    modal_id="auth",
+                ),
+            ],
+            # FastAPI dependency providers — service-facade deps that
+            # take an AsyncSession and return a service instance. These
+            # used to live inline in the shared deps.py.jinja behind
+            # ``{% if include_auth %}`` blocks. Round 7.x moves them
+            # into ``app/services/auth/deps.py.jinja`` (Option-1 refactor),
+            # and the shared template just imports them via this list.
+            #
+            # Org-scoped providers gate on ``include_auth_org`` because
+            # the org/membership/invite tables only exist at that auth
+            # level.
+            deps_providers=[
+                SymbolWiring(
+                    module="app.services.auth.deps",
+                    symbol="get_user_service",
+                ),
+                SymbolWiring(
+                    module="app.services.auth.deps",
+                    symbol="get_org_service",
+                    when=lambda opts: bool(opts.get("include_auth_org")),
+                ),
+                SymbolWiring(
+                    module="app.services.auth.deps",
+                    symbol="get_membership_service",
+                    when=lambda opts: bool(opts.get("include_auth_org")),
+                ),
+                SymbolWiring(
+                    module="app.services.auth.deps",
+                    symbol="get_invite_service",
+                    when=lambda opts: bool(opts.get("include_auth_org")),
                 ),
             ],
         ),
@@ -158,10 +190,16 @@ SERVICES: dict[str, ServiceSpec] = {
                 default=False,
             ),
         ],
+        # Mirrors the ``{%- if include_auth %}`` + cross-service blocks in
+        # pyproject.toml.jinja. Auth contributes ``alembic`` (auth has
+        # migrations) and ``email-validator`` (User.email is EmailStr).
+        # Order matches the legacy render for byte-parity.
         pyproject_deps=[
             "python-jose[cryptography]==3.3.0",
-            "passlib[bcrypt]==1.7.4",
-            "python-multipart==0.0.9",  # For form data parsing
+            "bcrypt>=4.0.0",
+            "python-multipart==0.0.9",
+            "alembic==1.16.5",
+            "email-validator==2.2.0",
         ],
         template_files=[
             "app/components/backend/api/auth/",
@@ -245,14 +283,14 @@ SERVICES: dict[str, ServiceSpec] = {
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.cards.ai_card",
                     symbol="AICard",
-                    modal_id="ai_modal",
+                    modal_id="ai",
                 ),
             ],
             dashboard_modals=[
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.modals.ai_modal",
-                    symbol="AIModal",
-                    modal_id="ai_modal",
+                    symbol="AIDetailDialog",
+                    modal_id="ai",
                 ),
             ],
         ),
@@ -362,21 +400,21 @@ SERVICES: dict[str, ServiceSpec] = {
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.cards.comms_card",
                     symbol="CommsCard",
-                    modal_id="comms_modal",
+                    modal_id="comms",
                 ),
             ],
             dashboard_modals=[
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.modals.comms_modal",
-                    symbol="CommsModal",
-                    modal_id="comms_modal",
+                    symbol="CommsDetailDialog",
+                    modal_id="comms",
                 ),
             ],
         ),
         pyproject_deps=[
-            "resend>=2.4.0",  # Email provider
-            "twilio>=9.3.7",  # SMS/Voice provider
-            # Note: email-validator is shared with auth service, handled in pyproject.toml.jinja
+            "resend>=2.4.0",
+            "twilio>=9.3.7",
+            "email-validator==2.2.0",
         ],
         template_files=[
             "app/services/comms/",
@@ -423,14 +461,30 @@ SERVICES: dict[str, ServiceSpec] = {
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.cards.insights_card",
                     symbol="InsightsCard",
-                    modal_id="insights_modal",
+                    modal_id="service_insights",
                 ),
             ],
             dashboard_modals=[
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.modals.insights_modal",
-                    symbol="InsightsModal",
-                    modal_id="insights_modal",
+                    symbol="InsightsDetailDialog",
+                    modal_id="service_insights",
+                ),
+            ],
+            # FastAPI dependency providers — moved from inline definitions
+            # in shared deps.py.jinja into ``app/services/insights/deps.py``.
+            deps_providers=[
+                SymbolWiring(
+                    module="app.services.insights.deps",
+                    symbol="get_insight_service",
+                ),
+                SymbolWiring(
+                    module="app.services.insights.deps",
+                    symbol="get_collector_service",
+                ),
+                SymbolWiring(
+                    module="app.services.insights.deps",
+                    symbol="get_query_service",
                 ),
             ],
         ),
@@ -512,21 +566,30 @@ SERVICES: dict[str, ServiceSpec] = {
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.cards.payment_card",
                     symbol="PaymentCard",
-                    modal_id="payment_modal",
+                    modal_id="service_payment",
                 ),
             ],
             dashboard_modals=[
                 FrontendWidgetWiring(
                     module="app.components.frontend.dashboard.modals.payment_modal",
-                    symbol="PaymentModal",
-                    modal_id="payment_modal",
+                    symbol="PaymentDetailDialog",
+                    modal_id="service_payment",
+                ),
+            ],
+            # FastAPI dependency providers — moved from inline definitions
+            # in shared deps.py.jinja into ``app/services/payment/deps.py``.
+            deps_providers=[
+                SymbolWiring(
+                    module="app.services.payment.deps",
+                    symbol="get_payment_service",
                 ),
             ],
         ),
         # R4-A: migrations declared on the spec.
         migrations=[PAYMENT_MIGRATION, PAYMENT_AUTH_LINK_MIGRATION],
         pyproject_deps=[
-            "stripe>=11.0.0",  # Stripe Python SDK
+            "alembic==1.16.5",
+            "stripe>=11.0.0",
         ],
         template_files=[
             "app/services/payment/",

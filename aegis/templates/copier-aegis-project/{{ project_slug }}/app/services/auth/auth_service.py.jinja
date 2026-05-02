@@ -10,7 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from fastapi import Cookie, Depends
 from fastapi.security import OAuth2PasswordBearer
 
-from app.components.backend.api.deps import get_async_db
+from app.core.db import get_async_db
 from app.core.security import SESSION_COOKIE_NAME, VALID_ROLES
 {% endif %}
 

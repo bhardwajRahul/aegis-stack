@@ -55,3 +55,13 @@ class AuditEmitter:
 
 # Singleton instance
 audit_emitter = AuditEmitter()
+
+
+def get_audit() -> AuditEmitter:
+    """FastAPI dependency provider returning the audit emitter singleton.
+
+    Lives with the emitter rather than under
+    ``app/components/backend/api/deps.py`` so per-service deps modules
+    can import it without going through the api shim (see
+    ``app.core.db`` for the same pattern + rationale)."""
+    return audit_emitter

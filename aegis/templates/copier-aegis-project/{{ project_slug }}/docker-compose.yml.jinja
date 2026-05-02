@@ -343,6 +343,12 @@ services:
       - prod
 {%- endif %}
 
+{%- for p in _plugins | default([]) %}
+{%- for s in p.docker_services %}
+  {{ s | trim | indent(2, true) }}
+{%- endfor %}
+{%- endfor %}
+
   # TEST PROFILE
 
   test_runner:
