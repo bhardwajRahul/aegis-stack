@@ -1,0 +1,37 @@
+"""PluginSpec for ``aegis-plugin-{{ name }}``.
+
+The ``aegis.plugins`` entry point in ``pyproject.toml`` points at
+:func:`get_spec`. Aegis discovers it at runtime via
+``importlib.metadata`` (see ``aegis.core.plugin_discovery``).
+"""
+
+from aegis.core.file_manifest import FileManifest
+from aegis.core.plugin_spec import PluginKind, PluginSpec
+
+
+def get_spec() -> PluginSpec:
+    """Return the plugin's spec.
+
+    Hook points (uncomment + populate as needed):
+
+    * ``wiring=PluginWiring(routers=[...])`` — mount FastAPI routers.
+      See ``aegis.core.plugin_spec.RouterWiring``.
+    * ``wiring=PluginWiring(dashboard_cards=[...], dashboard_modals=[...])``
+      — register Flet dashboard widgets.
+    * ``wiring=PluginWiring(deps_providers=[...])`` — expose FastAPI
+      dependency providers.
+    * ``required_components=["database"]`` — declare deps; ``aegis add``
+      auto-resolves them.
+
+    See also: ``aegis plugins info {{ name }}`` after install.
+    """
+    return PluginSpec(
+        name="{{ name }}",
+        kind=PluginKind.SERVICE,
+        description="{{ description }}",
+        version="0.0.1",
+        verified=False,
+        # Files this plugin owns in the target project. ``aegis remove``
+        # walks this list to clean up after itself.
+        files=FileManifest(primary=["app/services/{{ name }}"]),
+    )

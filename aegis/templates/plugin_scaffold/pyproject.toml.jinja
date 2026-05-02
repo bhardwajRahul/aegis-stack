@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aegis-plugin-{{ name }}"
+version = "0.0.1"
+description = "{{ description }}"
+authors = [{ name = "{{ author }}" }]
+requires-python = ">=3.11"
+dependencies = [
+    "aegis-stack",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.0",
+    "ruff>=0.1.0",
+    "pre-commit>=3.7.0",
+]
+
+[project.entry-points."aegis.plugins"]
+{{ name }} = "aegis_plugin_{{ name }}.plugin:get_spec"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aegis_plugin_{{ name }}"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]

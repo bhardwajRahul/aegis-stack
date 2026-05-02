@@ -555,6 +555,109 @@ def plugins_update_command(
 
 
 # ---------------------------------------------------------------------
+# `aegis plugins create` (#774)
+# ---------------------------------------------------------------------
+
+
+@plugins_app.command("create")
+def plugins_create_command(
+    name: str = typer.Argument(
+        ...,
+        help="Plugin name (lowercase, no hyphens). Becomes the Python "
+        "package ``aegis_plugin_<name>`` and the install name "
+        "``aegis-plugin-<name>``.",
+    ),
+    target_dir: str = typer.Option(
+        ".",
+        "--target-dir",
+        "-d",
+        help="Parent directory the plugin scaffold lands inside.",
+    ),
+    author: str = typer.Option(
+        "",
+        "--author",
+        help="Author string for pyproject.toml + README.",
+    ),
+    description: str = typer.Option(
+        "",
+        "--description",
+        help="One-line plugin description.",
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt."),
+) -> None:
+    """Scaffold a new ``aegis-plugin-<name>`` Python package.
+
+    Generates a self-contained, pip-installable plugin project under
+    ``<target-dir>/aegis-plugin-<name>``. After creation:
+
+    \b
+        cd aegis-plugin-<name>
+        pip install -e .
+        aegis plugins list   # plugin shows up under "External plugins"
+
+    The scaffold ships with a minimal ``PluginSpec``, a placeholder
+    template tree, a Makefile (``make check`` / ``make test``), a
+    pre-commit config, and a GitHub Actions test workflow — all
+    matching the conventions ``aegis add`` / ``aegis plugins update``
+    expect at install time.
+    """
+    from ..core.plugin_scaffold import scaffold_plugin, validate_plugin_name
+
+    try:
+        validate_plugin_name(name)
+    except ValueError as e:
+        typer.secho(str(e), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from e
+
+    target = Path(target_dir).resolve()
+    if not target.is_dir():
+        typer.secho(
+            f"Target directory does not exist: {target}",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    output_root = target / f"aegis-plugin-{name}"
+    if output_root.exists():
+        typer.secho(
+            f"Directory already exists: {output_root}",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        typer.echo(
+            "   Pick a different name or remove the existing directory.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    typer.echo(f"Creating plugin: {name}")
+    typer.echo(f"   Target: {output_root}")
+    typer.echo(f"   Author: {author or '(default)'}")
+    typer.echo(f"   Description: {description or f'Aegis Stack plugin: {name}'}")
+    if not yes and not typer.confirm("Create the scaffold?", default=True):
+        typer.secho("Cancelled.", fg=typer.colors.YELLOW)
+        raise typer.Exit(0)
+
+    written = scaffold_plugin(
+        name,
+        target,
+        author=author,
+        description=description,
+    )
+
+    typer.secho(
+        f"\nCreated {len(written)} files under {output_root}",
+        fg=typer.colors.GREEN,
+    )
+    typer.echo("\nNext steps:")
+    typer.echo(f"   cd {output_root}")
+    typer.echo("   pip install -e .")
+    typer.echo("   aegis plugins list   # confirm the plugin is discovered")
+    typer.echo("   # Edit src/aegis_plugin_<name>/plugin.py to add wiring")
+
+
+# ---------------------------------------------------------------------
 # `aegis plugins search`
 # ---------------------------------------------------------------------
 
