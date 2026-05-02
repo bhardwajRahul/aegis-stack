@@ -271,6 +271,9 @@ MESSAGES: dict[str, str] = {
     "add.success": "Composants ajoutés !",
     "add.failed_component": "Échec de l'ajout de {component} : {error}",
     "add.failed": "Échec de l'ajout des composants : {error}",
+    "add.plugin_installing": "Installing plugin: {name}",
+    "add.plugin_confirm": "Add plugin {name} to this project?",
+    "add.plugin_success": "Plugin {name} installed.",
     "add.invalid_format": "Format de composant invalide : {error}",
     "add.bracket_override": (
         "La syntaxe entre crochets « scheduler[{engine}] » remplace --backend {backend}"
@@ -321,6 +324,9 @@ MESSAGES: dict[str, str] = {
     "remove.failed_component": "Échec de la suppression de {component} : {error}",
     "remove.success": "Composants supprimés !",
     "remove.failed": "Échec de la suppression des composants : {error}",
+    "remove.plugin_removing": "Removing plugin: {name}",
+    "remove.plugin_confirm": "Remove plugin {name} from this project?",
+    "remove.plugin_success": "Plugin {name} removed.",
     # ── Manual updater ─────────────────────────────────────────────────
     "updater.processing_files": "Traitement de {count} fichiers de composants...",
     "updater.updating_shared": "Mise à jour des fichiers de modèle partagés...",

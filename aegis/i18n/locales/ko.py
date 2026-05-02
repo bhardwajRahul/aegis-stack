@@ -250,6 +250,9 @@ MESSAGES: dict[str, str] = {
     "add.success": "컴포넌트 추가 완료!",
     "add.failed_component": "{component} 추가 실패: {error}",
     "add.failed": "컴포넌트 추가 실패: {error}",
+    "add.plugin_installing": "Installing plugin: {name}",
+    "add.plugin_confirm": "Add plugin {name} to this project?",
+    "add.plugin_success": "Plugin {name} installed.",
     "add.invalid_format": "컴포넌트 형식 오류: {error}",
     "add.bracket_override": (
         "대괄호 구문 'scheduler[{engine}]'이(가) --backend {backend}을(를) 덮어씁니다"
@@ -296,6 +299,9 @@ MESSAGES: dict[str, str] = {
     "remove.failed_component": "{component} 제거 실패: {error}",
     "remove.success": "컴포넌트 제거 완료!",
     "remove.failed": "컴포넌트 제거 실패: {error}",
+    "remove.plugin_removing": "Removing plugin: {name}",
+    "remove.plugin_confirm": "Remove plugin {name} from this project?",
+    "remove.plugin_success": "Plugin {name} removed.",
     # ── Manual updater ─────────────────────────────────────────────────
     "updater.processing_files": "{count}개 컴포넌트 파일 처리 중...",
     "updater.updating_shared": "공유 템플릿 파일 업데이트 중...",

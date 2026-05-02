@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aegis-plugin-test"
+version = "0.0.1"
+description = "Fake plugin used by Aegis Stack tests."
+requires-python = ">=3.10"
+
+[project.entry-points."aegis.plugins"]
+test_plugin = "aegis_plugin_test.spec:get_spec"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aegis_plugin_test"]

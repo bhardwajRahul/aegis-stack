@@ -255,6 +255,9 @@ MESSAGES: dict[str, str] = {
     "add.success": "Компоненты добавлены!",
     "add.failed_component": "Не удалось добавить {component}: {error}",
     "add.failed": "Не удалось добавить компоненты: {error}",
+    "add.plugin_installing": "Installing plugin: {name}",
+    "add.plugin_confirm": "Add plugin {name} to this project?",
+    "add.plugin_success": "Plugin {name} installed.",
     "add.invalid_format": "Неверный формат компонента: {error}",
     "add.bracket_override": (
         "Синтаксис 'scheduler[{engine}]' переопределяет --backend {backend}"
@@ -301,6 +304,9 @@ MESSAGES: dict[str, str] = {
     "remove.failed_component": "Не удалось удалить {component}: {error}",
     "remove.success": "Компоненты удалены!",
     "remove.failed": "Не удалось удалить компоненты: {error}",
+    "remove.plugin_removing": "Removing plugin: {name}",
+    "remove.plugin_confirm": "Remove plugin {name} from this project?",
+    "remove.plugin_success": "Plugin {name} removed.",
     # ── Ручной updater ─────────────────────────────────────────────────
     "updater.processing_files": "Обработка файлов компонентов: {count}...",
     "updater.updating_shared": "Обновление общих файлов шаблонов...",
