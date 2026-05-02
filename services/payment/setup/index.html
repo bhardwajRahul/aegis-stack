@@ -3104,15 +3104,15 @@
 <h2 id="3-get-your-webhook-signing-secret">3. Get Your Webhook Signing Secret</h2>
 <p>Unlike the secret key, the webhook signing secret is tied to a specific webhook endpoint, so you get it <em>after</em> you start forwarding events, not at signup.</p>
 <h3 id="local-development">Local development</h3>
-<p><strong>If you're running the Overseer webserver</strong> (<code>make serve</code> or <code>docker compose up</code>), webhook forwarding is automatic when <code>stripe-cli</code> is installed on your PATH, you're authenticated (<code>stripe login</code>), and <code>STRIPE_SECRET_KEY</code> is a test key. On startup the app launches <code>stripe listen</code> as a supervised subprocess, captures the ephemeral signing secret from its stdout, and injects it into the payment provider at runtime — no <code>.env</code> edit needed. You'll see:</p>
+<p><strong>If you're running the Overseer webserver</strong> (<code>make serve</code> or <code>docker compose up</code>), webhook forwarding is automatic when <code>stripe-cli</code> is installed on your PATH, you're authenticated (<code>stripe login</code>), and <code>STRIPE_SECRET_KEY</code> is a test key. On startup the app launches <code>stripe listen</code> as a supervised subprocess, captures the ephemeral signing secret from its stdout, and injects it into the payment provider at runtime, no <code>.env</code> edit needed. You'll see:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Stripe webhook forwarder started: stripe listen → /api/v1/payment/webhook
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Stripe webhook signing secret captured from stripe-cli
 </span></code></pre></div>
 <p>in the server logs. Shutting down the webserver terminates the subprocess cleanly.</p>
 <p>The auto-forwarder is skipped when any of the following is true, so your setup wins:</p>
 <ul>
-<li><code>STRIPE_WEBHOOK_SECRET</code> is already set in <code>.env</code> (explicit override — you're using a tunnel like ngrok or the Stripe dashboard endpoint).</li>
-<li><code>STRIPE_SECRET_KEY</code> is a live key (<code>sk_live_...</code>) — production uses the Stripe dashboard webhook, never a local subprocess.</li>
+<li><code>STRIPE_WEBHOOK_SECRET</code> is already set in <code>.env</code> (explicit override, you're using a tunnel like ngrok or the Stripe dashboard endpoint).</li>
+<li><code>STRIPE_SECRET_KEY</code> is a live key (<code>sk_live_...</code>). Production uses the Stripe dashboard webhook, never a local subprocess.</li>
 <li><code>stripe-cli</code> isn't on PATH, or the user hasn't run <code>stripe login</code>.</li>
 </ul>
 <p><strong>Foreground alternative</strong>: if you'd rather run the forwarder in a dedicated terminal (easier to watch event logs), the CLI helper is still available:</p>
@@ -3121,7 +3121,7 @@
 <p>It shells to <code>stripe listen --forward-to localhost:8000/api/v1/payment/webhook</code> and prints:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>&gt; Ready! Your webhook signing secret is whsec_...
 </span></code></pre></div>
-<p>Copy that <code>whsec_...</code> value into <code>.env</code> as <code>STRIPE_WEBHOOK_SECRET</code> and restart the webserver — doing so disables the auto-forwarder so you don't end up with two listeners.</p>
+<p>Copy that <code>whsec_...</code> value into <code>.env</code> as <code>STRIPE_WEBHOOK_SECRET</code> and restart the webserver. Doing so disables the auto-forwarder so you don't end up with two listeners.</p>
 <p>See <a href="../cli/#webhook">CLI Commands → webhook</a> for details including platform-specific <code>stripe-cli</code> install instructions.</p>
 <h3 id="production">Production</h3>
 <ol>
@@ -3311,14 +3311,14 @@
 <p><strong><code>Status: Disconnected</code> even though the key is set</strong>: the CLI and webserver both read <code>STRIPE_SECRET_KEY</code> via pydantic <code>Settings()</code>, which loads from <code>.env</code>. If you set the key directly in your shell (not <code>.env</code>), it won't be seen by a process that only loads the dotenv file. Prefer <code>.env</code>.</p>
 <p><strong><code>Extra inputs are not permitted</code> on webserver startup</strong>: the webserver's <code>Settings</code> model is missing a declared field for one of the <code>STRIPE_*</code> env vars. Check <code>app/core/config.py</code> for <code>STRIPE_SECRET_KEY</code> / <code>STRIPE_WEBHOOK_SECRET</code> declarations under the payment block.</p>
 <p><strong><code>You specified 'payment' mode but passed a recurring price</code></strong>: your Price was configured as recurring in Stripe but you sent <code>"mode": "payment"</code> in the checkout request. Either change <code>mode</code> to <code>"subscription"</code> or create a separate one-off Price for single charges.</p>
-<p><strong>Webhook signature verification fails</strong>: the <code>STRIPE_WEBHOOK_SECRET</code> in <code>.env</code> must match the signing secret for the specific endpoint delivering events. Local <code>stripe listen</code> and production dashboard webhooks have <strong>different</strong> secrets; don't mix them. If the Overseer auto-forwarder is running, the runtime-captured secret wins over <code>.env</code> — unset <code>STRIPE_WEBHOOK_SECRET</code> to let the auto-forwarder manage it, or set it explicitly to disable auto-forwarding.</p>
+<p><strong>Webhook signature verification fails</strong>: the <code>STRIPE_WEBHOOK_SECRET</code> in <code>.env</code> must match the signing secret for the specific endpoint delivering events. Local <code>stripe listen</code> and production dashboard webhooks have <strong>different</strong> secrets; don't mix them. If the Overseer auto-forwarder is running, the runtime-captured secret wins over <code>.env</code>, unset <code>STRIPE_WEBHOOK_SECRET</code> to let the auto-forwarder manage it, or set it explicitly to disable auto-forwarding.</p>
 <p><strong>Auto-forwarder skipped, events never arrive</strong>: check the server logs for one of these lines:</p>
 <ul>
-<li><code>Stripe CLI not installed; skipping auto-webhook-forwarder</code> — install stripe-cli (<code>brew install stripe/stripe-cli/stripe</code> on macOS) or run <code>my-app payment webhook</code> manually.</li>
-<li><code>Stripe CLI is installed but not authenticated</code> — run <code>stripe login</code> once, then restart the webserver.</li>
-<li><code>STRIPE_SECRET_KEY is not a test key</code> — the auto-forwarder only runs in test mode; live deployments must configure a production webhook endpoint in the Stripe dashboard.</li>
+<li><code>Stripe CLI not installed; skipping auto-webhook-forwarder</code>, install stripe-cli (<code>brew install stripe/stripe-cli/stripe</code> on macOS) or run <code>my-app payment webhook</code> manually.</li>
+<li><code>Stripe CLI is installed but not authenticated</code>: run <code>stripe login</code> once, then restart the webserver.</li>
+<li><code>STRIPE_SECRET_KEY is not a test key</code>, the auto-forwarder only runs in test mode; live deployments must configure a production webhook endpoint in the Stripe dashboard.</li>
 </ul>
-<p><strong>Docker compose</strong>: the webserver image installs <code>stripe-cli</code> when the payment service is included (see the <code>Install stripe-cli</code> block in <code>Dockerfile</code>). The auto-forwarder authenticates via <code>--api-key $STRIPE_SECRET_KEY</code> at runtime, so no interactive <code>stripe login</code> is needed inside the container. If you see <code>Stripe CLI not installed</code> from a compose run, your image was built before this feature landed — rebuild it with <code>docker compose build --no-cache webserver</code>.</p>
+<p><strong>Docker compose</strong>: the webserver image installs <code>stripe-cli</code> when the payment service is included (see the <code>Install stripe-cli</code> block in <code>Dockerfile</code>). The auto-forwarder authenticates via <code>--api-key $STRIPE_SECRET_KEY</code> at runtime, so no interactive <code>stripe login</code> is needed inside the container. If you see <code>Stripe CLI not installed</code> from a compose run, your image was built before this feature landed, rebuild it with <code>docker compose build --no-cache webserver</code>.</p>
 
 
 

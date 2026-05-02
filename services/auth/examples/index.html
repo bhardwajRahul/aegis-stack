@@ -2920,7 +2920,7 @@
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1"># Start all services (PostgreSQL + API)</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>make<span class="w"> </span>serve
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># In a second terminal — create test users</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># In a second terminal, create test users</span>
 </span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>my-app<span class="w"> </span>auth<span class="w"> </span>create-test-user<span class="w"> </span>--email<span class="w"> </span><span class="s2">&quot;admin@example.com&quot;</span><span class="w"> </span>--password<span class="w"> </span><span class="s2">&quot;Admin1234!&quot;</span>
 </span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>my-app<span class="w"> </span>auth<span class="w"> </span>create-test-users<span class="w"> </span>--count<span class="w"> </span><span class="m">3</span><span class="w"> </span>--prefix<span class="w"> </span><span class="s2">&quot;user&quot;</span>
 </span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
@@ -2962,7 +2962,7 @@
 <hr />
 <h2 id="2-password-reset-flow">2. Password Reset Flow</h2>
 <p>Two-step flow: request a token, then confirm with the new password.</p>
-<p><strong>Step 1 — request the reset token:</strong></p>
+<p><strong>Step 1, request the reset token:</strong></p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/auth/password-reset/request<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;email&quot;: &quot;jane@example.com&quot;}&#39;</span><span class="w"> </span><span class="se">\</span>
@@ -2973,7 +2973,7 @@
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="p">}</span>
 </span></code></pre></div>
 <p>The response is always 200 regardless of whether the email exists, to prevent user enumeration.</p>
-<p><strong>Step 2 — retrieve the token from the database:</strong></p>
+<p><strong>Step 2, retrieve the token from the database:</strong></p>
 <p>In production you would email this token. During development, query it directly:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Connect to the local Postgres instance</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>psql<span class="w"> </span>postgresql://postgres:postgres@localhost:5432/my-app<span class="w"> </span><span class="se">\</span>
@@ -2983,7 +2983,7 @@
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>------------------------------------+------------------------+------
 </span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a> Xk9mP2qR7vN4wL1jC8dE5fA3bH6oK0nT | 2026-03-30 12:01:00    | f
 </span></code></pre></div>
-<p><strong>Step 3 — confirm the reset:</strong></p>
+<p><strong>Step 3, confirm the reset:</strong></p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/auth/password-reset/confirm<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;token&quot;: &quot;Xk9mP2qR7vN4wL1jC8dE5fA3bH6oK0nT&quot;, &quot;new_password&quot;: &quot;NewSecret5678!&quot;}&#39;</span><span class="w"> </span><span class="se">\</span>
@@ -2993,7 +2993,7 @@
 </span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">    </span><span class="nt">&quot;detail&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Password has been reset successfully&quot;</span>
 </span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="p">}</span>
 </span></code></pre></div>
-<p><strong>Step 4 — verify login with the new password:</strong></p>
+<p><strong>Step 4, verify login with the new password:</strong></p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/auth/token<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>-d<span class="w"> </span><span class="s2">&quot;username=jane@example.com&amp;password=NewSecret5678!&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-m<span class="w"> </span>json.tool
@@ -3010,7 +3010,7 @@
 <hr />
 <h2 id="3-email-verification-flow">3. Email Verification Flow</h2>
 <p>A verification token is created automatically on registration. Tokens expire after 24 hours (configurable via <code>EMAIL_VERIFICATION_EXPIRE_HOURS</code>).</p>
-<p><strong>Step 1 — register (token created automatically):</strong></p>
+<p><strong>Step 1, register (token created automatically):</strong></p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/auth/register<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;email&quot;: &quot;bob@example.com&quot;, &quot;password&quot;: &quot;Secret1234!&quot;, &quot;full_name&quot;: &quot;Bob Smith&quot;}&#39;</span><span class="w"> </span><span class="se">\</span>
@@ -3026,8 +3026,8 @@
 </span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">    </span><span class="err">...</span>
 </span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="p">}</span>
 </span></code></pre></div>
-<p>Note <code>"is_verified": false</code> — the account works immediately but is unverified.</p>
-<p><strong>Step 2 — retrieve the verification token from the database:</strong></p>
+<p>Note <code>"is_verified": false</code>, the account works immediately but is unverified.</p>
+<p><strong>Step 2, retrieve the verification token from the database:</strong></p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>psql<span class="w"> </span>postgresql://postgres:postgres@localhost:5432/my-app<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span>-c<span class="w"> </span><span class="s2">&quot;SELECT token, created_at, used FROM email_verification_token ORDER BY created_at DESC LIMIT 1;&quot;</span>
 </span></code></pre></div>
@@ -3035,7 +3035,7 @@
 </span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>------------------------------------+------------------------+------
 </span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a> mQ3sW7xZ2kR9vN5pL8tA1cE4bD6oH0jY | 2026-03-30 12:05:00    | f
 </span></code></pre></div>
-<p><strong>Step 3 — verify the email:</strong></p>
+<p><strong>Step 3, verify the email:</strong></p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/auth/verify-email<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;token&quot;: &quot;mQ3sW7xZ2kR9vN5pL8tA1cE4bD6oH0jY&quot;}&#39;</span><span class="w"> </span><span class="se">\</span>
@@ -3045,7 +3045,7 @@
 </span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">    </span><span class="nt">&quot;detail&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Email has been verified successfully&quot;</span>
 </span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="p">}</span>
 </span></code></pre></div>
-<p><strong>Step 4 — confirm <code>is_verified</code> is now true:</strong></p>
+<p><strong>Step 4, confirm <code>is_verified</code> is now true:</strong></p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="nv">TOKEN</span><span class="o">=</span><span class="k">$(</span>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/auth/token<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">  </span>-d<span class="w"> </span><span class="s2">&quot;username=bob@example.com&amp;password=Secret1234!&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import sys,json; print(json.load(sys.stdin)[&#39;access_token&#39;])&quot;</span><span class="k">)</span>
@@ -3138,7 +3138,7 @@
 </span><span id="__span-25-4"><a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a>Failed attempt 4:  Incorrect email or password
 </span><span id="__span-25-5"><a id="__codelineno-25-5" name="__codelineno-25-5" href="#__codelineno-25-5"></a>Failed attempt 5:  Incorrect email or password
 </span></code></pre></div>
-<p><strong>Attempt 6 — even with the correct password, account is now locked:</strong></p>
+<p><strong>Attempt 6, even with the correct password, account is now locked:</strong></p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/auth/token<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-26-2"><a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a><span class="w">  </span>-d<span class="w"> </span><span class="s2">&quot;username=alice@example.com&amp;password=Correct1234!&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-26-3"><a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-m<span class="w"> </span>json.tool
@@ -3156,7 +3156,7 @@
 </span><span id="__span-29-2"><a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a>----------------------+-----------------------+---------------------------
 </span><span id="__span-29-3"><a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a> alice@example.com   |                     5 | 2026-03-30 12:20:00
 </span></code></pre></div>
-<p><strong>Auto-unlock:</strong> After 15 minutes, the next login attempt clears <code>locked_until</code> automatically — no manual intervention needed.</p>
+<p><strong>Auto-unlock:</strong> After 15 minutes, the next login attempt clears <code>locked_until</code> automatically, no manual intervention needed.</p>
 <p><strong>Adjust thresholds in <code>.env</code>:</strong></p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="nv">ACCOUNT_LOCKOUT_ATTEMPTS</span><span class="o">=</span><span class="m">5</span>
 </span><span id="__span-30-2"><a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a><span class="nv">ACCOUNT_LOCKOUT_MINUTES</span><span class="o">=</span><span class="m">15</span>
@@ -3283,7 +3283,7 @@
 <h2 id="8-invite-flow">8. Invite Flow</h2>
 <p>Two scenarios: inviting an existing user (added immediately) and inviting a new user (pending until they register).</p>
 <h3 id="invite-an-existing-user">Invite an Existing User</h3>
-<p>The user is added to the org instantly — no token acceptance required.</p>
+<p>The user is added to the org instantly, no token acceptance required.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-47-1"><a id="__codelineno-47-1" name="__codelineno-47-1" href="#__codelineno-47-1"></a><span class="c1"># bob@example.com already has an account (user_id: 2)</span>
 </span><span id="__span-47-2"><a id="__codelineno-47-2" name="__codelineno-47-2" href="#__codelineno-47-2"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/orgs/1/invites<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-47-3"><a id="__codelineno-47-3" name="__codelineno-47-3" href="#__codelineno-47-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="nv">$ADMIN_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
@@ -3301,10 +3301,10 @@
 </span><span id="__span-48-8"><a id="__codelineno-48-8" name="__codelineno-48-8" href="#__codelineno-48-8"></a><span class="w">    </span><span class="nt">&quot;created_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-03-30T12:35:00&quot;</span>
 </span><span id="__span-48-9"><a id="__codelineno-48-9" name="__codelineno-48-9" href="#__codelineno-48-9"></a><span class="p">}</span>
 </span></code></pre></div>
-<p>Note <code>"status": "accepted"</code> — membership was created immediately.</p>
+<p>Note <code>"status": "accepted"</code>, membership was created immediately.</p>
 <h3 id="invite-a-new-user-pending">Invite a New User (Pending)</h3>
 <p>The user doesn't have an account yet. A pending invite is stored and resolved automatically when they register.</p>
-<p><strong>Step 1 — create the pending invite:</strong></p>
+<p><strong>Step 1, create the pending invite:</strong></p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-49-1"><a id="__codelineno-49-1" name="__codelineno-49-1" href="#__codelineno-49-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/orgs/1/invites<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-49-2"><a id="__codelineno-49-2" name="__codelineno-49-2" href="#__codelineno-49-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="nv">$ADMIN_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-49-3"><a id="__codelineno-49-3" name="__codelineno-49-3" href="#__codelineno-49-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
@@ -3321,19 +3321,19 @@
 </span><span id="__span-50-8"><a id="__codelineno-50-8" name="__codelineno-50-8" href="#__codelineno-50-8"></a><span class="w">    </span><span class="nt">&quot;created_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2026-03-30T12:36:00&quot;</span>
 </span><span id="__span-50-9"><a id="__codelineno-50-9" name="__codelineno-50-9" href="#__codelineno-50-9"></a><span class="p">}</span>
 </span></code></pre></div>
-<p><strong>Step 2 — check pending invites:</strong></p>
+<p><strong>Step 2, check pending invites:</strong></p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-51-1"><a id="__codelineno-51-1" name="__codelineno-51-1" href="#__codelineno-51-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>http://localhost:8000/api/v1/orgs/1/invites<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-51-2"><a id="__codelineno-51-2" name="__codelineno-51-2" href="#__codelineno-51-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: Bearer </span><span class="nv">$ADMIN_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-51-3"><a id="__codelineno-51-3" name="__codelineno-51-3" href="#__codelineno-51-3"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-m<span class="w"> </span>json.tool
 </span></code></pre></div>
-<p><strong>Step 3a — newcomer registers (auto-joins the org):</strong></p>
+<p><strong>Step 3a, newcomer registers (auto-joins the org):</strong></p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-52-1"><a id="__codelineno-52-1" name="__codelineno-52-1" href="#__codelineno-52-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/auth/register<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-52-2"><a id="__codelineno-52-2" name="__codelineno-52-2" href="#__codelineno-52-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-52-3"><a id="__codelineno-52-3" name="__codelineno-52-3" href="#__codelineno-52-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;email&quot;: &quot;newcomer@example.com&quot;, &quot;password&quot;: &quot;Welcome1234!&quot;}&#39;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-52-4"><a id="__codelineno-52-4" name="__codelineno-52-4" href="#__codelineno-52-4"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>python3<span class="w"> </span>-m<span class="w"> </span>json.tool
 </span></code></pre></div>
 <p>The <code>accept_pending_invites</code> hook fires automatically during registration. The invite status changes to <code>accepted</code> and the user is a member immediately.</p>
-<p><strong>Step 3b (alternative) — accept invite explicitly by token:</strong></p>
+<p><strong>Step 3b (alternative), accept invite explicitly by token:</strong></p>
 <p>Use this when <code>INVITE_ACCEPTANCE_MODE=token</code> or when you want a registered user to explicitly accept.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-53-1"><a id="__codelineno-53-1" name="__codelineno-53-1" href="#__codelineno-53-1"></a><span class="nv">NEWCOMER_TOKEN</span><span class="o">=</span><span class="k">$(</span>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/auth/token<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-53-2"><a id="__codelineno-53-2" name="__codelineno-53-2" href="#__codelineno-53-2"></a><span class="w">  </span>-d<span class="w"> </span><span class="s2">&quot;username=newcomer@example.com&amp;password=Welcome1234!&quot;</span><span class="w"> </span><span class="se">\</span>

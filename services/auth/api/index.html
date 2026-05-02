@@ -3475,7 +3475,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </span></code></pre></div>
 <hr />
 <h3 id="post-authtoken">POST /auth/token</h3>
-<p>Login and receive a JWT access token. Follows the OAuth2 password flow — email is passed as <code>username</code> in form data.</p>
+<p>Login and receive a JWT access token. Follows the OAuth2 password flow; email is passed as <code>username</code> in form data.</p>
 <p><strong>Auth:</strong> None
 <strong>Rate limited:</strong> Yes</p>
 <p><strong>Request body:</strong> <code>application/x-www-form-urlencoded</code></p>
@@ -3491,7 +3491,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <tr>
 <td><code>username</code></td>
 <td><code>string</code></td>
-<td>Yes — pass email here</td>
+<td>Yes, pass email here</td>
 </tr>
 <tr>
 <td><code>password</code></td>
@@ -3515,7 +3515,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </tr>
 <tr>
 <td><code>token_type</code></td>
-<td><code>string</code> — always <code>"bearer"</code></td>
+<td><code>string</code>, always <code>"bearer"</code></td>
 </tr>
 </tbody>
 </table>
@@ -3558,7 +3558,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <h3 id="get-authme">GET /auth/me</h3>
 <p>Get the current authenticated user's profile.</p>
 <p><strong>Auth:</strong> Bearer token required</p>
-<p><strong>Response: <code>200 OK</code></strong> — <code>UserResponse</code> (see schema above)</p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>UserResponse</code> (see schema above)</p>
 <p><strong>Status codes:</strong></p>
 <table>
 <thead>
@@ -3602,7 +3602,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </tr>
 </tbody>
 </table>
-<p><strong>Response: <code>200 OK</code></strong> — <code>UserResponse</code></p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>UserResponse</code></p>
 <p><strong>Status codes:</strong></p>
 <table>
 <thead>
@@ -3669,7 +3669,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </tr>
 </tbody>
 </table>
-<p><strong>Response: <code>200 OK</code></strong> — <code>UserResponse</code></p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>UserResponse</code></p>
 <p><strong>Status codes:</strong></p>
 <table>
 <thead>
@@ -3900,11 +3900,11 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <tr>
 <td><code>token</code></td>
 <td><code>string</code></td>
-<td>Yes — invite token</td>
+<td>Yes, invite token</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Response: <code>200 OK</code></strong> — <code>InviteResponse</code></p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>InviteResponse</code></p>
 <table>
 <thead>
 <tr>
@@ -3976,8 +3976,8 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <p>These endpoints require elevated roles (<code>admin</code> or <code>moderator</code>).</p>
 <h3 id="get-authusers">GET /auth/users</h3>
 <p>List all users. Requires <code>admin</code> or <code>moderator</code> role.</p>
-<p><strong>Auth:</strong> Bearer token — <code>admin</code> or <code>moderator</code></p>
-<p><strong>Response: <code>200 OK</code></strong> — <code>list[UserResponse]</code></p>
+<p><strong>Auth:</strong> Bearer token, <code>admin</code> or <code>moderator</code></p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>list[UserResponse]</code></p>
 <p><strong>Status codes:</strong></p>
 <table>
 <thead>
@@ -4007,7 +4007,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="patch-authusersuser_iddeactivate">PATCH /auth/users/{user_id}/deactivate</h3>
 <p>Deactivate a user account. Requires <code>admin</code> role.</p>
-<p><strong>Auth:</strong> Bearer token — <code>admin</code></p>
+<p><strong>Auth:</strong> Bearer token, <code>admin</code></p>
 <p><strong>Path parameters:</strong></p>
 <table>
 <thead>
@@ -4025,7 +4025,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </tr>
 </tbody>
 </table>
-<p><strong>Response: <code>200 OK</code></strong> — <code>UserResponse</code> with <code>is_active: false</code></p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>UserResponse</code> with <code>is_active: false</code></p>
 <p><strong>Status codes:</strong></p>
 <table>
 <thead>
@@ -4059,7 +4059,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="patch-authusersuser_idactivate">PATCH /auth/users/{user_id}/activate</h3>
 <p>Reactivate a deactivated user account. Requires <code>admin</code> role.</p>
-<p><strong>Auth:</strong> Bearer token — <code>admin</code></p>
+<p><strong>Auth:</strong> Bearer token, <code>admin</code></p>
 <p><strong>Path parameters:</strong></p>
 <table>
 <thead>
@@ -4077,7 +4077,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </tr>
 </tbody>
 </table>
-<p><strong>Response: <code>200 OK</code></strong> — <code>UserResponse</code> with <code>is_active: true</code></p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>UserResponse</code> with <code>is_active: true</code></p>
 <p><strong>Status codes:</strong></p>
 <table>
 <thead>
@@ -4111,7 +4111,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="delete-authusersuser_id">DELETE /auth/users/{user_id}</h3>
 <p>Permanently delete a user. Requires <code>admin</code> role.</p>
-<p><strong>Auth:</strong> Bearer token — <code>admin</code></p>
+<p><strong>Auth:</strong> Bearer token, <code>admin</code></p>
 <p><strong>Path parameters:</strong></p>
 <table>
 <thead>
@@ -4188,7 +4188,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <td><code>slug</code></td>
 <td><code>string</code></td>
 <td>Yes</td>
-<td>Unique URL identifier — lowercase alphanumeric with hyphens, cannot start/end with a hyphen</td>
+<td>Unique URL identifier, lowercase alphanumeric with hyphens, cannot start/end with a hyphen</td>
 </tr>
 <tr>
 <td><code>description</code></td>
@@ -4204,7 +4204,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </tr>
 </tbody>
 </table>
-<p><strong>Response: <code>201 Created</code></strong> — <code>OrgResponse</code></p>
+<p><strong>Response: <code>201 Created</code></strong>, <code>OrgResponse</code></p>
 <table>
 <thead>
 <tr>
@@ -4275,7 +4275,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <h3 id="get-orgs">GET /orgs</h3>
 <p>List organizations the current user belongs to.</p>
 <p><strong>Auth:</strong> Bearer token required</p>
-<p><strong>Response: <code>200 OK</code></strong> — <code>list[OrgResponse]</code></p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>list[OrgResponse]</code></p>
 <p><strong>Status codes:</strong></p>
 <table>
 <thead>
@@ -4301,8 +4301,8 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="get-orgsall">GET /orgs/all</h3>
 <p>List all organizations in the system. Requires <code>admin</code> role.</p>
-<p><strong>Auth:</strong> Bearer token — <code>admin</code></p>
-<p><strong>Response: <code>200 OK</code></strong> — <code>list[OrgResponse]</code></p>
+<p><strong>Auth:</strong> Bearer token, <code>admin</code></p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>list[OrgResponse]</code></p>
 <p><strong>Status codes:</strong></p>
 <table>
 <thead>
@@ -4332,8 +4332,8 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="get-orgsmemberships">GET /orgs/memberships</h3>
 <p>List all memberships across all orgs with org name and slug. Requires <code>admin</code> role.</p>
-<p><strong>Auth:</strong> Bearer token — <code>admin</code></p>
-<p><strong>Response: <code>200 OK</code></strong> — <code>list[UserMembershipResponse]</code></p>
+<p><strong>Auth:</strong> Bearer token, <code>admin</code></p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>list[UserMembershipResponse]</code></p>
 <table>
 <thead>
 <tr>
@@ -4389,7 +4389,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="get-orgsorg_id">GET /orgs/{org_id}</h3>
 <p>Get organization details. Requires membership in the org.</p>
-<p><strong>Auth:</strong> Bearer token — any org member</p>
+<p><strong>Auth:</strong> Bearer token, any org member</p>
 <p><strong>Path parameters:</strong></p>
 <table>
 <thead>
@@ -4407,7 +4407,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </tr>
 </tbody>
 </table>
-<p><strong>Response: <code>200 OK</code></strong> — <code>OrgResponse</code></p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>OrgResponse</code></p>
 <p><strong>Status codes:</strong></p>
 <table>
 <thead>
@@ -4441,7 +4441,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="patch-orgsorg_id">PATCH /orgs/{org_id}</h3>
 <p>Update organization name or description. Requires <code>admin</code> or <code>owner</code> org role.</p>
-<p><strong>Auth:</strong> Bearer token — org <code>admin</code> or <code>owner</code></p>
+<p><strong>Auth:</strong> Bearer token, org <code>admin</code> or <code>owner</code></p>
 <p><strong>Path parameters:</strong></p>
 <table>
 <thead>
@@ -4484,7 +4484,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </tr>
 </tbody>
 </table>
-<p><strong>Response: <code>200 OK</code></strong> — <code>OrgResponse</code></p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>OrgResponse</code></p>
 <p><strong>Status codes:</strong></p>
 <table>
 <thead>
@@ -4522,7 +4522,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="delete-orgsorg_id">DELETE /orgs/{org_id}</h3>
 <p>Delete an organization. Requires <code>owner</code> org role.</p>
-<p><strong>Auth:</strong> Bearer token — org <code>owner</code></p>
+<p><strong>Auth:</strong> Bearer token, org <code>owner</code></p>
 <p><strong>Path parameters:</strong></p>
 <table>
 <thead>
@@ -4574,7 +4574,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="post-orgsorg_idtransfer-ownership">POST /orgs/{org_id}/transfer-ownership</h3>
 <p>Transfer org ownership to another existing member. Caller must be the current <code>owner</code>.</p>
-<p><strong>Auth:</strong> Bearer token — org <code>owner</code></p>
+<p><strong>Auth:</strong> Bearer token, org <code>owner</code></p>
 <p><strong>Path parameters:</strong></p>
 <table>
 <thead>
@@ -4649,7 +4649,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="get-orgsorg_idmembers">GET /orgs/{org_id}/members</h3>
 <p>List organization members. Requires membership.</p>
-<p><strong>Auth:</strong> Bearer token — any org member</p>
+<p><strong>Auth:</strong> Bearer token, any org member</p>
 <p><strong>Path parameters:</strong></p>
 <table>
 <thead>
@@ -4667,7 +4667,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </tr>
 </tbody>
 </table>
-<p><strong>Response: <code>200 OK</code></strong> — <code>list[MemberResponse]</code></p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>list[MemberResponse]</code></p>
 <table>
 <thead>
 <tr>
@@ -4727,7 +4727,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="get-orgsorg_idmembersdetails">GET /orgs/{org_id}/members/details</h3>
 <p>List members with enriched user data (email and name). Requires membership.</p>
-<p><strong>Auth:</strong> Bearer token — any org member</p>
+<p><strong>Auth:</strong> Bearer token, any org member</p>
 <p><strong>Path parameters:</strong></p>
 <table>
 <thead>
@@ -4745,7 +4745,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </tr>
 </tbody>
 </table>
-<p><strong>Response: <code>200 OK</code></strong> — <code>list[MemberDetailResponse]</code></p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>list[MemberDetailResponse]</code></p>
 <table>
 <thead>
 <tr>
@@ -4805,7 +4805,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="post-orgsorg_idmembers">POST /orgs/{org_id}/members</h3>
 <p>Add a single member to the organization. Requires <code>admin</code> or <code>owner</code> org role.</p>
-<p><strong>Auth:</strong> Bearer token — org <code>admin</code> or <code>owner</code></p>
+<p><strong>Auth:</strong> Bearer token, org <code>admin</code> or <code>owner</code></p>
 <p><strong>Path parameters:</strong></p>
 <table>
 <thead>
@@ -4844,11 +4844,11 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <td><code>role</code></td>
 <td><code>string</code></td>
 <td>No</td>
-<td>Defaults to <code>"member"</code> — valid: <code>owner</code>, <code>admin</code>, <code>member</code></td>
+<td>Defaults to <code>"member"</code>, valid: <code>owner</code>, <code>admin</code>, <code>member</code></td>
 </tr>
 </tbody>
 </table>
-<p><strong>Response: <code>201 Created</code></strong> — <code>MemberResponse</code></p>
+<p><strong>Response: <code>201 Created</code></strong>, <code>MemberResponse</code></p>
 <p><strong>Status codes:</strong></p>
 <table>
 <thead>
@@ -4882,7 +4882,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="post-orgsorg_idmembersbulk">POST /orgs/{org_id}/members/bulk</h3>
 <p>Add multiple members at once, all with the same role. Requires <code>admin</code> or <code>owner</code> org role. Skips users already in the org.</p>
-<p><strong>Auth:</strong> Bearer token — org <code>admin</code> or <code>owner</code></p>
+<p><strong>Auth:</strong> Bearer token, org <code>admin</code> or <code>owner</code></p>
 <p><strong>Path parameters:</strong></p>
 <table>
 <thead>
@@ -4921,11 +4921,11 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <td><code>role</code></td>
 <td><code>string</code></td>
 <td>No</td>
-<td>Defaults to <code>"member"</code> — valid: <code>owner</code>, <code>admin</code>, <code>member</code></td>
+<td>Defaults to <code>"member"</code>, valid: <code>owner</code>, <code>admin</code>, <code>member</code></td>
 </tr>
 </tbody>
 </table>
-<p><strong>Response: <code>201 Created</code></strong> — <code>list[MemberResponse]</code> (newly added members only)</p>
+<p><strong>Response: <code>201 Created</code></strong>, <code>list[MemberResponse]</code> (newly added members only)</p>
 <p><strong>Status codes:</strong></p>
 <table>
 <thead>
@@ -4961,7 +4961,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="patch-orgsorg_idmembersuser_id">PATCH /orgs/{org_id}/members/{user_id}</h3>
 <p>Update a member's role. Requires <code>admin</code> or <code>owner</code> org role.</p>
-<p><strong>Auth:</strong> Bearer token — org <code>admin</code> or <code>owner</code></p>
+<p><strong>Auth:</strong> Bearer token, org <code>admin</code> or <code>owner</code></p>
 <p><strong>Path parameters:</strong></p>
 <table>
 <thead>
@@ -5003,7 +5003,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </tr>
 </tbody>
 </table>
-<p><strong>Response: <code>200 OK</code></strong> — <code>MemberResponse</code></p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>MemberResponse</code></p>
 <p><strong>Status codes:</strong></p>
 <table>
 <thead>
@@ -5040,8 +5040,8 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </span></code></pre></div>
 <hr />
 <h3 id="delete-orgsorg_idmembersuser_id">DELETE /orgs/{org_id}/members/{user_id}</h3>
-<p>Remove a member from the organization. The <code>owner</code> cannot be removed — transfer ownership first. Requires <code>admin</code> or <code>owner</code> org role.</p>
-<p><strong>Auth:</strong> Bearer token — org <code>admin</code> or <code>owner</code></p>
+<p>Remove a member from the organization. The <code>owner</code> cannot be removed, transfer ownership first. Requires <code>admin</code> or <code>owner</code> org role.</p>
+<p><strong>Auth:</strong> Bearer token, org <code>admin</code> or <code>owner</code></p>
 <p><strong>Path parameters:</strong></p>
 <table>
 <thead>
@@ -5098,7 +5098,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="post-orgsorg_idinvites">POST /orgs/{org_id}/invites</h3>
 <p>Invite a user to the org by email. If the user already has an account, they are added immediately and the invite is marked as accepted. For pending invites (user doesn't exist yet), they auto-join on registration or can accept explicitly via <code>POST /auth/accept-invite</code>. Requires <code>admin</code> or <code>owner</code> org role.</p>
-<p><strong>Auth:</strong> Bearer token — org <code>admin</code> or <code>owner</code></p>
+<p><strong>Auth:</strong> Bearer token, org <code>admin</code> or <code>owner</code></p>
 <p><strong>Path parameters:</strong></p>
 <table>
 <thead>
@@ -5137,11 +5137,11 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <td><code>role</code></td>
 <td><code>string</code></td>
 <td>No</td>
-<td>Defaults to <code>"member"</code> — valid: <code>owner</code>, <code>admin</code>, <code>member</code></td>
+<td>Defaults to <code>"member"</code>, valid: <code>owner</code>, <code>admin</code>, <code>member</code></td>
 </tr>
 </tbody>
 </table>
-<p><strong>Response: <code>201 Created</code></strong> — <code>InviteResponse</code></p>
+<p><strong>Response: <code>201 Created</code></strong>, <code>InviteResponse</code></p>
 <p><strong>Status codes:</strong></p>
 <table>
 <thead>
@@ -5177,7 +5177,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="get-orgsorg_idinvites">GET /orgs/{org_id}/invites</h3>
 <p>List pending invites for an organization. Requires <code>admin</code> or <code>owner</code> org role.</p>
-<p><strong>Auth:</strong> Bearer token — org <code>admin</code> or <code>owner</code></p>
+<p><strong>Auth:</strong> Bearer token, org <code>admin</code> or <code>owner</code></p>
 <p><strong>Path parameters:</strong></p>
 <table>
 <thead>
@@ -5195,7 +5195,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </tr>
 </tbody>
 </table>
-<p><strong>Response: <code>200 OK</code></strong> — <code>list[InviteResponse]</code></p>
+<p><strong>Response: <code>200 OK</code></strong>, <code>list[InviteResponse]</code></p>
 <p><strong>Status codes:</strong></p>
 <table>
 <thead>
@@ -5246,7 +5246,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </tr>
 <tr>
 <td><code>400</code></td>
-<td>Bad request — validation or business rule failure</td>
+<td>Bad request, validation or business rule failure</td>
 </tr>
 <tr>
 <td><code>401</code></td>
@@ -5273,9 +5273,9 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <p><strong>See also:</strong></p>
 <ul>
-<li><strong><a href="../integration/">Integration Guide</a></strong> — How to integrate auth into your app</li>
-<li><strong><a href="../cli/">CLI Commands</a></strong> — Manage users and orgs from the command line</li>
-<li><strong><a href="../examples/">Examples</a></strong> — Complete implementation examples</li>
+<li><strong><a href="../integration/">Integration Guide</a></strong>, How to integrate auth into your app</li>
+<li><strong><a href="../cli/">CLI Commands</a></strong>, Manage users and orgs from the command line</li>
+<li><strong><a href="../examples/">Examples</a></strong>, Complete implementation examples</li>
 </ul>
 
 

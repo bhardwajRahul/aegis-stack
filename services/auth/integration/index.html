@@ -3298,7 +3298,7 @@
 </span><span id="__span-0-38"><a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>  │ TokenBlacklist  │  │  AuditEmitter   │  │   RateLimiter   │
 </span><span id="__span-0-39"><a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>  └─────────────────┘  └─────────────────┘  └─────────────────┘
 </span></code></pre></div>
-<p><code>UserService</code>, <code>OrgService</code>, <code>MembershipService</code>, and <code>InviteService</code> each accept an <code>AsyncSession</code> in their constructor. Use the dependency functions in <code>deps.py</code> to get properly scoped instances — never instantiate services directly in endpoints.</p>
+<p><code>UserService</code>, <code>OrgService</code>, <code>MembershipService</code>, and <code>InviteService</code> each accept an <code>AsyncSession</code> in their constructor. Use the dependency functions in <code>deps.py</code> to get properly scoped instances. Never instantiate services directly in endpoints.</p>
 <hr />
 <h2 id="userservice">UserService</h2>
 <p>Manages user lifecycle: creation, lookup, updates, deactivation, password reset, email verification, and account lockout.</p>
@@ -3363,7 +3363,7 @@
 <tr>
 <td><code>create_password_reset_token</code></td>
 <td><code>(email: str) -&gt; str \| None</code></td>
-<td>Create a <code>PasswordResetToken</code> record, return the token string. Returns <code>None</code> if user not found — callers should not reveal this.</td>
+<td>Create a <code>PasswordResetToken</code> record, return the token string. Returns <code>None</code> if user not found, callers should not reveal this.</td>
 </tr>
 <tr>
 <td><code>reset_password</code></td>
@@ -3612,7 +3612,7 @@
 </span></code></pre></div>
 <hr />
 <h2 id="inviteservice">InviteService</h2>
-<p>Handles org invitations. Invites can be sent to users who don't yet have an account — pending invites are automatically accepted when the user registers.</p>
+<p>Handles org invitations. Invites can be sent to users who don't yet have an account, pending invites are automatically accepted when the user registers.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">InviteService</span><span class="p">:</span>
 </span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">db</span><span class="p">:</span> <span class="n">AsyncSession</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
 </span></code></pre></div>
@@ -3655,8 +3655,8 @@
 </span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>                                                        │
 </span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>                            ┌───────────────────────────┘
 </span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>                            ▼
-</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>        accept_pending_invites()  — called at registration
-</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>        accept_invite_by_token()  — called from invite link
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>        accept_pending_invites()  ─ called at registration
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>        accept_invite_by_token()  ─ called from invite link
 </span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>                            │
 </span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>                            └─  MembershipService.add_member()
 </span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>                                invite.status = &quot;accepted&quot;
@@ -3808,7 +3808,7 @@
 </span><span id="__span-19-11"><a id="__codelineno-19-11" name="__codelineno-19-11" href="#__codelineno-19-11"></a>            <span class="n">token_blacklist</span><span class="o">.</span><span class="n">revoke</span><span class="p">(</span><span class="n">jti</span><span class="p">,</span> <span class="n">exp</span><span class="p">)</span>
 </span><span id="__span-19-12"><a id="__codelineno-19-12" name="__codelineno-19-12" href="#__codelineno-19-12"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;logged out&quot;</span><span class="p">}</span>
 </span></code></pre></div>
-<p>The blacklist is consulted automatically in <code>get_current_user_from_token</code> — you do not need to check it manually in your endpoints.</p>
+<p>The blacklist is consulted automatically in <code>get_current_user_from_token</code>, you do not need to check it manually in your endpoints.</p>
 <div class="admonition warning">
 <p class="admonition-title">Process-local storage</p>
 <p><code>TokenBlacklist</code> is in-memory and not shared across processes. In multi-worker deployments, revoked tokens may still be accepted by other workers. For production multi-process environments, replace the backend with a Redis-backed implementation.</p>
@@ -3841,7 +3841,7 @@
 </span><span id="__span-21-20"><a id="__codelineno-21-20" name="__codelineno-21-20" href="#__codelineno-21-20"></a>    <span class="p">)</span>
 </span><span id="__span-21-21"><a id="__codelineno-21-21" name="__codelineno-21-21" href="#__codelineno-21-21"></a>    <span class="k">return</span> <span class="n">UserResponse</span><span class="o">.</span><span class="n">model_validate</span><span class="p">(</span><span class="n">user</span><span class="p">)</span>
 </span></code></pre></div>
-<p><strong>Standard event type naming:</strong> <code>&lt;domain&gt;.&lt;action&gt;</code> — for example <code>auth.login_success</code>, <code>org.member_added</code>, <code>user.password_reset</code>.</p>
+<p><strong>Standard event type naming:</strong> <code>&lt;domain&gt;.&lt;action&gt;</code>, for example <code>auth.login_success</code>, <code>org.member_added</code>, <code>user.password_reset</code>.</p>
 <hr />
 <h3 id="ratelimiter">RateLimiter</h3>
 <p>Sliding-window, in-memory rate limiter. Three pre-configured instances cover the main auth endpoints:</p>

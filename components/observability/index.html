@@ -2893,7 +2893,7 @@
 <p>This is a weird one. I don't see this as a true replacement for the Logfire UI, but they do give enough useful info to warrant a spot in Overseer. I just have to find the balance.</p>
 </div>
 <p><a class="glightbox" href="../../images/observability_exceptions.png" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img src="../../images/observability_exceptions.png" alt="Observability - Exception tracking with full stack traces"></a></p>
-<p>Distributed tracing, metrics, and log correlation with <a href="https://logfire.pydantic.dev/">Pydantic Logfire</a> — auto-instruments your application and adapts to whichever components you have enabled.</p>
+<p>Distributed tracing, metrics, and log correlation with <a href="https://logfire.pydantic.dev/">Pydantic Logfire</a>. Auto-instruments your application and adapts to whichever components you have enabled.</p>
 <div class="admonition info">
 <p class="admonition-title">Adding Observability to Your Project</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-project<span class="w"> </span>--components<span class="w"> </span>observability
@@ -2904,13 +2904,13 @@
 <p>When you include the observability component, your project gets:</p>
 <ul>
 <li><strong>Pydantic Logfire integration</strong> with automatic configuration</li>
-<li><strong>FastAPI instrumentation</strong> — traces every request (health/dashboard endpoints excluded)</li>
-<li><strong>HTTPX instrumentation</strong> — traces outbound HTTP calls</li>
-<li><strong>SQLAlchemy instrumentation</strong> — auto-enabled when the database component is present</li>
-<li><strong>Redis instrumentation</strong> — auto-enabled when the redis component is present</li>
+<li><strong>FastAPI instrumentation</strong>: traces every request (health/dashboard endpoints excluded)</li>
+<li><strong>HTTPX instrumentation</strong>: traces outbound HTTP calls</li>
+<li><strong>SQLAlchemy instrumentation</strong>: auto-enabled when the database component is present</li>
+<li><strong>Redis instrumentation</strong>: auto-enabled when the redis component is present</li>
 <li><strong>Health check integration</strong> with the Overseer dashboard, including Logfire Query API analytics</li>
 <li><strong>Dashboard card + detail modal</strong> with trace metrics, slowest spans, and exception tracking</li>
-<li><strong>Graceful degradation</strong> — works without a cloud token (local instrumentation only)</li>
+<li><strong>Graceful degradation</strong>: works without a cloud token (local instrumentation only)</li>
 </ul>
 <h2 id="generated-files">Generated Files</h2>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>my-project/
@@ -2975,7 +2975,7 @@
     style QA fill:#fff3e0
     style Card fill:#e8f5e8
     style Modal fill:#e8f5e8</code></pre>
-<p>The middleware is auto-discovered by the backend hook system — no manual registration needed. On startup it configures Logfire with your project name and environment, then instruments each available integration.</p>
+<p>The middleware is auto-discovered by the backend hook system, no manual registration needed. On startup it configures Logfire with your project name and environment, then instruments each available integration.</p>
 <p>When <code>LOGFIRE_TOKEN</code> is set, traces are sent to Logfire cloud. Without a token, instrumentation still runs locally (useful for development and structured logging).</p>
 <h2 id="environment-variables">Environment Variables</h2>
 <table>
@@ -3043,7 +3043,7 @@
 </tr>
 </tbody>
 </table>
-<p>This is handled at template generation time — the <code>logfire[fastapi,httpx]</code> dependency automatically includes extras like <code>sqlalchemy</code> and <code>redis</code> when those components are present.</p>
+<p>This is handled at template generation time, the <code>logfire[fastapi,httpx]</code> dependency automatically includes extras like <code>sqlalchemy</code> and <code>redis</code> when those components are present.</p>
 <h2 id="overseer-integration">Overseer Integration</h2>
 <p>The observability component integrates with the Overseer dashboard through a status card and a detail modal.</p>
 <h3 id="dashboard-card">Dashboard Card</h3>
@@ -3054,12 +3054,12 @@
 </ul>
 <h3 id="detail-modal">Detail Modal</h3>
 <p>Clicking the card opens a detail modal with four tabs:</p>
-<p><strong>Overview</strong> — Key metrics (traces, spans, exceptions, latency) plus a bar chart of the slowest spans:</p>
+<p><strong>Overview</strong>, Key metrics (traces, spans, exceptions, latency) plus a bar chart of the slowest spans:</p>
 <p><a class="glightbox" href="../../images/observability_overview.png" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img src="../../images/observability_overview.png" alt="Observability Overview Tab"></a></p>
-<p><strong>Slowest Spans</strong> — Full table with avg, p95, and max latency per span type, with error counts highlighted in red:</p>
+<p><strong>Slowest Spans</strong>, Full table with avg, p95, and max latency per span type, with error counts highlighted in red:</p>
 <p><a class="glightbox" href="../../images/observability_slowest_spans.png" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img src="../../images/observability_slowest_spans.png" alt="Observability Slowest Spans Tab"></a></p>
-<p><strong>Exceptions</strong> — Expandable table of exceptions from the last 24 hours, grouped by type. Click to expand and see the full stack trace.</p>
-<p><strong>Config</strong> — Service name, cloud status, Query API availability, and project URL link</p>
+<p><strong>Exceptions</strong>, Expandable table of exceptions from the last 24 hours, grouped by type. Click to expand and see the full stack trace.</p>
+<p><strong>Config</strong>, Service name, cloud status, Query API availability, and project URL link</p>
 <h3 id="health-check">Health Check</h3>
 <p>The health check queries the Logfire Query API (when <code>LOGFIRE_READ_TOKEN</code> is set) and reports:</p>
 <ul>
@@ -3072,9 +3072,9 @@
 <p>Results are cached for 2 minutes with a 5-minute backoff on failure to respect rate limits.</p>
 <h2 id="next-steps">Next Steps</h2>
 <ul>
-<li><strong><a href="../">Component Overview</a></strong> — Understanding Aegis Stack's component architecture</li>
-<li><strong><a href="../../integration-patterns/">Integration Patterns</a></strong> — How components work together</li>
-<li><strong><a href="https://logfire.pydantic.dev/">Pydantic Logfire Documentation</a></strong> — Complete Logfire reference</li>
+<li><strong><a href="../">Component Overview</a></strong>, Understanding Aegis Stack's component architecture</li>
+<li><strong><a href="../../integration-patterns/">Integration Patterns</a></strong>, How components work together</li>
+<li><strong><a href="https://logfire.pydantic.dev/">Pydantic Logfire Documentation</a></strong>, Complete Logfire reference</li>
 </ul>
 
 

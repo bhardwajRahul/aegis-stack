@@ -3759,15 +3759,15 @@
 <div class="language-python highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1"># Total concurrent messages = WORKER_PROCESSES x WORKER_THREADS</span>
 </span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="c1"># Example: 2 processes x 8 threads = 16 concurrent messages per container</span>
 </span></code></pre></div>
-<p><strong>I/O-bound workloads</strong> — increase threads:</p>
+<p><strong>I/O-bound workloads</strong>: increase threads.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="nv">WORKER_PROCESSES</span><span class="o">=</span><span class="m">1</span>
 </span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="nv">WORKER_THREADS</span><span class="o">=</span><span class="m">32</span><span class="w">    </span><span class="c1"># Async actors spend most time awaiting I/O</span>
 </span></code></pre></div>
-<p><strong>CPU-bound workloads</strong> — increase processes:</p>
+<p><strong>CPU-bound workloads</strong>: increase processes.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="nv">WORKER_PROCESSES</span><span class="o">=</span><span class="m">4</span><span class="w">   </span><span class="c1"># One per CPU core</span>
 </span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="nv">WORKER_THREADS</span><span class="o">=</span><span class="m">4</span><span class="w">     </span><span class="c1"># Fewer threads per process</span>
 </span></code></pre></div>
-<p><strong>Mixed workloads</strong> — balanced:</p>
+<p><strong>Mixed workloads</strong>: balanced.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="nv">WORKER_PROCESSES</span><span class="o">=</span><span class="m">2</span>
 </span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="nv">WORKER_THREADS</span><span class="o">=</span><span class="m">8</span>
 </span></code></pre></div>
@@ -3927,9 +3927,9 @@
 <p>TaskIQ publishes lifecycle events to Redis Streams via <code>EventPublishMiddleware</code>:</p>
 <p><strong>Event types:</strong></p>
 <ul>
-<li><code>worker.started</code> / <code>worker.stopped</code> — Worker lifecycle</li>
-<li><code>job.enqueued</code> — Task enqueued (from client side)</li>
-<li><code>job.started</code> / <code>job.completed</code> / <code>job.failed</code> — Task execution</li>
+<li><code>worker.started</code> / <code>worker.stopped</code>, Worker lifecycle</li>
+<li><code>job.enqueued</code>, Task enqueued (from client side)</li>
+<li><code>job.started</code> / <code>job.completed</code> / <code>job.failed</code>, Task execution</li>
 </ul>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-40-1"><a id="__codelineno-40-1" name="__codelineno-40-1" href="#__codelineno-40-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">EventPublishMiddleware</span><span class="p">(</span><span class="n">TaskiqMiddleware</span><span class="p">):</span>
 </span><span id="__span-40-2"><a id="__codelineno-40-2" name="__codelineno-40-2" href="#__codelineno-40-2"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">startup</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>

@@ -3694,8 +3694,8 @@
 <h3 id="password-reset">Password Reset</h3>
 <p>A two-step flow using single-use tokens:</p>
 <ol>
-<li><strong>Request a reset token</strong> — <code>POST /auth/password-reset/request</code> with the user's email. A token is generated with a configurable expiry (default: 60 minutes).</li>
-<li><strong>Confirm the reset</strong> — <code>POST /auth/password-reset/confirm</code> with the token and new password. The token is invalidated after use.</li>
+<li><strong>Request a reset token</strong>, <code>POST /auth/password-reset/request</code> with the user's email. A token is generated with a configurable expiry (default: 60 minutes).</li>
+<li><strong>Confirm the reset</strong>, <code>POST /auth/password-reset/confirm</code> with the token and new password. The token is invalidated after use.</li>
 </ol>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Request reset</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/auth/password-reset/request<span class="w"> </span><span class="se">\</span>
@@ -3975,14 +3975,14 @@
 <p>The Organization level adds multi-tenant support on top of all RBAC features.</p>
 <h3 id="what-you-get">What You Get</h3>
 <ul>
-<li><strong>Organization model</strong> — name, slug (with validation), description, active status</li>
-<li><strong>Membership model</strong> — links users to organizations with roles</li>
-<li><strong>Invite model</strong> — email-based invitations with token acceptance</li>
-<li><strong>OrgService</strong> — CRUD operations for organizations</li>
-<li><strong>MembershipService</strong> — Add/remove members, update roles, list memberships, bulk operations</li>
-<li><strong>InviteService</strong> — Create invites, accept invites, resolve pending invites on registration</li>
-<li><strong>REST API</strong> — Full org, membership, and invite management endpoints</li>
-<li><strong>Dashboard</strong> — Organizations tab + Org column in the Users tab</li>
+<li><strong>Organization model</strong>, name, slug (with validation), description, active status</li>
+<li><strong>Membership model</strong>, links users to organizations with roles</li>
+<li><strong>Invite model</strong>, email-based invitations with token acceptance</li>
+<li><strong>OrgService</strong>, CRUD operations for organizations</li>
+<li><strong>MembershipService</strong>, Add/remove members, update roles, list memberships, bulk operations</li>
+<li><strong>InviteService</strong>, Create invites, accept invites, resolve pending invites on registration</li>
+<li><strong>REST API</strong>, Full org, membership, and invite management endpoints</li>
+<li><strong>Dashboard</strong>, Organizations tab + Org column in the Users tab</li>
 </ul>
 <h3 id="organization-models">Organization Models</h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># app/models/org.py</span>

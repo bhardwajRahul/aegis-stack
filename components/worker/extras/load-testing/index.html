@@ -3001,7 +3001,7 @@
 </span></code></pre></div>
 </div>
 <div class="tabbed-block">
-<p>Dramatiq uses a <strong>fire-and-forget orchestrator actor</strong>. The orchestrator enqueues all individual tasks and returns immediately — it does not wait for them to complete:</p>
+<p>Dramatiq uses a <strong>fire-and-forget orchestrator actor</strong>. The orchestrator enqueues all individual tasks and returns immediately. It does not wait for them to complete:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nd">@dramatiq</span><span class="o">.</span><span class="n">actor</span><span class="p">(</span><span class="n">queue_name</span><span class="o">=</span><span class="s2">&quot;load_test&quot;</span><span class="p">,</span> <span class="n">store_results</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">run_load_test_orchestrator</span><span class="p">(</span><span class="n">task_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">task_count</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Enqueue load test tasks and return immediately.&quot;&quot;&quot;</span>
@@ -3019,7 +3019,7 @@
 </span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>        <span class="s2">&quot;message_ids&quot;</span><span class="p">:</span> <span class="n">messages</span><span class="p">,</span>
 </span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>    <span class="p">}</span>
 </span></code></pre></div>
-<p>Note the <code>asyncio.to_thread</code> wrapper — Dramatiq's <code>.send()</code> is a synchronous Redis LPUSH.</p>
+<p>Note the <code>asyncio.to_thread</code> wrapper, Dramatiq's <code>.send()</code> is a synchronous Redis LPUSH.</p>
 </div>
 <div class="tabbed-block">
 <p>The TaskIQ orchestrator is itself a task that spawns individual tasks via <code>.kiq()</code> in batches:</p>

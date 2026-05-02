@@ -2728,7 +2728,7 @@
 <p>The test suite spins up every valid combination...base stack, scheduler, worker, full stack with everything. Each one gets validated from scratch. If I break something in the template, I know within seconds because one of the 6 combinations fails.</p>
 <h2 id="why-this-works">Why This Works</h2>
 <p>The secret is the architecture. Because everything is template-driven and modular, testing is just regeneration + validation. The templates ARE the product.</p>
-<p>When I added the scheduler component, I followed the same pattern as worker. Auth service? Same pattern. AI service? Same pattern. Each time, the tests validated it worked with every other component—not just in isolation, but in combination.</p>
+<p>When I added the scheduler component, I followed the same pattern as worker. Auth service? Same pattern. AI service? Same pattern. Each time, the tests validated it worked with every other component, not just in isolation, but in combination.</p>
 <p>Here's the thing that surprised me: adding new components gets <em>easier</em> over time, not harder. That's the foundation. Not "good enough for now" code that becomes technical debt. Actual tested, validated, proven patterns I can build on with confidence.</p>
 <p>Fast iteration requires solid ground. The paranoid testing gives me that ground. And when I have that ground, I can take more risks:</p>
 <p><a class="glightbox" href="../images/eli_to_manningham.gif" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Peace" src="../images/eli_to_manningham.gif" /></a></p>

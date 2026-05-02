@@ -3218,7 +3218,7 @@
 <ul>
 <li><code>GET /transactions</code>, <code>GET /subscriptions</code>, <code>GET /disputes</code> return only rows tied to the current user's <code>PaymentCustomer</code>.</li>
 <li><code>GET /transactions/{id}</code>, <code>GET /disputes/{id}</code> return <code>404</code> for rows owned by another user (indistinguishable from a missing row on purpose).</li>
-<li><code>POST /refund/{id}</code> and <code>POST /subscriptions/{id}/cancel</code> return <code>404</code> for rows owned by another user — users can't refund or cancel each other's payments.</li>
+<li><code>POST /refund/{id}</code> and <code>POST /subscriptions/{id}/cancel</code> return <code>404</code> for rows owned by another user, users can't refund or cancel each other's payments.</li>
 <li><code>POST /checkout</code> upserts a <code>PaymentCustomer</code> for the authenticated user on first use, then reuses the <code>provider_customer_id</code> on every subsequent checkout so Stripe sees one customer per app user.</li>
 </ul>
 <h3 id="anonymous-flow-no-auth">Anonymous flow (no auth)</h3>

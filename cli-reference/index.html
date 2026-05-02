@@ -3806,10 +3806,10 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--host, -h TEXT</code> — Server IP address or hostname</li>
-<li><code>--user, -u TEXT</code> — SSH user for deployment (default: <code>root</code>)</li>
-<li><code>--path, -p TEXT</code> — Deployment path on server (default: <code>/opt/{project-name}</code>)</li>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--host, -h TEXT</code>, Server IP address or hostname</li>
+<li><code>--user, -u TEXT</code>, SSH user for deployment (default: <code>root</code>)</li>
+<li><code>--path, -p TEXT</code>, Deployment path on server (default: <code>/opt/{project-name}</code>)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>aegis<span class="w"> </span>deploy-init<span class="w"> </span>--host<span class="w"> </span><span class="m">192</span>.168.1.100
@@ -3823,7 +3823,7 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>aegis<span class="w"> </span>deploy-setup
@@ -3836,10 +3836,10 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--build / --no-build</code> — Build images before deploying (default: <code>--build</code>)</li>
-<li><code>--backup / --no-backup</code> — Create backup before deploying (default: <code>--backup</code>)</li>
-<li><code>--health-check / --no-health-check</code> — Run health check after deploying (default: <code>--health-check</code>)</li>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--build / --no-build</code>, Build images before deploying (default: <code>--build</code>)</li>
+<li><code>--backup / --no-backup</code>, Create backup before deploying (default: <code>--backup</code>)</li>
+<li><code>--health-check / --no-health-check</code>, Run health check after deploying (default: <code>--health-check</code>)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a>aegis<span class="w"> </span>deploy
@@ -3854,7 +3854,7 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-29-1"><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a>aegis<span class="w"> </span>deploy-backup
@@ -3867,7 +3867,7 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a>aegis<span class="w"> </span>deploy-backups
@@ -3880,8 +3880,8 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--backup, -b TEXT</code> — Backup timestamp to rollback to (default: latest)</li>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--backup, -b TEXT</code>, Backup timestamp to rollback to (default: latest)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-33-1"><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a>aegis<span class="w"> </span>deploy-rollback
@@ -3895,9 +3895,9 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--follow / --no-follow, -f</code> — Follow log output (default: <code>--follow</code>)</li>
-<li><code>--service, -s TEXT</code> — Show logs for a specific service</li>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--follow / --no-follow, -f</code>, Follow log output (default: <code>--follow</code>)</li>
+<li><code>--service, -s TEXT</code>, Show logs for a specific service</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-35-1"><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a>aegis<span class="w"> </span>deploy-logs
@@ -3912,7 +3912,7 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-37-1"><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a>aegis<span class="w"> </span>deploy-status
@@ -3925,7 +3925,7 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-39-1"><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a>aegis<span class="w"> </span>deploy-stop
@@ -3938,7 +3938,7 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-41-1"><a id="__codelineno-41-1" name="__codelineno-41-1" href="#__codelineno-41-1"></a>aegis<span class="w"> </span>deploy-restart
@@ -3951,8 +3951,8 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--service, -s TEXT</code> — Service to connect to (default: <code>webserver</code>)</li>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--service, -s TEXT</code>, Service to connect to (default: <code>webserver</code>)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-43-1"><a id="__codelineno-43-1" name="__codelineno-43-1" href="#__codelineno-43-1"></a>aegis<span class="w"> </span>deploy-shell
@@ -3966,10 +3966,10 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--domain, -d TEXT</code> — Domain name for TLS certificate (e.g., <code>example.com</code>)</li>
-<li><code>--email, -e TEXT</code> — Email for Let's Encrypt certificate notifications</li>
-<li><code>--project-path, -p TEXT</code> — Path to the project (default: current directory)</li>
-<li><code>--yes, -y</code> — Skip confirmation prompts</li>
+<li><code>--domain, -d TEXT</code>, Domain name for TLS certificate (e.g., <code>example.com</code>)</li>
+<li><code>--email, -e TEXT</code>, Email for Let's Encrypt certificate notifications</li>
+<li><code>--project-path, -p TEXT</code>, Path to the project (default: current directory)</li>
+<li><code>--yes, -y</code>, Skip confirmation prompts</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-45-1"><a id="__codelineno-45-1" name="__codelineno-45-1" href="#__codelineno-45-1"></a>aegis<span class="w"> </span>ingress-enable<span class="w"> </span>--domain<span class="w"> </span>example.com<span class="w"> </span>--email<span class="w"> </span>admin@example.com

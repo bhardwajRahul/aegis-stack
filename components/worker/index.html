@@ -3061,11 +3061,11 @@
 <p>Background task processing with your choice of worker backend: <a href="https://arq-docs.helpmanual.io/">arq</a> (default), <a href="https://dramatiq.io/">Dramatiq</a>, or <a href="https://taskiq-python.github.io/">TaskIQ</a>.</p>
 <div class="admonition info">
 <p class="admonition-title">Adding Worker to Your Project</p>
-<p><strong>Interactive</strong> — the CLI prompts you to pick a backend when you select the worker component:
+<p><strong>Interactive</strong>: the CLI prompts you to pick a backend when you select the worker component:
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-project<span class="w">           </span><span class="c1"># interactive mode prompts for backend</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>worker<span class="w"> </span>--interactive<span class="w">  </span><span class="c1"># same for existing projects</span>
 </span></code></pre></div></p>
-<p><strong>Non-interactive</strong> — specify the backend with bracket syntax:
+<p><strong>Non-interactive</strong>: specify the backend with bracket syntax.
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># arq (default)</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-project<span class="w"> </span>--components<span class="w"> </span>worker<span class="w"> </span>--no-interactive<span class="w"> </span>-y
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
@@ -3178,7 +3178,7 @@
 </ol>
 <p>Try the dashboard at <a href="http://localhost:8000/dashboard">http://localhost:8000/dashboard</a> to see health status including worker queues!</p>
 <h3 id="overseer-dashboard">Overseer Dashboard</h3>
-<p>The Overseer dashboard provides real-time worker monitoring — queue status, job counts, and worker health at a glance:</p>
+<p>The Overseer dashboard provides real-time worker monitoring, queue status, job counts, and worker health at a glance:</p>
 <p><a class="glightbox" href="../../images/overseer_worker_2.gif" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img src="../../images/overseer_worker_2.gif" alt="Overseer Worker Dashboard"></a></p>
 <h2 id="cli-commands">CLI Commands</h2>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:3"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">arq</label><label for="__tabbed_1_2">Dramatiq</label><label for="__tabbed_1_3">TaskIQ</label></div>

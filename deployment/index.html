@@ -3246,7 +3246,7 @@
 </tr>
 </tbody>
 </table>
-<p>All <code>backup</code> and <code>health_check</code> fields are optional — missing fields use defaults. Existing <code>deploy.yml</code> files work without changes.</p>
+<p>All <code>backup</code> and <code>health_check</code> fields are optional, missing fields use defaults. Existing <code>deploy.yml</code> files work without changes.</p>
 <div class="admonition tip">
 <p class="admonition-title">Git-ignore deploy config</p>
 <p>Add <code>.aegis/</code> to your <code>.gitignore</code> to keep deployment config out of version control. <code>deploy-init</code> will remind you if it's missing.</p>
@@ -3260,10 +3260,10 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--host, -h TEXT</code> — Server IP address or hostname (prompted if not provided)</li>
-<li><code>--user, -u TEXT</code> — SSH user for deployment (default: <code>root</code>)</li>
-<li><code>--path, -p TEXT</code> — Deployment path on server (default: <code>/opt/{project-name}</code>)</li>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--host, -h TEXT</code>, Server IP address or hostname (prompted if not provided)</li>
+<li><code>--user, -u TEXT</code>, SSH user for deployment (default: <code>root</code>)</li>
+<li><code>--path, -p TEXT</code>, Deployment path on server (default: <code>/opt/{project-name}</code>)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Interactive (prompts for host)</span>
@@ -3283,7 +3283,7 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>What it does:</strong></p>
 <ol>
@@ -3315,10 +3315,10 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--build / --no-build</code> — Build Docker images before deploying (default: <code>--build</code>)</li>
-<li><code>--backup / --no-backup</code> — Create backup before deploying (default: <code>--backup</code>)</li>
-<li><code>--health-check / --no-health-check</code> — Run health check after deploying (default: <code>--health-check</code>)</li>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--build / --no-build</code>, Build Docker images before deploying (default: <code>--build</code>)</li>
+<li><code>--backup / --no-backup</code>, Create backup before deploying (default: <code>--backup</code>)</li>
+<li><code>--health-check / --no-health-check</code>, Run health check after deploying (default: <code>--health-check</code>)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>What it does:</strong></p>
 <ol>
@@ -3329,21 +3329,21 @@
 <li><strong>Builds and starts services</strong> with production compose overrides</li>
 <li><strong>Restarts Traefik</strong> if the ingress component is present (ensures container re-discovery)</li>
 <li><strong>Runs health check</strong> against <code>/health/</code> endpoint</li>
-<li><strong>Auto-rollback</strong> if health check fails — restores the backup from step 1</li>
+<li><strong>Auto-rollback</strong> if health check fails, restores the backup from step 1</li>
 </ol>
 <p><strong>Excluded from sync:</strong></p>
 <p>Files and directories excluded from the rsync transfer:</p>
 <ul>
-<li><code>.git</code> — Git history</li>
-<li><code>__pycache__</code> — Python cache</li>
-<li><code>.venv</code> — Virtual environment</li>
-<li><code>*.pyc</code> — Compiled Python files</li>
-<li><code>.pytest_cache</code> — Test cache</li>
-<li><code>.ruff_cache</code> — Linter cache</li>
-<li><code>data/</code> — Local database files</li>
-<li><code>.env</code> — Environment file (copied separately)</li>
-<li><code>.aegis/</code> — Deploy configuration</li>
-<li><code>backups/</code> — Server-side backups</li>
+<li><code>.git</code>, Git history</li>
+<li><code>__pycache__</code>, Python cache</li>
+<li><code>.venv</code>, Virtual environment</li>
+<li><code>*.pyc</code>, Compiled Python files</li>
+<li><code>.pytest_cache</code>, Test cache</li>
+<li><code>.ruff_cache</code>, Linter cache</li>
+<li><code>data/</code>, Local database files</li>
+<li><code>.env</code>, Environment file (copied separately)</li>
+<li><code>.aegis/</code>, Deploy configuration</li>
+<li><code>backups/</code>, Server-side backups</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Full deploy with build (backup + health check enabled by default)</span>
@@ -3363,7 +3363,7 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>What it does:</strong></p>
 <ol>
@@ -3384,7 +3384,7 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Example output:</strong>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>Backups on 143.198.20.208 (3 total):
@@ -3405,8 +3405,8 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--backup, -b TEXT</code> — Backup timestamp to rollback to (default: latest)</li>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--backup, -b TEXT</code>, Backup timestamp to rollback to (default: latest)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>What it does:</strong></p>
 <ol>
@@ -3431,9 +3431,9 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--follow / --no-follow, -f</code> — Follow log output in real-time (default: <code>--follow</code>)</li>
-<li><code>--service, -s TEXT</code> — Show logs for a specific service</li>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--follow / --no-follow, -f</code>, Follow log output in real-time (default: <code>--follow</code>)</li>
+<li><code>--service, -s TEXT</code>, Show logs for a specific service</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Follow all service logs</span>
@@ -3455,7 +3455,7 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>aegis<span class="w"> </span>deploy-status
@@ -3469,7 +3469,7 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>aegis<span class="w"> </span>deploy-stop
@@ -3483,7 +3483,7 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>aegis<span class="w"> </span>deploy-restart
@@ -3497,8 +3497,8 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--service, -s TEXT</code> — Service to connect to (default: <code>webserver</code>)</li>
-<li><code>--project-path TEXT</code> — Path to the project (default: current directory)</li>
+<li><code>--service, -s TEXT</code>, Service to connect to (default: <code>webserver</code>)</li>
+<li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="c1"># Shell into the webserver (default)</span>
@@ -3521,10 +3521,10 @@
 </span></code></pre></div></p>
 <p><strong>Options:</strong></p>
 <ul>
-<li><code>--domain, -d TEXT</code> — Domain name for the TLS certificate (e.g., <code>example.com</code>)</li>
-<li><code>--email, -e TEXT</code> — Email for Let's Encrypt certificate notifications</li>
-<li><code>--project-path, -p TEXT</code> — Path to the project (default: current directory)</li>
-<li><code>--yes, -y</code> — Skip confirmation prompts</li>
+<li><code>--domain, -d TEXT</code>, Domain name for the TLS certificate (e.g., <code>example.com</code>)</li>
+<li><code>--email, -e TEXT</code>, Email for Let's Encrypt certificate notifications</li>
+<li><code>--project-path, -p TEXT</code>, Path to the project (default: current directory)</li>
+<li><code>--yes, -y</code>, Skip confirmation prompts</li>
 </ul>
 <p><strong>What it does:</strong></p>
 <ol>
@@ -3642,9 +3642,9 @@
 <hr />
 <h2 id="next-steps">Next Steps</h2>
 <ul>
-<li><strong><a href="../components/ingress/">Ingress Component</a></strong> — Traefik configuration, routing, and admin protection</li>
-<li><strong><a href="../cli-reference/">CLI Reference</a></strong> — Complete command reference</li>
-<li><strong><a href="../evolving-your-stack/">Evolving Your Stack</a></strong> — Adding components and deploying over time</li>
+<li><strong><a href="../components/ingress/">Ingress Component</a></strong>, Traefik configuration, routing, and admin protection</li>
+<li><strong><a href="../cli-reference/">CLI Reference</a></strong>, Complete command reference</li>
+<li><strong><a href="../evolving-your-stack/">Evolving Your Stack</a></strong>, Adding components and deploying over time</li>
 </ul>
 
 
