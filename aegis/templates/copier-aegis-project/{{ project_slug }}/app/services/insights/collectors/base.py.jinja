@@ -4,6 +4,14 @@ Base collector for insight data sources.
 All collectors inherit from BaseCollector and implement:
 - source_key: which insight_source this collector writes to
 - collect(): run the collection, return a CollectionResult
+{% if insights_per_user %}
+
+When ``auth`` is on the collector ALSO takes a ``Project``: every metric
+and event row stamps ``project_id`` so multi-tenant queries can scope
+by it. The scheduler loops over projects with the relevant source
+configured (``project.github_repo`` set, ``project.pypi_package`` set,
+etc.) and calls one collector instance per (source, project).
+{% endif %}
 """
 
 import logging
@@ -17,6 +25,9 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ..models import InsightMetric, InsightMetricType, InsightSource
+{% if insights_per_user -%}
+from ..models import Project
+{%- endif %}
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +80,36 @@ async def clickhouse_query(client: httpx.AsyncClient, sql: str) -> list[list]:
 
 
 class BaseCollector(ABC):
-    """Base class for all insight data collectors."""
+    """Base class for all insight data collectors.
+    {% if insights_per_user %}
 
-    def __init__(self, db: AsyncSession) -> None:
+    The optional ``project`` arg makes the collector multi-tenant:
+    rows are stamped with ``project.id``, and source config (GitHub
+    repo, PyPI package, etc.) reads from the project row instead of
+    env vars. ``project=None`` falls back to env-var single-tenant
+    behavior — kept for tooling that wants a global view, never
+    used by the scheduler when auth is on.
+    {% endif %}
+    """
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        {% if insights_per_user -%}
+        project: Project | None = None,
+        {%- endif %}
+    ) -> None:
         self.db = db
+        {% if insights_per_user -%}
+        self.project = project
+        {%- endif %}
+
+    {% if insights_per_user -%}
+    @property
+    def project_id(self) -> int | None:
+        """Convenience accessor — None when this collector isn't project-scoped."""
+        return self.project.id if self.project is not None else None
+    {%- endif %}
 
     @property
     @abstractmethod
@@ -186,6 +223,9 @@ class BaseCollector(ABC):
             metric = InsightMetric(
                 date=date,
                 metric_type_id=metric_type.id,
+                {% if insights_per_user -%}
+                project_id=self.project_id,
+                {%- endif %}
                 value=value,
                 period=period,
                 metadata_=metadata or {},
@@ -193,14 +233,19 @@ class BaseCollector(ABC):
             self.db.add(metric)
             return metric, True
 
-        # For other periods, check for existing row
-        result = await self.db.exec(
-            select(InsightMetric).where(
-                InsightMetric.metric_type_id == metric_type.id,
-                InsightMetric.date == date,
-                InsightMetric.period == period,
-            )
+        # For other periods, check for existing row. Dedup is now scoped
+        # by project_id when set — same (date, period) on different
+        # projects are independent rows.
+        stmt = select(InsightMetric).where(
+            InsightMetric.metric_type_id == metric_type.id,
+            InsightMetric.date == date,
+            InsightMetric.period == period,
         )
+        {% if insights_per_user -%}
+        if self.project_id is not None:
+            stmt = stmt.where(InsightMetric.project_id == self.project_id)
+        {%- endif %}
+        result = await self.db.exec(stmt)
         existing = result.first()
 
         if existing is not None:
@@ -215,6 +260,9 @@ class BaseCollector(ABC):
         metric = InsightMetric(
             date=date,
             metric_type_id=metric_type.id,
+            {% if insights_per_user -%}
+            project_id=self.project_id,
+            {%- endif %}
             value=value,
             period=period,
             metadata_=metadata or {},

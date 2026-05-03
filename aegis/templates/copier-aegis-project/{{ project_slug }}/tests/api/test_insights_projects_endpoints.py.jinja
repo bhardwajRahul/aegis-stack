@@ -1,0 +1,418 @@
+{% if insights_per_user -%}
+"""Tests for the project CRUD HTTP API.
+
+The route surface is gated on ``insights_per_user``, so this file
+only ships in stacks that have per-user insights enabled.
+
+Auth uses bearer tokens directly (mint via ``create_access_token``)
+to avoid the cookie-jar bleed-across-tests footgun and to skip the
+rate limiter that protects ``/auth/token``.
+"""
+
+from fastapi import status
+from fastapi.testclient import TestClient
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.config import settings
+from app.core.security import create_access_token
+from app.models.user import UserCreate
+from app.services.auth.user_service import UserService
+
+
+@pytest.fixture(autouse=True)
+def _enable_auth():
+    """Force real auth on for this module."""
+    prior = settings.AUTH_ENABLED
+    settings.AUTH_ENABLED = True
+    try:
+        yield
+    finally:
+        settings.AUTH_ENABLED = prior
+
+
+async def _seed_user_and_token(
+    session: AsyncSession, email: str = "u@example.com"
+) -> tuple[int, dict[str, str]]:
+    """Create a user, return (user_id, auth_headers)."""
+    svc = UserService(session)
+    user = await svc.create_user(
+        UserCreate(email=email, full_name="T", password="p"*12)
+    )
+    token = create_access_token(data={"sub": user.email})
+    return user.id, {"Authorization": f"Bearer {token}"}
+
+
+# ---------------------------------------------------------------------------
+# POST /projects
+# ---------------------------------------------------------------------------
+
+
+class TestCreateProject:
+    @pytest.mark.asyncio
+    async def test_returns_201_with_response_body(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+    ) -> None:
+        _, headers = await _seed_user_and_token(async_db_session)
+
+        response = async_client_with_db.post(
+            "/api/v1/insights/projects",
+            json={"slug": "my-project", "name": "My Project"},
+            headers=headers,
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        body = response.json()
+        assert body["slug"] == "my-project"
+        assert body["name"] == "My Project"
+        assert body["id"]
+
+    @pytest.mark.asyncio
+    async def test_owner_is_current_user_not_request_body(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+    ) -> None:
+        """Client cannot impersonate by sending owner_user_id."""
+        user_id, headers = await _seed_user_and_token(async_db_session)
+
+        response = async_client_with_db.post(
+            "/api/v1/insights/projects",
+            json={
+                "slug": "proj",
+                "name": "P",
+                "owner_user_id": 99999,  # ignored by ProjectCreate schema
+            },
+            headers=headers,
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.json()["owner_user_id"] == user_id
+
+    @pytest.mark.asyncio
+    async def test_credentials_are_masked_in_response(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+    ) -> None:
+        _, headers = await _seed_user_and_token(async_db_session)
+
+        response = async_client_with_db.post(
+            "/api/v1/insights/projects",
+            json={
+                "slug": "proj",
+                "name": "P",
+                "github_token": "ghp_abcdef123456",
+                "plausible_api_key": "pk_abcdefghij",
+            },
+            headers=headers,
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        body = response.json()
+        assert body["github_token_masked"] == "***3456"
+        assert body["plausible_api_key_masked"] == "***ghij"
+        # And the raw fields are not in the response.
+        assert "github_token" not in body
+        assert "plausible_api_key" not in body
+
+    @pytest.mark.asyncio
+    async def test_returns_409_on_duplicate_slug(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+    ) -> None:
+        _, headers = await _seed_user_and_token(async_db_session)
+
+        async_client_with_db.post(
+            "/api/v1/insights/projects",
+            json={"slug": "proj", "name": "P"},
+            headers=headers,
+        )
+        response = async_client_with_db.post(
+            "/api/v1/insights/projects",
+            json={"slug": "proj", "name": "Different Name"},
+            headers=headers,
+        )
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+
+    @pytest.mark.asyncio
+    async def test_returns_422_on_invalid_slug(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+    ) -> None:
+        """Slug must be lowercase + digits + hyphens, 3–64 chars."""
+        _, headers = await _seed_user_and_token(async_db_session)
+
+        for bad_slug in ["UPPER", "with spaces", "ab", "-leading", "trailing-"]:
+            response = async_client_with_db.post(
+                "/api/v1/insights/projects",
+                json={"slug": bad_slug, "name": "P"},
+                headers=headers,
+            )
+            assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY, (
+                f"slug={bad_slug!r} should be rejected"
+            )
+
+    @pytest.mark.asyncio
+    async def test_returns_401_without_auth(
+        self,
+        async_client_with_db: TestClient,
+    ) -> None:
+        response = async_client_with_db.post(
+            "/api/v1/insights/projects",
+            json={"slug": "proj", "name": "P"},
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+# ---------------------------------------------------------------------------
+# GET /projects
+# ---------------------------------------------------------------------------
+
+
+class TestListProjects:
+    @pytest.mark.asyncio
+    async def test_filters_by_owner(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+    ) -> None:
+        _, alice_headers = await _seed_user_and_token(
+            async_db_session, "alice@x.com"
+        )
+        _, bob_headers = await _seed_user_and_token(
+            async_db_session, "bob@x.com"
+        )
+        async_client_with_db.post(
+            "/api/v1/insights/projects",
+            json={"slug": "alice-1", "name": "A1"},
+            headers=alice_headers,
+        )
+        async_client_with_db.post(
+            "/api/v1/insights/projects",
+            json={"slug": "bob-1", "name": "B1"},
+            headers=bob_headers,
+        )
+
+        alice_list = async_client_with_db.get(
+            "/api/v1/insights/projects", headers=alice_headers
+        )
+
+        slugs = {p["slug"] for p in alice_list.json()}
+        assert slugs == {"alice-1"}
+
+
+# ---------------------------------------------------------------------------
+# GET /projects/{slug}
+# ---------------------------------------------------------------------------
+
+
+class TestGetProject:
+    @pytest.mark.asyncio
+    async def test_returns_404_for_non_owner(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+    ) -> None:
+        _, alice_headers = await _seed_user_and_token(
+            async_db_session, "alice@x.com"
+        )
+        _, bob_headers = await _seed_user_and_token(
+            async_db_session, "bob@x.com"
+        )
+        async_client_with_db.post(
+            "/api/v1/insights/projects",
+            json={"slug": "alice-only", "name": "A"},
+            headers=alice_headers,
+        )
+
+        response = async_client_with_db.get(
+            "/api/v1/insights/projects/alice-only", headers=bob_headers
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+# ---------------------------------------------------------------------------
+# PATCH /projects/{slug}
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateProject:
+    @pytest.mark.asyncio
+    async def test_changes_only_provided_fields(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+    ) -> None:
+        _, headers = await _seed_user_and_token(async_db_session)
+        async_client_with_db.post(
+            "/api/v1/insights/projects",
+            json={
+                "slug": "proj",
+                "name": "Original",
+                "github_owner": "lbedner",
+                "github_repo": "aegis-stack",
+            },
+            headers=headers,
+        )
+
+        response = async_client_with_db.patch(
+            "/api/v1/insights/projects/proj",
+            json={"name": "Renamed"},
+            headers=headers,
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        body = response.json()
+        assert body["name"] == "Renamed"
+        # Untouched fields preserved.
+        assert body["github_owner"] == "lbedner"
+        assert body["github_repo"] == "aegis-stack"
+
+    @pytest.mark.asyncio
+    async def test_returns_404_for_non_owner(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+    ) -> None:
+        _, alice_headers = await _seed_user_and_token(
+            async_db_session, "alice@x.com"
+        )
+        _, bob_headers = await _seed_user_and_token(
+            async_db_session, "bob@x.com"
+        )
+        async_client_with_db.post(
+            "/api/v1/insights/projects",
+            json={"slug": "alice-only", "name": "A"},
+            headers=alice_headers,
+        )
+
+        response = async_client_with_db.patch(
+            "/api/v1/insights/projects/alice-only",
+            json={"name": "hacked"},
+            headers=bob_headers,
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+# ---------------------------------------------------------------------------
+# GET /projects/{slug}/all (per-project insights bundle)
+# ---------------------------------------------------------------------------
+
+
+class TestGetProjectInsights:
+    @pytest.mark.asyncio
+    async def test_returns_200_for_owner(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+    ) -> None:
+        _, headers = await _seed_user_and_token(async_db_session)
+        async_client_with_db.post(
+            "/api/v1/insights/projects",
+            json={"slug": "proj", "name": "P"},
+            headers=headers,
+        )
+
+        response = async_client_with_db.get(
+            "/api/v1/insights/projects/proj/all", headers=headers
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        # Response shape matches BulkInsightsResponse (empty for a fresh project).
+        body = response.json()
+        assert "daily" in body
+        assert "events" in body
+        assert "insight_events" in body
+        assert "sources" in body
+
+    @pytest.mark.asyncio
+    async def test_returns_404_for_non_owner(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+    ) -> None:
+        _, alice_headers = await _seed_user_and_token(
+            async_db_session, "alice@x.com"
+        )
+        _, bob_headers = await _seed_user_and_token(
+            async_db_session, "bob@x.com"
+        )
+        async_client_with_db.post(
+            "/api/v1/insights/projects",
+            json={"slug": "alice-only", "name": "A"},
+            headers=alice_headers,
+        )
+
+        response = async_client_with_db.get(
+            "/api/v1/insights/projects/alice-only/all", headers=bob_headers
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+# ---------------------------------------------------------------------------
+# DELETE /projects/{slug}
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteProject:
+    @pytest.mark.asyncio
+    async def test_returns_204_and_removes_project(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+    ) -> None:
+        _, headers = await _seed_user_and_token(async_db_session)
+        async_client_with_db.post(
+            "/api/v1/insights/projects",
+            json={"slug": "proj", "name": "P"},
+            headers=headers,
+        )
+
+        delete_response = async_client_with_db.delete(
+            "/api/v1/insights/projects/proj", headers=headers
+        )
+        get_response = async_client_with_db.get(
+            "/api/v1/insights/projects/proj", headers=headers
+        )
+
+        assert delete_response.status_code == status.HTTP_204_NO_CONTENT
+        assert get_response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_returns_404_for_non_owner(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+    ) -> None:
+        _, alice_headers = await _seed_user_and_token(
+            async_db_session, "alice@x.com"
+        )
+        _, bob_headers = await _seed_user_and_token(
+            async_db_session, "bob@x.com"
+        )
+        async_client_with_db.post(
+            "/api/v1/insights/projects",
+            json={"slug": "alice-only", "name": "A"},
+            headers=alice_headers,
+        )
+
+        response = async_client_with_db.delete(
+            "/api/v1/insights/projects/alice-only", headers=bob_headers
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        # And it's still there for alice.
+        check = async_client_with_db.get(
+            "/api/v1/insights/projects/alice-only", headers=alice_headers
+        )
+        assert check.status_code == status.HTTP_200_OK
+{%- endif %}

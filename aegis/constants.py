@@ -150,6 +150,7 @@ class AnswerKeys:
     INSIGHTS_PYPI = "insights_pypi"
     INSIGHTS_PLAUSIBLE = "insights_plausible"
     INSIGHTS_REDDIT = "insights_reddit"
+    INSIGHTS_PER_USER = "insights_per_user"
 
     # Payment configuration
     PAYMENT_PROVIDER = "payment_provider"

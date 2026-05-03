@@ -33,17 +33,23 @@ EVENT_TYPE_MAP = {
 class GitHubEventsCollector(BaseCollector):
     """Collects GitHub event data from ClickHouse public dataset."""
 
-    def __init__(self, db: AsyncSession) -> None:
-        super().__init__(db)
-
     @property
     def source_key(self) -> str:
         return SourceKeys.GITHUB_EVENTS
 
     async def collect(self) -> CollectionResult:
         """Collect forks, releases, star events, and activity summary."""
+        {% if insights_per_user -%}
+        if self.project is not None:
+            owner = self.project.github_owner
+            repo = self.project.github_repo
+        else:
+            owner = settings.INSIGHT_GITHUB_OWNER
+            repo = settings.INSIGHT_GITHUB_REPO
+        {% else -%}
         owner = settings.INSIGHT_GITHUB_OWNER
         repo = settings.INSIGHT_GITHUB_REPO
+        {%- endif %}
 
         if err := self._validate_config(
             INSIGHT_GITHUB_OWNER=owner, INSIGHT_GITHUB_REPO=repo
@@ -75,12 +81,17 @@ class GitHubEventsCollector(BaseCollector):
                 )
 
                 # Get existing fork actors to skip duplicates
-                existing_forks = await self.db.exec(
-                    select(InsightMetric.metadata_).where(
-                        InsightMetric.metric_type_id == forks_type.id,
-                        InsightMetric.period == Periods.EVENT,
-                    )
+                forks_stmt = select(InsightMetric.metadata_).where(
+                    InsightMetric.metric_type_id == forks_type.id,
+                    InsightMetric.period == Periods.EVENT,
                 )
+                {% if insights_per_user -%}
+                if self.project_id is not None:
+                    forks_stmt = forks_stmt.where(
+                        InsightMetric.project_id == self.project_id
+                    )
+                {%- endif %}
+                existing_forks = await self.db.exec(forks_stmt)
                 existing_actors = {
                     m.get("actor", "")
                     for m in existing_forks.all()
@@ -118,12 +129,17 @@ class GitHubEventsCollector(BaseCollector):
                 """,
                 )
 
-                existing_releases = await self.db.exec(
-                    select(InsightMetric.metadata_).where(
-                        InsightMetric.metric_type_id == releases_type.id,
-                        InsightMetric.period == Periods.EVENT,
-                    )
+                releases_stmt = select(InsightMetric.metadata_).where(
+                    InsightMetric.metric_type_id == releases_type.id,
+                    InsightMetric.period == Periods.EVENT,
                 )
+                {% if insights_per_user -%}
+                if self.project_id is not None:
+                    releases_stmt = releases_stmt.where(
+                        InsightMetric.project_id == self.project_id
+                    )
+                {%- endif %}
+                existing_releases = await self.db.exec(releases_stmt)
                 existing_tags = {
                     m.get("tag", "")
                     for m in existing_releases.all()

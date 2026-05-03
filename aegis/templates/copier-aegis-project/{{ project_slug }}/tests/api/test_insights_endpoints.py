@@ -35,11 +35,15 @@ async def _seed_full(session: AsyncSession) -> None:
 
     from datetime import datetime
 
+    project = await _ensure_project(session)
+    project_kwargs = {"project_id": project.id} if project is not None else {}
+
     metric = InsightMetric(
         date=datetime(2026, 4, 10),
         metric_type_id=mt.id,  # type: ignore[arg-type]
         value=42.0,
         period=Periods.DAILY,
+        **project_kwargs,
     )
     session.add(metric)
 
@@ -47,9 +51,44 @@ async def _seed_full(session: AsyncSession) -> None:
         date=datetime(2026, 4, 10),
         event_type="release",
         description="v0.6.9",
+        **project_kwargs,
     )
     session.add(event)
     await session.flush()
+
+
+async def _ensure_project(session: AsyncSession) -> object | None:
+    """Lazily create (or reuse) a Project for this test session.
+
+    Returns ``None`` in auth=off builds (no Project model exists), so
+    rows can be inserted without ``project_id`` in single-tenant mode.
+    """
+    try:
+        from sqlmodel import select
+
+        from app.models.user import User
+        from app.services.insights.models import Project
+    except ImportError:
+        return None
+    result = await session.exec(select(Project).limit(1))
+    existing = result.first()
+    if existing is not None:
+        return existing
+    user = User(
+        email="insights-endpoints-test@example.com",
+        full_name="Insights API Test",
+        hashed_password="x",
+    )
+    session.add(user)
+    await session.flush()
+    project = Project(
+        slug="iep",
+        name="iep",
+        owner_user_id=user.id,  # type: ignore[arg-type]
+    )
+    session.add(project)
+    await session.flush()
+    return project
 
 
 @pytest.fixture(autouse=True)

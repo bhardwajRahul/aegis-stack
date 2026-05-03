@@ -5,11 +5,11 @@ Separate from `InsightService` (which is read-focused and also serves
 collectors) so the user-CRUD surface stays narrow. Only ever touches rows
 where `origin = 'user'`; collector rows are invisible to this service.
 
-Gated on `include_auth` because every user event carries a
-`created_by_user_id` FK — that field is only present on the InsightEvent
-table when auth ships.
+Gated on `insights_per_user` because every user-created event is
+scoped to a Project (FK ``project_id``) and that column only exists
+on InsightEvent when per-user mode ships.
 """
-{% if include_auth %}
+{% if insights_per_user %}
 import logging
 from datetime import date, datetime
 from typing import Any
@@ -26,10 +26,25 @@ logger = logging.getLogger(__name__)
 
 
 class EventService:
-    """CRUD for user-created insight events."""
+    """CRUD for user-created insight events.
 
-    def __init__(self, db: AsyncSession) -> None:
+    When ``project_id`` is set, every read filters by it and every write
+    stamps it on new rows. Unset = global view (auth=off mode).
+    """
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        project_id: int | None = None,
+    ) -> None:
         self.db = db
+        self.project_id = project_id
+
+    def _scope(self, stmt):
+        """Add ``WHERE project_id = ...`` to a SELECT, if scoped."""
+        if self.project_id is None:
+            return stmt
+        return stmt.where(InsightEvent.project_id == self.project_id)
 
     # -------------------------------------------------------------------
     # Read
@@ -66,6 +81,7 @@ class EventService:
             stmt = stmt.where(InsightEvent.event_type == event_type)
 
         stmt = stmt.order_by(InsightEvent.date.desc())  # type: ignore[union-attr]
+        stmt = self._scope(stmt)
         result = await self.db.exec(stmt)
         return list(result.all())
 
@@ -85,9 +101,16 @@ class EventService:
 
     async def get_user_event(self, event_id: int) -> InsightEvent | None:
         """Fetch one user-origin event. Returns None for collector rows so the
-        API/CLI can never accidentally mutate a collector-emitted event."""
+        API/CLI can never accidentally mutate a collector-emitted event.
+
+        Also returns None if the event belongs to a different project (when
+        the service is project-scoped); prevents cross-project access via
+        an event_id guess.
+        """
         event = await self.db.get(InsightEvent, event_id)
         if event is None or event.origin != EventOrigin.USER:
+            return None
+        if self.project_id is not None and event.project_id != self.project_id:
             return None
         return event
 
@@ -113,6 +136,7 @@ class EventService:
             description=description,
             metadata_=metadata or {},
             origin=EventOrigin.USER,
+            project_id=self.project_id,  # type: ignore[arg-type]
             created_by_user_id=created_by_user_id,
         )
         self.db.add(event)

@@ -213,6 +213,22 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet", "apscheduler"],
     ),
     StackCombination(
+        name="insights_per_user",
+        components=["database", "scheduler"],
+        services=["auth", "insights[per_user]"],
+        description="Per-user insights: auth + Project model + project_id FKs",
+        expected_files=[
+            "app/services/insights/",
+            "app/services/insights/project_service.py",
+            "app/services/auth/",
+            "app/core/db.py",
+            "app/core/encryption.py",
+            "app/components/scheduler/",
+        ],
+        expected_docker_services=["webserver", "scheduler"],
+        expected_pyproject_deps=["fastapi", "flet", "apscheduler"],
+    ),
+    StackCombination(
         name="payment",
         components=["database"],
         services=["payment"],

@@ -9,6 +9,8 @@ import pytest
 from app.services.insights.collectors.github_stars import GitHubStarsCollector
 from app.services.insights.constants import MetricKeys, Periods, SourceKeys
 from app.services.insights.models import InsightMetric, InsightMetricType, InsightSource
+
+from ._collector_fixtures import collector_kwargs, seed_project_for_collector
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -56,6 +58,7 @@ class TestGitHubStarsCollectorSuccess:
     async def test_collect_success(self, async_db_session: AsyncSession) -> None:
         """Happy path: collect stargazers with profiles."""
         await _seed_github_stars(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack", github_token="token123")
 
         # Mock httpx.AsyncClient
         mock_client = AsyncMock()
@@ -117,7 +120,7 @@ class TestGitHubStarsCollectorSuccess:
                 mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
                 mock_settings.INSIGHT_GITHUB_REPO = "aegis-stack"
 
-                collector = GitHubStarsCollector(async_db_session)
+                collector = GitHubStarsCollector(async_db_session, **collector_kwargs(project))
                 result = await collector.collect()
 
         assert result.success is True
@@ -137,6 +140,7 @@ class TestGitHubStarsCollectorSuccess:
     async def test_collect_missing_config(self, async_db_session: AsyncSession) -> None:
         """Missing token/owner/repo returns error."""
         await _seed_github_stars(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner=None, github_repo=None, github_token=None)
 
         with patch(
             "app.services.insights.collectors.github_stars.settings"
@@ -145,7 +149,7 @@ class TestGitHubStarsCollectorSuccess:
             mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
             mock_settings.INSIGHT_GITHUB_REPO = "aegis-stack"
 
-            collector = GitHubStarsCollector(async_db_session)
+            collector = GitHubStarsCollector(async_db_session, **collector_kwargs(project))
             result = await collector.collect()
 
         assert result.success is False
@@ -157,6 +161,7 @@ class TestGitHubStarsCollectorSuccess:
         import httpx
 
         await _seed_github_stars(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack", github_token="token123")
 
         mock_response = MagicMock(status_code=403, text="Forbidden")
         error = httpx.HTTPStatusError(
@@ -178,7 +183,7 @@ class TestGitHubStarsCollectorSuccess:
                 mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
                 mock_settings.INSIGHT_GITHUB_REPO = "aegis-stack"
 
-                collector = GitHubStarsCollector(async_db_session)
+                collector = GitHubStarsCollector(async_db_session, **collector_kwargs(project))
                 result = await collector.collect()
 
         assert result.success is False
@@ -188,9 +193,11 @@ class TestGitHubStarsCollectorSuccess:
     async def test_deduplication(self, async_db_session: AsyncSession) -> None:
         """Second collect doesn't duplicate existing stars."""
         source, metric_types = await _seed_github_stars(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack", github_token="token123")
         star_type = metric_types[MetricKeys.NEW_STAR]
 
         # Pre-populate star #1
+        project_kwargs = {'project_id': project.id} if project is not None else {}
         existing_star = InsightMetric(
             date=datetime(2026, 4, 11),
             metric_type_id=star_type.id,  # type: ignore[arg-type]
@@ -201,6 +208,7 @@ class TestGitHubStarsCollectorSuccess:
                 "followers": 10,
                 "account_age_years": 15.0,
             },
+            **project_kwargs,
         )
         async_db_session.add(existing_star)
         await async_db_session.commit()
@@ -255,7 +263,7 @@ class TestGitHubStarsCollectorSuccess:
                 mock_settings.INSIGHT_GITHUB_OWNER = "lbedner"
                 mock_settings.INSIGHT_GITHUB_REPO = "aegis-stack"
 
-                collector = GitHubStarsCollector(async_db_session)
+                collector = GitHubStarsCollector(async_db_session, **collector_kwargs(project))
                 result = await collector.collect()
 
         assert result.success is True

@@ -299,6 +299,12 @@ insights_reddit:
   default: false
   when: "{{ include_insights }}"
 
+insights_per_user:
+  type: bool
+  help: "Per-user insights (each user has isolated projects with their own credentials)? Default is shared insights driven by env vars."
+  default: false
+  when: "{{ include_insights and include_auth }}"
+
 # Internal computed values (using Jinja2)
 _has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache or include_ingress or include_observability }}"
 _include_migrations: "{{ include_auth }}"

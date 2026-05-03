@@ -6,6 +6,8 @@ from datetime import datetime
 
 import pytest
 from app.services.insights.collectors.base import CollectionResult
+
+from ._collector_fixtures import collector_kwargs, seed_project_for_collector
 from app.services.insights.constants import MetricKeys, Periods, SourceKeys
 from app.services.insights.models import (
     InsightMetric,
@@ -113,6 +115,7 @@ class TestUpsertMetric:
     async def test_creates_new_row(self, async_db_session: AsyncSession) -> None:
         """First upsert creates a new metric row."""
         _, metric_types = await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session)
         mt = metric_types[MetricKeys.CLONES]
 
         # Need a concrete collector to test base methods
@@ -120,7 +123,7 @@ class TestUpsertMetric:
             GitHubTrafficCollector,
         )
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
         metric, created = await collector.upsert_metric(
             metric_type=mt,
             date=datetime(2026, 3, 31),
@@ -135,13 +138,14 @@ class TestUpsertMetric:
     async def test_updates_existing_row(self, async_db_session: AsyncSession) -> None:
         """Second upsert for same (type, date, period) updates instead of creating."""
         _, metric_types = await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session)
         mt = metric_types[MetricKeys.CLONES]
 
         from app.services.insights.collectors.github_traffic import (
             GitHubTrafficCollector,
         )
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         # First insert
         _, created1 = await collector.upsert_metric(
@@ -174,13 +178,14 @@ class TestUpsertMetric:
     ) -> None:
         """Event period rows are always new (no deduplication)."""
         _, metric_types = await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session)
         mt = metric_types[MetricKeys.CLONES]
 
         from app.services.insights.collectors.github_traffic import (
             GitHubTrafficCollector,
         )
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         _, created1 = await collector.upsert_metric(
             metric_type=mt,
@@ -221,12 +226,13 @@ class TestBaseCollectorHelpers:
     async def test_get_source(self, async_db_session: AsyncSession) -> None:
         """get_source returns the correct source row."""
         await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session)
 
         from app.services.insights.collectors.github_traffic import (
             GitHubTrafficCollector,
         )
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
         source = await collector.get_source()
 
         assert source.key == SourceKeys.GITHUB_TRAFFIC
@@ -236,11 +242,12 @@ class TestBaseCollectorHelpers:
         self, async_db_session: AsyncSession
     ) -> None:
         """get_source raises RuntimeError when source not seeded."""
+        project = await seed_project_for_collector(async_db_session)
         from app.services.insights.collectors.github_traffic import (
             GitHubTrafficCollector,
         )
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with pytest.raises(RuntimeError, match="not found"):
             await collector.get_source()
@@ -249,12 +256,13 @@ class TestBaseCollectorHelpers:
     async def test_get_metric_type(self, async_db_session: AsyncSession) -> None:
         """get_metric_type returns the correct type row."""
         await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session)
 
         from app.services.insights.collectors.github_traffic import (
             GitHubTrafficCollector,
         )
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
         mt = await collector.get_metric_type(MetricKeys.CLONES)
 
         assert mt.key == MetricKeys.CLONES
@@ -266,12 +274,13 @@ class TestBaseCollectorHelpers:
     ) -> None:
         """get_metric_type raises RuntimeError for unknown key."""
         await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session)
 
         from app.services.insights.collectors.github_traffic import (
             GitHubTrafficCollector,
         )
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with pytest.raises(RuntimeError, match="not found"):
             await collector.get_metric_type("nonexistent_metric")
