@@ -19,15 +19,15 @@ from unittest.mock import patch
 import pytest
 import typer
 
-from aegis.core import plugin_discovery
-from aegis.core.plugin_discovery import (
+from aegis.core.plugins import discovery as plugin_discovery
+from aegis.core.plugins.discovery import (
     PLUGIN_CLI_ENTRY_POINT_GROUP,
     PLUGIN_ENTRY_POINT_GROUP,
     clear_cache,
     discover_plugin_cli_apps,
     discover_plugins,
 )
-from aegis.core.plugin_spec import PluginKind, PluginSpec
+from aegis.core.plugins.spec import PluginKind, PluginSpec
 
 # ---------------------------------------------------------------------
 # Fixtures + helpers
@@ -343,7 +343,7 @@ class TestMountPluginCliApps:
         fresh_app = typer.Typer(name="aegis")
         plugin_app = typer.Typer()
         with patch(
-            "aegis.core.plugin_discovery.discover_plugin_cli_apps",
+            "aegis.core.plugins.discovery.discover_plugin_cli_apps",
             return_value={"scraper": plugin_app},
         ):
             _mount_plugin_cli_apps(fresh_app)
@@ -371,7 +371,7 @@ class TestMountPluginCliApps:
             return {}
 
         with patch(
-            "aegis.core.plugin_discovery.discover_plugin_cli_apps",
+            "aegis.core.plugins.discovery.discover_plugin_cli_apps",
             side_effect=fake_discover,
         ):
             _mount_plugin_cli_apps(fresh_app)
@@ -387,7 +387,7 @@ class TestMountPluginCliApps:
         fresh_app = typer.Typer(name="aegis")
         before = len(fresh_app.registered_groups)
         with patch(
-            "aegis.core.plugin_discovery.discover_plugin_cli_apps",
+            "aegis.core.plugins.discovery.discover_plugin_cli_apps",
             return_value={},
         ):
             _mount_plugin_cli_apps(fresh_app)
