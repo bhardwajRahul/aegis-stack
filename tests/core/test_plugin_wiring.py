@@ -24,12 +24,12 @@ import json
 
 import pytest
 
-from aegis.core.plugin_composer import (
+from aegis.core.plugins.composer import (
     PLUGINS_ANSWER_KEY,
     serialize_plugin_to_answer,
     serialize_plugins,
 )
-from aegis.core.plugin_spec import (
+from aegis.core.plugins.spec import (
     FrontendWidgetWiring,
     HealthCheckWiring,
     PluginKind,
@@ -319,7 +319,7 @@ class TestConstants:
 
 def test_wiring_dataclasses_re_exported_from_composer() -> None:
     """Plugin authors can import wiring shapes from one module."""
-    from aegis.core import plugin_composer
+    from aegis.core.plugins import composer as plugin_composer
 
     assert plugin_composer.FrontendWidgetWiring is FrontendWidgetWiring
     assert plugin_composer.HealthCheckWiring is HealthCheckWiring

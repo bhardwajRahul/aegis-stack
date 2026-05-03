@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .file_manifest import FileManifest
-from .plugin_spec import PluginKind, PluginSpec
+from .plugins.spec import PluginKind, PluginSpec
 
 
 class ComponentType(Enum):

@@ -137,7 +137,7 @@ def _mount_plugin_cli_apps(target_app: typer.Typer) -> None:
     module-level ``app``) so tests can verify the mount path against a
     fresh Typer instance without re-running module import.
     """
-    from .core.plugin_discovery import discover_plugin_cli_apps
+    from .core.plugins.discovery import discover_plugin_cli_apps
 
     reserved = {cmd.name for cmd in target_app.registered_commands if cmd.name}
     reserved.update(grp.name for grp in target_app.registered_groups if grp.name)

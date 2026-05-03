@@ -17,9 +17,9 @@ from ..core.components import COMPONENTS, CORE_COMPONENTS
 from ..core.copier_manager import load_copier_answers
 from ..core.dependency_resolver import DependencyResolver
 from ..core.manual_updater import ManualUpdater
-from ..core.plugin_compat import reverse_dependents
-from ..core.plugin_discovery import discover_plugins
-from ..core.plugin_spec import PluginSpec
+from ..core.plugins.compat import reverse_dependents
+from ..core.plugins.discovery import discover_plugins
+from ..core.plugins.spec import PluginSpec
 from ..core.services import SERVICES
 from ..core.version_compatibility import validate_version_compatibility
 from ..i18n import t

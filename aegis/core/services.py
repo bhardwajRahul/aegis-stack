@@ -29,7 +29,7 @@ from .migration_generator import (
     VOICE_MIGRATION,
 )
 from .option_spec import OptionMode, OptionSpec
-from .plugin_spec import (
+from .plugins.spec import (
     FrontendWidgetWiring,
     PluginKind,
     PluginSpec,

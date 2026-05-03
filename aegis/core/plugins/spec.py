@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from .file_manifest import FileManifest
+from ..file_manifest import FileManifest
 
 
 class PluginKind(Enum):
