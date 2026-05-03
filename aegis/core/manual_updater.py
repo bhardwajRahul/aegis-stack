@@ -141,6 +141,8 @@ class ManualUpdater:
         self,
         component: str,
         additional_data: dict[str, Any] | None = None,
+        *,
+        run_post_gen: bool = True,
     ) -> UpdateResult:
         """
         Add a component to the project.
@@ -148,6 +150,11 @@ class ManualUpdater:
         Args:
             component: Component name (e.g., "scheduler", "worker")
             additional_data: Additional configuration data (e.g., scheduler_backend)
+            run_post_gen: When False, skip the trailing ``uv sync`` + ``make fix``
+                pass. Used by orchestrators (the plugin resolver flow) that batch
+                multiple installs and want to amortise post-gen across the whole
+                operation by calling :meth:`run_post_generation_tasks` once at
+                the end.
 
         Returns:
             UpdateResult with files modified/skipped
@@ -268,8 +275,8 @@ class ManualUpdater:
             # Update .copier-answers.yml
             self._save_answers(updated_answers)
 
-            # Run post-generation tasks
-            self._run_post_generation_tasks()
+            if run_post_gen:
+                self.run_post_generation_tasks()
 
             return UpdateResult(
                 component=component,
@@ -289,6 +296,76 @@ class ManualUpdater:
                 success=False,
                 error_message=str(e),
             )
+
+    def add_service(
+        self,
+        service: str,
+        additional_data: dict[str, Any] | None = None,
+        *,
+        run_post_gen: bool = True,
+    ) -> UpdateResult:
+        """Install a service: write its files, then run its migrations.
+
+        Services are stored alongside components in the registry, so the
+        file-rendering half of the install reuses :meth:`add_component`.
+        What's different is the **migration tail**: services that ship
+        a ``MIGRATION_SPECS`` entry (auth, ai-with-sqlite, insights, ...)
+        need ``alembic`` bootstrapped, a versioned migration generated,
+        and the migration applied. Without this tail the service's
+        answer flag is set but its tables don't exist, and the project
+        boots into a SQLAlchemy ``OperationalError`` on first request.
+
+        ``add_service_command`` does this manually inline; this method
+        gives the resolver flow (``aegis add <plugin>`` resolving
+        ``required_services``) the same treatment without re-implementing
+        the migration sequence.
+
+        Args:
+            service: Service name (e.g., ``"auth"``, ``"insights"``).
+            additional_data: Optional config dict (auth level, AI
+                backend, etc.). Pass ``None`` for the defaults a
+                transitive plugin dep gets.
+            run_post_gen: When False, skip the trailing ``uv sync`` +
+                ``make fix`` pass — caller will run them once at the
+                end of a batched operation.
+
+        Returns the same :class:`UpdateResult` shape as
+        :meth:`add_component`. Migration steps are best-effort: if
+        bootstrap or generation raises, the result still reports
+        success for the file install (the user can re-run migrations
+        manually). A failed ``run_migrations`` is logged but doesn't
+        fail the install — matching how ``add_service_command`` handles
+        the same case.
+        """
+        # Lazy import — keeps ``ManualUpdater`` from pulling the
+        # migration_generator surface (and its alembic deps) at module
+        # load time. Only services-with-migrations exercise this path.
+        from .migration_generator import (
+            MIGRATION_SPECS,
+            bootstrap_alembic,
+            generate_migration,
+            service_has_migration,
+        )
+        from .post_gen_tasks import run_migrations
+
+        result = self.add_component(service, additional_data, run_post_gen=False)
+        if not result.success:
+            return result
+
+        if service in MIGRATION_SPECS:
+            alembic_dir = self.project_path / "alembic"
+            if not alembic_dir.exists():
+                bootstrap_alembic(self.project_path, self.jinja_env, self.answers)
+            if not service_has_migration(self.project_path, service):
+                generate_migration(self.project_path, service)
+            # run_migrations failure is non-fatal — match
+            # add_service_command's behaviour. The user can ``alembic
+            # upgrade head`` manually later.
+            run_migrations(self.project_path, include_migrations=True)
+
+        if run_post_gen:
+            self.run_post_generation_tasks()
+        return result
 
     def remove_component(self, component: str) -> UpdateResult:
         """
@@ -369,7 +446,7 @@ class ManualUpdater:
             ) = self._regenerate_shared_files(updated_answers)
 
             # Run post-generation tasks to clean up dependencies
-            self._run_post_generation_tasks()
+            self.run_post_generation_tasks()
 
             return UpdateResult(
                 component=component,
@@ -669,7 +746,7 @@ class ManualUpdater:
                 apply_cleanup_path(self.project_path, rel_path)
                 files_deleted.append(rel_path)
 
-            self._run_post_generation_tasks()
+            self.run_post_generation_tasks()
 
             return UpdateResult(
                 component=spec.name,
@@ -692,6 +769,8 @@ class ManualUpdater:
         spec: Any,
         plugin_module_name: str,
         plugin_options: dict[str, Any] | None = None,
+        *,
+        run_post_gen: bool = True,
     ) -> UpdateResult:
         """Install a plugin into the project.
 
@@ -705,11 +784,18 @@ class ManualUpdater:
         3. Regenerate shared template files so the new plugin loops
            emit imports / wiring for this plugin.
         4. Drop the plugin's own template tree into the project.
-        5. Run post-generation tasks (``uv sync`` + format).
+        5. Run post-generation tasks (``uv sync`` + format), unless the
+           caller asked to defer them via ``run_post_gen=False``.
 
         Returns an :class:`UpdateResult` describing the surface area
         that changed. Existing plugin entries with the same name are
         replaced (idempotent).
+
+        ``run_post_gen=False`` is used by the resolver flow in
+        ``aegis add`` — it batches multiple component / service /
+        plugin installs and runs ``uv sync`` + ``make fix`` exactly
+        once at the end (avoids the N+1 sync that nesting would
+        otherwise produce).
         """
         from .plugins.composer import PLUGINS_ANSWER_KEY, serialize_plugin_to_answer
 
@@ -757,8 +843,11 @@ class ManualUpdater:
             files_modified.extend(plugin_files)
 
             # Post-gen — uv sync picks up the plugin's pyproject deps,
-            # make fix re-formats anything we touched.
-            self._run_post_generation_tasks()
+            # make fix re-formats anything we touched. Skipped when the
+            # caller (resolver flow) is batching installs and will run
+            # post-gen once at the end.
+            if run_post_gen:
+                self.run_post_generation_tasks()
 
             return UpdateResult(
                 component=spec.name,
@@ -802,9 +891,14 @@ class ManualUpdater:
 
         self.answers = answers
 
-    def _run_post_generation_tasks(self) -> None:
+    def run_post_generation_tasks(self) -> None:
         """
         Run post-generation tasks (uv sync, make fix).
+
+        Public so callers that batch multiple ``add_*`` operations
+        (e.g. the plugin resolver flow in ``aegis add``) can defer
+        sync/format with ``run_post_gen=False`` per call and invoke
+        this exactly once at the end of the whole operation.
 
         This ensures:
         - Dependencies are updated

@@ -592,6 +592,10 @@ MESSAGES: dict[str, str] = {
         "   {count} ファイルにマージコンフリクトがあります（<<<<<<< を検索して解決）："
     ),
     "update.running_postgen": "生成後タスクを実行中...",
+    "update.skipping_postgen_conflicts": (
+        "Skipping post-generation tasks — merge conflicts present.\n"
+        "   Resolve <<<<<<< markers, then run: uv sync && make check"
+    ),
     "update.version_updated": "   __aegis_version__ を {version} に更新",
     "update.success": "更新完了！",
     "update.partial_success": ("更新完了（一部の生成後タスクが失敗）"),
