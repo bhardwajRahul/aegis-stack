@@ -1,0 +1,62 @@
+"""Pydantic request/response schemas for the user-events API.
+
+Gated on `insights_per_user` because user-event CRUD requires a
+`project_id` scope, which only exists on InsightEvent when per-user
+mode ships.
+"""
+{% if insights_per_user %}
+from datetime import date, datetime
+from typing import Any
+
+from app.services.insights.models import EventOrigin, UserEventType, event_type_display
+from pydantic import BaseModel, Field, computed_field
+
+
+class UserEventTypeCatalogEntry(BaseModel):
+    """One entry in the GET /events/types catalog — drives the UI dropdown."""
+
+    key: UserEventType
+    label: str
+
+
+class UserEventCreate(BaseModel):
+    """Payload for POST /events."""
+
+    event_type: UserEventType
+    description: str = Field(min_length=1, max_length=1024)
+    event_date: date | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class UserEventUpdate(BaseModel):
+    """Payload for PATCH /events/{id}. All fields optional."""
+
+    event_type: UserEventType | None = None
+    description: str | None = Field(default=None, min_length=1, max_length=1024)
+    event_date: date | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class UserEventResponse(BaseModel):
+    """Wire shape for an event (either origin).
+
+    `display_type` is a computed friendly label for `event_type` — the UI
+    renders it directly so collector rows never show snake_case.
+    """
+
+    id: int
+    date: datetime
+    event_type: str
+    description: str
+    metadata_: dict[str, Any]
+    origin: EventOrigin
+    created_by_user_id: int | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @computed_field  # serialized on output; derived from event_type
+    @property
+    def display_type(self) -> str:
+        return event_type_display(self.event_type)
+{% endif %}

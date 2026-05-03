@@ -22,7 +22,7 @@ This Aegis Stack project includes the following components:
 ## Services
 
 {%- if include_auth %}
-- **Auth**: JWT authentication with user management
+- **Auth**: JWT authentication with user management{% if include_oauth %} + GitHub/Google OAuth social login{% endif %}
 {%- endif %}
 {%- if include_ai %}
 - **AI**: Multi-provider AI integration with PydanticAI
@@ -175,6 +175,70 @@ with db_session() as session:
     session.add(user)
     # Auto-committed by context manager
 ```
+
+{%- endif %}
+
+{%- if include_oauth %}
+
+### OAuth Social Login
+
+GitHub and Google sign-in are wired up out of the box. Each provider
+is enabled independently — leaving its client ID/secret blank turns
+just that provider off (the route returns 503), so you can ship with
+GitHub configured and add Google later.
+
+**1. Create OAuth apps**
+
+- **GitHub**: <https://github.com/settings/developers> → New OAuth App.
+  - Authorization callback URL:
+    `https://your-domain.example/api/v1/auth/oauth/github/callback`
+  - Or for local dev:
+    `http://localhost:8000/api/v1/auth/oauth/github/callback`
+- **Google**: <https://console.cloud.google.com/apis/credentials> →
+  Create Credentials → OAuth client ID → Web application.
+  - Authorized redirect URI:
+    `https://your-domain.example/api/v1/auth/oauth/google/callback`
+
+**2. Set environment variables**
+
+```bash
+# OAuth client credentials (leave blank to disable a provider)
+GITHUB_OAUTH_CLIENT_ID=...
+GITHUB_OAUTH_CLIENT_SECRET=...
+GOOGLE_OAUTH_CLIENT_ID=...
+GOOGLE_OAUTH_CLIENT_SECRET=...
+
+# Secret for starlette's SessionMiddleware — Authlib stashes the
+# OAuth state + PKCE verifier here between /start and /callback.
+# MUST be overridden in any non-dev deployment.
+OAUTH_SESSION_SECRET=replace-me-with-a-strong-random-string
+
+# Optional: override the secure-flag heuristic. None (default) means
+# off in dev, on otherwise. Set to false to run prod over HTTP without
+# TLS — browsers refuse Secure cookies on insecure origins.
+# SESSION_COOKIE_SECURE=
+```
+
+**3. Sign-in URLs**
+
+- `GET /api/v1/auth/oauth/github/start?next=/dashboard`
+- `GET /api/v1/auth/oauth/google/start?next=/dashboard`
+
+The `?next=` parameter is honored only for same-origin paths. After a
+successful callback the user is redirected to `next` (or `/app` by
+default) with the JWT set in an HttpOnly `aegis_session` cookie. API
+clients can keep using `Authorization: Bearer ...` — the cookie path
+is parallel, not exclusive.
+
+**4. Connection management**
+
+Authenticated users can list and unlink their providers:
+
+- `GET /api/v1/auth/oauth/connections`
+- `DELETE /api/v1/auth/oauth/connections/{github|google}`
+
+The disconnect route refuses to remove the last sign-in method to
+avoid lock-out — set a password or link another provider first.
 
 {%- endif %}
 

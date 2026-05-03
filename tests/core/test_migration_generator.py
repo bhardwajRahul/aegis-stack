@@ -12,12 +12,14 @@ from aegis.core.migration_generator import (
     AUTH_MIGRATION,
     AUTH_RBAC_MIGRATION,
     AUTH_TOKENS_MIGRATION,
+    INSIGHTS_MIGRATION,
     MIGRATION_SPECS,
     ORG_MIGRATION,
     VOICE_MIGRATION,
     ColumnSpec,
     IndexSpec,
     TableSpec,
+    _build_insights_migration,
     generate_migration,
     generate_migrations_for_services,
     get_existing_migrations,
@@ -398,9 +400,11 @@ class TestMigrationSpecs:
         """Test auth migration spec is defined."""
         assert "auth" in MIGRATION_SPECS
         assert AUTH_MIGRATION.service_name == "auth"
-        assert len(AUTH_MIGRATION.tables) == 1
-        assert AUTH_MIGRATION.tables[0].name == "user"
-        column_names = [col.name for col in AUTH_MIGRATION.tables[0].columns]
+        assert len(AUTH_MIGRATION.tables) == 2
+
+        user_table = AUTH_MIGRATION.tables[0]
+        assert user_table.name == "user"
+        column_names = [col.name for col in user_table.columns]
         assert "email" in column_names
         assert "hashed_password" in column_names
         assert "is_verified" in column_names
@@ -409,6 +413,23 @@ class TestMigrationSpecs:
         assert "locked_until" in column_names
         # Only role is in RBAC migration
         assert "role" not in column_names
+
+        # OAuth identity table — links a user to a third-party identity
+        # (GitHub, Google, etc.). Composite (provider, provider_user_id) is
+        # unique to prevent identity hijacking across accounts.
+        oauth_table = AUTH_MIGRATION.tables[1]
+        assert oauth_table.name == "user_oauth_identity"
+        oauth_cols = [col.name for col in oauth_table.columns]
+        assert "user_id" in oauth_cols
+        assert "provider" in oauth_cols
+        assert "provider_user_id" in oauth_cols
+        assert "provider_email" in oauth_cols
+        assert oauth_table.foreign_keys[0].ref_table == "user"
+        # Composite uniqueness on (provider, provider_user_id)
+        unique_indexes = [idx for idx in oauth_table.indexes if idx.unique]
+        assert any(
+            idx.columns == ["provider", "provider_user_id"] for idx in unique_indexes
+        )
 
     def test_auth_rbac_spec_exists(self) -> None:
         """Test auth RBAC migration spec is defined with alter_tables."""
@@ -422,6 +443,82 @@ class TestMigrationSpecs:
         # is_verified and last_login are in base auth, not rbac
         assert "is_verified" not in col_names
         assert "last_login" not in col_names
+
+    def test_insights_shared_spec_exists(self) -> None:
+        """Shared-mode insights spec — base tables, no per-user columns.
+
+        Default registry-facing variant (``insights_per_user=False``):
+        just source/metric_type/metric/event/record. No project, no goal,
+        no user FKs. A project can ship insights without auth.
+        """
+        assert "insights" in MIGRATION_SPECS
+        assert INSIGHTS_MIGRATION.service_name == "insights"
+
+        table_names = [t.name for t in INSIGHTS_MIGRATION.tables]
+        assert table_names == [
+            "insight_source",
+            "insight_metric_type",
+            "insight_metric",
+            "insight_record",
+            "insight_event",
+        ]
+
+        event_table = next(
+            t for t in INSIGHTS_MIGRATION.tables if t.name == "insight_event"
+        )
+        event_cols = [c.name for c in event_table.columns]
+        assert "origin" in event_cols
+        # User/project columns are per-user mode only.
+        assert "created_by_user_id" not in event_cols
+        assert "project_id" not in event_cols
+
+        metric_table = next(
+            t for t in INSIGHTS_MIGRATION.tables if t.name == "insight_metric"
+        )
+        assert "project_id" not in [c.name for c in metric_table.columns]
+
+    def test_insights_per_user_spec_adds_project_and_goals(self) -> None:
+        """Per-user mode folds project + insight_goal + project_id FKs into one spec."""
+        spec = _build_insights_migration(per_user=True)
+        assert spec.service_name == "insights"
+
+        table_names = [t.name for t in spec.tables]
+        # ``project`` is first (FK target for everything below); ``insight_goal``
+        # is last (per-user-only, FKs to project + user).
+        assert table_names == [
+            "project",
+            "insight_source",
+            "insight_metric_type",
+            "insight_metric",
+            "insight_record",
+            "insight_event",
+            "insight_goal",
+        ]
+
+        # insight_metric carries a NOT NULL project_id FK.
+        metric_table = next(t for t in spec.tables if t.name == "insight_metric")
+        metric_cols = {c.name: c for c in metric_table.columns}
+        assert "project_id" in metric_cols
+        assert metric_cols["project_id"].nullable is False
+        assert any(fk.ref_table == "project" for fk in metric_table.foreign_keys)
+
+        # insight_event carries project_id (NOT NULL) and created_by_user_id (nullable).
+        event_table = next(t for t in spec.tables if t.name == "insight_event")
+        event_cols = {c.name: c for c in event_table.columns}
+        assert "project_id" in event_cols
+        assert event_cols["project_id"].nullable is False
+        assert "created_by_user_id" in event_cols
+        assert event_cols["created_by_user_id"].nullable is True
+
+        # insight_goal has both user_id + project_id FKs and no legacy
+        # source_project_slug column (the fold drops it).
+        goal_table = next(t for t in spec.tables if t.name == "insight_goal")
+        goal_cols = {c.name for c in goal_table.columns}
+        assert "user_id" in goal_cols
+        assert "project_id" in goal_cols
+        assert "source_project_slug" not in goal_cols
+        fk_targets = {fk.ref_table for fk in goal_table.foreign_keys}
+        assert fk_targets == {"user", "project"}
 
     def test_ai_spec_exists(self) -> None:
         """Test AI migration spec is defined."""
@@ -838,3 +935,123 @@ class TestGenerateVoiceMigration:
         # Verify chain
         voice_content = result[2].read_text()
         assert "down_revision = '002'" in voice_content
+
+
+class TestCheckConstraintRendering:
+    """Test that ``CheckConstraintSpec`` entries make it into the
+    rendered migration output.
+
+    The auth spec defines a CHECK constraint on the
+    ``user_oauth_identity.provider`` column to keep the column locked
+    to the supported provider list at the database level (project
+    convention is VARCHAR + CHECK rather than native Postgres enums,
+    for SQLite parity).
+    """
+
+    def test_auth_migration_includes_oauth_provider_check(self, tmp_path: Path) -> None:
+        """Generated auth migration must render the OAuth provider check."""
+        from aegis.core.migration_generator import generate_migration
+
+        migration_path = generate_migration(tmp_path, "auth")
+        assert migration_path is not None
+        content = migration_path.read_text()
+
+        # The CHECK constraint goes through the new template branch in
+        # ``migration_generator.py`` — assert the rendered output.
+        assert "sa.CheckConstraint(" in content
+        assert "ck_user_oauth_identity_provider" in content
+        assert "provider IN ('github', 'google')" in content
+
+    def test_specs_without_check_constraints_skip_block(self, tmp_path: Path) -> None:
+        """Specs without CHECK constraints render no ``sa.CheckConstraint``.
+
+        Guards against the ``{% for chk %}`` loop accidentally emitting
+        empty / malformed output for tables that don't declare any.
+        """
+        from aegis.core.migration_generator import generate_migration
+
+        # AI migration uses no CHECK constraints (yet) — sanity-check it.
+        migration_path = generate_migration(tmp_path, "ai")
+        assert migration_path is not None
+        content = migration_path.read_text()
+
+        assert "sa.CheckConstraint(" not in content
+
+
+class TestForeignKeyOnDeleteRendering:
+    """``ForeignKeySpec.ondelete`` must reach the rendered migration.
+
+    Without DB-level cascade, ``Project.metrics`` /
+    ``Project.events`` / ``Project.goals`` relationships use
+    ``passive_deletes=True`` but the database doesn't honour the cascade,
+    so deleting a project with any child rows blows up at the FK. These
+    tests pin the renderer behaviour so the failure mode can't sneak
+    back in.
+    """
+
+    def test_spec_round_trips_ondelete(self) -> None:
+        """ForeignKeySpec accepts and stores the ondelete option."""
+        from aegis.core.migration_generator import ForeignKeySpec
+
+        fk = ForeignKeySpec(["project_id"], "project", ["id"], ondelete="CASCADE")
+        assert fk.ondelete == "CASCADE"
+        # Default still None for back-compat with every other FK.
+        assert ForeignKeySpec(["x"], "y", ["id"]).ondelete is None
+
+    def test_per_user_insights_renders_cascade(self, tmp_path: Path) -> None:
+        """Per-user insights migration emits ondelete='CASCADE' on the
+        three project_id FKs (metric, event, goal).
+
+        Drives ``generate_migration`` with ``insights_per_user=true``
+        context so the spec swaps to the per-user variant.
+        """
+        from aegis.core.migration_generator import generate_migration
+
+        migration_path = generate_migration(
+            tmp_path, "insights", {"insights_per_user": True}
+        )
+        assert migration_path is not None
+        content = migration_path.read_text()
+
+        # The cascade marker should appear once per project_id FK.
+        assert content.count("ondelete='CASCADE'") == 3
+        # And it should sit on FKs that point to ``project``, not
+        # accidentally on the user FKs.
+        assert (
+            "['project.id'], ondelete='CASCADE'" in content
+            or "['project.id'],ondelete='CASCADE'" in content
+        )
+
+    def test_per_user_insights_user_fk_has_no_cascade(self, tmp_path: Path) -> None:
+        """``created_by_user_id`` and ``user_id`` FKs must NOT cascade —
+        deleting a user shouldn't nuke insights data, just error.
+        """
+        from aegis.core.migration_generator import generate_migration
+
+        migration_path = generate_migration(
+            tmp_path, "insights", {"insights_per_user": True}
+        )
+        assert migration_path is not None
+        content = migration_path.read_text()
+
+        # Find every line that references user.id and verify none of
+        # them carry ondelete=. (Substring scan over the rendered text
+        # is enough — the spec only uses two user-targeting FKs.)
+        for line in content.splitlines():
+            if "['user.id']" in line:
+                assert "ondelete" not in line, (
+                    f"User FK should not cascade, got: {line!r}"
+                )
+
+    def test_shared_insights_renders_no_cascade(self, tmp_path: Path) -> None:
+        """Shared-mode insights has no project_id FKs at all, so the
+        rendered output must not mention CASCADE anywhere.
+        """
+        from aegis.core.migration_generator import generate_migration
+
+        migration_path = generate_migration(tmp_path, "insights")
+        assert migration_path is not None
+        content = migration_path.read_text()
+
+        assert "ondelete=" not in content
+        assert "CASCADE" not in content

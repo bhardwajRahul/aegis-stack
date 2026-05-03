@@ -93,7 +93,7 @@ my-app payment disputes -s needs_response   # any specific status
 
 ## seed
 
-Populate the payment database with fake data across every UI state — useful for eyeballing the dashboard's Payment card and tabs without running real Stripe charges. Creates transactions (succeeded, pending, failed, refunded, partially refunded, canceled, subscription-type), subscriptions (active, trialing, past due, canceled, cancelling-at-period-end), and disputes (every lifecycle status plus different reason codes).
+Populate the payment database with fake data across every UI state, useful for eyeballing the dashboard's Payment card and tabs without running real Stripe charges. Creates transactions (succeeded, pending, failed, refunded, partially refunded, canceled, subscription-type), subscriptions (active, trialing, past due, canceled, cancelling-at-period-end), and disputes (every lifecycle status plus different reason codes).
 
 ```bash
 my-app payment seed            # add fake rows to existing data

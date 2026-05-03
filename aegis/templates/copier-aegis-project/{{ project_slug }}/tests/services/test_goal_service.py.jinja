@@ -1,0 +1,457 @@
+{% if insights_per_user -%}
+"""Tests for GoalService — validation, progress computation, batch SELECT.
+
+Goals carry FKs to both ``Goal.user_id`` (user) and ``Goal.project_id``
+(project), so this file only renders in builds where per-user insights
+are enabled. The matrix covers that combination via the per-user
+variant of the `everything` stack.
+"""
+
+from datetime import UTC, date, datetime, timedelta
+
+import pytest
+from app.models.user import User
+from app.services.insights.constants import Periods, SourceKeys
+from app.services.insights.goal_service import (
+    GoalService,
+    _is_on_track,
+    _validate_goal_shape,
+)
+from app.services.insights.models import (
+    Goal,
+    GoalKind,
+    GoalMetric,
+    GoalStatus,
+    InsightMetric,
+    InsightMetricType,
+    InsightSource,
+    Project,
+)
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+async def _seed_user(session: AsyncSession, email: str = "u@example.com") -> User:
+    """Create a minimal User row that Goal.user_id can FK to."""
+    user = User(
+        email=email,
+        full_name="Test User",
+        hashed_password="x",
+    )
+    session.add(user)
+    await session.flush()
+    return user
+
+
+async def _seed_project(
+    session: AsyncSession,
+    user: User,
+    *,
+    slug: str = "aegis-stack",
+    name: str = "Aegis Stack",
+) -> Project:
+    """Create a minimal Project row that Goal.project_id can FK to.
+
+    All goal tests now operate against a project, since the ``Goal`` model
+    requires a non-null ``project_id``. Helper keeps fixture noise low.
+    """
+    project = Project(
+        slug=slug,
+        name=name,
+        owner_user_id=user.id,  # type: ignore[arg-type]
+    )
+    session.add(project)
+    await session.flush()
+    return project
+
+
+async def _seed_metric_chain(
+    session: AsyncSession,
+    source_key: str = SourceKeys.GITHUB_STARS,
+    metric_key: str = "new_star",
+) -> InsightMetricType:
+    """Seed source + metric_type so InsightMetric rows can FK in."""
+    source = InsightSource(key=source_key, display_name=source_key, enabled=True)
+    session.add(source)
+    await session.flush()
+    mt = InsightMetricType(
+        source_id=source.id,  # type: ignore[arg-type]
+        key=metric_key,
+        display_name=metric_key,
+        unit="count",
+    )
+    session.add(mt)
+    await session.flush()
+    return mt
+
+
+def _now() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+# ---------------------------------------------------------------------------
+# Validation: kind-specific shape rules
+# ---------------------------------------------------------------------------
+
+
+def test_validate_shape_absolute_requires_target_date() -> None:
+    """ABSOLUTE without target_date raises."""
+    with pytest.raises(ValueError, match="target_date"):
+        _validate_goal_shape(GoalKind.ABSOLUTE, window_days=None, target_date=None)
+
+
+def test_validate_shape_delta_requires_positive_window() -> None:
+    """DELTA needs window_days > 0."""
+    with pytest.raises(ValueError, match="window_days"):
+        _validate_goal_shape(GoalKind.DELTA, window_days=None, target_date=None)
+    with pytest.raises(ValueError, match="window_days"):
+        _validate_goal_shape(GoalKind.DELTA, window_days=0, target_date=None)
+
+
+def test_validate_shape_rate_requires_positive_window() -> None:
+    """RATE also needs window_days > 0; target_date is optional."""
+    with pytest.raises(ValueError, match="window_days"):
+        _validate_goal_shape(GoalKind.RATE, window_days=None, target_date=None)
+    # Valid: positive window, no target_date
+    _validate_goal_shape(GoalKind.RATE, window_days=7, target_date=None)
+
+
+# ---------------------------------------------------------------------------
+# CRUD round-trip
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_persists_goal(async_db_session: AsyncSession) -> None:
+    """Happy-path create then retrieve by id; fields round-trip."""
+    user = await _seed_user(async_db_session)
+    project = await _seed_project(async_db_session, user)
+    service = GoalService(async_db_session)
+
+    created = await service.create(
+        user_id=user.id,  # type: ignore[arg-type]
+        project_id=project.id,  # type: ignore[arg-type]
+        metric_key=GoalMetric.GITHUB_STARS,
+        kind=GoalKind.RATE,
+        target_value=10.0,
+        window_days=7,
+    )
+
+    fetched = await service.get(created.id, user.id)  # type: ignore[arg-type]
+    assert fetched is not None
+    assert fetched.id == created.id
+    assert fetched.metric_key == GoalMetric.GITHUB_STARS
+    assert fetched.kind == GoalKind.RATE
+    assert fetched.target_value == 10.0
+    assert fetched.window_days == 7
+    assert fetched.status == GoalStatus.ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_update_partial_fields_only(async_db_session: AsyncSession) -> None:
+    """Update touches only specified fields; the rest are preserved."""
+    user = await _seed_user(async_db_session)
+    project = await _seed_project(async_db_session, user)
+    service = GoalService(async_db_session)
+
+    goal = await service.create(
+        user_id=user.id,  # type: ignore[arg-type]
+        project_id=project.id,  # type: ignore[arg-type]
+        metric_key=GoalMetric.GITHUB_STARS,
+        kind=GoalKind.RATE,
+        target_value=10.0,
+        window_days=7,
+    )
+
+    updated = await service.update(
+        goal_id=goal.id,  # type: ignore[arg-type]
+        user_id=user.id,  # type: ignore[arg-type]
+        target_value=20.0,
+    )
+
+    assert updated is not None
+    assert updated.target_value == 20.0
+    # Unchanged fields:
+    assert updated.window_days == 7
+    assert updated.metric_key == GoalMetric.GITHUB_STARS
+    assert updated.kind == GoalKind.RATE
+
+
+# ---------------------------------------------------------------------------
+# Progress computation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_compute_progress_absolute_baseline_clamp(
+    async_db_session: AsyncSession,
+) -> None:
+    """ABSOLUTE goal: baseline = sum of rows up to creation - 1 day.
+
+    Drives the dashboard's two-tone progress bar (the dotted "already
+    there" portion when the user creates a goal on a metric with
+    pre-existing history).
+    """
+    user = await _seed_user(async_db_session)
+    project = await _seed_project(async_db_session, user)
+    mt = await _seed_metric_chain(async_db_session)
+
+    today = date.today()
+    creation_dt = datetime.combine(today, datetime.min.time())
+
+    # 5 events before creation, 3 after → baseline = 5, current = 8
+    pre_creation_dt = datetime.combine(today - timedelta(days=2), datetime.min.time())
+    post_creation_dt = datetime.combine(today, datetime.min.time())
+    for _ in range(5):
+        async_db_session.add(
+            InsightMetric(
+                date=pre_creation_dt,
+                metric_type_id=mt.id,  # type: ignore[arg-type]
+                project_id=project.id,  # type: ignore[arg-type]
+                value=1.0,
+                period=Periods.EVENT,
+            )
+        )
+    for _ in range(3):
+        async_db_session.add(
+            InsightMetric(
+                date=post_creation_dt,
+                metric_type_id=mt.id,  # type: ignore[arg-type]
+                project_id=project.id,  # type: ignore[arg-type]
+                value=1.0,
+                period=Periods.EVENT,
+            )
+        )
+    await async_db_session.flush()
+
+    goal = Goal(
+        user_id=user.id,  # type: ignore[arg-type]
+        project_id=project.id,  # type: ignore[arg-type]
+        metric_key=GoalMetric.GITHUB_STARS,
+        kind=GoalKind.ABSOLUTE,
+        target_value=20.0,
+        target_date=today + timedelta(days=30),
+        created_at=creation_dt,
+        updated_at=creation_dt,
+    )
+    async_db_session.add(goal)
+    await async_db_session.flush()
+
+    service = GoalService(async_db_session)
+    progress = await service.compute_progress(goal)
+
+    assert progress.current_value == 8.0  # 5 pre + 3 post
+    assert progress.baseline_value == 5.0  # only pre-creation rows
+
+
+@pytest.mark.asyncio
+async def test_compute_progress_batch_one_query_per_group(
+    async_db_session: AsyncSession,
+) -> None:
+    """3 goals over 2 metrics → 2 metric SELECTs (one per group)."""
+    user = await _seed_user(async_db_session)
+    project = await _seed_project(async_db_session, user)
+    # Two distinct metrics
+    stars_mt = await _seed_metric_chain(
+        async_db_session, SourceKeys.GITHUB_STARS, "new_star"
+    )
+    pypi_mt = await _seed_metric_chain(
+        async_db_session, SourceKeys.PYPI, "downloads_daily"
+    )
+    _ = stars_mt, pypi_mt  # consumed by FK chain; not referenced again
+
+    today = date.today()
+    creation_dt = datetime.combine(today, datetime.min.time())
+
+    # 3 goals: 2 on stars (same group), 1 on pypi
+    goals = [
+        Goal(
+            user_id=user.id,  # type: ignore[arg-type]
+            project_id=project.id,  # type: ignore[arg-type]
+            metric_key=GoalMetric.GITHUB_STARS,
+            kind=GoalKind.RATE,
+            target_value=5.0,
+            window_days=7,
+            created_at=creation_dt,
+            updated_at=creation_dt,
+        ),
+        Goal(
+            user_id=user.id,  # type: ignore[arg-type]
+            project_id=project.id,  # type: ignore[arg-type]
+            metric_key=GoalMetric.GITHUB_STARS,
+            kind=GoalKind.DELTA,
+            target_value=10.0,
+            window_days=14,
+            created_at=creation_dt,
+            updated_at=creation_dt,
+        ),
+        Goal(
+            user_id=user.id,  # type: ignore[arg-type]
+            project_id=project.id,  # type: ignore[arg-type]
+            metric_key=GoalMetric.PYPI_DOWNLOADS,
+            kind=GoalKind.RATE,
+            target_value=1000.0,
+            window_days=7,
+            created_at=creation_dt,
+            updated_at=creation_dt,
+        ),
+    ]
+    for g in goals:
+        async_db_session.add(g)
+    await async_db_session.flush()
+
+    # Spy on db.exec to count SELECTs against InsightMetric
+    real_exec = async_db_session.exec
+    metric_selects: list[object] = []
+
+    async def spy_exec(stmt, *args, **kwargs):
+        # Only count statements whose primary FROM is insight_metric
+        stmt_str = str(stmt)
+        if "insight_metric" in stmt_str.lower() and "FROM insight_metric" in stmt_str:
+            metric_selects.append(stmt)
+        return await real_exec(stmt, *args, **kwargs)
+
+    async_db_session.exec = spy_exec  # type: ignore[method-assign]
+    try:
+        service = GoalService(async_db_session)
+        out = await service.compute_progress_batch(goals)
+    finally:
+        async_db_session.exec = real_exec  # type: ignore[method-assign]
+
+    # 2 distinct (source, metric) groups → 2 metric queries, not 3
+    assert len(metric_selects) == 2
+    assert len(out) == 3
+
+
+@pytest.mark.asyncio
+async def test_compute_progress_batch_respects_earliest_needed_filter(
+    async_db_session: AsyncSession,
+) -> None:
+    """Rows older than min(creation) - max(window) - 1 day are not loaded.
+
+    Verifies the perf bound: a goal created today with a 7-day window
+    should not pull in metric rows from 30 days ago.
+    """
+    user = await _seed_user(async_db_session)
+    project = await _seed_project(async_db_session, user)
+    mt = await _seed_metric_chain(async_db_session)
+
+    today = date.today()
+    creation_dt = datetime.combine(today, datetime.min.time())
+
+    # One row WAY in the past (40 days ago) — should be filtered out
+    old_dt = datetime.combine(today - timedelta(days=40), datetime.min.time())
+    async_db_session.add(
+        InsightMetric(
+            date=old_dt,
+            metric_type_id=mt.id,  # type: ignore[arg-type]
+            project_id=project.id,  # type: ignore[arg-type]
+            value=1.0,
+            period=Periods.EVENT,
+        )
+    )
+    # And one recent row — should be loaded
+    recent_dt = datetime.combine(today - timedelta(days=2), datetime.min.time())
+    async_db_session.add(
+        InsightMetric(
+            date=recent_dt,
+            metric_type_id=mt.id,  # type: ignore[arg-type]
+            project_id=project.id,  # type: ignore[arg-type]
+            value=1.0,
+            period=Periods.EVENT,
+        )
+    )
+    await async_db_session.flush()
+
+    goal = Goal(
+        user_id=user.id,  # type: ignore[arg-type]
+        project_id=project.id,  # type: ignore[arg-type]
+        metric_key=GoalMetric.GITHUB_STARS,
+        kind=GoalKind.RATE,
+        target_value=5.0,
+        window_days=7,  # 7-day rolling window
+        created_at=creation_dt,
+        updated_at=creation_dt,
+    )
+    async_db_session.add(goal)
+    await async_db_session.flush()
+
+    # Spy: capture the rows loaded by compute_progress_batch
+    real_exec = async_db_session.exec
+    loaded_rows: list[InsightMetric] = []
+
+    async def spy_exec(stmt, *args, **kwargs):
+        result = await real_exec(stmt, *args, **kwargs)
+        stmt_str = str(stmt)
+        if "FROM insight_metric" in stmt_str:
+            # Materialize once for inspection, then return a fresh exec
+            rows = list(result.all())
+            loaded_rows.extend(rows)
+
+            class _Replay:
+                def all(self):
+                    return rows
+
+                def first(self):
+                    return rows[0] if rows else None
+
+            return _Replay()
+        return result
+
+    async_db_session.exec = spy_exec  # type: ignore[method-assign]
+    try:
+        service = GoalService(async_db_session)
+        await service.compute_progress_batch([goal])
+    finally:
+        async_db_session.exec = real_exec  # type: ignore[method-assign]
+
+    # Only the recent row should be loaded; the 40-day-old row is below
+    # the earliest_needed bound (today - 7 - 1 = 8 days back).
+    assert len(loaded_rows) == 1
+    assert loaded_rows[0].date == recent_dt
+
+
+# ---------------------------------------------------------------------------
+# On-track heuristic
+# ---------------------------------------------------------------------------
+
+
+def test_on_track_rate_threshold() -> None:
+    """RATE: on-track iff current >= target_value, regardless of dates."""
+    today = date.today()
+    goal = Goal(
+        user_id=1,
+        project_id=1,
+        metric_key=GoalMetric.GITHUB_STARS,
+        kind=GoalKind.RATE,
+        target_value=10.0,
+        window_days=7,
+        created_at=datetime.combine(today - timedelta(days=3), datetime.min.time()),
+        updated_at=datetime.combine(today, datetime.min.time()),
+    )
+    assert _is_on_track(goal, current=10.0, today=today)
+    assert _is_on_track(goal, current=15.0, today=today)
+    assert not _is_on_track(goal, current=9.9, today=today)
+
+
+def test_on_track_absolute_pre_creation_returns_truthy() -> None:
+    """ABSOLUTE: zero-elapsed window → any non-zero progress is on-track."""
+    today = date.today()
+    goal = Goal(
+        user_id=1,
+        project_id=1,
+        metric_key=GoalMetric.GITHUB_STARS,
+        kind=GoalKind.ABSOLUTE,
+        target_value=100.0,
+        # Created today — zero elapsed
+        created_at=datetime.combine(today, datetime.min.time()),
+        updated_at=datetime.combine(today, datetime.min.time()),
+        target_date=today + timedelta(days=30),
+    )
+    # Per `_is_on_track` docstring: "any non-zero progress counts as on-track"
+    # when the elapsed/total ratio degenerates.
+    assert _is_on_track(goal, current=0.1, today=today)
+{%- endif %}

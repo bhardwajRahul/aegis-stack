@@ -11,7 +11,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 import stripe
 
-from app.components.backend.api.deps import get_payment_service
+from app.services.payment.deps import get_payment_service
 from app.core.config import settings
 from app.services.payment.catalog import get_catalog
 from app.services.payment.payment_service import PaymentService

@@ -20,9 +20,163 @@ from ..core.components import COMPONENTS, CORE_COMPONENTS
 from ..core.copier_manager import load_copier_answers
 from ..core.dependency_resolver import DependencyResolver
 from ..core.manual_updater import ManualUpdater
+from ..core.option_spec import is_spec_with_options, parse_options
+from ..core.plugin_discovery import discover_plugins
+from ..core.plugin_spec import PluginSpec
 from ..core.project_map import render_project_map
+from ..core.services import SERVICES
 from ..core.version_compatibility import validate_version_compatibility
 from ..i18n import t
+
+
+def _strip_brackets(spec_str: str) -> str:
+    """Pull the base name out of ``foo[opt1,opt2]``.
+
+    ``extract_base_component_name`` is stricter and rejects bracket
+    contents that contain commas or whitespace — that's intentional
+    for component names but too narrow for plugins/services with
+    bracket-syntax options (``ai[langchain,openai]`` is valid).
+    Splitting on the literal ``[`` is the simplest tolerant variant.
+    """
+    return spec_str.split("[", 1)[0].strip()
+
+
+def _resolve_plugin(spec_str: str) -> tuple[PluginSpec, str] | None:
+    """Match ``spec_str`` (with or without bracket options) against a
+    discovered external plugin.
+
+    Returns ``(spec, module_name)`` where ``module_name`` is the
+    importable Python package (e.g. ``"aegis_plugin_scraper"``) — the
+    spec's ``name`` is a logical identifier and may differ. The module
+    name is what the template resolver and the runtime importer need.
+    Returns ``None`` if no plugin matches.
+
+    Module-name resolution iterates entry points and re-loads each
+    spec until the names match. ``ep.name`` and ``spec.name`` are
+    free to differ, so matching on entry-point name alone misses
+    cases where a plugin author exposes ``my_pkg = ...`` but the
+    spec says ``name="scraper"``.
+    """
+    from importlib.metadata import entry_points
+
+    base_name = _strip_brackets(spec_str)
+    for plugin in discover_plugins():
+        if plugin.name != base_name:
+            continue
+        for ep in entry_points(group="aegis.plugins"):
+            try:
+                ep_spec = ep.load()()
+            except Exception:
+                continue
+            if getattr(ep_spec, "name", None) == plugin.name:
+                # ``ep.value`` is "module.path:attr" — the module path
+                # is everything before the colon, top-level package is
+                # everything before the first dot.
+                module_name = ep.value.split(":")[0].split(".")[0]
+                return (plugin, module_name)
+        # Fallback: no entry point matched (shouldn't happen — discovery
+        # populated this spec from one). Use plugin.name as module name;
+        # if it's wrong, template resolution will surface a clear
+        # ``ModuleNotFoundError``.
+        return (plugin, plugin.name)
+    return None
+
+
+def _install_plugin(
+    spec_str: str,
+    target_path: Path,
+    yes: bool,
+    force: bool = False,
+) -> None:
+    """Run the full ``aegis add <plugin>`` flow for an external plugin.
+
+    Mirrors the component flow's structure (validate, confirm, render,
+    summarize) but the rendering goes through ``ManualUpdater.add_plugin``,
+    which appends a ``_plugins`` entry, regenerates shared files, and
+    drops the plugin's own template tree.
+
+    The ``force`` flag bypasses the aegis-version compatibility check
+    (#777). The user already confirmed they understand the risk;
+    we let the install proceed.
+    """
+    from ..core.plugin_compat import check_aegis_version_compat
+
+    resolved = _resolve_plugin(spec_str)
+    if resolved is None:
+        # Caller should have checked first; defensive guard.
+        typer.secho(
+            f"Plugin not found: {extract_base_component_name(spec_str)!r}",
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    plugin_spec, plugin_module_name = resolved
+
+    # Aegis-version compat (#777). Plugins built for a different CLI
+    # major may rely on internals that moved or were renamed; we'd
+    # rather refuse the install than ship a broken project. ``--force``
+    # bypasses for users who know what they're doing.
+    compatible, error_msg = check_aegis_version_compat(plugin_spec)
+    if not compatible:
+        if force:
+            typer.secho(
+                f"Forcing install despite version mismatch: {error_msg}",
+                fg="yellow",
+            )
+        else:
+            typer.secho(error_msg, fg="red", err=True)
+            typer.echo(
+                "   Pass --force to install anyway (incompatible plugins "
+                "may render broken templates).",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+    # Parse bracket-syntax options, e.g. ``scraper[playwright]``.
+    parsed_options: dict | None = None
+    if is_spec_with_options(spec_str):
+        try:
+            parsed_options = parse_options(spec_str, plugin_spec)
+        except ValueError as e:
+            typer.secho(f"Invalid options: {e}", fg="red", err=True)
+            raise typer.Exit(1) from e
+
+    typer.echo(f"\n{t('add.plugin_installing', name=plugin_spec.name)}")
+    typer.echo(f"   Description: {plugin_spec.description}")
+    typer.echo(f"   Version: {plugin_spec.version}")
+    typer.echo(f"   Verified: {plugin_spec.verified}")
+    if parsed_options:
+        typer.echo(f"   Options: {parsed_options}")
+
+    if not yes and not typer.confirm(
+        t("add.plugin_confirm", name=plugin_spec.name), default=True
+    ):
+        typer.secho(t("shared.operation_cancelled"), fg="red")
+        raise typer.Exit(0)
+
+    updater = ManualUpdater(target_path)
+    result = updater.add_plugin(
+        spec=plugin_spec,
+        plugin_module_name=plugin_module_name,
+        plugin_options=parsed_options,
+    )
+
+    if not result.success:
+        typer.secho(
+            f"\nPlugin install failed: {result.error_message}",
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    typer.secho(
+        f"\n{t('add.plugin_success', name=plugin_spec.name)}",
+        fg="green",
+    )
+    typer.echo()
+    render_project_map(target_path, highlight=[plugin_spec.name])
+    Messages.print_next_steps()
 
 
 def _translated_desc(name: str, fallback: str) -> str:
@@ -105,6 +259,32 @@ def add_command(
         typer.echo(f"   {t('add.usage_hint')}", err=True)
         typer.echo(f"   {t('add.interactive_hint')}", err=True)
         raise typer.Exit(1)
+
+    # Plugin / service dispatch — single-name args only. Plugins use
+    # bracket syntax which doesn't compose with comma-separated lists;
+    # services route through the existing add-service implementation
+    # (Phase 2 of #771: unify the entry point, defer the
+    # implementation-merge).
+    if components and "," not in components:
+        if _resolve_plugin(components) is not None:
+            validate_git_repository(target_path)
+            _install_plugin(components, target_path, yes, force=force)
+            return
+
+        # Use the bracket-tolerant helper here too — service bracket
+        # syntax (e.g. ``ai[langchain,openai]``) contains commas that
+        # ``extract_base_component_name`` rejects.
+        service_base = _strip_brackets(components)
+        if service_base in SERVICES:
+            from .add_service import add_service_command
+
+            add_service_command(
+                services=components,
+                interactive=False,
+                project_path=str(target_path),
+                yes=yes,
+            )
+            return
 
     # Interactive mode
     if interactive:

@@ -136,7 +136,7 @@ data/
 demos/recordings
 
 # Claude Stuff
-.claude/settings.json
+.claude/
 
 # Typical generated stack folders
 my-app/

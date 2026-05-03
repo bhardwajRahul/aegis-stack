@@ -16,6 +16,8 @@ from app.services.insights.models import (
 )
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from ._collector_fixtures import collector_kwargs, seed_project_for_collector
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -174,18 +176,21 @@ class TestCheckRecords:
         """_check_records creates a milestone event when ATH is detected."""
         source = await _seed_source(async_db_session)
         mt = await _seed_metric_type(async_db_session, source, MetricKeys.CLONES)
+        project = await seed_project_for_collector(async_db_session)
 
         # Seed a daily metric that should trigger a record
+        project_kwargs = {"project_id": project.id} if project is not None else {}
         metric = InsightMetric(
             date=datetime(2026, 4, 10),
             metric_type_id=mt.id,  # type: ignore[arg-type]
             value=999.0,
             period=Periods.DAILY,
+            **project_kwargs,
         )
         async_db_session.add(metric)
         await async_db_session.flush()
 
-        service = CollectorService(async_db_session)
+        service = CollectorService(async_db_session, **collector_kwargs(project))
         broken = await service._check_records(SourceKeys.GITHUB_TRAFFIC)
 
         assert len(broken) > 0
@@ -198,6 +203,8 @@ class TestCheckRecords:
 
         source = await _seed_source(async_db_session)
         mt = await _seed_metric_type(async_db_session, source, MetricKeys.CLONES)
+        project = await seed_project_for_collector(async_db_session)
+        project_kwargs = {"project_id": project.id} if project is not None else {}
 
         # Seed an existing milestone
         event = InsightEvent(
@@ -205,6 +212,7 @@ class TestCheckRecords:
             event_type="milestone_github",
             description="1,000 (GitHub 1-Day Clones)",
             metadata_={"category": "daily_clones"},
+            **project_kwargs,
         )
         async_db_session.add(event)
         await async_db_session.flush()
@@ -215,11 +223,12 @@ class TestCheckRecords:
             metric_type_id=mt.id,  # type: ignore[arg-type]
             value=500.0,
             period=Periods.DAILY,
+            **project_kwargs,
         )
         async_db_session.add(metric)
         await async_db_session.flush()
 
-        service = CollectorService(async_db_session)
+        service = CollectorService(async_db_session, **collector_kwargs(project))
         broken = await service._check_records(SourceKeys.GITHUB_TRAFFIC)
 
         # Should not detect record for clones (500 < 1000)
@@ -235,56 +244,12 @@ class TestCheckRecords:
         broken = await service._check_records(SourceKeys.REDDIT)
         assert broken == []
 
-    @pytest.mark.asyncio
-    async def test_star_daily_record(self, async_db_session: AsyncSession) -> None:
-        """_check_records detects new star daily ATH from new_star events."""
-        source = await _seed_source(async_db_session, SourceKeys.GITHUB_STARS)
-        mt = await _seed_metric_type(async_db_session, source, "new_star")
-
-        # 6 stars on the same day
-        for i in range(6):
-            async_db_session.add(
-                InsightMetric(
-                    date=datetime(2026, 4, 10),
-                    metric_type_id=mt.id,  # type: ignore[arg-type]
-                    value=float(i + 1),
-                    period=Periods.EVENT,
-                )
-            )
-        await async_db_session.flush()
-
-        service = CollectorService(async_db_session)
-        broken = await service._check_records(SourceKeys.GITHUB_STARS)
-
-        star_records = [b for b in broken if "Stars Best Day" in b]
-        assert len(star_records) == 1
-        assert "6" in star_records[0]
-
-    @pytest.mark.asyncio
-    async def test_star_monthly_record(self, async_db_session: AsyncSession) -> None:
-        """_check_records detects new star monthly ATH from new_star events."""
-        source = await _seed_source(async_db_session, SourceKeys.GITHUB_STARS)
-        mt = await _seed_metric_type(async_db_session, source, "new_star")
-
-        # Stars across multiple days in the same month: 3 + 2 + 5 = 10
-        for day, count in [(1, 3), (5, 2), (10, 5)]:
-            for i in range(count):
-                async_db_session.add(
-                    InsightMetric(
-                        date=datetime(2026, 4, day),
-                        metric_type_id=mt.id,  # type: ignore[arg-type]
-                        value=float(i + 1),
-                        period=Periods.EVENT,
-                    )
-                )
-        await async_db_session.flush()
-
-        service = CollectorService(async_db_session)
-        broken = await service._check_records(SourceKeys.GITHUB_STARS)
-
-        monthly_records = [b for b in broken if "Stars Best Month" in b]
-        assert len(monthly_records) == 1
-        assert "10" in monthly_records[0]
+    # Star daily/monthly record detection was removed from
+    # CollectorService._check_records; the surface relied on a separate
+    # ``new_star``-event aggregation path that the current collector
+    # pipeline doesn't wire up. If that surface returns, restore the
+    # ``test_star_daily_record`` and ``test_star_monthly_record`` cases
+    # from git history.
 
 
 # ---------------------------------------------------------------------------
@@ -319,8 +284,12 @@ def _make_mock_collector_cls(success: bool = True) -> type:
     """Create a mock collector class that returns a fixed result."""
 
     class MockCollector:
-        def __init__(self, db: AsyncSession) -> None:
+        # Accepts an optional ``project=`` kwarg so it stays compatible with
+        # CollectorService's instantiation contract in both auth=on
+        # (collector_cls(db, project=...)) and auth=off (collector_cls(db)).
+        def __init__(self, db: AsyncSession, **kwargs: object) -> None:
             self.db = db
+            self.project = kwargs.get("project")
 
         @property
         def source_key(self) -> str:

@@ -22,6 +22,15 @@ The **Authentication Service** provides complete user management and JWT-based a
 ## What You Get
 
 - **JWT-based authentication** - Industry-standard token authentication
+- **HttpOnly session cookies** - Browser flows ride on the `aegis_session`
+  cookie set by the backend; the token never has to be touched by
+  frontend code
+- **Sign-in and registration views out of the box** - The Overseer ships
+  with `/login` and `/register` pages wired to the auth API, so the
+  generated app is sign-in-ready the moment it boots
+- **Social login (GitHub + Google)** - One CLI flag wires up OAuth start +
+  callback routes, account linking, and sign-in buttons on both `/login`
+  and `/register`
 - **User registration and login** - Complete user lifecycle management
 - **Password hashing** - Secure bcrypt password storage
 - **Protected routes** - Easy endpoint protection with decorators
@@ -203,6 +212,80 @@ def get_password_hash(password: str) -> str:
     """Generate password hash."""
     return pwd_context.hash(password)
 ```
+
+## Social Login
+
+Sign in with **GitHub** and **Google** alongside the password flow,
+end-to-end out of the box: backend routes, account linking, the
+HttpOnly session cookie, *and* the sign-in buttons on `/login` and
+`/register` in the generated frontend.
+
+### Enable it
+
+Add the `oauth` modifier to the `auth[...]` bracket syntax. The
+modifier composes with the level slot, so any of these work:
+
+```bash
+# Basic auth + OAuth
+aegis init my-app --services auth[oauth] --components database
+
+# RBAC + OAuth (order doesn't matter)
+aegis init my-app --services auth[rbac,oauth] --components database
+
+# Org + OAuth, with explicit engine
+aegis init my-app --services auth[org,oauth,postgres] --components database
+```
+
+### What ships
+
+#### Frontend
+
+The generated auth shell renders "Continue with GitHub" and "Continue
+with Google" buttons under the password form on both the sign-in and
+registration views. Click → `/auth/oauth/{provider}/start` → provider
+consent → callback → cookie set → 303 to `/`. No view code to write.
+
+#### Backend
+
+- `GET /api/v1/auth/oauth/github/start` and `/google/start`:
+  Authlib-driven `state` + PKCE redirects.
+- `GET /api/v1/auth/oauth/{provider}/callback`, exchanges the code,
+  upserts a local user (linking by email when an account already
+  exists), sets the `aegis_session` HttpOnly cookie, and 303s to
+  `/app` (or to the same-origin `?next=` the user came in with).
+- `GET /api/v1/auth/oauth/connections` and
+  `DELETE /api/v1/auth/oauth/connections/{provider}`, list and
+  unlink linked identities. The disconnect route refuses to remove
+  the last sign-in method to avoid lock-out.
+
+### Configure each provider
+
+Each provider is enabled independently, leaving its client ID/secret
+blank turns just that provider off (the route returns 503), so you
+can ship with GitHub configured and add Google later.
+
+```bash
+# .env
+GITHUB_OAUTH_CLIENT_ID=...
+GITHUB_OAUTH_CLIENT_SECRET=...
+GOOGLE_OAUTH_CLIENT_ID=...
+GOOGLE_OAUTH_CLIENT_SECRET=...
+
+# Backs starlette's SessionMiddleware, Authlib stashes the OAuth
+# state + PKCE verifier here between /start and /callback.
+OAUTH_SESSION_SECRET=replace-me-with-a-strong-random-string
+```
+
+Callback URLs to register on each provider's developer console:
+
+| Provider | Callback URL                                                        |
+|----------|---------------------------------------------------------------------|
+| GitHub   | `https://your-domain/api/v1/auth/oauth/github/callback`             |
+| Google   | `https://your-domain/api/v1/auth/oauth/google/callback`             |
+
+API clients (CLIs, server-to-server) keep using
+`Authorization: Bearer ...`, the cookie path is parallel, not
+exclusive.
 
 ## Next Steps
 

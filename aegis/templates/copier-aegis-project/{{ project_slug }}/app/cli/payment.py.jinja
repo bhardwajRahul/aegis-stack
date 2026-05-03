@@ -12,13 +12,13 @@ from rich.console import Console
 from rich.table import Table
 import typer
 
-from app.i18n import lazy_t
+from app.i18n import lazy_t, t
 
 app = typer.Typer(help=lazy_t("payment.help"))
 console = Console()
 
 
-@app.command(help="Show payment provider status and summary")
+@app.command(help=lazy_t("payment.help_status"))
 def status() -> None:
     """Display payment service status."""
     asyncio.run(_status())
@@ -33,47 +33,57 @@ async def _status() -> None:
         service = PaymentService(session)
         summary = await service.get_status_summary()
 
-    mode = "[yellow]TEST[/yellow]" if summary.is_test_mode else "[green]LIVE[/green]"
+    mode = (
+        f"[yellow]{t('payment.mode_test')}[/yellow]"
+        if summary.is_test_mode
+        else f"[green]{t('payment.mode_live')}[/green]"
+    )
     health = (
-        "[green]Connected[/green]" if summary.healthy else "[red]Disconnected[/red]"
+        f"[green]{t('payment.connected')}[/green]"
+        if summary.healthy
+        else f"[red]{t('payment.disconnected')}[/red]"
     )
 
     console.print()
-    console.print("[bold]Payment Service Status[/bold]")
+    console.print(f"[bold]{t('payment.status_title')}[/bold]")
     console.print()
 
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column("Label", style="dim")
     table.add_column("Value")
 
-    table.add_row("Provider", summary.provider_display_name)
-    table.add_row("Mode", mode)
-    table.add_row("Status", health)
+    table.add_row(t("payment.col_provider"), summary.provider_display_name)
+    table.add_row(t("payment.col_mode"), mode)
+    table.add_row(t("payment.col_status"), health)
     if summary.api_version:
-        table.add_row("API Version", summary.api_version)
-    table.add_row("Transactions", str(summary.total_transactions))
+        table.add_row(t("payment.col_api_version"), summary.api_version)
+    table.add_row(t("payment.col_transactions"), str(summary.total_transactions))
     table.add_row(
-        "Revenue",
+        t("payment.col_revenue"),
         f"${summary.total_revenue_cents / 100:,.2f}",
     )
-    table.add_row("Active Subscriptions", str(summary.active_subscriptions))
+    table.add_row(t("payment.col_active_subs"), str(summary.active_subscriptions))
     if summary.open_disputes:
         table.add_row(
-            "Open Disputes", f"[red]{summary.open_disputes}[/red]"
+            t("payment.col_open_disputes"), f"[red]{summary.open_disputes}[/red]"
         )
 
     console.print(table)
     console.print()
 
     if not summary.healthy and summary.health_message:
-        console.print(f"[yellow]Warning:[/yellow] {summary.health_message}")
+        console.print(
+            f"[yellow]{t('payment.warning')}[/yellow] {summary.health_message}"
+        )
         console.print()
 
 
-@app.command(help="List recent transactions")
+@app.command(help=lazy_t("payment.help_transactions"))
 def transactions(
-    limit: int = typer.Option(20, "--limit", "-n", help="Number of transactions to show"),
-    status_filter: str | None = typer.Option(None, "--status", "-s", help="Filter by status"),
+    limit: int = typer.Option(20, "--limit", "-n", help=lazy_t("payment.opt_limit")),
+    status_filter: str | None = typer.Option(
+        None, "--status", "-s", help=lazy_t("payment.opt_status")
+    ),
 ) -> None:
     """Display recent transactions."""
     asyncio.run(_transactions(limit, status_filter))
@@ -91,16 +101,16 @@ async def _transactions(limit: int, status_filter: str | None) -> None:
         )
 
     if not txns:
-        console.print("[dim]No transactions found.[/dim]")
+        console.print(f"[dim]{t('payment.no_transactions')}[/dim]")
         return
 
-    table = Table(title=f"Transactions ({total} total)")
-    table.add_column("ID", style="dim")
-    table.add_column("Type")
-    table.add_column("Status")
-    table.add_column("Amount", justify="right")
-    table.add_column("Currency")
-    table.add_column("Date")
+    table = Table(title=t("payment.transactions_title", total=total))
+    table.add_column(t("payment.col_id"), style="dim")
+    table.add_column(t("payment.col_type"))
+    table.add_column(t("payment.col_status"))
+    table.add_column(t("payment.col_amount"), justify="right")
+    table.add_column(t("payment.col_currency"))
+    table.add_column(t("payment.col_date"))
 
     status_colors = {
         "succeeded": "green",
@@ -124,16 +134,13 @@ async def _transactions(limit: int, status_filter: str | None) -> None:
     console.print(table)
 
 
-@app.command(help="List chargebacks and early fraud warnings")
+@app.command(help=lazy_t("payment.help_disputes"))
 def disputes(
     status_filter: str | None = typer.Option(
         None,
         "--status",
         "-s",
-        help=(
-            "Filter by status: open, warning_issued, needs_response, "
-            "under_review, won, lost, charge_refunded, warning_closed"
-        ),
+        help=lazy_t("payment.opt_dispute_status"),
     ),
 ) -> None:
     """Display disputes (chargebacks + early fraud warnings)."""
@@ -150,22 +157,22 @@ async def _disputes(status_filter: str | None) -> None:
         rows = await service.get_disputes(status=status_filter)
 
     if not rows:
-        console.print("[dim]No disputes found.[/dim]")
+        console.print(f"[dim]{t('payment.no_disputes')}[/dim]")
         return
 
-    title = "Disputes"
+    title = t("payment.disputes_title")
     if status_filter:
-        title = f"Disputes ({status_filter})"
+        title = t("payment.disputes_title_filtered", status=status_filter)
 
-    table = Table(title=f"{title} ({len(rows)} total)")
-    table.add_column("ID", style="dim")
-    table.add_column("Txn", style="dim")
-    table.add_column("Provider ID", style="dim")
-    table.add_column("Status")
-    table.add_column("Reason")
-    table.add_column("Amount", justify="right")
-    table.add_column("Due")
-    table.add_column("Created")
+    table = Table(title=t("payment.disputes_count", title=title, count=len(rows)))
+    table.add_column(t("payment.col_id"), style="dim")
+    table.add_column(t("payment.col_txn"), style="dim")
+    table.add_column(t("payment.col_provider_id"), style="dim")
+    table.add_column(t("payment.col_status"))
+    table.add_column(t("payment.col_reason"))
+    table.add_column(t("payment.col_amount"), justify="right")
+    table.add_column(t("payment.col_due"))
+    table.add_column(t("payment.col_created"))
 
     status_colors = {
         "warning_issued": "yellow",
@@ -198,23 +205,17 @@ async def _disputes(status_filter: str | None) -> None:
     console.print(table)
 
 
-@app.command(
-    help=(
-        "Seed fake payment data for dashboard/CLI testing (dev only). "
-        "Populates transactions, subscriptions, and disputes covering every "
-        "UI state so you can eyeball the dashboard without live Stripe calls."
-    ),
-)
+@app.command(help=lazy_t("payment.help_seed"))
 def seed(
     reset: bool = typer.Option(
         False,
         "--reset",
-        help="Wipe existing payment rows (except the provider) before seeding.",
+        help=lazy_t("payment.opt_reset"),
     ),
     clear: bool = typer.Option(
         False,
         "--clear",
-        help="Only wipe; do not re-seed.",
+        help=lazy_t("payment.opt_clear"),
     ),
 ) -> None:
     """Seed fake payment data for dashboard testing."""
@@ -233,7 +234,7 @@ async def _seed(reset: bool, clear: bool) -> None:
     async with get_async_session() as session:
         if reset or clear:
             await clear_fake_data(session)
-            console.print("[yellow]Wiped existing payment rows.[/yellow]")
+            console.print(f"[yellow]{t('payment.wiped_rows')}[/yellow]")
 
         if clear:
             return
@@ -243,29 +244,27 @@ async def _seed(reset: bool, clear: bool) -> None:
         try:
             summary = await seed_fake_data(session, provider)
         except RuntimeError as e:
-            console.print(f"[yellow]Nothing to do:[/yellow] {e}")
+            console.print(f"[yellow]{t('payment.nothing_to_do')}[/yellow] {e}")
             raise typer.Exit(0) from e
 
     console.print()
-    console.print("[bold green]Fake payment data seeded.[/bold green]")
+    console.print(f"[bold green]{t('payment.seed_success')}[/bold green]")
     console.print()
     table = Table(show_header=False, box=None, padding=(0, 2))
-    table.add_column("Kind", style="dim")
-    table.add_column("Count", justify="right")
+    table.add_column(t("payment.col_kind"), style="dim")
+    table.add_column(t("payment.col_count"), justify="right")
     for key, val in summary.items():
         table.add_row(key.capitalize(), str(val))
     console.print(table)
     console.print()
-    console.print(
-        "[dim]View via the dashboard (click the Payment card) or:[/dim]"
-    )
+    console.print(f"[dim]{t('payment.seed_view_via_dashboard')}[/dim]")
     console.print("  [bold]my-app payment transactions[/bold]")
     console.print("  [bold]my-app payment disputes[/bold]")
 
 
-@app.command(help="Forward Stripe webhooks to the local server (requires stripe-cli)")
+@app.command(help=lazy_t("payment.help_webhook"))
 def webhook(
-    port: int = typer.Option(8000, "--port", "-p", help="Local webserver port"),
+    port: int = typer.Option(8000, "--port", "-p", help=lazy_t("payment.opt_port")),
 ) -> None:
     """Run `stripe listen` and forward events to the local webhook endpoint.
 
@@ -278,24 +277,22 @@ def webhook(
     import shutil
 
     if not shutil.which("stripe"):
-        console.print("[red]stripe-cli not found on PATH.[/red]\n")
+        console.print(f"[red]{t('payment.stripe_cli_not_found')}[/red]\n")
         system = platform.system()
         if system == "Darwin":
-            console.print("Install with Homebrew:")
+            console.print(t("payment.install_homebrew"))
             console.print("  [bold]brew install stripe/stripe-cli/stripe[/bold]")
         elif system == "Windows":
-            console.print("Install with Scoop:")
+            console.print(t("payment.install_scoop"))
             console.print("  [bold]scoop install stripe[/bold]")
         else:
-            console.print(
-                "See: [bold]https://stripe.com/docs/stripe-cli#install[/bold]"
-            )
-        console.print("\nThen authenticate with: [bold]stripe login[/bold]")
+            console.print(t("payment.install_other"))
+        console.print(f"\n{t('payment.then_authenticate')}")
         raise typer.Exit(1)
 
     target = f"localhost:{port}/api/v1/payment/webhook"
-    console.print(f"Forwarding Stripe webhooks → [bold]{target}[/bold]")
-    console.print("[dim]Press Ctrl-C to stop.[/dim]\n")
+    console.print(t("payment.forwarding", target=target))
+    console.print(f"[dim]{t('payment.press_ctrl_c')}[/dim]\n")
 
     os.execvp("stripe", ["stripe", "listen", "--forward-to", target])
 
@@ -308,15 +305,13 @@ def webhook(
 _CLI_FIXTURE_DESCRIPTION = "(created by Stripe CLI)"
 
 
-@app.command(
-    help="Trigger a Stripe test event and clean up the fixtures it creates"
-)
+@app.command(help=lazy_t("payment.help_trigger"))
 def trigger(
-    event: str = typer.Argument(..., help="Event type, e.g. checkout.session.completed"),
+    event: str = typer.Argument(..., help=lazy_t("payment.arg_event")),
     no_cleanup: bool = typer.Option(
         False,
         "--no-cleanup",
-        help="Skip the fixture sweep (leave test Products/Prices active)",
+        help=lazy_t("payment.opt_no_cleanup"),
     ),
 ) -> None:
     """pytest-style test trigger: setup → event → teardown.
@@ -345,49 +340,46 @@ def trigger(
     from app.core.config import settings
 
     if not shutil.which("stripe"):
-        console.print("[red]stripe-cli not found on PATH.[/red]")
-        console.print(
-            "Install with: [bold]brew install stripe/stripe-cli/stripe[/bold] (macOS) "
-            "or see https://stripe.com/docs/stripe-cli#install"
-        )
+        console.print(f"[red]{t('payment.stripe_cli_not_found')}[/red]")
+        console.print(t("payment.stripe_install_brief"))
         raise typer.Exit(1)
 
     api_key = settings.STRIPE_SECRET_KEY or ""
     if not api_key:
-        console.print("[red]STRIPE_SECRET_KEY is not set in .env[/red]")
+        console.print(f"[red]{t('payment.stripe_secret_missing')}[/red]")
         raise typer.Exit(1)
 
     if not api_key.startswith("sk_test_"):
-        console.print(
-            "[red]Refusing to run trigger against a live key. "
-            "This command is test-mode only.[/red]"
-        )
+        console.print(f"[red]{t('payment.refuse_live_key')}[/red]")
         raise typer.Exit(1)
 
-    console.print(f"Triggering [bold]{event}[/bold]...")
+    console.print(t("payment.triggering", event=event))
     result = subprocess.run(
         ["stripe", "trigger", "--api-key", api_key, event],
         capture_output=False,
     )
     if result.returncode != 0:
         console.print(
-            f"[red]stripe trigger exited with code {result.returncode}[/red]"
+            f"[red]{t('payment.trigger_exited', code=result.returncode)}[/red]"
         )
         # Still attempt cleanup — partial failures can leave partial
         # fixtures in place.
 
     if no_cleanup:
-        console.print("[dim]Skipping fixture cleanup (--no-cleanup).[/dim]")
+        console.print(f"[dim]{t('payment.skipping_cleanup')}[/dim]")
         raise typer.Exit(result.returncode)
 
     archived = _archive_fixtures(api_key)
     if archived["products"] or archived["prices"]:
         console.print(
-            f"Cleaned up [bold]{archived['products']}[/bold] fixture product(s) "
-            f"and [bold]{archived['prices']}[/bold] price(s)"
+            t(
+                "payment.cleaned_up",
+                products=archived["products"],
+                prices=archived["prices"],
+            )
         )
     else:
-        console.print("[dim]No fixture debris found to clean up.[/dim]")
+        console.print(f"[dim]{t('payment.no_fixture_debris')}[/dim]")
 
     raise typer.Exit(result.returncode)
 
@@ -424,7 +416,7 @@ def _archive_fixtures(api_key: str) -> dict[str, int]:
                     archived_prices += 1
                 except Exception as e:
                     console.print(
-                        f"[yellow]Could not archive {price.id}: {e}[/yellow]"
+                        f"[yellow]{t('payment.could_not_archive_price', id=price.id, error=e)}[/yellow]"
                     )
 
             try:
@@ -432,9 +424,11 @@ def _archive_fixtures(api_key: str) -> dict[str, int]:
                 archived_products += 1
             except Exception as e:
                 console.print(
-                    f"[yellow]Could not archive {product.id}: {e}[/yellow]"
+                    f"[yellow]{t('payment.could_not_archive_product', id=product.id, error=e)}[/yellow]"
                 )
     except Exception as e:
-        console.print(f"[yellow]Fixture cleanup aborted: {e}[/yellow]")
+        console.print(
+            f"[yellow]{t('payment.fixture_cleanup_aborted', error=e)}[/yellow]"
+        )
 
     return {"products": archived_products, "prices": archived_prices}

@@ -101,8 +101,8 @@ Passwords are hashed using **bcrypt** with automatic 72-byte truncation. Bcrypt 
 
 A two-step flow using single-use tokens:
 
-1. **Request a reset token** — `POST /auth/password-reset/request` with the user's email. A token is generated with a configurable expiry (default: 60 minutes).
-2. **Confirm the reset** — `POST /auth/password-reset/confirm` with the token and new password. The token is invalidated after use.
+1. **Request a reset token**, `POST /auth/password-reset/request` with the user's email. A token is generated with a configurable expiry (default: 60 minutes).
+2. **Confirm the reset**, `POST /auth/password-reset/confirm` with the token and new password. The token is invalidated after use.
 
 ```bash
 # Request reset
@@ -297,14 +297,14 @@ The Organization level adds multi-tenant support on top of all RBAC features.
 
 ### What You Get
 
-- **Organization model** — name, slug (with validation), description, active status
-- **Membership model** — links users to organizations with roles
-- **Invite model** — email-based invitations with token acceptance
-- **OrgService** — CRUD operations for organizations
-- **MembershipService** — Add/remove members, update roles, list memberships, bulk operations
-- **InviteService** — Create invites, accept invites, resolve pending invites on registration
-- **REST API** — Full org, membership, and invite management endpoints
-- **Dashboard** — Organizations tab + Org column in the Users tab
+- **Organization model**, name, slug (with validation), description, active status
+- **Membership model**, links users to organizations with roles
+- **Invite model**, email-based invitations with token acceptance
+- **OrgService**, CRUD operations for organizations
+- **MembershipService**, Add/remove members, update roles, list memberships, bulk operations
+- **InviteService**, Create invites, accept invites, resolve pending invites on registration
+- **REST API**, Full org, membership, and invite management endpoints
+- **Dashboard**, Organizations tab + Org column in the Users tab
 
 ### Organization Models
 

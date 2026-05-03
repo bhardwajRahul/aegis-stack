@@ -9,7 +9,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import flet as ft
-import httpx
 from app.components.frontend.controls import (
     DataTable,
     DataTableColumn,
@@ -19,7 +18,6 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.components.frontend.theme import DarkColorPalette
-from app.core.config import settings
 from app.core.formatting import format_cost, format_number
 
 from .modal_sections import MetricCard, PieChartCard
@@ -335,27 +333,15 @@ class AIAnalyticsTab(ft.Container):
 
     async def _load_stats(self) -> None:
         """Fetch usage stats from API and update the UI."""
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"http://localhost:{settings.PORT}/ai/usage/stats",
-                    params={"recent_limit": 10},
-                    timeout=10.0,
-                )
+        from app.components.frontend.state.session_state import get_session_state
 
-                if response.status_code == 200:
-                    api_data = response.json()
-                    stats = _transform_api_response(api_data)
-                    self._render_stats(stats)
-                else:
-                    self._render_error(f"API returned status {response.status_code}")
-
-        except httpx.TimeoutException:
-            self._render_error("Request timed out")
-        except httpx.ConnectError:
-            self._render_error("Could not connect to backend API")
-        except Exception as e:
-            self._render_error(str(e))
+        api = get_session_state(self.page).api_client
+        api_data = await api.get("/ai/usage/stats", params={"recent_limit": 10})
+        if api_data is None:
+            self._render_error("Could not load usage stats.")
+            return
+        stats = _transform_api_response(api_data)
+        self._render_stats(stats)
 
     def _render_stats(self, stats: dict[str, Any]) -> None:
         """Render the stats sections with loaded data."""

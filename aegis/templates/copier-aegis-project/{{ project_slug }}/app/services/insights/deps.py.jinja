@@ -1,0 +1,82 @@
+"""Insights dependencies for FastAPI route injection.
+
+Service-facade deps live here (rather than in the shared API deps
+module) so the insights service owns its own injection contract.
+{% if insights_per_user -%}
+
+When per-user mode is on, this also exposes the project-ownership
+enforcement deps (``get_project_service``, ``get_owned_project``).
+``get_owned_project`` is the single point of truth for "this URL
+slug + this signed-in user → a real project, or 404." Every
+per-project endpoint takes it as a dep so cross-user data leakage
+is prevented structurally rather than via per-handler checks.
+{%- endif %}
+"""
+
+from __future__ import annotations
+
+from app.core.db import get_async_db
+from app.services.insights.collector_service import CollectorService
+from app.services.insights.insight_service import InsightService
+from app.services.insights.query_service import InsightQueryService
+from fastapi import Depends
+{% if insights_per_user -%}
+from fastapi import HTTPException, status
+
+from app.models.user import User
+from app.services.auth.deps import get_current_active_user
+from app.services.insights.models import Project
+from app.services.insights.project_service import ProjectService
+{%- endif %}
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+
+async def get_insight_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> InsightService:
+    """Provide an InsightService instance."""
+    return InsightService(db)
+
+
+async def get_collector_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> CollectorService:
+    """Provide a CollectorService instance."""
+    return CollectorService(db)
+
+
+async def get_query_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> InsightQueryService:
+    """Provide an InsightQueryService instance."""
+    return InsightQueryService(session=db)
+
+{% if insights_per_user -%}
+
+def get_project_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> ProjectService:
+    """Standard FastAPI dependency provider for ProjectService."""
+    return ProjectService(db)
+
+
+async def get_owned_project(
+    slug: str,
+    current_user: User = Depends(get_current_active_user),
+    service: ProjectService = Depends(get_project_service),
+) -> Project:
+    """Resolve ``{slug}`` from the URL path to a project owned by the caller.
+
+    Returns the :class:`Project` (with credentials decrypted) on success.
+    Raises 404 if no project with that slug exists for the current user.
+    The 404 is intentional: distinguishing "doesn't exist" from "not
+    yours" leaks ownership information.
+    """
+    project = await service.get_by_slug_for_user(slug, current_user.id)  # type: ignore[arg-type]
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found",
+        )
+    return project
+{%- endif %}

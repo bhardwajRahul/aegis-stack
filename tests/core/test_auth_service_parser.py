@@ -154,6 +154,105 @@ class TestAuthServiceConfigDataclass:
         assert config1 != config2
 
 
+class TestAuthServiceParserOAuth:
+    """Test the ``oauth`` modifier — bracket toggle for social login.
+
+    OAuth is a modifier (a flag, not a slot), so it composes freely
+    with the level + engine slots. Order doesn't matter and it can
+    appear with or without the other tokens.
+    """
+
+    def test_bare_auth_defaults_oauth_false(self) -> None:
+        """auth -> oauth=False (default)"""
+        result = parse_auth_service_config("auth")
+        assert result.oauth is False
+
+    def test_basic_level_alone_defaults_oauth_false(self) -> None:
+        """auth[basic] -> oauth=False (default, no modifier)"""
+        result = parse_auth_service_config("auth[basic]")
+        assert result.oauth is False
+
+    def test_oauth_only(self) -> None:
+        """auth[oauth] -> level=basic (default), oauth=True"""
+        result = parse_auth_service_config("auth[oauth]")
+        assert result.level == "basic"
+        assert result.oauth is True
+
+    def test_oauth_with_rbac(self) -> None:
+        """auth[rbac,oauth] -> level=rbac, oauth=True"""
+        result = parse_auth_service_config("auth[rbac,oauth]")
+        assert result.level == "rbac"
+        assert result.oauth is True
+
+    def test_oauth_with_org(self) -> None:
+        """auth[org,oauth] -> level=org, oauth=True"""
+        result = parse_auth_service_config("auth[org,oauth]")
+        assert result.level == "org"
+        assert result.oauth is True
+
+    def test_oauth_with_basic_explicit(self) -> None:
+        """auth[basic,oauth] -> level=basic, oauth=True"""
+        result = parse_auth_service_config("auth[basic,oauth]")
+        assert result.level == "basic"
+        assert result.oauth is True
+
+    def test_oauth_with_engine(self) -> None:
+        """auth[oauth,sqlite] -> level=basic, engine=sqlite, oauth=True"""
+        result = parse_auth_service_config("auth[oauth,sqlite]")
+        assert result.level == "basic"
+        assert result.engine == "sqlite"
+        assert result.oauth is True
+
+    def test_oauth_with_level_and_engine(self) -> None:
+        """auth[rbac,oauth,postgres] -> level=rbac, engine=postgres, oauth=True"""
+        result = parse_auth_service_config("auth[rbac,oauth,postgres]")
+        assert result.level == "rbac"
+        assert result.engine == "postgres"
+        assert result.oauth is True
+
+    def test_oauth_order_independent_first(self) -> None:
+        """auth[oauth,rbac] equivalent to auth[rbac,oauth]"""
+        result = parse_auth_service_config("auth[oauth,rbac]")
+        assert result.level == "rbac"
+        assert result.oauth is True
+
+    def test_oauth_order_independent_middle(self) -> None:
+        """auth[rbac,oauth,sqlite] equivalent to auth[rbac,sqlite,oauth]"""
+        a = parse_auth_service_config("auth[rbac,oauth,sqlite]")
+        b = parse_auth_service_config("auth[rbac,sqlite,oauth]")
+        c = parse_auth_service_config("auth[oauth,rbac,sqlite]")
+        assert a == b == c
+
+    def test_oauth_case_insensitive_uppercase(self) -> None:
+        """auth[OAUTH] -> oauth=True (case insensitive)"""
+        result = parse_auth_service_config("auth[OAUTH]")
+        assert result.oauth is True
+
+    def test_oauth_case_insensitive_mixed(self) -> None:
+        """auth[OAuth] -> oauth=True (case insensitive)"""
+        result = parse_auth_service_config("auth[OAuth]")
+        assert result.oauth is True
+
+    def test_oauth_with_whitespace(self) -> None:
+        """auth[ rbac , oauth ] parses correctly with spaces around tokens."""
+        result = parse_auth_service_config("auth[ rbac , oauth ]")
+        assert result.level == "rbac"
+        assert result.oauth is True
+
+    def test_duplicate_oauth_raises(self) -> None:
+        """auth[oauth,oauth] should raise — repeating a modifier is a typo."""
+        with pytest.raises(ValueError) as exc_info:
+            parse_auth_service_config("auth[oauth,oauth]")
+        assert "oauth" in str(exc_info.value).lower()
+        assert "duplicate" in str(exc_info.value).lower()
+
+    def test_unknown_modifier_error_lists_oauth(self) -> None:
+        """Unknown token error should mention oauth as a valid modifier."""
+        with pytest.raises(ValueError) as exc_info:
+            parse_auth_service_config("auth[bogus]")
+        assert "oauth" in str(exc_info.value).lower()
+
+
 class TestIsAuthServiceWithOptions:
     """Test the is_auth_service_with_options helper function.
 

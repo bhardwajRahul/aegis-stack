@@ -261,6 +261,9 @@ MESSAGES: dict[str, str] = {
     "add.success": "コンポーネント追加完了！",
     "add.failed_component": "{component} の追加失敗：{error}",
     "add.failed": "コンポーネント追加失敗：{error}",
+    "add.plugin_installing": "Installing plugin: {name}",
+    "add.plugin_confirm": "Add plugin {name} to this project?",
+    "add.plugin_success": "Plugin {name} installed.",
     "add.invalid_format": "不正なコンポーネント形式：{error}",
     "add.bracket_override": (
         "ブラケット構文 'scheduler[{engine}]' は --backend {backend} を上書きします"
@@ -311,6 +314,9 @@ MESSAGES: dict[str, str] = {
     "remove.failed_component": "{component} の削除失敗：{error}",
     "remove.success": "コンポーネント削除完了！",
     "remove.failed": "コンポーネント削除失敗：{error}",
+    "remove.plugin_removing": "Removing plugin: {name}",
+    "remove.plugin_confirm": "Remove plugin {name} from this project?",
+    "remove.plugin_success": "Plugin {name} removed.",
     # ── 手動アップデーター ──────────────────────────────────────────────
     "updater.processing_files": "{count} コンポーネントファイルを処理中...",
     "updater.updating_shared": "共通テンプレートファイルを更新中...",

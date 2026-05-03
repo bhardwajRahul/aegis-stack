@@ -8,6 +8,9 @@ used for project generation and validation.
 from dataclasses import dataclass
 from enum import Enum
 
+from .file_manifest import FileManifest
+from .plugin_spec import PluginKind, PluginSpec
+
 
 class ComponentType(Enum):
     """Component type classifications."""
@@ -28,34 +31,24 @@ class SchedulerBackend(str, Enum):
 CORE_COMPONENTS = ["backend", "frontend"]
 
 
-@dataclass
-class ComponentSpec:
-    """Specification for a single component."""
+@dataclass(kw_only=True)
+class ComponentSpec(PluginSpec):
+    """Component-flavoured PluginSpec — back-compat alias for pre-R2 callers.
 
-    name: str
-    type: ComponentType
-    description: str
-    requires: list[str] | None = None  # Hard dependencies
-    recommends: list[str] | None = None  # Soft dependencies
-    conflicts: list[str] | None = None  # Mutual exclusions
-    docker_services: list[str] | None = None
-    pyproject_deps: list[str] | None = None
-    template_files: list[str] | None = None
+    Subclasses ``PluginSpec`` and pins ``kind`` to ``COMPONENT`` by default.
+    Legacy field names ``requires`` / ``recommends`` continue to work for
+    *read* access via the property aliases on ``PluginSpec``; constructions
+    in this file use the canonical ``required_components`` /
+    ``recommended_components`` names. R2 of the plugin system refactor.
 
-    def __post_init__(self) -> None:
-        """Ensure all list fields are initialized."""
-        if self.requires is None:
-            self.requires = []
-        if self.recommends is None:
-            self.recommends = []
-        if self.conflicts is None:
-            self.conflicts = []
-        if self.docker_services is None:
-            self.docker_services = []
-        if self.pyproject_deps is None:
-            self.pyproject_deps = []
-        if self.template_files is None:
-            self.template_files = []
+    ``kw_only=True`` is required: ``PluginSpec`` has a required ``kind`` field
+    followed by defaulted fields, and overriding ``kind`` with a default in
+    this subclass would otherwise violate the "required field after default"
+    dataclass rule. Pre-R2 callers all used keyword construction (verified
+    by AST scan), so no real call sites are affected.
+    """
+
+    kind: PluginKind = PluginKind.COMPONENT
 
 
 # Component registry - single source of truth
@@ -66,6 +59,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         description="FastAPI backend server",
         pyproject_deps=["fastapi==0.116.1", "uvicorn==0.35.0"],
         template_files=["app/components/backend/"],
+        # backend is a CORE component; never cleaned up.
     ),
     "frontend": ComponentSpec(
         name="frontend",
@@ -73,6 +67,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         description="Flet frontend interface",
         pyproject_deps=["flet==0.28.3"],
         template_files=["app/components/frontend/"],
+        # frontend is a CORE component; never cleaned up.
     ),
     "redis": ComponentSpec(
         name="redis",
@@ -80,15 +75,41 @@ COMPONENTS: dict[str, ComponentSpec] = {
         description="Redis cache and message broker",
         docker_services=["redis"],
         pyproject_deps=["redis==5.0.8"],
+        files=FileManifest(
+            primary=[
+                "app/components/frontend/dashboard/cards/redis_card.py",
+                "app/components/frontend/dashboard/modals/redis_modal.py",
+            ],
+        ),
     ),
     "worker": ComponentSpec(
         name="worker",
         type=ComponentType.INFRASTRUCTURE,
         description="Background task processing (arq, Dramatiq, or TaskIQ)",
-        requires=["redis"],  # Hard dependency
+        required_components=["redis"],  # Hard dependency
         pyproject_deps=["arq==0.25.0"],
         docker_services=["worker-system", "worker-load-test"],
         template_files=["app/components/worker/"],
+        files=FileManifest(
+            # Mirrors cleanup_components() lines 316-333 (worker NOT enabled).
+            # task_history_section.py is intentionally NOT here — cleanup
+            # leaves it. worker_taskiq.py IS here — cleanup removes it.
+            primary=[
+                "app/components/worker",
+                "app/cli/load_test.py",
+                "app/services/load_test.py",
+                "app/services/load_test_models.py",
+                "app/services/load_test_workloads.py",
+                "tests/services/test_load_test_models.py",
+                "tests/services/test_load_test_service.py",
+                "tests/services/test_worker_health_registration.py",
+                "app/components/backend/api/worker.py",
+                "app/components/backend/api/worker_taskiq.py",
+                "tests/api/test_worker_endpoints.py",
+                "app/components/frontend/dashboard/cards/worker_card.py",
+                "app/components/frontend/dashboard/modals/worker_modal.py",
+            ],
+        ),
     ),
     "scheduler": ComponentSpec(
         name="scheduler",
@@ -97,6 +118,22 @@ COMPONENTS: dict[str, ComponentSpec] = {
         pyproject_deps=["apscheduler==3.10.4"],
         docker_services=["scheduler"],
         template_files=["app/components/scheduler.py", "app/entrypoints/scheduler.py"],
+        files=FileManifest(
+            primary=[
+                "app/entrypoints/scheduler.py",
+                "app/components/scheduler",
+                "tests/components/test_scheduler.py",
+                "docs/components/scheduler.md",
+                "app/components/backend/api/scheduler.py",
+                "tests/api/test_scheduler_endpoints.py",
+                "app/components/frontend/dashboard/cards/scheduler_card.py",
+                "app/components/frontend/dashboard/modals/scheduler_modal.py",
+                "tests/services/test_scheduled_task_manager.py",
+            ],
+            # scheduler persistence cleanup is option-driven
+            # (scheduler_backend == MEMORY), not a simple AnswerKey toggle —
+            # it stays inline in cleanup_components() for R1.
+        ),
     ),
     "database": ComponentSpec(
         name="database",
@@ -105,13 +142,27 @@ COMPONENTS: dict[str, ComponentSpec] = {
         pyproject_deps=["sqlmodel>=0.0.14", "sqlalchemy>=2.0.0"],
         # Note: async driver (aiosqlite or asyncpg) selected based on database_type in copier.yml
         template_files=["app/core/db.py"],
+        files=FileManifest(
+            primary=[
+                "app/core/db.py",
+                "app/components/frontend/dashboard/cards/database_card.py",
+                "app/components/frontend/dashboard/modals/database_modal.py",
+            ],
+        ),
     ),
     "ingress": ComponentSpec(
         name="ingress",
         type=ComponentType.INFRASTRUCTURE,
         description="Traefik reverse proxy and load balancer",
         docker_services=["traefik"],
-        recommends=["backend"],
+        recommended_components=["backend"],
+        files=FileManifest(
+            primary=[
+                "traefik",
+                "app/components/frontend/dashboard/cards/ingress_card.py",
+                "app/components/frontend/dashboard/modals/ingress_modal.py",
+            ],
+        ),
     ),
     "observability": ComponentSpec(
         name="observability",
@@ -119,6 +170,13 @@ COMPONENTS: dict[str, ComponentSpec] = {
         description="Logfire observability, tracing, and metrics",
         pyproject_deps=["logfire[fastapi,httpx]"],
         template_files=["app/components/backend/middleware/logfire_tracing.py"],
+        files=FileManifest(
+            primary=[
+                "app/components/backend/middleware/logfire_tracing.py",
+                "app/components/frontend/dashboard/cards/observability_card.py",
+                "app/components/frontend/dashboard/modals/observability_modal.py",
+            ],
+        ),
     ),
 }
 

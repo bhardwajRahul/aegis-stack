@@ -150,6 +150,7 @@ class AnswerKeys:
     INSIGHTS_PYPI = "insights_pypi"
     INSIGHTS_PLAUSIBLE = "insights_plausible"
     INSIGHTS_REDDIT = "insights_reddit"
+    INSIGHTS_PER_USER = "insights_per_user"
 
     # Payment configuration
     PAYMENT_PROVIDER = "payment_provider"
@@ -167,6 +168,7 @@ class AnswerKeys:
     AUTH_LEVEL = "auth_level"
     AUTH_RBAC = "include_auth_rbac"
     AUTH_ORG = "include_auth_org"
+    AUTH_OAUTH = "include_oauth"
     AI_VOICE = "ai_voice"
     OLLAMA_MODE = "ollama_mode"
     PROJECT_SLUG = "project_slug"

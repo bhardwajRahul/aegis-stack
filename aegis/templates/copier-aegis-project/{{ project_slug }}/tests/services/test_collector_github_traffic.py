@@ -11,6 +11,8 @@ import pytest
 from app.services.insights.collectors.github_traffic import GitHubTrafficCollector
 from app.services.insights.constants import MetricKeys, SourceKeys
 from app.services.insights.models import InsightMetric, InsightMetricType
+
+from ._collector_fixtures import collector_kwargs, seed_project_for_collector
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -85,8 +87,9 @@ class TestGitHubTrafficCollectorSuccess:
     async def test_collect_success(self, async_db_session: AsyncSession) -> None:
         """Successful collection processes all 4 API endpoints and stores data."""
         await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack", github_token="token123")
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         # Mock settings
         with patch(
@@ -115,8 +118,10 @@ class TestGitHubTrafficCollectorSuccess:
         # 2 clones entries * 2 metrics (clones + unique_cloners) = 4
         # 2 views entries * 2 metrics (views + unique_visitors) = 4
         # 1 referrers row + 1 paths row = 2
-        # Total = 10
-        assert result.rows_written == 10
+        # 4 server-side 14d rolling totals (clones_14d, clones_14d_unique,
+        #   views_14d, views_14d_unique) — one row each, latest day = 4
+        # Total = 14
+        assert result.rows_written == 14
         assert result.rows_skipped == 0
         assert result.error is None
 
@@ -141,8 +146,9 @@ class TestGitHubTrafficCollectorMissingConfig:
     async def test_collect_missing_token(self, async_db_session: AsyncSession) -> None:
         """Collection fails when INSIGHT_GITHUB_TOKEN is missing."""
         await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner='lbedner', github_repo='aegis-stack', github_token=None)
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
             "app.services.insights.collectors.github_traffic.settings"
@@ -162,8 +168,9 @@ class TestGitHubTrafficCollectorMissingConfig:
     async def test_collect_missing_owner(self, async_db_session: AsyncSession) -> None:
         """Collection fails when INSIGHT_GITHUB_OWNER is missing."""
         await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner=None, github_repo='aegis-stack', github_token='token123')
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
             "app.services.insights.collectors.github_traffic.settings"
@@ -181,8 +188,9 @@ class TestGitHubTrafficCollectorMissingConfig:
     async def test_collect_missing_repo(self, async_db_session: AsyncSession) -> None:
         """Collection fails when INSIGHT_GITHUB_REPO is missing."""
         await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner='lbedner', github_repo=None, github_token='token123')
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
             "app.services.insights.collectors.github_traffic.settings"
@@ -209,8 +217,9 @@ class TestGitHubTrafficCollectorDeduplication:
     async def test_collect_deduplication(self, async_db_session: AsyncSession) -> None:
         """Running collect twice with same data skips duplicates on second run."""
         await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack", github_token="token123")
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
             "app.services.insights.collectors.github_traffic.settings"
@@ -234,7 +243,8 @@ class TestGitHubTrafficCollectorDeduplication:
                 result1 = await collector.collect()
 
             assert result1.success is True
-            assert result1.rows_written == 10
+            # Same total as test_collect_success (10 base + 4 14d rolling).
+            assert result1.rows_written == 14
             assert result1.rows_skipped == 0
 
             # Second collection with same data
@@ -253,7 +263,7 @@ class TestGitHubTrafficCollectorDeduplication:
 
             assert result2.success is True
             assert result2.rows_written == 0  # All rows already exist
-            assert result2.rows_skipped == 10
+            assert result2.rows_skipped == 14
 
 
 # ---------------------------------------------------------------------------
@@ -268,8 +278,9 @@ class TestGitHubTrafficCollectorAPIErrors:
     async def test_collect_api_error_403(self, async_db_session: AsyncSession) -> None:
         """Collection fails gracefully on HTTP 403 error."""
         await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack", github_token="token123")
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
             "app.services.insights.collectors.github_traffic.settings"
@@ -306,8 +317,9 @@ class TestGitHubTrafficCollectorAPIErrors:
     async def test_collect_api_error_500(self, async_db_session: AsyncSession) -> None:
         """Collection fails gracefully on HTTP 500 error."""
         await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack", github_token="token123")
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
             "app.services.insights.collectors.github_traffic.settings"
@@ -344,8 +356,9 @@ class TestGitHubTrafficCollectorAPIErrors:
     ) -> None:
         """Collection fails gracefully on unexpected exceptions."""
         await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack", github_token="token123")
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
             "app.services.insights.collectors.github_traffic.settings"
@@ -378,8 +391,9 @@ class TestGitHubTrafficCollectorProcessing:
     async def test_process_clones(self, async_db_session: AsyncSession) -> None:
         """_process_clones correctly parses timestamps and creates metrics."""
         _, metric_types = await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack", github_token="token123")
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
         written, skipped = await collector._process_clones(CLONES_RESPONSE)
 
         # 2 clone entries * 2 metrics (clones + unique_cloners) = 4
@@ -390,8 +404,9 @@ class TestGitHubTrafficCollectorProcessing:
     async def test_process_views(self, async_db_session: AsyncSession) -> None:
         """_process_views correctly parses timestamps and creates metrics."""
         _, metric_types = await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack", github_token="token123")
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
         written, skipped = await collector._process_views(VIEWS_RESPONSE)
 
         # 2 view entries * 2 metrics (views + unique_visitors) = 4
@@ -402,8 +417,9 @@ class TestGitHubTrafficCollectorProcessing:
     async def test_process_referrers(self, async_db_session: AsyncSession) -> None:
         """_process_referrers creates single snapshot row with metadata."""
         _, metric_types = await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack", github_token="token123")
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
         written, skipped = await collector._process_referrers(REFERRERS_RESPONSE)
 
         # Single snapshot row for all referrers
@@ -425,8 +441,9 @@ class TestGitHubTrafficCollectorProcessing:
     async def test_process_popular_paths(self, async_db_session: AsyncSession) -> None:
         """_process_popular_paths creates single snapshot row with path metadata."""
         _, metric_types = await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack", github_token="token123")
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
         written, skipped = await collector._process_popular_paths(PATHS_RESPONSE)
 
         # Single snapshot row for all paths
@@ -459,8 +476,15 @@ class TestGitHubTrafficCollectorHeaders:
     ) -> None:
         """Collection sets correct GitHub API headers."""
         await _seed_github_traffic(async_db_session)
+        # Token here MUST match the value the test asserts on below.
+        project = await seed_project_for_collector(
+            async_db_session,
+            github_owner="lbedner",
+            github_repo="aegis-stack",
+            github_token="test-token-123",
+        )
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
             "app.services.insights.collectors.github_traffic.settings"
@@ -497,8 +521,9 @@ class TestGitHubTrafficCollectorHeaders:
     ) -> None:
         """Collection requests correct GitHub API endpoints."""
         await _seed_github_traffic(async_db_session)
+        project = await seed_project_for_collector(async_db_session, github_owner="lbedner", github_repo="aegis-stack", github_token="token123")
 
-        collector = GitHubTrafficCollector(async_db_session)
+        collector = GitHubTrafficCollector(async_db_session, **collector_kwargs(project))
 
         with patch(
             "app.services.insights.collectors.github_traffic.settings"

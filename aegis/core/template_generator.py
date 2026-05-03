@@ -123,7 +123,13 @@ class TemplateGenerator:
                     user_specified_ai_backend = True
                 break
 
-        # Extract auth level from auth[level] format in services
+        # OAuth social login (GitHub + Google) — opt-in via the
+        # ``auth[oauth]`` modifier in the bracket syntax (composes with
+        # ``auth[rbac,oauth]`` etc.). Defaults off so projects that
+        # don't ask for it don't pay for the extra routes and deps.
+        self.include_oauth: bool = False
+
+        # Extract auth level (and oauth modifier) from auth[...] format in services
         self.auth_level = AuthLevels.BASIC  # Default to basic
         self._user_specified_auth_level = False
         for service in self.selected_services:
@@ -132,17 +138,20 @@ class TemplateGenerator:
                     auth_config = parse_auth_service_config(service)
                     self.auth_level = auth_config.level
                     self._user_specified_auth_level = True
+                    self.include_oauth = auth_config.oauth
                 break
 
-        # Extract insights sources from insights[sources] format in services
+        # Extract insights sources + per_user flag from insights[...] format
         from .insights_service_parser import DEFAULT_SOURCES
 
         self.insights_sources: list[str] = DEFAULT_SOURCES.copy()
+        self.insights_per_user: bool = False
         for service in self.selected_services:
             if extract_base_service_name(service) == SERVICE_INSIGHTS:
                 if is_insights_service_with_options(service):
                     insights_config = parse_insights_service_config(service)
                     self.insights_sources = insights_config.sources
+                    self.insights_per_user = insights_config.per_user
                 break
 
         # Auto-detect: if AI service selected AND database available AND no explicit backend,
@@ -237,6 +246,11 @@ class TemplateGenerator:
             if auth_level in (AuthLevels.RBAC, AuthLevels.ORG)
             else "no",
             AnswerKeys.AUTH_ORG: "yes" if auth_level == AuthLevels.ORG else "no",
+            # OAuth social login (GitHub + Google) — opt-in via the
+            # ``auth[oauth]`` modifier in the bracket syntax (composes
+            # with ``auth[rbac,oauth]`` etc.). Defaults off so existing
+            # flows aren't surprised by extra routes and dependencies.
+            AnswerKeys.AUTH_OAUTH: "yes" if self.include_oauth else "no",
             AnswerKeys.AI: "yes"
             if any(
                 extract_base_service_name(s) == AnswerKeys.SERVICE_AI
@@ -275,6 +289,7 @@ class TemplateGenerator:
             AnswerKeys.INSIGHTS_REDDIT: "yes"
             if "reddit" in self.insights_sources
             else "no",
+            AnswerKeys.INSIGHTS_PER_USER: "yes" if self.insights_per_user else "no",
             # AI backend selection for conversation persistence
             AnswerKeys.AI_BACKEND: self.ai_backend,
             # AI persistence flag for backwards compatibility with template conditionals

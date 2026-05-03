@@ -4,6 +4,8 @@ Query layer for insight metrics.
 Centralizes all DB queries used by the Overseer dashboard and API endpoints.
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -20,6 +22,11 @@ DAILY_KEYS = [
     "unique_cloners",
     "views",
     "unique_visitors",
+    # GitHub's server-side 14-day rolling totals (one row per day).
+    "clones_14d",
+    "clones_14d_unique",
+    "views_14d",
+    "views_14d_unique",
     "star_events",
     "activity_summary",
     "downloads_daily",
@@ -34,19 +41,44 @@ DAILY_KEYS = [
     "bounce_rate",
     "top_pages",
     "top_countries",
+    "top_sources",
 ]
 EVENT_KEYS = ["new_star", "forks", "releases", "post_stats"]
 SNAPSHOT_KEYS = ["referrers", "popular_paths", "downloads_total"]
 
 
 class InsightQueryService:
-    """Async query service for insight metrics."""
+    """Async query service for insight metrics.
 
-    def __init__(self, session: AsyncSession) -> None:
+    When ``project_id`` is set, every metric / event SELECT is scoped to
+    that project. When unset, no filter is applied (single-tenant
+    fallback for builds without auth, or tooling that explicitly wants
+    a global view). The two modes share one code path; the filter is
+    a no-op when ``project_id`` is None.
+    """
+
+    def __init__(
+        self,
+        session: AsyncSession,
+        project_id: int | None = None,
+    ) -> None:
         self.session = session
+        self.project_id = project_id
         self._type_cache: dict[str, InsightMetricType | None] = {}
 
-    async def __aenter__(self) -> "InsightQueryService":
+    def _scope_metric(self, stmt):
+        """Add ``WHERE project_id = ...`` to a metric SELECT, if scoped."""
+        if self.project_id is None:
+            return stmt
+        return stmt.where(InsightMetric.project_id == self.project_id)
+
+    def _scope_event(self, stmt):
+        """Add ``WHERE project_id = ...`` to an InsightEvent SELECT."""
+        if self.project_id is None:
+            return stmt
+        return stmt.where(InsightEvent.project_id == self.project_id)
+
+    async def __aenter__(self) -> InsightQueryService:
         return self
 
     async def __aexit__(self, *args: Any) -> None:
@@ -246,50 +278,99 @@ class InsightQueryService:
     # -- bulk loader ----------------------------------------------------------
 
     async def load_all(self) -> BulkInsightsResponse:
-        """Bulk-load all insight data in minimal queries."""
-        daily: dict[str, list[InsightMetric]] = {}
-        for key in DAILY_KEYS:
-            mt = await self._get_type(key)
-            if mt:
-                result = await self.session.exec(
+        """Bulk-load all insight data in the minimum number of queries.
+
+        Previously this ran ~50 separate SELECTs (one per key to look up
+        the metric_type, one per key to fetch its rows, plus `get_latest`
+        for each snapshot). The fan-out was mechanical loop-iteration, not
+        a data dependency — so we collapse it with `IN (...)` clauses:
+
+            1. one SELECT for all metric_types we care about
+            2. one SELECT for every daily metric across every daily key
+            3. one SELECT for every event metric across every event key
+            4. one SELECT for every snapshot metric; pick the latest per
+               key in Python (portable across dialects, vs. DISTINCT ON)
+            5. one SELECT for insight_events
+            6. one SELECT for insight_sources
+
+        Total: 6 round-trips regardless of how many keys the app tracks.
+        """
+        all_keys = DAILY_KEYS + EVENT_KEYS + SNAPSHOT_KEYS
+        types_result = await self.session.exec(
+            select(InsightMetricType).where(InsightMetricType.key.in_(all_keys))
+        )
+        types_by_key: dict[str, InsightMetricType] = {
+            t.key: t for t in types_result.all()
+        }
+        # Warm the instance-level cache so subsequent `.get_daily()` / etc.
+        # calls in this request skip the DB hit we just did.
+        for k in all_keys:
+            self._type_cache[k] = types_by_key.get(k)
+
+        # Daily metrics — one query spanning every daily type.
+        daily: dict[str, list[InsightMetric]] = {k: [] for k in DAILY_KEYS}
+        daily_type_ids = [types_by_key[k].id for k in DAILY_KEYS if k in types_by_key]
+        if daily_type_ids:
+            result = await self.session.exec(
+                self._scope_metric(
                     select(InsightMetric)
                     .where(
-                        InsightMetric.metric_type_id == mt.id,
+                        InsightMetric.metric_type_id.in_(daily_type_ids),
                         InsightMetric.period == Periods.DAILY,
                     )
                     .order_by(InsightMetric.date.asc())
                 )
-                daily[key] = list(result.all())
-            else:
-                daily[key] = []
+            )
+            id_to_key = {types_by_key[k].id: k for k in DAILY_KEYS if k in types_by_key}
+            for m in result.all():
+                daily[id_to_key[m.metric_type_id]].append(m)
 
-        events: dict[str, list[InsightMetric]] = {}
-        for key in EVENT_KEYS:
-            mt = await self._get_type(key)
-            if mt:
-                result = await self.session.exec(
+        # Event metrics — one query.
+        events: dict[str, list[InsightMetric]] = {k: [] for k in EVENT_KEYS}
+        event_type_ids = [types_by_key[k].id for k in EVENT_KEYS if k in types_by_key]
+        if event_type_ids:
+            result = await self.session.exec(
+                self._scope_metric(
                     select(InsightMetric)
                     .where(
-                        InsightMetric.metric_type_id == mt.id,
+                        InsightMetric.metric_type_id.in_(event_type_ids),
                         InsightMetric.period == Periods.EVENT,
                     )
                     .order_by(InsightMetric.date.asc())
                 )
-                events[key] = list(result.all())
-            else:
-                events[key] = []
+            )
+            id_to_key = {types_by_key[k].id: k for k in EVENT_KEYS if k in types_by_key}
+            for m in result.all():
+                events[id_to_key[m.metric_type_id]].append(m)
+
+        # Snapshots — one query, desc by date, take the first row per key.
+        latest: dict[str, InsightMetric | None] = dict.fromkeys(SNAPSHOT_KEYS)
+        snapshot_type_ids = [
+            types_by_key[k].id for k in SNAPSHOT_KEYS if k in types_by_key
+        ]
+        if snapshot_type_ids:
+            result = await self.session.exec(
+                self._scope_metric(
+                    select(InsightMetric)
+                    .where(InsightMetric.metric_type_id.in_(snapshot_type_ids))
+                    .order_by(InsightMetric.date.desc())
+                )
+            )
+            id_to_key = {
+                types_by_key[k].id: k for k in SNAPSHOT_KEYS if k in types_by_key
+            }
+            for m in result.all():
+                key = id_to_key[m.metric_type_id]
+                if latest[key] is None:  # first iteration per key == latest date
+                    latest[key] = m
 
         result = await self.session.exec(
-            select(InsightEvent).order_by(InsightEvent.date.asc())
+            self._scope_event(select(InsightEvent).order_by(InsightEvent.date.asc()))
         )
         insight_events = list(result.all())
 
         result = await self.session.exec(select(InsightSource))
         sources = list(result.all())
-
-        latest: dict[str, InsightMetric | None] = {}
-        for key in SNAPSHOT_KEYS:
-            latest[key] = await self.get_latest(key)
 
         return BulkInsightsResponse(
             daily=daily,

@@ -28,6 +28,16 @@ class MetricKeys:
     UNIQUE_VISITORS = "unique_visitors"
     REFERRERS = "referrers"
     POPULAR_PATHS = "popular_paths"
+    # 14-day rolling totals — GitHub computes these server-side and returns
+    # them as top-level `count` / `uniques` on /traffic/clones and /traffic/views.
+    # Stored as one row per day (period=daily) so the rolling window itself
+    # becomes a chartable time series. The `*_unique` variants are GitHub's
+    # real distinct counts across the window, NOT sums of per-day uniques
+    # (which double-count repeat users).
+    CLONES_14D = "clones_14d"
+    CLONES_14D_UNIQUE = "clones_14d_unique"
+    VIEWS_14D = "views_14d"
+    VIEWS_14D_UNIQUE = "views_14d_unique"
 
     # github_stars
     NEW_STAR = "new_star"
@@ -54,6 +64,7 @@ class MetricKeys:
     BOUNCE_RATE = "bounce_rate"
     TOP_PAGES = "top_pages"
     TOP_COUNTRIES = "top_countries"
+    TOP_SOURCES = "top_sources"
 
     # reddit
     POST_STATS = "post_stats"

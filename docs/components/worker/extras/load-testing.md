@@ -109,7 +109,7 @@ Each backend uses an orchestrator to enqueue load test tasks in batches. A Redis
 
 === "Dramatiq"
 
-    Dramatiq uses a **fire-and-forget orchestrator actor**. The orchestrator enqueues all individual tasks and returns immediately — it does not wait for them to complete:
+    Dramatiq uses a **fire-and-forget orchestrator actor**. The orchestrator enqueues all individual tasks and returns immediately. It does not wait for them to complete:
 
     ```python
     @dramatiq.actor(queue_name="load_test", store_results=True)
@@ -130,7 +130,7 @@ Each backend uses an orchestrator to enqueue load test tasks in batches. A Redis
         }
     ```
 
-    Note the `asyncio.to_thread` wrapper — Dramatiq's `.send()` is a synchronous Redis LPUSH.
+    Note the `asyncio.to_thread` wrapper, Dramatiq's `.send()` is a synchronous Redis LPUSH.
 
 === "TaskIQ"
 

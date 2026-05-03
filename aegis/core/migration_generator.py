@@ -46,11 +46,33 @@ class IndexSpec:
 
 @dataclass
 class ForeignKeySpec:
-    """Specification for a foreign key constraint."""
+    """Specification for a foreign key constraint.
+
+    ``ondelete`` is the SQL ``ON DELETE`` referential action, passed
+    straight through to ``sa.ForeignKeyConstraint`` /
+    ``op.create_foreign_key``. Defaults to ``None`` (no cascade — the
+    database's default behaviour, typically "RESTRICT"). Set to
+    ``"CASCADE"`` for project-owned children that should die with
+    their owner so SQLAlchemy ``passive_deletes=True`` relationships
+    actually work end-to-end.
+    """
 
     columns: list[str]
     ref_table: str
     ref_columns: list[str]
+    ondelete: str | None = None
+
+
+@dataclass
+class CheckConstraintSpec:
+    """Specification for a CHECK constraint on a table.
+
+    Used to enforce enum-style allowed values without a native PG enum type.
+    Rendered into ``op.create_table`` so it works on both SQLite and Postgres.
+    """
+
+    name: str
+    sqltext: str  # e.g. "origin IN ('collector', 'user')"
 
 
 @dataclass
@@ -61,25 +83,45 @@ class TableSpec:
     columns: list[ColumnSpec]
     indexes: list[IndexSpec] = field(default_factory=list)
     foreign_keys: list[ForeignKeySpec] = field(default_factory=list)
+    check_constraints: list[CheckConstraintSpec] = field(default_factory=list)
 
 
 @dataclass
 class AlterTableSpec:
-    """Specification for altering an existing table (adding columns or FKs)."""
+    """Specification for altering an existing table.
+
+    Add operations: ``add_columns``, ``add_foreign_keys``, ``add_indexes``.
+    Drop operations: ``drop_columns``, ``drop_indexes``.
+
+    All operations on a single ``AlterTableSpec`` run inside a single
+    ``op.batch_alter_table`` block so they're atomic and SQLite-safe.
+    Drop operations run BEFORE add operations within the block, since
+    a common pattern is "replace this column / index with that one"
+    and the new versions can reuse names.
+    """
 
     name: str
     add_columns: list[ColumnSpec] = field(default_factory=list)
     add_foreign_keys: list[ForeignKeySpec] = field(default_factory=list)
+    add_indexes: list[IndexSpec] = field(default_factory=list)
+    drop_columns: list[str] = field(default_factory=list)
+    drop_indexes: list[str] = field(default_factory=list)
 
 
 @dataclass
 class ServiceMigrationSpec:
-    """Migration specification for a service."""
+    """Migration specification for a service.
+
+    ``forward_only=True`` is for migrations that drop columns or merge
+    schemas in non-recoverable ways. The generated ``downgrade()``
+    raises ``NotImplementedError`` instead of trying to revert.
+    """
 
     service_name: str
     tables: list[TableSpec]
     description: str
     alter_tables: list[AlterTableSpec] = field(default_factory=list)
+    forward_only: bool = False
 
 
 # ============================================================================
@@ -110,6 +152,43 @@ AUTH_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec("updated_at", "sa.DateTime()", nullable=True),
             ],
             indexes=[IndexSpec("ix_user_email", ["email"], unique=True)],
+        ),
+        # UserOAuthIdentity - links a user to a third-party identity.
+        # One user can have many identities (GitHub + Google). The
+        # (provider, provider_user_id) pair is unique to prevent identity
+        # hijacking across accounts.
+        TableSpec(
+            name="user_oauth_identity",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("provider", "sa.String(32)", nullable=False),
+                # Stored as string to avoid caring whether the provider
+                # uses int IDs (GitHub) or UUIDs (some others).
+                ColumnSpec("provider_user_id", "sa.String(128)", nullable=False),
+                ColumnSpec("provider_username", "sa.String(128)", nullable=True),
+                ColumnSpec("provider_email", "sa.String(255)", nullable=True),
+                ColumnSpec("avatar_url", "sa.String(512)", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec(
+                    "uq_user_oauth_identity_provider_pid",
+                    ["provider", "provider_user_id"],
+                    unique=True,
+                ),
+                IndexSpec("ix_user_oauth_identity_user_id", ["user_id"]),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["user_id"], "user", ["id"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    name="ck_user_oauth_identity_provider",
+                    sqltext="provider IN ('github', 'google')",
+                ),
+            ],
         ),
     ],
 )
@@ -510,11 +589,68 @@ VOICE_MIGRATION = ServiceMigrationSpec(
     ],
 )
 
-INSIGHTS_MIGRATION = ServiceMigrationSpec(
-    service_name="insights",
-    description="Insights service tables (sources, metrics, records, events)",
-    tables=[
-        # InsightSource - lookup table for data sources
+
+def _build_insights_migration(per_user: bool) -> ServiceMigrationSpec:
+    """Build the insights migration spec.
+
+    The insights service ships in two shapes, picked by ``insights_per_user``:
+
+    * **Shared mode** (``per_user=False``): just the base tables — source,
+      metric_type, metric, event, record. No tenancy. Single-tenant + env
+      var driven. No goals (goals are per-user-scoped).
+    * **Per-user mode** (``per_user=True``): adds the ``project`` table,
+      stamps every metric/event row with a non-null ``project_id`` FK,
+      adds ``created_by_user_id`` to events, and creates the user-scoped
+      ``insight_goal`` table (with its own ``project_id`` FK).
+
+    Folded into one migration per mode so a fresh DB gets a coherent
+    schema in a single revision instead of three layered ones, and there's
+    no destructive forward-only step needed for the per-user shape.
+    """
+    tables: list[TableSpec] = []
+
+    if per_user:
+        # `project` must come first — every insights table FKs to it.
+        tables.append(
+            TableSpec(
+                name="project",
+                columns=[
+                    ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                    ColumnSpec("slug", "sa.String(64)", nullable=False),
+                    ColumnSpec("name", "sa.String(128)", nullable=False),
+                    ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                    ColumnSpec("github_owner", "sa.String(64)", nullable=True),
+                    ColumnSpec("github_repo", "sa.String(128)", nullable=True),
+                    # github_token / plausible_api_key store ciphertext;
+                    # encrypt/decrypt happens in ProjectService.
+                    ColumnSpec("github_token", "sa.String(512)", nullable=True),
+                    ColumnSpec("pypi_package", "sa.String(128)", nullable=True),
+                    ColumnSpec("plausible_site", "sa.String(256)", nullable=True),
+                    ColumnSpec("plausible_api_key", "sa.String(512)", nullable=True),
+                    ColumnSpec("reddit_subreddits", "sa.String(256)", nullable=True),
+                    ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                    ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+                ],
+                indexes=[
+                    IndexSpec("ix_project_owner_user_id", ["owner_user_id"]),
+                    IndexSpec("ix_project_slug", ["slug"]),
+                    # Same owner can't reuse a slug (enforces the URL handle
+                    # contract: ``/insights/projects/<slug>/...`` resolves
+                    # uniquely within a user's namespace).
+                    IndexSpec(
+                        "uq_project_owner_slug",
+                        ["owner_user_id", "slug"],
+                        unique=True,
+                    ),
+                ],
+                foreign_keys=[
+                    ForeignKeySpec(["owner_user_id"], "user", ["id"]),
+                ],
+            )
+        )
+
+    # InsightSource — lookup table for data sources.
+    tables.append(
         TableSpec(
             name="insight_source",
             columns=[
@@ -533,8 +669,11 @@ INSIGHTS_MIGRATION = ServiceMigrationSpec(
             indexes=[
                 IndexSpec("ix_insight_source_key", ["key"], unique=True),
             ],
-        ),
-        # InsightMetricType - metric type registry, FK to source
+        )
+    )
+
+    # InsightMetricType — metric registry, FK to source.
+    tables.append(
         TableSpec(
             name="insight_metric_type",
             columns=[
@@ -558,29 +697,53 @@ INSIGHTS_MIGRATION = ServiceMigrationSpec(
             foreign_keys=[
                 ForeignKeySpec(["source_id"], "insight_source", ["id"]),
             ],
-        ),
-        # InsightMetric - core time-series data
+        )
+    )
+
+    # InsightMetric — core time-series data. Per-user mode adds project_id.
+    metric_columns = [
+        ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+        ColumnSpec("date", "sa.DateTime()", nullable=False),
+        ColumnSpec("metric_type_id", "sa.Integer()", nullable=False),
+        ColumnSpec("value", "sa.Float()", nullable=False, default="0.0"),
+        ColumnSpec("period", "sa.String(32)", nullable=False),
+        ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+        ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+    ]
+    metric_indexes = [
+        IndexSpec("ix_insight_metric_type_date", ["metric_type_id", "date"]),
+        IndexSpec("ix_insight_metric_date", ["date"]),
+        IndexSpec("ix_insight_metric_metric_type_id", ["metric_type_id"]),
+    ]
+    metric_fks = [
+        ForeignKeySpec(["metric_type_id"], "insight_metric_type", ["id"]),
+    ]
+    if per_user:
+        metric_columns.append(ColumnSpec("project_id", "sa.Integer()", nullable=False))
+        metric_indexes.extend(
+            [
+                IndexSpec("ix_insight_metric_project_id", ["project_id"]),
+                IndexSpec("ix_insight_metric_project_date", ["project_id", "date"]),
+            ]
+        )
+        # ON DELETE CASCADE so SQLAlchemy ``passive_deletes=True`` on
+        # ``Project.metrics`` resolves end-to-end at the DB level.
+        metric_fks.append(
+            ForeignKeySpec(["project_id"], "project", ["id"], ondelete="CASCADE")
+        )
+    tables.append(
         TableSpec(
             name="insight_metric",
-            columns=[
-                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
-                ColumnSpec("date", "sa.DateTime()", nullable=False),
-                ColumnSpec("metric_type_id", "sa.Integer()", nullable=False),
-                ColumnSpec("value", "sa.Float()", nullable=False, default="0.0"),
-                ColumnSpec("period", "sa.String(32)", nullable=False),
-                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
-                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
-            ],
-            indexes=[
-                IndexSpec("ix_insight_metric_type_date", ["metric_type_id", "date"]),
-                IndexSpec("ix_insight_metric_date", ["date"]),
-                IndexSpec("ix_insight_metric_metric_type_id", ["metric_type_id"]),
-            ],
-            foreign_keys=[
-                ForeignKeySpec(["metric_type_id"], "insight_metric_type", ["id"]),
-            ],
-        ),
-        # InsightRecord - all-time records per metric type
+            columns=metric_columns,
+            indexes=metric_indexes,
+            foreign_keys=metric_fks,
+        )
+    )
+
+    # InsightRecord — all-time records per metric type. Not per-project: a
+    # record is the global high-water mark for a metric and lives in the
+    # shared lookup space alongside metric_type.
+    tables.append(
         TableSpec(
             name="insight_record",
             columns=[
@@ -605,25 +768,153 @@ INSIGHTS_MIGRATION = ServiceMigrationSpec(
             foreign_keys=[
                 ForeignKeySpec(["metric_type_id"], "insight_metric_type", ["id"]),
             ],
-        ),
-        # InsightEvent - contextual markers
+        )
+    )
+
+    # InsightEvent — contextual markers. Per-user mode adds project_id +
+    # created_by_user_id; shared mode keeps just the base columns.
+    event_columns = [
+        ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+        ColumnSpec("date", "sa.DateTime()", nullable=False),
+        ColumnSpec("event_type", "sa.String(64)", nullable=False),
+        ColumnSpec("description", "sa.String(1024)", nullable=False),
+        ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+        # `origin` distinguishes collector output from user-created
+        # annotations so the API/UI only exposes user rows for editing.
+        ColumnSpec("origin", "sa.String(16)", nullable=False, default="'collector'"),
+        ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+    ]
+    event_indexes = [
+        IndexSpec("ix_insight_event_date", ["date"]),
+        IndexSpec("ix_insight_event_type_date", ["event_type", "date"]),
+        IndexSpec("ix_insight_event_origin", ["origin"]),
+        IndexSpec("ix_insight_event_origin_date", ["origin", "date"]),
+    ]
+    event_fks: list[ForeignKeySpec] = []
+    if per_user:
+        event_columns.append(ColumnSpec("project_id", "sa.Integer()", nullable=False))
+        event_columns.append(
+            ColumnSpec("created_by_user_id", "sa.Integer()", nullable=True)
+        )
+        event_indexes.extend(
+            [
+                IndexSpec("ix_insight_event_project_id", ["project_id"]),
+                IndexSpec("ix_insight_event_project_date", ["project_id", "date"]),
+                IndexSpec(
+                    "ix_insight_event_created_by_user_id", ["created_by_user_id"]
+                ),
+            ]
+        )
+        event_fks.extend(
+            [
+                # CASCADE on the project FK so deleting a project also
+                # drops its events; the user FK stays a plain RESTRICT
+                # so deleting a user with authored events errors loudly
+                # instead of silently nuking history.
+                ForeignKeySpec(["project_id"], "project", ["id"], ondelete="CASCADE"),
+                ForeignKeySpec(["created_by_user_id"], "user", ["id"]),
+            ]
+        )
+    tables.append(
         TableSpec(
             name="insight_event",
-            columns=[
-                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
-                ColumnSpec("date", "sa.DateTime()", nullable=False),
-                ColumnSpec("event_type", "sa.String(64)", nullable=False),
-                ColumnSpec("description", "sa.String(1024)", nullable=False),
-                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
-                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            columns=event_columns,
+            indexes=event_indexes,
+            foreign_keys=event_fks,
+            check_constraints=[
+                CheckConstraintSpec(
+                    name="ck_insight_event_origin",
+                    sqltext="origin IN ('collector', 'user')",
+                ),
             ],
-            indexes=[
-                IndexSpec("ix_insight_event_date", ["date"]),
-                IndexSpec("ix_insight_event_type_date", ["event_type", "date"]),
-            ],
-        ),
-    ],
-)
+        )
+    )
+
+    if per_user:
+        # InsightGoal — per-user goals scoped to a project. ``user_id`` is
+        # the goal owner (today: project owner; v2 may differ for shared
+        # projects). ``project_id`` is the FK that every read filters on.
+        tables.append(
+            TableSpec(
+                name="insight_goal",
+                columns=[
+                    ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                    ColumnSpec("user_id", "sa.Integer()", nullable=False),
+                    ColumnSpec("project_id", "sa.Integer()", nullable=False),
+                    ColumnSpec("metric_key", "sa.String(64)", nullable=False),
+                    ColumnSpec("kind", "sa.String(16)", nullable=False),
+                    ColumnSpec("target_value", "sa.Float()", nullable=False),
+                    ColumnSpec("window_days", "sa.Integer()", nullable=True),
+                    ColumnSpec("target_date", "sa.Date()", nullable=True),
+                    ColumnSpec(
+                        "status",
+                        "sa.String(16)",
+                        nullable=False,
+                        default="'active'",
+                    ),
+                    ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                    ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+                ],
+                indexes=[
+                    IndexSpec("ix_insight_goal_user_id", ["user_id"]),
+                    IndexSpec("ix_insight_goal_project_id", ["project_id"]),
+                    IndexSpec("ix_insight_goal_metric_key", ["metric_key"]),
+                    IndexSpec("ix_insight_goal_user_status", ["user_id", "status"]),
+                    IndexSpec(
+                        "ix_insight_goal_project_metric",
+                        ["project_id", "metric_key"],
+                    ),
+                ],
+                foreign_keys=[
+                    # User FK stays plain RESTRICT (deleting a user with
+                    # goals errors loudly). Project FK cascades so
+                    # deleting a project drops its goals along with the
+                    # rest of its row tree.
+                    ForeignKeySpec(["user_id"], "user", ["id"]),
+                    ForeignKeySpec(
+                        ["project_id"], "project", ["id"], ondelete="CASCADE"
+                    ),
+                ],
+                check_constraints=[
+                    CheckConstraintSpec(
+                        name="ck_insight_goal_kind",
+                        sqltext="kind IN ('absolute', 'delta', 'rate')",
+                    ),
+                    CheckConstraintSpec(
+                        name="ck_insight_goal_status",
+                        sqltext="status IN ('active', 'achieved', 'abandoned')",
+                    ),
+                    CheckConstraintSpec(
+                        name="ck_insight_goal_metric_key",
+                        sqltext=(
+                            "metric_key IN ("
+                            "'github.stars', 'github.clones', 'github.unique_cloners', "
+                            "'github.views', 'github.unique_visitors', 'github.forks', "
+                            "'github.releases', 'pypi.downloads', 'docs.visitors', "
+                            "'docs.pageviews'"
+                            ")"
+                        ),
+                    ),
+                ],
+            )
+        )
+
+    description = (
+        "Per-user insights tables (project, source/metric_type/metric/event/record, goal)"
+        if per_user
+        else "Insights service tables (sources, metrics, records, events)"
+    )
+    return ServiceMigrationSpec(
+        service_name="insights",
+        description=description,
+        tables=tables,
+    )
+
+
+# Default registry-facing variant is the shared-mode shape. Per-user mode
+# rebuilds the spec at generation time via _build_insights_migration(True).
+INSIGHTS_MIGRATION = _build_insights_migration(per_user=False)
+
 
 PAYMENT_MIGRATION = ServiceMigrationSpec(
     service_name="payment",
@@ -803,18 +1094,55 @@ PAYMENT_AUTH_LINK_MIGRATION = ServiceMigrationSpec(
     ],
 )
 
-# Registry of all service migrations
-MIGRATION_SPECS: dict[str, ServiceMigrationSpec] = {
-    "auth": AUTH_MIGRATION,
-    "auth_rbac": AUTH_RBAC_MIGRATION,
-    "auth_org": ORG_MIGRATION,
-    "auth_tokens": AUTH_TOKENS_MIGRATION,
-    "ai": AI_MIGRATION,
-    "ai_voice": VOICE_MIGRATION,
-    "payment": PAYMENT_MIGRATION,
-    "payment_auth_link": PAYMENT_AUTH_LINK_MIGRATION,
-    "insights": INSIGHTS_MIGRATION,
-}
+# Registry of all service migrations.
+#
+# R4-A: derived lazily from each ``PluginSpec.migrations`` list (see
+# ``aegis/core/services.py`` for the in-tree declarations and
+# ``aegis/core/migration_spec.py`` for the plugin-author-facing facade).
+# Pre-R4 this was a literal ``dict[str, ServiceMigrationSpec]`` here;
+# moving it onto the specs lets third-party plugins ship their own
+# migrations without forking core, while preserving the same
+# ``MIGRATION_SPECS["auth"]`` lookup shape for existing callers
+# (``copier_manager.py``, ``add_service.py``, the test suite).
+#
+# Lazy because ``services.py`` imports the named ``*_MIGRATION``
+# constants from this module — eager construction here would create a
+# circular import at module load time. ``__getattr__`` defers the
+# ``services`` import until first access of ``MIGRATION_SPECS``, by
+# which point the services registry is fully built.
+
+_MIGRATION_SPECS_CACHE: dict[str, ServiceMigrationSpec] | None = None
+
+
+def _get_migration_specs() -> dict[str, ServiceMigrationSpec]:
+    """Return the (lazily built) migration registry.
+
+    Plugins discovered via entry points (Phase B of the plugin system)
+    will need to invalidate ``_MIGRATION_SPECS_CACHE`` after registering
+    new specs; for R4-A the in-tree registry is static, so the dict is
+    built once and reused.
+    """
+    global _MIGRATION_SPECS_CACHE
+    if _MIGRATION_SPECS_CACHE is None:
+        from .migration_spec import collect_migrations
+        from .services import SERVICES
+
+        _MIGRATION_SPECS_CACHE = collect_migrations(SERVICES.values())
+    return _MIGRATION_SPECS_CACHE
+
+
+def __getattr__(name: str) -> Any:
+    """Module-level lazy access for ``MIGRATION_SPECS``.
+
+    Used when callers do ``from migration_generator import MIGRATION_SPECS``;
+    code inside this module references the cache via ``_get_migration_specs()``
+    instead, since module-level ``__getattr__`` does not fire for internal
+    name lookups.
+    """
+    if name == "MIGRATION_SPECS":
+        return _get_migration_specs()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # ============================================================================
 # Migration File Template
@@ -853,11 +1181,15 @@ def upgrade() -> None:
         sa.Column('{{ column.name }}', {{ column.type }}, nullable={{ column.nullable }}{{ pk_attr }}{{ default_attr }}),
 {% endfor %}
 {% if table.primary_keys %}
-        sa.PrimaryKeyConstraint({% for pk in table.primary_keys %}'{{ pk }}'{% if not loop.last %}, {% endif %}{% endfor %}){% if table.foreign_keys %},{% endif %}
+        sa.PrimaryKeyConstraint({% for pk in table.primary_keys %}'{{ pk }}'{% if not loop.last %}, {% endif %}{% endfor %}){% if table.foreign_keys or table.check_constraints %},{% endif %}
 
 {% endif %}
 {% for fk in table.foreign_keys %}
-        sa.ForeignKeyConstraint({{ fk.columns }}, ['{{ fk.ref_table }}.{{ fk.ref_columns[0] }}']){% if not loop.last %},{% endif %}
+        sa.ForeignKeyConstraint({{ fk.columns }}, ['{{ fk.ref_table }}.{{ fk.ref_columns[0] }}']{% if fk.ondelete %}, ondelete='{{ fk.ondelete }}'{% endif %}){% if not loop.last or table.check_constraints %},{% endif %}
+
+{% endfor %}
+{% for chk in table.check_constraints %}
+        sa.CheckConstraint("{{ chk.sqltext }}", name='{{ chk.name }}'){% if not loop.last %},{% endif %}
 
 {% endfor %}
     )
@@ -867,24 +1199,49 @@ def upgrade() -> None:
 
 {% endfor %}
 {% for alter in alter_tables %}
-    # Alter {{ alter.name }} table
+    # Alter {{ alter.name }} table — batch_alter_table is required for
+    # SQLite, which doesn't support ALTER for FK constraints. Postgres
+    # treats it as plain ALTER, so this is portable across both backends.
+    # Drops run before adds so names can be reused (e.g. swap an index
+    # from one column set to another with the same name).
+    with op.batch_alter_table('{{ alter.name }}') as batch_op:
+{% for index_name in alter.drop_indexes %}
+        batch_op.drop_index('{{ index_name }}')
+{% endfor %}
+{% for column_name in alter.drop_columns %}
+        batch_op.drop_column('{{ column_name }}')
+{% endfor %}
 {% for column in alter.add_columns %}
-    op.add_column('{{ alter.name }}', sa.Column('{{ column.name }}', {{ column.type }}, nullable={{ column.nullable }}{% if column.server_default %}, server_default={{ column.server_default }}{% endif %}))
+        batch_op.add_column(sa.Column('{{ column.name }}', {{ column.type }}, nullable={{ column.nullable }}{% if column.server_default %}, server_default={{ column.server_default }}{% endif %}))
 {% endfor %}
 {% for fk in alter.add_foreign_keys %}
-    op.create_foreign_key('fk_{{ alter.name }}_{{ fk.columns[0] }}_{{ fk.ref_table }}', '{{ alter.name }}', '{{ fk.ref_table }}', {{ fk.columns }}, {{ fk.ref_columns }})
+        batch_op.create_foreign_key('fk_{{ alter.name }}_{{ fk.columns[0] }}_{{ fk.ref_table }}', '{{ fk.ref_table }}', {{ fk.columns }}, {{ fk.ref_columns }}{% if fk.ondelete %}, ondelete='{{ fk.ondelete }}'{% endif %})
+{% endfor %}
+{% for index in alter.add_indexes %}
+        batch_op.create_index('{{ index.name }}', {{ index.columns }}{% if index.unique %}, unique=True{% endif %})
 {% endfor %}
 
 {% endfor %}
 
 def downgrade() -> None:
     """Reverse {{ service_name }} migration."""
+{% if forward_only %}
+    raise NotImplementedError(
+        "Migration {{ service_name }} is forward-only — it drops columns "
+        "or merges schemas in non-recoverable ways. Restore from backup "
+        "to roll back."
+    )
+{% else %}
 {% for alter in alter_tables|reverse %}
+    with op.batch_alter_table('{{ alter.name }}') as batch_op:
+{% for index in alter.add_indexes|reverse %}
+        batch_op.drop_index('{{ index.name }}')
+{% endfor %}
 {% for fk in alter.add_foreign_keys|reverse %}
-    op.drop_constraint('fk_{{ alter.name }}_{{ fk.columns[0] }}_{{ fk.ref_table }}', '{{ alter.name }}', type_='foreignkey')
+        batch_op.drop_constraint('fk_{{ alter.name }}_{{ fk.columns[0] }}_{{ fk.ref_table }}', type_='foreignkey')
 {% endfor %}
 {% for column in alter.add_columns|reverse %}
-    op.drop_column('{{ alter.name }}', '{{ column.name }}')
+        batch_op.drop_column('{{ column.name }}')
 {% endfor %}
 {% endfor %}
 {% for table in tables|reverse %}
@@ -893,6 +1250,7 @@ def downgrade() -> None:
 {% endfor %}
     op.drop_table('{{ table.name }}')
 {% endfor %}
+{% endif %}
 '''
 
 
@@ -1008,8 +1366,13 @@ def _render_migration(
                         "columns": fk.columns,
                         "ref_table": fk.ref_table,
                         "ref_columns": fk.ref_columns,
+                        "ondelete": fk.ondelete,
                     }
                     for fk in table.foreign_keys
+                ],
+                "check_constraints": [
+                    {"name": chk.name, "sqltext": chk.sqltext}
+                    for chk in table.check_constraints
                 ],
                 "primary_keys": primary_keys,
             }
@@ -1037,14 +1400,26 @@ def _render_migration(
                 "columns": fk.columns,
                 "ref_table": fk.ref_table,
                 "ref_columns": fk.ref_columns,
+                "ondelete": fk.ondelete,
             }
             for fk in alter.add_foreign_keys
+        ]
+        add_idxs = [
+            {
+                "name": idx.name,
+                "columns": idx.columns,
+                "unique": idx.unique,
+            }
+            for idx in alter.add_indexes
         ]
         alter_tables_data.append(
             {
                 "name": alter.name,
                 "add_columns": cols,
                 "add_foreign_keys": fks,
+                "add_indexes": add_idxs,
+                "drop_columns": list(alter.drop_columns),
+                "drop_indexes": list(alter.drop_indexes),
             }
         )
 
@@ -1066,24 +1441,56 @@ def _render_migration(
         create_date=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S.%f"),
         tables=tables_data,
         alter_tables=alter_tables_data,
+        forward_only=spec.forward_only,
     )
 
 
-def generate_migration(project_path: Path, service_name: str) -> Path | None:
+def _resolve_spec(
+    service_name: str,
+    context: dict[str, Any] | None,
+) -> ServiceMigrationSpec | None:
+    """Look up a migration spec, applying any context-driven overrides.
+
+    The ``insights`` spec ships in two shapes — shared mode (default) and
+    per-user mode (``insights_per_user=true``). Both render to a single
+    ``00X_insights.py`` migration file; only the shape changes. Other
+    services pass through to the static spec unchanged.
+    """
+    migration_specs = _get_migration_specs()
+    if service_name not in migration_specs:
+        return None
+
+    if service_name == "insights" and context is not None:
+        flag = context.get("insights_per_user")
+        per_user = flag == "yes" or flag is True
+        if per_user:
+            return _build_insights_migration(per_user=True)
+
+    return migration_specs[service_name]
+
+
+def generate_migration(
+    project_path: Path,
+    service_name: str,
+    context: dict[str, Any] | None = None,
+) -> Path | None:
     """
     Generate a migration file for a service.
 
     Args:
         project_path: Path to the project directory
         service_name: Name of the service (e.g., "auth", "ai")
+        context: Optional generation context (copier flags). Used to pick
+            between spec variants — e.g. ``insights_per_user`` toggles the
+            insights spec between shared and per-user shape.
 
     Returns:
         Path to the generated migration file, or None if service not found
     """
-    if service_name not in MIGRATION_SPECS:
+    spec = _resolve_spec(service_name, context)
+    if spec is None:
         return None
 
-    spec = MIGRATION_SPECS[service_name]
     versions_dir = get_versions_dir(project_path)
 
     # Ensure versions directory exists
@@ -1106,7 +1513,9 @@ def generate_migration(project_path: Path, service_name: str) -> Path | None:
 
 
 def generate_migrations_for_services(
-    project_path: Path, services: list[str]
+    project_path: Path,
+    services: list[str],
+    context: dict[str, Any] | None = None,
 ) -> list[Path]:
     """
     Generate migrations for multiple services in order.
@@ -1114,21 +1523,24 @@ def generate_migrations_for_services(
     Args:
         project_path: Path to the project directory
         services: List of service names in desired order
+        context: Optional generation context forwarded to ``generate_migration``
+            so spec variants (e.g. insights per-user) pick the right shape.
 
     Returns:
         List of paths to generated migration files
     """
     generated = []
+    migration_specs = _get_migration_specs()
 
     for service_name in services:
-        if service_name not in MIGRATION_SPECS:
+        if service_name not in migration_specs:
             continue
 
         # Skip if migration already exists
         if service_has_migration(project_path, service_name):
             continue
 
-        migration_path = generate_migration(project_path, service_name)
+        migration_path = generate_migration(project_path, service_name, context)
         if migration_path:
             generated.append(migration_path)
 
@@ -1194,7 +1606,8 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
 
     # Insights service (always needs database)
     include_insights = context.get("include_insights")
-    if include_insights == "yes" or include_insights is True:
+    include_insights_on = include_insights == "yes" or include_insights is True
+    if include_insights_on:
         services.append("insights")
 
     # Payment service (always needs database)
@@ -1209,6 +1622,9 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     include_auth_on = include_auth == "yes" or include_auth is True
     if include_payment_on and include_auth_on:
         services.append("payment_auth_link")
+
+    # Per-user vs shared insights is one folded migration — generation
+    # picks the shape from the context flag (see ``generate_migration``).
 
     return services
 

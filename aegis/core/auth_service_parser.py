@@ -1,123 +1,38 @@
 """
-Auth service bracket syntax parser.
+Auth service bracket-syntax parser.
 
-Parses auth[level, engine] syntax where values are detected by type:
-- Levels: basic, rbac, org
-- Engines: sqlite, postgres
-
-Order doesn't matter. Defaults: basic, (no engine override).
+R3 of the plugin system refactor: thin shim around the generic
+``parse_options`` driven by the auth service's declarative ``options``
+list. The typed ``AuthServiceConfig`` dataclass is preserved for
+back-compat with existing callers.
 """
 
 from dataclasses import dataclass
 
-from ..constants import AuthLevels, StorageBackends
-
-# Valid values for detection
-LEVELS = set(AuthLevels.ALL)
-ENGINES = {StorageBackends.SQLITE, StorageBackends.POSTGRES}
-
-DEFAULT_LEVEL = AuthLevels.BASIC
+from .option_spec import is_spec_with_options, parse_options
+from .services import SERVICES
 
 
 @dataclass
 class AuthServiceConfig:
-    """Parsed auth service configuration."""
+    """Parsed auth service configuration (back-compat shape)."""
 
     level: str
     engine: str | None = None
+    oauth: bool = False
 
 
 def parse_auth_service_config(service_string: str) -> AuthServiceConfig:
-    """
-    Parse auth[...] service string into config.
-
-    Args:
-        service_string: Service specification like "auth", "auth[rbac]",
-                        or "auth[org,postgres]"
-
-    Returns:
-        AuthServiceConfig with level and optional engine
-
-    Raises:
-        ValueError: If service string is invalid or has unknown values
-    """
-    service_string = service_string.strip()
-
-    if not service_string.startswith("auth"):
-        raise ValueError(
-            f"Expected 'auth' service, got '{service_string}'. "
-            "This parser only handles auth[...] syntax."
-        )
-
-    # Plain "auth" with no brackets
-    if service_string == "auth":
-        return AuthServiceConfig(level=DEFAULT_LEVEL)
-
-    if "[" not in service_string:
-        raise ValueError(
-            f"Invalid service string '{service_string}'. "
-            "Expected 'auth' or 'auth[level]' format."
-        )
-
-    if not service_string.endswith("]"):
-        raise ValueError(
-            f"Malformed brackets in '{service_string}'. Expected closing ']'."
-        )
-
-    bracket_start = service_string.index("[")
-    bracket_content = service_string[bracket_start + 1 : -1].strip()
-
-    # Empty brackets = defaults
-    if not bracket_content:
-        return AuthServiceConfig(level=DEFAULT_LEVEL)
-
-    # Split by comma and categorize
-    values = [v.strip().lower() for v in bracket_content.split(",") if v.strip()]
-
-    found_levels: list[str] = []
-    found_engines: list[str] = []
-
-    for value in values:
-        if value in LEVELS:
-            found_levels.append(value)
-        elif value in ENGINES:
-            found_engines.append(value)
-        else:
-            raise ValueError(
-                f"Unknown value '{value}' in auth[...] syntax. "
-                f"Valid levels: {', '.join(sorted(LEVELS))}. "
-                f"Valid engines: {', '.join(sorted(ENGINES))}."
-            )
-
-    if len(found_levels) > 1:
-        raise ValueError(
-            f"Cannot specify multiple levels: {', '.join(found_levels)}. "
-            f"Choose one of: {', '.join(sorted(LEVELS))}."
-        )
-
-    if len(found_engines) > 1:
-        raise ValueError(
-            f"Cannot specify multiple engines: {', '.join(found_engines)}. "
-            f"Choose one of: {', '.join(sorted(ENGINES))}."
-        )
-
-    level = found_levels[0] if found_levels else DEFAULT_LEVEL
-    engine = found_engines[0] if found_engines else None
-
-    return AuthServiceConfig(level=level, engine=engine)
+    """Parse an ``auth[...]`` string into the legacy typed dataclass."""
+    parsed = parse_options(service_string, SERVICES["auth"])
+    return AuthServiceConfig(
+        level=parsed["level"],
+        engine=parsed.get("engine"),
+        oauth=bool(parsed.get("oauth", False)),
+    )
 
 
 def is_auth_service_with_options(service_string: str) -> bool:
-    """
-    Check if a service string is an auth service with bracket options.
-
-    Returns True ONLY when explicit bracket syntax is used (auth[...]).
-    Plain "auth" without brackets returns False.
-
-    Args:
-        service_string: Service specification string
-
-    Returns:
-        True if this is an auth[...] format string with explicit options
-    """
-    return service_string.strip().startswith("auth[")
+    """True when ``service_string`` uses ``auth[...]`` bracket syntax."""
+    s = service_string.strip()
+    return s.startswith("auth[") and is_spec_with_options(s)

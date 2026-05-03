@@ -13,19 +13,38 @@ import flet as ft
 
 from app.components.frontend.controls import (
     BodyText,
+    DisplayText,
+    ErrorText,
     H3Text,
     LabelText,
     SecondaryText,
+    SuccessText,
+)
+from app.components.frontend.controls.data_table import (
+    DataTable,
+    DataTableColumn,
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.constants import COUNTRY_NAMES
+from app.services.insights.models import EVENT_TYPE_LABELS
 from app.services.insights.schemas import BulkInsightsResponse
+from app.services.insights.view_schemas import OverviewHero
+from app.services.insights.view_service import InsightViewService
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
-from .modal_sections import MetricCard, MilestoneCard, PieChartCard
+from .modal_sections import (
+    ChartColors,
+    ChartPoint,
+    DateRangeChips,
+    LineChartCard,
+    LineSeries,
+    MetricCard,
+    PieChartCard,
+    chart_tooltip_kwargs,
+)
 
 # Event type → chip border/highlight color
 EVENT_TYPE_COLORS: dict[str, str] = {
@@ -117,6 +136,230 @@ def _pct(current: float, previous: float) -> float | None:
     return None
 
 
+def _build_overview_goals(bulk: BulkInsightsResponse | None) -> ft.Column:
+    """Stubbed Goals section.
+
+    Goals are auth-gated in the templates (the real `Goal` model carries a
+    `user_id` FK), so projects generated without auth don't have
+    persistent goals yet. Until the auth/no-auth/org endpoint design is
+    settled, this builds four placeholder goals from the live current
+    values in ``bulk`` and synthetic targets — the UI shape is real, the
+    targets aren't. Replace the body with real `Goal` rows when the
+    Goal API endpoint is wired through.
+    """
+    header = H3Text("Goals")
+    divider = ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT)
+
+    if bulk is None:
+        return ft.Column(
+            [header, divider, SecondaryText("No data yet.")],
+            spacing=6,
+        )
+
+    # Pull real current values from bulk so the cards aren't lying about
+    # where the project actually stands — only the targets are synthetic.
+    star_count = len(bulk.events.get("new_star", []))
+    pypi_total_row = bulk.latest.get("downloads_total")
+    pypi_total = int(pypi_total_row.value) if pypi_total_row else 0
+    clones_total = sum(int(r.value) for r in bulk.daily.get("clones", []))
+    unique_cloners_total = sum(
+        int(r.value) for r in bulk.daily.get("unique_cloners", [])
+    )
+
+    # Two cards above current (in-progress feel), two below (achieved
+    # / over-target feel) so the visual mix shows both states.
+    fake_goals: list[tuple[str, int, int]] = [
+        ("Pypi — Downloads", pypi_total, max(35_000, pypi_total * 2)),
+        ("Github — Stars", star_count, max(150, int(star_count * 1.5))),
+        ("Github — Clones", clones_total, max(2_500, int(clones_total * 0.85))),
+        (
+            "Github — Unique Cloners",
+            unique_cloners_total,
+            max(500, int(unique_cloners_total * 0.75)),
+        ),
+    ]
+
+    rows: list[ft.Control] = []
+    for label, current, target in fake_goals:
+        pct_raw = (current / target * 100) if target > 0 else 0
+        achieved = pct_raw >= 100
+        pct = int(pct_raw)
+
+        top_row = ft.Row(
+            [
+                BodyText(label, weight=Theme.Typography.WEIGHT_MEDIUM),
+                ft.Row(
+                    [
+                        BodyText(
+                            f"{current:,}",
+                            size=Theme.Typography.BODY_SMALL,
+                            weight=Theme.Typography.WEIGHT_MEDIUM,
+                        ),
+                        SecondaryText(
+                            f" / {target:,}", size=Theme.Typography.BODY_SMALL
+                        ),
+                    ],
+                    spacing=0,
+                ),
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+        )
+
+        bar = ft.ProgressBar(
+            # `value` clamped to 1.0 — flet renders >1 as overflow.
+            value=min(pct_raw / 100, 1.0),
+            color=Theme.Colors.SUCCESS if achieved else Theme.Colors.PRIMARY,
+            bgcolor=Theme.Colors.SURFACE_2,
+            height=6,
+            border_radius=3,
+        )
+
+        bottom = SecondaryText(f"{pct}%", size=Theme.Typography.BODY_SMALL)
+
+        rows.append(ft.Column([top_row, bar, bottom], spacing=4))
+
+    # Match MetricCard styling so this reads as the same family of
+    # surfaces as the metric row above.
+    card = ft.Container(
+        content=ft.Column(rows, spacing=Theme.Spacing.SM),
+        padding=Theme.Spacing.MD,
+        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+        border=ft.border.all(0.5, ft.Colors.OUTLINE),
+        border_radius=Theme.Components.CARD_RADIUS,
+    )
+
+    return ft.Column([header, divider, card], spacing=6)
+
+
+def _format_hero_number(n: float) -> str:
+    """One decimal when fractional, no trailing '.0' on whole numbers."""
+    if n is None:
+        return "—"
+    if float(n).is_integer():
+        return str(int(n))
+    return f"{n:.1f}"
+
+
+def _build_overview_hero(hero: OverviewHero) -> ft.Container:
+    """Editorial 'king metric' card: avg daily unique cloners.
+
+    Mirrors the aegis-pulse Summary hero block — big number on the left,
+    prior-period delta on the right, footer with totals. Renders only the
+    delta block when ``change_pct`` is present (no prior data → no arrow).
+    Uses Aegis text controls so the typography stays consistent with the
+    rest of the dashboard.
+    """
+    # Subtitle: "people / day, last N days" or "all time" for huge ranges.
+    if hero.range_days >= 9000:
+        subtitle = "people / day, all time"
+    else:
+        subtitle = f"people / day, last {hero.range_days} days"
+
+    # Hero number is intentionally larger than DisplayText (32) — it has
+    # to dominate the card visually. Hand-set size; weight comes from the
+    # control's defaults so we keep the family/selectable behavior.
+    big_number = DisplayText(
+        _format_hero_number(hero.avg_daily_unique_cloners),
+        size=64,
+        weight=Theme.Typography.WEIGHT_SEMIBOLD,
+    )
+
+    # Footer mixes emphasized numbers with muted descriptors. BodyText
+    # for the numbers (default weight regular) bumped to medium for
+    # readability; SecondaryText carries the muted units.
+    footer_pieces: list[ft.Control] = [
+        BodyText(
+            f"{hero.total_unique_cloners:,}",
+            size=Theme.Typography.BODY_SMALL,
+            weight=Theme.Typography.WEIGHT_MEDIUM,
+        ),
+        SecondaryText(" total uniques", size=Theme.Typography.BODY_SMALL),
+        SecondaryText(" · ", size=Theme.Typography.BODY_SMALL),
+        BodyText(
+            f"{hero.total_clones:,}",
+            size=Theme.Typography.BODY_SMALL,
+            weight=Theme.Typography.WEIGHT_MEDIUM,
+        ),
+        SecondaryText(" clones", size=Theme.Typography.BODY_SMALL),
+        SecondaryText(" · ", size=Theme.Typography.BODY_SMALL),
+        BodyText(
+            f"{hero.avg_daily_clones:.1f}",
+            size=Theme.Typography.BODY_SMALL,
+            weight=Theme.Typography.WEIGHT_MEDIUM,
+        ),
+        SecondaryText(" clones / day avg", size=Theme.Typography.BODY_SMALL),
+    ]
+
+    left_block = ft.Column(
+        [
+            LabelText(
+                "AVG DAILY UNIQUE CLONERS",
+                color=Theme.Colors.PRIMARY,
+            ),
+            ft.Row(
+                [
+                    big_number,
+                    SecondaryText(subtitle),
+                ],
+                spacing=12,
+                vertical_alignment=ft.CrossAxisAlignment.END,
+                wrap=True,
+            ),
+            ft.Row(footer_pieces, spacing=0, wrap=True),
+        ],
+        spacing=8,
+        expand=True,
+    )
+
+    row_children: list[ft.Control] = [left_block]
+
+    # Right-side prior-period delta — only shown when we have a comparison.
+    if hero.change_pct is not None:
+        is_down = hero.change_pct < 0
+        # SuccessText / ErrorText carry the right semantic color; size
+        # bumped to H2 so the delta reads at a glance from across the card.
+        delta_arrow = "▼" if is_down else "▲"
+        delta_text = f"{delta_arrow} {abs(hero.change_pct)}%"
+        delta_control: ft.Control = (
+            ErrorText(
+                delta_text,
+                size=Theme.Typography.H2,
+                weight=Theme.Typography.WEIGHT_SEMIBOLD,
+            )
+            if is_down
+            else SuccessText(
+                delta_text,
+                size=Theme.Typography.H2,
+                weight=Theme.Typography.WEIGHT_SEMIBOLD,
+            )
+        )
+        right_block = ft.Column(
+            [
+                LabelText("VS PRIOR PERIOD"),
+                delta_control,
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.END,
+            spacing=4,
+        )
+        row_children.append(right_block)
+
+    # Match MetricCard: same bgcolor, border weight/color, and corner
+    # radius so the hero reads as part of the same visual family rather
+    # than a foreign panel above it.
+    return ft.Container(
+        content=ft.Row(
+            row_children,
+            vertical_alignment=ft.CrossAxisAlignment.START,
+            spacing=Theme.Spacing.LG,
+        ),
+        padding=Theme.Spacing.LG,
+        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+        border=ft.border.all(0.5, ft.Colors.OUTLINE),
+        border_radius=Theme.Components.CARD_RADIUS,
+        margin=ft.margin.only(bottom=Theme.Spacing.MD),
+    )
+
+
 def _make_line_chart(
     data_series: list,
     max_y: float,
@@ -202,42 +445,25 @@ class InsightsTab(ft.Container):
         self._bulk = bulk
         self._days = self._default_days
         self._data = self._load_data(self._days)
-        self._show_events = False
         self._highlighted_dates: set[str] = set()
+        # Selection / filter state mirroring the aegis-pulse event-chip
+        # macro. `_selected_event_id` is None when no chip is selected.
+        # `_selected_event_types` is the explicit set of event types
+        # shown in the chip strip and as chart annotations - empty
+        # means "no events selected", so chips are hidden and the
+        # chart shows no event markers. The "All" toggle row in the
+        # filter dropdown selects every type present in the data.
+        self._selected_event_id: str | None = None
+        self._selected_event_types: set[str] = set()
         self._content_column = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO)
 
-        self._events_toggle = ft.Switch(
-            label="Show events",
-            value=False,
-            on_change=self._on_events_toggle,
-            label_style=ft.TextStyle(size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-        )
-
-        self._range_chips = ft.Row(
-            [
-                ft.Container(
-                    content=ft.Text(
-                        label,
-                        size=11,
-                        weight=ft.FontWeight.W_600
-                        if days == self._days
-                        else ft.FontWeight.W_400,
-                        color=ft.Colors.ON_SURFACE
-                        if days == self._days
-                        else ft.Colors.ON_SURFACE_VARIANT,
-                    ),
-                    bgcolor=Theme.Colors.SURFACE_2 if days == self._days else None,
-                    border=ft.border.all(1, ft.Colors.ON_SURFACE)
-                    if days == self._days
-                    else ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
-                    border_radius=12,
-                    padding=ft.padding.symmetric(horizontal=10, vertical=4),
-                    on_click=lambda e, d=days: self._on_range_change(d),
-                    ink=True,
-                )
-                for label, days in RANGE_OPTIONS
-            ],
-            spacing=6,
+        # Date-range pills — owned by `DateRangeChips`, which keeps its
+        # own selection state and styling so this base class only has to
+        # react to the change.
+        self._range_chips = DateRangeChips(
+            options=RANGE_OPTIONS,
+            selected_days=self._days,
+            on_change=self._on_range_change,
         )
 
         self._build_content()
@@ -251,12 +477,6 @@ class InsightsTab(ft.Container):
         )
         self.expand = True
 
-    def _on_events_toggle(self, e: ft.ControlEvent) -> None:
-        self._show_events = e.control.value
-        self._highlighted_dates = set()
-        self._build_content()
-        self._content_column.update()
-
     def _on_event_click(self, dates: set[str]) -> None:
         if self._highlighted_dates == dates:
             self._highlighted_dates = set()
@@ -268,23 +488,9 @@ class InsightsTab(ft.Container):
     def _on_range_change(self, days: int) -> None:
         self._days = days
         self._data = self._load_data(days)
-
-        for i, (_label, d) in enumerate(RANGE_OPTIONS):
-            chip = self._range_chips.controls[i]
-            is_active = d == days
-            chip.bgcolor = Theme.Colors.SURFACE_2 if is_active else None
-            chip.border = (
-                ft.border.all(1, ft.Colors.ON_SURFACE)
-                if is_active
-                else ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
-            )
-            chip.content.weight = (
-                ft.FontWeight.W_600 if is_active else ft.FontWeight.W_400
-            )
-            chip.content.color = (
-                ft.Colors.ON_SURFACE if is_active else ft.Colors.ON_SURFACE_VARIANT
-            )
-
+        # `DateRangeChips` already updated its own active pill before
+        # invoking this callback, so we only have to react: reload data
+        # and rebuild the tab content for the new window.
         self._build_content()
         self._content_column.update()
 
@@ -299,7 +505,11 @@ class InsightsTab(ft.Container):
     def _make_filter_bar(
         self, last_updated: str = "", extra_controls: list[ft.Control] | None = None
     ) -> ft.Row:
-        """Build the standard filter bar with range chips, last updated, and events toggle."""  # noqa: E501
+        """Build the standard filter bar with range chips and last-updated.
+
+        The Events filter dropdown lives on the chip strip itself
+        (see `_render_event_chips`), so it isn't included here.
+        """
         right_items: list[ft.Control] = []
         if last_updated:
             right_items.append(
@@ -307,7 +517,6 @@ class InsightsTab(ft.Container):
                     f"Last updated: {last_updated}", size=Theme.Typography.BODY_SMALL
                 )
             )
-        right_items.append(self._events_toggle)
         if extra_controls:
             right_items.extend(extra_controls)
         return ft.Row(
@@ -321,10 +530,17 @@ class InsightsTab(ft.Container):
         valid_dates: set[str] | None = None,
         exclude_types: set[str] | None = None,
     ) -> ft.Control | None:
-        """Render grouped event chips. Returns Row control or None."""
-        if not self._show_events:
-            return None
+        """Render the event chip strip + filter dropdown.
 
+        Mirrors the aegis-pulse `alpine_event_chips` macro — uniform
+        muted-card chip styling, teal accent for the selected chip,
+        amber for chips on the same date as the selection, and a
+        right-aligned "Events (N)" dropdown that filters the strip by
+        event type. Returns a Column with the filter row above the chip
+        row. The filter trigger is always shown; the chip row only
+        renders when there are events to display under the current
+        filter.
+        """
         if exclude_types:
             all_events = [
                 (d, lbl, t) for d, lbl, t in all_events if t not in exclude_types
@@ -332,37 +548,155 @@ class InsightsTab(ft.Container):
         if valid_dates is not None:
             all_events = [(d, lbl, t) for d, lbl, t in all_events if d in valid_dates]
 
-        grouped = _group_events(all_events, self._days)
-        if not grouped:
+        # Apply the dropdown's type filter. Empty set means "no events
+        # selected" — chip strip stays empty, button reads neutral.
+        # Non-empty restricts to the selected types.
+        visible_events = [
+            (d, lbl, t) for d, lbl, t in all_events if t in self._selected_event_types
+        ]
+
+        grouped = _group_events(visible_events, self._days)
+        if not all_events:
+            # Nothing to filter and nothing to show — hide the toolbar
+            # entirely so empty tabs don't get a stray "Events" button.
             return None
 
+        # Build the filter dropdown. Lists every event type present in
+        # the un-filtered set, plus an "All" toggle-all row at the top.
+        present_types = sorted({t for _d, _lbl, t in all_events})
+        all_selected = bool(present_types) and set(present_types).issubset(
+            self._selected_event_types
+        )
+        active_filter = bool(self._selected_event_types)
+        filter_label = f"Events ({len(grouped)})" if active_filter else "Events"
+        filter_button = ft.PopupMenuButton(
+            content=ft.Container(
+                content=ft.Text(
+                    filter_label,
+                    size=Theme.Typography.BODY_SMALL,
+                    weight=ft.FontWeight.W_500,
+                    color=ft.Colors.ON_SURFACE
+                    if active_filter
+                    else ft.Colors.ON_SURFACE_VARIANT,
+                ),
+                bgcolor=ft.Colors.with_opacity(0.10, ChartColors.TEAL)
+                if active_filter
+                else ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                border=ft.border.all(
+                    0.5,
+                    ChartColors.TEAL if active_filter else ft.Colors.OUTLINE,
+                ),
+                border_radius=10,
+                padding=ft.padding.symmetric(horizontal=10, vertical=4),
+            ),
+            items=[
+                ft.PopupMenuItem(
+                    text=("✓ All" if all_selected else "All"),
+                    on_click=lambda _e, types=present_types: (
+                        self._on_event_types_toggle_all(types)
+                    ),
+                ),
+                *[
+                    ft.PopupMenuItem(
+                        text=(
+                            f"✓ {EVENT_TYPE_LABELS.get(t, t)}"
+                            if t in self._selected_event_types
+                            else EVENT_TYPE_LABELS.get(t, t)
+                        ),
+                        on_click=lambda _e, et=t: self._on_event_type_toggle(et),
+                    )
+                    for t in present_types
+                ],
+            ],
+        )
+
         highlighted = self._highlighted_dates
-        return ft.Row(
-            [
+
+        chip_controls: list[ft.Control] = []
+        for date, label, etype, dates_set in grouped:
+            chip_id = f"{date}::{label}::{etype}"
+            is_selected = chip_id == self._selected_event_id
+            is_related = not is_selected and bool(dates_set & highlighted)
+            if is_selected:
+                chip_bg = ft.Colors.with_opacity(0.10, ChartColors.TEAL)
+                chip_border_color = ChartColors.TEAL
+                chip_text_color = ft.Colors.ON_SURFACE
+            elif is_related:
+                chip_bg = ft.Colors.with_opacity(0.10, ChartColors.AMBER)
+                chip_border_color = ChartColors.AMBER
+                chip_text_color = ft.Colors.ON_SURFACE
+            else:
+                chip_bg = ft.Colors.SURFACE_CONTAINER_HIGHEST
+                chip_border_color = ft.Colors.OUTLINE
+                chip_text_color = ft.Colors.ON_SURFACE_VARIANT
+            chip_controls.append(
                 ft.Container(
                     content=ft.Text(
                         f"{label}  {date[-5:]}",
                         size=Theme.Typography.BODY_SMALL,
-                        weight=ft.FontWeight.W_600,
+                        weight=ft.FontWeight.W_500,
+                        color=chip_text_color,
                         selectable=False,
                     ),
-                    bgcolor=EVENT_TYPE_COLORS.get(etype, Theme.Colors.SURFACE_2)
-                    if dates_set & highlighted
-                    else Theme.Colors.SURFACE_2,
-                    border=ft.border.all(
-                        2 if dates_set & highlighted else 1,
-                        EVENT_TYPE_COLORS.get(etype, ft.Colors.OUTLINE_VARIANT),
-                    ),
+                    bgcolor=chip_bg,
+                    border=ft.border.all(0.5, chip_border_color),
                     border_radius=10,
                     padding=ft.padding.symmetric(horizontal=8, vertical=3),
-                    on_click=lambda e, ds=dates_set: self._on_event_click(ds),
+                    on_click=lambda _e, cid=chip_id, ds=dates_set: (
+                        self._on_event_chip_click(cid, ds)
+                    ),
                     ink=True,
                 )
-                for date, label, etype, dates_set in grouped
+            )
+
+        return ft.Column(
+            [
+                ft.Row(
+                    [filter_button],
+                    alignment=ft.MainAxisAlignment.END,
+                ),
+                ft.Row(chip_controls, spacing=6, wrap=True),
             ],
             spacing=6,
-            wrap=True,
         )
+
+    def _on_event_chip_click(self, chip_id: str, dates_set: set[str]) -> None:
+        """Toggle chip selection. Clicking the same chip again clears
+        the highlight; clicking a different chip moves the highlight to
+        its date(s)."""
+        if self._selected_event_id == chip_id:
+            self._selected_event_id = None
+            self._highlighted_dates = set()
+        else:
+            self._selected_event_id = chip_id
+            self._highlighted_dates = set(dates_set)
+        self._build_content()
+        self._content_column.update()
+
+    def _on_event_type_toggle(self, event_type: str) -> None:
+        """Toggle membership of an event type in the filter dropdown."""
+        if event_type in self._selected_event_types:
+            self._selected_event_types.discard(event_type)
+        else:
+            self._selected_event_types.add(event_type)
+        self._build_content()
+        self._content_column.update()
+
+    def _on_event_types_toggle_all(self, types: list[str]) -> None:
+        """Dropdown's "All" row — toggle all event types on or off.
+
+        If every type is already selected, clear the set (hides the
+        chip strip and turns the button neutral). Otherwise select
+        every available type, showing the full chip strip with the
+        button in its teal/active state.
+        """
+        type_set = set(types)
+        if type_set.issubset(self._selected_event_types) and self._selected_event_types:
+            self._selected_event_types = set()
+        else:
+            self._selected_event_types = type_set
+        self._build_content()
+        self._content_column.update()
 
 
 # ---------------------------------------------------------------------------
@@ -542,35 +876,7 @@ class OverviewTab(ft.Container):
         recent_stars = len([r for r in star_events if r.date >= d14])
         prev_star_count = len([r for r in star_events if d28 <= r.date < d14])
 
-        # Milestones - highest value per category (ATH per record type)
         insight_events = bulk.insight_events if bulk else []
-        best_per_category: dict[str, dict[str, Any]] = {}
-        for ev in insight_events:
-            if ev.event_type not in ("milestone_github", "milestone_pypi", "feature"):
-                continue
-            meta = ev.metadata_ if isinstance(ev.metadata_, dict) else {}
-            category = meta.get("category", ev.description)
-
-            hero_str = (
-                _extract_max_number(ev.description)
-                if ev.event_type != "feature"
-                else ""
-            )
-            value = int(hero_str.replace(",", "")) if hero_str else 0
-
-            existing = best_per_category.get(category)
-            if existing is None or value > existing.get("_value", 0):
-                best_per_category[category] = {
-                    "date": str(ev.date)[:10],
-                    "description": ev.description,
-                    "type": ev.event_type,
-                    "metadata": meta,
-                    "_value": value,
-                }
-
-        milestones = sorted(
-            best_per_category.values(), key=lambda m: m["date"], reverse=True
-        )
 
         # Recent events of all types from bulk
         recent_events: list[dict[str, Any]] = []
@@ -815,45 +1121,15 @@ class OverviewTab(ft.Container):
                 DataTableRow(columns=_row_col, row_data=[row], padding=4)
             )
 
-        # Parse milestone data into trophy cards
-        milestone_cards: list[ft.Control] = []
-        for m in milestones:
-            meta = m.get("metadata", {})
-            category = meta.get("category", "")
-            config = CATEGORY_CONFIG.get(category, {})
-            label = config.get("label", m["description"])
-            accent = config.get("color", "#9CA3AF")
-
-            # Extract hero number — only for milestone types, not features
-            hero = (
-                _extract_max_number(m["description"]) if m["type"] != "feature" else ""
-            )
-
-            milestone_cards.append(
-                MilestoneCard(
-                    label=label,
-                    value=hero or "\u2014",
-                    date=_pretty_date(m["date"]),
-                    accent_color=accent,
-                )
-            )
-
-        # Arrange milestones in a 2x2 grid
-        milestone_grid: list[ft.Control] = [
-            H3Text("Key Milestones"),
-            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
-        ]
-        row_items: list[ft.Control] = []
-        for card in milestone_cards:
-            row_items.append(card)
-            if len(row_items) == 2:
-                milestone_grid.append(ft.Row(row_items, spacing=Theme.Spacing.MD))
-                row_items = []
-        if row_items:
-            milestone_grid.append(ft.Row(row_items, spacing=Theme.Spacing.MD))
+        # Goals (left) + Recent Activity (right) — mirrors the aegis-pulse
+        # Summary layout. Goals stubbed pending the auth/no-auth/org
+        # endpoint design; the old "Key Milestones" grid is gone since
+        # those deltas now live on the metric cards via change_pct.
+        goals_section = _build_overview_goals(bulk)
 
         side_by_side = ft.Row(
             [
+                ft.Column([goals_section], spacing=6, expand=2),
                 ft.Column(
                     [
                         H3Text("Recent Activity"),
@@ -861,25 +1137,111 @@ class OverviewTab(ft.Container):
                         *activity_items,
                     ],
                     spacing=6,
-                    expand=2,
-                ),
-                ft.Column(
-                    milestone_grid,
-                    spacing=6,
-                    expand=1,
+                    expand=3,
                 ),
             ],
             spacing=Theme.Spacing.LG,
             vertical_alignment=ft.CrossAxisAlignment.START,
         )
 
-        # Intelligence Report — collapsible analysis
+        # Build the full OverviewView once — hero, chart series, and
+        # everything else come from the same source of truth so the
+        # numbers in the cards always agree with the curves below.
+        overview_view = InsightViewService(bulk).overview(days=14) if bulk else None
+        hero_view = overview_view.hero if overview_view else None
+
+        # Daily Cloners chart — trim leading zero days so the curve starts
+        # where collection actually picked up the project. Two series:
+        # blue clones, purple unique-cloners — same palette as the GitHub
+        # tab so the visual language stays consistent.
+        clones_chart: LineChartCard | None = None
+        if overview_view and overview_view.daily:
+            trimmed = overview_view.daily
+            for i, d in enumerate(overview_view.daily):
+                if d.clones or d.unique_cloners:
+                    trimmed = overview_view.daily[i:]
+                    break
+            if trimmed:
+                clones_chart = LineChartCard(
+                    title="Daily Cloners",
+                    subtitle="unique people / clones per day",
+                    x_labels=[d.date for d in trimmed],
+                    series=[
+                        LineSeries(
+                            label="Clones",
+                            color=ChartColors.TEAL,
+                            points=[(i, d.clones) for i, d in enumerate(trimmed)],
+                            tooltips=[f"Clones: {d.clones:,}" for d in trimmed],
+                            fill=True,
+                        ),
+                        LineSeries(
+                            label="Unique Cloners",
+                            color=ChartColors.INDIGO,
+                            points=[
+                                (i, d.unique_cloners) for i, d in enumerate(trimmed)
+                            ],
+                            tooltips=[f"Unique: {d.unique_cloners:,}" for d in trimmed],
+                        ),
+                    ],
+                )
+
+        # Cumulative Stars chart — gold line with a 15%-opacity fill,
+        # star-history style. min_y is bumped off zero so a healthy
+        # project's curve doesn't get squashed against the bottom.
+        stars_chart: LineChartCard | None = None
+        if overview_view and overview_view.stars_daily:
+            stars_daily = overview_view.stars_daily
+            min_y_stars = max(
+                0,
+                stars_daily[0].value
+                - max(1, (stars_daily[-1].value - stars_daily[0].value) // 4),
+            )
+            stars_chart = LineChartCard(
+                title="Stars",
+                subtitle="cumulative",
+                x_labels=[d.date for d in stars_daily],
+                series=[
+                    LineSeries(
+                        label="Cumulative Stars",
+                        color=ChartColors.AMBER,
+                        points=[(i, d.value) for i, d in enumerate(stars_daily)],
+                        tooltips=[f"#{d.value:,}\n{d.date}" for d in stars_daily],
+                        fill=True,
+                        stroke_width=3,
+                    ),
+                ],
+                min_y=min_y_stars,
+            )
+
+        # Daily Cloners (left, expand=2) + Stars (right, expand=1) —
+        # mirrors the aegis-pulse Summary 2/3 + 1/3 split. Each side
+        # collapses to nothing when its data is empty so we don't render
+        # a half-empty row.
+        charts_row: ft.Control | None = None
+        if clones_chart and stars_chart:
+            charts_row = ft.Row(
+                [
+                    ft.Container(content=clones_chart, expand=2),
+                    ft.Container(content=stars_chart, expand=1),
+                ],
+                spacing=Theme.Spacing.MD,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+            )
+        elif clones_chart:
+            charts_row = clones_chart
+        elif stars_chart:
+            charts_row = stars_chart
+
+        column_children: list[ft.Control] = []
+        if hero_view is not None:
+            column_children.append(_build_overview_hero(hero_view))
+        column_children.append(metrics_row)
+        if charts_row is not None:
+            column_children.extend([ft.Container(height=4), charts_row])
+        column_children.extend([ft.Container(height=4), side_by_side])
+
         self.content = ft.Column(
-            [
-                metrics_row,
-                ft.Container(height=4),
-                side_by_side,
-            ],
+            column_children,
             spacing=8,
             scroll=ft.ScrollMode.AUTO,
         )
@@ -1070,7 +1432,6 @@ class GitHubTrafficTab(InsightsTab):
 
         # -- Clones + Unique chart with event annotations ---------------------
 
-        releases_map = data.get("releases", {}) if self._show_events else {}
         highlighted = self._highlighted_dates
 
         # Trim leading zero days separately for each chart
@@ -1086,175 +1447,91 @@ class GitHubTrafficTab(InsightsTab):
                 view_daily = daily[i:]
                 break
 
+        # Build a date→event-labels map. The Events dropdown's selected
+        # types narrow the set when non-empty (== filtered); an empty
+        # set means "All", showing every event in the chart's tooltip
+        # overlay.
+        events_by_date: dict[str, list[str]] = {}
+        for ev_date, ev_label, ev_etype in data.get("all_events", []):
+            if (
+                self._selected_event_types
+                and ev_etype not in self._selected_event_types
+            ):
+                continue
+            events_by_date.setdefault(ev_date, []).append(ev_label)
+
         # -- Clones + Unique chart --------------------------------------------
-
-        max_clone = max(d["clones"] for d in clone_daily) if clone_daily else 1
-        clone_step = _smart_step(max_clone)
-        clone_max_y = int((max_clone // clone_step + 1) * clone_step)
-
-        clone_points: list[ft.LineChartDataPoint] = []
-        unique_points: list[ft.LineChartDataPoint] = []
-        release_anno_points: list[ft.LineChartDataPoint] = []
-
-        for i, d in enumerate(clone_daily):
-            is_hl = d["date"] in highlighted
-            hl_point = (
-                ft.ChartCirclePoint(
-                    radius=7, color="#FF5722", stroke_width=2, stroke_color="#FFFFFF"
-                )
-                if is_hl
-                else None
-            )
-
-            clone_points.append(
-                ft.LineChartDataPoint(
-                    i,
-                    d["clones"],
-                    tooltip=f"Clones: {d['clones']:,}",
-                    point=hl_point,
-                )
-            )
-            unique_points.append(
-                ft.LineChartDataPoint(
-                    i,
-                    d["unique_cloners"],
-                    tooltip=f"Unique: {d['unique_cloners']:,}",
-                )
-            )
-
-            rel = releases_map.get(d["date"])
-            if rel:
-                release_anno_points.append(
-                    ft.LineChartDataPoint(i, 0, tooltip=rel, show_tooltip=True)
-                )
-            else:
-                release_anno_points.append(
-                    ft.LineChartDataPoint(i, 0, show_tooltip=False)
-                )
-
+        # Indices on the chart that correspond to the currently selected
+        # event chip — drives the per-point amber marker that lets the
+        # eye correlate the chip with its date.
+        clone_highlights = frozenset(
+            i for i, d in enumerate(clone_daily) if d["date"] in highlighted
+        )
         clone_series = [
-            ft.LineChartData(
-                data_points=clone_points,
-                stroke_width=2,
-                color="#2563eb",
-                curved=True,
-                point=ft.ChartCirclePoint(
-                    radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
-                ),
-                stroke_cap_round=True,
+            LineSeries(
+                label="Clones",
+                color=ChartColors.TEAL,
+                points=[(i, d["clones"]) for i, d in enumerate(clone_daily)],
+                tooltips=[f"Clones: {d['clones']:,}" for d in clone_daily],
+                fill=True,
+                highlighted_indices=clone_highlights,
             ),
-            ft.LineChartData(
-                data_points=unique_points,
-                stroke_width=2,
-                color="#7c3aed",
-                curved=True,
-                point=ft.ChartCirclePoint(
-                    radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
-                ),
-                stroke_cap_round=True,
+            LineSeries(
+                label="Unique Cloners",
+                color=ChartColors.INDIGO,
+                points=[(i, d["unique_cloners"]) for i, d in enumerate(clone_daily)],
+                tooltips=[f"Unique: {d['unique_cloners']:,}" for d in clone_daily],
+                highlighted_indices=clone_highlights,
             ),
         ]
-        if any(p.show_tooltip for p in release_anno_points):
-            clone_series.append(
-                ft.LineChartData(
-                    data_points=release_anno_points,
-                    stroke_width=0,
-                    color="#9CA3AF",
-                )
+        content.append(
+            LineChartCard(
+                title="Clones",
+                subtitle="clones / unique cloners per day",
+                x_labels=[d["date"] for d in clone_daily],
+                series=clone_series,
+                height=300,
+                event_annotations=[
+                    events_by_date.get(d["date"], []) for d in clone_daily
+                ],
             )
-
-        clone_chart = _make_line_chart(
-            clone_series, clone_max_y, clone_daily, clone_step
-        )
-        content.append(
-            ft.Container(content=clone_chart, margin=ft.margin.only(right=20))
-        )
-        content.append(
-            _make_legend([("#2563eb", "Clones"), ("#7c3aed", "Unique Cloners")])
         )
 
         content.append(ft.Container(height=12))
 
         # -- Views + Visitors chart -------------------------------------------
-
-        max_view = max(d["views"] for d in view_daily) if view_daily else 1
-        view_step = _smart_step(max_view)
-        view_max_y = int((max_view // view_step + 1) * view_step)
-
-        view_points: list[ft.LineChartDataPoint] = []
-        visitor_points: list[ft.LineChartDataPoint] = []
-        release_anno2: list[ft.LineChartDataPoint] = []
-
-        for i, d in enumerate(view_daily):
-            is_hl = d["date"] in highlighted
-            hl_point = (
-                ft.ChartCirclePoint(
-                    radius=7, color="#FF5722", stroke_width=2, stroke_color="#FFFFFF"
-                )
-                if is_hl
-                else None
-            )
-
-            view_points.append(
-                ft.LineChartDataPoint(
-                    i,
-                    d["views"],
-                    tooltip=f"Views: {d['views']:,}",
-                    point=hl_point,
-                )
-            )
-            visitor_points.append(
-                ft.LineChartDataPoint(
-                    i,
-                    d["unique_visitors"],
-                    tooltip=f"Visitors: {d['unique_visitors']:,}",
-                )
-            )
-
-            rel = releases_map.get(d["date"])
-            if rel:
-                release_anno2.append(
-                    ft.LineChartDataPoint(i, 0, tooltip=rel, show_tooltip=True)
-                )
-            else:
-                release_anno2.append(ft.LineChartDataPoint(i, 0, show_tooltip=False))
-
+        view_highlights = frozenset(
+            i for i, d in enumerate(view_daily) if d["date"] in highlighted
+        )
         view_series = [
-            ft.LineChartData(
-                data_points=view_points,
-                stroke_width=2,
-                color="#22C55E",
-                curved=True,
-                point=ft.ChartCirclePoint(
-                    radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
-                ),
-                stroke_cap_round=True,
+            LineSeries(
+                label="Views",
+                color=ChartColors.TEAL,
+                points=[(i, d["views"]) for i, d in enumerate(view_daily)],
+                tooltips=[f"Views: {d['views']:,}" for d in view_daily],
+                fill=True,
+                highlighted_indices=view_highlights,
             ),
-            ft.LineChartData(
-                data_points=visitor_points,
-                stroke_width=2,
-                color="#F59E0B",
-                curved=True,
-                point=ft.ChartCirclePoint(
-                    radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
-                ),
-                stroke_cap_round=True,
+            LineSeries(
+                label="Visitors",
+                color=ChartColors.VIOLET,
+                points=[(i, d["unique_visitors"]) for i, d in enumerate(view_daily)],
+                tooltips=[f"Visitors: {d['unique_visitors']:,}" for d in view_daily],
+                highlighted_indices=view_highlights,
             ),
         ]
-        if any(p.show_tooltip for p in release_anno2):
-            view_series.append(
-                ft.LineChartData(
-                    data_points=release_anno2,
-                    stroke_width=0,
-                    color="#9CA3AF",
-                )
-            )
-
-        views_chart = _make_line_chart(view_series, view_max_y, view_daily, view_step)
         content.append(
-            ft.Container(content=views_chart, margin=ft.margin.only(right=20))
+            LineChartCard(
+                title="Views",
+                subtitle="page views / unique visitors per day",
+                x_labels=[d["date"] for d in view_daily],
+                series=view_series,
+                height=300,
+                event_annotations=[
+                    events_by_date.get(d["date"], []) for d in view_daily
+                ],
+            )
         )
-        content.append(_make_legend([("#22C55E", "Views"), ("#F59E0B", "Visitors")]))
 
         # Interpretation
         content.append(
@@ -1269,201 +1546,209 @@ class GitHubTrafficTab(InsightsTab):
             )
         )
 
-        # -- Activity Summary stacked bar chart -------------------------------
+        # -- Avg Unique Cloners by Day of Week --------------------------------
+        # Source/cadence pattern lives here — peak/trough days are colored
+        # distinctly so the rhythm pops without parsing seven nearly-equal
+        # bars. Hidden when there's no cloner data at all.
+        weekday = data.get("weekday", [])
+        if weekday and any(v > 0 for v in weekday):
+            wk_min = min(weekday)
+            wk_max = max(weekday)
+            pad_bottom = max((wk_max - wk_min) * 0.3, 1)
+            pad_top = max((wk_max - wk_min) * 0.15, 1)
+            wk_min_y = max(0, int(wk_min - pad_bottom))
+            wk_max_y = int(wk_max + pad_top + 0.5)
 
-        activity = data.get("activity_summary", [])
-        if activity:
-            content.append(ft.Container(height=12))
-            content.append(H3Text("Activity Summary"))
+            # Peak (brand teal) + trough (violet) + middle days (muted teal)
+            # — same color treatment as the aegis-pulse Summary tab.
+            peak_color = ChartColors.TEAL
+            trough_color = ChartColors.VIOLET
+            mid_color = ft.Colors.with_opacity(0.55, ChartColors.TEAL)
 
-            # Group into 5 categories
-            act_categories = [
-                ("Code", "#3B82F6", ["push", "creates", "deletes"]),
-                ("Issues", "#F59E0B", ["issues", "issue_comments"]),
-                ("PRs", "#A855F7", ["pull_requests", "pull_request_reviews"]),
-                ("Community", "#22C55E", ["forks", "stars"]),
-                ("Releases", "#EC4899", ["releases"]),
-            ]
-
-            bar_groups: list[ft.BarChartGroup] = []
-            act_max = 0
-
-            bar_width = max(8, 400 // max(len(activity), 1))
-
-            for i, day in enumerate(activity):
-                stack_items: list[ft.BarChartRodStackItem] = []
-                running_y = 0.0
-                for _cat_name, color, fields in act_categories:
-                    val = sum(day.get(f, 0) for f in fields)
-                    if val > 0:
-                        stack_items.append(
-                            ft.BarChartRodStackItem(
-                                from_y=running_y,
-                                to_y=running_y + val,
-                                color=color,
-                            )
-                        )
-                    running_y += val
-                act_max = max(act_max, running_y)
-                bar_groups.append(
+            wk_groups: list[ft.BarChartGroup] = []
+            for i, v in enumerate(weekday):
+                if v == wk_max:
+                    bar_color = peak_color
+                elif v == wk_min:
+                    bar_color = trough_color
+                else:
+                    bar_color = mid_color
+                wk_groups.append(
                     ft.BarChartGroup(
                         x=i,
                         bar_rods=[
                             ft.BarChartRod(
-                                to_y=running_y,
-                                width=bar_width,
-                                rod_stack_items=stack_items,
-                                color=ft.Colors.TRANSPARENT,
-                                border_radius=2,
-                            ),
+                                from_y=wk_min_y,
+                                to_y=v,
+                                width=28,
+                                color=bar_color,
+                                tooltip=f"{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i]}: {v:.1f}",
+                                border_radius=4,
+                            )
                         ],
                     )
                 )
 
-            act_step = _smart_step(act_max) if act_max > 0 else 5
-            act_max_y = int((act_max // act_step + 1) * act_step) if act_max > 0 else 10
-
-            activity_chart = ft.BarChart(
-                bar_groups=bar_groups,
-                left_axis=ft.ChartAxis(labels_size=50, labels_interval=act_step),
-                bottom_axis=ft.ChartAxis(
-                    labels_size=50,
-                    labels=[
+            # Y-axis ticks rendered explicitly so they pick up the same
+            # small + muted styling as the bottom axis (and as the
+            # LineChartCard left-axis treatment) — without this, Flet
+            # falls back to its default-styled auto-labels which are
+            # larger and use the default white text color.
+            wk_step = _smart_step(wk_max_y - wk_min_y)
+            wk_left_labels: list[ft.ChartAxisLabel] = []
+            if wk_step > 0:
+                tick = int(wk_min_y) + (
+                    wk_step - (int(wk_min_y) % wk_step)
+                    if int(wk_min_y) % wk_step
+                    else 0
+                )
+                while tick <= wk_max_y:
+                    wk_left_labels.append(
                         ft.ChartAxisLabel(
-                            value=i,
+                            value=tick,
                             label=ft.Text(
-                                day["date"][-5:],
+                                f"{int(tick):,}",
                                 size=9,
                                 color=ft.Colors.ON_SURFACE_VARIANT,
                             ),
                         )
-                        for i, day in enumerate(activity)
-                        if i % 3 == 0 or i == len(activity) - 1
+                    )
+                    tick += wk_step
+
+            wk_chart = ft.BarChart(
+                bar_groups=wk_groups,
+                left_axis=ft.ChartAxis(labels_size=50, labels=wk_left_labels),
+                bottom_axis=ft.ChartAxis(
+                    labels_size=40,
+                    labels=[
+                        ft.ChartAxisLabel(
+                            value=i,
+                            label=ft.Text(
+                                ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][i],
+                                size=11,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                            ),
+                        )
+                        for i in range(7)
                     ],
                 ),
                 horizontal_grid_lines=ft.ChartGridLines(
-                    interval=act_step,
                     color=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE),
                     width=1,
                 ),
+                **chart_tooltip_kwargs(),
                 border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
-                interactive=False,
-                max_y=act_max_y,
-                height=300,
+                interactive=True,
+                min_y=wk_min_y,
+                max_y=wk_max_y,
+                height=240,
                 expand=True,
             )
 
+            # Wrap in the same MetricCard-style card as the line charts
+            # so the surfaces stay visually unified. Title row dropped
+            # to match LineChartCard — the chart speaks for itself.
+            content.append(ft.Container(height=12))
             content.append(
-                ft.Container(content=activity_chart, margin=ft.margin.only(right=20))
-            )
-            content.append(
-                ft.Row(
-                    [
-                        ft.Row(
-                            [
-                                ft.Container(
-                                    width=10, height=10, bgcolor=color, border_radius=5
-                                ),
-                                SecondaryText(name, size=Theme.Typography.BODY_SMALL),
-                            ],
-                            spacing=4,
-                        )
-                        for name, color, _fields in act_categories
-                    ],
-                    spacing=16,
-                    alignment=ft.MainAxisAlignment.CENTER,
+                ft.Container(
+                    content=wk_chart,
+                    padding=Theme.Spacing.MD,
+                    bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                    border=ft.border.all(0.5, ft.Colors.OUTLINE),
+                    border_radius=Theme.Components.CARD_RADIUS,
                 )
             )
 
-        # -- Referrers --------------------------------------------------------
-
+        # -- Referrers + Popular Paths ----------------------------------------
+        # Side-by-side data tables, matching the aegis-pulse Summary tab.
+        # Each name cell is a clickable link (referrer domain or
+        # github.com path), so visitors can dig into the source from
+        # the modal instead of copy-pasting URLs.
         referrers = data.get("referrers", [])
-        content.append(ft.Container(height=8))
-        content.append(H3Text("Referrers"))
-        content.append(ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT))
+        paths = data.get("popular_paths", [])
 
-        if referrers:
-            for ref in referrers:
-                domain = ref["domain"]
-                # Build URL — search engines get their URL, others get https://
-                url = (
-                    f"https://{domain}"
-                    if "." in domain
-                    else f"https://www.google.com/search?q={domain}"
-                )
-                content.append(
-                    ft.Row(
-                        [
-                            ft.Container(
-                                content=ft.Text(
-                                    domain,
-                                    size=Theme.Typography.BODY_SMALL,
-                                    style=ft.TextStyle(
-                                        color=Theme.Colors.INFO,
-                                        decoration=ft.TextDecoration.UNDERLINE,
-                                    ),
-                                    selectable=False,
-                                ),
-                                width=200,
-                                on_click=lambda e, u=url: e.page.launch_url(u),
-                                ink=True,
-                            ),
-                            SecondaryText(
-                                f"{ref['views']} views",
-                                size=Theme.Typography.BODY_SMALL,
-                            ),
-                            SecondaryText(
-                                f"{ref['uniques']} unique",
-                                size=Theme.Typography.BODY_SMALL,
-                            ),
-                        ],
-                        spacing=8,
-                    )
-                )
-        else:
-            content.append(
-                SecondaryText(
-                    "No referrer data available.", size=Theme.Typography.BODY_SMALL
-                )
+        traffic_columns = [
+            DataTableColumn("Source", style="primary"),
+            DataTableColumn("Views", width=80, alignment="right", style="body"),
+            DataTableColumn("Unique", width=80, alignment="right", style="secondary"),
+        ]
+
+        def _link_cell(label: str, url: str) -> ft.Container:
+            return ft.Container(
+                content=ft.Text(
+                    label,
+                    size=Theme.Typography.BODY,
+                    style=ft.TextStyle(
+                        color=Theme.Colors.INFO,
+                        decoration=ft.TextDecoration.UNDERLINE,
+                    ),
+                    selectable=False,
+                    no_wrap=True,
+                    overflow=ft.TextOverflow.ELLIPSIS,
+                ),
+                on_click=lambda e, u=url: e.page.launch_url(u),
+                ink=True,
+                expand=True,
             )
 
-        # -- Popular Paths ----------------------------------------------------
+        referrer_rows = [
+            [
+                _link_cell(
+                    ref["domain"],
+                    f"https://{ref['domain']}"
+                    if "." in ref["domain"]
+                    else f"https://www.google.com/search?q={ref['domain']}",
+                ),
+                f"{ref['views']:,}",
+                f"{ref['uniques']:,}",
+            ]
+            for ref in referrers
+        ]
 
-        paths = data.get("popular_paths", [])
-        if paths:
-            content.append(ft.Container(height=8))
-            content.append(H3Text("Popular Paths"))
-            content.append(ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT))
-            for p in paths:
-                path_url = f"https://github.com{p['path']}"
-                content.append(
-                    ft.Row(
-                        [
-                            ft.Container(
-                                content=ft.Text(
-                                    p["path"],
-                                    size=Theme.Typography.BODY_SMALL,
-                                    style=ft.TextStyle(
-                                        color=Theme.Colors.INFO,
-                                        decoration=ft.TextDecoration.UNDERLINE,
-                                    ),
-                                    selectable=False,
-                                ),
-                                expand=True,
-                                on_click=lambda e, u=path_url: e.page.launch_url(u),
-                                ink=True,
-                            ),
-                            SecondaryText(
-                                f"{p['views']} views", size=Theme.Typography.BODY_SMALL
-                            ),
-                            SecondaryText(
-                                f"{p['uniques']} unique",
-                                size=Theme.Typography.BODY_SMALL,
-                            ),
-                        ],
-                        spacing=8,
-                    )
-                )
+        paths_rows = [
+            [
+                _link_cell(p["path"], f"https://github.com{p['path']}"),
+                f"{p['views']:,}",
+                f"{p['uniques']:,}",
+            ]
+            for p in paths
+        ]
+
+        referrers_section = ft.Column(
+            [
+                H3Text("Referrers"),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                DataTable(
+                    columns=traffic_columns,
+                    rows=referrer_rows,
+                    empty_message="No referrer data available.",
+                ),
+            ],
+            spacing=6,
+            expand=1,
+        )
+        paths_section = ft.Column(
+            [
+                H3Text("Popular Paths"),
+                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                DataTable(
+                    columns=traffic_columns,
+                    rows=paths_rows,
+                    empty_message="No popular path data available.",
+                ),
+            ],
+            spacing=6,
+            expand=1,
+        )
+
+        content.append(ft.Container(height=8))
+        content.append(
+            ft.Row(
+                [referrers_section, paths_section],
+                spacing=Theme.Spacing.LG,
+                vertical_alignment=ft.CrossAxisAlignment.START,
+            )
+        )
 
         self._content_column.controls = content
 
@@ -1630,6 +1915,13 @@ class GitHubTrafficTab(InsightsTab):
 
         all_events.sort(key=lambda x: x[0])
 
+        # Average unique cloners by day-of-week (Sun..Sat) — sourced from
+        # view_service so this stays consistent with whatever the rest of
+        # the app shows. Empty list when there's no cloner data, so the
+        # builder can hide the chart instead of rendering an empty axis.
+        github_view = InsightViewService(self._bulk).github(days=days)
+        weekday = github_view.unique_cloners_by_weekday
+
         return {
             "daily": daily,
             "referrers": referrers,
@@ -1639,6 +1931,7 @@ class GitHubTrafficTab(InsightsTab):
             "all_events": all_events,
             "activity_summary": activity_summary,
             "star_events_daily": star_events_daily,
+            "weekday": weekday,
             "prev_clones": sum(
                 int(r.value)
                 for r in self._bulk.daily.get("clones", [])
@@ -1729,7 +2022,7 @@ class StarsTab(InsightsTab):
         star_max_y = int((max_stars // star_step + 1) * star_step)
         highlighted = self._highlighted_dates
         # Filter releases: exclude star events, only dates that have chart points
-        releases_map = data.get("releases", {}) if self._show_events else {}
+        releases_map = data.get("releases", {})
         non_star_releases: dict[str, str] = {}
         for day, label in releases_map.items():
             if day not in star_dates:
@@ -1743,13 +2036,7 @@ class StarsTab(InsightsTab):
 
         for i, d in enumerate(star_history):
             is_hl = d["date"] in highlighted
-            hl_point = (
-                ft.ChartCirclePoint(
-                    radius=7, color="#FF5722", stroke_width=2, stroke_color="#FFFFFF"
-                )
-                if is_hl
-                else None
-            )
+            hl_point = ChartPoint.highlight() if is_hl else None
             count = d.get("count", 1)
             names = d.get("usernames", [])
             if count == 1:
@@ -1778,10 +2065,10 @@ class StarsTab(InsightsTab):
             ft.LineChartData(
                 data_points=history_points,
                 stroke_width=3,
-                color="#FFD700",
+                color=ChartColors.TEAL,
                 curved=True,
-                below_line_bgcolor=ft.Colors.with_opacity(0.15, "#FFD700"),
-                point=ft.ChartCirclePoint(radius=3, color="#FFD700", stroke_width=0),
+                below_line_bgcolor=ft.Colors.with_opacity(0.15, ChartColors.TEAL),
+                point=ChartPoint.dot(ChartColors.TEAL),
                 stroke_cap_round=True,
             ),
         ]
@@ -1800,7 +2087,7 @@ class StarsTab(InsightsTab):
         content.append(
             ft.Container(content=history_chart, margin=ft.margin.only(right=20))
         )
-        content.append(_make_legend([("#FFD700", "Cumulative Stars")]))
+        content.append(_make_legend([(ChartColors.TEAL, "Cumulative Stars")]))
 
         self._content_column.controls = content
 
@@ -1901,29 +2188,21 @@ class StarsTab(InsightsTab):
 
 
 class PyPITab(InsightsTab):
-    """PyPI: real data from database with CI/mirror toggle and date range filter."""
+    """PyPI: real data from database with date range filter.
+
+    Mirrors the aegis-pulse PyPI panel — always shows Total downloads
+    (teal, filled) and Human-only downloads (indigo, line on top) on a
+    single chart. The CI/mirror split lives in the chart, not behind a
+    toggle, since users typically want to see both at once and seeing
+    them stacked is the comparison that actually answers the
+    "how much real adoption?" question.
+    """
 
     _default_days = 7
 
-    def __init__(self, bulk: BulkInsightsResponse | None = None) -> None:
-        self._include_ci = False
-        self._toggle = ft.Switch(
-            label="Include CI/Mirror downloads",
-            value=False,
-            on_change=self._on_toggle,
-            label_style=ft.TextStyle(size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-        )
-        super().__init__(bulk=bulk)
-
-    def _on_toggle(self, e: ft.ControlEvent) -> None:
-        self._include_ci = e.control.value
-        self._build_content()
-        self._content_column.update()
-
     def _build_content(self) -> None:
-        """Build or rebuild all content based on toggle state and date range."""
+        """Build or rebuild content for the current date range."""
         data = self._data
-        include_ci = self._include_ci
         daily = data["daily"]
 
         # Compute averages from daily data
@@ -1935,37 +2214,30 @@ class PyPITab(InsightsTab):
         )
 
         range_all = sum(d["total"] for d in daily) if daily else 0
-        range_human = sum(d["human"] for d in daily) if daily else 0
 
-        if include_ci:
-            total_display = f"{range_all:,}"
-            avg_day = range_all // num_days if num_days else 0
-        else:
-            total_display = f"{range_human:,}"
-            avg_day = range_human // num_days if num_days else 0
+        # Headline metric tracks the same number pulse leads with: total
+        # downloads (incl. CI/mirror). Human-only is still on the chart
+        # — readers who care about real adoption see the indigo line
+        # over the teal area and can compare visually.
+        total_display = f"{range_all:,}"
+        avg_day = range_all // num_days if num_days else 0
 
         avg_week = avg_day * 7
         avg_month = avg_day * 30
 
         last_date = daily[-1]["date"] if daily else ""
         content: list[ft.Control] = [
-            self._make_filter_bar(
-                last_updated=last_date, extra_controls=[self._toggle]
-            ),
+            self._make_filter_bar(last_updated=last_date),
             ft.Container(height=8),
         ]
 
-        # Period-over-period change
-        prev_total = data.get("prev_total", 0)
-        prev_human = data.get("prev_human", 0)
-        prev_val = prev_total if include_ci else prev_human
-        cur_val = range_all if include_ci else range_human
+        # Period-over-period change tracks the headline (total).
+        prev_val = data.get("prev_total", 0)
+        cur_val = range_all
 
         # Latest day's value for subtitle
         last_day = daily[-1] if daily else {}
-        last_dl = (
-            last_day.get("human", 0) if not include_ci else last_day.get("total", 0)
-        )
+        last_dl = last_day.get("total", 0)
         last_dl_date = last_day.get("date", "")
         from datetime import datetime as _dt
 
@@ -1988,7 +2260,7 @@ class PyPITab(InsightsTab):
                 MetricCard(
                     "Total Downloads",
                     total_display,
-                    "#FF69B4",
+                    ChartColors.TEAL,
                     change_pct=_pct(cur_val, prev_val),
                     prev_value=f"+{last_dl:,} {_dl_label}",
                 ),
@@ -2040,16 +2312,12 @@ class PyPITab(InsightsTab):
             if chips:
                 content.append(chips)
 
-        # Chart 1: Downloads — toggle controls which lines show
+        # Chart 1: Downloads — always shows both Total (teal, filled
+        # area) and Human (indigo, line on top), matching the
+        # aegis-pulse PyPI panel exactly. Total is the upper bound, so
+        # the y-axis is sized to it.
         if daily:
-            if include_ci:
-                max_val = max(d["total"] for d in daily)
-            else:
-                max_val = (
-                    max(d["human"] for d in daily)
-                    if any(d["human"] for d in daily)
-                    else 1
-                )
+            max_val = max(d["total"] for d in daily)
 
             # Smart rounding: small values round to nearest 5, medium to 25, large to 100  # noqa: E501
             if max_val <= 20:
@@ -2062,150 +2330,74 @@ class PyPITab(InsightsTab):
                 step = 100
             rounded_max = int((max_val // step + 1) * step)
 
-            releases = data.get("releases", {}) if self._show_events else {}
+            releases = data.get("releases", {})
+            highlighted = self._highlighted_dates
 
-            chart1_series = []
-            if include_ci:
-                # Stacked: total (pink filled) on top, human (green filled) below
-                total_points = []
-                human_points_ci = []
-                release_points_ci = []
-                highlighted = self._highlighted_dates
-                for i, d in enumerate(daily):
-                    is_hl = d["date"] in highlighted
-                    point_style = (
-                        ft.ChartCirclePoint(
-                            radius=7,
-                            color="#FF5722",
-                            stroke_width=2,
-                            stroke_color="#FFFFFF",
-                        )
-                        if is_hl
-                        else None
-                    )
-                    total_points.append(
-                        ft.LineChartDataPoint(
-                            i,
-                            d["total"],
-                            tooltip=f"Total: {d['total']:,}  Bot: {d['total'] - d['human']:,}",  # noqa: E501
-                            point=point_style,
-                        )
-                    )
-                    human_points_ci.append(
-                        ft.LineChartDataPoint(
-                            i, d["human"], tooltip=f"Human: {d['human']:,}"
-                        )
-                    )
-
-                    rel = releases.get(d["date"])
-                    if rel:
-                        release_points_ci.append(
-                            ft.LineChartDataPoint(
-                                i, 0, tooltip=f"{rel}", show_tooltip=True
-                            )
-                        )
-                    else:
-                        release_points_ci.append(
-                            ft.LineChartDataPoint(i, 0, show_tooltip=False)
-                        )
-
-                chart1_series.append(
-                    ft.LineChartData(
-                        data_points=total_points,
-                        stroke_width=1,
-                        color="#FF69B4",
-                        below_line_bgcolor=ft.Colors.with_opacity(0.5, "#FF69B4"),
+            total_points: list[ft.LineChartDataPoint] = []
+            human_points: list[ft.LineChartDataPoint] = []
+            release_points: list[ft.LineChartDataPoint] = []
+            for i, d in enumerate(daily):
+                is_hl = d["date"] in highlighted
+                point_style = ChartPoint.highlight() if is_hl else None
+                total_points.append(
+                    ft.LineChartDataPoint(
+                        i,
+                        d["total"],
+                        tooltip=f"Total: {d['total']:,}",
+                        point=point_style,
                     )
                 )
-                chart1_series.append(
-                    ft.LineChartData(
-                        data_points=human_points_ci,
-                        stroke_width=2,
-                        color="#22C55E",
-                        below_line_bgcolor=ft.Colors.with_opacity(0.6, "#22C55E"),
-                        point=ft.ChartCirclePoint(
-                            radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
-                        ),
+                human_points.append(
+                    ft.LineChartDataPoint(
+                        i,
+                        d["human"],
+                        tooltip=f"Human: {d['human']:,}",
                     )
                 )
-                chart1_series.append(
-                    ft.LineChartData(
-                        data_points=release_points_ci,
-                        stroke_width=0,
-                        color="#9CA3AF",
+
+                rel = releases.get(d["date"])
+                if rel:
+                    release_points.append(
+                        ft.LineChartDataPoint(i, 0, tooltip=f"{rel}", show_tooltip=True)
                     )
-                )
-            else:
-                # Just human as filled area
-                human_points = []
-                release_points = []
-                highlighted = self._highlighted_dates
-                for i, d in enumerate(daily):
-                    tip = f"{d['human']:,} downloads"
-                    is_hl = d["date"] in highlighted
-                    point_style = (
-                        ft.ChartCirclePoint(
-                            radius=7,
-                            color="#FF5722",
-                            stroke_width=2,
-                            stroke_color="#FFFFFF",
-                        )
-                        if is_hl
-                        else ft.ChartCirclePoint(
-                            radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
-                        )
-                    )
-                    human_points.append(
-                        ft.LineChartDataPoint(
-                            i, d["human"], tooltip=tip, point=point_style
-                        )
+                else:
+                    release_points.append(
+                        ft.LineChartDataPoint(i, 0, show_tooltip=False)
                     )
 
-                    rel = releases.get(d["date"])
-                    if rel:
-                        release_points.append(
-                            ft.LineChartDataPoint(
-                                i, 0, tooltip=f"{rel}", show_tooltip=True
-                            )
-                        )
-                    else:
-                        release_points.append(
-                            ft.LineChartDataPoint(i, 0, show_tooltip=False)
-                        )
-
-                chart1_series.append(
-                    ft.LineChartData(
-                        data_points=human_points,
-                        stroke_width=2,
-                        color="#22C55E",
-                        below_line_bgcolor=ft.Colors.with_opacity(0.4, "#22C55E"),
-                        point=ft.ChartCirclePoint(
-                            radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
-                        ),
-                    )
-                )
-                # Release annotation series — invisible line, tooltip in secondary color
-                chart1_series.append(
-                    ft.LineChartData(
-                        data_points=release_points,
-                        stroke_width=0,
-                        color="#9CA3AF",
-                    )
-                )
+            chart1_series = [
+                # Total = teal filled area (pulse THEME.teal #17CCBF)
+                ft.LineChartData(
+                    data_points=total_points,
+                    stroke_width=2,
+                    color=ChartColors.TEAL,
+                    below_line_bgcolor=ft.Colors.with_opacity(0.15, ChartColors.TEAL),
+                    curved=True,
+                    stroke_cap_round=True,
+                ),
+                # Human = indigo line on top (pulse THEME.indigo #6366F1)
+                ft.LineChartData(
+                    data_points=human_points,
+                    stroke_width=2,
+                    color=ChartColors.INDIGO,
+                    curved=True,
+                    stroke_cap_round=True,
+                ),
+                # Release annotations — invisible series, tooltip-only
+                ft.LineChartData(
+                    data_points=release_points,
+                    stroke_width=0,
+                    color="#9CA3AF",
+                ),
+            ]
 
             chart1 = _make_line_chart(chart1_series, rounded_max, daily, step)
-
-            if include_ci:
-                legend1 = _make_legend(
-                    [
-                        (ft.Colors.with_opacity(0.5, "#FF69B4"), "Bot / Mirror"),
-                        (ft.Colors.with_opacity(0.6, "#22C55E"), "Human"),
-                    ]
-                )
-            else:
-                legend1 = _make_legend(
-                    [(ft.Colors.with_opacity(0.4, "#22C55E"), "Human Downloads")]
-                )
+            legend1 = _make_legend(
+                [
+                    (ChartColors.TEAL, "Total"),
+                    (ChartColors.INDIGO, "Human"),
+                ]
+            )
 
             chart1_wrapped = ft.Container(
                 content=chart1,
@@ -2228,15 +2420,11 @@ class PyPITab(InsightsTab):
 
             all_sorted = sorted(versions.keys(), key=_version_sort_key)
 
-            # Filter out versions with 0 downloads for the current mode
+            # Filter out versions with 0 downloads
             sorted_versions = []
             for ver in all_sorted:
                 info = versions[ver]
-                if isinstance(info, dict):
-                    t, h = info.get("total", 0), info.get("human", 0)
-                else:
-                    t, h = info, 0
-                val = t if include_ci else h
+                val = info.get("total", 0) if isinstance(info, dict) else info
                 if val > 0:
                     sorted_versions.append(ver)
 
@@ -2244,12 +2432,8 @@ class PyPITab(InsightsTab):
             bar_max = 0
             for i, ver in enumerate(sorted_versions):
                 info = versions[ver]
-                if isinstance(info, dict):
-                    t, h = info.get("total", 0), info.get("human", 0)
-                else:
-                    t, h = info, 0
+                val = info.get("total", 0) if isinstance(info, dict) else info
 
-                val = t if include_ci else h
                 bar_max = max(bar_max, val)
 
                 bar_groups.append(
@@ -2260,7 +2444,7 @@ class PyPITab(InsightsTab):
                                 from_y=0,
                                 to_y=val,
                                 width=max(8, 400 // len(sorted_versions)),
-                                color="#FF69B4" if include_ci else "#22C55E",
+                                color=ChartColors.TEAL,
                                 border_radius=ft.border_radius.only(
                                     top_left=3, top_right=3
                                 ),
@@ -2318,11 +2502,11 @@ class PyPITab(InsightsTab):
                             ft.Container(
                                 width=10,
                                 height=10,
-                                bgcolor="#FF69B4" if include_ci else "#22C55E",
+                                bgcolor=ChartColors.TEAL,
                                 border_radius=5,
                             ),
                             SecondaryText(
-                                f"Downloads by Version ({'incl. CI' if include_ci else 'human only'})",  # noqa: E501
+                                "Downloads by Version",
                                 size=Theme.Typography.BODY_SMALL,
                             ),
                         ],
@@ -2723,13 +2907,13 @@ class DocsTab(InsightsTab):
                     MetricCard(
                         "Visitors",
                         f"{total_visitors:,}",
-                        Theme.Colors.PRIMARY,
+                        ChartColors.TEAL,
                         change_pct=_pct(total_visitors, prev_v),
                     ),
                     MetricCard(
                         "Pageviews",
                         f"{total_pageviews:,}",
-                        Theme.Colors.INFO,
+                        ChartColors.INDIGO,
                         change_pct=_pct(total_pageviews, prev_pv),
                     ),
                     MetricCard(
@@ -2927,9 +3111,7 @@ class DocsTab(InsightsTab):
         highlighted = self._highlighted_dates
         releases_map = {
             day: label
-            for day, label in (
-                data.get("releases", {}) if self._show_events else {}
-            ).items()
+            for day, label in (data.get("releases", {})).items()
             if day in active_dates
         }
 
@@ -2945,13 +3127,7 @@ class DocsTab(InsightsTab):
 
         for i, d in enumerate(daily):
             is_hl = d["date"] in highlighted
-            hl_point = (
-                ft.ChartCirclePoint(
-                    radius=7, color="#FF5722", stroke_width=2, stroke_color="#FFFFFF"
-                )
-                if is_hl
-                else None
-            )
+            hl_point = ChartPoint.highlight() if is_hl else None
 
             visitor_points.append(
                 ft.LineChartDataPoint(
@@ -2977,26 +3153,25 @@ class DocsTab(InsightsTab):
             else:
                 release_anno.append(ft.LineChartDataPoint(i, 0, show_tooltip=False))
 
+        # Match the aegis-pulse Docs panel: Visitors as the filled
+        # primary series (teal), Pageviews as a line on top (indigo).
+        # Same visual grammar as the GitHub Clones+Unique chart and the
+        # PyPI Total+Human chart, so all three "primary + companion"
+        # series read the same way across the modal.
         chart_series = [
             ft.LineChartData(
                 data_points=visitor_points,
                 stroke_width=2,
-                color="#6366F1",
+                color=ChartColors.TEAL,
                 curved=True,
-                below_line_bgcolor=ft.Colors.with_opacity(0.15, "#6366F1"),
-                point=ft.ChartCirclePoint(
-                    radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
-                ),
+                below_line_bgcolor=ft.Colors.with_opacity(0.15, ChartColors.TEAL),
                 stroke_cap_round=True,
             ),
             ft.LineChartData(
                 data_points=pageview_points,
                 stroke_width=2,
-                color="#22C55E",
+                color=ChartColors.INDIGO,
                 curved=True,
-                point=ft.ChartCirclePoint(
-                    radius=3, color=ft.Colors.ON_SURFACE, stroke_width=0
-                ),
                 stroke_cap_round=True,
             ),
         ]
@@ -3012,114 +3187,126 @@ class DocsTab(InsightsTab):
         chart = _make_line_chart(chart_series, max_y, daily, step)
         content.append(ft.Container(content=chart, margin=ft.margin.only(right=20)))
         content.append(
-            _make_legend([("#6366F1", "Visitors"), ("#22C55E", "Pageviews")])
+            _make_legend(
+                [
+                    (ChartColors.TEAL, "Visitors"),
+                    (ChartColors.INDIGO, "Pageviews"),
+                ]
+            )
         )
 
-        # Country breakdown — horizontal bar chart
-        countries = data.get("countries", [])
-        if countries:
-            content.append(ft.Container(height=12))
-            content.append(H3Text("Countries"))
-
-            max_visitors = countries[0]["visitors"] if countries else 1
-            country_bar_groups = []
-            country_labels = []
-            for i, c in enumerate(countries):
-                country_bar_groups.append(
-                    ft.BarChartGroup(
-                        x=i,
-                        bar_rods=[
-                            ft.BarChartRod(
-                                from_y=0,
-                                to_y=c["visitors"],
-                                width=max(12, 300 // max(len(countries), 1)),
-                                color="#6366F1",
-                                border_radius=ft.border_radius.only(
-                                    top_left=3, top_right=3
-                                ),
-                                tooltip=f"{c['country']}: {c['visitors']}",
-                            )
-                        ],
-                    )
-                )
-                country_labels.append(c["country"])
-
-            country_step = _smart_step(max_visitors)
-            country_max_y = int((max_visitors // country_step + 1) * country_step)
-
-            country_chart = ft.BarChart(
-                bar_groups=country_bar_groups,
-                left_axis=ft.ChartAxis(labels_size=50, labels_interval=country_step),
-                bottom_axis=ft.ChartAxis(
-                    labels_size=50,
-                    labels=[
-                        ft.ChartAxisLabel(
-                            value=i,
-                            label=ft.Text(
-                                lbl, size=9, color=ft.Colors.ON_SURFACE_VARIANT
-                            ),
-                        )
-                        for i, lbl in enumerate(country_labels)
-                    ],
-                ),
-                horizontal_grid_lines=ft.ChartGridLines(
-                    interval=country_step,
-                    color=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE),
-                    width=1,
-                ),
-                tooltip_bgcolor=Theme.Colors.SURFACE_1,
-                tooltip_rounded_radius=8,
-                tooltip_padding=10,
-                tooltip_tooltip_border_side=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
-                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
-                max_y=country_max_y,
-                height=250,
-                expand=True,
-            )
-
-            content.append(
-                ft.Container(content=country_chart, margin=ft.margin.only(right=20))
-            )
-
-        # Top Pages table
+        # Top Pages table - six-column `DataTable` matching the pulse
+        # PAGE / VISITORS / PAGEVIEWS / BOUNCE / TIME / SCROLL layout.
+        # Title sits in the first column header (same convention as the
+        # bottom Top Countries / Top Sources cards), so the whole card
+        # reads as one unit.
         top_pages = data.get("top_pages", [])
         if top_pages:
-            content.append(ft.Container(height=12))
-            content.append(H3Text("Top Pages"))
-            content.append(ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT))
-            for p in top_pages:
-                page_url = f"https://lbedner.github.io{p['url']}"
-                duration = p.get("time_s") or 0
-                d_min = int(duration // 60)
-                d_sec = int(duration % 60)
-                content.append(
-                    ft.Row(
-                        [
-                            ft.Container(
-                                content=ft.Text(
-                                    p["url"],
-                                    size=Theme.Typography.BODY_SMALL,
-                                    style=ft.TextStyle(
-                                        color=Theme.Colors.INFO,
-                                        decoration=ft.TextDecoration.UNDERLINE,
-                                    ),
-                                    selectable=False,
-                                ),
-                                expand=True,
-                                on_click=lambda e, u=page_url: e.page.launch_url(u),
-                                ink=True,
-                            ),
-                            SecondaryText(
-                                f"{p['visitors']} visitors",
-                                size=Theme.Typography.BODY_SMALL,
-                            ),
-                            SecondaryText(
-                                f"{d_min}m {d_sec}s", size=Theme.Typography.BODY_SMALL
-                            ),
-                        ],
-                        spacing=8,
-                    )
+
+            def _format_duration(seconds: float) -> str:
+                d_min = int(seconds // 60)
+                d_sec = int(seconds % 60)
+                return f"{d_min}m {d_sec}s" if d_min else f"{d_sec}s"
+
+            def _format_pct(value: float | None) -> str:
+                return "-" if value is None else f"{value:.1f}%"
+
+            def _page_link(url: str) -> ft.Container:
+                full_url = f"https://lbedner.github.io{url}"
+                return ft.Container(
+                    content=ft.Text(
+                        url,
+                        size=Theme.Typography.BODY,
+                        style=ft.TextStyle(
+                            color=Theme.Colors.INFO,
+                            decoration=ft.TextDecoration.UNDERLINE,
+                        ),
+                        selectable=False,
+                        no_wrap=True,
+                        overflow=ft.TextOverflow.ELLIPSIS,
+                    ),
+                    on_click=lambda e, u=full_url: e.page.launch_url(u),
+                    ink=True,
+                    expand=True,
                 )
+
+            pages_columns = [
+                DataTableColumn("TOP PAGES", style="primary"),
+                DataTableColumn("VISITORS", width=80, alignment="right", style="body"),
+                DataTableColumn(
+                    "PAGEVIEWS", width=90, alignment="right", style="secondary"
+                ),
+                DataTableColumn(
+                    "BOUNCE", width=70, alignment="right", style="secondary"
+                ),
+                DataTableColumn("TIME", width=70, alignment="right", style="secondary"),
+                DataTableColumn(
+                    "SCROLL", width=70, alignment="right", style="secondary"
+                ),
+            ]
+            pages_rows = [
+                [
+                    _page_link(p["url"]),
+                    f"{p['visitors']:,}",
+                    f"{p['pageviews']:,}",
+                    _format_pct(p.get("bounce_rate")),
+                    _format_duration(p.get("time_s") or 0),
+                    _format_pct(p.get("scroll")),
+                ]
+                for p in top_pages
+            ]
+
+            content.append(ft.Container(height=12))
+            content.append(
+                DataTable(
+                    columns=pages_columns,
+                    rows=pages_rows,
+                    empty_message="No page data available.",
+                )
+            )
+
+        # Top Countries + Top Sources - two side-by-side `DataTable`s.
+        # Title lives in the table header (first column) rather than as
+        # a separate `H3Text`, so the card reads as one unit instead of
+        # a heading + table stack. Sits at the bottom because it's the
+        # long-tail "where is the traffic actually coming from?" view;
+        # metrics + chart answer the headline question first.
+        top_sources = data.get("top_sources", [])
+        if countries or top_sources:
+            countries_table = DataTable(
+                columns=[
+                    DataTableColumn("TOP COUNTRIES", style="primary"),
+                    DataTableColumn("", width=80, alignment="right", style="body"),
+                ],
+                rows=[
+                    [
+                        COUNTRY_NAMES.get(c["country"], c["country"]),
+                        f"{c['visitors']:,}",
+                    ]
+                    for c in countries[:7]
+                ],
+                empty_message="No country data available.",
+            )
+            sources_table = DataTable(
+                columns=[
+                    DataTableColumn("TOP SOURCES", style="primary"),
+                    DataTableColumn("", width=80, alignment="right", style="body"),
+                ],
+                rows=[[s["source"], f"{s['visitors']:,}"] for s in top_sources[:7]],
+                empty_message="No source data available.",
+            )
+
+            content.append(ft.Container(height=8))
+            content.append(
+                ft.Row(
+                    [
+                        ft.Container(content=countries_table, expand=1),
+                        ft.Container(content=sources_table, expand=1),
+                    ],
+                    spacing=Theme.Spacing.LG,
+                    vertical_alignment=ft.CrossAxisAlignment.START,
+                )
+            )
 
         self._content_column.controls = content
 
@@ -3199,19 +3386,62 @@ class DocsTab(InsightsTab):
                 }
             )
 
-        # Top pages - aggregate per-day snapshots across selected range
+        # Top pages - aggregate per-day snapshots across selected range.
+        # `visitors` and `pageviews` are sums; `time_s`, `bounce_rate`,
+        # `scroll` are visitor-weighted averages (so a page with 100
+        # visitors at 30s and 1 visitor at 300s reports the right
+        # average, not (30+300)/2). Sorted by visitors desc to match
+        # the header sort indicator on the pulse layout.
         all_pages: dict[str, dict[str, Any]] = {}
         for r in [r for r in self._bulk.daily.get("top_pages", []) if r.date >= cutoff]:
             meta = r.metadata_ if isinstance(r.metadata_, dict) else {}
             for p in meta.get("pages", []):
                 url = p.get("url", "")
-                if url not in all_pages:
-                    all_pages[url] = {"url": url, "visitors": 0, "time_s": 0}
-                all_pages[url]["visitors"] += p.get("visitors", 0)
-                all_pages[url]["time_s"] += p.get("time_s") or 0
-        top_pages = sorted(all_pages.values(), key=lambda x: -(x.get("time_s") or 0))[
-            :20
-        ]
+                if not url:
+                    continue
+                accum = all_pages.setdefault(
+                    url,
+                    {
+                        "url": url,
+                        "visitors": 0,
+                        "pageviews": 0,
+                        "_time_weighted": 0.0,
+                        "_time_weight": 0,
+                        "_bounce_weighted": 0.0,
+                        "_bounce_weight": 0,
+                        "_scroll_weighted": 0.0,
+                        "_scroll_weight": 0,
+                    },
+                )
+                visitors = p.get("visitors", 0) or 0
+                accum["visitors"] += visitors
+                accum["pageviews"] += p.get("pageviews", 0) or 0
+
+                if visitors > 0:
+                    if p.get("time_s") is not None:
+                        accum["_time_weighted"] += float(p["time_s"]) * visitors
+                        accum["_time_weight"] += visitors
+                    if p.get("bounce_rate") is not None:
+                        accum["_bounce_weighted"] += float(p["bounce_rate"]) * visitors
+                        accum["_bounce_weight"] += visitors
+                    if p.get("scroll") is not None:
+                        accum["_scroll_weighted"] += float(p["scroll"]) * visitors
+                        accum["_scroll_weight"] += visitors
+
+        top_pages: list[dict[str, Any]] = []
+        for accum in all_pages.values():
+            tw = accum.pop("_time_weighted")
+            twn = accum.pop("_time_weight")
+            bw = accum.pop("_bounce_weighted")
+            bwn = accum.pop("_bounce_weight")
+            sw = accum.pop("_scroll_weighted")
+            swn = accum.pop("_scroll_weight")
+            accum["time_s"] = tw / twn if twn else 0.0
+            accum["bounce_rate"] = bw / bwn if bwn else None
+            accum["scroll"] = sw / swn if swn else None
+            top_pages.append(accum)
+        top_pages.sort(key=lambda x: -x["visitors"])
+        top_pages = top_pages[:20]
 
         # Countries - aggregate per-day snapshots across selected range
         all_countries: dict[str, int] = {}
@@ -3225,6 +3455,22 @@ class DocsTab(InsightsTab):
         countries = [
             {"country": code, "visitors": count}
             for code, count in sorted(all_countries.items(), key=lambda x: -x[1])
+        ][:20]
+
+        # Sources - aggregate per-day snapshots across selected range.
+        # Source labels come from the Plausible referrer breakdown
+        # ("Direct / None", "GitHub", "Reddit", ...) - pre-formatted.
+        all_sources: dict[str, int] = {}
+        for r in [
+            r for r in self._bulk.daily.get("top_sources", []) if r.date >= cutoff
+        ]:
+            meta = r.metadata_ if isinstance(r.metadata_, dict) else {}
+            for s in meta.get("sources", []):
+                name = s.get("source", "") or "Direct / None"
+                all_sources[name] = all_sources.get(name, 0) + s.get("visitors", 0)
+        top_sources = [
+            {"source": name, "visitors": count}
+            for name, count in sorted(all_sources.items(), key=lambda x: -x[1])
         ][:20]
 
         # Events
@@ -3254,6 +3500,7 @@ class DocsTab(InsightsTab):
             "daily": daily,
             "top_pages": top_pages,
             "countries": countries,
+            "top_sources": top_sources,
             "all_events": all_events,
             "releases": release_map,
             "prev_visitors": prev_visitors,
@@ -3657,9 +3904,9 @@ class InsightsDetailDialog(BaseDetailPopup):
 
     async def _load_and_build(self) -> None:
         """Fetch bulk data from API and build all tabs."""
-        from app.core.client import APIClient
+        from app.components.frontend.state.session_state import get_session_state
 
-        client = APIClient()
+        client = get_session_state(self.page).api_client
         raw = await client.get("/api/v1/insights/all")
         if not raw:
             self._tabs_container.content = SecondaryText(

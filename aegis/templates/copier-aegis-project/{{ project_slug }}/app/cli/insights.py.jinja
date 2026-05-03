@@ -89,7 +89,7 @@ def collect(
         None, help=lazy_t("insights.arg_source")
     ),
     lookback_days: int = typer.Option(
-        1, "--lookback-days", "-d", help="Days to fetch (for backfill). Default 1 = today only.",
+        1, "--lookback-days", "-d", help=lazy_t("insights.opt_lookback_days"),
     ),
 ) -> None:
     asyncio.run(_collect(source, lookback_days))
@@ -276,8 +276,8 @@ async def _reddit_add(url: str) -> None:
 def log_event(
     event_type: str = typer.Argument(..., help=lazy_t("insights.arg_event_type")),
     description: str = typer.Argument(..., help=lazy_t("insights.arg_description")),
-    date: str | None = typer.Option(None, "--date", help="Event date (YYYY-MM-DD). Defaults to today."),
-    category: str | None = typer.Option(None, "--category", help="Milestone category (e.g., daily_clones, pypi_daily)."),
+    date: str | None = typer.Option(None, "--date", help=lazy_t("insights.opt_event_date")),
+    category: str | None = typer.Option(None, "--category", help=lazy_t("insights.opt_event_category")),
 ) -> None:
     asyncio.run(_log_event(event_type, description, date, category))
 
@@ -297,7 +297,10 @@ async def _log_event(
         try:
             event_date = date_type.fromisoformat(date_str)
         except ValueError:
-            typer.secho(f"Invalid date format: {date_str}. Use YYYY-MM-DD.", fg=typer.colors.RED)
+            typer.secho(
+                t("insights.invalid_date_format", date=date_str),
+                fg=typer.colors.RED,
+            )
             raise typer.Exit(1)
 
     metadata = {}
@@ -314,9 +317,14 @@ async def _log_event(
         )
         await session.commit()
 
-    date_display = date_str or "today"
+    date_display = date_str or t("insights.today")
     typer.secho(
-        t("insights.event_logged", event_type=event_type, description=description) + f" ({date_display})",
+        t(
+            "insights.event_logged_with_date",
+            event_type=event_type,
+            description=description,
+            date=date_display,
+        ),
         fg=typer.colors.GREEN,
     )
 

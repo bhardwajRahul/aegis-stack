@@ -187,6 +187,12 @@ include_auth_org:
   default: "{{ auth_level == 'org' }}"
   when: "{{ include_auth }}"
 
+include_oauth:
+  type: bool
+  help: "Include OAuth social login (GitHub + Google)?"
+  default: false
+  when: "{{ include_auth }}"
+
 include_ai:
   type: bool
   help: "Include AI service?"
@@ -292,6 +298,12 @@ insights_reddit:
   help: "Include Reddit post tracking?"
   default: false
   when: "{{ include_insights }}"
+
+insights_per_user:
+  type: bool
+  help: "Per-user insights (each user has isolated projects with their own credentials)? Default is shared insights driven by env vars."
+  default: false
+  when: "{{ include_insights and include_auth }}"
 
 # Internal computed values (using Jinja2)
 _has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache or include_ingress or include_observability }}"

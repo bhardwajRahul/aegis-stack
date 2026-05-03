@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import flet as ft
-import httpx
 from app.components.frontend.controls import (
     ConfirmDialog,
     DataTable,
@@ -21,8 +20,12 @@ from app.components.frontend.controls import (
     SecondaryText,
     Tag,
 )
+from app.components.frontend.controls.snack_bar import (
+    ErrorSnackBar,
+    SuccessSnackBar,
+)
+from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
-from app.core.config import settings
 
 
 def _format_relative_time(timestamp_str: str) -> str:
@@ -136,48 +139,28 @@ class AuthOrgsTab(ft.Container):
 
     async def _load_orgs(self) -> None:
         """Fetch organizations from API."""
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"http://localhost:{settings.PORT}/api/v1/orgs/all",
-                    timeout=10.0,
-                )
-
-                if response.status_code == 200:
-                    self._orgs_data = response.json()
-                    await self._load_members_and_render()
-                elif response.status_code == 401:
-                    self._render_error("Authentication required")
-                else:
-                    self._render_error(f"API returned status {response.status_code}")
-
-        except httpx.TimeoutException:
-            self._render_error("Request timed out")
-        except httpx.ConnectError:
-            self._render_error("Could not connect to backend API")
-        except Exception as e:
-            self._render_error(str(e))
+        api = get_session_state(self.page).api_client
+        data = await api.get("/api/v1/orgs/all")
+        if data is None:
+            self._render_error("Could not load organizations.")
+            return
+        if not isinstance(data, list):
+            self._render_error("Unexpected response shape from /orgs/all.")
+            return
+        self._orgs_data = data
+        await self._load_members_and_render()
 
     async def _load_members_and_render(self) -> None:
         """Load members for each org and render the table."""
+        api = get_session_state(self.page).api_client
         org_members: dict[int, list[dict[str, Any]]] = {}
 
-        async with httpx.AsyncClient() as client:
-            for org in self._orgs_data:
-                org_id = org.get("id")
-                if org_id is None:
-                    continue
-                try:
-                    response = await client.get(
-                        f"http://localhost:{settings.PORT}/api/v1/orgs/{org_id}/members",
-                        timeout=10.0,
-                    )
-                    if response.status_code == 200:
-                        org_members[org_id] = response.json()
-                    else:
-                        org_members[org_id] = []
-                except Exception:
-                    org_members[org_id] = []
+        for org in self._orgs_data:
+            org_id = org.get("id")
+            if org_id is None:
+                continue
+            data = await api.get(f"/api/v1/orgs/{org_id}/members")
+            org_members[org_id] = data if isinstance(data, list) else []
 
         self._render_orgs(self._orgs_data, org_members)
 
@@ -347,40 +330,25 @@ class AuthOrgsTab(ft.Container):
 
     async def _delete_org(self, org_id: int) -> None:
         """Delete an organization via API."""
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.delete(
-                    f"http://localhost:{settings.PORT}/api/v1/orgs/{org_id}",
-                    timeout=10.0,
-                )
+        api = get_session_state(self.page).api_client
+        status, body = await api.request_with_status(
+            "DELETE", f"/api/v1/orgs/{org_id}"
+        )
 
-                if response.status_code == 204:
-                    self.page.open(
-                        ft.SnackBar(
-                            content=ft.Text("Organization deleted successfully")
-                        )
-                    )
-                    await self._load_orgs()
-                elif response.status_code == 403:
-                    self.page.open(
-                        ft.SnackBar(
-                            content=ft.Text("Only the owner can delete this organization"),
-                            bgcolor=Theme.Colors.ERROR,
-                        )
-                    )
-                else:
-                    self.page.open(
-                        ft.SnackBar(
-                            content=ft.Text(f"Failed: {response.text}"),
-                            bgcolor=Theme.Colors.ERROR,
-                        )
-                    )
-        except Exception as e:
-            self.page.open(
-                ft.SnackBar(
-                    content=ft.Text(f"Error: {e}"), bgcolor=Theme.Colors.ERROR
-                )
+        if status == 204:
+            SuccessSnackBar("Organization deleted").launch(self.page)
+            await self._load_orgs()
+        elif status == 403:
+            ErrorSnackBar(
+                "Only the owner can delete this organization."
+            ).launch(self.page)
+        else:
+            detail = (
+                body.get("detail")
+                if isinstance(body, dict) and body.get("detail")
+                else f"status {status}"
             )
+            ErrorSnackBar(f"Delete failed: {detail}").launch(self.page)
 {% else %}
 # Organization tab not included (auth_level != org)
 {% endif %}

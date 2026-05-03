@@ -16,6 +16,8 @@ from app.services.insights.models import (
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from ._collector_fixtures import collector_kwargs, seed_project_for_collector
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -60,6 +62,7 @@ class TestRedditCollectorAddPost:
     async def test_add_post_success(self, async_db_session: AsyncSession) -> None:
         """Happy path: add a Reddit post with stats."""
         await _seed_reddit(async_db_session)
+        project = await seed_project_for_collector(async_db_session)
 
         mock_client = AsyncMock()
 
@@ -98,7 +101,7 @@ class TestRedditCollectorAddPost:
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
-            collector = RedditCollector(async_db_session)
+            collector = RedditCollector(async_db_session, **collector_kwargs(project))
             result = await collector.add_post(
                 "https://reddit.com/r/Python/comments/abc123/announcing_aegis_stack"
             )
@@ -127,6 +130,7 @@ class TestRedditCollectorAddPost:
         import httpx
 
         await _seed_reddit(async_db_session)
+        project = await seed_project_for_collector(async_db_session)
 
         mock_response = MagicMock(status_code=404)
         error = httpx.HTTPStatusError(
@@ -141,7 +145,7 @@ class TestRedditCollectorAddPost:
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
-            collector = RedditCollector(async_db_session)
+            collector = RedditCollector(async_db_session, **collector_kwargs(project))
             result = await collector.add_post(
                 "https://reddit.com/r/Python/comments/notfound/..."
             )
@@ -153,6 +157,7 @@ class TestRedditCollectorAddPost:
     async def test_add_post_parse_error(self, async_db_session: AsyncSession) -> None:
         """Malformed Reddit response is handled gracefully."""
         await _seed_reddit(async_db_session)
+        project = await seed_project_for_collector(async_db_session)
 
         mock_client = AsyncMock()
 
@@ -170,7 +175,7 @@ class TestRedditCollectorAddPost:
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
-            collector = RedditCollector(async_db_session)
+            collector = RedditCollector(async_db_session, **collector_kwargs(project))
             result = await collector.add_post(
                 "https://reddit.com/r/Python/comments/abc123/..."
             )
@@ -182,6 +187,7 @@ class TestRedditCollectorAddPost:
     async def test_add_post_deduplication(self, async_db_session: AsyncSession) -> None:
         """Second add_post for same post doesn't duplicate event."""
         await _seed_reddit(async_db_session)
+        project = await seed_project_for_collector(async_db_session)
 
         # Pre-add the post
         mock_client = AsyncMock()
@@ -219,7 +225,7 @@ class TestRedditCollectorAddPost:
         ) as mock_async_client:
             mock_async_client.return_value.__aenter__.return_value = mock_client
 
-            collector = RedditCollector(async_db_session)
+            collector = RedditCollector(async_db_session, **collector_kwargs(project))
             # First add
             result1 = await collector.add_post(
                 "https://reddit.com/r/Python/comments/abc123/announcing_aegis_stack"
@@ -275,8 +281,9 @@ class TestRedditCollectorAddPost:
     ) -> None:
         """collect() returns on-demand message."""
         await _seed_reddit(async_db_session)
+        project = await seed_project_for_collector(async_db_session)
 
-        collector = RedditCollector(async_db_session)
+        collector = RedditCollector(async_db_session, **collector_kwargs(project))
         result = await collector.collect()
 
         assert result.success is True

@@ -35,6 +35,16 @@ class TestHealthEndpoints:
         # Clean up after test
         await backend_hooks.execute_shutdown_hooks()
 
+        # Dispose the global async engine so its asyncpg connection pool
+        # doesn't carry pending operations into the next test (which would
+        # otherwise see "another operation is in progress" when a sync
+        # TestClient-based test reuses the same connection).
+        try:
+            from app.core.db import async_engine
+            await async_engine.dispose()
+        except ImportError:
+            pass
+
     @pytest.mark.asyncio
     async def test_basic_health_endpoint_accessible(
         self, async_client: AsyncClient

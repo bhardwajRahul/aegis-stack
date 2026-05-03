@@ -67,6 +67,13 @@ dependencies = [
     "bcrypt>=4.0.0",
     "python-multipart==0.0.9",
 {%- endif %}
+{%- if include_oauth %}
+    # OAuth social login (GitHub + Google) — Authlib drives the flow,
+    # itsdangerous backs starlette's SessionMiddleware that stashes the
+    # OAuth state + PKCE verifier between /start and /callback.
+    "authlib>=1.7.0",
+    "itsdangerous>=2.1.0",
+{%- endif %}
 {%- if include_auth or include_payment or include_insights or (include_ai and ai_backend in ["sqlite", "postgres"]) %}
     "alembic==1.16.5",
 {%- endif %}
@@ -110,13 +117,18 @@ dependencies = [
     "stripe>=11.0.0",
 {%- endif %}
 {%- if include_auth or include_comms %}
-    "email-validator==2.2.0",  # Required for EmailStr in auth/comms models
+    "email-validator==2.2.0",
 {%- endif %}
 {%- if ai_rag %}
     "chromadb>=0.4.22,<1.0.0",  # Vector store - pin to 0.x for stability
     "sentence-transformers>=3.0.0",  # Local embeddings
     "torch>=2.0.0",  # Explicit dep for CPU-only override (see [tool.uv.sources])
 {%- endif %}
+{%- for p in _plugins | default([]) %}
+{%- for d in p.pyproject_deps %}
+    "{{ d }}",
+{%- endfor %}
+{%- endfor %}
 ]
 
 [project.scripts]
@@ -131,6 +143,12 @@ dev = [
     "types-psutil==7.0.0.20250801",
     "pre-commit==4.2.0",
     "pip-audit==2.9.0",
+{%- if include_database and database_engine != 'sqlite' %}
+    # Tests use in-memory SQLite for speed/isolation regardless of the
+    # production backend, so aiosqlite is required as a test dep even when
+    # the app itself runs on Postgres.
+    "aiosqlite>=0.19.0",
+{%- endif %}
 {%- if include_worker %}
     # Development auto-reload for workers
     "watchdog==4.0.2",

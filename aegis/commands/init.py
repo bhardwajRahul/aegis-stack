@@ -392,7 +392,15 @@ def init_command(
         typer.echo(t("init.removing_dir", path=project_path))
         import shutil
 
-        shutil.rmtree(project_path)
+        def _ignore_vanished(_func: object, _path: str, exc_info: object) -> None:
+            # Git pack-refs and similar create transient files like
+            # bitmap-ref-tips_* that vanish between enumeration and
+            # unlink. Swallow FileNotFoundError, re-raise everything else.
+            exc = exc_info[1] if isinstance(exc_info, tuple) else None
+            if not isinstance(exc, FileNotFoundError):
+                raise exc  # type: ignore[misc]
+
+        shutil.rmtree(project_path, onerror=_ignore_vanished)
 
     # Create project using Copier template engine
     typer.echo()

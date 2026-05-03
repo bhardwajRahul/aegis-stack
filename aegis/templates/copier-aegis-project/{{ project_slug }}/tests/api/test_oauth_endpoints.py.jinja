@@ -1,0 +1,105 @@
+{% if include_oauth -%}
+"""Tests for OAuth API endpoints.
+
+Covers the routes' guard behavior end-to-end (configured vs not). The
+upsert / linking logic itself is exercised directly in
+``tests/services/test_oauth_user_service.py`` because mocking
+authlib's full authorize-redirect + token-exchange round-trip is
+fragile and tightly coupled to library internals; the per-path logic
+is what would actually break.
+"""
+
+import pytest
+from app.core.config import settings
+from fastapi import status
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture(autouse=True)
+def _enable_auth():
+    """Force real auth on for this module."""
+    prior = settings.AUTH_ENABLED
+    settings.AUTH_ENABLED = True
+    try:
+        yield
+    finally:
+        settings.AUTH_ENABLED = prior
+
+
+@pytest.fixture(autouse=True)
+def _clear_oauth_credentials():
+    """Default each test to *no* OAuth credentials configured. Tests that
+    need providers configured opt in explicitly via ``monkeypatch``."""
+    prior = (
+        settings.GITHUB_OAUTH_CLIENT_ID,
+        settings.GITHUB_OAUTH_CLIENT_SECRET,
+        settings.GOOGLE_OAUTH_CLIENT_ID,
+        settings.GOOGLE_OAUTH_CLIENT_SECRET,
+    )
+    settings.GITHUB_OAUTH_CLIENT_ID = ""
+    settings.GITHUB_OAUTH_CLIENT_SECRET = ""
+    settings.GOOGLE_OAUTH_CLIENT_ID = ""
+    settings.GOOGLE_OAUTH_CLIENT_SECRET = ""
+    try:
+        yield
+    finally:
+        (
+            settings.GITHUB_OAUTH_CLIENT_ID,
+            settings.GITHUB_OAUTH_CLIENT_SECRET,
+            settings.GOOGLE_OAUTH_CLIENT_ID,
+            settings.GOOGLE_OAUTH_CLIENT_SECRET,
+        ) = prior
+
+
+class TestOAuthGuards:
+    """Provider-not-configured guards on every entry point."""
+
+    def test_github_start_503_when_unconfigured(self, client: TestClient):
+        response = client.get(
+            "/api/v1/auth/oauth/github/start", follow_redirects=False
+        )
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert "GitHub" in response.json()["detail"]
+
+    def test_github_callback_503_when_unconfigured(self, client: TestClient):
+        response = client.get(
+            "/api/v1/auth/oauth/github/callback", follow_redirects=False
+        )
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+    def test_google_start_503_when_unconfigured(self, client: TestClient):
+        response = client.get(
+            "/api/v1/auth/oauth/google/start", follow_redirects=False
+        )
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert "Google" in response.json()["detail"]
+
+    def test_google_callback_503_when_unconfigured(self, client: TestClient):
+        response = client.get(
+            "/api/v1/auth/oauth/google/callback", follow_redirects=False
+        )
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+    def test_github_only_partially_configured_still_503(
+        self, client: TestClient
+    ):
+        """ID without secret (or vice versa) is treated as unconfigured."""
+        settings.GITHUB_OAUTH_CLIENT_ID = "fake-id"
+        # secret intentionally left blank
+        response = client.get(
+            "/api/v1/auth/oauth/github/start", follow_redirects=False
+        )
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+
+
+class TestOAuthConnectionsRequireAuth:
+    """Connection-management routes require an authenticated user."""
+
+    def test_list_connections_unauthenticated(self, client: TestClient):
+        response = client.get("/api/v1/auth/oauth/connections")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_disconnect_unauthenticated(self, client: TestClient):
+        response = client.delete("/api/v1/auth/oauth/connections/github")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+{%- endif %}

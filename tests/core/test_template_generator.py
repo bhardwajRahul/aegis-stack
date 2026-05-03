@@ -481,6 +481,101 @@ class TestTemplateGeneratorAuthLevel:
         assert context["include_auth_org"] == "yes"
         assert context["include_auth_rbac"] == "yes"
 
+    # ---- OAuth modifier (auth[oauth]) -------------------------------
+
+    def test_bare_auth_omits_oauth(self) -> None:
+        """Plain ``auth`` (no bracket) -> include_oauth='no'."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth"],
+        )
+        assert gen.include_oauth is False
+        context = gen.get_template_context()
+        assert context["include_oauth"] == "no"
+
+    def test_auth_basic_bracket_omits_oauth(self) -> None:
+        """``auth[basic]`` without modifier -> include_oauth='no'."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth[basic]"],
+        )
+        assert gen.include_oauth is False
+        context = gen.get_template_context()
+        assert context["include_oauth"] == "no"
+
+    def test_auth_oauth_bracket_syntax(self) -> None:
+        """``auth[oauth]`` -> level=basic, include_oauth='yes'."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth[oauth]"],
+        )
+        assert gen.auth_level == AuthLevels.BASIC
+        assert gen.include_oauth is True
+        context = gen.get_template_context()
+        assert context["auth_level"] == AuthLevels.BASIC
+        assert context["include_oauth"] == "yes"
+        # OAuth is independent of RBAC; basic-level oauth must NOT
+        # implicitly turn rbac on.
+        assert context["include_auth_rbac"] == "no"
+
+    def test_auth_rbac_oauth_bracket_syntax(self) -> None:
+        """``auth[rbac,oauth]`` -> level=rbac, include_oauth='yes'."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth[rbac,oauth]"],
+        )
+        assert gen.auth_level == AuthLevels.RBAC
+        assert gen.include_oauth is True
+        context = gen.get_template_context()
+        assert context["auth_level"] == AuthLevels.RBAC
+        assert context["include_auth_rbac"] == "yes"
+        assert context["include_oauth"] == "yes"
+
+    def test_auth_org_oauth_bracket_syntax(self) -> None:
+        """``auth[org,oauth]`` -> level=org, include_oauth='yes'."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth[org,oauth]"],
+        )
+        context = gen.get_template_context()
+        assert context["auth_level"] == AuthLevels.ORG
+        assert context["include_auth_org"] == "yes"
+        assert context["include_auth_rbac"] == "yes"
+        assert context["include_oauth"] == "yes"
+
+    def test_auth_oauth_order_independent(self) -> None:
+        """``auth[oauth,rbac]`` parses identically to ``auth[rbac,oauth]``."""
+        gen_a = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth[oauth,rbac]"],
+        )
+        gen_b = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=["auth[rbac,oauth]"],
+        )
+        ctx_a = gen_a.get_template_context()
+        ctx_b = gen_b.get_template_context()
+        assert ctx_a["auth_level"] == ctx_b["auth_level"] == AuthLevels.RBAC
+        assert ctx_a["include_oauth"] == ctx_b["include_oauth"] == "yes"
+
+    def test_no_auth_service_omits_oauth(self) -> None:
+        """No auth service at all -> include_oauth='no'."""
+        gen = TemplateGenerator(
+            project_name="test",
+            selected_components=[],
+            selected_services=[],
+        )
+        assert gen.include_oauth is False
+        context = gen.get_template_context()
+        assert context["include_oauth"] == "no"
+
 
 class TestTemplateGeneratorInsightsService:
     """Test insights service handling in template context."""

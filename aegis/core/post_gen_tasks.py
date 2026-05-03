@@ -19,7 +19,10 @@ from aegis.constants import (
     StorageBackends,
     WorkerBackends,
 )
+from aegis.core.components import COMPONENTS, ComponentType
+from aegis.core.file_manifest import apply_cleanup_path, iter_cleanup_paths
 from aegis.core.project_map import render_project_map
+from aegis.core.services import SERVICES
 from aegis.i18n import t
 
 # Task configuration constants (following tests/cli/test_utils.py pattern)
@@ -56,13 +59,17 @@ def _truncate_stderr(stderr: str, max_lines: int = POST_GEN_STDERR_MAX_LINES) ->
     return "\n".join(result)
 
 
-# TODO: This entire file mapping + cleanup + shared_files approach needs to be
-# refactored. Every new template file requires manual registration in 3 places:
-# 1. get_component_file_mapping() below (for add/remove)
-# 2. cleanup_components() (for init-time removal)
-# 3. shared_files.py SHARED_TEMPLATE_FILES (for jinja regeneration on add-service)
-# This is fragile and unmaintainable. Should be auto-discovered from the template
-# directory structure or declared once in a single config.
+# TODO: triple-registration partially resolved by R1 of the plugin refactor.
+# Every new template file currently still requires manual registration in:
+# 1. get_component_file_mapping() below (for add/remove)         -- R2 (legacy)
+# 2. cleanup_components() Pattern A blocks                       -- DONE in R1
+#    (now derived from each spec's `files.primary` manifest;
+#    see aegis/core/file_manifest.py and aegis/core/services.py)
+# 3. shared_files.py SHARED_TEMPLATE_FILES (jinja regeneration)  -- R2 (shared)
+# This dict and each spec's FileManifest can drift silently — they must be
+# kept aligned by hand until R2 derives the mapping from manifests. Long-term
+# goal: auto-discover from the template directory structure or declare once
+# in a single config.
 def get_component_file_mapping() -> dict[str, list[str]]:
     """
     Get mapping of components to their files.
@@ -284,24 +291,26 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         value = context.get(key)
         return value is True or value == "yes"
 
-    # Remove scheduler component if not selected
-    if not is_enabled(AnswerKeys.SCHEDULER):
-        remove_file(project_path, "app/entrypoints/scheduler.py")
-        remove_dir(project_path, "app/components/scheduler")
-        remove_file(project_path, "tests/components/test_scheduler.py")
-        remove_file(project_path, "docs/components/scheduler.md")
-        remove_file(project_path, "app/components/backend/api/scheduler.py")
-        remove_file(project_path, "tests/api/test_scheduler_endpoints.py")
-        remove_file(
-            project_path, "app/components/frontend/dashboard/cards/scheduler_card.py"
-        )
-        remove_file(
-            project_path, "app/components/frontend/dashboard/modals/scheduler_modal.py"
-        )
-        remove_file(project_path, "tests/services/test_scheduled_task_manager.py")
+    # =====================================================================
+    # Pattern A: per-spec primary cleanup driven from FileManifest
+    # =====================================================================
+    # Each non-CORE component and each service declares a `files.primary`
+    # list on its spec (see aegis/core/{components,services}.py). When the
+    # spec is not selected, we remove every path it owns. Replaces ~150
+    # lines of imperative `remove_file` / `remove_dir` calls.
+    _cleanable_specs: list[Any] = [
+        spec for spec in COMPONENTS.values() if spec.type != ComponentType.CORE
+    ]
+    _cleanable_specs.extend(SERVICES.values())
+    for _spec in _cleanable_specs:
+        if not is_enabled(AnswerKeys.include_key(_spec.name)):
+            for _rel_path in iter_cleanup_paths(_spec, selected=False):
+                apply_cleanup_path(project_path, _rel_path)
 
-    # Remove scheduler service if using memory backend
-    # The service is only useful when we can persist to a database
+    # =====================================================================
+    # Pattern B/D: option-driven and backend-variant cleanups (inline).
+    # =====================================================================
+    # Scheduler service (only useful with persistence; remove on memory backend)
     scheduler_backend = context.get(
         AnswerKeys.SCHEDULER_BACKEND, StorageBackends.MEMORY
     )
@@ -312,26 +321,10 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/api/test_scheduler_endpoints.py")
         remove_file(project_path, "tests/services/test_scheduled_task_manager.py")
 
-    # Remove worker component if not selected
-    if not is_enabled(AnswerKeys.WORKER):
-        remove_dir(project_path, "app/components/worker")
-        remove_file(project_path, "app/cli/load_test.py")
-        remove_file(project_path, "app/services/load_test.py")
-        remove_file(project_path, "app/services/load_test_models.py")
-        remove_file(project_path, "app/services/load_test_workloads.py")
-        remove_file(project_path, "tests/services/test_load_test_models.py")
-        remove_file(project_path, "tests/services/test_load_test_service.py")
-        remove_file(project_path, "tests/services/test_worker_health_registration.py")
-        remove_file(project_path, "app/components/backend/api/worker.py")
-        remove_file(project_path, "app/components/backend/api/worker_taskiq.py")
-        remove_file(project_path, "tests/api/test_worker_endpoints.py")
-        remove_file(
-            project_path, "app/components/frontend/dashboard/cards/worker_card.py"
-        )
-        remove_file(
-            project_path, "app/components/frontend/dashboard/modals/worker_modal.py"
-        )
-    else:
+    # Worker backend variant (Pattern D). Primary worker cleanup is handled
+    # above by the Pattern A loop; this branch only runs when worker IS
+    # selected and renames/strips backend-specific suffixes.
+    if is_enabled(AnswerKeys.WORKER):
         # Worker is included - clean up backend-specific files
         worker_backend = context.get(AnswerKeys.WORKER_BACKEND, WorkerBackends.ARQ)
         queues_dir = project_path / "app/components/worker/queues"
@@ -435,65 +428,22 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/services/test_component_integration.py")
         remove_file(project_path, "tests/services/test_health_logic.py")
 
-    # Remove database component if not selected
-    if not is_enabled(AnswerKeys.DATABASE):
-        remove_file(project_path, "app/core/db.py")
-        remove_file(
-            project_path, "app/components/frontend/dashboard/cards/database_card.py"
-        )
-        remove_file(
-            project_path, "app/components/frontend/dashboard/modals/database_modal.py"
-        )
+    # Note: per-spec primary cleanup for database / redis / ingress /
+    # observability / auth / AI / comms / payment / insights is now driven
+    # by the Pattern A loop above, sourced from each spec's
+    # `files.primary` list. Sub-feature blocks (auth_org, ai_memory,
+    # ollama, ai_rag, ai_voice) remain inline below.
 
-    # Remove redis component dashboard files if not selected
-    if not is_enabled(AnswerKeys.REDIS):
-        remove_file(
-            project_path, "app/components/frontend/dashboard/cards/redis_card.py"
-        )
-        remove_file(
-            project_path, "app/components/frontend/dashboard/modals/redis_modal.py"
-        )
-
-    # Remove ingress component if not selected
-    if not is_enabled(AnswerKeys.INGRESS):
-        remove_dir(project_path, "traefik")
-        remove_file(
-            project_path, "app/components/frontend/dashboard/cards/ingress_card.py"
-        )
-        remove_file(
-            project_path, "app/components/frontend/dashboard/modals/ingress_modal.py"
-        )
-
-    # Remove observability component if not selected
-    if not is_enabled(AnswerKeys.OBSERVABILITY):
-        remove_file(
-            project_path, "app/components/backend/middleware/logfire_tracing.py"
-        )
-        remove_file(
-            project_path,
-            "app/components/frontend/dashboard/cards/observability_card.py",
-        )
-        remove_file(
-            project_path,
-            "app/components/frontend/dashboard/modals/observability_modal.py",
-        )
-
-    # Remove cache component if not selected
-    if not is_enabled(AnswerKeys.CACHE):
-        pass  # Placeholder - cache component doesn't exist yet
-
-    # Remove auth service if not selected
-    if not is_enabled(AnswerKeys.AUTH):
-        remove_dir(project_path, "app/components/backend/api/auth")
-        remove_file(project_path, "app/models/user.py")
-        remove_dir(project_path, "app/services/auth")
-        remove_file(project_path, "app/core/security.py")
-        remove_file(project_path, "app/cli/auth.py")
-        remove_file(project_path, "tests/api/test_auth_endpoints.py")
-        remove_file(project_path, "tests/services/test_auth_service.py")
-        remove_file(project_path, "tests/services/test_auth_integration.py")
-        remove_file(project_path, "tests/models/test_user.py")
-        # Note: alembic removal is handled below based on whether ANY service needs migrations
+    # Remove OAuth (social login) files when not selected. Auth-only
+    # projects without OAuth still have ``OAuthProvider`` /
+    # ``UserOAuthIdentity`` SQLModels in ``app/models/user.py`` (the
+    # tables ship with the auth migration unconditionally), but the
+    # routes, middleware, settings, and tests are scoped here.
+    if not is_enabled(AnswerKeys.AUTH_OAUTH):
+        remove_file(project_path, "app/components/backend/api/auth/oauth.py")
+        remove_file(project_path, "app/components/backend/middleware/session.py")
+        remove_file(project_path, "tests/api/test_oauth_endpoints.py")
+        remove_file(project_path, "tests/services/test_oauth_user_service.py")
 
     # Remove auth org files if org level not selected (but auth is enabled)
     if is_enabled(AnswerKeys.AUTH) and not is_enabled(AnswerKeys.AUTH_ORG):
@@ -509,33 +459,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/services/test_org_integration.py")
         remove_file(project_path, "tests/api/test_org_endpoints.py")
 
-    # Remove AI service if not selected
-    if not is_enabled(AnswerKeys.AI):
-        remove_dir(project_path, "app/components/backend/api/ai")
-        remove_dir(project_path, "app/services/ai")
-        remove_file(project_path, "app/cli/ai.py")
-        remove_file(project_path, "app/cli/ai_rendering.py")
-        remove_file(project_path, "app/cli/marko_terminal_renderer.py")
-        remove_file(project_path, "app/cli/chat_completer.py")
-        remove_file(project_path, "app/cli/slash_commands.py")
-        remove_file(project_path, "app/cli/llm.py")
-        remove_file(project_path, "app/cli/status_line.py")
-        remove_file(project_path, "app/core/formatting.py")
-        remove_file(project_path, "tests/api/test_ai_endpoints.py")
-        remove_file(project_path, "tests/services/test_conversation_persistence.py")
-        remove_file(project_path, "tests/cli/test_ai_rendering.py")
-        remove_file(project_path, "tests/cli/test_conversation_memory.py")
-        remove_file(project_path, "tests/cli/test_chat_completer.py")
-        remove_file(project_path, "tests/cli/test_llm_cli.py")
-        remove_file(project_path, "tests/cli/test_slash_commands.py")
-        remove_file(project_path, "tests/cli/test_status_line.py")
-        remove_dir(project_path, "tests/services/ai")
-        remove_file(project_path, "app/components/frontend/dashboard/cards/ai_card.py")
-        remove_file(
-            project_path, "app/components/frontend/dashboard/modals/ai_modal.py"
-        )
-        # Remove AI conversation SQLModel tables
-        remove_file(project_path, "app/models/conversation.py")
+    # (AI primary cleanup handled by the Pattern A loop above.)
 
     # AI conversation persistence handling
     # When AI backend is memory (or not specified), remove database-related files
@@ -608,80 +532,8 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
             "app/components/frontend/dashboard/modals/voice_settings_tab.py",
         )
 
-    # Remove comms service if not selected
-    if not is_enabled(AnswerKeys.COMMS):
-        remove_dir(project_path, "app/components/backend/api/comms")
-        remove_dir(project_path, "app/services/comms")
-        remove_file(project_path, "app/cli/comms.py")
-        remove_file(project_path, "tests/api/test_comms_endpoints.py")
-        remove_dir(project_path, "tests/services/comms")
-        remove_dir(project_path, "docs/services/comms")
-        remove_file(
-            project_path, "app/components/frontend/dashboard/cards/comms_card.py"
-        )
-        remove_file(
-            project_path, "app/components/frontend/dashboard/modals/comms_modal.py"
-        )
-
-    # Remove payment service if not selected
-    if not is_enabled(AnswerKeys.PAYMENT):
-        remove_dir(project_path, "app/components/backend/api/payment")
-        remove_dir(project_path, "app/services/payment")
-        remove_file(project_path, "app/cli/payment.py")
-        remove_file(project_path, "tests/services/test_payment_service.py")
-        remove_file(project_path, "tests/services/test_payment_models.py")
-        remove_file(project_path, "tests/services/test_payment_catalog.py")
-        remove_file(project_path, "tests/services/test_payment_webhook_forwarder.py")
-        remove_file(project_path, "tests/cli/test_payment_trigger.py")
-        remove_file(project_path, "tests/api/test_payment_endpoints.py")
-        remove_file(
-            project_path, "app/components/backend/startup/payment_webhook_forwarder.py"
-        )
-        remove_file(
-            project_path, "app/components/backend/shutdown/payment_webhook_forwarder.py"
-        )
-        remove_file(
-            project_path, "app/components/frontend/dashboard/cards/payment_card.py"
-        )
-        remove_file(
-            project_path, "app/components/frontend/dashboard/modals/payment_modal.py"
-        )
-
-    # Remove insights service if not selected
-    if not is_enabled(AnswerKeys.INSIGHTS):
-        remove_dir(project_path, "app/components/backend/api/insights")
-        remove_dir(project_path, "app/services/insights")
-        remove_file(project_path, "app/components/backend/api/insights.py")
-        remove_file(project_path, "app/cli/insights.py")
-        remove_file(project_path, "tests/services/test_insights_service.py")
-        remove_file(project_path, "tests/services/test_insights_collectors.py")
-        remove_file(project_path, "tests/services/test_insight_service.py")
-        remove_file(project_path, "tests/services/test_query_service.py")
-        remove_file(project_path, "tests/services/test_collector_service.py")
-        remove_file(project_path, "tests/services/test_collector_github_traffic.py")
-        remove_file(project_path, "tests/services/test_collector_github_events.py")
-        remove_file(project_path, "tests/services/test_collector_github_stars.py")
-        remove_file(project_path, "tests/services/test_collector_pypi.py")
-        remove_file(project_path, "tests/services/test_collector_plausible.py")
-        remove_file(project_path, "tests/services/test_collector_reddit.py")
-        remove_file(project_path, "tests/api/test_insights_endpoints.py")
-        remove_file(project_path, "tests/test_bulk_response.py")
-        remove_file(project_path, "tests/test_cache_integration.py")
-        remove_file(
-            project_path, "app/components/frontend/dashboard/cards/insights_card.py"
-        )
-        remove_file(
-            project_path, "app/components/frontend/dashboard/modals/insights_modal.py"
-        )
-
-    # Remove auth service dashboard files if not selected
-    if not is_enabled(AnswerKeys.AUTH):
-        remove_file(
-            project_path, "app/components/frontend/dashboard/cards/auth_card.py"
-        )
-        remove_file(
-            project_path, "app/components/frontend/dashboard/modals/auth_modal.py"
-        )
+    # (comms / payment / insights / auth-dashboard primary cleanups handled
+    # by the Pattern A loop above.)
 
     # Remove services_card.py only if NO services are enabled
     # ServicesCard shows all services, so keep if ANY service is enabled

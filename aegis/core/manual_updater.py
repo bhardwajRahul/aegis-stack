@@ -21,6 +21,7 @@ from aegis.i18n import t
 
 from .component_files import get_component_files, get_copier_defaults, get_template_path
 from .copier_manager import is_copier_project, load_copier_answers
+from .plugin_template_resolver import get_plugin_template_root
 from .verbosity import verbose_print
 
 # Constants
@@ -532,6 +533,248 @@ class ManualUpdater:
             return template.render(context)
         except TemplateNotFound:
             return None
+
+    def install_plugin_template_tree(self, plugin_module_name: str) -> list[str]:
+        """Render the plugin's template tree into the project.
+
+        Plugins ship a ``<package>/templates/{{ project_slug }}/...``
+        directory parallel to aegis-stack's own. This method locates
+        that tree via :func:`plugin_template_resolver.get_plugin_template_root`,
+        renders every ``*.jinja`` file through a fresh Jinja2 environment
+        rooted at the plugin's templates dir (so ``include`` / ``extends``
+        resolve against the plugin's tree, not aegis-stack's), and writes
+        the rendered output at the corresponding relative path under
+        ``self.project_path``.
+
+        The render context is the project's current ``self.answers``,
+        so plugin templates can branch on the same project state that
+        aegis-stack templates do (``include_database``, ``database_engine``,
+        etc.).
+
+        Returns the list of relative paths written. Empty list when the
+        plugin ships no templates (pure-code plugin).
+
+        Existing files are overwritten. Per-file conflict policy lives at
+        the calling level (``aegis add`` in round 8b); for now this is
+        used by tests and by future ``aegis add`` once it lands.
+
+        **Filesystem-only.** Uses ``Path.rglob`` and ``FileSystemLoader``
+        on the resolver's returned path, which requires a real on-disk
+        directory. Zipped wheels are not supported today — see
+        ``plugin_template_resolver`` for the rationale.
+        """
+        template_root = get_plugin_template_root(plugin_module_name)
+        if template_root is None:
+            return []
+
+        # Plugin templates mirror aegis-stack's: every file is nested
+        # under ``{{ project_slug }}/`` so the rendered path is naturally
+        # rooted at the project tree.
+        project_slug_dir = template_root / PROJECT_SLUG_PLACEHOLDER
+        if not project_slug_dir.is_dir():
+            return []
+
+        plugin_env = Environment(
+            loader=FileSystemLoader(str(template_root)),
+            trim_blocks=False,
+            lstrip_blocks=False,
+        )
+
+        files_written: list[str] = []
+        for source_file in sorted(project_slug_dir.rglob(f"*{JINJA_EXTENSION}")):
+            # Path relative to the project slug dir → relative path
+            # inside the target project. Strip the ``.jinja`` suffix
+            # since the rendered file shouldn't keep it.
+            rel_inside_slug = source_file.relative_to(project_slug_dir)
+            out_rel = rel_inside_slug.with_suffix("")
+            out_path = self.project_path / out_rel
+
+            # Jinja2 needs the template name relative to the loader's
+            # root (template_root, not project_slug_dir) so it can
+            # resolve includes against sibling files.
+            template_name = str(source_file.relative_to(template_root))
+            template = plugin_env.get_template(template_name)
+            content = template.render(self.answers)
+
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(content)
+            files_written.append(str(out_rel))
+
+        return files_written
+
+    def remove_plugin(self, spec: Any) -> UpdateResult:
+        """Uninstall a plugin from the project.
+
+        Mirror of :meth:`add_plugin`:
+
+        1. Drop the plugin's ``_plugins[i]`` entry from answers and
+           persist.
+        2. Regenerate shared template files so the plugin's wiring no
+           longer appears in routes / cards / modals / etc.
+        3. Apply :class:`FileManifest` cleanup to remove the plugin's
+           own files from the project tree.
+        4. Run post-generation tasks (``uv sync`` to drop deps).
+
+        Migrations are intentionally NOT rolled back — matches the
+        existing ``aegis remove-service`` behaviour. Database tables
+        belonging to the plugin remain in place; users can drop them
+        manually via ``alembic downgrade`` if desired.
+
+        Returns an :class:`UpdateResult`. ``success=False`` with a
+        clear error message if the plugin isn't currently installed.
+        """
+        from .file_manifest import apply_cleanup_path, iter_cleanup_paths
+        from .plugin_composer import PLUGINS_ANSWER_KEY
+
+        files_deleted: list[str] = []
+        try:
+            # Normalise legacy entries — pre-Round-8 ``_plugins`` data
+            # could be a list of strings (``"plugin>=1.0"``); only
+            # dict-shaped entries carry a ``name`` field. Filter to the
+            # safe shape before reading / rewriting.
+            raw_plugins = self.answers.get(PLUGINS_ANSWER_KEY) or []
+            existing_plugins: list[dict[str, Any]] = [
+                p for p in raw_plugins if isinstance(p, dict)
+            ]
+            if not any(p.get("name") == spec.name for p in existing_plugins):
+                raise ValueError(
+                    f"Plugin {spec.name!r} is not installed in this project"
+                )
+
+            # Drop the plugin from answers + persist before any disk
+            # cleanup. If the cleanup fails the answers still reflect
+            # reality; a re-run picks up where we left off.
+            updated_plugins = [
+                p for p in existing_plugins if p.get("name") != spec.name
+            ]
+            updated_answers = {**self.answers, PLUGINS_ANSWER_KEY: updated_plugins}
+            self._save_answers(updated_answers)
+
+            # Shared file regen — plugin's wiring is no longer in
+            # ``_plugins``, so loops emit nothing for it.
+            (
+                shared_updated,
+                shared_backed_up,
+                shared_manual_merge,
+            ) = self._regenerate_shared_files(updated_answers)
+
+            # Plugin's own files. ``FileManifest.iter_cleanup_paths``
+            # with ``selected=False`` walks the manifest as if the
+            # plugin were never selected, yielding everything to
+            # delete.
+            for rel_path in iter_cleanup_paths(spec, selected=False):
+                target = self.project_path / rel_path
+                if not target.exists():
+                    continue
+                apply_cleanup_path(self.project_path, rel_path)
+                files_deleted.append(rel_path)
+
+            self._run_post_generation_tasks()
+
+            return UpdateResult(
+                component=spec.name,
+                files_deleted=files_deleted,
+                shared_files_updated=shared_updated,
+                shared_files_backed_up=shared_backed_up,
+                shared_files_need_manual_merge=shared_manual_merge,
+                success=True,
+            )
+        except Exception as e:
+            return UpdateResult(
+                component=spec.name,
+                files_deleted=files_deleted,
+                success=False,
+                error_message=str(e),
+            )
+
+    def add_plugin(
+        self,
+        spec: Any,
+        plugin_module_name: str,
+        plugin_options: dict[str, Any] | None = None,
+    ) -> UpdateResult:
+        """Install a plugin into the project.
+
+        Higher-level than :meth:`install_plugin_template_tree` —
+        this is the full ``aegis add <plugin>`` operation:
+
+        1. Serialise the plugin spec into a ``_plugins[i]`` entry
+           (predicates evaluated against the merged opts dict, see
+           ``plugin_composer``).
+        2. Append it to ``self.answers["_plugins"]`` and persist.
+        3. Regenerate shared template files so the new plugin loops
+           emit imports / wiring for this plugin.
+        4. Drop the plugin's own template tree into the project.
+        5. Run post-generation tasks (``uv sync`` + format).
+
+        Returns an :class:`UpdateResult` describing the surface area
+        that changed. Existing plugin entries with the same name are
+        replaced (idempotent).
+        """
+        from .plugin_composer import PLUGINS_ANSWER_KEY, serialize_plugin_to_answer
+
+        files_modified: list[str] = []
+        try:
+            # Normalise legacy entries — see ``remove_plugin`` for the
+            # full rationale. Same filter; same intent.
+            raw_plugins = self.answers.get(PLUGINS_ANSWER_KEY) or []
+            existing_plugins: list[dict[str, Any]] = [
+                p for p in raw_plugins if isinstance(p, dict)
+            ]
+            # Idempotent: same plugin name replaces an existing entry
+            # rather than duplicating. Plugin authors who want re-add
+            # semantics use ``aegis remove`` + ``aegis add`` explicitly.
+            existing_plugins = [
+                p for p in existing_plugins if p.get("name") != spec.name
+            ]
+
+            entry = serialize_plugin_to_answer(
+                spec,
+                plugin_options=plugin_options,
+                project_answers=self.answers,
+            )
+            existing_plugins.append(entry)
+
+            updated_answers = {**self.answers, PLUGINS_ANSWER_KEY: existing_plugins}
+
+            # Persist BEFORE regenerating shared files so subsequent
+            # ManualUpdater operations (and tests) see the plugin in
+            # answers from disk.
+            self._save_answers(updated_answers)
+
+            # Shared file regen — uses ``self.answers`` (now includes
+            # the new plugin) so ``{% for p in _plugins %}`` loops emit
+            # this plugin's wiring entries.
+            (
+                shared_updated,
+                shared_backed_up,
+                shared_manual_merge,
+            ) = self._regenerate_shared_files(updated_answers)
+            files_modified.extend(shared_updated)
+
+            # Plugin's own template tree.
+            plugin_files = self.install_plugin_template_tree(plugin_module_name)
+            files_modified.extend(plugin_files)
+
+            # Post-gen — uv sync picks up the plugin's pyproject deps,
+            # make fix re-formats anything we touched.
+            self._run_post_generation_tasks()
+
+            return UpdateResult(
+                component=spec.name,
+                files_modified=files_modified,
+                shared_files_updated=shared_updated,
+                shared_files_backed_up=shared_backed_up,
+                shared_files_need_manual_merge=shared_manual_merge,
+                success=True,
+            )
+        except Exception as e:
+            return UpdateResult(
+                component=spec.name,
+                files_modified=files_modified,
+                success=False,
+                error_message=str(e),
+            )
 
     def _save_answers(self, answers: dict[str, Any]) -> None:
         """

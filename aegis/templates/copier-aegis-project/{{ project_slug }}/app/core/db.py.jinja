@@ -210,3 +210,38 @@ def init_database() -> None:
     # This no-op exists so code calling init_database() still works
     pass
 {% endif %}
+
+
+# ---------------------------------------------------------------------
+# FastAPI-flavored session generators
+#
+# These live with the engine factories rather than under
+# ``app/components/backend/api/deps.py`` so per-service deps modules
+# (``app.services.<svc>.deps``) can import them without going through
+# the api shim — the api shim imports BACK from the per-service deps,
+# which would otherwise be a circular import.
+#
+# The functions are plain generators; FastAPI consumers wire them via
+# ``Depends(get_async_db)`` at the call site.
+# ---------------------------------------------------------------------
+
+
+def get_db() -> Generator[Session]:
+    """Yield a synchronous SQLModel session, closing it on exit."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+async def get_async_db() -> AsyncGenerator[AsyncSession]:
+    """Yield an async SQLModel session, committing on success and rolling
+    back on any exception."""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

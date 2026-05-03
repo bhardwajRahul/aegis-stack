@@ -1,0 +1,58 @@
+# aegis-plugin-{{ name }}
+
+{{ description }}
+
+An [Aegis Stack](https://github.com/lbedner/aegis-stack) plugin.
+
+## Install
+
+```bash
+pip install aegis-plugin-{{ name }}
+```
+
+Or for local development:
+
+```bash
+pip install -e .
+```
+
+## Use
+
+Inside an Aegis Stack project:
+
+```bash
+aegis add {{ name }}
+```
+
+That will:
+- Append a `_plugins` entry to your project's `.copier-answers.yml`
+- Render any templates this plugin ships under `src/aegis_plugin_{{ name }}/templates/{% raw %}{{ project_slug }}/{% endraw %}` into your project tree
+- Regenerate aegis-stack shared files so the plugin's wiring (routers, deps,
+  cards, etc.) takes effect
+
+## Layout
+
+```
+aegis-plugin-{{ name }}/
+├── pyproject.toml
+├── src/aegis_plugin_{{ name }}/
+│   ├── __init__.py
+│   ├── plugin.py                 ← exposes get_spec() (the entry point)
+│   └── templates/
+│       └── {% raw %}{{ project_slug }}/{% endraw %}      ← files this plugin drops into the target project
+└── tests/
+    └── test_plugin.py
+```
+
+## Develop
+
+```bash
+make install     # uv sync
+make test        # pytest
+make check       # lint + test
+make fix         # ruff format + autofix
+```
+
+## Author
+
+{{ author }}
