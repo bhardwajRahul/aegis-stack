@@ -427,6 +427,13 @@ def plugins_update_command(
         help="Path to the Aegis project (default: current directory).",
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts."),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Apply the update even when the new plugin version's "
+        "``aegis_version`` constraint excludes the running CLI (#777).",
+    ),
 ) -> None:
     """Re-render an installed plugin's templates at its currently
     pip-installed version.
@@ -515,6 +522,23 @@ def plugins_update_command(
         if installed_version == recorded_version:
             skipped.append(f"{name} (already at {installed_version})")
             continue
+
+        # Aegis-version compat (#777). Plugin authors may have
+        # tightened the supported aegis range in the new version
+        # (e.g. dropped support for older CLI majors). Refuse the
+        # update unless ``--force`` overrides.
+        from ..core.plugin_compat import check_aegis_version_compat
+
+        compatible, error_msg = check_aegis_version_compat(installed_spec)
+        if not compatible:
+            if force:
+                typer.secho(
+                    f"Forcing update despite version mismatch: {error_msg}",
+                    fg=typer.colors.YELLOW,
+                )
+            else:
+                failed.append((name, error_msg))
+                continue
 
         typer.echo(
             f"\nUpdating plugin: {name} ({recorded_version} → {installed_version})"

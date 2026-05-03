@@ -4,11 +4,17 @@ Tests for ``aegis.core.plugin_compat``.
 Round 8 (#771) introduced :func:`reverse_dependents` to support the
 reverse-dependency check that ``aegis remove`` runs before letting the
 user delete a service or plugin that something else still relies on.
+
+Round 11 (#777) added :func:`check_aegis_version_compat` for the
+``aegis_version`` constraint plugins declare.
 """
 
 from __future__ import annotations
 
-from aegis.core.plugin_compat import reverse_dependents
+from aegis.core.plugin_compat import (
+    check_aegis_version_compat,
+    reverse_dependents,
+)
 from aegis.core.plugin_spec import PluginKind, PluginSpec
 
 
@@ -98,3 +104,71 @@ class TestReverseDependents:
 
         deps = reverse_dependents("scraper", candidates, answers)
         assert deps == ["dashboard"]
+
+
+class TestCheckAegisVersionCompat:
+    def test_empty_constraint_is_compatible(self) -> None:
+        """Plugins predating #777 declare no constraint — install
+        unconditionally, no warnings."""
+        spec = _spec("legacy")  # aegis_version="" by default
+        compatible, msg = check_aegis_version_compat(
+            spec, current_aegis_version="0.6.11"
+        )
+        assert compatible
+        assert msg == ""
+
+    def test_satisfied_constraint_is_compatible(self) -> None:
+        spec = _spec("scraper", aegis_version=">=0.6,<0.8")
+        compatible, msg = check_aegis_version_compat(
+            spec, current_aegis_version="0.7.2"
+        )
+        assert compatible
+        assert msg == ""
+
+    def test_outside_lower_bound_rejected(self) -> None:
+        spec = _spec("scraper", aegis_version=">=0.7")
+        compatible, msg = check_aegis_version_compat(
+            spec, current_aegis_version="0.6.11"
+        )
+        assert not compatible
+        assert "scraper" in msg
+        assert ">=0.7" in msg
+        assert "0.6.11" in msg
+
+    def test_outside_upper_bound_rejected(self) -> None:
+        spec = _spec("scraper", aegis_version="<0.7")
+        compatible, msg = check_aegis_version_compat(
+            spec, current_aegis_version="0.7.2"
+        )
+        assert not compatible
+        assert "<0.7" in msg
+
+    def test_invalid_specifier_string_rejected(self) -> None:
+        spec = _spec("scraper", aegis_version="not a real spec")
+        compatible, msg = check_aegis_version_compat(
+            spec, current_aegis_version="0.6.11"
+        )
+        assert not compatible
+        assert "invalid aegis_version" in msg
+
+    def test_pre_release_excluded_by_default(self) -> None:
+        """``packaging.SpecifierSet`` rejects pre-releases by default,
+        matching pip behaviour. The wrapper inherits that — a CLI on
+        ``0.7.0rc1`` is treated as outside ``>=0.6,<0.8`` even though
+        the stable ``0.7.0`` would satisfy. Plugin authors who want to
+        accept pre-releases would have to widen their constraint
+        explicitly; we don't second-guess pip here."""
+        spec = _spec("scraper", aegis_version=">=0.6,<0.8")
+        compatible, msg = check_aegis_version_compat(
+            spec, current_aegis_version="0.7.0rc1"
+        )
+        assert not compatible
+        assert "0.7.0rc1" in msg
+
+    def test_stable_in_range_accepted(self) -> None:
+        spec = _spec("scraper", aegis_version=">=0.6,<0.8")
+        compatible, msg = check_aegis_version_compat(
+            spec, current_aegis_version="0.7.0"
+        )
+        assert compatible
+        assert msg == ""

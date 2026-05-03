@@ -243,6 +243,14 @@ class PluginSpec:
     version: str = "0.0.0"
     verified: bool = True
 
+    # PEP 440 specifier string (e.g. ``">=0.6,<0.8"``) declaring which
+    # aegis-stack CLI versions this plugin supports. Empty string means
+    # "no constraint" — back-compat default for plugins that predate
+    # #777. Validated by ``aegis.core.plugin_compat.check_aegis_version_compat``
+    # at ``aegis add`` / ``aegis plugins update`` time; a mismatch warns
+    # the user and aborts unless ``--force`` is passed.
+    aegis_version: str = ""
+
     # ----- Read-only legacy aliases -------------------------------------
 
     @property
