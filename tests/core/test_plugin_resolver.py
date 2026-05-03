@@ -74,6 +74,38 @@ class TestServiceDeps:
         assert [d.name for d in result.to_install] == ["auth"]
 
 
+class TestBracketVariants:
+    def test_bracket_variant_resolves_to_base_service(self) -> None:
+        """``required_services=["auth[org]"]`` should canonicalize to
+        ``auth`` and queue the base service. Variant-aware install
+        (actually picking the org variant) is intentionally out of
+        scope for the resolver; the registry keys on base names so
+        without bracket stripping the lookup raises
+        ``UnknownDependencyError`` despite ``auth`` being present."""
+        target = _spec("stripe", required_services=["auth[org]"])
+        registry = {
+            "stripe": target,
+            "auth": _spec("auth"),
+        }
+        result = resolve_dependencies(target, answers={}, registry=registry)
+        assert [d.name for d in result.to_install] == ["auth"]
+
+    def test_bracket_variant_already_installed_skipped(self) -> None:
+        """Bracket variant should also collapse for the
+        ``already-installed`` short-circuit. ``required_components=
+        ["database[sqlite]"]`` against a project with ``include_database:
+        true`` must NOT re-queue the dep."""
+        target = _spec("stripe", required_components=["database[sqlite]"])
+        registry = {
+            "stripe": target,
+            "database": _spec("database", kind=PluginKind.COMPONENT),
+        }
+        result = resolve_dependencies(
+            target, answers={"include_database": True}, registry=registry
+        )
+        assert result.is_empty
+
+
 class TestTransitive:
     def test_deepest_first_ordering(self) -> None:
         """``stripe → auth → database`` should install ``database``

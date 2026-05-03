@@ -76,26 +76,35 @@ def _fake_plugin_with_dep() -> PluginSpec:
 class TestResolverIntegration:
     def test_required_service_installed_before_target(self, fake_project: Path) -> None:
         """When ``aegis add needs_auth`` runs and auth isn't installed,
-        the resolver should drive ``ManualUpdater.add_component('auth')``
-        first, then ``ManualUpdater.add_plugin(needs_auth)`` for the
-        target. Both calls should hit the same updater instance type
-        (we don't pin the instance because the implementation creates
-        fresh updaters per dep)."""
+        the resolver should drive ``ManualUpdater.add_component('database')``
+        for the component dep, ``ManualUpdater.add_service('auth')`` for
+        the service dep (so its migrations get bootstrapped + run), and
+        ``ManualUpdater.add_plugin(needs_auth)`` for the target plugin.
+
+        Service deps must NOT go through ``add_component`` directly — that
+        would set the include flag but skip alembic bootstrap and migration
+        generation, leaving the project with an enabled service whose
+        tables don't exist."""
         spec = _fake_plugin_with_dep()
         call_order: list[str] = []
 
-        def _add_component_side_effect(name: str, _data) -> MagicMock:
+        def _add_component_side_effect(name: str, _data, **_kw) -> MagicMock:
             call_order.append(f"add_component:{name}")
             return MagicMock(success=True, error_message=None)
 
+        def _add_service_side_effect(name: str, _data, **_kw) -> MagicMock:
+            call_order.append(f"add_service:{name}")
+            return MagicMock(success=True, error_message=None)
+
         def _add_plugin_side_effect(
-            spec, plugin_module_name, plugin_options=None
+            spec, plugin_module_name, plugin_options=None, **_kw
         ) -> MagicMock:
             call_order.append(f"add_plugin:{spec.name}")
             return MagicMock(success=True, error_message=None)
 
         mock_updater = MagicMock()
         mock_updater.add_component.side_effect = _add_component_side_effect
+        mock_updater.add_service.side_effect = _add_service_side_effect
         mock_updater.add_plugin.side_effect = _add_plugin_side_effect
 
         # ``_resolve_plugin`` returns the synthetic spec; no entry-point
@@ -124,14 +133,76 @@ class TestResolverIntegration:
         # The plan summary should mention the required service.
         assert "auth" in result.output
         # Topological order: auth's own ``required_components=["database"]``
-        # gets walked transitively, so database lands first, then auth,
-        # then the target plugin. This is exactly what we want — the
-        # resolver did its job through one full hop.
+        # gets walked transitively, so database lands first as a component,
+        # then auth as a service (with migration bootstrap), then the
+        # target plugin.
         assert call_order == [
             "add_component:database",
-            "add_component:auth",
+            "add_service:auth",
             "add_plugin:needs_auth",
         ]
+
+    def test_dep_install_runs_post_gen_exactly_once(self, fake_project: Path) -> None:
+        """Adding a plugin with N transitive deps must trigger exactly
+        ONE ``run_post_generation_tasks`` invocation across the whole
+        operation, not N+1.
+
+        Each ``add_component`` / ``add_service`` / ``add_plugin`` call
+        used to end with its own ``uv sync`` + ``make fix`` pass, so a
+        plugin with a chain of deps would re-sync after every dep.
+        Now they all pass ``run_post_gen=False`` and the outermost
+        ``_install_plugin`` runs post-gen once at the end."""
+        spec = _fake_plugin_with_dep()  # needs_auth → auth → database
+
+        mock_updater = MagicMock()
+        mock_updater.add_component.return_value = MagicMock(
+            success=True, error_message=None
+        )
+        mock_updater.add_service.return_value = MagicMock(
+            success=True, error_message=None
+        )
+        mock_updater.add_plugin.return_value = MagicMock(
+            success=True, error_message=None
+        )
+
+        with (
+            patch(
+                "aegis.commands.add._resolve_plugin",
+                return_value=(spec, "fake_module"),
+            ),
+            patch(
+                "aegis.commands.add.ManualUpdater",
+                return_value=mock_updater,
+            ),
+            patch(
+                "aegis.commands.add.validate_version_compatibility",
+                return_value=None,
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                ["needs_auth", "--project-path", str(fake_project), "--yes"],
+            )
+
+        assert result.exit_code == 0, result.output
+
+        # Every dep / target install should pass run_post_gen=False so
+        # they don't fire sync individually.
+        for call in mock_updater.add_component.call_args_list:
+            assert call.kwargs.get("run_post_gen") is False, (
+                f"add_component called without run_post_gen=False: {call}"
+            )
+        for call in mock_updater.add_service.call_args_list:
+            assert call.kwargs.get("run_post_gen") is False, (
+                f"add_service called without run_post_gen=False: {call}"
+            )
+        for call in mock_updater.add_plugin.call_args_list:
+            assert call.kwargs.get("run_post_gen") is False, (
+                f"add_plugin called without run_post_gen=False: {call}"
+            )
+
+        # And the outer flow runs post-gen exactly once.
+        assert mock_updater.run_post_generation_tasks.call_count == 1
 
     def test_declining_confirmation_installs_nothing(self, fake_project: Path) -> None:
         """A single confirmation gates the entire plan. If the user
@@ -176,7 +247,9 @@ class TestResolverIntegration:
         # exit 0 because cancellation is a clean exit, not a failure.
         assert result.exit_code == 0, result.output
         mock_updater.add_component.assert_not_called()
+        mock_updater.add_service.assert_not_called()
         mock_updater.add_plugin.assert_not_called()
+        mock_updater.run_post_generation_tasks.assert_not_called()
 
     def test_unresolved_plugin_dep_aborts_with_pip_hint(
         self, fake_project: Path

@@ -60,7 +60,7 @@ class TestAddRemovePluginRoundTrip:
         from aegis_plugin_test.spec import get_spec
 
         monkeypatch.setattr(
-            ManualUpdater, "_run_post_generation_tasks", lambda self: None
+            ManualUpdater, "run_post_generation_tasks", lambda self: None
         )
         # Skip shared file regen — synthetic project has no shared
         # template files; we're only verifying answers + plugin tree.
@@ -86,7 +86,7 @@ class TestAddRemovePluginRoundTrip:
         from aegis_plugin_test.spec import get_spec
 
         monkeypatch.setattr(
-            ManualUpdater, "_run_post_generation_tasks", lambda self: None
+            ManualUpdater, "run_post_generation_tasks", lambda self: None
         )
         monkeypatch.setattr(
             ManualUpdater,
@@ -120,7 +120,7 @@ class TestAddRemovePluginRoundTrip:
         from aegis_plugin_test.spec import get_spec
 
         monkeypatch.setattr(
-            ManualUpdater, "_run_post_generation_tasks", lambda self: None
+            ManualUpdater, "run_post_generation_tasks", lambda self: None
         )
         monkeypatch.setattr(
             ManualUpdater,
@@ -142,7 +142,7 @@ class TestAddRemovePluginRoundTrip:
         from aegis_plugin_test.spec import get_spec
 
         monkeypatch.setattr(
-            ManualUpdater, "_run_post_generation_tasks", lambda self: None
+            ManualUpdater, "run_post_generation_tasks", lambda self: None
         )
         monkeypatch.setattr(
             ManualUpdater,

@@ -32,6 +32,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..component_utils import extract_base_component_name
 from ..components import COMPONENTS, CORE_COMPONENTS
 from ..services import SERVICES
 from .compat import _installed_plugins, _is_present, _plugin_name_only
@@ -199,7 +200,13 @@ def _resolve_one(
     """Process one entry from ``required_*``.
 
     Strips any version-constraint suffix (``"auth>=1.0"`` → ``"auth"``)
-    and decides whether the dep is:
+    AND any bracket-variant suffix (``"auth[org]"`` → ``"auth"``) so the
+    registry lookup matches the base-name keys ``SERVICES``/``COMPONENTS``
+    use. Variant-aware install (actually installing the ``[org]`` variant
+    rather than the base) is intentionally out of scope here — the
+    resolver canonicalises and the caller installs the base spec.
+
+    With both suffixes stripped, decides whether the dep is:
 
     * already installed (skip),
     * known to the registry but missing from the project (queue for
@@ -208,6 +215,12 @@ def _resolve_one(
       stop — can't recurse without a spec).
     """
     dep_name = _plugin_name_only(dep_constraint)
+    # Collapse bracket variants AFTER version stripping. ``_is_present``
+    # already canonicalises internally, but the registry lookup further
+    # down keys on the bare name, so we have to canonicalise here too —
+    # otherwise ``"auth[org]"`` falls through to ``UnknownDependencyError``
+    # despite ``auth`` being in the registry.
+    dep_name = extract_base_component_name(dep_name)
     if _is_present(dep_name, answers, plugins_present) or dep_name in CORE_COMPONENTS:
         return
 

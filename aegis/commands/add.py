@@ -64,8 +64,17 @@ def _resolve_plugin(spec_str: str) -> tuple[PluginSpec, str] | None:
         if plugin.name != base_name:
             continue
         for ep in entry_points(group="aegis.plugins"):
+            # Mirror ``_load_plugin_spec`` in ``plugins.discovery``: the
+            # entry point can resolve to either a factory callable
+            # (``"pkg:get_spec"``) or a pre-built ``PluginSpec`` instance
+            # (``"pkg:SPEC"``). Calling unconditionally would crash on
+            # the instance shape and fall through to the plugin.name
+            # fallback below — which usually picks the wrong module
+            # name when the package directory differs from the spec
+            # name (e.g. ``aegis_plugin_scraper`` vs ``scraper``).
             try:
-                ep_spec = ep.load()()
+                loader = ep.load()
+                ep_spec = loader() if callable(loader) else loader
             except Exception:
                 continue
             if getattr(ep_spec, "name", None) == plugin.name:
@@ -87,6 +96,8 @@ def _install_plugin(
     target_path: Path,
     yes: bool,
     force: bool = False,
+    *,
+    run_post_gen: bool = True,
 ) -> None:
     """Run the full ``aegis add <plugin>`` flow for an external plugin.
 
@@ -98,6 +109,13 @@ def _install_plugin(
     The ``force`` flag bypasses the aegis-version compatibility check
     (#777). The user already confirmed they understand the risk;
     we let the install proceed.
+
+    The ``run_post_gen`` keyword controls the trailing ``uv sync`` /
+    ``make fix`` pass. The top-level CLI invocation keeps the default
+    ``True``; recursive calls (a plugin dep that's itself a plugin)
+    pass ``False`` so the outermost call runs sync exactly once for
+    the entire dependency tree. Without this, a target plugin with
+    N transitive deps would do N+1 sync passes.
     """
     from ..core.plugins.compat import check_aegis_version_compat
 
@@ -214,32 +232,47 @@ def _install_plugin(
         typer.secho(t("shared.operation_cancelled"), fg="red")
         raise typer.Exit(0)
 
-    # Apply the plan in topological order. In-tree services /
-    # components share ``ManualUpdater.add_component``; plugin deps
+    # Apply the plan in topological order. In-tree components share
+    # ``ManualUpdater.add_component``; in-tree services use
+    # ``add_service`` so their migrations get bootstrapped and run
+    # (just routing through ``add_component`` would land the answer
+    # flag but leave the service's tables uncreated). Plugin deps
     # recurse into ``_install_plugin`` so their own deps are resolved
-    # + their own ``add_plugin`` lifecycle runs. Recursive calls pass
-    # ``yes=True`` because the user already confirmed the full plan.
+    # and their own ``add_plugin`` lifecycle runs. Every dep install
+    # passes ``run_post_gen=False`` — we batch the ``uv sync`` /
+    # ``make fix`` pass to a single invocation at the very end so
+    # adding a plugin with N transitive deps doesn't trigger N+1
+    # syncs. Recursive calls pass ``yes=True`` because the user
+    # already confirmed the full plan.
     for dep in plan.to_install:
         typer.echo(f"\n→ Installing dependency: {dep.name}")
-        if dep.kind == PluginKind.COMPONENT or dep.name in SERVICES:
+        if dep.kind == PluginKind.COMPONENT:
             dep_updater = ManualUpdater(target_path)
-            dep_result = dep_updater.add_component(dep.name, None)
-            if not dep_result.success:
-                typer.secho(
-                    f"Dependency {dep.name!r} failed to install: "
-                    f"{dep_result.error_message}",
-                    fg="red",
-                    err=True,
-                )
-                raise typer.Exit(1)
+            dep_result = dep_updater.add_component(dep.name, None, run_post_gen=False)
+        elif dep.name in SERVICES:
+            dep_updater = ManualUpdater(target_path)
+            dep_result = dep_updater.add_service(dep.name, None, run_post_gen=False)
         else:
-            _install_plugin(dep.name, target_path, yes=True, force=force)
+            _install_plugin(
+                dep.name, target_path, yes=True, force=force, run_post_gen=False
+            )
+            continue
+
+        if not dep_result.success:
+            typer.secho(
+                f"Dependency {dep.name!r} failed to install: "
+                f"{dep_result.error_message}",
+                fg="red",
+                err=True,
+            )
+            raise typer.Exit(1)
 
     updater = ManualUpdater(target_path)
     result = updater.add_plugin(
         spec=plugin_spec,
         plugin_module_name=plugin_module_name,
         plugin_options=parsed_options,
+        run_post_gen=False,
     )
 
     if not result.success:
@@ -249,6 +282,14 @@ def _install_plugin(
             err=True,
         )
         raise typer.Exit(1)
+
+    # One sync + format pass for the entire dependency tree. Recursive
+    # ``_install_plugin`` invocations forwarded ``run_post_gen=False``;
+    # the outermost (top-level CLI) call hits this branch with
+    # ``run_post_gen=True`` and amortises the post-gen cost across all
+    # the deps + the target plugin.
+    if run_post_gen:
+        updater.run_post_generation_tasks()
 
     typer.secho(
         f"\n{t('add.plugin_success', name=plugin_spec.name)}",
