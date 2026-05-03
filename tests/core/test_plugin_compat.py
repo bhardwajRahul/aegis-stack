@@ -11,11 +11,11 @@ Round 11 (#777) added :func:`check_aegis_version_compat` for the
 
 from __future__ import annotations
 
-from aegis.core.plugin_compat import (
+from aegis.core.plugins.compat import (
     check_aegis_version_compat,
     reverse_dependents,
 )
-from aegis.core.plugin_spec import PluginKind, PluginSpec
+from aegis.core.plugins.spec import PluginKind, PluginSpec
 
 
 def _spec(name: str, **kwargs) -> PluginSpec:

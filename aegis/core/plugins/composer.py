@@ -33,7 +33,7 @@ from collections.abc import Iterable
 from dataclasses import asdict, fields, is_dataclass
 from typing import Any
 
-from .plugin_spec import (
+from .spec import (
     FrontendWidgetWiring,
     HealthCheckWiring,
     PluginSpec,
