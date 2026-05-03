@@ -21,8 +21,8 @@ from ..core.copier_manager import load_copier_answers
 from ..core.dependency_resolver import DependencyResolver
 from ..core.manual_updater import ManualUpdater
 from ..core.option_spec import is_spec_with_options, parse_options
-from ..core.plugin_discovery import discover_plugins
-from ..core.plugin_spec import PluginSpec
+from ..core.plugins.discovery import discover_plugins
+from ..core.plugins.spec import PluginSpec
 from ..core.project_map import render_project_map
 from ..core.services import SERVICES
 from ..core.version_compatibility import validate_version_compatibility
@@ -99,7 +99,7 @@ def _install_plugin(
     (#777). The user already confirmed they understand the risk;
     we let the install proceed.
     """
-    from ..core.plugin_compat import check_aegis_version_compat
+    from ..core.plugins.compat import check_aegis_version_compat
 
     resolved = _resolve_plugin(spec_str)
     if resolved is None:
@@ -142,6 +142,65 @@ def _install_plugin(
             typer.secho(f"Invalid options: {e}", fg="red", err=True)
             raise typer.Exit(1) from e
 
+    # Forward dependency resolution (#776). Walks the plugin's
+    # ``required_components`` / ``required_services`` / ``required_plugins``
+    # transitively and queues anything missing from the project.
+    # Components and services are auto-installed in topological order
+    # before the target plugin. Missing pip packages (plugin deps that
+    # aren't installed) abort with a clear ``pip install`` instruction
+    # — auto-fetching from PyPI would be a network side effect from
+    # what's nominally a configure command.
+    from ..core.copier_manager import load_copier_answers
+    from ..core.plugins.resolver import (
+        CircularDependencyError,
+        PluginKind,
+        UnknownDependencyError,
+        format_plan,
+        resolve_dependencies,
+    )
+
+    try:
+        existing_answers = load_copier_answers(target_path)
+    except FileNotFoundError as e:
+        typer.secho(str(e), fg="red", err=True)
+        raise typer.Exit(1) from e
+
+    try:
+        plan = resolve_dependencies(plugin_spec, existing_answers)
+    except CircularDependencyError as e:
+        typer.secho(
+            f"Circular plugin dependency: {e}",
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(1) from e
+    except UnknownDependencyError as e:
+        typer.secho(str(e), fg="red", err=True)
+        raise typer.Exit(1) from e
+
+    if plan.unresolved_plugins:
+        typer.secho(
+            f"\n{plugin_spec.name!r} requires plugin packages that aren't installed:",
+            fg="red",
+            err=True,
+        )
+        for missing in plan.unresolved_plugins:
+            typer.echo(f"   pip install aegis-plugin-{missing}", err=True)
+        typer.echo(
+            "\n   Install them and re-run ``aegis add``.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    # Single confirmation gate. Show the dep plan (if any) + the target
+    # plugin's identity, then ask once. Declining leaves the project
+    # untouched; accepting commits to installing deps + target as one
+    # atomic action. Earlier versions split this into two prompts and
+    # installed deps between them — declining the second prompt left
+    # the project in a partial state.
+    if plan.to_install:
+        typer.echo("\n" + format_plan(plan, plugin_spec.name))
+
     typer.echo(f"\n{t('add.plugin_installing', name=plugin_spec.name)}")
     typer.echo(f"   Description: {plugin_spec.description}")
     typer.echo(f"   Version: {plugin_spec.version}")
@@ -154,6 +213,27 @@ def _install_plugin(
     ):
         typer.secho(t("shared.operation_cancelled"), fg="red")
         raise typer.Exit(0)
+
+    # Apply the plan in topological order. In-tree services /
+    # components share ``ManualUpdater.add_component``; plugin deps
+    # recurse into ``_install_plugin`` so their own deps are resolved
+    # + their own ``add_plugin`` lifecycle runs. Recursive calls pass
+    # ``yes=True`` because the user already confirmed the full plan.
+    for dep in plan.to_install:
+        typer.echo(f"\n→ Installing dependency: {dep.name}")
+        if dep.kind == PluginKind.COMPONENT or dep.name in SERVICES:
+            dep_updater = ManualUpdater(target_path)
+            dep_result = dep_updater.add_component(dep.name, None)
+            if not dep_result.success:
+                typer.secho(
+                    f"Dependency {dep.name!r} failed to install: "
+                    f"{dep_result.error_message}",
+                    fg="red",
+                    err=True,
+                )
+                raise typer.Exit(1)
+        else:
+            _install_plugin(dep.name, target_path, yes=True, force=force)
 
     updater = ManualUpdater(target_path)
     result = updater.add_plugin(

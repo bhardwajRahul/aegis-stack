@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from aegis.core.plugin_scaffold import scaffold_plugin, validate_plugin_name
+from aegis.core.plugins.scaffold import scaffold_plugin, validate_plugin_name
 
 
 class TestValidateName:
@@ -154,7 +154,7 @@ class TestScaffoldedPluginIsImportable:
     but for the unit test we exec the rendered ``plugin.py`` directly."""
 
     def test_get_spec_runs_with_valid_pluginspec(self, tmp_path: Path) -> None:
-        from aegis.core.plugin_spec import PluginKind, PluginSpec
+        from aegis.core.plugins.spec import PluginKind, PluginSpec
 
         scaffold_plugin("scraper", tmp_path)
         plugin_py = (

@@ -13,7 +13,7 @@ import pytest
 
 from aegis.core.components import COMPONENTS, ComponentSpec, ComponentType
 from aegis.core.file_manifest import FileManifest
-from aegis.core.plugin_spec import PluginKind, PluginSpec
+from aegis.core.plugins.spec import PluginKind, PluginSpec
 from aegis.core.services import SERVICES, ServiceSpec, ServiceType
 
 

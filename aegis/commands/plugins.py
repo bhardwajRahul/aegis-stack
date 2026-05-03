@@ -34,9 +34,9 @@ import typer
 from rich.markup import escape as _escape
 
 from ..core.components import COMPONENTS
-from ..core.plugin_compat import CompatStatus, check_compat
-from ..core.plugin_discovery import discover_plugin_cli_apps, discover_plugins
-from ..core.plugin_spec import PluginKind, PluginSpec
+from ..core.plugins.compat import CompatStatus, check_compat
+from ..core.plugins.discovery import discover_plugin_cli_apps, discover_plugins
+from ..core.plugins.spec import PluginKind, PluginSpec
 from ..core.services import SERVICES
 
 plugins_app = typer.Typer(
@@ -527,7 +527,7 @@ def plugins_update_command(
         # tightened the supported aegis range in the new version
         # (e.g. dropped support for older CLI majors). Refuse the
         # update unless ``--force`` overrides.
-        from ..core.plugin_compat import check_aegis_version_compat
+        from ..core.plugins.compat import check_aegis_version_compat
 
         compatible, error_msg = check_aegis_version_compat(installed_spec)
         if not compatible:
@@ -625,7 +625,7 @@ def plugins_create_command(
     matching the conventions ``aegis add`` / ``aegis plugins update``
     expect at install time.
     """
-    from ..core.plugin_scaffold import scaffold_plugin, validate_plugin_name
+    from ..core.plugins.scaffold import scaffold_plugin, validate_plugin_name
 
     try:
         validate_plugin_name(name)

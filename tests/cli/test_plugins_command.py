@@ -29,9 +29,9 @@ import pytest
 from typer.testing import CliRunner
 
 from aegis.commands.plugins import plugins_app
-from aegis.core import plugin_discovery
-from aegis.core.plugin_compat import CompatStatus, check_compat
-from aegis.core.plugin_spec import PluginKind, PluginSpec
+from aegis.core.plugins import discovery as plugin_discovery
+from aegis.core.plugins.compat import CompatStatus, check_compat
+from aegis.core.plugins.spec import PluginKind, PluginSpec
 
 # ---------------------------------------------------------------------
 # Fixtures
@@ -236,7 +236,7 @@ class TestInTreeCollision:
     def test_external_collides_with_in_tree(self, capsys) -> None:
         """A community package shipping ``name='auth'`` is rejected at
         discovery time so ``plugins list`` never shows it."""
-        from aegis.core.plugin_discovery import (
+        from aegis.core.plugins.discovery import (
             PLUGIN_ENTRY_POINT_GROUP,
             discover_plugins,
         )
