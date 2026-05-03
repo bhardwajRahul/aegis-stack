@@ -23,7 +23,7 @@ import pytest
 from jinja2 import Environment, FileSystemLoader
 
 from aegis.core.component_files import get_copier_defaults, get_template_path
-from aegis.core.plugin_composer import PLUGINS_ANSWER_KEY, serialize_plugin_to_answer
+from aegis.core.plugins.composer import PLUGINS_ANSWER_KEY, serialize_plugin_to_answer
 from aegis.core.services import SERVICES
 
 PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"

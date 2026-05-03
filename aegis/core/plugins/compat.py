@@ -23,9 +23,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from ..constants import AnswerKeys
-from .component_utils import extract_base_component_name
-from .plugin_spec import PluginSpec
+from aegis.constants import AnswerKeys
+
+from ..component_utils import extract_base_component_name
+from .spec import PluginSpec
 
 
 class CompatStatus(Enum):

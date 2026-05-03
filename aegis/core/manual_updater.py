@@ -21,7 +21,7 @@ from aegis.i18n import t
 
 from .component_files import get_component_files, get_copier_defaults, get_template_path
 from .copier_manager import is_copier_project, load_copier_answers
-from .plugin_template_resolver import get_plugin_template_root
+from .plugins.template_resolver import get_plugin_template_root
 from .verbosity import verbose_print
 
 # Constants
@@ -539,7 +539,7 @@ class ManualUpdater:
 
         Plugins ship a ``<package>/templates/{{ project_slug }}/...``
         directory parallel to aegis-stack's own. This method locates
-        that tree via :func:`plugin_template_resolver.get_plugin_template_root`,
+        that tree via :func:`aegis.core.plugins.template_resolver.get_plugin_template_root`,
         renders every ``*.jinja`` file through a fresh Jinja2 environment
         rooted at the plugin's templates dir (so ``include`` / ``extends``
         resolve against the plugin's tree, not aegis-stack's), and writes
@@ -561,7 +561,7 @@ class ManualUpdater:
         **Filesystem-only.** Uses ``Path.rglob`` and ``FileSystemLoader``
         on the resolver's returned path, which requires a real on-disk
         directory. Zipped wheels are not supported today — see
-        ``plugin_template_resolver`` for the rationale.
+        ``aegis.core.plugins.template_resolver`` for the rationale.
         """
         template_root = get_plugin_template_root(plugin_module_name)
         if template_root is None:
@@ -624,7 +624,7 @@ class ManualUpdater:
         clear error message if the plugin isn't currently installed.
         """
         from .file_manifest import apply_cleanup_path, iter_cleanup_paths
-        from .plugin_composer import PLUGINS_ANSWER_KEY
+        from .plugins.composer import PLUGINS_ANSWER_KEY
 
         files_deleted: list[str] = []
         try:
@@ -711,7 +711,7 @@ class ManualUpdater:
         that changed. Existing plugin entries with the same name are
         replaced (idempotent).
         """
-        from .plugin_composer import PLUGINS_ANSWER_KEY, serialize_plugin_to_answer
+        from .plugins.composer import PLUGINS_ANSWER_KEY, serialize_plugin_to_answer
 
         files_modified: list[str] = []
         try:

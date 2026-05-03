@@ -38,7 +38,7 @@ import sys
 from importlib.metadata import EntryPoint, entry_points
 from typing import Any
 
-from .plugin_spec import PluginSpec
+from .spec import PluginSpec
 
 PLUGIN_ENTRY_POINT_GROUP = "aegis.plugins"
 """Entry-point group name for plugin specs (#768)."""
@@ -157,8 +157,8 @@ def _in_tree_spec_names() -> dict[str, str]:
     services/components registries at module load time (would create a
     cycle: services.py imports migration_generator which imports services).
     """
-    from .components import COMPONENTS
-    from .services import SERVICES
+    from ..components import COMPONENTS
+    from ..services import SERVICES
 
     out: dict[str, str] = {}
     for name in SERVICES:

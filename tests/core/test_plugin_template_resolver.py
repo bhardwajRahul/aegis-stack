@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from aegis.core.plugin_template_resolver import (
+from aegis.core.plugins.template_resolver import (
     TEMPLATE_SUBDIR,
     get_plugin_template_root,
 )

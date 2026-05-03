@@ -45,8 +45,12 @@ _NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 def _scaffold_template_root() -> Path:
-    """Path to the scaffold templates shipped with the CLI."""
-    return Path(__file__).parent.parent / "templates" / "plugin_scaffold"
+    """Path to the scaffold templates shipped with the CLI.
+
+    Three ``parent`` walks up from ``aegis/core/plugins/scaffold.py``
+    land on the ``aegis/`` package root, then under ``templates/``.
+    """
+    return Path(__file__).parent.parent.parent / "templates" / "plugin_scaffold"
 
 
 def validate_plugin_name(name: str) -> None:

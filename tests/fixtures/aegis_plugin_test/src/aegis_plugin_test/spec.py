@@ -6,7 +6,7 @@ the spec at runtime.
 """
 
 from aegis.core.file_manifest import FileManifest
-from aegis.core.plugin_spec import PluginKind, PluginSpec
+from aegis.core.plugins.spec import PluginKind, PluginSpec
 
 
 def get_spec() -> PluginSpec:
