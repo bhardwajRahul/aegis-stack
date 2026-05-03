@@ -611,6 +611,116 @@ class TestUpdateCommandPostGenTasks:
         )
 
 
+class TestUpdateSkipsPostGenOnConflicts:
+    """Skip post-gen tasks when ``sync_template_changes`` reports conflicts.
+
+    Without this guard, ``run_post_generation_tasks`` calls ``uv sync``,
+    which fails parsing ``pyproject.toml`` if the merge left
+    ``<<<<<<<`` markers. That failure raises
+    ``DependencyInstallationError`` and the outer ``except`` rolls back
+    the merged state — destroying the work the user is supposed to
+    resolve manually. The fix gates post-gen on ``not sync_result.conflicts``.
+    """
+
+    @patch("aegis.commands.update.cleanup_backup_tag")
+    @patch("aegis.commands.update.run_post_generation_tasks")
+    @patch("aegis.commands.update.sync_template_changes")
+    @patch("copier.run_update")
+    @patch("aegis.commands.update.get_current_template_commit")
+    @patch("aegis.commands.update.create_backup_point")
+    def test_post_gen_skipped_when_conflicts_present(
+        self,
+        mock_create_backup: MagicMock,
+        mock_get_commit: MagicMock,
+        mock_copier_update: MagicMock,
+        mock_sync: MagicMock,
+        mock_post_gen: MagicMock,
+        mock_cleanup_backup: MagicMock,
+        project_factory: "ProjectFactory",
+    ) -> None:
+        """When sync reports conflicts, post-gen must NOT run, and the
+        backup tag must NOT be cleaned up.
+
+        If post-gen runs, it'll call uv sync against a pyproject.toml
+        with merge markers and raise — triggering the rollback path
+        that wipes the merge.
+
+        And if the backup tag is cleaned up while conflicts remain,
+        the user has no rollback target if their resolution goes wrong.
+        Both safety nets need to hold while the user is mid-resolution.
+        """
+        mock_create_backup.return_value = "aegis-backup-123"
+        mock_get_commit.return_value = "different-commit"
+
+        # Simulate copier producing a conflict in pyproject.toml.
+        sync_stub = MagicMock()
+        sync_stub.synced = ["app/foo.py"]
+        sync_stub.conflicts = ["pyproject.toml"]
+        mock_sync.return_value = sync_stub
+
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--yes"
+        )
+
+        # Post-gen tasks must not have been invoked — that's the whole
+        # point of the gate. If they were, the test in production would
+        # have rolled back.
+        assert not mock_post_gen.called, (
+            "Post-gen ran despite conflicts; this is the bug we're fixing"
+        )
+
+        # Backup tag must survive so manual rollback stays possible.
+        assert not mock_cleanup_backup.called, (
+            "Backup tag cleaned up while conflicts unresolved; "
+            "user has no rollback safety net"
+        )
+
+        # And the user-facing message should mention the skip + how to
+        # recover, so the user knows what to do next, plus the
+        # preserved-backup-tag tip.
+        combined = (result.stdout + result.stderr).lower()
+        assert "merge conflicts" in combined or "<<<<<<<" in combined
+        assert "backup tag preserved" in combined
+
+    @patch("aegis.commands.update.cleanup_backup_tag")
+    @patch("aegis.commands.update.run_post_generation_tasks")
+    @patch("aegis.commands.update.sync_template_changes")
+    @patch("copier.run_update")
+    @patch("aegis.commands.update.get_current_template_commit")
+    @patch("aegis.commands.update.create_backup_point")
+    def test_post_gen_runs_when_no_conflicts(
+        self,
+        mock_create_backup: MagicMock,
+        mock_get_commit: MagicMock,
+        mock_copier_update: MagicMock,
+        mock_sync: MagicMock,
+        mock_post_gen: MagicMock,
+        mock_cleanup_backup: MagicMock,
+        project_factory: "ProjectFactory",
+    ) -> None:
+        """The conflict-free happy path must still run post-gen AND
+        clean up the backup tag (otherwise tags accumulate forever)."""
+        mock_create_backup.return_value = "aegis-backup-123"
+        mock_get_commit.return_value = "different-commit"
+        mock_post_gen.return_value = True
+
+        sync_stub = MagicMock()
+        sync_stub.synced = ["app/foo.py"]
+        sync_stub.conflicts = []  # no conflicts → post-gen should run
+        mock_sync.return_value = sync_stub
+
+        project_path = project_factory("base")
+
+        run_aegis_command("update", "--project-path", str(project_path), "--yes")
+
+        assert mock_post_gen.called, "Post-gen should run on conflict-free updates"
+        assert mock_cleanup_backup.called, (
+            "Backup tag should be cleaned up on a fully-clean update"
+        )
+
+
 class TestUpdateCommandEnvVar:
     """Tests for AEGIS_TEMPLATE_PATH environment variable support."""
 

@@ -573,6 +573,10 @@ MESSAGES: dict[str, str] = {
         "   {count}개 파일에 병합 충돌 있음 (<<<<<<< 검색으로 해결):"
     ),
     "update.running_postgen": "후처리 작업 실행 중...",
+    "update.skipping_postgen_conflicts": (
+        "Skipping post-generation tasks — merge conflicts present.\n"
+        "   Resolve <<<<<<< markers, then run: uv sync && make check"
+    ),
     "update.version_updated": "   __aegis_version__을 {version}으로 업데이트 완료",
     "update.success": "업데이트 완료!",
     "update.partial_success": ("업데이트 완료 (일부 후처리 작업 실패)"),

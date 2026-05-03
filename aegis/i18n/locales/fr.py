@@ -608,6 +608,10 @@ MESSAGES: dict[str, str] = {
         "   {count} fichier(s) avec des conflits de fusion (cherchez <<<<<<< pour résoudre) :"
     ),
     "update.running_postgen": "Exécution des tâches post-génération...",
+    "update.skipping_postgen_conflicts": (
+        "Skipping post-generation tasks — merge conflicts present.\n"
+        "   Resolve <<<<<<< markers, then run: uv sync && make check"
+    ),
     "update.version_updated": "   __aegis_version__ mis à jour vers {version}",
     "update.success": "Mise à jour terminée !",
     "update.partial_success": (
