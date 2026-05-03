@@ -22,12 +22,16 @@ class InsightsServiceConfig:
     """Parsed insights service configuration (back-compat shape)."""
 
     sources: list[str] = field(default_factory=lambda: DEFAULT_SOURCES.copy())
+    per_user: bool = False
 
 
 def parse_insights_service_config(service_string: str) -> InsightsServiceConfig:
     """Parse an ``insights[...]`` string into the legacy typed dataclass."""
     parsed = parse_options(service_string, SERVICES["insights"])
-    return InsightsServiceConfig(sources=list(parsed["sources"]))
+    return InsightsServiceConfig(
+        sources=list(parsed["sources"]),
+        per_user=bool(parsed.get("per_user", False)),
+    )
 
 
 def is_insights_service_with_options(service_string: str) -> bool:

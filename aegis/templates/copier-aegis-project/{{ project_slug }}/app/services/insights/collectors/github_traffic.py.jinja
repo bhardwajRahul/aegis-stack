@@ -25,18 +25,26 @@ GITHUB_API = "https://api.github.com"
 class GitHubTrafficCollector(BaseCollector):
     """Collects traffic data from the GitHub REST API."""
 
-    def __init__(self, db: AsyncSession) -> None:
-        super().__init__(db)
-
     @property
     def source_key(self) -> str:
         return SourceKeys.GITHUB_TRAFFIC
 
     async def collect(self) -> CollectionResult:
         """Collect clones, views, referrers, and popular paths."""
+        {% if insights_per_user -%}
+        if self.project is not None:
+            token = self.project.github_token
+            owner = self.project.github_owner
+            repo = self.project.github_repo
+        else:
+            token = settings.INSIGHT_GITHUB_TOKEN
+            owner = settings.INSIGHT_GITHUB_OWNER
+            repo = settings.INSIGHT_GITHUB_REPO
+        {% else -%}
         token = settings.INSIGHT_GITHUB_TOKEN
         owner = settings.INSIGHT_GITHUB_OWNER
         repo = settings.INSIGHT_GITHUB_REPO
+        {%- endif %}
 
         if not token or not owner or not repo:
             return CollectionResult(

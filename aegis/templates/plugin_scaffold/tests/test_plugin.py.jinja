@@ -1,0 +1,11 @@
+"""Smoke test that the plugin's spec is well-formed."""
+
+from aegis.core.plugin_spec import PluginKind, PluginSpec
+from aegis_plugin_{{ name }}.plugin import get_spec
+
+
+def test_get_spec_returns_pluginspec() -> None:
+    spec = get_spec()
+    assert isinstance(spec, PluginSpec)
+    assert spec.name == "{{ name }}"
+    assert spec.kind == PluginKind.SERVICE

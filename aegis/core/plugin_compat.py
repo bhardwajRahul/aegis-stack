@@ -203,6 +203,69 @@ def _plugin_name_only(constraint: str) -> str:
     return constraint.strip()
 
 
+def check_aegis_version_compat(
+    spec: PluginSpec,
+    current_aegis_version: str | None = None,
+) -> tuple[bool, str]:
+    """Verify ``spec.aegis_version`` is satisfied by the running CLI.
+
+    Args:
+        spec: The plugin spec being installed / updated.
+        current_aegis_version: The CLI version to check against. Defaults
+            to ``aegis.__version__`` so callers normally pass nothing —
+            the kwarg exists for tests that need a synthetic version.
+
+    Returns:
+        ``(True, "")`` if the spec declares no constraint, or the
+        constraint is satisfied. ``(False, message)`` when the running
+        CLI sits outside the declared range or the constraint string
+        is malformed. The message is always a populated string when
+        the bool is False — callers can interpolate it directly without
+        defensive ``or "..."`` fallbacks.
+
+    The constraint is a PEP 440 specifier (``">=0.6,<0.8"``). An empty
+    ``aegis_version`` is treated as "no constraint" so plugins predating
+    #777 keep installing without changes.
+    """
+    if not spec.aegis_version:
+        return (True, "")
+
+    # Lazy import to keep ``packaging`` out of the import path for callers
+    # that never reach this helper. ``packaging`` is a setuptools/pip
+    # transitive dep, available everywhere aegis runs.
+    from packaging.specifiers import InvalidSpecifier, SpecifierSet
+    from packaging.version import InvalidVersion, Version
+
+    if current_aegis_version is None:
+        from aegis import __version__ as current_aegis_version
+
+    try:
+        spec_set = SpecifierSet(spec.aegis_version)
+    except InvalidSpecifier as e:
+        return (
+            False,
+            f"plugin {spec.name!r} declares an invalid aegis_version "
+            f"specifier {spec.aegis_version!r}: {e}",
+        )
+
+    try:
+        current = Version(current_aegis_version)
+    except InvalidVersion as e:
+        return (
+            False,
+            f"running aegis version {current_aegis_version!r} is not a "
+            f"valid PEP 440 version: {e}",
+        )
+
+    if current in spec_set:
+        return (True, "")
+    return (
+        False,
+        f"plugin {spec.name!r} requires aegis {spec.aegis_version}, "
+        f"but the running CLI is {current_aegis_version}.",
+    )
+
+
 def reverse_dependents(
     target_name: str,
     candidates: Iterable[Any],

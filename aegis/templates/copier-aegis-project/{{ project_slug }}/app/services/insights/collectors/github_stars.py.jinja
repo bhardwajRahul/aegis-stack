@@ -26,18 +26,28 @@ GITHUB_API = "https://api.github.com"
 class GitHubStarsCollector(BaseCollector):
     """Collects stargazer data from the GitHub REST API."""
 
-    def __init__(self, db: AsyncSession) -> None:
-        super().__init__(db)
-
     @property
     def source_key(self) -> str:
         return SourceKeys.GITHUB_STARS
 
     async def collect(self) -> CollectionResult:
         """Collect new stars with user profiles."""
+        {% if insights_per_user -%}
+        # Project takes precedence; fall back to env vars only when this
+        # collector wasn't bound to one (CLI / single-tenant deploy).
+        if self.project is not None:
+            token = self.project.github_token
+            owner = self.project.github_owner
+            repo = self.project.github_repo
+        else:
+            token = settings.INSIGHT_GITHUB_TOKEN
+            owner = settings.INSIGHT_GITHUB_OWNER
+            repo = settings.INSIGHT_GITHUB_REPO
+        {% else -%}
         token = settings.INSIGHT_GITHUB_TOKEN
         owner = settings.INSIGHT_GITHUB_OWNER
         repo = settings.INSIGHT_GITHUB_REPO
+        {%- endif %}
 
         if not token or not owner or not repo:
             return CollectionResult(
@@ -60,12 +70,17 @@ class GitHubStarsCollector(BaseCollector):
             star_type = await self.get_metric_type(MetricKeys.NEW_STAR)
 
             # Get existing star numbers to skip
-            existing_result = await self.db.exec(
-                select(InsightMetric.value).where(
-                    InsightMetric.metric_type_id == star_type.id,
-                    InsightMetric.period == Periods.EVENT,
-                )
+            existing_stmt = select(InsightMetric.value).where(
+                InsightMetric.metric_type_id == star_type.id,
+                InsightMetric.period == Periods.EVENT,
             )
+            {% if insights_per_user -%}
+            if self.project_id is not None:
+                existing_stmt = existing_stmt.where(
+                    InsightMetric.project_id == self.project_id
+                )
+            {%- endif %}
+            existing_result = await self.db.exec(existing_stmt)
             existing_star_numbers = {int(v) for v in existing_result.all()}
 
             async with httpx.AsyncClient(headers=headers, timeout=30.0) as client:
@@ -115,7 +130,7 @@ class GitHubStarsCollector(BaseCollector):
             from ..models import InsightEvent
 
             # Get all star metrics to group by date
-            all_stars = await self.db.exec(
+            all_stars_stmt = (
                 select(InsightMetric)
                 .where(
                     InsightMetric.metric_type_id == star_type.id,
@@ -123,6 +138,13 @@ class GitHubStarsCollector(BaseCollector):
                 )
                 .order_by(InsightMetric.date.asc())
             )
+            {% if insights_per_user -%}
+            if self.project_id is not None:
+                all_stars_stmt = all_stars_stmt.where(
+                    InsightMetric.project_id == self.project_id
+                )
+            {%- endif %}
+            all_stars = await self.db.exec(all_stars_stmt)
             stars_by_date: dict[str, list[dict]] = {}
             for s in all_stars.all():
                 day = str(s.date)[:10]
@@ -135,9 +157,16 @@ class GitHubStarsCollector(BaseCollector):
                 )
 
             # Get existing star events to avoid duplicates
-            existing_star_events = await self.db.exec(
-                select(InsightEvent).where(InsightEvent.event_type == "star")
+            existing_events_stmt = select(InsightEvent).where(
+                InsightEvent.event_type == "star"
             )
+            {% if insights_per_user -%}
+            if self.project_id is not None:
+                existing_events_stmt = existing_events_stmt.where(
+                    InsightEvent.project_id == self.project_id
+                )
+            {%- endif %}
+            existing_star_events = await self.db.exec(existing_events_stmt)
             existing_star_dates = {
                 str(ev.date)[:10] for ev in existing_star_events.all()
             }
@@ -157,6 +186,9 @@ class GitHubStarsCollector(BaseCollector):
                     event_type="star",
                     description=desc,
                     metadata_={"usernames": usernames, "numbers": numbers},
+                    {% if insights_per_user -%}
+                    project_id=self.project_id,
+                    {%- endif %}
                 )
                 self.db.add(event)
 

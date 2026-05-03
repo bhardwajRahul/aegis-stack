@@ -16,6 +16,8 @@ from app.services.insights.models import (
 )
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from ._collector_fixtures import collector_kwargs, seed_project_for_collector
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -174,18 +176,21 @@ class TestCheckRecords:
         """_check_records creates a milestone event when ATH is detected."""
         source = await _seed_source(async_db_session)
         mt = await _seed_metric_type(async_db_session, source, MetricKeys.CLONES)
+        project = await seed_project_for_collector(async_db_session)
 
         # Seed a daily metric that should trigger a record
+        project_kwargs = {"project_id": project.id} if project is not None else {}
         metric = InsightMetric(
             date=datetime(2026, 4, 10),
             metric_type_id=mt.id,  # type: ignore[arg-type]
             value=999.0,
             period=Periods.DAILY,
+            **project_kwargs,
         )
         async_db_session.add(metric)
         await async_db_session.flush()
 
-        service = CollectorService(async_db_session)
+        service = CollectorService(async_db_session, **collector_kwargs(project))
         broken = await service._check_records(SourceKeys.GITHUB_TRAFFIC)
 
         assert len(broken) > 0
@@ -198,6 +203,8 @@ class TestCheckRecords:
 
         source = await _seed_source(async_db_session)
         mt = await _seed_metric_type(async_db_session, source, MetricKeys.CLONES)
+        project = await seed_project_for_collector(async_db_session)
+        project_kwargs = {"project_id": project.id} if project is not None else {}
 
         # Seed an existing milestone
         event = InsightEvent(
@@ -205,6 +212,7 @@ class TestCheckRecords:
             event_type="milestone_github",
             description="1,000 (GitHub 1-Day Clones)",
             metadata_={"category": "daily_clones"},
+            **project_kwargs,
         )
         async_db_session.add(event)
         await async_db_session.flush()
@@ -215,11 +223,12 @@ class TestCheckRecords:
             metric_type_id=mt.id,  # type: ignore[arg-type]
             value=500.0,
             period=Periods.DAILY,
+            **project_kwargs,
         )
         async_db_session.add(metric)
         await async_db_session.flush()
 
-        service = CollectorService(async_db_session)
+        service = CollectorService(async_db_session, **collector_kwargs(project))
         broken = await service._check_records(SourceKeys.GITHUB_TRAFFIC)
 
         # Should not detect record for clones (500 < 1000)
@@ -275,8 +284,12 @@ def _make_mock_collector_cls(success: bool = True) -> type:
     """Create a mock collector class that returns a fixed result."""
 
     class MockCollector:
-        def __init__(self, db: AsyncSession) -> None:
+        # Accepts an optional ``project=`` kwarg so it stays compatible with
+        # CollectorService's instantiation contract in both auth=on
+        # (collector_cls(db, project=...)) and auth=off (collector_cls(db)).
+        def __init__(self, db: AsyncSession, **kwargs: object) -> None:
             self.db = db
+            self.project = kwargs.get("project")
 
         @property
         def source_key(self) -> str:

@@ -26,10 +26,26 @@ logger = logging.getLogger(__name__)
 
 
 class InsightService:
-    """Query layer for all insight data."""
+    """Query layer for all insight data.
+    {% if insights_per_user %}
 
-    def __init__(self, db: AsyncSession) -> None:
+    When ``project_id`` is set, ``add_event`` stamps it on every new
+    InsightEvent row so the timeline stays project-scoped. Unset =
+    single-tenant fallback (auth=off mode).
+    {% endif %}
+    """
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        {% if insights_per_user -%}
+        project_id: int | None = None,
+        {%- endif %}
+    ) -> None:
         self.db = db
+        {% if insights_per_user -%}
+        self.project_id = project_id
+        {%- endif %}
 
     # -------------------------------------------------------------------
     # Metrics
@@ -275,6 +291,9 @@ class InsightService:
             description=description,
             metadata_=metadata or {},
             origin=EventOrigin.USER,
+            {% if insights_per_user -%}
+            project_id=self.project_id,
+            {%- endif %}
         )
         self.db.add(event)
         await self.db.flush()

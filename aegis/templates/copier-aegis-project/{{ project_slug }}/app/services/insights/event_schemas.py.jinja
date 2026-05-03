@@ -1,10 +1,10 @@
 """Pydantic request/response schemas for the user-events API.
 
-Gated on `include_auth` because user-events carry a `created_by_user_id`
-FK to the `user` table — meaningless (and unsafe to type-check) without
-the auth service generating that table.
+Gated on `insights_per_user` because user-event CRUD requires a
+`project_id` scope, which only exists on InsightEvent when per-user
+mode ships.
 """
-{% if include_auth %}
+{% if insights_per_user %}
 from datetime import date, datetime
 from typing import Any
 

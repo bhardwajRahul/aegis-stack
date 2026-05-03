@@ -86,6 +86,7 @@ def _install_plugin(
     spec_str: str,
     target_path: Path,
     yes: bool,
+    force: bool = False,
 ) -> None:
     """Run the full ``aegis add <plugin>`` flow for an external plugin.
 
@@ -93,7 +94,13 @@ def _install_plugin(
     summarize) but the rendering goes through ``ManualUpdater.add_plugin``,
     which appends a ``_plugins`` entry, regenerates shared files, and
     drops the plugin's own template tree.
+
+    The ``force`` flag bypasses the aegis-version compatibility check
+    (#777). The user already confirmed they understand the risk;
+    we let the install proceed.
     """
+    from ..core.plugin_compat import check_aegis_version_compat
+
     resolved = _resolve_plugin(spec_str)
     if resolved is None:
         # Caller should have checked first; defensive guard.
@@ -105,6 +112,26 @@ def _install_plugin(
         raise typer.Exit(1)
 
     plugin_spec, plugin_module_name = resolved
+
+    # Aegis-version compat (#777). Plugins built for a different CLI
+    # major may rely on internals that moved or were renamed; we'd
+    # rather refuse the install than ship a broken project. ``--force``
+    # bypasses for users who know what they're doing.
+    compatible, error_msg = check_aegis_version_compat(plugin_spec)
+    if not compatible:
+        if force:
+            typer.secho(
+                f"Forcing install despite version mismatch: {error_msg}",
+                fg="yellow",
+            )
+        else:
+            typer.secho(error_msg, fg="red", err=True)
+            typer.echo(
+                "   Pass --force to install anyway (incompatible plugins "
+                "may render broken templates).",
+                err=True,
+            )
+            raise typer.Exit(1)
 
     # Parse bracket-syntax options, e.g. ``scraper[playwright]``.
     parsed_options: dict | None = None
@@ -241,7 +268,7 @@ def add_command(
     if components and "," not in components:
         if _resolve_plugin(components) is not None:
             validate_git_repository(target_path)
-            _install_plugin(components, target_path, yes)
+            _install_plugin(components, target_path, yes, force=force)
             return
 
         # Use the bracket-tolerant helper here too — service bracket

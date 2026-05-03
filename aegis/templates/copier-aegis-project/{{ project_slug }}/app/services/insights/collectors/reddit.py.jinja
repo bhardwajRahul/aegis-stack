@@ -21,9 +21,6 @@ logger = logging.getLogger(__name__)
 class RedditCollector(BaseCollector):
     """Tracks Reddit post stats."""
 
-    def __init__(self, db: AsyncSession) -> None:
-        super().__init__(db)
-
     @property
     def source_key(self) -> str:
         return SourceKeys.REDDIT
@@ -92,9 +89,16 @@ class RedditCollector(BaseCollector):
             from ..models import InsightEvent
 
             # Only create event if one doesn't exist for this post
-            existing_events = await self.db.exec(
-                select(InsightEvent).where(InsightEvent.event_type == "reddit_post")
+            existing_events_stmt = select(InsightEvent).where(
+                InsightEvent.event_type == "reddit_post"
             )
+            {% if insights_per_user -%}
+            if self.project_id is not None:
+                existing_events_stmt = existing_events_stmt.where(
+                    InsightEvent.project_id == self.project_id
+                )
+            {%- endif %}
+            existing_events = await self.db.exec(existing_events_stmt)
             already_tracked = any(
                 (ev.metadata_ or {}).get("post_id") == post_id
                 for ev in existing_events.all()
@@ -116,6 +120,9 @@ class RedditCollector(BaseCollector):
                     event_type="reddit_post",
                     description=f"r/{subreddit} — {title[:80]}",
                     metadata_={"post_id": post_id, "subreddit": subreddit, "url": url},
+                    {% if insights_per_user -%}
+                    project_id=self.project_id,
+                    {%- endif %}
                 )
                 self.db.add(event)
 

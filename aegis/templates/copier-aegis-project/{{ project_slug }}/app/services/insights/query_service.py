@@ -48,11 +48,35 @@ SNAPSHOT_KEYS = ["referrers", "popular_paths", "downloads_total"]
 
 
 class InsightQueryService:
-    """Async query service for insight metrics."""
+    """Async query service for insight metrics.
 
-    def __init__(self, session: AsyncSession) -> None:
+    When ``project_id`` is set, every metric / event SELECT is scoped to
+    that project. When unset, no filter is applied (single-tenant
+    fallback for builds without auth, or tooling that explicitly wants
+    a global view). The two modes share one code path; the filter is
+    a no-op when ``project_id`` is None.
+    """
+
+    def __init__(
+        self,
+        session: AsyncSession,
+        project_id: int | None = None,
+    ) -> None:
         self.session = session
+        self.project_id = project_id
         self._type_cache: dict[str, InsightMetricType | None] = {}
+
+    def _scope_metric(self, stmt):
+        """Add ``WHERE project_id = ...`` to a metric SELECT, if scoped."""
+        if self.project_id is None:
+            return stmt
+        return stmt.where(InsightMetric.project_id == self.project_id)
+
+    def _scope_event(self, stmt):
+        """Add ``WHERE project_id = ...`` to an InsightEvent SELECT."""
+        if self.project_id is None:
+            return stmt
+        return stmt.where(InsightEvent.project_id == self.project_id)
 
     async def __aenter__(self) -> InsightQueryService:
         return self
@@ -288,12 +312,14 @@ class InsightQueryService:
         daily_type_ids = [types_by_key[k].id for k in DAILY_KEYS if k in types_by_key]
         if daily_type_ids:
             result = await self.session.exec(
-                select(InsightMetric)
-                .where(
-                    InsightMetric.metric_type_id.in_(daily_type_ids),
-                    InsightMetric.period == Periods.DAILY,
+                self._scope_metric(
+                    select(InsightMetric)
+                    .where(
+                        InsightMetric.metric_type_id.in_(daily_type_ids),
+                        InsightMetric.period == Periods.DAILY,
+                    )
+                    .order_by(InsightMetric.date.asc())
                 )
-                .order_by(InsightMetric.date.asc())
             )
             id_to_key = {types_by_key[k].id: k for k in DAILY_KEYS if k in types_by_key}
             for m in result.all():
@@ -304,12 +330,14 @@ class InsightQueryService:
         event_type_ids = [types_by_key[k].id for k in EVENT_KEYS if k in types_by_key]
         if event_type_ids:
             result = await self.session.exec(
-                select(InsightMetric)
-                .where(
-                    InsightMetric.metric_type_id.in_(event_type_ids),
-                    InsightMetric.period == Periods.EVENT,
+                self._scope_metric(
+                    select(InsightMetric)
+                    .where(
+                        InsightMetric.metric_type_id.in_(event_type_ids),
+                        InsightMetric.period == Periods.EVENT,
+                    )
+                    .order_by(InsightMetric.date.asc())
                 )
-                .order_by(InsightMetric.date.asc())
             )
             id_to_key = {types_by_key[k].id: k for k in EVENT_KEYS if k in types_by_key}
             for m in result.all():
@@ -322,9 +350,11 @@ class InsightQueryService:
         ]
         if snapshot_type_ids:
             result = await self.session.exec(
-                select(InsightMetric)
-                .where(InsightMetric.metric_type_id.in_(snapshot_type_ids))
-                .order_by(InsightMetric.date.desc())
+                self._scope_metric(
+                    select(InsightMetric)
+                    .where(InsightMetric.metric_type_id.in_(snapshot_type_ids))
+                    .order_by(InsightMetric.date.desc())
+                )
             )
             id_to_key = {
                 types_by_key[k].id: k for k in SNAPSHOT_KEYS if k in types_by_key
@@ -335,7 +365,7 @@ class InsightQueryService:
                     latest[key] = m
 
         result = await self.session.exec(
-            select(InsightEvent).order_by(InsightEvent.date.asc())
+            self._scope_event(select(InsightEvent).order_by(InsightEvent.date.asc()))
         )
         insight_events = list(result.all())
 

@@ -22,7 +22,6 @@ from .migration_generator import (
     AUTH_MIGRATION,
     AUTH_RBAC_MIGRATION,
     AUTH_TOKENS_MIGRATION,
-    INSIGHTS_AUTH_LINK_MIGRATION,
     INSIGHTS_MIGRATION,
     ORG_MIGRATION,
     PAYMENT_AUTH_LINK_MIGRATION,
@@ -488,16 +487,24 @@ SERVICES: dict[str, ServiceSpec] = {
                 ),
             ],
         ),
-        # R4-A: migrations declared on the spec.
-        migrations=[INSIGHTS_MIGRATION, INSIGHTS_AUTH_LINK_MIGRATION],
-        # Bracket-syntax options: insights[sources...]
-        # e.g. insights[github,pypi,plausible,reddit]
+        # R4-A: migrations declared on the spec. The insights spec is
+        # context-aware — at generation time it rebuilds itself with the
+        # per-user variant if ``insights_per_user`` is on.
+        migrations=[INSIGHTS_MIGRATION],
+        # Bracket-syntax options: insights[sources..., per_user]
+        # e.g. insights[github,pypi,plausible,reddit,per_user]
         options=[
             OptionSpec(
                 name="sources",
                 mode=OptionMode.MULTI,
                 choices=["github", "pypi", "plausible", "reddit"],
                 default=["github", "pypi"],
+            ),
+            OptionSpec(
+                name="per_user",
+                mode=OptionMode.FLAG,
+                choices=["per_user"],
+                default=False,
             ),
         ],
         pyproject_deps=[

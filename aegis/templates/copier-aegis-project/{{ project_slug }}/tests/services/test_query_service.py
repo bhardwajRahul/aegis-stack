@@ -17,6 +17,7 @@ from app.services.insights.query_service import (
     EVENT_KEYS,
     InsightQueryService,
 )
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 # ---------------------------------------------------------------------------
@@ -52,6 +53,39 @@ async def _seed_metric_type(
     return mt
 
 
+async def _ensure_project(session: AsyncSession) -> object | None:
+    """Lazily create (or reuse) a Project for this test session.
+
+    Centralizes the auth=on requirement that every metric/event row
+    have a non-null ``project_id``: the per-test ``async_db_session``
+    holds at most one Project across all helper calls.
+
+    Returns ``None`` in auth=off builds (no Project model exists),
+    which signals to the helpers below to skip the ``project_id``
+    field entirely.
+    """
+    try:
+        from app.models.user import User
+        from app.services.insights.models import Project
+    except ImportError:
+        return None
+    result = await session.exec(select(Project).limit(1))
+    existing = result.first()
+    if existing is not None:
+        return existing
+    user = User(
+        email="query-service-test@example.com",
+        full_name="Query Service Test",
+        hashed_password="x",
+    )
+    session.add(user)
+    await session.flush()
+    project = Project(slug="qsvc", name="qsvc", owner_user_id=user.id)  # type: ignore[arg-type]
+    session.add(project)
+    await session.flush()
+    return project
+
+
 async def _seed_metric(
     session: AsyncSession,
     metric_type: InsightMetricType,
@@ -60,11 +94,14 @@ async def _seed_metric(
     period: str = Periods.DAILY,
     metadata: dict | None = None,
 ) -> InsightMetric:
+    project = await _ensure_project(session)
+    project_kwargs = {"project_id": project.id} if project is not None else {}
     metric = InsightMetric(
         date=date,
         metric_type_id=metric_type.id,  # type: ignore[arg-type]
         value=value,
         period=period,
+        **project_kwargs,
     )
     if metadata:
         metric.metadata_ = metadata
@@ -80,10 +117,13 @@ async def _seed_event(
     date: datetime | None = None,
     metadata: dict | None = None,
 ) -> InsightEvent:
+    project = await _ensure_project(session)
+    project_kwargs = {"project_id": project.id} if project is not None else {}
     event = InsightEvent(
         date=date or datetime.now(),
         event_type=event_type,
         description=description,
+        **project_kwargs,
     )
     if metadata:
         event.metadata_ = metadata

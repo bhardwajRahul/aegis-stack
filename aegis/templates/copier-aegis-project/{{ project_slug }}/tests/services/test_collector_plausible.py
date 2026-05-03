@@ -9,6 +9,8 @@ import pytest
 from app.services.insights.collectors.plausible import PlausibleCollector
 from app.services.insights.constants import MetricKeys, Periods, SourceKeys
 from app.services.insights.models import InsightMetric, InsightMetricType, InsightSource
+
+from ._collector_fixtures import collector_kwargs, seed_project_for_collector
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -65,6 +67,7 @@ class TestPlausibleCollectorSuccess:
     async def test_collect_success(self, async_db_session: AsyncSession) -> None:
         """Happy path: collect visitor metrics and page engagement."""
         await _seed_plausible(async_db_session)
+        project = await seed_project_for_collector(async_db_session, plausible_api_key="apikey123", plausible_site="docs.example.com")
 
         mock_client = AsyncMock()
 
@@ -151,7 +154,7 @@ class TestPlausibleCollectorSuccess:
                 mock_settings.INSIGHT_PLAUSIBLE_API_KEY = "apikey123"
                 mock_settings.INSIGHT_PLAUSIBLE_SITES = "docs.example.com"
 
-                collector = PlausibleCollector(async_db_session)
+                collector = PlausibleCollector(async_db_session, **collector_kwargs(project))
                 result = await collector.collect(lookback_days=1)
 
         assert result.success is True
@@ -167,6 +170,12 @@ class TestPlausibleCollectorSuccess:
     async def test_collect_missing_config(self, async_db_session: AsyncSession) -> None:
         """Missing API key or sites returns error."""
         await _seed_plausible(async_db_session)
+        # Project with NO credentials — verifies the "missing config" error path.
+        project = await seed_project_for_collector(
+            async_db_session,
+            plausible_api_key=None,
+            plausible_site=None,
+        )
 
         with patch(
             "app.services.insights.collectors.plausible.settings"
@@ -174,7 +183,7 @@ class TestPlausibleCollectorSuccess:
             mock_settings.INSIGHT_PLAUSIBLE_API_KEY = None
             mock_settings.INSIGHT_PLAUSIBLE_SITES = "docs.example.com"
 
-            collector = PlausibleCollector(async_db_session)
+            collector = PlausibleCollector(async_db_session, **collector_kwargs(project))
             result = await collector.collect()
 
         assert result.success is False
@@ -186,6 +195,7 @@ class TestPlausibleCollectorSuccess:
         import httpx
 
         await _seed_plausible(async_db_session)
+        project = await seed_project_for_collector(async_db_session, plausible_api_key="apikey123", plausible_site="docs.example.com")
 
         mock_response = MagicMock(status_code=401)
         error = httpx.HTTPStatusError(
@@ -206,7 +216,7 @@ class TestPlausibleCollectorSuccess:
                 mock_settings.INSIGHT_PLAUSIBLE_API_KEY = "apikey123"
                 mock_settings.INSIGHT_PLAUSIBLE_SITES = "docs.example.com"
 
-                collector = PlausibleCollector(async_db_session)
+                collector = PlausibleCollector(async_db_session, **collector_kwargs(project))
                 result = await collector.collect()
 
         assert result.success is False
@@ -216,15 +226,18 @@ class TestPlausibleCollectorSuccess:
     async def test_deduplication(self, async_db_session: AsyncSession) -> None:
         """Second collect doesn't duplicate existing daily rows."""
         source, metric_types = await _seed_plausible(async_db_session)
+        project = await seed_project_for_collector(async_db_session, plausible_api_key="apikey123", plausible_site="docs.example.com")
         visitors_type = metric_types[MetricKeys.VISITORS]
 
         # Pre-populate a visitors row
+        project_kwargs = {"project_id": project.id} if project is not None else {}
         existing_visitors = InsightMetric(
             date=datetime(2026, 4, 11),
             metric_type_id=visitors_type.id,  # type: ignore[arg-type]
             value=100.0,
             period=Periods.DAILY,
             metadata_={"site": "docs.example.com"},
+            **project_kwargs,
         )
         async_db_session.add(existing_visitors)
         await async_db_session.commit()
@@ -273,7 +286,7 @@ class TestPlausibleCollectorSuccess:
                 mock_settings.INSIGHT_PLAUSIBLE_API_KEY = "apikey123"
                 mock_settings.INSIGHT_PLAUSIBLE_SITES = "docs.example.com"
 
-                collector = PlausibleCollector(async_db_session)
+                collector = PlausibleCollector(async_db_session, **collector_kwargs(project))
                 result = await collector.collect(lookback_days=1)
 
         assert result.success is True
@@ -284,6 +297,7 @@ class TestPlausibleCollectorSuccess:
     async def test_lookback_days(self, async_db_session: AsyncSession) -> None:
         """Lookback parameter affects query date range."""
         await _seed_plausible(async_db_session)
+        project = await seed_project_for_collector(async_db_session, plausible_api_key="apikey123", plausible_site="docs.example.com")
 
         captured_requests: list[dict] = []
 
@@ -315,7 +329,7 @@ class TestPlausibleCollectorSuccess:
                 mock_settings.INSIGHT_PLAUSIBLE_API_KEY = "apikey123"
                 mock_settings.INSIGHT_PLAUSIBLE_SITES = "docs.example.com"
 
-                collector = PlausibleCollector(async_db_session)
+                collector = PlausibleCollector(async_db_session, **collector_kwargs(project))
                 await collector.collect(lookback_days=30)
 
         # Check that timeseries request has date range parameter

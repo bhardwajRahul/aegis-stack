@@ -343,6 +343,345 @@ def plugins_info_command(
 
 
 # ---------------------------------------------------------------------
+# `aegis plugins update` (#772)
+# ---------------------------------------------------------------------
+
+
+def _installed_plugin_entries(answers: dict) -> list[dict]:
+    """Return only dict-shaped entries from ``answers["_plugins"]``.
+
+    Mirrors the normalisation in ``ManualUpdater.add_plugin`` /
+    ``remove_plugin`` so update operates on the same view of state.
+
+    Pre-Round-8 ``_plugins`` data could be a list of strings
+    (``"scraper>=1.0"``); those entries lack the version + wiring
+    payload the update flow needs. We warn the user with a
+    re-add hint instead of silently dropping them.
+    """
+    raw = answers.get("_plugins") or []
+    if not isinstance(raw, list):
+        return []
+
+    legacy_strings = [item for item in raw if isinstance(item, str)]
+    if legacy_strings:
+        typer.secho(
+            "Skipping legacy string-shaped _plugins entries: "
+            f"{', '.join(repr(s) for s in legacy_strings)}. "
+            "Re-add them with `aegis add <name>` to upgrade to the "
+            "current dict format.",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+    return [p for p in raw if isinstance(p, dict)]
+
+
+def _resolve_installed_spec(name: str) -> tuple[PluginSpec, str] | None:
+    """Match ``name`` against the currently *installed* plugin set
+    (i.e. what ``discover_plugins`` returns post-``pip install -U``).
+
+    Returns ``(spec, module_name)`` if found, else ``None``. The module
+    name is required by ``ManualUpdater.add_plugin`` to locate the
+    plugin's template tree.
+    """
+    from importlib.metadata import entry_points
+
+    for plugin in discover_plugins():
+        if plugin.name != name:
+            continue
+        for ep in entry_points(group="aegis.plugins"):
+            try:
+                loader = ep.load()
+                # Mirror ``plugin_discovery._load_plugin_spec``:
+                # entry-points may export a factory callable OR a
+                # ``PluginSpec`` instance directly. Calling an instance
+                # would crash, so branch on ``callable``.
+                ep_spec = loader() if callable(loader) else loader
+            except Exception:
+                continue
+            if getattr(ep_spec, "name", None) == plugin.name:
+                module_name = ep.value.split(":")[0].split(".")[0]
+                return (plugin, module_name)
+        # Defensive only — discovery populated this spec from one of
+        # the entry points above, so the matched-ep path should always
+        # return. If somehow not, ``plugin.name`` is the best guess
+        # and template resolution will surface a clear error.
+        return (plugin, plugin.name)
+    return None
+
+
+@plugins_app.command("update")
+def plugins_update_command(
+    plugin_name: str | None = typer.Argument(
+        None,
+        help="Plugin to update. Required unless --all is given.",
+    ),
+    all_: bool = typer.Option(
+        False,
+        "--all",
+        help="Update every plugin currently in this project's ``_plugins``.",
+    ),
+    project_path: str = typer.Option(
+        ".",
+        "--project-path",
+        "-p",
+        help="Path to the Aegis project (default: current directory).",
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts."),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Apply the update even when the new plugin version's "
+        "``aegis_version`` constraint excludes the running CLI (#777).",
+    ),
+) -> None:
+    """Re-render an installed plugin's templates at its currently
+    pip-installed version.
+
+    Workflow: plugin author publishes a new version of
+    ``aegis-plugin-foo`` to PyPI; user runs
+    ``pip install -U aegis-plugin-foo`` to pull the new bits onto
+    disk; this command re-runs the project-configure step so the
+    plugin's updated templates / wiring / migrations land in the
+    project tree. Only plugins whose pip-installed version differs
+    from the project's recorded version actually re-render.
+
+    The recorded version (``_plugins[i].version``) is updated even
+    when nothing visibly changes, so a re-run on identical bits is a
+    no-op.
+    """
+    from ..core.copier_manager import load_copier_answers
+    from ..core.manual_updater import ManualUpdater
+
+    if not all_ and not plugin_name:
+        typer.secho("Pass a plugin name or use --all.", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    if all_ and plugin_name:
+        typer.secho(
+            "Pass either a plugin name OR --all, not both.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    target_path = Path(project_path).resolve()
+    try:
+        answers = load_copier_answers(target_path)
+    except FileNotFoundError as e:
+        typer.secho(str(e), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from e
+
+    installed = _installed_plugin_entries(answers)
+    if not installed:
+        typer.secho("No plugins are installed in this project.", fg=typer.colors.YELLOW)
+        return
+
+    targets: list[dict]
+    if all_:
+        targets = installed
+    else:
+        targets = [p for p in installed if p.get("name") == plugin_name]
+        if not targets:
+            typer.secho(
+                f"Plugin {plugin_name!r} is not installed in this project.",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            typer.echo(
+                "   Use ``aegis plugins list`` to see what's available, "
+                "and ``aegis add <name>`` to install."
+            )
+            raise typer.Exit(1)
+
+    # Check disk vs. recorded version for each target. We touch the
+    # ManualUpdater only for plugins whose pip-installed bits actually
+    # differ — otherwise the op is a no-op and we say so.
+    updated: list[str] = []
+    skipped: list[str] = []
+    failed: list[tuple[str, str]] = []
+
+    for entry in targets:
+        name = entry.get("name", "")
+        recorded_version = entry.get("version", "0.0.0")
+
+        resolved = _resolve_installed_spec(name)
+        if resolved is None:
+            failed.append(
+                (
+                    name,
+                    f"plugin {name!r} is in the project's _plugins list but "
+                    f"not currently pip-installed; run "
+                    f"``pip install aegis-plugin-{name}`` first.",
+                )
+            )
+            continue
+
+        installed_spec, module_name = resolved
+        installed_version = installed_spec.version
+
+        if installed_version == recorded_version:
+            skipped.append(f"{name} (already at {installed_version})")
+            continue
+
+        # Aegis-version compat (#777). Plugin authors may have
+        # tightened the supported aegis range in the new version
+        # (e.g. dropped support for older CLI majors). Refuse the
+        # update unless ``--force`` overrides.
+        from ..core.plugin_compat import check_aegis_version_compat
+
+        compatible, error_msg = check_aegis_version_compat(installed_spec)
+        if not compatible:
+            if force:
+                typer.secho(
+                    f"Forcing update despite version mismatch: {error_msg}",
+                    fg=typer.colors.YELLOW,
+                )
+            else:
+                failed.append((name, error_msg))
+                continue
+
+        typer.echo(
+            f"\nUpdating plugin: {name} ({recorded_version} → {installed_version})"
+        )
+        if not yes and not typer.confirm(f"Apply update to {name!r}?", default=True):
+            skipped.append(f"{name} (skipped by user)")
+            continue
+
+        updater = ManualUpdater(target_path)
+        # ``add_plugin`` is idempotent: a same-named entry replaces
+        # the old one, shared files regenerate, plugin templates re-render.
+        # That's exactly the update operation.
+        result = updater.add_plugin(
+            spec=installed_spec,
+            plugin_module_name=module_name,
+            plugin_options=entry.get("options") or None,
+        )
+        if result.success:
+            updated.append(f"{name} → {installed_version}")
+        else:
+            failed.append((name, result.error_message or "unknown error"))
+
+    # Summary
+    typer.echo()
+    if updated:
+        typer.secho(f"Updated: {len(updated)}", fg=typer.colors.GREEN)
+        for line in updated:
+            typer.echo(f"   • {line}")
+    if skipped:
+        typer.echo(f"Skipped: {len(skipped)}")
+        for line in skipped:
+            typer.echo(f"   • {line}")
+    if failed:
+        typer.secho(f"Failed: {len(failed)}", fg=typer.colors.RED, err=True)
+        for name, msg in failed:
+            typer.secho(f"   • {name}: {msg}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+
+
+# ---------------------------------------------------------------------
+# `aegis plugins create` (#774)
+# ---------------------------------------------------------------------
+
+
+@plugins_app.command("create")
+def plugins_create_command(
+    name: str = typer.Argument(
+        ...,
+        help="Plugin name (lowercase, no hyphens). Becomes the Python "
+        "package ``aegis_plugin_<name>`` and the install name "
+        "``aegis-plugin-<name>``.",
+    ),
+    target_dir: str = typer.Option(
+        ".",
+        "--target-dir",
+        "-d",
+        help="Parent directory the plugin scaffold lands inside.",
+    ),
+    author: str = typer.Option(
+        "",
+        "--author",
+        help="Author string for pyproject.toml + README.",
+    ),
+    description: str = typer.Option(
+        "",
+        "--description",
+        help="One-line plugin description.",
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt."),
+) -> None:
+    """Scaffold a new ``aegis-plugin-<name>`` Python package.
+
+    Generates a self-contained, pip-installable plugin project under
+    ``<target-dir>/aegis-plugin-<name>``. After creation:
+
+    \b
+        cd aegis-plugin-<name>
+        pip install -e .
+        aegis plugins list   # plugin shows up under "External plugins"
+
+    The scaffold ships with a minimal ``PluginSpec``, a placeholder
+    template tree, a Makefile (``make check`` / ``make test``), a
+    pre-commit config, and a GitHub Actions test workflow — all
+    matching the conventions ``aegis add`` / ``aegis plugins update``
+    expect at install time.
+    """
+    from ..core.plugin_scaffold import scaffold_plugin, validate_plugin_name
+
+    try:
+        validate_plugin_name(name)
+    except ValueError as e:
+        typer.secho(str(e), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from e
+
+    target = Path(target_dir).resolve()
+    if not target.is_dir():
+        typer.secho(
+            f"Target directory does not exist: {target}",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    output_root = target / f"aegis-plugin-{name}"
+    if output_root.exists():
+        typer.secho(
+            f"Directory already exists: {output_root}",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        typer.echo(
+            "   Pick a different name or remove the existing directory.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    typer.echo(f"Creating plugin: {name}")
+    typer.echo(f"   Target: {output_root}")
+    typer.echo(f"   Author: {author or '(default)'}")
+    typer.echo(f"   Description: {description or f'Aegis Stack plugin: {name}'}")
+    if not yes and not typer.confirm("Create the scaffold?", default=True):
+        typer.secho("Cancelled.", fg=typer.colors.YELLOW)
+        raise typer.Exit(0)
+
+    written = scaffold_plugin(
+        name,
+        target,
+        author=author,
+        description=description,
+    )
+
+    typer.secho(
+        f"\nCreated {len(written)} files under {output_root}",
+        fg=typer.colors.GREEN,
+    )
+    typer.echo("\nNext steps:")
+    typer.echo(f"   cd {output_root}")
+    typer.echo("   pip install -e .")
+    typer.echo("   aegis plugins list   # confirm the plugin is discovered")
+    typer.echo("   # Edit src/aegis_plugin_<name>/plugin.py to add wiring")
+
+
+# ---------------------------------------------------------------------
 # `aegis plugins search`
 # ---------------------------------------------------------------------
 
