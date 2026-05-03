@@ -224,6 +224,79 @@ class TestUpdateFlow:
         assert "Failed: 1" in result.output
         assert "boom" in result.output
 
+    def test_aegis_version_mismatch_blocks_update(
+        self, project_with_plugin: Path
+    ) -> None:
+        """Plugin's new version declares an aegis_version range that
+        excludes the running CLI — update should fail without
+        --force (#777)."""
+        from aegis_plugin_test.spec import get_spec
+
+        installed_spec = get_spec()
+        installed_spec.version = "9.9.9"
+        installed_spec.aegis_version = ">=99.0"  # impossible
+
+        with patch(
+            "aegis.commands.plugins._resolve_installed_spec",
+            return_value=(installed_spec, "aegis_plugin_test"),
+        ):
+            result = runner.invoke(
+                plugins_app,
+                [
+                    "update",
+                    "test_plugin",
+                    "--yes",
+                    "--project-path",
+                    str(project_with_plugin),
+                ],
+            )
+
+        assert result.exit_code == 1
+        assert "requires aegis >=99.0" in result.output
+        assert "Failed: 1" in result.output
+
+    def test_aegis_version_mismatch_force_overrides(
+        self, project_with_plugin: Path
+    ) -> None:
+        """``--force`` lets the user proceed past a version-compat
+        rejection — plugin author / user is on the hook for the
+        consequences."""
+        from aegis_plugin_test.spec import get_spec
+
+        installed_spec = get_spec()
+        installed_spec.version = "9.9.9"
+        installed_spec.aegis_version = ">=99.0"
+
+        mock_updater = MagicMock()
+        mock_updater.add_plugin.return_value = MagicMock(
+            success=True, error_message=None
+        )
+        with (
+            patch(
+                "aegis.commands.plugins._resolve_installed_spec",
+                return_value=(installed_spec, "aegis_plugin_test"),
+            ),
+            patch(
+                "aegis.core.manual_updater.ManualUpdater",
+                return_value=mock_updater,
+            ),
+        ):
+            result = runner.invoke(
+                plugins_app,
+                [
+                    "update",
+                    "test_plugin",
+                    "--yes",
+                    "--force",
+                    "--project-path",
+                    str(project_with_plugin),
+                ],
+            )
+
+        assert result.exit_code == 0
+        assert "Forcing update despite version mismatch" in result.output
+        assert "Updated: 1" in result.output
+
     def test_pip_uninstalled_plugin_reports_clearly(
         self, project_with_plugin: Path
     ) -> None:
