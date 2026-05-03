@@ -606,6 +606,10 @@ MESSAGES: dict[str, str] = {
         "   {count} Datei(en) haben Merge-Konflikte (nach <<<<<<< suchen):"
     ),
     "update.running_postgen": "Führe Nachgenerierungsaufgaben aus...",
+    "update.skipping_postgen_conflicts": (
+        "Skipping post-generation tasks — merge conflicts present.\n"
+        "   Resolve <<<<<<< markers, then run: uv sync && make check"
+    ),
     "update.version_updated": "   __aegis_version__ auf {version} aktualisiert",
     "update.success": "Update abgeschlossen!",
     "update.partial_success": (

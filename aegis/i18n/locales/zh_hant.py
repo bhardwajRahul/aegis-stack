@@ -466,6 +466,10 @@ MESSAGES: dict[str, str] = {
     "update.synced_files": "   已同步 {count} 處模板變更",
     "update.merge_conflicts": ("   {count} 個檔案存在合並衝突（搜索 <<<<<<< 解決）："),
     "update.running_postgen": "正在執行生成後任務……",
+    "update.skipping_postgen_conflicts": (
+        "Skipping post-generation tasks — merge conflicts present.\n"
+        "   Resolve <<<<<<< markers, then run: uv sync && make check"
+    ),
     "update.version_updated": "   已更新 __aegis_version__ 至 {version}",
     "update.success": "更新完成",
     "update.partial_success": "更新完成，但部分生成後任務失敗",
