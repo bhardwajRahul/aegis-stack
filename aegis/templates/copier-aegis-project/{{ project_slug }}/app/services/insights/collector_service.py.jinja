@@ -286,7 +286,7 @@ class CollectorService:
                         current_record = max(current_record, val)
 
             if record_value > current_record:
-                desc = f"{record_value:,} ({check['label']})"
+                desc = f"⬢ {record_value:,} ({check['label']})"
                 event = InsightEvent(
                     date=datetime.strptime(record_date, "%Y-%m-%d"),
                     event_type=check["event_type"],
@@ -368,7 +368,7 @@ class CollectorService:
                             current_record = max(current_record, val)
 
                 if rolling_value > current_record:
-                    desc = f"{rolling_value:,} ({check['label']})"
+                    desc = f"⬢ {rolling_value:,} ({check['label']})"
                     event = InsightEvent(
                         date=now,
                         event_type=check["event_type"],
