@@ -102,12 +102,17 @@ def _clear_cache() -> None:
 class TestGetAllInsights:
     @pytest.mark.asyncio
     async def test_returns_bulk_data(
-        self, async_client_with_db: object, async_db_session: AsyncSession
+        self,
+        async_client_with_db: object,
+        async_db_session: AsyncSession,
+        auth_headers: dict[str, str],
     ) -> None:
         """GET /api/v1/insights/all returns bulk insight data."""
         await _seed_full(async_db_session)
 
-        response = async_client_with_db.get("/api/v1/insights/all")  # type: ignore[union-attr]
+        response = async_client_with_db.get(  # type: ignore[union-attr]
+            "/api/v1/insights/all", headers=auth_headers
+        )
 
         assert response.status_code == 200
         data = response.json()
@@ -120,12 +125,17 @@ class TestGetAllInsights:
 
     @pytest.mark.asyncio
     async def test_daily_contains_seeded_metric(
-        self, async_client_with_db: object, async_db_session: AsyncSession
+        self,
+        async_client_with_db: object,
+        async_db_session: AsyncSession,
+        auth_headers: dict[str, str],
     ) -> None:
         """Seeded daily metric appears in response."""
         await _seed_full(async_db_session)
 
-        response = async_client_with_db.get("/api/v1/insights/all")  # type: ignore[union-attr]
+        response = async_client_with_db.get(  # type: ignore[union-attr]
+            "/api/v1/insights/all", headers=auth_headers
+        )
         data = response.json()
 
         clones = data["daily"].get("clones", [])
@@ -136,12 +146,17 @@ class TestGetAllInsights:
 
     @pytest.mark.asyncio
     async def test_insight_events_in_response(
-        self, async_client_with_db: object, async_db_session: AsyncSession
+        self,
+        async_client_with_db: object,
+        async_db_session: AsyncSession,
+        auth_headers: dict[str, str],
     ) -> None:
         """Seeded InsightEvent appears in response."""
         await _seed_full(async_db_session)
 
-        response = async_client_with_db.get("/api/v1/insights/all")  # type: ignore[union-attr]
+        response = async_client_with_db.get(  # type: ignore[union-attr]
+            "/api/v1/insights/all", headers=auth_headers
+        )
         data = response.json()
 
         assert len(data["insight_events"]) == 1
@@ -150,10 +165,12 @@ class TestGetAllInsights:
 
     @pytest.mark.asyncio
     async def test_empty_db_returns_empty_lists(
-        self, async_client_with_db: object
+        self, async_client_with_db: object, auth_headers: dict[str, str]
     ) -> None:
         """Empty database returns structure with empty lists."""
-        response = async_client_with_db.get("/api/v1/insights/all")  # type: ignore[union-attr]
+        response = async_client_with_db.get(  # type: ignore[union-attr]
+            "/api/v1/insights/all", headers=auth_headers
+        )
 
         assert response.status_code == 200
         data = response.json()

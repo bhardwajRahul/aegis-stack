@@ -164,13 +164,11 @@ class AuthOrgsTab(ft.Container):
 
         self._render_orgs(self._orgs_data, org_members)
 
-    def _render_orgs(
-        self,
-        orgs: list[dict[str, Any]],
-        org_members: dict[int, list[dict[str, Any]]],
-    ) -> None:
-        """Render the organizations table with expandable member rows."""
-        refresh_row = ft.Row(
+    def _refresh_row(self) -> ft.Row:
+        """Trailing-aligned refresh icon, included on render paths where a
+        retry is meaningful (loaded and error states). Skipped on the
+        unavailable state since refresh can't restore a missing database."""
+        return ft.Row(
             [
                 ft.Container(expand=True),
                 ft.IconButton(
@@ -182,6 +180,13 @@ class AuthOrgsTab(ft.Container):
             ],
             alignment=ft.MainAxisAlignment.END,
         )
+
+    def _render_orgs(
+        self,
+        orgs: list[dict[str, Any]],
+        org_members: dict[int, list[dict[str, Any]]],
+    ) -> None:
+        """Render the organizations table with expandable member rows."""
 
         columns = [
             DataTableColumn("Name", style="primary"),
@@ -239,14 +244,17 @@ class AuthOrgsTab(ft.Container):
             empty_message="No organizations found",
         )
 
-        self._content_column.controls = [refresh_row, table]
+        self._content_column.controls = [self._refresh_row(), table]
         self._content_column.scroll = ft.ScrollMode.AUTO
         self._content_column.spacing = 0
         self.update()
 
     def _render_error(self, message: str) -> None:
-        """Render an error state."""
+        """Render an error state. The refresh button is included so the user
+        can retry after fixing the underlying problem (e.g. role bump)
+        without closing and reopening the dialog."""
         self._content_column.controls = [
+            self._refresh_row(),
             ft.Container(
                 content=ft.Icon(
                     ft.Icons.ERROR_OUTLINE,

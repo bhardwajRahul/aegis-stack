@@ -3,6 +3,9 @@
 import secrets
 from datetime import UTC, datetime, timedelta
 
+{% if include_auth_rbac %}
+from sqlalchemy import func
+{% endif %}
 {% if include_auth_org %}
 from sqlmodel import delete, select
 {% else %}
@@ -39,16 +42,32 @@ class UserService:
         self.db = db
 
     async def create_user(self, user_data: UserCreate) -> User:
-        """Create a new user asynchronously."""
+        """Create a new user asynchronously.
+{%- if include_auth_rbac %}
+
+        The very first user in the system is auto-promoted to ``admin`` so
+        the operator who runs ``aegis init`` and registers can reach the
+        admin-gated tabs (Users, Orgs) without a manual SQL update.
+{%- endif %}
+        """
         # Hash the password
         hashed_password = get_password_hash(user_data.password)
 
+{%- if include_auth_rbac %}
+        # First user becomes admin
+        count_result = await self.db.exec(select(func.count()).select_from(User))
+        is_first_user = count_result.one() == 0
+
+{%- endif %}
         # Create user object
         user = User(
             email=user_data.email.lower(),
             full_name=user_data.full_name,
             hashed_password=hashed_password,
             is_active=user_data.is_active,
+{%- if include_auth_rbac %}
+            role="admin" if is_first_user else "user",
+{%- endif %}
             created_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
@@ -322,6 +341,11 @@ class UserService:
         # Path 3: brand-new user.
         if not settings.REGISTRATION_ENABLED:
             raise RegistrationClosed()
+{%- if include_auth_rbac %}
+        # First user becomes admin (matches password-registration behavior).
+        count_result = await self.db.exec(select(func.count()).select_from(User))
+        is_first_user = count_result.one() == 0
+{%- endif %}
         user = User(
             email=email,
             full_name=provider_username or email.split("@")[0],
@@ -330,6 +354,9 @@ class UserService:
             hashed_password="",
             is_active=True,
             is_verified=True,  # provider guarantees email ownership
+{%- if include_auth_rbac %}
+            role="admin" if is_first_user else "user",
+{%- endif %}
         )
         self.db.add(user)
         await self.db.flush()  # need user.id for the identity row

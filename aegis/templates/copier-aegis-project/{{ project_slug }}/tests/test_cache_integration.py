@@ -8,20 +8,26 @@ from app.core.cache import CacheService
 
 class TestCacheIntegration:
     @pytest.mark.asyncio
-    async def test_insights_endpoint_caches(self, async_client_with_db: object) -> None:
+    async def test_insights_endpoint_caches(
+        self, async_client_with_db: object, auth_headers: dict[str, str]
+    ) -> None:
         """Second call to /insights/all returns cached data."""
         from app.core.cache import cache
 
         cache.clear()
 
-        resp1 = async_client_with_db.get("/api/v1/insights/all")  # type: ignore[union-attr]
+        resp1 = async_client_with_db.get(  # type: ignore[union-attr]
+            "/api/v1/insights/all", headers=auth_headers
+        )
         assert resp1.status_code == 200
 
         # Cache should now have the data
         cached = cache.get("insights:all")
         assert cached is not None
 
-        resp2 = async_client_with_db.get("/api/v1/insights/all")  # type: ignore[union-attr]
+        resp2 = async_client_with_db.get(  # type: ignore[union-attr]
+            "/api/v1/insights/all", headers=auth_headers
+        )
         assert resp2.status_code == 200
 
     @pytest.mark.asyncio

@@ -17,6 +17,9 @@ from rich.table import Table
 import typer
 
 from app.core.db import get_async_session
+{%- if include_auth_rbac %}
+from app.core.security import VALID_ROLES
+{%- endif %}
 from app.i18n import lazy_t, t
 from app.models.user import UserCreate
 from app.services.auth.user_service import UserService
@@ -255,6 +258,61 @@ async def _create_test_users(
         raise typer.Exit(1)
 
 
+{% if include_auth_rbac %}
+@app.command(help=lazy_t("auth.help_promote_user"))
+def promote_user(
+    email: str = typer.Option(..., help=lazy_t("auth.opt_promote_email")),
+    role: str = typer.Option("admin", help=lazy_t("auth.opt_promote_role")),
+) -> None:
+    asyncio.run(_promote_user(email, role))
+
+
+async def _promote_user(email: str, role: str) -> None:
+    """Async implementation of promote_user."""
+    if role not in VALID_ROLES:
+        typer.secho(
+            t("auth.invalid_role", role=role, valid=", ".join(sorted(VALID_ROLES))),
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    try:
+        async with get_async_session() as session:
+            user_service = UserService(session)
+            user = await user_service.get_user_by_email(email)
+            if not user:
+                typer.secho(
+                    t("auth.user_not_found", email=email),
+                    fg=typer.colors.RED,
+                )
+                raise typer.Exit(1)
+
+            previous_role = user.role
+            updated = await user_service.update_user(user.id, role=role)
+            assert updated is not None  # we just fetched it
+
+            typer.secho(
+                t(
+                    "auth.user_promoted",
+                    email=updated.email,
+                    previous=previous_role,
+                    role=updated.role,
+                ),
+                fg=typer.colors.GREEN,
+                bold=True,
+            )
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        typer.secho(
+            t("auth.promote_user_failed", error=str(e)),
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+
+{% endif %}
 @app.command(help=lazy_t("auth.help_list_users"))
 def list_users() -> None:
     asyncio.run(_list_users())

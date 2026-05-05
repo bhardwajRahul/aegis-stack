@@ -228,15 +228,11 @@ class AuthUsersTab(ft.Container):
         return user_orgs
 
 {% endif %}
-    def _render_users(
-        self,
-        users: list[dict[str, Any]],
-{% if include_auth_org %}
-        user_orgs: dict[int, list[str]] | None = None,
-{% endif %}
-    ) -> None:
-        """Render the users table with loaded data."""
-        refresh_row = ft.Row(
+    def _refresh_row(self) -> ft.Row:
+        """Trailing-aligned refresh icon, included on render paths where a
+        retry is meaningful (loaded and error states). Skipped on the
+        unavailable state since refresh can't restore a missing database."""
+        return ft.Row(
             [
                 ft.Container(expand=True),
                 ft.IconButton(
@@ -249,8 +245,16 @@ class AuthUsersTab(ft.Container):
             alignment=ft.MainAxisAlignment.END,
         )
 
+    def _render_users(
+        self,
+        users: list[dict[str, Any]],
+{% if include_auth_org %}
+        user_orgs: dict[int, list[str]] | None = None,
+{% endif %}
+    ) -> None:
+        """Render the users table with loaded data."""
         self._content_column.controls = [
-            refresh_row,
+            self._refresh_row(),
             UsersTableSection(
                 users,
                 on_toggle=self._on_toggle_user,
@@ -265,8 +269,11 @@ class AuthUsersTab(ft.Container):
         self.update()
 
     def _render_error(self, message: str) -> None:
-        """Render an error state."""
+        """Render an error state. The refresh button is included so the user
+        can retry after fixing the underlying problem (e.g. role bump)
+        without closing and reopening the dialog."""
         self._content_column.controls = [
+            self._refresh_row(),
             ft.Container(
                 content=ft.Icon(
                     ft.Icons.ERROR_OUTLINE,
