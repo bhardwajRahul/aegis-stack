@@ -199,6 +199,75 @@ async def async_client_with_db(
 
     # Clean up dependency override
     app.dependency_overrides.clear()
+{%- if include_auth_rbac %}
+
+
+@pytest.fixture
+async def admin_user(async_db_session: AsyncSession):
+    """Create an admin user for tests that hit auth-protected endpoints.
+
+    Created before any other test data, so the ``UserService.create_user``
+    "first user becomes admin" rule auto-promotes it to ``role="admin"``.
+    """
+    from app.models.user import UserCreate
+    from app.services.auth.user_service import UserService
+
+    user_service = UserService(async_db_session)
+    return await user_service.create_user(
+        UserCreate(
+            email="admin-fixture@test.com",
+            full_name="Admin Fixture",
+            password="password123",
+        )
+    )
+
+
+@pytest.fixture
+async def auth_headers(admin_user) -> dict[str, str]:
+    """Bearer token headers for ``admin_user``."""
+    from app.core.security import create_access_token
+
+    token = create_access_token(data={"sub": admin_user.email})
+    return {"Authorization": f"Bearer {token}"}
+{% elif include_auth %}
+
+
+@pytest.fixture
+async def auth_user(async_db_session: AsyncSession):
+    """Create a generic authenticated user. Basic auth has no role
+    concept, so this is just "a logged-in user" — no admin claim."""
+    from app.models.user import UserCreate
+    from app.services.auth.user_service import UserService
+
+    user_service = UserService(async_db_session)
+    return await user_service.create_user(
+        UserCreate(
+            email="auth-fixture@test.com",
+            full_name="Auth Fixture",
+            password="password123",
+        )
+    )
+
+
+@pytest.fixture
+async def auth_headers(auth_user) -> dict[str, str]:
+    """Bearer token headers for ``auth_user``."""
+    from app.core.security import create_access_token
+
+    token = create_access_token(data={"sub": auth_user.email})
+    return {"Authorization": f"Bearer {token}"}
+{% else %}
+
+
+@pytest.fixture
+def auth_headers() -> dict[str, str]:
+    """No-op headers fixture for stacks without the auth service.
+
+    Tests that share assertions with auth-enabled stacks can ask for
+    ``auth_headers`` and get ``{}`` here; the endpoints aren't gated.
+    """
+    return {}
+{% endif %}
 {% endif %}
 
 

@@ -80,7 +80,11 @@ class Settings(
     FLET_ASSETS_DIR: str = "assets"  # Directory for Flet static assets (images, etc.)
 
     # Authentication settings
-    AUTH_ENABLED: bool = False  # Set to true in production to enable auth
+{%- if include_auth %}
+    AUTH_ENABLED: bool = True  # Auth service included; set false in .env to bypass for local dev
+{%- else %}
+    AUTH_ENABLED: bool = False  # Auth service not included; dev user is synthesized
+{%- endif %}
     DEV_USER_ROLE: str = "admin"  # Role for synthetic dev user when AUTH_ENABLED=false
     INVITE_ACCEPTANCE_MODE: str = "email"  # "email" requires email match, "token" allows anyone with token
     SECRET_KEY: str = "change-this-secret-key-in-production-use-env-variable"
