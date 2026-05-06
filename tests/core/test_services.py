@@ -30,6 +30,7 @@ class TestServiceType:
         assert ServiceType.NOTIFICATION.value == "notification"
         assert ServiceType.ANALYTICS.value == "analytics"
         assert ServiceType.STORAGE.value == "storage"
+        assert ServiceType.CONTENT.value == "content"
 
     def test_service_type_enum_completeness(self):
         """Test that we have all expected service types."""
@@ -40,6 +41,7 @@ class TestServiceType:
             "notification",
             "analytics",
             "storage",
+            "content",
         }
         actual_types = {st.value for st in ServiceType}
         assert actual_types == expected_types
@@ -114,6 +116,7 @@ class TestServicesRegistry:
         """Test that the SERVICES registry contains services."""
         assert len(SERVICES) > 0
         assert "auth" in SERVICES
+        assert "blog" in SERVICES
         assert "insights" in SERVICES
 
     def test_insights_service_specification(self):
@@ -202,6 +205,33 @@ class TestServicesRegistry:
         assert ComponentNames.DATABASE in spec.required_components
         assert ComponentNames.WORKER in spec.recommended_components
 
+    def test_blog_service_specification(self):
+        """Test the blog service specification is properly defined."""
+        from aegis.constants import ComponentNames
+
+        spec = SERVICES["blog"]
+
+        assert spec.name == "blog"
+        assert spec.type == ServiceType.CONTENT
+        assert spec.description
+        assert ComponentNames.BACKEND in spec.required_components
+        assert ComponentNames.DATABASE in spec.required_components
+        assert len(spec.template_files) > 0
+        assert spec.migrations
+
+    def test_blog_service_wiring(self):
+        """Test that blog publishes its backend and dashboard wiring."""
+        spec = SERVICES["blog"]
+
+        assert len(spec.wiring.routers) == 1
+        assert spec.wiring.routers[0].module == "app.components.backend.api.blog.router"
+        assert spec.wiring.routers[0].alias == "blog_router"
+        assert spec.wiring.routers[0].prefix == "/api/v1"
+        assert len(spec.wiring.dashboard_cards) == 1
+        assert spec.wiring.dashboard_cards[0].modal_id == "service_blog"
+        assert len(spec.wiring.dashboard_modals) == 1
+        assert spec.wiring.dashboard_modals[0].modal_id == "service_blog"
+
 
 class TestServiceRegistryFunctions:
     """Test service registry helper functions."""
@@ -226,6 +256,12 @@ class TestServiceRegistryFunctions:
         # Test empty result for unused type
         storage_services = get_services_by_type(ServiceType.STORAGE)
         assert len(storage_services) == 0
+
+        content_services = get_services_by_type(ServiceType.CONTENT)
+        assert "blog" in content_services
+        assert all(
+            spec.type == ServiceType.CONTENT for spec in content_services.values()
+        )
 
     def test_list_available_services(self):
         """Test listing all available services."""

@@ -12,6 +12,9 @@ from app.components.frontend.dashboard.modals.ai_modal import AIDetailDialog
 {%- if include_auth %}
 from app.components.frontend.dashboard.modals.auth_modal import AuthDetailDialog
 {%- endif %}
+{%- if include_blog %}
+from app.components.frontend.dashboard.modals.blog_modal import BlogDetailDialog
+{%- endif %}
 {%- if include_comms %}
 from app.components.frontend.dashboard.modals.comms_modal import CommsDetailDialog
 {%- endif %}
@@ -57,6 +60,9 @@ __all__ = [
 {%- endif %}
 {%- if include_auth %}
     "AuthDetailDialog",
+{%- endif %}
+{%- if include_blog %}
+    "BlogDetailDialog",
 {%- endif %}
 {%- if include_comms %}
     "CommsDetailDialog",

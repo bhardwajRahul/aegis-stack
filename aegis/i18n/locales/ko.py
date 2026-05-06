@@ -71,6 +71,7 @@ MESSAGES: dict[str, str] = {
     "service.auth": "JWT 토큰 기반 사용자 인증 및 권한 부여",
     "service.ai": "멀티 프레임워크 지원 AI 챗봇 서비스",
     "service.comms": "이메일, SMS, 음성 통신 서비스",
+    "service.blog": "초안, 게시, 태그 워크플로가 있는 Markdown 블로그",
     # ── Interactive: component prompts ─────────────────────────────────
     "interactive.add_prompt": "{description}을(를) 추가하시겠습니까?",
     "interactive.add_with_redis": "{description}을(를) 추가하시겠습니까? (Redis 자동 추가)",
@@ -511,6 +512,7 @@ MESSAGES: dict[str, str] = {
     "services.type_notification": "알림 서비스",
     "services.type_analytics": "분석 서비스",
     "services.type_storage": "스토리지 서비스",
+    "services.type_content": "콘텐츠 서비스",
     "services.requires_components": "필수 컴포넌트: {deps}",
     "services.recommends_components": "권장 컴포넌트: {deps}",
     "services.requires_services": "필수 서비스: {deps}",

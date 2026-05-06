@@ -139,7 +139,7 @@ class TestInTreeRegistry:
     context-aware ``insights`` spec, so the canonical key set is:
 
       auth, auth_rbac, auth_org, auth_tokens, ai, ai_voice,
-      payment, payment_auth_link, insights.
+      payment, payment_auth_link, insights, blog.
 
     R4-A derives the same set from ``SERVICES``. These tests guard
     that mapping so a future spec edit can't silently lose a migration.
@@ -157,6 +157,7 @@ class TestInTreeRegistry:
             "payment",
             "payment_auth_link",
             "insights",
+            "blog",
         }
 
     def test_each_migration_is_a_servicemigrationspec(self) -> None:

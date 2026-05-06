@@ -22,6 +22,7 @@ from .migration_generator import (
     AUTH_MIGRATION,
     AUTH_RBAC_MIGRATION,
     AUTH_TOKENS_MIGRATION,
+    BLOG_MIGRATION,
     INSIGHTS_MIGRATION,
     ORG_MIGRATION,
     PAYMENT_AUTH_LINK_MIGRATION,
@@ -48,6 +49,7 @@ class ServiceType(Enum):
     NOTIFICATION = "notification"  # Email, SMS, push notifications
     ANALYTICS = "analytics"  # Usage analytics and metrics
     STORAGE = "storage"  # File storage and CDN
+    CONTENT = "content"  # Content publishing and editorial workflows
 
 
 @dataclass(kw_only=True)
@@ -196,8 +198,11 @@ SERVICES: dict[str, ServiceSpec] = {
         pyproject_deps=[
             "python-jose[cryptography]==3.3.0",
             "bcrypt>=4.0.0",
-            "python-multipart==0.0.9",
+            # Order matches the legacy pyproject.toml.jinja template's
+            # block order so the plugin-renderer / legacy parity test
+            # (test_pyproject_deps_parity) keeps passing.
             "alembic==1.16.5",
+            "python-multipart==0.0.9",
             "email-validator==2.2.0",
         ],
         template_files=[
@@ -620,6 +625,72 @@ SERVICES: dict[str, ServiceSpec] = {
                 # Frontend dashboard files
                 "app/components/frontend/dashboard/cards/payment_card.py",
                 "app/components/frontend/dashboard/modals/payment_modal.py",
+            ],
+        ),
+    ),
+    "blog": ServiceSpec(
+        name="blog",
+        type=ServiceType.CONTENT,
+        description="Markdown blog with draft/publish workflow and tags",
+        required_components=[
+            ComponentNames.BACKEND,
+            ComponentNames.DATABASE,
+        ],
+        wiring=PluginWiring(
+            routers=[
+                RouterWiring(
+                    module="app.components.backend.api.blog.router",
+                    symbol="router",
+                    alias="blog_router",
+                    prefix="/api/v1",
+                ),
+            ],
+            dashboard_cards=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.cards.blog_card",
+                    symbol="BlogCard",
+                    modal_id="service_blog",
+                ),
+            ],
+            dashboard_modals=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.modals.blog_modal",
+                    symbol="BlogDetailDialog",
+                    modal_id="service_blog",
+                ),
+            ],
+            deps_providers=[
+                SymbolWiring(
+                    module="app.services.blog.deps",
+                    symbol="get_blog_service",
+                ),
+            ],
+        ),
+        migrations=[BLOG_MIGRATION],
+        pyproject_deps=[
+            "alembic==1.16.5",
+            # /import endpoint uses UploadFile, which FastAPI lowers to a
+            # multipart form parameter and requires python-multipart.
+            "python-multipart==0.0.9",
+            # YAML-frontmatter parser used by the export/import pipeline
+            # (see app/services/blog/serialization.py).
+            "python-frontmatter>=1.1.0",
+        ],
+        template_files=[
+            "app/services/blog/",
+            "app/components/backend/api/blog/",
+        ],
+        files=FileManifest(
+            primary=[
+                "app/components/backend/api/blog",
+                "app/services/blog",
+                "app/cli/blog.py",
+                "tests/services/test_blog_service.py",
+                "tests/services/test_blog_serialization.py",
+                "tests/api/test_blog_endpoints.py",
+                "app/components/frontend/dashboard/cards/blog_card.py",
+                "app/components/frontend/dashboard/modals/blog_modal.py",
+                "docs/services/blog",
             ],
         ),
     ),

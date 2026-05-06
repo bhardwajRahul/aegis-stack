@@ -65,25 +65,26 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 | Component | What you get | |
 |---|---|---|
 | **[Backend](https://lbedner.github.io/aegis-stack/components/webserver/)** | FastAPI + lifecycle hooks | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
-| **[Frontend](https://lbedner.github.io/aegis-stack/components/frontend/)** | Flet, ships with the Overseer system dashboard | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
 | **[CLI](https://lbedner.github.io/aegis-stack/cli-reference/)** | Typer, first-class system interface | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
-| **[Database](https://lbedner.github.io/aegis-stack/components/database/)** | Postgres or SQLite + SQLModel ORM | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Worker](https://lbedner.github.io/aegis-stack/components/worker/)** | Pluggable Arq, Taskiq, or Dramatiq | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Scheduler](https://lbedner.github.io/aegis-stack/components/scheduler/)** | APScheduler with persistent jobs | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Frontend](https://lbedner.github.io/aegis-stack/components/frontend/)** | Flet, ships with the Overseer system dashboard | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
 | **[Cache](https://lbedner.github.io/aegis-stack/components/)** | Redis for caching, sessions, pub/sub | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Database](https://lbedner.github.io/aegis-stack/components/database/)** | Postgres or SQLite + SQLModel ORM | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Inference](https://lbedner.github.io/aegis-stack/components/)** | Local AI models via Ollama | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Ingress](https://lbedner.github.io/aegis-stack/components/ingress/)** | Traefik v3 reverse proxy with TLS | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Observability](https://lbedner.github.io/aegis-stack/components/observability/)** | Pydantic Logfire tracing + metrics + logging | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Inference](https://lbedner.github.io/aegis-stack/components/)** | Local AI models via Ollama | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Scheduler](https://lbedner.github.io/aegis-stack/components/scheduler/)** | APScheduler with persistent jobs | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Worker](https://lbedner.github.io/aegis-stack/components/worker/)** | Pluggable Arq, Taskiq, or Dramatiq | ![Optional](https://img.shields.io/badge/-optional-blue) |
 
 ### Services
 
 | Service | What you get | |
 |---|---|---|
-| **[Auth](https://lbedner.github.io/aegis-stack/services/auth/)** | JWT cookie sessions, GitHub/Google sign-in, RBAC, multi-tenant Organizations | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[AI](https://lbedner.github.io/aegis-stack/services/ai/)** | Conversational agents, RAG, model catalog, TTS and STT (PydanticAI / LangChain across 7 providers) | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Auth](https://lbedner.github.io/aegis-stack/services/auth/)** | JWT cookie sessions, GitHub/Google sign-in, RBAC, multi-tenant Organizations | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Blog](https://lbedner.github.io/aegis-stack/services/blog/)** | Markdown publishing with drafts, tags, and an Overseer editor | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Comms](https://lbedner.github.io/aegis-stack/services/comms/)** | Transactional email (Resend) + SMS / voice (Twilio) | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Payments](https://lbedner.github.io/aegis-stack/services/payment/)** | Stripe checkout, subscriptions, refunds, disputes | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Insights](https://lbedner.github.io/aegis-stack/services/insights/)** | Adoption metrics across GitHub, PyPI, Plausible, Reddit | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Payments](https://lbedner.github.io/aegis-stack/services/payment/)** | Stripe checkout, subscriptions, refunds, disputes | ![Optional](https://img.shields.io/badge/-optional-blue) |
 
 Components compose into capabilities you didn't have to build:
 

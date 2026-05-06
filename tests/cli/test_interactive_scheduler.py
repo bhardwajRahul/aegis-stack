@@ -38,6 +38,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # observability
                 False,  # auth
                 False,  # AI
+                False,  # blog service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -48,8 +49,8 @@ class TestInteractiveSchedulerFlow:
             assert scheduler_backend == "sqlite"
             assert services == []  # No services selected
 
-            # Verify correct calls were made
-            assert mock_confirm.call_count == 8
+            # Verify correct calls were made (including blog service prompt)
+            assert mock_confirm.call_count == 9
         finally:
             clear_database_engine_selection()
 
@@ -72,6 +73,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # observability
                 False,  # auth
                 False,  # AI
+                False,  # blog service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -101,6 +103,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # observability=no
                 False,  # no auth
                 False,  # no AI
+                False,  # blog service
             ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()
@@ -126,6 +129,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # observability
                 False,  # no auth
                 False,  # no AI
+                False,  # blog service
             ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()
@@ -157,6 +161,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # observability
                 False,  # no auth
                 False,  # no AI
+                False,  # blog service
             ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()
@@ -166,8 +171,8 @@ class TestInteractiveSchedulerFlow:
             assert any(c.startswith("database") for c in components)
             assert scheduler_backend == "sqlite"
 
-            # Should not have been prompted for generic database (8 confirms total)
-            assert mock_confirm.call_count == 8
+            # Should not have been prompted for generic database (9 confirms total, including blog)
+            assert mock_confirm.call_count == 9
         finally:
             clear_database_engine_selection()
 
@@ -195,6 +200,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # observability=no
                 False,  # no auth
                 False,  # no AI
+                False,  # blog service
             ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()
@@ -223,6 +229,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # observability
                 False,  # no auth
                 False,  # no AI
+                False,  # blog service
             ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()

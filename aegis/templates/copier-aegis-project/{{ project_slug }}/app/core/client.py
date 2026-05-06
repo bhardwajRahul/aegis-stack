@@ -106,16 +106,19 @@ class APIClient:
         self,
         endpoint: str,
         files: dict[str, tuple[str, bytes, str]],
+        params: dict[str, Any] | None = None,
     ) -> dict | list | None:
         """
         POST a ``multipart/form-data`` body.
 
         ``files`` shape matches httpx: ``{field_name: (filename, bytes, mime)}``.
-        Cookies + 401 → ``on_unauthorized`` are handled the same as
-        the JSON-bodied methods. ``Content-Type`` is **not** set manually —
-        httpx infers ``multipart/form-data; boundary=…`` from ``files=``.
+        ``params`` are appended as the URL query string (used for things like
+        ``?on_conflict=skip``). Cookies + 401 → ``on_unauthorized`` are
+        handled the same as the JSON-bodied methods. ``Content-Type`` is
+        **not** set manually — httpx infers ``multipart/form-data;
+        boundary=…`` from ``files=``.
         """
-        return await self._request("POST", endpoint, files=files)
+        return await self._request("POST", endpoint, files=files, params=params)
 
     async def put(
         self, endpoint: str, json: dict[str, Any] | None = None

@@ -1,0 +1,359 @@
+"""Blog API routes."""
+
+from io import BytesIO
+from typing import Literal
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
+from fastapi.responses import StreamingResponse
+
+from app.services.blog.blog_service import BlogService
+from app.services.blog.constants import ImportConflictPolicy
+from app.services.blog.deps import get_blog_service
+from app.services.blog.schemas import (
+    BlogPostCreate,
+    BlogPostListResponse,
+    BlogPostResponse,
+    BlogPostUpdate,
+    BlogTagCreate,
+    BlogTagListResponse,
+    BlogTagResponse,
+    BlogTagUpdate,
+    ImportResult,
+)
+from app.services.blog.serialization import (
+    json_to_posts,
+    markdown_to_post,
+    posts_to_json,
+    posts_to_zip,
+    zip_to_posts,
+)
+{% if include_auth %}
+from app.models.user import User
+{%- if include_auth_rbac %}
+from app.services.auth.auth_service import require_role
+{%- else %}
+from app.services.auth.deps import get_current_active_user
+{%- endif %}
+{% endif %}
+
+router = APIRouter(prefix="/blog", tags=["blog"])
+{% if include_auth %}
+{%- if include_auth_rbac %}
+require_blog_writer = require_role("admin", "moderator")
+{%- else %}
+require_blog_writer = get_current_active_user
+{%- endif %}
+{% endif %}
+
+
+@router.get("/posts", response_model=BlogPostListResponse)
+async def list_public_posts(
+    page: int = 1,
+    page_size: int = 20,
+    tag: str | None = None,
+    service: BlogService = Depends(get_blog_service),
+) -> BlogPostListResponse:
+    """List published posts."""
+    posts, total = await service.list_public_posts(
+        page=page,
+        page_size=page_size,
+        tag=tag,
+    )
+    return BlogPostListResponse(
+        posts=posts,
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/admin/posts", response_model=BlogPostListResponse)
+async def list_admin_posts(
+    page: int = 1,
+    page_size: int = 20,
+    status: str | None = None,
+    tag: str | None = None,
+    service: BlogService = Depends(get_blog_service),
+{% if include_auth %}
+    current_user: User = Depends(require_blog_writer),
+{% endif %}
+) -> BlogPostListResponse:
+    """List posts for editors, including drafts and archived posts."""
+{% if include_auth %}
+    _ = current_user
+{% endif %}
+    posts, total = await service.list_posts(
+        page=page,
+        page_size=page_size,
+        status=status,
+        tag=tag,
+    )
+    return BlogPostListResponse(
+        posts=posts,
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/posts/{slug}", response_model=BlogPostResponse)
+async def get_public_post(
+    slug: str,
+    service: BlogService = Depends(get_blog_service),
+) -> BlogPostResponse:
+    """Get a published post by slug."""
+    post = await service.get_public_post_by_slug(slug)
+    if post is None:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return post
+
+
+@router.post("/posts", response_model=BlogPostResponse, status_code=201)
+async def create_post(
+    payload: BlogPostCreate,
+    service: BlogService = Depends(get_blog_service),
+{% if include_auth %}
+    current_user: User = Depends(require_blog_writer),
+{% endif %}
+) -> BlogPostResponse:
+    """Create a draft post."""
+    try:
+        return await service.create_post(
+            payload,
+{% if include_auth %}
+            author_id=current_user.id,
+            author_name=current_user.full_name or current_user.email,
+{% else %}
+            author_id=None,
+            author_name=None,
+{% endif %}
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+
+@router.put("/posts/{post_id}", response_model=BlogPostResponse)
+async def update_post(
+    post_id: int,
+    payload: BlogPostUpdate,
+    service: BlogService = Depends(get_blog_service),
+{% if include_auth %}
+    current_user: User = Depends(require_blog_writer),
+{% endif %}
+) -> BlogPostResponse:
+    """Update a post."""
+{% if include_auth %}
+    _ = current_user
+{% endif %}
+    try:
+        post = await service.update_post(post_id, payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    if post is None:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return post
+
+
+@router.post("/posts/{post_id}/publish", response_model=BlogPostResponse)
+async def publish_post(
+    post_id: int,
+    service: BlogService = Depends(get_blog_service),
+{% if include_auth %}
+    current_user: User = Depends(require_blog_writer),
+{% endif %}
+) -> BlogPostResponse:
+    """Publish a post."""
+{% if include_auth %}
+    _ = current_user
+{% endif %}
+    post = await service.publish_post(post_id)
+    if post is None:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return post
+
+
+@router.post("/posts/{post_id}/archive", response_model=BlogPostResponse)
+async def archive_post(
+    post_id: int,
+    service: BlogService = Depends(get_blog_service),
+{% if include_auth %}
+    current_user: User = Depends(require_blog_writer),
+{% endif %}
+) -> BlogPostResponse:
+    """Archive a post."""
+{% if include_auth %}
+    _ = current_user
+{% endif %}
+    post = await service.archive_post(post_id)
+    if post is None:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return post
+
+
+@router.delete("/posts/{post_id}", status_code=204)
+async def delete_post(
+    post_id: int,
+    response: Response,
+    service: BlogService = Depends(get_blog_service),
+{% if include_auth %}
+    current_user: User = Depends(require_blog_writer),
+{% endif %}
+) -> None:
+    """Delete a post."""
+{% if include_auth %}
+    _ = current_user
+{% endif %}
+    deleted = await service.delete_post(post_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Post not found")
+    response.status_code = status.HTTP_204_NO_CONTENT
+
+
+@router.get("/tags", response_model=BlogTagListResponse)
+async def list_tags(
+    service: BlogService = Depends(get_blog_service),
+) -> BlogTagListResponse:
+    """List blog tags."""
+    tags = await service.list_tags()
+    return BlogTagListResponse(tags=tags, total=len(tags))
+
+
+@router.post("/tags", response_model=BlogTagResponse, status_code=201)
+async def create_tag(
+    payload: BlogTagCreate,
+    service: BlogService = Depends(get_blog_service),
+{% if include_auth %}
+    current_user: User = Depends(require_blog_writer),
+{% endif %}
+) -> BlogTagResponse:
+    """Create a tag."""
+{% if include_auth %}
+    _ = current_user
+{% endif %}
+    try:
+        return await service.create_tag(payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+
+@router.put("/tags/{tag_id}", response_model=BlogTagResponse)
+async def update_tag(
+    tag_id: int,
+    payload: BlogTagUpdate,
+    service: BlogService = Depends(get_blog_service),
+{% if include_auth %}
+    current_user: User = Depends(require_blog_writer),
+{% endif %}
+) -> BlogTagResponse:
+    """Update a tag."""
+{% if include_auth %}
+    _ = current_user
+{% endif %}
+    try:
+        tag = await service.update_tag(tag_id, payload)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    if tag is None:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    return tag
+
+
+@router.delete("/tags/{tag_id}", status_code=204)
+async def delete_tag(
+    tag_id: int,
+    response: Response,
+    service: BlogService = Depends(get_blog_service),
+{% if include_auth %}
+    current_user: User = Depends(require_blog_writer),
+{% endif %}
+) -> None:
+    """Delete a tag."""
+{% if include_auth %}
+    _ = current_user
+{% endif %}
+    deleted = await service.delete_tag(tag_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    response.status_code = status.HTTP_204_NO_CONTENT
+
+
+@router.get("/export")
+async def export_posts_endpoint(
+    format: Literal["markdown", "json"] = "markdown",
+    status_filter: str | None = None,
+    service: BlogService = Depends(get_blog_service),
+{% if include_auth %}
+    current_user: User = Depends(require_blog_writer),
+{% endif %}
+) -> StreamingResponse:
+    """Download all posts as a markdown zip or single JSON document.
+
+    Markdown is portable across SSGs (Hugo/Jekyll/Astro). JSON preserves
+    full fidelity for round-tripping between Aegis projects.
+    """
+{% if include_auth %}
+    _ = current_user
+{% endif %}
+    posts = await service.export_posts(status=status_filter)
+    if format == "json":
+        body = posts_to_json(posts).encode("utf-8")
+        media_type = "application/json"
+        filename = "blog-export.json"
+    else:
+        body = posts_to_zip(posts)
+        media_type = "application/zip"
+        filename = "blog-export.zip"
+    return StreamingResponse(
+        BytesIO(body),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/import", response_model=ImportResult)
+async def import_posts_endpoint(
+    file: UploadFile = File(...),
+    on_conflict: ImportConflictPolicy = ImportConflictPolicy.SKIP,
+    service: BlogService = Depends(get_blog_service),
+{% if include_auth %}
+    current_user: User = Depends(require_blog_writer),
+{% endif %}
+) -> ImportResult:
+    """Import posts from a markdown file, zip of markdowns, or JSON document.
+
+    Format is auto-detected from the upload's filename extension.
+    """
+{% if include_auth %}
+    _ = current_user
+{% endif %}
+    data = await file.read()
+    name = (file.filename or "").lower()
+    try:
+        if name.endswith(".json"):
+            posts = json_to_posts(data.decode("utf-8"))
+        elif name.endswith(".zip"):
+            posts = zip_to_posts(data)
+        elif name.endswith(".md") or name.endswith(".markdown"):
+            posts = [
+                markdown_to_post(
+                    data.decode("utf-8"),
+                    fallback_slug=name.rsplit("/", 1)[-1].rsplit(".", 1)[0],
+                )
+            ]
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Unsupported file type. Use .md, .zip, or .json.",
+            )
+    except UnicodeDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid UTF-8: {e}") from e
+
+    return await service.import_posts(posts, on_conflict=on_conflict)

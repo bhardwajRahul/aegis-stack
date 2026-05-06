@@ -492,3 +492,43 @@ class TestInsightsServiceResolver:
         assert resolved.count("backend") == 1
         assert resolved.count("database") == 1
         assert "scheduler" in resolved
+
+
+class TestBlogServiceResolver:
+    """Test blog service resolution."""
+
+    def test_resolve_blog_dependencies(self):
+        """Blog requires backend and database."""
+        services = ["blog"]
+
+        resolved, auto_added = ServiceResolver.resolve_service_dependencies(services)
+
+        assert "backend" in resolved
+        assert "database" in resolved
+        assert "backend" in auto_added
+        assert "database" in auto_added
+
+    def test_validate_blog_plain(self):
+        """Plain 'blog' validates successfully."""
+        errors = ServiceResolver.validate_services(["blog"])
+        assert errors == []
+
+    def test_blog_full_resolution(self):
+        """Full resolution flow for blog service."""
+        services = ["blog"]
+
+        resolved, _ = ServiceResolver.resolve_service_dependencies(services)
+
+        errors = ServiceResolver.validate_service_component_compatibility(
+            services, resolved
+        )
+        assert errors == []
+
+    def test_blog_with_auth_merge(self):
+        """Blog + auth share backend and database without duplication."""
+        services = ["blog", "auth"]
+
+        resolved, _ = ServiceResolver.resolve_service_dependencies(services)
+
+        assert resolved.count("backend") == 1
+        assert resolved.count("database") == 1

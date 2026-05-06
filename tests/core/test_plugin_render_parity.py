@@ -51,6 +51,7 @@ def _render(template_rel_path: str, context: dict) -> str:
 SERVICE_INCLUDE_KEY = {
     "auth": "include_auth",
     "ai": "include_ai",
+    "blog": "include_blog",
     "comms": "include_comms",
     "insights": "include_insights",
     "payment": "include_payment",
@@ -119,6 +120,7 @@ def test_routing_py_parity(service_name: str) -> None:
 
 DEPS_INCLUDE_KEY = {
     "auth": "include_auth",
+    "blog": "include_blog",
     "insights": "include_insights",
     "payment": "include_payment",
 }
@@ -233,6 +235,7 @@ def test_dashboard_modals_init_parity(service_name: str) -> None:
 
 PYPROJECT_DEPS_INCLUDE_KEY = {
     "auth": "include_auth",
+    "blog": "include_blog",
     "comms": "include_comms",
     "payment": "include_payment",
 }
@@ -277,9 +280,10 @@ def test_pyproject_deps_parity(service_name: str) -> None:
         # That's behaviour, not wiring — it lives outside the
         # ``{% for p in _plugins %}`` loop and produces a render-output
         # divergence between legacy and plugin paths for insights only.
-        # Remaining 4 services hit identical output via both paths.
+        # Remaining services hit identical output via both paths.
         "auth",
         "ai",
+        "blog",
         "comms",
         "payment",
     ],

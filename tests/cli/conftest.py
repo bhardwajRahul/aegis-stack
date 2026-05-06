@@ -94,10 +94,13 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
     "payment_with_database": ProjectTemplateSpec(
         components=("database",), services=("payment",)
     ),
+    "blog_with_database": ProjectTemplateSpec(
+        components=("database",), services=("blog",)
+    ),
     "comms_only": ProjectTemplateSpec(services=("comms",)),
     "everything": ProjectTemplateSpec(
         components=("database", "scheduler", "worker", "redis"),
-        services=("auth[org]", "ai[sqlite]", "insights", "payment", "comms"),
+        services=("auth[org]", "ai[sqlite]", "insights", "payment", "blog", "comms"),
     ),
 }
 
@@ -124,7 +127,7 @@ def project_template_cache(
             scheduler_backend=spec.scheduler_backend,
             selected_services=list(spec.services),
         )
-        return generate_with_copier(template_gen, cache_root)
+        return generate_with_copier(template_gen, cache_root, dev_mode=True)
 
     def get_project(spec: ProjectTemplateSpec) -> Path:
         if spec not in cache:
@@ -196,6 +199,7 @@ def generated_stacks(
             combination.components,
             session_temp_dir,
             services=combination.services or None,
+            dev=True,
         )
 
         if not result.success:

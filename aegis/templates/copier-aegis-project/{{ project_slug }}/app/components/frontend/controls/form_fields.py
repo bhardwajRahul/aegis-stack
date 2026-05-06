@@ -14,6 +14,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
 import flet as ft
+
 from app.components.frontend.controls.buttons import (
     ElevatedCancelButton,
     ElevatedUpdateButton,
@@ -88,9 +89,7 @@ class FormTextField(ft.Container):
         hint: str = "",
         on_change: Callable[[ft.ControlEvent], None] | None = None,
         # Flet's TextField accepts both sync and async on_submit at runtime.
-        on_submit: (
-            Callable[[ft.ControlEvent], Awaitable[None] | None] | None
-        ) = None,
+        on_submit: (Callable[[ft.ControlEvent], Awaitable[None] | None] | None) = None,
         error: str | None = None,
         disabled: bool = False,
         width: int | None = None,
@@ -99,6 +98,11 @@ class FormTextField(ft.Container):
         autofocus: bool = False,
         password: bool = False,
         can_reveal_password: bool = False,
+        multiline: bool = False,
+        min_lines: int | None = None,
+        max_lines: int | None = None,
+        show_label: bool = True,
+        borderless: bool = False,
     ) -> None:
         """
         Initialize form text field.
@@ -117,6 +121,15 @@ class FormTextField(ft.Container):
             autofocus: Focus this field on mount
             password: Mask the value
             can_reveal_password: Add Flet's built-in reveal toggle
+            multiline: Enable multi-line text entry
+            min_lines: Minimum visible lines for multi-line fields
+            max_lines: Maximum visible lines for multi-line fields
+            show_label: When False, skip the label widget and the 4px
+                gap above the field (use when an outer container, e.g.
+                a SectionCard header, already provides the label).
+            borderless: When True, drop the field's border and corner
+                radius so it blends into a parent container that owns
+                the visible frame (e.g. a SectionCard).
         """
         super().__init__()
 
@@ -124,12 +137,19 @@ class FormTextField(ft.Container):
         self._error = error
         self._on_change = on_change
         self._variant = variant
+        self._show_label = show_label
 
         # Outer Container takes the explicit width so siblings (buttons,
         # dividers) can match it.
         if width is not None:
             self.width = width
 
+        input_kwargs = _input_kwargs(variant, error)
+        if borderless:
+            input_kwargs["border"] = ft.InputBorder.NONE
+            input_kwargs["border_radius"] = 0
+            input_kwargs["filled"] = False
+            input_kwargs["bgcolor"] = ft.Colors.TRANSPARENT
         self._text_field = ft.TextField(
             value=value,
             hint_text=hint,
@@ -140,20 +160,23 @@ class FormTextField(ft.Container):
             autofocus=autofocus,
             password=password,
             can_reveal_password=can_reveal_password,
+            multiline=multiline,
+            min_lines=min_lines,
+            max_lines=max_lines,
             expand=width is None,
             width=width,
-            **_input_kwargs(variant, error),
+            **input_kwargs,
         )
 
         self._build_content()
 
     def _build_content(self) -> None:
         """Build the form field content with label and optional error."""
-        children: list[ft.Control] = [
-            _build_label(self._label, self._variant),
-            ft.Container(height=4),
-            self._text_field,
-        ]
+        children: list[ft.Control] = []
+        if self._show_label:
+            children.append(_build_label(self._label, self._variant))
+            children.append(ft.Container(height=4))
+        children.append(self._text_field)
 
         if self._error:
             children.append(ft.Container(height=4))
@@ -357,9 +380,9 @@ class FormDropdown(ft.Container):
     Reusable dropdown with label and error state.
 
     Mirrors ``FormTextField``'s shape (label above, field below, optional
-    error line) so forms mixing text inputs and dropdowns stay visually
-    consistent. Theme-aware styling: same border radius, surface colour,
-    and focused border as the rest of the form controls.
+    error line). Uses Flet's stock ``ft.Dropdown`` directly. Note: the
+    focused border colour is not painted in Flet 0.28.x — that's a known
+    framework limitation, not something we work around here.
     """
 
     def __init__(
@@ -372,19 +395,6 @@ class FormDropdown(ft.Container):
         disabled: bool = False,
         width: int | None = None,
     ) -> None:
-        """
-        Initialize form dropdown.
-
-        Args:
-            label: Label text displayed above the dropdown.
-            options: List of (key, display_label) tuples. `key` is what
-                ``value`` returns; `display_label` is what the user sees.
-            value: Initial selected key. Defaults to the first option's key.
-            on_change: Callback when selection changes.
-            error: Error message to display below the dropdown.
-            disabled: Whether the dropdown is disabled.
-            width: Optional fixed width; omit for `expand`.
-        """
         super().__init__()
 
         self._label = label
@@ -411,13 +421,11 @@ class FormDropdown(ft.Container):
         self._build_content()
 
     def _build_content(self) -> None:
-        """Build the dropdown content with label and optional error."""
         children: list[ft.Control] = [
             LabelText(self._label),
             ft.Container(height=4),
             self._dropdown,
         ]
-
         if self._error:
             children.append(ft.Container(height=4))
             children.append(
@@ -427,33 +435,54 @@ class FormDropdown(ft.Container):
                     color=Theme.Colors.ERROR,
                 )
             )
-
         self.content = ft.Column(children, spacing=0, tight=True)
 
     def _handle_change(self, e: ft.ControlEvent) -> None:
-        """Handle dropdown change events."""
         if self._on_change:
             self._on_change(e)
 
     @property
     def value(self) -> str:
-        """Get the currently selected key."""
         return self._dropdown.value or ""
 
     @value.setter
     def value(self, new_value: str) -> None:
-        """Set the selected key."""
         self._dropdown.value = new_value
         if self.page:
             self._dropdown.update()
 
     def set_error(self, error: str | None) -> None:
-        """Set or clear the error message."""
         self._error = error
-        self._dropdown.border_color = Theme.Colors.ERROR if error else ft.Colors.OUTLINE
+        self._dropdown.border_color = (
+            Theme.Colors.ERROR if error else ft.Colors.OUTLINE
+        )
         self._build_content()
         if self.page:
             self.update()
+
+    def set_options(
+        self,
+        options: list[tuple[str, str]],
+        *,
+        keep_value: bool = True,
+    ) -> None:
+        """Replace the dropdown's options at runtime.
+
+        ``keep_value`` preserves the current selection if its key is still
+        present after the update; otherwise it clears.
+        """
+        previous = self._dropdown.value if keep_value else None
+        self._dropdown.options = [
+            ft.dropdown.Option(key=k, text=t) for k, t in options
+        ]
+        if previous is not None and any(k == previous for k, _ in options):
+            self._dropdown.value = previous
+        else:
+            self._dropdown.value = None
+        if self.page:
+            self._dropdown.update()
+
+
 
 
 class FormActionButtons(ft.Row):

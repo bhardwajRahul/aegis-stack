@@ -265,6 +265,7 @@ class TestInteractiveServiceSelection:
                 True,  # auth service
                 True,  # database confirmation for auth
                 False,  # AI service
+                False,  # blog service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -290,6 +291,7 @@ class TestInteractiveServiceSelection:
                 False,  # observability
                 False,  # auth service
                 False,  # AI service
+                False,  # blog service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()

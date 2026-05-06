@@ -13,6 +13,7 @@ graph TB
     subgraph "Services Layer (Business Logic)"
         Auth[🔐 Auth Service<br/>JWT + User Management<br/>Registration, Login, Profiles]
         AI[🤖 AI Service<br/>PydanticAI Integration<br/>Multi-Provider Chat]
+        Blog[📝 Blog Service<br/>Markdown Publishing<br/>Drafts, Tags, SEO]
         Comms[📧 Comms Service<br/>Email, SMS, Voice<br/>Resend + Twilio]
         Payment[💳 Payment Service<br/>Stripe Integration<br/>Checkout, Subscriptions]
         Insights[📊 Insights Service<br/>Adoption Metrics<br/>GitHub, PyPI, Plausible]
@@ -30,6 +31,8 @@ graph TB
     Auth --> Backend
     Auth --> Database
     AI --> Backend
+    Blog --> Backend
+    Blog --> Database
     Comms --> Backend
     Payment --> Backend
     Payment --> Database
@@ -38,6 +41,7 @@ graph TB
 
     style Auth fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style AI fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
+    style Blog fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style Comms fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style Payment fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style Insights fill:#fff3e0,stroke:#f57c00,stroke-width:2px,stroke-dasharray: 5 5
@@ -128,6 +132,7 @@ graph LR
 |---------|--------|-------------|-------------------|
 | **ai** | ✅ Available | Multi-provider AI chat with PydanticAI (OpenAI, Anthropic, Google, Groq, etc.) | backend |
 | **auth** | ✅ Available | User authentication and authorization with JWT tokens | backend, database |
+| **blog** | 🧪 Experimental | Markdown posts with draft/publish workflow, tags, and Overseer editing | backend, database |
 | **comms** | ✅ Available | Email (Resend), SMS, and voice calls (Twilio) | backend |
 | **insights** | 🧪 Experimental | Adoption metrics tracking (GitHub, PyPI, Plausible, Reddit) | backend, database, scheduler |
 | **payment** | 🧪 Experimental | Stripe checkout, subscriptions, refunds, webhooks, disputes | backend, database |
@@ -156,6 +161,10 @@ graph TB
         InsightsService[insights<br/>GitHub, PyPI, Plausible, Reddit]
     end
 
+    subgraph "📝 Content Services"
+        BlogService[blog<br/>Markdown Posts + Tags]
+    end
+
     style AuthJWT fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style AuthOAuth fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
     style AuthSAML fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
@@ -164,6 +173,7 @@ graph TB
     style CommsService fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style Push fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
     style InsightsService fill:#fff3e0,stroke:#f57c00,stroke-width:2px,stroke-dasharray: 5 5
+    style BlogService fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
 ```
 
 ## Service Development Patterns
@@ -269,6 +279,7 @@ Services automatically appear in the health dashboard alongside components, prov
 - **[Integration Patterns](../integration-patterns.md)** - How services integrate with components and architectural patterns
 - **[AI Service](ai/index.md)** - Multi-provider AI chat with PydanticAI
 - **[Authentication Service](auth/index.md)** - Complete JWT auth implementation
+- **[Blog Service](blog/index.md)** - Markdown publishing with drafts, tags, and Overseer editor *(experimental)*
 - **[Communications Service](comms/index.md)** - Email, SMS, and voice via Resend/Twilio
 - **[Insights Service](insights/index.md)** - Adoption metrics tracking (GitHub, PyPI, Plausible, Reddit) *(experimental)*
 - **[Payment Service](payment/index.md)** - Payment processing with Stripe *(experimental)*

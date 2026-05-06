@@ -12,6 +12,7 @@ from aegis.core.migration_generator import (
     AUTH_MIGRATION,
     AUTH_RBAC_MIGRATION,
     AUTH_TOKENS_MIGRATION,
+    BLOG_MIGRATION,
     INSIGHTS_MIGRATION,
     MIGRATION_SPECS,
     ORG_MIGRATION,
@@ -69,6 +70,18 @@ class TestGetServicesNeedingMigrations:
         context = {"include_auth": False, "include_ai": False, "ai_backend": "memory"}
         result = get_services_needing_migrations(context)
         assert result == []
+
+    def test_blog_needs_migration(self) -> None:
+        """Blog service needs migrations when selected."""
+        context = {"include_blog": True, "include_ai": False, "ai_backend": "memory"}
+        result = get_services_needing_migrations(context)
+        assert result == ["blog"]
+
+    def test_blog_needs_migration_with_yes_string(self) -> None:
+        """Blog service supports Copier-style yes strings."""
+        context = {"include_blog": "yes", "include_ai": False, "ai_backend": "memory"}
+        result = get_services_needing_migrations(context)
+        assert result == ["blog"]
 
     def test_auth_rbac_needs_migration(self) -> None:
         """Test auth_rbac migration needed when rbac level enabled."""
@@ -340,6 +353,21 @@ class TestGenerateMigration:
         assert "'conversation_message'" in content
         assert "op.create_index" in content
 
+    def test_generates_blog_migration(self, tmp_path: Path) -> None:
+        """Test generates blog migration file."""
+        result = generate_migration(tmp_path, "blog")
+
+        assert result is not None
+        assert result.exists()
+        assert result.name == "001_blog.py"
+
+        content = result.read_text()
+        assert "'blog_post'" in content
+        assert "'blog_tag'" in content
+        assert "'blog_post_tag'" in content
+        assert "ck_blog_post_status" in content
+        assert "ondelete='CASCADE'" in content
+
     def test_creates_versions_directory(self, tmp_path: Path) -> None:
         """Test creates versions directory if it doesn't exist."""
         assert not (tmp_path / "alembic" / "versions").exists()
@@ -545,6 +573,32 @@ class TestMigrationSpecs:
         )
         assert len(message_table.foreign_keys) == 1
         assert message_table.foreign_keys[0].ref_table == "conversation"
+
+    def test_blog_spec_exists(self) -> None:
+        """Test blog migration spec is defined."""
+        assert "blog" in MIGRATION_SPECS
+        assert BLOG_MIGRATION.service_name == "blog"
+        assert len(BLOG_MIGRATION.tables) == 3
+
+        table_names = [t.name for t in BLOG_MIGRATION.tables]
+        assert table_names == ["blog_post", "blog_tag", "blog_post_tag"]
+
+        post_table = BLOG_MIGRATION.tables[0]
+        post_columns = [col.name for col in post_table.columns]
+        assert "title" in post_columns
+        assert "slug" in post_columns
+        assert "content" in post_columns
+        assert "status" in post_columns
+
+        index_names = [idx.name for idx in post_table.indexes]
+        assert "ix_blog_post_slug" in index_names
+        assert any(idx.unique for idx in post_table.indexes)
+
+        link_table = BLOG_MIGRATION.tables[2]
+        assert {fk.ref_table for fk in link_table.foreign_keys} == {
+            "blog_post",
+            "blog_tag",
+        }
 
 
 class TestOrgMigrationSpec:

@@ -75,6 +75,7 @@ MESSAGES: dict[str, str] = {
     "service.auth": "Benutzerauthentifizierung und -autorisierung mit JWT-Tokens",
     "service.ai": "AI Chatbot Service mit Multi-Framework-Unterstützung",
     "service.comms": "Kommunikationsservice mit E-Mail, SMS und Sprache",
+    "service.blog": "Markdown-Blog mit Entwurfs-, Veröffentlichungs- und Tag-Workflow",
     # ── Interactive: component prompts ─────────────────────────────────
     "interactive.add_prompt": "{description} hinzufügen?",
     "interactive.add_with_redis": "{description} hinzufügen? (fügt Redis automatisch hinzu)",
@@ -544,6 +545,7 @@ MESSAGES: dict[str, str] = {
     "services.type_notification": "Benachrichtigungsdienste",
     "services.type_analytics": "Analysedienste",
     "services.type_storage": "Speicherdienste",
+    "services.type_content": "Content-Dienste",
     "services.requires_components": "Benötigt Komponenten: {deps}",
     "services.recommends_components": "Empfiehlt Komponenten: {deps}",
     "services.requires_services": "Benötigt Services: {deps}",

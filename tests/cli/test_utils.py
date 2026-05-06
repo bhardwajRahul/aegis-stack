@@ -301,6 +301,7 @@ def run_aegis_init(
     yes: bool = True,
     python_version: str | None = None,
     services: list[str] | None = None,
+    dev: bool = False,
 ) -> CLITestResult:
     """
     Run the aegis init command and return results.
@@ -323,6 +324,8 @@ def run_aegis_init(
         args.extend(["--components", ",".join(components)])
     if services:
         args.extend(["--services", ",".join(services)])
+    if dev:
+        args.append("--dev")
     if output_dir:
         args.extend(["--output-dir", str(output_dir)])
     if python_version:

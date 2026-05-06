@@ -241,6 +241,18 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/components/frontend/dashboard/cards/payment_card.py",
             "app/components/frontend/dashboard/modals/payment_modal.py",
         ],
+        AnswerKeys.SERVICE_BLOG: [
+            "app/components/backend/api/blog",
+            "app/services/blog",
+            "app/cli/blog.py",
+            "tests/services/test_blog_service.py",
+            "tests/services/test_blog_serialization.py",
+            "tests/api/test_blog_endpoints.py",
+            "docs/services/blog",
+            # Frontend dashboard files
+            "app/components/frontend/dashboard/cards/blog_card.py",
+            "app/components/frontend/dashboard/modals/blog_modal.py",
+        ],
     }
 
 
@@ -543,6 +555,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         and not is_enabled(AnswerKeys.COMMS)
         and not is_enabled(AnswerKeys.INSIGHTS)
         and not is_enabled(AnswerKeys.PAYMENT)
+        and not is_enabled(AnswerKeys.BLOG)
     ):
         remove_file(
             project_path, "app/components/frontend/dashboard/cards/services_card.py"
@@ -554,10 +567,15 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     include_ai = is_enabled(AnswerKeys.AI)
     include_insights = is_enabled(AnswerKeys.INSIGHTS)
     include_payment = is_enabled(AnswerKeys.PAYMENT)
+    include_blog = is_enabled(AnswerKeys.BLOG)
     ai_backend = context.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
     ai_needs_migrations = include_ai and ai_backend != StorageBackends.MEMORY
     needs_migrations = (
-        include_auth or ai_needs_migrations or include_insights or include_payment
+        include_auth
+        or ai_needs_migrations
+        or include_insights
+        or include_payment
+        or include_blog
     )
 
     if not needs_migrations:
@@ -607,6 +625,7 @@ def _render_jinja_template(src: Path, dst: Path, project_path: Path) -> None:
         "include_comms": True,
         "include_insights": True,
         "include_payment": True,
+        "include_blog": True,
         # Component flags - check what exists in project
         "include_scheduler": (project_path / "app/components/scheduler").exists(),
         "include_worker": (project_path / "app/components/worker").exists(),

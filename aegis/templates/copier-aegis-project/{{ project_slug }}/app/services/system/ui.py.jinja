@@ -67,6 +67,9 @@ def get_component_title(component_name: str) -> str:
         {%- if include_auth %}
         "service_auth": "Auth Service",
         {%- endif %}
+        {%- if include_blog %}
+        "service_blog": "Blog",
+        {%- endif %}
         {%- if include_comms %}
         "service_comms": "Communications",
         {%- endif %}
@@ -106,6 +109,9 @@ def get_component_label(component_name: str) -> str:
         {%- endif %}
         {%- if include_auth %}
         "service_auth": "JWT Auth",
+        {%- endif %}
+        {%- if include_blog %}
+        "service_blog": "Markdown",
         {%- endif %}
         {%- if include_comms %}
         "service_comms": "Resend + Twilio",
