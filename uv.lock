@@ -9,7 +9,7 @@ source = { editable = "tests/fixtures/aegis_plugin_test" }
 
 [[package]]
 name = "aegis-stack"
-version = "0.6.13rc1"
+version = "0.6.13"
 source = { editable = "." }
 dependencies = [
     { name = "copier" },
