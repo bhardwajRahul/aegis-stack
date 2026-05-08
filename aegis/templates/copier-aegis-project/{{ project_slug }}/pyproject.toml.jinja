@@ -65,7 +65,6 @@ dependencies = [
 {%- if include_auth %}
     "python-jose[cryptography]==3.3.0",
     "bcrypt>=4.0.0",
-    "python-multipart==0.0.9",
 {%- endif %}
 {%- if include_oauth %}
     # OAuth social login (GitHub + Google) — Authlib drives the flow,
@@ -74,12 +73,13 @@ dependencies = [
     "authlib>=1.7.0",
     "itsdangerous>=2.1.0",
 {%- endif %}
-{%- if include_auth or include_payment or include_insights or (include_ai and ai_backend in ["sqlite", "postgres"]) %}
+{%- if include_auth or include_payment or include_insights or include_blog or (include_ai and ai_backend in ["sqlite", "postgres"]) %}
     "alembic==1.16.5",
 {%- endif %}
-{%- if include_ai %}
-    # File uploads for voice/STT endpoints
+{%- if include_auth or include_ai or include_blog %}
     "python-multipart==0.0.9",
+{%- endif %}
+{%- if include_ai %}
 {%- if ai_framework == "pydantic-ai" %}
 {# Map provider names to pydantic-ai-slim extras (OpenAI-compatible providers -> openai) #}
 {%- set pydantic_extras = ai_providers | replace("public", "openai") | replace("openrouter", "openai") | replace("ollama", "openai") %}
@@ -115,6 +115,9 @@ dependencies = [
 {%- endif %}
 {%- if include_payment %}
     "stripe>=11.0.0",
+{%- endif %}
+{%- if include_blog %}
+    "python-frontmatter>=1.1.0",
 {%- endif %}
 {%- if include_auth or include_comms %}
     "email-validator==2.2.0",

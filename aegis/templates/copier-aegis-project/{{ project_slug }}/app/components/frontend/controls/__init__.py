@@ -1,10 +1,17 @@
 """Frontend UI controls for styled components."""
 
+from .action_menu import ActionMenu, ActionMenuItem
 from .buttons import ConfirmDialog
 from .data_table import DataTable, DataTableColumn
 from .expand_arrow import ExpandArrow
 from .expandable_data_table import ExpandableDataTable, ExpandableRow
-from .form_fields import FormActionButtons, FormSecretField, FormTextField
+from .form_fields import (
+    FormActionButtons,
+    FormDropdown,
+    FormSecretField,
+    FormTextField,
+)
+from .section_card import SectionCard
 from .service_card import ServiceCard
 from .severity_filter import SeverityFilter
 from .table import (
@@ -63,14 +70,19 @@ __all__ = [
     "StatusTag",
     "TechBadge",
     # Card layout controls
+    "SectionCard",
     "ServiceCard",
     # Dialog controls
     "ConfirmDialog",
+    # Action menu controls
+    "ActionMenu",
+    "ActionMenuItem",
     # Arrow controls
     "ExpandArrow",
     # Form controls
     "FormTextField",
     "FormSecretField",
+    "FormDropdown",
     "FormActionButtons",
     # Filter controls
     "SeverityFilter",

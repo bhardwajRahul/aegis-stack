@@ -6,7 +6,7 @@
 # - Update support
 
 _min_copier_version: "9.0.0"
-_version: "0.6.12"
+_version: "0.6.13rc1"
 
 # IMPORTANT: Template content is in subdirectory
 # This allows the template to be recognized as git-tracked (aegis-stack repo root has .git)
@@ -270,6 +270,11 @@ payment_provider:
     - "stripe"
   when: "{{ include_payment }}"
 
+include_blog:
+  type: bool
+  help: "Include Markdown blog service?"
+  default: false
+
 include_insights:
   type: bool
   help: "Include insights service (adoption metrics and analytics)?"
@@ -307,7 +312,7 @@ insights_per_user:
 
 # Internal computed values (using Jinja2)
 _has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache or include_ingress or include_observability }}"
-_include_migrations: "{{ include_auth }}"
+_include_migrations: "{{ include_auth or include_payment or include_insights or include_blog or (include_ai and ai_backend in ['sqlite', 'postgres']) }}"
 
 # Component-specific dependencies (computed)
 _scheduler_deps: "{% if include_scheduler %}apscheduler>=3.10.0{% endif %}"

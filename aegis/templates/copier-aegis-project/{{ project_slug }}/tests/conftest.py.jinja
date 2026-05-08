@@ -32,6 +32,10 @@ from app.services.payment.models import (  # noqa: F401
     PaymentTransaction,
 )
 {% endif %}
+{%- if include_blog %}
+# Import blog models to register them with SQLModel metadata
+from app.services.blog.models import BlogPost, BlogPostTag, BlogTag  # noqa: F401
+{% endif %}
 
 # Add project root to Python path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -269,5 +273,4 @@ def auth_headers() -> dict[str, str]:
     return {}
 {% endif %}
 {% endif %}
-
 

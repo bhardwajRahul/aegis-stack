@@ -69,7 +69,9 @@ def generate_with_copier(
         (missing conditional _exclude patterns). Projects will include all
         components regardless of selection until template is fixed.
     """
+    import shutil
     import subprocess
+    import tempfile
 
     # Get template context from template generator
     template_context = template_gen.get_template_context()
@@ -124,6 +126,7 @@ def generate_with_copier(
         == "yes",
         AnswerKeys.AI: template_context.get(AnswerKeys.AI, "no") == "yes",
         AnswerKeys.COMMS: template_context.get(AnswerKeys.COMMS, "no") == "yes",
+        AnswerKeys.BLOG: template_context.get(AnswerKeys.BLOG, "no") == "yes",
         AnswerKeys.AI_FRAMEWORK: template_context.get(
             AnswerKeys.AI_FRAMEWORK, "pydantic-ai"
         ),
@@ -173,10 +176,21 @@ def generate_with_copier(
 
     template_root = get_template_root()
 
+    dev_template_dir: tempfile.TemporaryDirectory[str] | None = None
+
     if dev_mode:
         # Dev mode: read directly from working tree (uncommitted changes)
         # WARNING: Projects generated in dev mode cannot be updated with aegis update
-        template_source = str(template_root)
+        dev_template_dir = tempfile.TemporaryDirectory(prefix="aegis-template-dev-")
+        dev_template_root = Path(dev_template_dir.name)
+        shutil.copy2(template_root / "copier.yml", dev_template_root / "copier.yml")
+        template_subdir = Path("aegis") / "templates" / "copier-aegis-project"
+        shutil.copytree(
+            template_root / template_subdir,
+            dev_template_root / template_subdir,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"),
+        )
+        template_source = str(dev_template_root)
         resolved_ref = None  # No version pinning in dev mode
     elif is_git_repo(template_root):
         # Development mode: local git repository available
@@ -211,15 +225,19 @@ def generate_with_copier(
     # Generate project - Copier creates output_dir/project_slug via {{ project_slug }}/ wrapper
     # NOTE: _tasks removed from copier.yml - we run them ourselves below
     # Suppress Copier output unless --verbose flag is passed
-    run_copy(
-        template_source,
-        output_dir,  # Copier creates project_slug subdirectory from template
-        data=copier_data,
-        defaults=True,  # Use template defaults, overridden by our explicit data
-        unsafe=False,  # No tasks in copier.yml anymore - we run them ourselves
-        vcs_ref=resolved_ref,  # Use specified version if provided
-        quiet=not is_verbose(),  # Silent unless --verbose
-    )
+    try:
+        run_copy(
+            template_source,
+            output_dir,  # Copier creates project_slug subdirectory from template
+            data=copier_data,
+            defaults=True,  # Use template defaults, overridden by our explicit data
+            unsafe=False,  # No tasks in copier.yml anymore - we run them ourselves
+            vcs_ref=resolved_ref,  # Use specified version if provided
+            quiet=not is_verbose(),  # Silent unless --verbose
+        )
+    finally:
+        if dev_template_dir is not None:
+            dev_template_dir.cleanup()
 
     # Copier creates the project in output_dir/project_slug
     project_path = output_dir / template_context["project_slug"]
@@ -263,6 +281,7 @@ def generate_with_copier(
     include_auth = copier_data.get(AnswerKeys.AUTH, False)
     include_ai = copier_data.get(AnswerKeys.AI, False)
     include_insights = copier_data.get(AnswerKeys.INSIGHTS, False)
+    include_blog = copier_data.get(AnswerKeys.BLOG, False)
     ai_backend = copier_data.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
     database_engine = copier_data.get(
         AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE
@@ -276,9 +295,13 @@ def generate_with_copier(
     ai_backend_str: str = str(ai_backend) if ai_backend else StorageBackends.MEMORY
 
     is_insights_included: bool = include_insights is True
+    is_blog_included: bool = include_blog is True
     ai_needs_migrations = is_ai_included and ai_backend_str != StorageBackends.MEMORY
     needs_migration_files = (
-        is_auth_included or ai_needs_migrations or is_insights_included
+        is_auth_included
+        or ai_needs_migrations
+        or is_insights_included
+        or is_blog_included
     )
     # Only run migrations automatically for SQLite (file-based, no server needed)
     # PostgreSQL requires a running server, so skip auto-migration
@@ -301,6 +324,7 @@ def generate_with_copier(
             "include_insights": is_insights_included,
             "insights_per_user": copier_data.get(AnswerKeys.INSIGHTS_PER_USER, False)
             is True,
+            "include_blog": is_blog_included,
             "include_payment": is_payment_included,
         }
         services = get_services_needing_migrations(context)

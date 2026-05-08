@@ -580,9 +580,18 @@ def update_command(
         else:
             include_auth = answers.get(AnswerKeys.AUTH, False)
             include_ai = answers.get(AnswerKeys.AI, False)
+            include_insights = answers.get(AnswerKeys.INSIGHTS, False)
+            include_payment = answers.get(AnswerKeys.PAYMENT, False)
+            include_blog = answers.get(AnswerKeys.BLOG, False)
             ai_backend = answers.get(AnswerKeys.AI_BACKEND, "memory")
             ai_needs_migrations = include_ai and ai_backend != "memory"
-            include_migrations = include_auth or ai_needs_migrations
+            include_migrations = (
+                include_auth
+                or ai_needs_migrations
+                or include_insights
+                or include_payment
+                or include_blog
+            )
 
             typer.echo(t("update.running_postgen"))
             tasks_success = run_post_generation_tasks(

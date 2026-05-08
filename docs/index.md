@@ -82,6 +82,7 @@ Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your S
 |---------|---------|--------|
 | **[AI](services/ai/index.md)** | Multi-provider AI chat | 🧪 **Experimental** |
 | **[Auth](services/auth/index.md)** | User authentication & JWT | ✅ **Available** |
+| **[Blog](services/blog/index.md)** | Markdown publishing, tags, drafts | 🧪 **Experimental** |
 | **[Comms](services/comms/index.md)** | Email, SMS, voice calls | 🧪 **Experimental** |
 | **[Insights](services/insights/index.md)** | Adoption metrics (GitHub, PyPI, Plausible, Reddit) | 🧪 **Experimental** |
 | **[Payment](services/payment/index.md)** | Stripe checkout, subscriptions, refunds, disputes | 🧪 **Experimental** |

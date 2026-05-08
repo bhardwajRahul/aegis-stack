@@ -66,6 +66,7 @@ class PulseColors:
     MUTED: str = "#7E8A9A"
     TEAL: str = "#17CCBF"
     AMBER: str = "#F59E0B"
+    STOP: str = "#E23E3E"
 
 
 @dataclass(frozen=True)
@@ -357,6 +358,7 @@ def create_pulse_button_style(accent: str) -> ft.ButtonStyle:
 
 PULSE_BUTTON_TEAL_STYLE = create_pulse_button_style(PulseColors.TEAL)
 PULSE_BUTTON_AMBER_STYLE = create_pulse_button_style(PulseColors.AMBER)
+PULSE_BUTTON_STOP_STYLE = create_pulse_button_style(PulseColors.STOP)
 
 
 PULSE_BUTTON_MUTED_STYLE = ft.ButtonStyle(

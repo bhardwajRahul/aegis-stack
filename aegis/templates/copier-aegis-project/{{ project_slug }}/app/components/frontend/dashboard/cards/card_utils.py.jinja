@@ -461,6 +461,9 @@ def create_modal_for_component(
     {%- if include_auth %}
     from app.components.frontend.dashboard.modals.auth_modal import AuthDetailDialog
     {%- endif %}
+    {%- if include_blog %}
+    from app.components.frontend.dashboard.modals.blog_modal import BlogDetailDialog
+    {%- endif %}
     {%- if include_comms %}
     from app.components.frontend.dashboard.modals.comms_modal import CommsDetailDialog
     {%- endif %}
@@ -506,6 +509,9 @@ def create_modal_for_component(
         {%- endif %}
         {%- if include_auth %}
         "auth": AuthDetailDialog,
+        {%- endif %}
+        {%- if include_blog %}
+        "service_blog": BlogDetailDialog,
         {%- endif %}
         {%- if include_comms %}
         "comms": CommsDetailDialog,

@@ -77,6 +77,12 @@ nav:
       - Service Layer: services/auth/integration.md
       - CLI Commands: services/auth/cli.md
       - Examples: services/auth/examples.md
+    - Blog (Experimental):
+      - Getting Started: services/blog/index.md
+      - API Reference: services/blog/api.md
+      - Dashboard: services/blog/dashboard.md
+      - CLI Commands: services/blog/cli.md
+      - Examples: services/blog/examples.md
     - Communications:
       - Getting Started: services/comms/index.md
       - Provider Setup: services/comms/setup.md

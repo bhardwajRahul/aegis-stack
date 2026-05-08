@@ -427,6 +427,14 @@ def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
 
         # Future service types can be added here as they become available
         # payment_services = get_services_by_type(ServiceType.PAYMENT)
+        content_services = get_services_by_type(ServiceType.CONTENT)
+        if content_services:
+            typer.echo(f"\n{t('services.type_content')}")
+            for service_name, service_spec in content_services.items():
+                desc = _translated_desc(service_name, service_spec.description)
+                prompt = f"  {t('interactive.add_prompt', description=desc)}"
+                if typer.confirm(prompt, default=True):
+                    selected_services.append(service_name)
 
     # Get skip_llm_sync from global selection (set during AI service config)
     skip_llm_sync = get_skip_llm_sync_selection()
@@ -1216,6 +1224,34 @@ def interactive_service_selection(project_path: Path) -> list[str]:
                 if comp not in enabled_components
             ]
 
+            requirement_text = (
+                f" (will auto-add: {', '.join(missing_components)})"
+                if missing_components
+                else ""
+            )
+
+            prompt = f"  Add {service_spec.description.lower()}{requirement_text}?"
+            if typer.confirm(prompt, default=True):
+                selected_services.append(service_name)
+
+                if missing_components:
+                    typer.echo(
+                        f"    Required components will be added: {', '.join(missing_components)}"
+                    )
+
+    content_services = get_services_by_type(ServiceType.CONTENT)
+    if content_services:
+        typer.echo("\nContent Services:")
+        for service_name, service_spec in content_services.items():
+            if service_name in enabled_services:
+                typer.secho(f"  {service_name} - Already enabled", fg="green")
+                continue
+
+            missing_components = [
+                comp
+                for comp in service_spec.required_components
+                if comp not in enabled_components
+            ]
             requirement_text = (
                 f" (will auto-add: {', '.join(missing_components)})"
                 if missing_components

@@ -9,7 +9,7 @@ Test Matrix:
 2. base + scheduler           (APScheduler component)
 3. base + worker              (Redis + arq workers; covers redis component transitively)
 4. base + worker + scheduler  (full processing stack)
-5. service rows (auth_basic, auth_org, ai_service, insights, payment, comms)
+5. service rows (auth_basic, auth_org, ai_service, insights, payment, blog, comms)
    each pair the service with the components it needs (database, scheduler,
    etc.), so the database component is exercised through the service rows
    rather than as its own row.
@@ -158,7 +158,7 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet", "arq", "apscheduler", "redis"],
     ),
     # ``database`` stack dropped from the matrix — every service-with-database
-    # row (auth_org, ai_service, insights, payment) already exercises the
+    # row (auth_org, ai_service, insights, payment, blog) already exercises the
     # database component end-to-end. The ``base_with_database`` cache entry
     # in conftest.py is still used by 6 other test files, so it stays.
     StackCombination(
@@ -241,6 +241,19 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet", "stripe"],
     ),
     StackCombination(
+        name="blog",
+        components=["database"],
+        services=["blog"],
+        description="Blog service + database",
+        expected_files=[
+            "app/services/blog/",
+            "app/components/backend/api/blog/",
+            "app/core/db.py",
+        ],
+        expected_docker_services=["webserver"],
+        expected_pyproject_deps=["fastapi", "flet", "sqlmodel"],
+    ),
+    StackCombination(
         name="comms",
         components=[],
         services=["comms"],
@@ -254,13 +267,14 @@ STACK_COMBINATIONS = [
     StackCombination(
         name="everything",
         components=["database", "scheduler", "worker", "redis"],
-        services=["auth[org]", "ai[sqlite]", "insights", "payment", "comms"],
+        services=["auth[org]", "ai[sqlite]", "insights", "payment", "blog", "comms"],
         description="Kitchen sink: all services + all processing infra",
         expected_files=[
             "app/services/auth/",
             "app/services/ai/",
             "app/services/insights/",
             "app/services/payment/",
+            "app/services/blog/",
             "app/services/comms/",
             "app/core/db.py",
             "app/components/scheduler/",
@@ -396,6 +410,7 @@ def test_stack_combinations_comprehensive() -> None:
         "ai_service",
         "insights",
         "payment",
+        "blog",
         "comms",
         "everything",
     }

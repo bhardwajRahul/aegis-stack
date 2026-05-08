@@ -10,6 +10,7 @@ from dataclasses import asdict
 from typing import Any
 
 import flet as ft
+
 from app.components.frontend import styles
 from app.components.frontend.controls.text import BodyText, H3Text
 
@@ -159,6 +160,7 @@ class PulseButton(BaseElevatedButton):
         "teal": styles.PULSE_BUTTON_TEAL_STYLE,
         "amber": styles.PULSE_BUTTON_AMBER_STYLE,
         "muted": styles.PULSE_BUTTON_MUTED_STYLE,
+        "stop": styles.PULSE_BUTTON_STOP_STYLE,
     }
 
     def __init__(
@@ -166,24 +168,54 @@ class PulseButton(BaseElevatedButton):
         on_click_callable: Callable,
         text: str,
         variant: str = "teal",
+        compact: bool = False,
         **kwargs,
     ) -> None:
-        style = self._VARIANTS.get(variant)
-        if style is None:
-            raise ValueError(
-                f"Unknown PulseButton variant '{variant}'. "
-                f"Must be one of: {', '.join(sorted(self._VARIANTS))}"
-            )
+        self._compact = compact
         super().__init__(
             on_click_callable,
-            style=style,
+            style=self._build_style(variant),
             text=text,
             text_style=styles.PulseButtonTextStyle,
             **kwargs,
         )
         # Match Pulse's vertical rhythm (py-2.5 + text-sm → ~40px line box).
-        # BaseElevatedButton's 36px default feels cramped for the flat look.
-        self.height = 40
+        # Compact uses a 28px line box for in-header use.
+        self.height = 28 if compact else 40
+
+    def _build_style(self, variant: str) -> ft.ButtonStyle:
+        base_style = self._VARIANTS.get(variant)
+        if base_style is None:
+            raise ValueError(
+                f"Unknown PulseButton variant '{variant}'. "
+                f"Must be one of: {', '.join(sorted(self._VARIANTS))}"
+            )
+        # Compact mode is a slimmer version for use inside card headers
+        # or other dense layouts. Same colors / borders as the variant,
+        # tighter padding, smaller corner radius.
+        if not self._compact:
+            return base_style
+        return ft.ButtonStyle(
+            color=base_style.color,
+            bgcolor=base_style.bgcolor,
+            side=base_style.side,
+            shape=ft.RoundedRectangleBorder(radius=6),
+            padding=ft.padding.symmetric(horizontal=10, vertical=2),
+            elevation=0,
+            overlay_color=ft.Colors.TRANSPARENT,
+            animation_duration=150,
+        )
+
+    def set_variant(self, variant: str) -> None:
+        """Swap the colour variant at runtime, preserving compact mode.
+
+        Useful for toggle-style buttons where the same control toggles
+        between an inactive ("muted") and active ("teal" / "amber")
+        appearance without changing the label or layout.
+        """
+        self.style = self._build_style(variant)
+        if self.page:
+            self.update()
 
 
 class BaseIconButton(ft.IconButton):
@@ -321,6 +353,9 @@ class ConfirmDialog(ft.AlertDialog):
         cancel_text: str = "Cancel",
         on_confirm: Callable | None = None,
         destructive: bool = False,
+        secondary_text: str | None = None,
+        on_secondary: Callable | None = None,
+        secondary_destructive: bool = False,
     ) -> None:
         """
         Initialize confirmation dialog.
@@ -333,53 +368,76 @@ class ConfirmDialog(ft.AlertDialog):
             cancel_text: Text for cancel button
             on_confirm: Callback when confirmed (can be sync or async)
             destructive: If True, confirm button is styled as destructive (red)
+            secondary_text: When set, renders a third button between
+                Cancel and Confirm with this label.
+            on_secondary: Callback when the secondary button is clicked
+                (sync or async).
+            secondary_destructive: If True, the secondary button uses
+                the red destructive variant; otherwise it stays muted.
         """
         self._page = page
         self._on_confirm = on_confirm
+        self._on_secondary = on_secondary
 
-        # Confirm button style
-        confirm_style = None
-        if destructive:
-            confirm_style = ft.ButtonStyle(
-                bgcolor=ft.Colors.ERROR,
-                color=ft.Colors.ON_ERROR,
+        cancel_button = PulseButton(
+            on_click_callable=self._handle_cancel,
+            text=cancel_text,
+            variant="muted",
+        )
+        confirm_button = PulseButton(
+            on_click_callable=self._handle_confirm,
+            text=confirm_text,
+            variant="stop" if destructive else "teal",
+        )
+
+        actions: list[ft.Control] = [cancel_button]
+        if secondary_text is not None:
+            secondary_button = PulseButton(
+                on_click_callable=self._handle_secondary,
+                text=secondary_text,
+                variant="stop" if secondary_destructive else "muted",
             )
+            actions.append(secondary_button)
+        actions.append(confirm_button)
 
         super().__init__(
             modal=True,
             title=H3Text(title),
             content=BodyText(message),
-            actions=[
-                ft.TextButton(cancel_text, on_click=self._close),
-                ft.FilledButton(
-                    confirm_text,
-                    on_click=self._confirm,
-                    style=confirm_style,
-                ),
-            ],
+            actions=actions,
             actions_alignment=ft.MainAxisAlignment.END,
             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
         )
 
-    def _close(self, e: ft.ControlEvent) -> None:
-        """Close the dialog."""
+    async def _handle_cancel(self) -> None:
+        """Close the dialog without firing the confirm callback."""
         self.open = False
         self._page.update()
 
-    def _confirm(self, e: ft.ControlEvent) -> None:
-        """Handle confirm action."""
+    async def _handle_confirm(self) -> None:
+        """Close the dialog and dispatch the confirm callback."""
         self.open = False
         self._page.update()
-        if self._on_confirm:
-            import asyncio
-            import inspect
+        self._dispatch(self._on_confirm)
 
-            if inspect.iscoroutinefunction(self._on_confirm):
-                self._page.run_task(self._on_confirm)
-            else:
-                result = self._on_confirm()
-                if asyncio.iscoroutine(result):
-                    self._page.run_task(lambda: result)
+    async def _handle_secondary(self) -> None:
+        """Close the dialog and dispatch the secondary callback."""
+        self.open = False
+        self._page.update()
+        self._dispatch(self._on_secondary)
+
+    def _dispatch(self, callback: Callable | None) -> None:
+        if callback is None:
+            return
+        import asyncio
+        import inspect
+
+        if inspect.iscoroutinefunction(callback):
+            self._page.run_task(callback)
+        else:
+            result = callback()
+            if asyncio.iscoroutine(result):
+                self._page.run_task(lambda: result)
 
     def show(self) -> None:
         """Show the dialog."""

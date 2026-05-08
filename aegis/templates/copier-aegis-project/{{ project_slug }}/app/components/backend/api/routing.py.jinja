@@ -40,6 +40,9 @@ from app.components.backend.api.insights import router as insights_router
 from app.components.backend.api.payment.router import router as payment_router
 from app.components.backend.api.payment.pages import router as payment_pages_router
 {%- endif %}
+{%- if include_blog %}
+from app.components.backend.api.blog.router import router as blog_router
+{%- endif %}
 {%- for p in _plugins | default([]) %}
 {%- for r in p.wiring.routers %}
 from {{ r.module }} import {{ r.symbol }} as {{ r.alias }}
@@ -88,6 +91,9 @@ def include_routers(app: FastAPI) -> None:
     {%- if include_payment %}
     app.include_router(payment_router, prefix="/api/v1")
     app.include_router(payment_pages_router)
+    {%- endif %}
+    {%- if include_blog %}
+    app.include_router(blog_router, prefix="/api/v1")
     {%- endif %}
     {%- for p in _plugins | default([]) %}
     {%- for r in p.wiring.routers %}

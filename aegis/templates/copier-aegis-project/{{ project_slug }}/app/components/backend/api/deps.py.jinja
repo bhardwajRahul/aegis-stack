@@ -35,6 +35,9 @@ from app.services.insights.deps import get_query_service
 {%- if include_payment %}
 from app.services.payment.deps import get_payment_service
 {%- endif %}
+{%- if include_blog %}
+from app.services.blog.deps import get_blog_service
+{%- endif %}
 {%- for p in _plugins | default([]) %}
 {%- for d in p.wiring.deps_providers %}
 from {{ d.module }} import {{ d.symbol }}

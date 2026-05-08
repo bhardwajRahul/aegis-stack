@@ -110,6 +110,14 @@ except ImportError:
     # Payment service not available, skip payment commands
     pass
 
+# Conditionally register blog command if blog service is available
+try:
+    blog_module = importlib.import_module("app.cli.blog")
+    app.add_typer(blog_module.app, name="blog")
+except ImportError:
+    # Blog service not available, skip blog commands
+    pass
+
 # Conditionally register rag command if ai_rag is enabled
 try:
     rag_module = importlib.import_module("app.cli.rag")

@@ -169,12 +169,37 @@ class TestTemplateGeneratorCommsService:
         gen = TemplateGenerator(
             project_name="test-project",
             selected_components=["database"],
-            selected_services=["comms", "auth", "ai"],
+            selected_services=["comms", "auth", "ai", "blog"],
         )
         context = gen.get_template_context()
         assert context["include_comms"] == "yes"
         assert context["include_auth"] == "yes"
         assert context["include_ai"] == "yes"
+        assert context["include_blog"] == "yes"
+
+
+class TestTemplateGeneratorBlogService:
+    """Test blog service handling in template context."""
+
+    def test_blog_service_sets_include_blog(self) -> None:
+        """Blog service should set include_blog to 'yes' in context."""
+        gen = TemplateGenerator(
+            project_name="test-project",
+            selected_components=["database"],
+            selected_services=["blog"],
+        )
+        context = gen.get_template_context()
+        assert context["include_blog"] == "yes"
+
+    def test_no_blog_service_sets_include_blog_no(self) -> None:
+        """Without blog service, include_blog should be 'no'."""
+        gen = TemplateGenerator(
+            project_name="test-project",
+            selected_components=[],
+            selected_services=[],
+        )
+        context = gen.get_template_context()
+        assert context["include_blog"] == "no"
 
 
 class TestCopierAnswersTemplate:
@@ -213,6 +238,7 @@ class TestCopierAnswersTemplate:
             "include_auth_org",
             "include_ai",
             "include_comms",  # This was missing and caused the bug!
+            "include_blog",
         ]
 
         for flag in required_service_flags:

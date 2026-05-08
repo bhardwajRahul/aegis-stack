@@ -1094,6 +1094,77 @@ PAYMENT_AUTH_LINK_MIGRATION = ServiceMigrationSpec(
     ],
 )
 
+
+BLOG_MIGRATION = ServiceMigrationSpec(
+    service_name="blog",
+    description="Blog service tables (posts, tags, post/tag links)",
+    tables=[
+        TableSpec(
+            name="blog_post",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("title", "sa.String(200)", nullable=False),
+                ColumnSpec("slug", "sa.String(220)", nullable=False),
+                ColumnSpec("excerpt", "sa.String(500)", nullable=True),
+                ColumnSpec("content", "sa.Text()", nullable=False),
+                ColumnSpec(
+                    "status", "sa.String(16)", nullable=False, default="'draft'"
+                ),
+                ColumnSpec("author_id", "sa.Integer()", nullable=True),
+                ColumnSpec("author_name", "sa.String(200)", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("published_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("seo_title", "sa.String(200)", nullable=True),
+                ColumnSpec("seo_description", "sa.String(320)", nullable=True),
+                ColumnSpec("hero_image_url", "sa.String(1024)", nullable=True),
+            ],
+            indexes=[
+                IndexSpec("ix_blog_post_slug", ["slug"], unique=True),
+                IndexSpec("ix_blog_post_status", ["status"]),
+                IndexSpec("ix_blog_post_author_id", ["author_id"]),
+                IndexSpec("ix_blog_post_created_at", ["created_at"]),
+                IndexSpec("ix_blog_post_published_at", ["published_at"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    name="ck_blog_post_status",
+                    sqltext="status IN ('draft', 'published', 'archived')",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="blog_tag",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("name", "sa.String(80)", nullable=False),
+                ColumnSpec("slug", "sa.String(100)", nullable=False),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_blog_tag_name", ["name"], unique=True),
+                IndexSpec("ix_blog_tag_slug", ["slug"], unique=True),
+            ],
+        ),
+        TableSpec(
+            name="blog_post_tag",
+            columns=[
+                ColumnSpec("post_id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("tag_id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_blog_post_tag_post_id", ["post_id"]),
+                IndexSpec("ix_blog_post_tag_tag_id", ["tag_id"]),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["post_id"], "blog_post", ["id"], ondelete="CASCADE"),
+                ForeignKeySpec(["tag_id"], "blog_tag", ["id"], ondelete="CASCADE"),
+            ],
+        ),
+    ],
+)
+
 # Registry of all service migrations.
 #
 # R4-A: derived lazily from each ``PluginSpec.migrations`` list (see
@@ -1622,6 +1693,12 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     include_auth_on = include_auth == "yes" or include_auth is True
     if include_payment_on and include_auth_on:
         services.append("payment_auth_link")
+
+    # Blog service (always needs database)
+    include_blog = context.get("include_blog")
+    include_blog_on = include_blog == "yes" or include_blog is True
+    if include_blog_on:
+        services.append("blog")
 
     # Per-user vs shared insights is one folded migration — generation
     # picks the shape from the context flag (see ``generate_migration``).

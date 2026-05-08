@@ -137,6 +137,7 @@ class AnswerKeys:
     COMMS = "include_comms"
     INSIGHTS = "include_insights"
     PAYMENT = "include_payment"
+    BLOG = "include_blog"
 
     # Service names (used for selection/lookup)
     SERVICE_AUTH = "auth"
@@ -144,6 +145,7 @@ class AnswerKeys:
     SERVICE_COMMS = "comms"
     SERVICE_INSIGHTS = "insights"
     SERVICE_PAYMENT = "payment"
+    SERVICE_BLOG = "blog"
 
     # Insights source flags
     INSIGHTS_GITHUB = "insights_github"

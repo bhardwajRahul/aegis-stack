@@ -51,6 +51,7 @@ class TestAIProviderSelection:
             False,  # ollama
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
+            False,  # blog service
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -87,6 +88,7 @@ class TestAIProviderSelection:
             False,  # ollama
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
+            False,  # blog service
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -124,6 +126,7 @@ class TestAIProviderSelection:
             False,  # ollama
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
+            False,  # blog service
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -150,6 +153,7 @@ class TestAIProviderSelection:
             False,  # observability
             False,  # auth service
             False,  # AI service
+            False,  # blog service
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -203,6 +207,7 @@ class TestAIBackendSelection:
                 False,  # ollama
                 True,  # Enable RAG? Yes (default)
                 True,  # Enable voice?
+                False,  # blog service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -250,6 +255,7 @@ class TestAIBackendSelection:
                 False,  # ollama
                 True,  # Enable RAG? Yes (default)
                 True,  # Enable voice?
+                False,  # blog service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -291,6 +297,7 @@ class TestAIBackendSelection:
             False,  # ollama
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
+            False,  # blog service
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -451,6 +458,7 @@ class TestAIConfigurationEndToEnd:
             False,  # Provider selection (7 providers: openai yes, anthropic no, google yes, groq yes, mistral no, cohere no, ollama no)
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
+            False,  # blog service
         ]
 
         # Run interactive selection
@@ -551,6 +559,7 @@ class TestOllamaModeSelection:
             True,  # Ollama mode: connect to host (True = HOST)
             True,  # Enable RAG
             True,  # Enable voice?
+            False,  # blog service
         ]
 
         interactive_project_selection()

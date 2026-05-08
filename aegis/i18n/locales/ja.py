@@ -70,6 +70,7 @@ MESSAGES: dict[str, str] = {
     "service.auth": "JWT トークンによるユーザー認証・認可",
     "service.ai": "マルチフレームワーク対応 AI チャットボットサービス",
     "service.comms": "メール・SMS・音声のコミュニケーションサービス",
+    "service.blog": "下書き、公開、タグに対応した Markdown ブログ",
     # ── 対話モード：コンポーネントプロンプト ────────────────────────────
     "interactive.add_prompt": "{description} を追加しますか？",
     "interactive.add_with_redis": "{description} を追加しますか？（Redis も自動追加）",
@@ -530,6 +531,7 @@ MESSAGES: dict[str, str] = {
     "services.type_notification": "通知サービス",
     "services.type_analytics": "分析サービス",
     "services.type_storage": "ストレージサービス",
+    "services.type_content": "コンテンツサービス",
     "services.requires_components": "必須コンポーネント：{deps}",
     "services.recommends_components": "推奨コンポーネント：{deps}",
     "services.requires_services": "必須サービス：{deps}",

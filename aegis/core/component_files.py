@@ -244,6 +244,7 @@ def get_all_component_files() -> dict[str, list[str]]:
         ComponentNames.DATABASE,
         AnswerKeys.SERVICE_AUTH,
         AnswerKeys.SERVICE_AI,
+        AnswerKeys.SERVICE_BLOG,
         ComponentNames.OBSERVABILITY,
     ]
 

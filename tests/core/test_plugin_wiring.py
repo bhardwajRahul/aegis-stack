@@ -9,7 +9,7 @@ Covers:
 * The serializer (``serialize_plugin_to_answer`` / ``serialize_plugins``)
   — predicate evaluation, JSON-serializability of output, exception
   tolerance in misbehaving predicates.
-* Registry-shape sanity for in-tree services — auth/ai/comms/insights/
+* Registry-shape sanity for in-tree services — auth/ai/blog/comms/insights/
   payment all have the expected number of routers/cards/modals after
   populating their wiring.
 
@@ -252,6 +252,7 @@ class TestInTreeWiringShape:
         [
             ("auth", 3, 1, 1),  # auth + oauth (gated) + org (gated)
             ("ai", 4, 1, 1),  # ai + voice + llm + rag (3 gated)
+            ("blog", 1, 1, 1),
             ("comms", 1, 1, 1),
             ("insights", 1, 1, 1),
             ("payment", 2, 1, 1),  # router + pages

@@ -38,6 +38,7 @@ from .services import SERVICES
 SERVICE_AI = "ai"
 SERVICE_AUTH = "auth"
 SERVICE_INSIGHTS = "insights"
+SERVICE_BLOG = "blog"
 
 
 class TemplateGenerator:
@@ -272,6 +273,12 @@ class TemplateGenerator:
             AnswerKeys.PAYMENT: "yes"
             if any(
                 extract_base_service_name(s) == AnswerKeys.SERVICE_PAYMENT
+                for s in self.selected_services
+            )
+            else "no",
+            AnswerKeys.BLOG: "yes"
+            if any(
+                extract_base_service_name(s) == AnswerKeys.SERVICE_BLOG
                 for s in self.selected_services
             )
             else "no",

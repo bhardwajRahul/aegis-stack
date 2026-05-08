@@ -166,6 +166,7 @@ aegis init my-app --services auth --components database --no-interactive --outpu
 |---------|--------|-------------|---------------------|
 | `ai` | 🧪 Experimental | AI chatbot with 7 provider options | backend |
 | `auth` | ✅ Available | User authentication with JWT tokens | backend, database |
+| `blog` | 🧪 Experimental | Markdown posts with draft/publish workflow and tags | backend, database |
 | `comms` | 🧪 Experimental | Email (Resend), SMS & voice (Twilio) | backend |
 | `insights` | 🧪 Experimental | Adoption metrics (GitHub, PyPI, Plausible, Reddit) | backend, database, scheduler |
 | `payment` | 🧪 Experimental | Stripe checkout, subscriptions, refunds, disputes | backend, database |
@@ -175,6 +176,7 @@ aegis init my-app --services auth --components database --no-interactive --outpu
 When you select services, required components are automatically added:
 
 - `--services auth` → Auto-adds `database` component
+- `--services blog` → Auto-adds `database` component
 - `--services ai` → No additional components (backend always included)
 - `--services comms` → No additional components (backend always included)
 - Backend and frontend components are **always included** in every project
@@ -825,6 +827,23 @@ my-app ai history <id>         # View conversation history
 ```
 
 **→ [Complete AI CLI Reference](services/ai/cli.md)**
+
+**Blog Service** - `my-app blog`
+
+Inspect posts and tags, transition post state, and manage taxonomy:
+
+```bash
+my-app blog status                       # Counts and latest activity
+my-app blog posts --status draft         # List posts (filter by status/tag)
+my-app blog post <slug>                  # Show one post's metadata
+my-app blog publish <slug>               # Draft/archived to published
+my-app blog archive <slug>               # Hide from the public site
+my-app blog delete <slug> --yes          # Permanent delete
+my-app blog tags                         # List tags
+my-app blog tag-create "Release Notes"   # Create a tag
+```
+
+**→ [Complete Blog CLI Reference](services/blog/cli.md)**
 
 ---
 

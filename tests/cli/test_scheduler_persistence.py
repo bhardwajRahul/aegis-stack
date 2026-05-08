@@ -39,6 +39,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # observability
                 False,  # auth service
                 False,  # AI service
+                False,  # blog service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -65,6 +66,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # observability
                 False,  # auth service
                 False,  # AI service
+                False,  # blog service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -90,6 +92,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # observability
                 False,  # auth service
                 False,  # AI service
+                False,  # blog service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -117,6 +120,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # observability
                 False,  # auth service
                 False,  # AI service
+                False,  # blog service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -143,6 +147,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # observability
                 False,  # auth service
                 False,  # AI service
+                False,  # blog service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -177,6 +182,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # observability
                 False,  # auth service
                 False,  # AI service
+                False,  # blog service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -207,6 +213,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # observability
                 False,  # auth service
                 False,  # AI service
+                False,  # blog service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -369,6 +376,7 @@ class TestSchedulerPersistenceLogic:
                 False,  # observability
                 False,  # auth service
                 False,  # AI service
+                False,  # blog service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -397,6 +405,7 @@ class TestSchedulerPersistenceLogic:
                     False,  # observability
                     False,  # auth service
                     False,  # AI service
+                    False,  # blog service
                 ]
 
                 components, scheduler_backend, services, _ = (

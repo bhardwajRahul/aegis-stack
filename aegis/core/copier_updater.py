@@ -196,8 +196,15 @@ def update_with_copier_native(
         # that were excluded during initial generation
 
         # Check for services in components_to_add (they start with 'include_')
-        # Service names: auth, ai
-        service_names = {AnswerKeys.SERVICE_AUTH, AnswerKeys.SERVICE_AI}
+        # Service names with service-specific template directories.
+        service_names = {
+            AnswerKeys.SERVICE_AUTH,
+            AnswerKeys.SERVICE_AI,
+            AnswerKeys.SERVICE_COMMS,
+            AnswerKeys.SERVICE_INSIGHTS,
+            AnswerKeys.SERVICE_PAYMENT,
+            AnswerKeys.SERVICE_BLOG,
+        }
         newly_added_services = [
             svc for svc in service_names if AnswerKeys.include_key(svc) in update_data
         ]
@@ -217,9 +224,18 @@ def update_with_copier_native(
         # This ensures consistent behavior with initial generation
         include_auth = answers.get(AnswerKeys.AUTH, False)
         include_ai = answers.get(AnswerKeys.AI, False)
+        include_insights = answers.get(AnswerKeys.INSIGHTS, False)
+        include_payment = answers.get(AnswerKeys.PAYMENT, False)
+        include_blog = answers.get(AnswerKeys.BLOG, False)
         ai_backend = answers.get(AnswerKeys.AI_BACKEND, "memory")
         ai_needs_migrations = include_ai and ai_backend != "memory"
-        include_migrations = include_auth or ai_needs_migrations
+        include_migrations = (
+            include_auth
+            or ai_needs_migrations
+            or include_insights
+            or include_payment
+            or include_blog
+        )
         # AI needs seeding when using persistence backend (same condition as migrations)
         ai_needs_seeding = ai_needs_migrations
 

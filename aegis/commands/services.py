@@ -23,6 +23,7 @@ _SERVICE_TYPE_KEYS: dict[ServiceType, str] = {
     ServiceType.NOTIFICATION: "services.type_notification",
     ServiceType.ANALYTICS: "services.type_analytics",
     ServiceType.STORAGE: "services.type_storage",
+    ServiceType.CONTENT: "services.type_content",
 }
 
 
@@ -40,6 +41,7 @@ def services_command() -> None:
         ServiceType.NOTIFICATION,
         ServiceType.ANALYTICS,
         ServiceType.STORAGE,
+        ServiceType.CONTENT,
     ]
 
     services_found = False

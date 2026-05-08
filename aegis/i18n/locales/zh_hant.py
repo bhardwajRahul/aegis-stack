@@ -62,6 +62,7 @@ MESSAGES: dict[str, str] = {
     "service.auth": "用戶認證與授權（JWT）",
     "service.ai": "AI 對話服務，支援多框架",
     "service.comms": "通信服務（郵件、短信、語音）",
+    "service.blog": "支援草稿、發佈和標籤的 Markdown 部落格",
     # ── 交互：組件選擇提示 ────────────────────────────────────────────
     "interactive.add_prompt": "添加{description}？",
     "interactive.add_with_redis": "添加{description}？（將自動加入 Redis）",
@@ -418,6 +419,7 @@ MESSAGES: dict[str, str] = {
     "services.type_notification": "通知服務",
     "services.type_analytics": "數據分析服務",
     "services.type_storage": "存儲服務",
+    "services.type_content": "內容服務",
     "services.requires_components": "依賴組件：{deps}",
     "services.recommends_components": "推薦組件：{deps}",
     "services.requires_services": "依賴服務：{deps}",
