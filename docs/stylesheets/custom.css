@@ -1,5 +1,102 @@
 /* Custom styles for Aegis Stack documentation */
 
+/* Banner / header / footer use Overseer's off-black chrome, regardless of
+   light/dark scheme. Teal is reserved for accents only (links, active nav,
+   admonition borders) so the banner doesn't become a giant teal slab. */
+:root,
+[data-md-color-scheme="default"][data-md-color-primary="custom"],
+[data-md-color-scheme="slate"][data-md-color-primary="custom"] {
+    --md-primary-fg-color:        #090B0D; /* banner background */
+    --md-primary-fg-color--light: #1A1D24;
+    --md-primary-fg-color--dark:  #050608;
+    --md-typeset-a-color:         #17CCBF; /* link colour — Overseer teal */
+    /* ``accent`` drives the active TOC item, hover states, and a handful of
+       other Material accents. Defaults to indigo otherwise. */
+    --md-accent-fg-color:           #17CCBF;
+    --md-accent-fg-color--transparent: rgba(23, 204, 191, 0.10);
+}
+
+/* Active tab / search outline / underline use the teal accent so the
+   banner still feels branded without being a flat color block. */
+.md-tabs__link--active,
+.md-tabs__link:focus,
+.md-tabs__link:hover,
+.md-nav__link--active,
+.md-search__input:focus + .md-search__icon,
+.md-typeset a:hover {
+    color: #17CCBF !important;
+}
+.md-tabs__item--active > .md-tabs__link {
+    border-bottom: 2px solid #17CCBF;
+}
+
+/* GitHub source-repo stats (top-right: version, stars, forks).
+   Default colour stays as Material renders it; teal only on hover. */
+.md-header__source:hover .md-source,
+.md-header__source:hover .md-source__repository,
+.md-header__source:hover .md-source__icon svg,
+.md-header__source:hover .md-source__fact {
+    color: #17CCBF;
+}
+.md-header__source:hover .md-source__icon svg {
+    fill: #17CCBF;
+}
+
+/* Code-block scrollbars (and other inner scrollbars Material exposes).
+   Webkit + Firefox; both supported by the browsers Material targets. */
+.md-typeset pre,
+.md-typeset .highlight pre,
+.md-typeset__scrollwrap {
+    scrollbar-color: #17CCBF transparent;
+}
+.md-typeset pre::-webkit-scrollbar-thumb,
+.md-typeset .highlight pre::-webkit-scrollbar-thumb,
+.md-typeset__scrollwrap::-webkit-scrollbar-thumb {
+    background-color: #17CCBF;
+}
+.md-typeset pre::-webkit-scrollbar-thumb:hover,
+.md-typeset .highlight pre::-webkit-scrollbar-thumb:hover,
+.md-typeset__scrollwrap::-webkit-scrollbar-thumb:hover {
+    background-color: #5eead4;
+}
+
+/* Dark mode: replace Material's default slate-navy with Overseer's
+   off-black surfaces (DarkColorPalette in app/components/frontend/theme.py).
+   Body text stays near-white for long-read comfort; teal is reserved for
+   accents (links, headings, admonition borders) — set above. */
+[data-md-color-scheme="slate"] {
+    --md-default-bg-color:           #090B0D; /* page background */
+    --md-default-bg-color--light:    #111418; /* card / sidebar */
+    --md-default-bg-color--lighter:  #1A1D24; /* hover, code blocks */
+    --md-default-bg-color--lightest: #212530; /* selected / active */
+    --md-default-fg-color:           #e6e6e6; /* body text */
+    --md-default-fg-color--light:    #c9c9c9; /* secondary text */
+    --md-default-fg-color--lighter:  #8b8b8b; /* tertiary text */
+    --md-code-bg-color:              #111418;
+    --md-code-fg-color:              #e6e6e6;
+    --md-footer-bg-color:            #090B0D;
+    --md-footer-bg-color--dark:      #050608;
+}
+
+/* Headings keep their default colour in dark mode — adding a teal underline
+   on h1/h2 caused a horizontal divider that visually shifted the hero image
+   between light/dark modes. Body text stays near-white via the variables
+   above, which is enough for readability without extra chrome. */
+[data-md-color-scheme="slate"] .md-typeset h1,
+[data-md-color-scheme="slate"] .md-typeset h2,
+[data-md-color-scheme="slate"] .md-typeset h3,
+[data-md-color-scheme="slate"] .md-typeset h4 {
+    color: #f5f5f5;
+}
+
+/* Hide Material's auto-injected page H1 on the homepage where the README
+   begins with a hero image. Only matches the very first h1 of the content
+   when it's immediately followed by a paragraph containing an image, so
+   inner pages (which have real H1s) are unaffected. */
+.md-content__inner > h1:first-child:has(+ p img:first-child) {
+    display: none;
+}
+
 /* Alternating row striping for tables (matches GitHub) */
 .md-typeset table:not([class]) tbody tr:nth-child(even) {
     background-color: rgba(255, 255, 255, 0.025);

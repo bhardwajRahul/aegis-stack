@@ -147,30 +147,6 @@ aegis init full-app --services auth,ai --components database,scheduler
 aegis init my-app --services auth --components database --no-interactive --output-dir /projects --yes
 ```
 
-**Available Components:**
-
-| Component | Status | Description |
-|-----------|--------|-------------|
-| `scheduler` | ✅ Available | APScheduler-based async task scheduling |
-| `scheduler[sqlite]` | ✅ Available | Scheduler with SQLite persistence (auto-adds database) |
-| `worker` | ✅ Available | Background task worker (arq, TaskIQ, or Dramatiq) with Redis for background processing (auto-adds redis) |
-| `database` | ✅ Available | SQLite or PostgreSQL with SQLModel ORM |
-| `redis` | ✅ Available | Redis cache and message broker |
-| `ingress` | ✅ Available | Traefik reverse proxy with auto-discovery and admin protection |
-| `observability` | ✅ Available | Logfire observability, tracing, and metrics |
-| `cache` | 🚧 Coming Soon | Redis-based async caching layer |
-
-**Available Services:**
-
-| Service | Status | Description | Required Components |
-|---------|--------|-------------|---------------------|
-| `ai` | 🧪 Experimental | AI chatbot with 7 provider options | backend |
-| `auth` | ✅ Available | User authentication with JWT tokens | backend, database |
-| `blog` | 🧪 Experimental | Markdown posts with draft/publish workflow and tags | backend, database |
-| `comms` | 🧪 Experimental | Email (Resend), SMS & voice (Twilio) | backend |
-| `insights` | 🧪 Experimental | Adoption metrics (GitHub, PyPI, Plausible, Reddit) | backend, database, scheduler |
-| `payment` | 🧪 Experimental | Stripe checkout, subscriptions, refunds, disputes | backend, database |
-
 **Service Auto-Resolution:**
 
 When you select services, required components are automatically added:
