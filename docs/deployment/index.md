@@ -111,6 +111,7 @@ aegis deploy-setup [OPTIONS]
 **Options:**
 
 - `--project-path TEXT`, Path to the project (default: current directory)
+- `--public-key PATH`, Public key to install in the deploy user's `authorized_keys` (idempotent). Lets you skip the manual `ssh-copy-id` step.
 
 **What it does:**
 
@@ -124,14 +125,77 @@ aegis deploy-setup [OPTIONS]
     - Sets up Docker daemon with log rotation
     - Creates application directory with proper permissions
     - Applies system optimizations (file limits, TCP BBR)
+4. If `--public-key` was passed, appends that key to the deploy user's `~/.ssh/authorized_keys` (idempotent — re-running with the same key is a no-op).
 
 **Examples:**
 ```bash
 aegis deploy-setup
+aegis deploy-setup --public-key ~/.ssh/id_ed25519.pub
 ```
 
 !!! note "Requires ingress component"
     The `server-setup.sh` script is generated when the ingress component is included. If you see "Server setup script not found", add ingress first: `aegis add ingress`.
+
+---
+
+### aegis deploy-cd-setup
+
+Wire up GitHub Actions continuous deployment in one command. Generates a dedicated SSH deploy key, installs the public key on your server, pushes the private key + host + user as repo secrets, and scaffolds `.github/workflows/deploy.yml`.
+
+**Usage:**
+```bash
+aegis deploy-cd-setup [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT`, Path to the project (default: current directory)
+- `--repo OWNER/NAME`, GitHub repo (default: auto-detect from `git remote get-url origin`)
+- `--on-tag`, Also trigger the deploy workflow on `v*` tag pushes (default: `workflow_dispatch` only)
+- `--force`, Overwrite existing secrets and `deploy.yml` (use to rotate the deploy key)
+- `--dry-run`, Print the plan without making any changes
+- `--keep-key PATH`, Save a copy of the generated private key locally (default: no local copy — the key only lives in GitHub secrets)
+
+**Prerequisites:**
+
+- `aegis deploy-init` has been run (this command reads `.aegis/deploy.yml` for host/user)
+- The [GitHub CLI (`gh`)](https://cli.github.com/) is installed and authenticated (`gh auth login`)
+- You can already SSH into the deploy server (the command uses your existing access to install the new CI key)
+
+**What it does:**
+
+1. Detects the GitHub repo from `git remote get-url origin` (or honors `--repo`)
+2. Generates a fresh ed25519 keypair in a temp dir, no passphrase, comment `github-actions-deploy@OWNER/REPO`
+3. Appends the public key to the deploy user's `authorized_keys` on the server (idempotent)
+4. Pushes three secrets to the repo: `DEPLOY_SSH_KEY` (private key), `DEPLOY_HOST`, `DEPLOY_USER`
+5. Writes `.github/workflows/deploy.yml` (workflow_dispatch by default; `--on-tag` adds the tag trigger)
+6. Records the key fingerprint in `.aegis/deploy.yml` under `ci.github` so re-runs detect "already configured"
+7. Securely deletes the temp private key (overwrites then unlinks)
+
+**Examples:**
+```bash
+aegis deploy-cd-setup                # one-shot setup with workflow_dispatch trigger
+aegis deploy-cd-setup --on-tag       # also auto-deploy on v* tag pushes
+aegis deploy-cd-setup --dry-run      # see the plan without touching anything
+aegis deploy-cd-setup --force        # rotate the existing deploy key
+```
+
+!!! tip "Why a dedicated deploy key"
+    Don't reuse your personal SSH key for CI. A dedicated key has a smaller blast radius (only deploys this one project), can be rotated without touching your other servers, and shows up as a distinct identity in `auth.log`. This command generates one for you.
+
+!!! warning "Backing up the deploy key"
+    GitHub Actions secrets are **write-only** — once the private key is uploaded, you can't read it back from the API or UI. By default, `deploy-cd-setup` uploads the key and securely deletes the local copy, so the only place it exists is inside GitHub.
+
+    **If you want a local backup** (for a password manager, disaster recovery, or to use the same key from another CI provider), pass `--keep-key PATH` at setup time:
+    ```bash
+    aegis deploy-cd-setup --keep-key ~/.ssh/aegis_deploy_ci
+    ```
+
+    **If you already ran setup without `--keep-key`** and want a copy now, rotate the key — there's no way to extract the existing one. Re-run with `--force --keep-key PATH`:
+    ```bash
+    aegis deploy-cd-setup --force --keep-key ~/.ssh/aegis_deploy_ci
+    ```
+    This generates a fresh key, replaces the public key on the server, overwrites the GitHub secret, and saves a local copy. The previous key is rotated out.
 
 ---
 

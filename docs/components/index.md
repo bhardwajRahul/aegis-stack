@@ -101,35 +101,9 @@ graph TB
 
 **Independent Scaling:** Each service can be scaled separately based on demand using Docker Compose replicas or orchestration tools.
 
-## Available Components
-
-| Component | Purpose | Implementation | Status |
-|-----------|---------|----------------|--------|
-| **Core** (Backend + Overseer + CLI) | API + UI + Management | FastAPI + Flet + Typer | ✅ Always included |
-| **Database** | Data persistence, ORM | SQLite or PostgreSQL + SQLModel | ✅ Available |
-| **Inference** | Local AI model serving | Ollama (Docker or external) | ✅ Available |
-| **Cache** | Message broker, pub/sub | Redis | ✅ Available |
-| **Worker** | Background task queues | arq, Dramatiq, or TaskIQ | ✅ Available |
-| **Scheduler** | Background tasks, cron jobs | APScheduler | ✅ Available |
-| **Ingress** | Reverse proxy, TLS, routing | Traefik v3 | ✅ Available |
-| **Observability** | Tracing, metrics, logging | Pydantic Logfire | ✅ Available |
-
 !!! tip "Component Composition"
     Components can be combined to enable different capabilities. For detailed patterns on how components integrate with services and each other, see the **[Integration Patterns Reference](../integration-patterns.md)**.
 
 ![Components forming your complete stack](../images/voltron.gif)
 
 **Individual components combine to form your complete application.** Database + Scheduler + Worker + Auth + AI = A unified, production-ready system.
-
----
-
-**Next:** Choose your first component combination and see the integration in action:
-
-- **[Database Component](./database.md)** - SQLite or PostgreSQL with SQLModel ORM
-- **[Scheduler Component](./scheduler.md)** - Background tasks and cron jobs
-- **[Worker Component](./worker/index.md)** - Background task processing and queues
-- **[Ingress Component](./ingress.md)** - Traefik reverse proxy and TLS
-- **[Observability Component](./observability.md)** - Pydantic Logfire tracing and metrics
-- **[Auth Service](../services/auth/index.md)** - User authentication with JWT
-- **[AI Service](../services/ai/index.md)** - Multi-provider AI conversations
-- **[Comms Service](../services/comms/index.md)** - Email, SMS, and voice
