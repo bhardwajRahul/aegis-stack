@@ -47,32 +47,14 @@ with open("README.md") as readme:
     # Apply all image path mappings
     for github_path, mkdocs_path in IMAGE_PATH_MAPPINGS.items():
         content = content.replace(github_path, mkdocs_path)
-    # Convert GitHub picture element to MkDocs light/dark syntax
-    picture_element = (
-        "<picture>\n"
-        '  <source media="(prefers-color-scheme: dark)" '
-        'srcset="docs/images/aegis-manifesto-dark.png">\n'
-        '  <img src="docs/images/aegis-manifesto.png" alt="Aegis Stack" width="400">\n'
-        "</picture>"
-    )
-
-    mkdocs_syntax = (
-        '<img src="images/aegis-manifesto.png#only-light" '
-        'alt="Aegis Stack" width="400">\n'
-        '<img src="images/aegis-manifesto-dark.png#only-dark" '
-        'alt="Aegis Stack" width="400">'
-    )
-
-    content = content.replace(picture_element, mkdocs_syntax)
-
-    # Fallback: Fix standalone manifesto image paths
-    content = content.replace(
-        '<img src="docs/images/aegis-manifesto.png"',
-        '<img src="images/aegis-manifesto.png"',
-    )
-    content = content.replace(
-        '<img src="docs/images/aegis-manifesto-dark.png"',
-        '<img src="images/aegis-manifesto-dark.png"',
+    # Strip the ``docs/`` prefix from any ``<img src="docs/images/...">`` so
+    # MkDocs serves them from ``images/...`` (the docs root has no ``docs/``
+    # segment, but GitHub's renderer needs the prefix). Catches the hero SVG
+    # plus every ``<img>``-wrapped GIF in the README.
+    content = re.sub(
+        r'src="docs/images/([^"]+)"',
+        r'src="images/\1"',
+        content,
     )
 
     # Fix links to documentation pages (remove 'docs/' prefix)
@@ -90,16 +72,23 @@ with open("README.md") as readme:
 
     def fix_trailing_slash(match: re.Match[str]) -> str:
         path = match.group(1).rstrip("/")
+        # Optional ``#anchor`` fragment that followed the trailing slash; preserve
+        # it so mkdocs links to the right heading after we rewrite to index.md.
+        anchor = match.group(2) or ""
         check_path = docs_dir / path / "index.md"
         # Check if it's a directory with index.md
         if check_path.exists():
-            return f"]({path}/index.md)"
+            return f"]({path}/index.md{anchor})"
         else:
             # Top-level page, convert to .md
             print(f"  DEBUG: {check_path} does not exist, using {path}.md")
-            return f"]({path}.md)"
+            return f"]({path}.md{anchor})"
 
-    content = re.sub(r"\]\(([a-z][a-z0-9-/]*)/\)", fix_trailing_slash, content)
+    content = re.sub(
+        r"\]\(([a-z][a-z0-9-/]*)/(#[^)]*)?\)",
+        fix_trailing_slash,
+        content,
+    )
 
     # Use mkdocs_gen_files to create a virtual file instead of writing directly
     # This prevents triggering file change detection loops

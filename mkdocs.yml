@@ -9,13 +9,21 @@ repo_name: lbedner/aegis-stack
 theme:
   name: material
   custom_dir: docs/overrides
+  logo: images/aegis_stack_layered_shield.svg
+  favicon: images/aegis_stack_layered_shield.svg
   palette:
-    # Palette toggle for light vs dark mode
+    # Palette toggle for light vs dark mode. ``primary: custom`` is paired
+    # with the ``--md-primary-fg-color*`` overrides in
+    # ``docs/stylesheets/custom.css`` so the banner uses Overseer's
+    # off-black chrome (#090B0D), while Overseer teal (#17CCBF) is reserved
+    # for accent/link styling — instead of Material's named-colour set.
     - scheme: default
+      primary: custom
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - scheme: slate
+      primary: custom
       toggle:
         icon: material/brightness-4
         name: Switch to light mode

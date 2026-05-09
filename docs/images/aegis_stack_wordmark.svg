@@ -1,0 +1,57 @@
+<svg width="2400" height="660" viewBox="0 0 2400 660" xmlns="http://www.w3.org/2000/svg">
+
+  <defs>
+    <!-- Gradients (mirrored from aegis_stack_layered_shield.svg) -->
+    <linearGradient id="outer" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2EF2E5"/>
+      <stop offset="100%" stop-color="#0E8F87"/>
+    </linearGradient>
+
+    <linearGradient id="mid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#17CCBF"/>
+      <stop offset="100%" stop-color="#065E5A"/>
+    </linearGradient>
+
+    <linearGradient id="inner" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#35FFF2"/>
+      <stop offset="100%" stop-color="#17CCBF"/>
+    </linearGradient>
+
+    <linearGradient id="stack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1DF0E3"/>
+      <stop offset="100%" stop-color="#0A6F6A"/>
+    </linearGradient>
+  </defs>
+
+  <!-- SHIELD scaled to ~62% of original (becomes ~640x640) and vertically
+       centered within the 800-tall viewBox. -->
+  <g transform="translate(20, 20) scale(0.625)">
+    <path d="M512 80L880 240V520C880 740 720 900 512 980C304 900 144 740 144 520V240L512 80Z"
+          fill="url(#outer)"/>
+    <path d="M512 140L820 280V520C820 700 690 840 512 910C334 840 204 700 204 520V280L512 140Z"
+          fill="url(#mid)"/>
+    <path d="M512 220L740 320V520C740 640 650 750 512 820C374 750 284 640 284 520V320L512 220Z"
+          fill="url(#inner)"/>
+    <polygon points="512,400 650,450 512,500 374,450" fill="url(#stack)"/>
+    <polygon points="512,480 650,530 512,580 374,530" fill="url(#stack)" opacity="0.9"/>
+    <polygon points="512,560 650,610 512,660 374,610" fill="url(#stack)" opacity="0.8"/>
+    <line x1="512" y1="220" x2="512" y2="820"
+          stroke="#CFFFFA" stroke-width="2" opacity="0.15"/>
+  </g>
+
+  <!--
+    WORDMARK
+    Colour: ``url(#mid)`` gradient — same teal range as the shield middle
+    layer so it reads on both GitHub light and dark backgrounds.
+    Font: system stack with fallbacks; SVG text doesn't bundle a font, so
+    each viewer renders with its own.
+  -->
+  <text x="730"
+        y="440"
+        font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+        font-size="260"
+        font-weight="700"
+        letter-spacing="-4"
+        fill="url(#mid)">Aegis Stack</text>
+
+</svg>

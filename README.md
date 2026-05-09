@@ -1,7 +1,4 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/aegis-manifesto-dark.png">
-  <img src="docs/images/aegis-manifesto.png" alt="Aegis Stack" width="400">
-</picture>
+<img src="docs/images/aegis_stack_wordmark.svg" alt="Aegis Stack" width="500">
 
 [![CI](https://github.com/lbedner/aegis-stack/workflows/CI/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/ci.yml)
 [![Documentation](https://github.com/lbedner/aegis-stack/workflows/Deploy%20Documentation/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/docs.yml)
@@ -10,7 +7,6 @@
 <br>
 [![Monthly Downloads](https://img.shields.io/pypi/dm/aegis-stack)](https://pypi.org/project/aegis-stack/)
 [![Total Downloads](https://static.pepy.tech/badge/aegis-stack)](https://pepy.tech/project/aegis-stack)
-[![PyPI - Top 10% 2026](https://img.shields.io/badge/PyPI-Top_10%25_2026-2ea043)](https://clickpy.clickhouse.com/dashboard/aegis-stack?min_date=2026-01-01&max_date=2026-12-31)
 <br>
 [![Commits per Month](https://img.shields.io/github/commit-activity/m/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
 [![Total Commits](https://img.shields.io/github/commit-activity/t/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
@@ -75,6 +71,8 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 | **[Scheduler](https://lbedner.github.io/aegis-stack/components/scheduler/)** | APScheduler with persistent jobs | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Worker](https://lbedner.github.io/aegis-stack/components/worker/)** | Pluggable Arq, Taskiq, or Dramatiq | ![Optional](https://img.shields.io/badge/-optional-blue) |
 
+[Components Docs →](https://lbedner.github.io/aegis-stack/components/)
+
 ### Services
 
 | Service | What you get | |
@@ -85,6 +83,19 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 | **[Comms](https://lbedner.github.io/aegis-stack/services/comms/)** | Transactional email (Resend) + SMS / voice (Twilio) | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Insights](https://lbedner.github.io/aegis-stack/services/insights/)** | Adoption metrics across GitHub, PyPI, Plausible, Reddit | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Payments](https://lbedner.github.io/aegis-stack/services/payment/)** | Stripe checkout, subscriptions, refunds, disputes | ![Optional](https://img.shields.io/badge/-optional-blue) |
+
+[Services Docs →](https://lbedner.github.io/aegis-stack/services/)
+
+## Deploying Your Stack
+
+| Capability | What you get | |
+|---|---|---|
+| **[Deploy CLI](https://lbedner.github.io/aegis-stack/deployment/)** | One-command deploys to any VPS over SSH (rsync + Docker), no PaaS lock-in | ![Available](https://img.shields.io/badge/-available-2ea043) |
+| **[Server Setup](https://lbedner.github.io/aegis-stack/deployment/#aegis-deploy-setup)** | `aegis deploy-setup` provisions Ubuntu, Debian, or Fedora boxes (Docker + firewall) | ![Available](https://img.shields.io/badge/-available-2ea043) |
+| **[Backups & Rollback](https://lbedner.github.io/aegis-stack/deployment/#backup-and-rollback)** | `pg_dump` before every deploy, retention policy, automatic rollback on failed health checks | ![Available](https://img.shields.io/badge/-available-2ea043) |
+| **[TLS / HTTPS](https://lbedner.github.io/aegis-stack/deployment/#tlshttps-with-lets-encrypt)** | Let's Encrypt via the Traefik ingress component, zero config when a domain is set | ![Optional](https://img.shields.io/badge/-optional-blue) |
+
+[Deployment Docs →](https://lbedner.github.io/aegis-stack/deployment/)
 
 Components compose into capabilities you didn't have to build:
 
@@ -99,8 +110,6 @@ graph LR
     Scheduler[Scheduler] --> D[Persistent job scheduling]
     DB --> D
 ```
-
-[Components Docs →](https://lbedner.github.io/aegis-stack/components/) · [Services Docs →](https://lbedner.github.io/aegis-stack/services/)
 
 ## Your Stack Grows With You
 
@@ -128,13 +137,13 @@ aegis update
 | **Others** | Locked at init | Manual deletion | High risk |
 | **Aegis Stack** | One command | One command | Auto-handled |
 
-![Component Evolution Demo](docs/images/aegis-evolution-demo.gif)
+<img src="docs/images/aegis-evolution-demo.gif" alt="Component Evolution Demo" width="480">
 
 Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your Stack](https://lbedner.github.io/aegis-stack/evolving-your-stack/)** for the complete guide.
 
 ## Overseer - Your Application's Control Plane
 
-![Overseer](docs/images/overseer-demo.gif)
+<img src="docs/images/overseer-demo.gif" alt="Overseer" width="480">
 
 <sub>[Live Demo: sector-7g.dev/dashboard](https://sector-7g.dev/dashboard/)</sub>
 
@@ -149,7 +158,7 @@ Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your S
 
 ## CLI - First-Class System Interface
 
-![CLI Demo](docs/images/cli-demo.gif)
+<img src="docs/images/cli-demo.gif" alt="CLI Demo" width="480">
 
 The Aegis CLI is a first-class interface to your running system. Not just a health check, but a full inspection layer.
 
@@ -161,7 +170,7 @@ The Aegis CLI is a first-class interface to your running system. Not just a heal
 
 ## Illiana - Optional System Operator
 
-![Illiana Demo](docs/images/illiana-demo.gif)
+<img src="docs/images/illiana-demo.gif" alt="Illiana Demo" width="480">
 
 When the AI service is enabled, Aegis exposes an additional interface: **Illiana**, a conversational operator over your running system.
 
@@ -182,7 +191,7 @@ When the AI service is enabled, Aegis exposes an additional interface: **Illiana
 
 ## For The Veterans
 
-![Ron Swanson](docs/images/ron-swanson.gif)
+<img src="docs/images/ron-swanson.gif" alt="Ron Swanson" width="480">
 
 No reinventing the wheel. Just the tools you already know, pre-configured and ready to compose.
 
