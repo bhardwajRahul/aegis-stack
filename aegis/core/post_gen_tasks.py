@@ -409,24 +409,37 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
 
         if queues_dir.exists():
             if worker_backend == WorkerBackends.DRAMATIQ:
-                # Using Dramatiq: rename _dramatiq.py files, remove arq + taskiq
+                # Using Dramatiq: rename _dramatiq.py files, remove arq + taskiq.
+                # Capture whether the template shipped *_dramatiq.py sources
+                # this run BEFORE renaming consumes them — this is the signal
+                # that distinguishes init (sources present) from update (only
+                # canonical files left from a prior init). On update we must
+                # NOT run the arq-cleanup glob below, otherwise we'd unlink
+                # the canonical system.py / load_test.py we already renamed
+                # last time. See issue #672.
+                has_dramatiq_sources = any(queues_dir.glob("*_dramatiq.py"))
                 dramatiq_final_names = _rename_backend_files("_dramatiq.py")
 
-                # Remove arq-only queue files (those without dramatiq counterparts)
-                for py_file in queues_dir.glob("*.py"):
-                    if py_file.name not in dramatiq_final_names:
-                        py_file.unlink()
+                if has_dramatiq_sources:
+                    # Remove arq-only queue files (those without dramatiq
+                    # counterparts) shipped alongside the just-renamed sources.
+                    for py_file in queues_dir.glob("*.py"):
+                        if py_file.name not in dramatiq_final_names:
+                            py_file.unlink()
 
                 _remove_backend_files("_taskiq.py")
 
             elif worker_backend == WorkerBackends.TASKIQ:
-                # Using TaskIQ: rename _taskiq.py files, remove arq + dramatiq
+                # Using TaskIQ: rename _taskiq.py files, remove arq + dramatiq.
+                # See dramatiq branch above for the init-vs-update rationale
+                # (issue #672).
+                has_taskiq_sources = any(queues_dir.glob("*_taskiq.py"))
                 taskiq_final_names = _rename_backend_files("_taskiq.py")
 
-                # Remove arq-only queue files (those without taskiq counterparts)
-                for py_file in queues_dir.glob("*.py"):
-                    if py_file.name not in taskiq_final_names:
-                        py_file.unlink()
+                if has_taskiq_sources:
+                    for py_file in queues_dir.glob("*.py"):
+                        if py_file.name not in taskiq_final_names:
+                            py_file.unlink()
 
                 _remove_backend_files("_dramatiq.py")
 

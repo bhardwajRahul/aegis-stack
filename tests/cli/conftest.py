@@ -67,6 +67,7 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
     ),
     "base_with_worker": ProjectTemplateSpec(components=("worker",)),
     "base_with_worker_taskiq": ProjectTemplateSpec(components=("worker[taskiq]",)),
+    "base_with_worker_dramatiq": ProjectTemplateSpec(components=("worker[dramatiq]",)),
     "base_with_redis": ProjectTemplateSpec(components=("redis",)),
     "scheduler_and_database": ProjectTemplateSpec(components=("database", "scheduler")),
     "base_with_auth_service": ProjectTemplateSpec(services=("auth",)),
