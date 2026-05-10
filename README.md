@@ -88,14 +88,19 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 
 ## CI/CD for Your Stack
 
-Every generated project ships with GitHub Actions and developer tooling pre-wired, so the first push to GitHub runs checks automatically — and one command (`aegis deploy-cd-setup`) wires up continuous deployment to your server.
+Every generated project ships with GitHub Actions and developer tooling pre-wired, so the first push to GitHub runs checks automatically, and one command wires up continuous deployment to your server.
 
-| Capability | What you get | |
-|---|---|---|
-| **CI Workflow** | `.github/workflows/ci.yml` runs lint, type checking, and tests on every push and PR (parallel jobs, `uv` cached) | ![Available](https://img.shields.io/badge/-available-2ea043) |
-| **Code Scanning** | `.github/workflows/security.yml` runs CodeQL on every PR and weekly | ![Available](https://img.shields.io/badge/-available-2ea043) |
-| **Pre-commit** | `.pre-commit-config.yaml` for ruff + ruff-format + ty, opt-in via `pre-commit install` | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **Continuous Deploy** | `aegis deploy-cd-setup` generates a dedicated SSH deploy key, installs the public key on your server, pushes secrets to GitHub, and scaffolds `.github/workflows/deploy.yml` (workflow_dispatch by default) | ![Optional](https://img.shields.io/badge/-optional-blue) |
+<table>
+<thead>
+<tr><th>Capability</th><th>What you get</th><th width="80">Status</th></tr>
+</thead>
+<tbody>
+<tr><td><b>CI Workflow</b></td><td>Lint, type checking, and tests on every push and PR (parallel jobs, cached)</td><td><img src="https://img.shields.io/badge/-available-2ea043" alt="Available" width="64"></td></tr>
+<tr><td><b>Code Scanning</b></td><td>CodeQL static analysis on every PR and on a weekly schedule</td><td><img src="https://img.shields.io/badge/-available-2ea043" alt="Available" width="64"></td></tr>
+<tr><td><b>Pre-commit</b></td><td>Ruff, ruff-format, and type-check hooks (opt-in)</td><td><img src="https://img.shields.io/badge/-optional-blue" alt="Optional" width="64"></td></tr>
+<tr><td><b>Continuous Deploy</b></td><td>Generates a dedicated SSH deploy key, installs it on your server, pushes secrets to GitHub, and scaffolds a deploy workflow (manual trigger by default)</td><td><img src="https://img.shields.io/badge/-optional-blue" alt="Optional" width="64"></td></tr>
+</tbody>
+</table>
 
 ## Deploying Your Stack
 
