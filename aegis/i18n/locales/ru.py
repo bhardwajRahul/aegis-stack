@@ -669,6 +669,68 @@ MESSAGES: dict[str, str] = {
     "deploy.setup_verify_uv": "  uv: {version}",
     "deploy.setup_verify_app_dir": "  Каталог приложения: {path}",
     "deploy.setup_next": "Далее: выполните «aegis deploy» для развёртывания приложения",
+    # ── deploy-setup --public-key ──
+    "deploy.pubkey_missing": "Public key file not found: {path}",
+    "deploy.installing_pubkey": (
+        "Installing public key into {user}'s authorized_keys..."
+    ),
+    "deploy.pubkey_install_failed": "Failed to install public key: {error}",
+    "deploy.pubkey_installed": "  Public key installed",
+    # ── deploy-cd-setup ──
+    "deploy.cd_gh_not_installed": (
+        "GitHub CLI (gh) is not installed. Install it from https://cli.github.com/"
+    ),
+    "deploy.cd_gh_not_authed": (
+        "GitHub CLI is not authenticated. Run 'gh auth login' first."
+    ),
+    "deploy.cd_repo_not_detected": (
+        "Could not detect GitHub repo from 'git remote get-url origin'. "
+        "Pass --repo OWNER/NAME explicitly."
+    ),
+    "deploy.cd_already_configured": (
+        "CD is already configured for this project (key fingerprint: "
+        "{fingerprint}). Use --force to rotate."
+    ),
+    "deploy.cd_secret_exists": (
+        "GitHub Actions secrets already exist: {names}. Use --force to overwrite."
+    ),
+    "deploy.cd_workflow_exists": (
+        "Workflow already exists at {path}. Use --force to overwrite."
+    ),
+    "deploy.cd_title": ("Setting up GitHub Actions CD for {repo} → {target}..."),
+    "deploy.cd_plan_header": "Plan:",
+    "deploy.cd_plan_keygen": (
+        "  1. Generate dedicated ed25519 deploy key (no passphrase)"
+    ),
+    "deploy.cd_plan_install": (
+        "  2. Install public key in {user}@{host}:~/.ssh/authorized_keys"
+    ),
+    "deploy.cd_plan_secrets": (
+        "  3. Push DEPLOY_SSH_KEY / DEPLOY_HOST / DEPLOY_USER to {repo} secrets"
+    ),
+    "deploy.cd_plan_workflow": "  4. Scaffold {path}",
+    "deploy.cd_dry_run": "Dry run; no changes made.",
+    "deploy.cd_generating_key": "Generating ed25519 deploy key...",
+    "deploy.cd_keygen_failed": "ssh-keygen failed: {error}",
+    "deploy.cd_installing_pubkey": ("Installing public key on {user}@{host}..."),
+    "deploy.cd_install_failed": "Failed to install public key: {error}",
+    "deploy.cd_pushing_secrets": "Pushing secrets to {repo}...",
+    "deploy.cd_secret_failed": "Failed to set secret {name}: {error}",
+    "deploy.cd_writing_workflow": "Writing {path}...",
+    "deploy.cd_kept_key": "  Private key copy saved to {path}",
+    "deploy.cd_complete": "GitHub Actions CD configured!",
+    "deploy.cd_fingerprint": "  Deploy key fingerprint: {fingerprint}",
+    "deploy.cd_next_commit": "  Next: commit {path} and push.",
+    "deploy.cd_next_run": ("  Then trigger a deploy from the Actions tab on GitHub."),
+    "deploy.cd_key_discarded": (
+        "Note: the private key was sent to GitHub secrets and discarded "
+        "locally. GitHub secrets are write-only — you can't retrieve it later."
+    ),
+    "deploy.cd_key_recover_hint": (
+        "  To keep a local copy on future setup, pass --keep-key PATH. "
+        "To rotate and save a copy now, run: aegis deploy-cd-setup --force "
+        "--keep-key PATH"
+    ),
     "deploy.deploying": "Развёртывание на {host}...",
     "deploy.creating_backup": "Создание бэкапа {timestamp}...",
     "deploy.backup_failed": "Не удалось создать бэкап: {error}",

@@ -121,6 +121,48 @@ def _run_remote_capture(
     )
 
 
+def _install_pubkey_on_server(
+    pubkey: str, host: str, user: str
+) -> subprocess.CompletedProcess:
+    """Append a public key to the remote user's authorized_keys, idempotently.
+
+    The pubkey is matched by full body via ``grep -F``; re-running with the
+    same key is a no-op. Caller is responsible for ensuring SSH access to
+    ``user@host`` already works.
+    """
+    pubkey_clean = pubkey.strip()
+    quoted = shlex.quote(pubkey_clean)
+    command = (
+        "mkdir -p ~/.ssh && chmod 700 ~/.ssh && "
+        "touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && "
+        f"grep -qxF {quoted} ~/.ssh/authorized_keys || "
+        f"echo {quoted} >> ~/.ssh/authorized_keys"
+    )
+    return subprocess.run(
+        ["ssh", f"{user}@{host}", command], capture_output=True, text=True
+    )
+
+
+def _remove_pubkey_from_server(
+    marker: str, host: str, user: str
+) -> subprocess.CompletedProcess:
+    """Remove any authorized_keys line containing ``marker``.
+
+    Used to roll back a failed deploy-cd-setup. ``marker`` is the trailing
+    comment on the pubkey (e.g. ``github-actions-deploy@owner/repo``).
+    """
+    quoted = shlex.quote(marker)
+    command = (
+        "if [ -f ~/.ssh/authorized_keys ]; then "
+        f"  grep -vF {quoted} ~/.ssh/authorized_keys > ~/.ssh/authorized_keys.tmp || true; "
+        "  mv ~/.ssh/authorized_keys.tmp ~/.ssh/authorized_keys; "
+        "fi"
+    )
+    return subprocess.run(
+        ["ssh", f"{user}@{host}", command], capture_output=True, text=True
+    )
+
+
 def _get_backup_config(config: dict) -> dict:
     """Extract backup config with defaults."""
     backup = config.get("backup", {}) or {}
@@ -399,6 +441,15 @@ def deploy_setup_command(
     project_path: str | None = typer.Option(
         None, "--project-path", help="Path to the project (default: current directory)"
     ),
+    public_key: str | None = typer.Option(
+        None,
+        "--public-key",
+        help=(
+            "Path to a public key to install in the deploy user's "
+            "authorized_keys (idempotent). Use this so you don't have to "
+            "ssh-copy-id by hand before deploying."
+        ),
+    ),
 ) -> None:
     """
     Provision a remote server for deployment.
@@ -408,6 +459,7 @@ def deploy_setup_command(
 
     Examples:\\n
         - aegis deploy-setup\\n
+        - aegis deploy-setup --public-key ~/.ssh/id_ed25519.pub\\n
     """
     config = _load_deploy_config(project_path)
     if not config:
@@ -505,6 +557,27 @@ def deploy_setup_command(
     uv_ver = _run_remote_capture(host, user, "PATH=$HOME/.local/bin:$PATH uv --version")
     typer.echo(t("deploy.setup_verify_uv", version=uv_ver.stdout.strip()))
     typer.echo(t("deploy.setup_verify_app_dir", path=deploy_path))
+
+    if public_key:
+        pubkey_path = Path(public_key).expanduser()
+        if not pubkey_path.exists():
+            typer.secho(
+                t("deploy.pubkey_missing", path=str(pubkey_path)),
+                fg="red",
+                err=True,
+            )
+            raise typer.Exit(1)
+        pubkey_body = pubkey_path.read_text().strip()
+        typer.echo(t("deploy.installing_pubkey", user=user))
+        install_result = _install_pubkey_on_server(pubkey_body, host, user)
+        if install_result.returncode != 0:
+            typer.secho(
+                t("deploy.pubkey_install_failed", error=install_result.stderr),
+                fg="red",
+                err=True,
+            )
+            raise typer.Exit(1)
+        typer.secho(t("deploy.pubkey_installed"), fg="green")
 
     typer.secho(f"\n{t('deploy.setup_complete')}", fg="green", bold=True)
     typer.echo(t("deploy.setup_next"))
@@ -1055,3 +1128,446 @@ def deploy_shell_command(
             f"{_compose_prefix(deploy_path)} exec {service} /bin/bash",
         ]
     )
+
+
+# ─────────────────────────── deploy-cd-setup ───────────────────────────
+
+
+_GH_DEPLOY_KEY_SECRET = "DEPLOY_SSH_KEY"
+_GH_DEPLOY_HOST_SECRET = "DEPLOY_HOST"
+_GH_DEPLOY_USER_SECRET = "DEPLOY_USER"
+
+
+def _detect_github_repo(project_root: Path) -> str | None:
+    """Parse owner/repo from ``git remote get-url origin`` in project_root.
+
+    Returns ``None`` if not a git repo, no origin, or origin isn't GitHub.
+    Accepts both SSH (``git@github.com:owner/repo.git``) and HTTPS
+    (``https://github.com/owner/repo.git``) forms.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(project_root), "remote", "get-url", "origin"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    url = result.stdout.strip()
+    match = re.match(
+        r"^(?:git@github\.com:|https://github\.com/)([^/]+)/([^/]+?)(?:\.git)?/?$",
+        url,
+    )
+    return f"{match.group(1)}/{match.group(2)}" if match else None
+
+
+def _check_gh_cli() -> None:
+    """Verify ``gh`` CLI is installed and authenticated; exit on failure."""
+    try:
+        version = subprocess.run(["gh", "--version"], capture_output=True)
+    except FileNotFoundError:
+        typer.secho(t("deploy.cd_gh_not_installed"), fg="red", err=True)
+        raise typer.Exit(1) from None
+    if version.returncode != 0:
+        typer.secho(t("deploy.cd_gh_not_installed"), fg="red", err=True)
+        raise typer.Exit(1)
+    try:
+        auth = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
+    except FileNotFoundError:
+        typer.secho(t("deploy.cd_gh_not_installed"), fg="red", err=True)
+        raise typer.Exit(1) from None
+    if auth.returncode != 0:
+        typer.secho(t("deploy.cd_gh_not_authed"), fg="red", err=True)
+        raise typer.Exit(1)
+
+
+def _list_gh_secrets(repo: str) -> set[str]:
+    """Return the set of secret names already configured on ``repo``."""
+    result = subprocess.run(
+        ["gh", "secret", "list", "--repo", repo],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return set()
+    return {line.split("\t", 1)[0] for line in result.stdout.splitlines() if line}
+
+
+def _set_gh_secret(name: str, value: str, repo: str) -> subprocess.CompletedProcess:
+    """Set a single GitHub Actions secret via ``gh secret set``."""
+    return subprocess.run(
+        ["gh", "secret", "set", name, "--repo", repo, "--body", value],
+        capture_output=True,
+        text=True,
+    )
+
+
+def _set_gh_secret_from_file(
+    name: str, file_path: Path, repo: str
+) -> subprocess.CompletedProcess:
+    """Set a GitHub Actions secret with the contents of ``file_path``."""
+    with open(file_path) as f:
+        return subprocess.run(
+            ["gh", "secret", "set", name, "--repo", repo],
+            stdin=f,
+            capture_output=True,
+            text=True,
+        )
+
+
+def _key_fingerprint(key_path: Path) -> str:
+    """Return ``ssh-keygen -lf`` fingerprint, or empty string on failure."""
+    result = subprocess.run(
+        ["ssh-keygen", "-lf", str(key_path)],
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _project_python_minor(project_root: Path) -> str | None:
+    """Extract a major.minor Python version (e.g. ``3.13``) from the project's
+    ``pyproject.toml``'s ``requires-python``.
+
+    Returns ``None`` if the file or constraint is missing/unparseable, in
+    which case callers should omit the ``uv python install`` step and let
+    uv resolve from the lock file.
+    """
+    pyproject = project_root / "pyproject.toml"
+    if not pyproject.exists():
+        return None
+    import tomllib
+
+    try:
+        with open(pyproject, "rb") as f:
+            data = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    constraint = data.get("project", {}).get("requires-python", "")
+    match = re.search(r"(\d+)\.(\d+)", constraint)
+    return f"{match.group(1)}.{match.group(2)}" if match else None
+
+
+def _render_deploy_workflow(on_tag: bool, python_version: str | None = None) -> str:
+    """Render the GitHub Actions deploy.yml content.
+
+    Always includes ``workflow_dispatch``. ``on_tag`` additionally fires on
+    ``v*`` tag pushes. When ``python_version`` is set, an explicit
+    ``uv python install`` step is emitted before ``uv sync`` to pin the
+    runtime, mirroring ci.yml.
+    """
+    triggers = ["  workflow_dispatch:"]
+    if on_tag:
+        triggers.append("  push:")
+        triggers.append("    tags:")
+        triggers.append("      - 'v*'")
+    on_block = "\n".join(triggers)
+    py_step = (
+        f"""
+    - name: Set up Python
+      run: uv python install {python_version}
+"""
+        if python_version
+        else ""
+    )
+    return f"""name: Deploy
+
+on:
+{on_block}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Load deploy SSH key
+      uses: webfactory/ssh-agent@v0.9.1
+      with:
+        ssh-private-key: ${{{{ secrets.{_GH_DEPLOY_KEY_SECRET} }}}}
+
+    - name: Trust server host key
+      run: ssh-keyscan -H ${{{{ secrets.{_GH_DEPLOY_HOST_SECRET} }}}} >> ~/.ssh/known_hosts
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+{py_step}
+    - name: Install dependencies
+      run: uv sync --all-extras
+
+    - name: Deploy
+      run: uv run aegis deploy --yes
+"""
+
+
+def deploy_cd_setup_command(
+    project_path: str | None = typer.Option(
+        None, "--project-path", help="Path to the project (default: current directory)"
+    ),
+    repo: str | None = typer.Option(
+        None,
+        "--repo",
+        help="GitHub repo as owner/name (default: auto-detect from git remote origin)",
+    ),
+    on_tag: bool = typer.Option(
+        False,
+        "--on-tag",
+        help="Also trigger the deploy workflow on pushes to v* tags",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Overwrite existing GitHub secrets and deploy.yml workflow",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Print planned actions without making any changes",
+    ),
+    keep_key: str | None = typer.Option(
+        None,
+        "--keep-key",
+        help=(
+            "Path to copy the generated private key to before cleanup. "
+            "Default: no local copy (the key only lives in GitHub secrets)."
+        ),
+    ),
+) -> None:
+    """
+    Wire up GitHub Actions continuous deployment for this project.
+
+    Generates a dedicated ed25519 deploy key, installs the public key on
+    the deploy server's authorized_keys, pushes the private key + host +
+    user to GitHub Actions secrets, and scaffolds .github/workflows/deploy.yml.
+
+    Requires the GitHub CLI (gh) authenticated via 'gh auth login', and an
+    .aegis/deploy.yml from a prior 'aegis deploy-init'.
+
+    Examples:\\n
+        - aegis deploy-cd-setup\\n
+        - aegis deploy-cd-setup --on-tag\\n
+        - aegis deploy-cd-setup --force  # rotate existing key\\n
+    """
+    import os
+    import shutil
+    import tempfile
+
+    project_root = _get_project_root(project_path)
+
+    # Preflight: gh CLI
+    if not dry_run:
+        _check_gh_cli()
+
+    # Preflight: deploy config
+    config = _load_deploy_config(project_path)
+    if not config:
+        typer.secho(t("deploy.no_config"), fg="red", err=True)
+        raise typer.Exit(1)
+    host = config["server"]["host"]
+    user = config["server"]["user"]
+
+    # Preflight: repo
+    repo_slug = repo or _detect_github_repo(project_root)
+    if not repo_slug:
+        typer.secho(t("deploy.cd_repo_not_detected"), fg="red", err=True)
+        raise typer.Exit(1)
+
+    workflow_path = project_root / ".github" / "workflows" / "deploy.yml"
+    marker = f"github-actions-deploy@{repo_slug}"
+
+    # Preflight: collisions
+    existing_ci = (
+        config.get("ci", {}).get("github") if isinstance(config, dict) else None
+    )
+    if existing_ci and not force:
+        typer.secho(
+            t(
+                "deploy.cd_already_configured",
+                fingerprint=existing_ci.get("deploy_key_fingerprint", "unknown"),
+            ),
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    if not force and not dry_run:
+        existing_secrets = _list_gh_secrets(repo_slug)
+        clash = existing_secrets & {
+            _GH_DEPLOY_KEY_SECRET,
+            _GH_DEPLOY_HOST_SECRET,
+            _GH_DEPLOY_USER_SECRET,
+        }
+        if clash:
+            typer.secho(
+                t("deploy.cd_secret_exists", names=", ".join(sorted(clash))),
+                fg="red",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+    if workflow_path.exists() and not force:
+        typer.secho(
+            t("deploy.cd_workflow_exists", path=str(workflow_path)),
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    # Plan
+    typer.secho(
+        t("deploy.cd_title", repo=repo_slug, target=f"{user}@{host}"),
+        fg="blue",
+        bold=True,
+    )
+    typer.echo(t("deploy.cd_plan_header"))
+    typer.echo(t("deploy.cd_plan_keygen"))
+    typer.echo(t("deploy.cd_plan_install", user=user, host=host))
+    typer.echo(t("deploy.cd_plan_secrets", repo=repo_slug))
+    typer.echo(
+        t("deploy.cd_plan_workflow", path=str(workflow_path.relative_to(project_root)))
+    )
+
+    if dry_run:
+        typer.secho(t("deploy.cd_dry_run"), fg="yellow")
+        return
+
+    # Generate key
+    tempdir = Path(tempfile.mkdtemp(prefix="aegis-deploy-"))
+    key_path = tempdir / "aegis_deploy_ci"
+    typer.echo(t("deploy.cd_generating_key"))
+    keygen = subprocess.run(
+        [
+            "ssh-keygen",
+            "-t",
+            "ed25519",
+            "-f",
+            str(key_path),
+            "-N",
+            "",
+            "-C",
+            marker,
+            "-q",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if keygen.returncode != 0:
+        shutil.rmtree(tempdir, ignore_errors=True)
+        typer.secho(
+            t("deploy.cd_keygen_failed", error=keygen.stderr),
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    pubkey_body = (key_path.with_suffix(".pub")).read_text().strip()
+    fingerprint = _key_fingerprint(key_path.with_suffix(".pub"))
+
+    # If rotating an existing key, remove the previous one first so we don't
+    # leave dead keys valid in authorized_keys.
+    if force and existing_ci:
+        _remove_pubkey_from_server(marker, host, user)
+
+    # Install pubkey on server
+    typer.echo(t("deploy.cd_installing_pubkey", user=user, host=host))
+    install = _install_pubkey_on_server(pubkey_body, host, user)
+    if install.returncode != 0:
+        shutil.rmtree(tempdir, ignore_errors=True)
+        typer.secho(
+            t("deploy.cd_install_failed", error=install.stderr),
+            fg="red",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    # Push secrets
+    typer.echo(t("deploy.cd_pushing_secrets", repo=repo_slug))
+    secret_calls = [
+        (
+            _GH_DEPLOY_KEY_SECRET,
+            lambda: _set_gh_secret_from_file(
+                _GH_DEPLOY_KEY_SECRET, key_path, repo_slug
+            ),
+        ),
+        (
+            _GH_DEPLOY_HOST_SECRET,
+            lambda: _set_gh_secret(_GH_DEPLOY_HOST_SECRET, host, repo_slug),
+        ),
+        (
+            _GH_DEPLOY_USER_SECRET,
+            lambda: _set_gh_secret(_GH_DEPLOY_USER_SECRET, user, repo_slug),
+        ),
+    ]
+    for name, call in secret_calls:
+        result = call()
+        if result.returncode != 0:
+            # Rollback: remove the pubkey we just installed
+            _remove_pubkey_from_server(marker, host, user)
+            shutil.rmtree(tempdir, ignore_errors=True)
+            typer.secho(
+                t("deploy.cd_secret_failed", name=name, error=result.stderr),
+                fg="red",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+    # Scaffold workflow
+    typer.echo(
+        t(
+            "deploy.cd_writing_workflow",
+            path=str(workflow_path.relative_to(project_root)),
+        )
+    )
+    workflow_path.parent.mkdir(parents=True, exist_ok=True)
+    workflow_path.write_text(
+        _render_deploy_workflow(
+            on_tag=on_tag,
+            python_version=_project_python_minor(project_root),
+        )
+    )
+
+    # Update .aegis/deploy.yml with ci.github block (merge, don't clobber)
+    config.setdefault("ci", {})["github"] = {
+        "repo": repo_slug,
+        "deploy_key_fingerprint": fingerprint,
+        "workflow_path": str(workflow_path.relative_to(project_root)),
+    }
+    # _save_deploy_config relies on cwd; pass project_path through directly
+    config_path = project_root / DEPLOY_CONFIG_FILE
+    config_path.parent.mkdir(exist_ok=True)
+    with open(config_path, "w") as f:
+        yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
+
+    # Optional: keep a local copy of the private key
+    if keep_key:
+        dest = Path(keep_key).expanduser()
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(key_path, dest)
+        os.chmod(dest, 0o600)
+        typer.echo(t("deploy.cd_kept_key", path=str(dest)))
+
+    # Cleanup tempdir (best-effort secure delete: overwrite then unlink)
+    for path in (key_path, key_path.with_suffix(".pub")):
+        if path.exists():
+            try:
+                size = path.stat().st_size
+                with open(path, "r+b") as f:
+                    f.write(b"\x00" * size)
+                    f.flush()
+                    os.fsync(f.fileno())
+            except OSError:
+                pass
+    shutil.rmtree(tempdir, ignore_errors=True)
+
+    typer.secho(f"\n{t('deploy.cd_complete')}", fg="green", bold=True)
+    typer.echo(t("deploy.cd_fingerprint", fingerprint=fingerprint))
+    typer.echo(
+        t("deploy.cd_next_commit", path=str(workflow_path.relative_to(project_root)))
+    )
+    typer.echo(t("deploy.cd_next_run"))
+    if not keep_key:
+        typer.echo("")
+        typer.secho(t("deploy.cd_key_discarded"), fg="yellow")
+        typer.echo(t("deploy.cd_key_recover_hint"))

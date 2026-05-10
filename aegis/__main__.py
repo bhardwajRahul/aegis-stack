@@ -16,6 +16,7 @@ from .commands.components import components_command
 from .commands.deploy import (
     deploy_backup_command,
     deploy_backups_command,
+    deploy_cd_setup_command,
     deploy_command,
     deploy_init_command,
     deploy_logs_command,
@@ -114,6 +115,7 @@ app.add_typer(plugins_app, name="plugins")
 # Deploy commands
 app.command(name="deploy-init")(deploy_init_command)
 app.command(name="deploy-setup")(deploy_setup_command)
+app.command(name="deploy-cd-setup")(deploy_cd_setup_command)
 app.command(name="deploy")(deploy_command)
 app.command(name="deploy-backup")(deploy_backup_command)
 app.command(name="deploy-backups")(deploy_backups_command)

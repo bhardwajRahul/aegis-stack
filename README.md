@@ -86,6 +86,17 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 
 [Services Docs →](https://lbedner.github.io/aegis-stack/services/)
 
+## CI/CD for Your Stack
+
+Every generated project ships with GitHub Actions and developer tooling pre-wired, so the first push to GitHub runs checks automatically — and one command (`aegis deploy-cd-setup`) wires up continuous deployment to your server.
+
+| Capability | What you get | |
+|---|---|---|
+| **CI Workflow** | `.github/workflows/ci.yml` runs lint, type checking, and tests on every push and PR (parallel jobs, `uv` cached) | ![Available](https://img.shields.io/badge/-available-2ea043) |
+| **Code Scanning** | `.github/workflows/security.yml` runs CodeQL on every PR and weekly | ![Available](https://img.shields.io/badge/-available-2ea043) |
+| **Pre-commit** | `.pre-commit-config.yaml` for ruff + ruff-format + ty, opt-in via `pre-commit install` | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **Continuous Deploy** | `aegis deploy-cd-setup` generates a dedicated SSH deploy key, installs the public key on your server, pushes secrets to GitHub, and scaffolds `.github/workflows/deploy.yml` (workflow_dispatch by default) | ![Optional](https://img.shields.io/badge/-optional-blue) |
+
 ## Deploying Your Stack
 
 | Capability | What you get | |
