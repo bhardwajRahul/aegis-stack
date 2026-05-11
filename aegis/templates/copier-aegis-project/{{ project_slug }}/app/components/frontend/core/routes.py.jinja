@@ -12,6 +12,11 @@ DASHBOARD_ROUTE: str = "/"
 LOGIN_ROUTE: str = "/login"
 REGISTER_ROUTE: str = "/register"
 {%- endif %}
+{% if insights_per_user -%}
+PROJECTS_ROUTE: str = "/projects"
+PROJECT_NEW_ROUTE: str = "/projects/new"
+PROJECT_EDIT_ROUTE: str = "/projects/edit"
+{%- endif %}
 
 {% if include_auth -%}
 PUBLIC_ROUTES: tuple[str, ...] = (LOGIN_ROUTE, REGISTER_ROUTE)

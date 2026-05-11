@@ -62,6 +62,10 @@ class APIClient:
         # True for the lifetime of the outermost handler invocation so
         # nested 401s short-circuit.
         self._in_unauthorized = False
+        # Re-entry guard for the refresh-on-401 retry layer. Stops
+        # ``/auth/refresh`` itself from triggering a refresh attempt if
+        # it returns 401, which would otherwise recurse.
+        self._in_refresh = False
         # ``follow_redirects`` lets the OAuth callback chain (303 → /)
         # work end-to-end if a server-side caller ever uses it. Cookie
         # jar is built into ``httpx.AsyncClient``.
@@ -137,6 +141,7 @@ class APIClient:
         params: dict[str, Any] | None = None,
         json: dict[str, Any] | None = None,
         form_data: dict[str, str] | None = None,
+        _retry_on_401: bool = True,
     ) -> tuple[int, dict | list | None]:
         """
         Status-aware variant: returns ``(status_code, body)`` instead of
@@ -165,6 +170,19 @@ class APIClient:
                 headers=headers,
             )
             if response.status_code == 401:
+                if (
+                    _retry_on_401
+                    and endpoint != "/api/v1/auth/refresh"
+                    and await self._try_refresh()
+                ):
+                    return await self.request_with_status(
+                        method,
+                        endpoint,
+                        params=params,
+                        json=json,
+                        form_data=form_data,
+                        _retry_on_401=False,
+                    )
                 await self._emit_unauthorized()
             if response.status_code == 204 or not response.content:
                 return response.status_code, None
@@ -206,6 +224,29 @@ class APIClient:
                 await self._emit_unauthorized()
             yield response
 
+    async def _try_refresh(self) -> bool:
+        """Attempt to mint a new access token via ``POST /auth/refresh``.
+
+        Returns True if the server returned 200 (cookies are refreshed
+        in the jar). Returns False on any other status or transport
+        error. The ``_in_refresh`` flag prevents recursion if the
+        refresh endpoint itself 401s. ``_in_unauthorized`` short-circuits
+        when we're already inside the unauthorized-handler cleanup path
+        (e.g. ``sign_out`` calling ``/auth/logout``) — no point trying
+        to refresh into a session we're explicitly tearing down.
+        """
+        if self._in_refresh or self._in_unauthorized:
+            return False
+        self._in_refresh = True
+        try:
+            url = f"{self.base_url}/api/v1/auth/refresh"
+            resp = await self._client.request("POST", url)
+            return resp.status_code == 200
+        except Exception:
+            return False
+        finally:
+            self._in_refresh = False
+
     async def _emit_unauthorized(self) -> None:
         if self.on_unauthorized is None or self._in_unauthorized:
             return
@@ -225,6 +266,7 @@ class APIClient:
         json: dict[str, Any] | None = None,
         form_data: dict[str, str] | None = None,
         files: dict[str, tuple[str, bytes, str]] | None = None,
+        _retry_on_401: bool = True,
     ) -> dict | list | None:
         url = f"{self.base_url}{endpoint}"
         headers: dict[str, str] = {}
@@ -250,6 +292,25 @@ class APIClient:
             logger.error("api_client.timeout", url=url, method=method)
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
+                # Refresh-on-401: silently mint a new access token and
+                # retry the original request once. Skip when this call
+                # was itself a retry, when the failing endpoint is the
+                # refresh endpoint, or when we're already inside a
+                # refresh round-trip — see ``_try_refresh``.
+                if (
+                    _retry_on_401
+                    and endpoint != "/api/v1/auth/refresh"
+                    and await self._try_refresh()
+                ):
+                    return await self._request(
+                        method,
+                        endpoint,
+                        params=params,
+                        json=json,
+                        form_data=form_data,
+                        files=files,
+                        _retry_on_401=False,
+                    )
                 await self._emit_unauthorized()
             logger.error(
                 "api_client.http_error",

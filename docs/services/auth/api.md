@@ -17,7 +17,7 @@ Org endpoints: `/api/v1/orgs/*`
 
 ### POST /auth/register
 
-Register a new user account. Automatically accepts any pending org invites for the registered email.
+Register a new user account. Automatically accepts any pending org invites for the registered email. On success the response sets the same `aegis_session` + `aegis_refresh` cookie pair as `POST /auth/token` — the user lands signed-in without a second round-trip.
 
 **Auth:** None
 **Rate limited:** Yes
@@ -65,6 +65,13 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 ### POST /auth/token
 
 Login and receive a JWT access token. Follows the OAuth2 password flow; email is passed as `username` in form data.
+
+On success the response also sets two cookies:
+
+- `aegis_session` — HttpOnly access token, `Path=/`, `SameSite=Lax`. Browser flows ride on this.
+- `aegis_refresh` — HttpOnly opaque refresh token, `Path=/api/v1/auth`, `SameSite=Strict`. Sent only on auth endpoints; used to rotate `aegis_session` once the access token expires.
+
+API clients (CLIs, server-to-server) keep using the body's `access_token` as a bearer header; cookies are a parallel surface, not exclusive.
 
 **Auth:** None
 **Rate limited:** Yes
@@ -292,11 +299,44 @@ curl -X POST http://localhost:8000/api/v1/auth/verify-email \
 
 ---
 
+### POST /auth/refresh
+
+Rotate the refresh token and mint a fresh access token. Reads the `aegis_refresh` cookie, revokes the inbound row, inserts a successor in the same family, and sets both cookies fresh. Returns the new access token in the body so bearer clients can update their header.
+
+**Auth:** `aegis_refresh` cookie required (no bearer fallback — refresh tokens never travel in `Authorization` headers).
+
+**Response: `200 OK`**
+
+| Field | Type |
+|-------|------|
+| `access_token` | `string` |
+| `token_type` | `string`, always `"bearer"` |
+
+**Status codes:**
+
+| Code | Condition |
+|------|-----------|
+| `200` | Rotation succeeded; new tokens in cookies + body |
+| `401` | Missing, expired, or revoked refresh cookie |
+
+!!! warning "Reuse detection"
+    Replaying a refresh token that has already been rotated triggers **family-wide revocation**: every refresh token descending from the same original sign-in is marked revoked, forcing re-auth on the next request. This is the standard OAuth2 defense against stolen-token replay.
+
+The browser-side `APIClient` in the generated frontend calls this endpoint transparently on any other-endpoint `401` and retries the original request once. Most users will never see a refresh response directly.
+
+```bash
+# Cookie-bearing clients (browsers, curl with -b)
+curl -X POST http://localhost:8000/api/v1/auth/refresh \
+  -b "aegis_refresh=$REFRESH_TOKEN"
+```
+
+---
+
 ### POST /auth/logout
 
-Revoke the current access token. The token is added to an in-memory blacklist until it naturally expires.
+Sign the user out. Revokes the refresh token in the database and drops both cookies. The short-lived access JWT is left to expire naturally (~15 minutes) — there is no stateful blacklist.
 
-**Auth:** Bearer token required
+**Auth:** Bearer token or `aegis_session` cookie required.
 
 **Response: `200 OK`**
 
@@ -308,8 +348,8 @@ Revoke the current access token. The token is added to an in-memory blacklist un
 
 | Code | Condition |
 |------|-----------|
-| `200` | Logged out (token revoked if it has a `jti` claim) |
-| `401` | Not authenticated |
+| `200` | Logged out; refresh row revoked, both cookies cleared |
+| `401` | Not authenticated (both cookies are still cleared so the client lands in a clean state) |
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/auth/logout \

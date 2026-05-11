@@ -261,6 +261,121 @@ class TestAuthEndpoints:
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
+    @pytest.mark.asyncio
+    async def test_get_user_by_id_no_token_returns_401(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        """Unauthenticated requests to GET /users/{id} are rejected."""
+        user_service = UserService(async_db_session)
+        target = await user_service.create_user(
+            UserCreate(
+                email="target@example.com",
+                full_name="Target User",
+                password="password123",
+            )
+        )
+
+        response = async_client_with_db.get(f"/api/v1/auth/users/{target.id}")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    @pytest.mark.asyncio
+    async def test_get_user_by_id_self_returns_200(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        """A user can read their own profile via /users/{id}."""
+        user_service = UserService(async_db_session)
+        me = await user_service.create_user(
+            UserCreate(
+                email="self@example.com",
+                full_name="Self User",
+                password="password123",
+            )
+        )
+        token = create_access_token(data={"sub": me.email})
+
+        response = async_client_with_db.get(
+            f"/api/v1/auth/users/{me.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["email"] == me.email
+
+    @pytest.mark.asyncio
+    async def test_get_user_by_id_other_user_returns_403(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        """A non-admin user cannot read another user's profile."""
+        user_service = UserService(async_db_session)
+{% if include_auth_rbac %}
+        # The first signup in any RBAC-enabled project is auto-promoted to
+        # admin. Burn one throwaway user so ``viewer`` lands as a plain
+        # ``"user"`` — exactly the case we want to assert 403 on.
+        await user_service.create_user(
+            UserCreate(
+                email="seed-admin@example.com",
+                full_name="Seed",
+                password="password123",
+            )
+        )
+{% endif %}
+        viewer = await user_service.create_user(
+            UserCreate(
+                email="viewer@example.com",
+                full_name="Viewer",
+                password="password123",
+            )
+        )
+        target = await user_service.create_user(
+            UserCreate(
+                email="other@example.com",
+                full_name="Other",
+                password="password123",
+            )
+        )
+        token = create_access_token(data={"sub": viewer.email})
+
+        response = async_client_with_db.get(
+            f"/api/v1/auth/users/{target.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+{% if include_auth_rbac %}
+    @pytest.mark.asyncio
+    async def test_get_user_by_id_admin_can_read_anyone(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        """An admin can read any user's profile."""
+        user_service = UserService(async_db_session)
+        admin = await user_service.create_user(
+            UserCreate(
+                email="admin@example.com",
+                full_name="Admin",
+                password="password123",
+            )
+        )
+        admin.role = "admin"
+        async_db_session.add(admin)
+        await async_db_session.commit()
+        await async_db_session.refresh(admin)
+
+        target = await user_service.create_user(
+            UserCreate(
+                email="target2@example.com",
+                full_name="Target Two",
+                password="password123",
+            )
+        )
+        token = create_access_token(data={"sub": admin.email})
+
+        response = async_client_with_db.get(
+            f"/api/v1/auth/users/{target.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["email"] == target.email
+{% endif %}
+
 
 class TestAuthIntegration:
     """Integration tests for auth flow."""
@@ -537,20 +652,167 @@ class TestSessionCookie:
         """
         ``/auth/logout`` must clear the cookie BEFORE the auth gate so a
         client with a stale/invalid cookie is not stuck unable to log out.
-        The endpoint can still 401 on the blacklist step — that's fine,
-        as long as the response carries the cookie removal.
+        The endpoint can still 401 on the auth gate — that's fine, as
+        long as the response carries the cookie removal.
         """
         # No login first — the TestClient has no session cookie. The
         # cookie/bearer dep will produce None, the auth gate will 401.
         response = async_client_with_db.post("/api/v1/auth/logout")
 
-        # The endpoint 401s because there's no valid token to blacklist.
+        # The endpoint 401s because there's no authenticated user.
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         # But the cookie removal is still on the response — that's the
         # whole point of clearing-before-auth-check.
         set_cookie = response.headers.get("set-cookie", "")
         assert "aegis_session" in set_cookie
         # ``response.delete_cookie`` emits an empty value + Max-Age=0.
+        assert "Max-Age=0" in set_cookie
+
+    @pytest.mark.asyncio
+    async def test_login_sets_aegis_refresh_cookie(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Login must also drop a long-lived refresh cookie, path-scoped."""
+        await UserService(async_db_session).create_user(
+            UserCreate(
+                email="refresh-login@example.com",
+                full_name="Refresh Login",
+                password="refreshlogin123",
+            )
+        )
+        response = async_client_with_db.post(
+            "/api/v1/auth/token",
+            data={
+                "username": "refresh-login@example.com",
+                "password": "refreshlogin123",
+            },
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert "aegis_refresh" in response.cookies
+        set_cookie = response.headers.get("set-cookie", "")
+        # Refresh cookie is stricter than the access cookie.
+        assert "aegis_refresh" in set_cookie
+        assert "samesite=strict" in set_cookie.lower()
+        assert "Path=/api/v1/auth" in set_cookie
+
+    @pytest.mark.asyncio
+    async def test_refresh_rotates_tokens(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """``POST /auth/refresh`` returns a new access token and rotates the
+        refresh cookie. The pre-refresh refresh value should be replaced."""
+        await UserService(async_db_session).create_user(
+            UserCreate(
+                email="rotate-endpoint@example.com",
+                full_name="Rotate",
+                password="rotateendpoint123",
+            )
+        )
+        login = async_client_with_db.post(
+            "/api/v1/auth/token",
+            data={
+                "username": "rotate-endpoint@example.com",
+                "password": "rotateendpoint123",
+            },
+        )
+        assert login.status_code == status.HTTP_200_OK
+        original_refresh = async_client_with_db.cookies.get("aegis_refresh")
+        assert original_refresh
+
+        response = async_client_with_db.post("/api/v1/auth/refresh")
+        assert response.status_code == status.HTTP_200_OK
+        body = response.json()
+        assert body["token_type"] == "bearer"
+        assert isinstance(body["access_token"], str)
+
+        rotated_refresh = async_client_with_db.cookies.get("aegis_refresh")
+        assert rotated_refresh is not None
+        assert rotated_refresh != original_refresh
+
+    @pytest.mark.asyncio
+    async def test_refresh_without_cookie_returns_401(
+        self, async_client_with_db: TestClient
+    ) -> None:
+        async_client_with_db.cookies.clear()
+        response = async_client_with_db.post("/api/v1/auth/refresh")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    @pytest.mark.asyncio
+    async def test_refresh_reuse_triggers_401(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        """Replaying a previously-rotated refresh token must 401 — the
+        service revokes the entire family on reuse."""
+        await UserService(async_db_session).create_user(
+            UserCreate(
+                email="reuse@example.com",
+                full_name="Reuse",
+                password="reuse123",
+            )
+        )
+        async_client_with_db.post(
+            "/api/v1/auth/token",
+            data={"username": "reuse@example.com", "password": "reuse123"},
+        )
+        original_refresh = async_client_with_db.cookies.get("aegis_refresh")
+        assert original_refresh
+
+        # First refresh succeeds; cookie jar now holds the rotated token.
+        first = async_client_with_db.post("/api/v1/auth/refresh")
+        assert first.status_code == status.HTTP_200_OK
+        rotated_refresh = async_client_with_db.cookies.get("aegis_refresh")
+        assert rotated_refresh and rotated_refresh != original_refresh
+
+        # Replay the original by sending it as an explicit cookie on the
+        # request, which dodges any jar-overwrite quirks (the rotated
+        # cookie also lives in the jar at the same path).
+        async_client_with_db.cookies.clear()
+        replay = async_client_with_db.post(
+            "/api/v1/auth/refresh",
+            cookies={"aegis_refresh": original_refresh},
+        )
+        assert replay.status_code == status.HTTP_401_UNAUTHORIZED
+        # Regression: the 401 response must carry cookie-clearing Set-Cookie
+        # headers. Raising HTTPException after mutating the injected
+        # ``response`` drops those headers (FastAPI builds a fresh error
+        # response), which would leave the browser stuck retrying with a
+        # stale refresh cookie. Both ``aegis_session`` and ``aegis_refresh``
+        # must be cleared (Max-Age=0) on this failure response.
+        replay_set_cookie = replay.headers.get("set-cookie", "")
+        assert "aegis_session" in replay_set_cookie
+        assert "aegis_refresh" in replay_set_cookie
+        assert replay_set_cookie.count("Max-Age=0") >= 2
+
+        # The successor (rotated) is now revoked too — sending it
+        # should also 401 because the family was nuked on reuse.
+        third = async_client_with_db.post(
+            "/api/v1/auth/refresh",
+            cookies={"aegis_refresh": rotated_refresh},
+        )
+        assert third.status_code == status.HTTP_401_UNAUTHORIZED
+
+    @pytest.mark.asyncio
+    async def test_logout_clears_aegis_refresh_cookie(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        await UserService(async_db_session).create_user(
+            UserCreate(
+                email="refresh-logout@example.com",
+                full_name="Refresh Logout",
+                password="refreshlogout123",
+            )
+        )
+        async_client_with_db.post(
+            "/api/v1/auth/token",
+            data={
+                "username": "refresh-logout@example.com",
+                "password": "refreshlogout123",
+            },
+        )
+        response = async_client_with_db.post("/api/v1/auth/logout")
+        assert response.status_code == status.HTTP_200_OK
+        set_cookie = response.headers.get("set-cookie", "")
+        assert "aegis_refresh" in set_cookie
         assert "Max-Age=0" in set_cookie
 
     @pytest.mark.asyncio

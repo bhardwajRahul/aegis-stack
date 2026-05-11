@@ -38,6 +38,15 @@ from app.components.frontend.controls.views.legacy_dashboard import (
 )
 from app.components.frontend.core import events as frontend_events
 from app.components.frontend.core.routes import DASHBOARD_ROUTE
+{% if insights_per_user -%}
+from app.components.frontend.core.routes import (
+    PROJECT_EDIT_ROUTE,
+    PROJECT_NEW_ROUTE,
+    PROJECTS_ROUTE,
+)
+from app.components.frontend.projects.project_form_view import ProjectFormView
+from app.components.frontend.projects.project_list_view import ProjectListView
+{%- endif %}
 from app.components.frontend.core.routing import (
     register_route,
     route_change,
@@ -643,6 +652,17 @@ async def setup_dashboard(view: BaseView) -> None:
                         ft.Container(content=view_toggle_button, padding=10),
                         # Theme toggle
                         ft.Container(content=theme_button, padding=10),
+                        {% if insights_per_user -%}
+                        ft.Container(
+                            content=ft.IconButton(
+                                icon=ft.Icons.FOLDER_OPEN_OUTLINED,
+                                tooltip="Projects",
+                                icon_color=ft.Colors.ON_SURFACE_VARIANT,
+                                on_click=lambda _: page.go(PROJECTS_ROUTE),
+                            ),
+                            padding=10,
+                        ),
+                        {%- endif %}
                         {% if include_auth -%}
                         # Sign out
                         ft.Container(content=logout_button, padding=10),
@@ -1215,6 +1235,11 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
         {% if include_auth -%}
         register_route(LOGIN_ROUTE, LoginView)
         register_route(REGISTER_ROUTE, RegisterView)
+        {%- endif %}
+        {% if insights_per_user -%}
+        register_route(PROJECTS_ROUTE, ProjectListView)
+        register_route(PROJECT_NEW_ROUTE, ProjectFormView)
+        register_route(PROJECT_EDIT_ROUTE, ProjectFormView)
         {%- endif %}
 
         # Wire page event handlers. ``async`` Flet handlers are dispatched
