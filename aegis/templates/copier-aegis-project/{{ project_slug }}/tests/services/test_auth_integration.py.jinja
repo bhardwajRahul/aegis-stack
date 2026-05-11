@@ -97,7 +97,7 @@ class TestAuthServiceIntegration:
         assert payload["sub"] == retrieved_user.email
 
         # Get user from token (simulates protected endpoint)
-        token_user = await get_current_user_from_token(access_token, async_db_session)
+        token_user = await get_current_user_from_token(access_token, UserService(async_db_session))
         assert token_user.id == created_user.id
         assert token_user.email == created_user.email
 
@@ -144,18 +144,18 @@ class TestAuthServiceIntegration:
         """Test handling of invalid tokens."""
         # Test with completely invalid token
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user_from_token("invalid_token", async_db_session)
+            await get_current_user_from_token("invalid_token", UserService(async_db_session))
         assert exc_info.value.status_code == 401
 
         # Test with malformed token
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user_from_token("Bearer invalid_token", async_db_session)
+            await get_current_user_from_token("Bearer invalid_token", UserService(async_db_session))
         assert exc_info.value.status_code == 401
 
         # Test with token for non-existent user
         fake_token = create_access_token(data={"sub": "nonexistent@example.com"})
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user_from_token(fake_token, async_db_session)
+            await get_current_user_from_token(fake_token, UserService(async_db_session))
         assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
@@ -176,7 +176,7 @@ class TestAuthServiceIntegration:
         token = create_access_token(data={"sub": created_user.email})
 
         # Verify token works for active user
-        active_user = await get_current_user_from_token(token, async_db_session)
+        active_user = await get_current_user_from_token(token, UserService(async_db_session))
         assert active_user.id == created_user.id
 
         # Deactivate user using async service
@@ -184,7 +184,7 @@ class TestAuthServiceIntegration:
 
         # Verify deactivated user cannot authenticate
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user_from_token(token, async_db_session)
+            await get_current_user_from_token(token, UserService(async_db_session))
         assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
@@ -424,7 +424,7 @@ class TestAuthMigrationIntegration:
 
             # Authenticate with token
             authenticated_user = await get_current_user_from_token(
-                token, async_db_session
+                token, UserService(async_db_session)
             )
             assert authenticated_user.id == created_user.id
 

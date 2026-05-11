@@ -1,0 +1,229 @@
+{% if insights_per_user -%}
+"""Create / edit form for an insights project.
+
+One view serves both routes:
+
+- ``/projects/new`` — empty form, POSTs to ``/api/v1/insights/projects``.
+- ``/projects/edit?slug=...`` — prefilled, PATCHes ``/api/v1/insights/projects/{slug}``.
+
+Secret fields (``github_token``, ``plausible_api_key``) render blank in edit
+mode and are only sent on submit when the user actually typed something —
+the backend masks them on read so we can't round-trip the existing value.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Any
+
+import flet as ft
+
+from app.components.frontend.controls.form_fields import (
+    FormActionButtons,
+    FormSecretField,
+    FormTextField,
+)
+from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
+from app.components.frontend.controls.text import DisplayText, SecondaryText
+from app.components.frontend.controls.views.base import BaseView
+from app.components.frontend.core.routes import PROJECTS_ROUTE
+from app.components.frontend.state.session_state import get_session_state
+from app.core.log import logger
+
+_FORM_MAX_WIDTH = 480
+_SLUG_RE = re.compile(r"[^a-z0-9-]+")
+
+
+def _slugify(name: str) -> str:
+    """Mirror the backend's slug shape: lowercase, hyphen-separated, ASCII."""
+    return _SLUG_RE.sub("-", name.strip().lower()).strip("-")
+
+
+class ProjectFormView(BaseView):
+    """Routed view for creating or editing a project."""
+
+    def __init__(self, *, page: ft.Page, route: str) -> None:
+        super().__init__(page=page, route=route, scroll=ft.ScrollMode.AUTO)
+        self._slug: str | None = None  # set in on_enter when editing
+
+        self._name = FormTextField(
+            label="Name", hint="My cool project", autofocus=True, width=_FORM_MAX_WIDTH
+        )
+        self._slug_field = FormTextField(
+            label="Slug",
+            hint="my-cool-project",
+            width=_FORM_MAX_WIDTH,
+        )
+        self._slug_readonly = SecondaryText("")
+        self._slug_readonly.visible = False
+        self._github_owner = FormTextField(
+            label="GitHub owner", hint="octocat", width=_FORM_MAX_WIDTH
+        )
+        self._github_repo = FormTextField(
+            label="GitHub repo", hint="hello-world", width=_FORM_MAX_WIDTH
+        )
+        self._github_token = FormSecretField(
+            label="GitHub token (optional)",
+            hint="ghp_…",
+            width=_FORM_MAX_WIDTH,
+        )
+        self._pypi_package = FormTextField(
+            label="PyPI package", hint="my-package", width=_FORM_MAX_WIDTH
+        )
+        self._plausible_site = FormTextField(
+            label="Plausible site", hint="docs.example.com", width=_FORM_MAX_WIDTH
+        )
+        self._plausible_api_key = FormSecretField(
+            label="Plausible API key (optional)",
+            hint="••••",
+            width=_FORM_MAX_WIDTH,
+        )
+        self._reddit_subreddits = FormTextField(
+            label="Reddit subreddits",
+            hint="python, learnpython",
+            width=_FORM_MAX_WIDTH,
+        )
+
+        self._actions = FormActionButtons(
+            on_save=self._handle_save,
+            on_cancel=self._handle_cancel,
+        )
+
+        self._heading = DisplayText("New project")
+        self._subhead = SecondaryText(
+            "Track a GitHub repo, PyPI package, or Plausible site."
+        )
+
+        self.controls = [
+            ft.Container(
+                content=ft.Column(
+                    controls=[
+                        self._heading,
+                        self._subhead,
+                        ft.Container(height=16),
+                        self._name,
+                        self._slug_field,
+                        self._slug_readonly,
+                        ft.Container(height=8),
+                        self._github_owner,
+                        self._github_repo,
+                        self._github_token,
+                        ft.Container(height=8),
+                        self._pypi_package,
+                        ft.Container(height=8),
+                        self._plausible_site,
+                        self._plausible_api_key,
+                        ft.Container(height=8),
+                        self._reddit_subreddits,
+                        ft.Container(height=16),
+                        self._actions,
+                    ],
+                    spacing=12,
+                    tight=True,
+                ),
+                padding=ft.padding.all(32),
+                width=_FORM_MAX_WIDTH + 64,
+                alignment=ft.alignment.top_center,
+            )
+        ]
+
+    # ---- lifecycle ----
+
+    async def on_enter(self, params: dict[str, Any]) -> None:
+        slug = params.get("slug")
+        if not slug:
+            return
+        await self._load_for_edit(str(slug))
+
+    async def on_refresh(self) -> None:
+        if self._slug is not None:
+            await self._load_for_edit(self._slug)
+
+    # ---- helpers ----
+
+    async def _load_for_edit(self, slug: str) -> None:
+        api = get_session_state(self.page).api_client
+        data = await api.get(f"/api/v1/insights/projects/{slug}")
+        if not isinstance(data, dict):
+            ErrorSnackBar("Could not load project.").launch(self.page)
+            self.page.go(PROJECTS_ROUTE)
+            return
+
+        self._slug = slug
+        self._heading.value = "Edit project"
+        self._name.value = str(data.get("name") or "")
+        self._slug_field.visible = False
+        self._slug_readonly.value = f"Slug: {data.get('slug') or slug}"
+        self._slug_readonly.visible = True
+        self._github_owner.value = str(data.get("github_owner") or "")
+        self._github_repo.value = str(data.get("github_repo") or "")
+        self._pypi_package.value = str(data.get("pypi_package") or "")
+        self._plausible_site.value = str(data.get("plausible_site") or "")
+        self._reddit_subreddits.value = str(data.get("reddit_subreddits") or "")
+        # Secret fields are intentionally left blank — backend masks them.
+        self.update()
+
+    async def _handle_save(self) -> None:
+        name = self._name.value.strip()
+        if not name:
+            self._name.set_error("Name is required.")
+            return
+        self._name.set_error(None)
+
+        slug = self._slug_field.value.strip() or _slugify(name)
+        if not slug:
+            self._slug_field.set_error("Slug is required.")
+            return
+        self._slug_field.set_error(None)
+
+        payload: dict[str, Any] = {
+            "name": name,
+            "github_owner": self._github_owner.value.strip() or None,
+            "github_repo": self._github_repo.value.strip() or None,
+            "pypi_package": self._pypi_package.value.strip() or None,
+            "plausible_site": self._plausible_site.value.strip() or None,
+            "reddit_subreddits": self._reddit_subreddits.value.strip() or None,
+        }
+        # Only send secrets when the user actually typed in them. Empty
+        # string in edit mode means "leave unchanged" — sending "" would
+        # clobber the stored cipher with empty plaintext.
+        gh_token = self._github_token.value.strip()
+        if gh_token or self._slug is None:
+            payload["github_token"] = gh_token or None
+        plausible_key = self._plausible_api_key.value.strip()
+        if plausible_key or self._slug is None:
+            payload["plausible_api_key"] = plausible_key or None
+
+        api = get_session_state(self.page).api_client
+        self._actions.set_saving(True)
+        try:
+            if self._slug is None:
+                payload["slug"] = slug
+                status, body = await api.request_with_status(
+                    "POST", "/api/v1/insights/projects", json=payload
+                )
+            else:
+                status, body = await api.request_with_status(
+                    "PATCH",
+                    f"/api/v1/insights/projects/{self._slug}",
+                    json=payload,
+                )
+        finally:
+            self._actions.set_saving(False)
+
+        if status == 409:
+            self._slug_field.set_error("A project with this slug already exists.")
+            return
+        if status not in (200, 201):
+            logger.warning("projects.save.failed", status=status, body=body)
+            ErrorSnackBar("Could not save project.").launch(self.page)
+            return
+
+        SuccessSnackBar(
+            "Project saved." if self._slug else "Project created."
+        ).launch(self.page)
+        self.page.go(PROJECTS_ROUTE)
+
+    async def _handle_cancel(self) -> None:
+        self.page.go(PROJECTS_ROUTE)
+{%- endif %}

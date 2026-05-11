@@ -89,7 +89,8 @@ class Settings(
     INVITE_ACCEPTANCE_MODE: str = "email"  # "email" requires email match, "token" allows anyone with token
     SECRET_KEY: str = "change-this-secret-key-in-production-use-env-variable"
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 14
     PASSWORD_RESET_EXPIRE_MINUTES: int = 60
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
 

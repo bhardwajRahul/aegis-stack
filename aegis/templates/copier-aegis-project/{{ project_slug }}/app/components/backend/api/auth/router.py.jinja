@@ -5,11 +5,9 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.audit import get_audit
-from app.core.db import get_async_db
-from app.services.auth.deps import get_user_service
+from app.services.auth.deps import get_refresh_service, get_user_service
 {% if include_auth_org %}
 from app.services.auth.deps import get_invite_service
 {% endif %}
@@ -21,11 +19,13 @@ from app.components.backend.middleware.rate_limit import (
 from app.core.audit import AuditEmitter
 from app.core.config import settings
 from app.core.security import (
+    REFRESH_COOKIE_NAME,
+    clear_refresh_cookie,
     clear_session_cookie,
     create_access_token,
+    set_refresh_cookie,
     set_session_cookie,
     verify_password,
-    verify_token,
 )
 {% if include_auth_org %}
 from app.models.org import AcceptInviteRequest, InviteResponse
@@ -33,6 +33,7 @@ from app.models.org import AcceptInviteRequest, InviteResponse
 from app.models.user import EmailVerifyRequest, PasswordResetConfirm, PasswordResetRequest, UserCreate, UserResponse
 from app.services.auth.auth_service import get_current_user_from_token
 from app.services.auth.deps import get_session_token
+from app.services.auth.refresh_service import RefreshService
 from app.services.auth.user_service import UserService
 {% if include_auth_org %}
 from app.services.auth.invite_service import InviteService
@@ -51,6 +52,7 @@ async def register(
     response: Response,
     user_data: UserCreate,
     user_service: UserService = Depends(get_user_service),
+    refresh_service: RefreshService = Depends(get_refresh_service),
 {% if include_auth_org %}
     invite_service: InviteService = Depends(get_invite_service),
 {% endif %}
@@ -89,6 +91,11 @@ async def register(
 {% endif %}
     set_session_cookie(response, access_token)
 
+    # Refresh token: opaque, server-side row. The cookie is path-scoped
+    # to ``/api/v1/auth`` so it only rides on auth endpoints.
+    refresh_token = await refresh_service.mint(user.id)
+    set_refresh_cookie(response, refresh_token)
+
     return UserResponse.model_validate(user)
 
 {% if include_auth_org %}
@@ -97,11 +104,11 @@ async def register(
 async def accept_invite(
     body: AcceptInviteRequest,
     token: str | None = Depends(get_session_token),
-    db: AsyncSession = Depends(get_async_db),
+    user_service: UserService = Depends(get_user_service),
     invite_service: InviteService = Depends(get_invite_service),
 ) -> InviteResponse:
     """Accept an org invite by token. Requires authentication."""
-    current_user = await get_current_user_from_token(token, db)
+    current_user = await get_current_user_from_token(token, user_service)
     try:
         invite = await invite_service.accept_invite_by_token(
             body.token, current_user.email, current_user.id
@@ -121,6 +128,7 @@ async def login(
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     user_service: UserService = Depends(get_user_service),
+    refresh_service: RefreshService = Depends(get_refresh_service),
     audit: AuditEmitter = Depends(get_audit),
 ):
     """Login and get access token.
@@ -173,6 +181,11 @@ async def login(
     access_token = create_access_token(data={"sub": user.email})
 {% endif %}
     set_session_cookie(response, access_token)
+
+    # Refresh token: see /register for the cookie scoping rationale.
+    refresh_token = await refresh_service.mint(user.id)
+    set_refresh_cookie(response, refresh_token)
+
     await audit.emit("auth.login_success", actor_email=form_data.username, actor_id=user.id, ip_address=ip_address)
 
     return {"access_token": access_token, "token_type": "bearer"}
@@ -233,41 +246,110 @@ async def verify_email(
     return {"detail": "Email has been verified successfully"}
 
 
+@router.post("/refresh")
+async def refresh(
+    request: Request,
+    response: Response,
+    user_service: UserService = Depends(get_user_service),
+    refresh_service: RefreshService = Depends(get_refresh_service),
+    audit: AuditEmitter = Depends(get_audit),
+):
+    """Rotate the refresh token and mint a fresh access token.
+
+    Reads the ``aegis_refresh`` cookie, validates the row, revokes it,
+    inserts a new one in the same family, and sets both cookies.
+    Returns the access token in the body for API clients (bearer flow).
+
+    Reuse detection: if the inbound token is already revoked, the
+    service nukes the whole family — this call returns 401 and the
+    user is forced to re-auth on the next request.
+    """
+    refresh_cookie = request.cookies.get(REFRESH_COOKIE_NAME)
+    if not refresh_cookie:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No refresh token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # 401-with-cookie-clear paths build their own JSONResponse instead
+    # of raising HTTPException. FastAPI's injected ``Response`` parameter
+    # is bypassed when the handler raises, which would silently drop the
+    # cookie-deletion headers — leaving the browser stuck retrying with
+    # a stale refresh cookie. Same pattern as ``/auth/logout``'s failure
+    # branch.
+    result = await refresh_service.rotate(refresh_cookie)
+    if result is None:
+        await audit.emit("auth.refresh_failed")
+        failure = JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": "Invalid refresh token"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        clear_session_cookie(failure)
+        clear_refresh_cookie(failure)
+        return failure
+
+    new_refresh, user_id = result
+    user = await user_service.get_user_by_id(user_id)
+    if user is None or not user.is_active:
+        failure = JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": "User unavailable"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        clear_session_cookie(failure)
+        clear_refresh_cookie(failure)
+        return failure
+
+{% if include_auth_rbac %}
+    access_token = create_access_token(data={"sub": user.email, "role": user.role})
+{% else %}
+    access_token = create_access_token(data={"sub": user.email})
+{% endif %}
+    set_session_cookie(response, access_token)
+    set_refresh_cookie(response, new_refresh)
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
 @router.get("/me", response_model=UserResponse)
 async def get_current_user(
     token: str | None = Depends(get_session_token),
-    db: AsyncSession = Depends(get_async_db),
+    user_service: UserService = Depends(get_user_service),
 ) -> UserResponse:
     """Get current authenticated user."""
-    user = await get_current_user_from_token(token, db)
+    user = await get_current_user_from_token(token, user_service)
     return UserResponse.model_validate(user)
 
 
 @router.post("/logout")
 async def logout(
+    request: Request,
     response: Response,
     token: str | None = Depends(get_session_token),
-    db: AsyncSession = Depends(get_async_db),
+    user_service: UserService = Depends(get_user_service),
+    refresh_service: RefreshService = Depends(get_refresh_service),
     audit: AuditEmitter = Depends(get_audit),
 ):
-    """Logout by dropping the session cookie and revoking the current token.
+    """Logout by dropping both cookies and revoking the refresh token.
 
-    The cookie is dropped on every response — success OR failure. Browsers
-    that arrive with a stale cookie must be able to log out and end up in
-    a clean state, otherwise the user is stuck. Token blacklisting still
-    requires a valid token (it's the identified action).
+    Both cookies are dropped on every response — success OR failure.
+    Browsers that arrive with a stale cookie must be able to log out and
+    end up in a clean state, otherwise the user is stuck. The refresh
+    row is revoked on the success path; the short-lived access JWT is
+    left to expire naturally (no stateful blacklist).
 
     On the failure path we build a ``JSONResponse`` ourselves and attach
     the cookie removal to it. FastAPI's injected ``Response`` parameter
     is bypassed when the handler raises ``HTTPException``, so we can't
     just modify it and rely on the framework to carry it through.
     """
-    from app.services.auth.token_blacklist import token_blacklist
+    refresh_cookie = request.cookies.get(REFRESH_COOKIE_NAME)
 
     # Auth gate. If invalid, build the 401 response ourselves so the
-    # cookie-removal header actually rides on the wire.
+    # cookie-removal headers actually ride on the wire.
     try:
-        current_user = await get_current_user_from_token(token, db)
+        current_user = await get_current_user_from_token(token, user_service)
     except HTTPException as exc:
         failure = JSONResponse(
             status_code=exc.status_code,
@@ -275,21 +357,16 @@ async def logout(
             headers=getattr(exc, "headers", None) or {},
         )
         clear_session_cookie(failure)
+        clear_refresh_cookie(failure)
         return failure
 
     # Success path. The injected Response *does* carry through here.
     clear_session_cookie(response)
+    clear_refresh_cookie(response)
 
-    # Decode token to get jti and exp claims
-    payload = verify_token(token) if token is not None else None
-    if payload is None or "jti" not in payload:
-        # Token has no jti — nothing to revoke (legacy token)
-        await audit.emit("auth.logout", actor_id=current_user.id)
-        return {"detail": "Logged out"}
+    if refresh_cookie:
+        await refresh_service.revoke(refresh_cookie)
 
-    jti = payload["jti"]
-    exp = payload.get("exp", 0)
-    token_blacklist.revoke(jti, float(exp))
     await audit.emit("auth.logout", actor_id=current_user.id)
     return {"detail": "Logged out"}
 
@@ -317,9 +394,23 @@ async def list_users(
 @router.get("/users/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: int,
+    token: str | None = Depends(get_session_token),
     user_service: UserService = Depends(get_user_service),
 ) -> UserResponse:
-    """Get a specific user by ID."""
+    """Get a specific user by ID. Caller must be the user or an admin."""
+    current_user = await get_current_user_from_token(token, user_service)
+    is_self = current_user.id == user_id
+{% if include_auth_rbac %}
+    is_admin = current_user.role == "admin"
+{% else %}
+    is_admin = False
+{% endif %}
+    if not is_self and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view this user",
+        )
+
     user = await user_service.get_user_by_id(user_id)
     if not user:
         raise HTTPException(
@@ -334,11 +425,10 @@ async def update_user(
     user_id: int,
     full_name: str | None = None,
     token: str | None = Depends(get_session_token),
-    db: AsyncSession = Depends(get_async_db),
     user_service: UserService = Depends(get_user_service),
 ) -> UserResponse:
     """Update a user's profile. Caller must be the user or an admin."""
-    current_user = await get_current_user_from_token(token, db)
+    current_user = await get_current_user_from_token(token, user_service)
     is_self = current_user.id == user_id
 {% if include_auth_rbac %}
     is_admin = current_user.role == "admin"

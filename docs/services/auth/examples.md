@@ -335,31 +335,61 @@ ACCOUNT_LOCKOUT_MINUTES=15
 
 ---
 
-## 6. Token Revocation / Logout
+## 6. Logout + Refresh-Token Rotation
 
-Logging out adds the token's JTI to an in-memory blacklist. Subsequent requests with the same token return `401 Unauthorized`.
+`POST /auth/logout` revokes the refresh-token row in the database and drops both the `aegis_session` and `aegis_refresh` cookies. The short-lived access JWT is left to expire naturally — there is no stateful blacklist on access tokens.
 
-**Login and capture the token:**
+For browser flows, this is invisible: cookies are gone, so the next request is unauthenticated. For pure bearer-token clients, the access token keeps working until its `ACCESS_TOKEN_EXPIRE_MINUTES` window closes (15 min default), but the client can't mint a new one because the refresh row is revoked.
+
+**Login and capture the access + refresh tokens (use `-c` to persist cookies):**
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/token \
+curl -s -c cookies.txt -X POST http://localhost:8000/api/v1/auth/token \
   -d "username=jane@example.com&password=NewSecret5678!" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+  | python3 -m json.tool
 ```
 
-**Use the token (should return 200):**
-
-```bash
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/api/v1/auth/me \
-  -H "Authorization: Bearer $TOKEN"
-# 200
+```json
+{
+    "access_token": "eyJ...",
+    "token_type": "bearer"
+}
 ```
 
-**Logout (revoke the token):**
+`cookies.txt` now holds both `aegis_session` and `aegis_refresh`.
+
+**Rotate the access token mid-session (this is what the frontend does on 401):**
 
 ```bash
-curl -s -X POST http://localhost:8000/api/v1/auth/logout \
-  -H "Authorization: Bearer $TOKEN" \
+curl -s -b cookies.txt -c cookies.txt -X POST \
+  http://localhost:8000/api/v1/auth/refresh \
+  | python3 -m json.tool
+```
+
+```json
+{
+    "access_token": "eyJ...new...",
+    "token_type": "bearer"
+}
+```
+
+The refresh cookie in `cookies.txt` has been rotated — the previous value is revoked server-side.
+
+**Replaying the OLD refresh token returns 401 and revokes the whole family:**
+
+```bash
+# Save the rotated refresh, then swap in an old one to simulate replay.
+# Anything that calls /refresh with a stale refresh nukes the chain.
+curl -s -b old_cookies.txt -X POST http://localhost:8000/api/v1/auth/refresh \
+  -o /dev/null -w "%{http_code}\n"
+# 401
+```
+
+**Logout — refresh row revoked, both cookies cleared:**
+
+```bash
+curl -s -b cookies.txt -c cookies.txt -X POST \
+  http://localhost:8000/api/v1/auth/logout \
   | python3 -m json.tool
 ```
 
@@ -369,16 +399,16 @@ curl -s -X POST http://localhost:8000/api/v1/auth/logout \
 }
 ```
 
-**Attempt to use the revoked token (should return 401):**
+**Try to refresh after logout — 401 because the row is revoked:**
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/api/v1/auth/me \
-  -H "Authorization: Bearer $TOKEN"
+curl -s -b cookies.txt -X POST http://localhost:8000/api/v1/auth/refresh \
+  -o /dev/null -w "%{http_code}\n"
 # 401
 ```
 
-!!! note
-    The blacklist is in-memory. Restarting the server clears it. Tokens issued before the restart remain technically valid until their `ACCESS_TOKEN_EXPIRE_MINUTES` window closes. For persistent revocation across restarts, store the blacklist in Redis.
+!!! info "Why no access-token blacklist"
+    Access tokens are 15-minute JWTs verified statelessly on every request — no DB hit on the hot path. Revocation is handled at the refresh layer: once the refresh row is revoked (on logout or reuse), the client can no longer mint new access tokens. A stolen access token's blast radius is bounded by its natural expiry. See [Refresh-Token Rotation](index.md#refresh-token-rotation) for the design rationale.
 
 ---
 

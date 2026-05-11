@@ -40,10 +40,15 @@ Reference for integrating auth services into your own endpoints and background t
                           │  list pending       │
                           └─────────────────────┘
 
+DB-backed session services:
+  ┌─────────────────┐
+  │  RefreshService │  mint / rotate / revoke / family revocation
+  └─────────────────┘
+
 Infrastructure (singletons, no DB dependency):
-  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-  │ TokenBlacklist  │  │  AuditEmitter   │  │   RateLimiter   │
-  └─────────────────┘  └─────────────────┘  └─────────────────┘
+  ┌─────────────────┐  ┌─────────────────┐
+  │  AuditEmitter   │  │   RateLimiter   │
+  └─────────────────┘  └─────────────────┘
 ```
 
 `UserService`, `OrgService`, `MembershipService`, and `InviteService` each accept an `AsyncSession` in their constructor. Use the dependency functions in `deps.py` to get properly scoped instances. Never instantiate services directly in endpoints.
@@ -432,34 +437,79 @@ async def list_users(
 
 ## Infrastructure
 
-### TokenBlacklist
+### RefreshService
 
-In-memory JWT revocation store. Tokens are keyed by their `jti` claim with an expiry timestamp. A cleanup pass removes expired entries on every read and write, so memory stays bounded.
-
-```python
-# app/services/auth/token_blacklist.py
-token_blacklist = TokenBlacklist()  # global singleton
-```
+DB-backed refresh-token store with rotation and reuse detection. The access JWT stays short-lived (15 min by default) and stateless; long-lived sessions are carried by an opaque refresh-token row that gets rotated on every use.
 
 ```python
-# Revoke a token on logout
-from app.services.auth.token_blacklist import token_blacklist
+# app/services/auth/refresh_service.py
+from app.services.auth.deps import get_refresh_service
+from app.services.auth.refresh_service import RefreshService
 
-@router.post("/logout")
-async def logout(current_user: User = Depends(get_current_user), token: str = ...):
-    payload = verify_token(token)
-    if payload:
-        jti = payload.get("jti")
-        exp = payload.get("exp")
-        if jti and exp:
-            token_blacklist.revoke(jti, exp)
-    return {"status": "logged out"}
+# Injected like any other service
+async def my_handler(
+    refresh_service: RefreshService = Depends(get_refresh_service),
+):
+    ...
 ```
 
-The blacklist is consulted automatically in `get_current_user_from_token`, you do not need to check it manually in your endpoints.
+The data model is one table:
 
-!!! warning "Process-local storage"
-    `TokenBlacklist` is in-memory and not shared across processes. In multi-worker deployments, revoked tokens may still be accepted by other workers. For production multi-process environments, replace the backend with a Redis-backed implementation.
+```python
+class RefreshToken(SQLModel, table=True):
+    token: str       # opaque 32-byte url-safe random, PK
+    user_id: int     # FK → user.id (cascade on delete)
+    family_id: str   # uuid, groups rotated successors
+    expires_at: datetime
+    revoked_at: datetime | None
+    created_at: datetime
+```
+
+**`RefreshService` surface:**
+
+| Method | Signature | Behavior |
+|--------|-----------|----------|
+| `mint` | `(user_id, family_id=None) -> token` | Insert a new refresh row. Callers minting a fresh sign-in leave `family_id=None`. |
+| `rotate` | `(token) -> (new_token, user_id) \| None` | Revoke inbound, insert successor in the same family. Returns `None` on miss / expired / replay. |
+| `revoke` | `(token) -> None` | Mark a single row revoked. Idempotent — logout with a stale cookie never 500s. |
+| `revoke_family` | `(family_id) -> None` | Revoke every live row in the family. Used on reuse detection and as the basis for a future "sign out everywhere" feature. |
+| `validate` | `(token) -> user_id \| None` | Read-only check. Used by diagnostic paths; the hot refresh path uses `rotate`. |
+
+**Rotation contract:**
+
+```python
+# Endpoint shape — see app/components/backend/api/auth/router.py
+@router.post("/refresh")
+async def refresh(
+    request: Request,
+    response: Response,
+    refresh_service: RefreshService = Depends(get_refresh_service),
+):
+    inbound = request.cookies.get("aegis_refresh")
+    result = await refresh_service.rotate(inbound)
+    if result is None:
+        # Stale, expired, or replay — drop both cookies and 401.
+        clear_session_cookie(response)
+        clear_refresh_cookie(response)
+        raise HTTPException(401)
+    new_refresh, user_id = result
+    # Mint a new access JWT, set both cookies fresh.
+    ...
+```
+
+**Reuse detection.** Replaying an already-rotated refresh token (e.g. a stolen cookie that the attacker has already used once before the victim noticed) triggers a family-wide revocation. Every refresh row descending from the same sign-in is marked revoked, forcing re-auth across the chain.
+
+```python
+# Inside rotate(), if row.revoked_at is not None:
+await self.revoke_family(row.family_id)
+return None
+```
+
+!!! info "Why opaque tokens, not JWT refresh"
+    Refresh tokens are 32-byte random strings — *not* JWTs. The DB row is the source of truth so revocation is O(1) and atomic. JWT refresh tokens are weak by default because revoking individual ones requires a blacklist anyway, which defeats the purpose.
+
+!!! info "Why DB, not Redis"
+    Auth already requires the DB, refresh rows are bounded (one active per device per session), and PK lookup is microseconds. A `RefreshTokenStore` protocol leaves room to plug Redis in later without redesigning anything.
 
 ---
 
@@ -529,7 +579,7 @@ async def login(
 Set `TRUST_PROXY_HEADERS=true` in settings when running behind a reverse proxy so the limiter reads the real client IP from `X-Forwarded-For` rather than the proxy's address.
 
 !!! warning "Process-local storage"
-    Like `TokenBlacklist`, rate limit counters are in-memory and not shared across processes. For multi-worker deployments, use a Redis-backed rate limiter.
+    Rate limit counters are in-memory and not shared across processes. For multi-worker deployments, use a Redis-backed rate limiter.
 
 ---
 

@@ -1,0 +1,35 @@
+{% if include_auth -%}
+"""Refresh-token model for the rotating refresh-token auth scheme.
+
+The token itself is an opaque, server-issued 32-byte random string
+(``secrets.token_urlsafe(32)``) stored as the primary key. Lookup is
+O(1) on the PK so per-request validation stays cheap. Rotation works
+by inserting a new row with the same ``family_id`` and marking the
+inbound row as revoked. A refresh arriving with an already-revoked
+token in any family is treated as a replay attempt — the service
+revokes every other row sharing that ``family_id`` and forces re-auth.
+"""
+
+from datetime import UTC, datetime
+
+from sqlmodel import Field, SQLModel
+
+
+class RefreshToken(SQLModel, table=True):
+    """Server-side row backing one issued refresh token.
+
+    ``family_id`` groups all tokens that descend from a single original
+    sign-in. Rotation preserves the family; reuse detection revokes it.
+    """
+
+    __tablename__ = "refresh_token"
+
+    token: str = Field(primary_key=True, max_length=64)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    family_id: str = Field(index=True, max_length=36)
+    expires_at: datetime
+    revoked_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+{%- endif %}

@@ -5,12 +5,10 @@ from app.core.security import verify_token
 from app.models.user import User
 from app.services.auth.user_service import UserService
 from fastapi import HTTPException, status
-from sqlmodel.ext.asyncio.session import AsyncSession
 {% if include_auth_rbac %}
 from fastapi import Cookie, Depends
 from fastapi.security import OAuth2PasswordBearer
 
-from app.core.db import get_async_db
 from app.core.security import SESSION_COOKIE_NAME, VALID_ROLES
 {% endif %}
 
@@ -29,7 +27,9 @@ def _build_dev_user() -> User:
     )
 
 
-async def get_current_user_from_token(token: str | None, db: AsyncSession) -> User:
+async def get_current_user_from_token(
+    token: str | None, user_service: UserService
+) -> User:
     """Get current user from JWT token."""
     if not settings.AUTH_ENABLED:
         return _build_dev_user()
@@ -48,21 +48,12 @@ async def get_current_user_from_token(token: str | None, db: AsyncSession) -> Us
     if payload is None:
         raise credentials_exception
 
-    # Check if token has been revoked (graceful: skip if no jti present)
-    jti = payload.get("jti")
-    if jti is not None:
-        from app.services.auth.token_blacklist import token_blacklist
-
-        if token_blacklist.is_revoked(jti):
-            raise credentials_exception
-
     # Get user email from token
     email = payload.get("sub")
     if not isinstance(email, str) or email is None:
         raise credentials_exception
 
     # Get user from database
-    user_service = UserService(db)
     user = await user_service.get_user_by_email(email)
     if user is None:
         raise credentials_exception
@@ -96,17 +87,21 @@ def require_role(*required_roles: str):
         if role not in VALID_ROLES:
             raise ValueError(f"Invalid role: {role}. Valid roles: {VALID_ROLES}")
 
+    # Imported lazily to avoid a circular import:
+    # ``auth.deps`` imports ``get_current_user_from_token`` from this module.
+    from app.services.auth.deps import get_user_service
+
     async def dependency(
         bearer_token: str | None = Depends(_oauth2_scheme),
         aegis_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
-        db: AsyncSession = Depends(get_async_db),
+        user_service: UserService = Depends(get_user_service),
     ) -> User:
         if not settings.AUTH_ENABLED:
             return _build_dev_user()
         # Cookie wins (browser flows are the primary path); bearer is the
         # fallback for CLIs and tests. Mirrors ``get_session_token``.
         token = aegis_session or bearer_token
-        user = await get_current_user_from_token(token, db)
+        user = await get_current_user_from_token(token, user_service)
         if user.role not in required_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

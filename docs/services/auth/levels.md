@@ -154,7 +154,9 @@ Protects against brute-force attacks by locking accounts after repeated failed l
 
 ### Token Revocation / Logout
 
-`POST /auth/logout` invalidates the current JWT by adding its **JTI** (JWT ID) to an in-memory blacklist. Blacklisted tokens are automatically cleaned up after they expire.
+`POST /auth/logout` revokes the current refresh token (DB-backed) and drops both the `aegis_session` and `aegis_refresh` cookies. The short-lived access JWT (~15 min default) is left to expire naturally — there's no stateful blacklist.
+
+For mid-session token rotation, see [Refresh-Token Rotation](index.md#refresh-token-rotation): the frontend `APIClient` transparently calls `POST /auth/refresh` on any 401 and retries the original request, so users stay signed in across days without ever seeing a redirect to `/login`.
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/auth/logout \

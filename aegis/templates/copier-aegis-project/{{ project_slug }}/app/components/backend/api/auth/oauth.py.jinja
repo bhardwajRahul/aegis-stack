@@ -27,12 +27,13 @@ from typing import Any
 
 import httpx
 from app.core.db import get_async_db
-from app.services.auth.deps import get_user_service
+from app.services.auth.deps import get_refresh_service, get_user_service
 from app.core.config import settings
 from app.core.log import logger
-from app.core.security import create_access_token, set_session_cookie
+from app.core.security import create_access_token, set_refresh_cookie, set_session_cookie
 from app.models.user import OAuthProvider, User, UserOAuthIdentity
 from app.services.auth.deps import get_current_active_user
+from app.services.auth.refresh_service import RefreshService
 from app.services.auth.user_service import RegistrationClosed, UserService
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -131,16 +132,22 @@ def _safe_next(candidate: str | None) -> str:
     return candidate
 
 
-def _finalize_oauth_signin(request: Request, user: User) -> RedirectResponse:
-    """Shared post-OAuth tail: mint the JWT, set the session cookie, pop
-    the stashed ``next`` (if any) and 303 there. Provider-agnostic."""
+async def _finalize_oauth_signin(
+    request: Request,
+    user: User,
+    refresh_service: RefreshService,
+) -> RedirectResponse:
+    """Shared post-OAuth tail: mint access + refresh, set both cookies,
+    pop the stashed ``next`` (if any) and 303 there. Provider-agnostic."""
     jwt = create_access_token({"sub": user.email})
+    refresh_token = await refresh_service.mint(user.id)
     nxt = _safe_next(request.session.pop("oauth_next", ""))
     response = RedirectResponse(
         url=nxt or "/app",
         status_code=status.HTTP_303_SEE_OTHER,
     )
     set_session_cookie(response, jwt)
+    set_refresh_cookie(response, refresh_token)
     return response
 
 
@@ -164,6 +171,7 @@ async def github_start(request: Request, next: str = "") -> RedirectResponse:
 async def github_callback(
     request: Request,
     user_service: UserService = Depends(get_user_service),
+    refresh_service: RefreshService = Depends(get_refresh_service),
 ) -> RedirectResponse:
     """Exchange the code for a token and sign the user in."""
     _require_github_configured()
@@ -234,7 +242,7 @@ async def github_callback(
         return RedirectResponse(
             url="/login?oauth_error=signup_closed", status_code=302
         )
-    return _finalize_oauth_signin(request, user)
+    return await _finalize_oauth_signin(request, user, refresh_service)
 
 
 @router.get("/google/start")
@@ -253,6 +261,7 @@ async def google_start(request: Request, next: str = "") -> RedirectResponse:
 async def google_callback(
     request: Request,
     user_service: UserService = Depends(get_user_service),
+    refresh_service: RefreshService = Depends(get_refresh_service),
 ) -> RedirectResponse:
     """Exchange the code, parse the OIDC userinfo, link/create the user."""
     _require_google_configured()
@@ -294,7 +303,7 @@ async def google_callback(
         return RedirectResponse(
             url="/login?oauth_error=signup_closed", status_code=302
         )
-    return _finalize_oauth_signin(request, user)
+    return await _finalize_oauth_signin(request, user, refresh_service)
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,197 @@
+{% if insights_per_user -%}
+"""Owner-scoped project list with create / edit / delete affordances.
+
+Fetches ``GET /api/v1/insights/projects`` on entry. Empty result renders
+an inline "Create your first project" CTA composed from existing text +
+button primitives — no new wrapper controls.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import flet as ft
+
+from app.components.frontend.controls.buttons import (
+    ConfirmDialog,
+    IconAddButton,
+    IconDeleteButton,
+    PulseButton,
+)
+from app.components.frontend.controls.section_card import SectionCard
+from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
+from app.components.frontend.controls.text import (
+    BodyText,
+    DisplayText,
+    H3Text,
+    SecondaryText,
+)
+from app.components.frontend.controls.views.base import BaseView
+from app.components.frontend.core.routes import (
+    PROJECT_EDIT_ROUTE,
+    PROJECT_NEW_ROUTE,
+)
+from app.components.frontend.state.session_state import get_session_state
+from app.core.log import logger
+
+
+def _source_badges(project: dict[str, Any]) -> str:
+    """Compact one-line summary of which sources the project has configured."""
+    sources: list[str] = []
+    if project.get("github_owner") and project.get("github_repo"):
+        sources.append(f"github:{project['github_owner']}/{project['github_repo']}")
+    if project.get("pypi_package"):
+        sources.append(f"pypi:{project['pypi_package']}")
+    if project.get("plausible_site"):
+        sources.append(f"plausible:{project['plausible_site']}")
+    if project.get("reddit_subreddits"):
+        sources.append("reddit")
+    return " · ".join(sources) if sources else "no sources configured"
+
+
+class ProjectListView(BaseView):
+    """Routed view that lists all projects owned by the current user."""
+
+    def __init__(self, *, page: ft.Page, route: str) -> None:
+        super().__init__(page=page, route=route, scroll=ft.ScrollMode.AUTO)
+
+        self._add_button = IconAddButton(on_click_callable=self._goto_new)
+
+        self._body = ft.Column(
+            controls=[BodyText("Loading…")],
+            spacing=12,
+            tight=True,
+        )
+
+        self.controls = [
+            ft.Container(
+                content=ft.Column(
+                    controls=[
+                        DisplayText("Projects"),
+                        SecondaryText(
+                            "Each project gets its own GitHub / PyPI / Plausible / Reddit slice."
+                        ),
+                        ft.Container(height=16),
+                        SectionCard(
+                            title="Owned projects",
+                            body=self._body,
+                            actions=[self._add_button],
+                            body_padding=16,
+                        ),
+                    ],
+                    spacing=8,
+                    tight=True,
+                ),
+                padding=ft.padding.all(32),
+                width=720,
+            )
+        ]
+
+    # ---- lifecycle ----
+
+    async def on_enter(self, params: dict[str, Any]) -> None:
+        await self._reload()
+
+    async def on_refresh(self) -> None:
+        await self._reload()
+
+    # ---- data ----
+
+    async def _reload(self) -> None:
+        api = get_session_state(self.page).api_client
+        result = await api.get("/api/v1/insights/projects")
+        if not isinstance(result, list):
+            self._body.controls = [BodyText("Could not load projects.")]
+            self._body.update()
+            return
+        if not result:
+            self._body.controls = [self._build_empty_state()]
+            self._body.update()
+            return
+        self._body.controls = [self._build_row(p) for p in result]
+        self._body.update()
+
+    # ---- builders ----
+
+    def _build_empty_state(self) -> ft.Control:
+        return ft.Container(
+            content=ft.Column(
+                controls=[
+                    H3Text("No projects yet"),
+                    SecondaryText(
+                        "Track a GitHub repo, PyPI package, or Plausible site."
+                    ),
+                    ft.Container(height=12),
+                    PulseButton(
+                        text="Create a project",
+                        on_click_callable=self._goto_new,
+                    ),
+                ],
+                spacing=8,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                tight=True,
+            ),
+            alignment=ft.alignment.center,
+            padding=ft.padding.symmetric(vertical=32, horizontal=24),
+        )
+
+    def _build_row(self, project: dict[str, Any]) -> ft.Control:
+        slug = str(project.get("slug") or "")
+        name = str(project.get("name") or slug)
+
+        async def _edit() -> None:
+            self.page.go(f"{PROJECT_EDIT_ROUTE}?slug={slug}")
+
+        async def _delete() -> None:
+            await self._confirm_delete(slug, name)
+
+        return ft.Container(
+            content=ft.Row(
+                controls=[
+                    ft.Column(
+                        controls=[
+                            BodyText(name),
+                            SecondaryText(_source_badges(project)),
+                        ],
+                        spacing=2,
+                        tight=True,
+                        expand=True,
+                    ),
+                    PulseButton(text="Edit", on_click_callable=_edit, variant="muted"),
+                    IconDeleteButton(on_click_callable=_delete),
+                ],
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            padding=ft.padding.symmetric(vertical=8),
+            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
+        )
+
+    # ---- handlers ----
+
+    async def _goto_new(self) -> None:
+        self.page.go(PROJECT_NEW_ROUTE)
+
+    async def _confirm_delete(self, slug: str, name: str) -> None:
+        async def _do_delete() -> None:
+            api = get_session_state(self.page).api_client
+            status, _body = await api.request_with_status(
+                "DELETE", f"/api/v1/insights/projects/{slug}"
+            )
+            if status not in (200, 204):
+                logger.warning("projects.delete.failed", slug=slug, status=status)
+                ErrorSnackBar("Could not delete project.").launch(self.page)
+                return
+            SuccessSnackBar(f"Deleted {name}.").launch(self.page)
+            await self._reload()
+
+        ConfirmDialog(
+            page=self.page,
+            title="Delete project?",
+            message=(
+                f"Delete '{name}'? Its metrics, events, and goals will be removed."
+            ),
+            confirm_text="Delete",
+            destructive=True,
+            on_confirm=_do_delete,
+        ).show()
+{%- endif %}

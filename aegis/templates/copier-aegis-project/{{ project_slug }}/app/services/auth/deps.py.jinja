@@ -4,6 +4,7 @@ from app.core.db import get_async_db
 from app.core.security import SESSION_COOKIE_NAME
 from app.models.user import User
 from app.services.auth.auth_service import get_current_user_from_token
+from app.services.auth.refresh_service import RefreshService
 from app.services.auth.user_service import UserService
 {%- if include_auth_org %}
 from app.services.auth.invite_service import InviteService
@@ -31,19 +32,26 @@ async def get_session_token(
     return aegis_session or bearer_token
 
 
-async def get_current_active_user(
-    token: str | None = Depends(get_session_token),
-    db: AsyncSession = Depends(get_async_db),
-) -> User:
-    """Get the current authenticated user. Raises 401 if not authenticated."""
-    return await get_current_user_from_token(token, db)
-
-
 async def get_user_service(
     db: AsyncSession = Depends(get_async_db),
 ) -> UserService:
     """Provide a UserService instance."""
     return UserService(db)
+
+
+async def get_refresh_service(
+    db: AsyncSession = Depends(get_async_db),
+) -> RefreshService:
+    """Provide a RefreshService instance."""
+    return RefreshService(db)
+
+
+async def get_current_active_user(
+    token: str | None = Depends(get_session_token),
+    user_service: UserService = Depends(get_user_service),
+) -> User:
+    """Get the current authenticated user. Raises 401 if not authenticated."""
+    return await get_current_user_from_token(token, user_service)
 {%- if include_auth_org %}
 
 

@@ -78,7 +78,7 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 | Service | What you get | |
 |---|---|---|
 | **[AI](https://lbedner.github.io/aegis-stack/services/ai/)** | Conversational agents, RAG, model catalog, TTS and STT (PydanticAI / LangChain across 7 providers) | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Auth](https://lbedner.github.io/aegis-stack/services/auth/)** | JWT cookie sessions, GitHub/Google sign-in, RBAC, multi-tenant Organizations | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Auth](https://lbedner.github.io/aegis-stack/services/auth/)** | Persistent sessions with refresh-token rotation, GitHub/Google sign-in, RBAC, multi-tenant Organizations | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Blog](https://lbedner.github.io/aegis-stack/services/blog/)** | Markdown publishing with drafts, tags, and an Overseer editor | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Comms](https://lbedner.github.io/aegis-stack/services/comms/)** | Transactional email (Resend) + SMS / voice (Twilio) | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Insights](https://lbedner.github.io/aegis-stack/services/insights/)** | Adoption metrics across GitHub, PyPI, Plausible, Reddit | ![Optional](https://img.shields.io/badge/-optional-blue) |

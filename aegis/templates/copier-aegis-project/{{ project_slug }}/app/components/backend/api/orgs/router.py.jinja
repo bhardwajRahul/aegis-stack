@@ -4,14 +4,13 @@
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.audit import get_audit
-from app.core.db import get_async_db
 from app.services.auth.deps import (
     get_invite_service,
     get_membership_service,
     get_org_service,
+    get_user_service,
 )
 from app.components.backend.api.utils import (
     raise_bad_request,
@@ -46,6 +45,7 @@ from app.services.auth.deps import get_session_token
 from app.services.auth.invite_service import InviteService
 from app.services.auth.membership_service import MembershipService
 from app.services.auth.org_service import OrgService
+from app.services.auth.user_service import UserService
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
 
@@ -54,10 +54,10 @@ router = APIRouter(prefix="/orgs", tags=["organizations"])
 
 async def _get_current_user(
     token: str | None = Depends(get_session_token),
-    db: AsyncSession = Depends(get_async_db),
+    user_service: UserService = Depends(get_user_service),
 ):
     """Get authenticated user."""
-    return await get_current_user_from_token(token, db)
+    return await get_current_user_from_token(token, user_service)
 
 
 async def _require_org_role(

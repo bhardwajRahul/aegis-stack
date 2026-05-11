@@ -258,6 +258,100 @@ class TestAPIClient:
         )
 
     @pytest.mark.asyncio
+    async def test_401_refreshes_and_retries(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        """First call 401s, refresh succeeds, retry returns 200.
+        ``on_unauthorized`` must NOT fire — the user sees a clean 200."""
+        import httpx
+
+        called: list[bool] = []
+
+        async def on_unauthorized() -> None:
+            called.append(True)
+
+        client = make_client(on_unauthorized=on_unauthorized)
+
+        # The mock sees three calls in order: original (401), refresh (200),
+        # retry (200). We script the responses by side_effect.
+        original_401 = _mock_response(
+            401,
+            raise_status=httpx.HTTPStatusError(
+                "401", request=MagicMock(), response=MagicMock(status_code=401)
+            ),
+        )
+        refresh_ok = _mock_response(200, {"access_token": "new"})
+        retry_ok = _mock_response(200, {"data": "ok"})
+        client._client.request = AsyncMock(  # type: ignore[method-assign]
+            side_effect=[original_401, refresh_ok, retry_ok],
+        )
+
+        result = await client.get("/api/test")
+
+        assert result == {"data": "ok"}
+        assert called == []  # refresh succeeded, no logout fired
+        assert client._client.request.call_count == 3
+        # The middle call targeted /auth/refresh.
+        refresh_call_args = client._client.request.call_args_list[1]
+        assert "/api/v1/auth/refresh" in refresh_call_args.args[1]
+
+    @pytest.mark.asyncio
+    async def test_401_refresh_fails_fires_on_unauthorized(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        """If refresh itself returns non-200, fall back to the existing
+        ``on_unauthorized`` path — no infinite retry loop."""
+        import httpx
+
+        called: list[bool] = []
+
+        async def on_unauthorized() -> None:
+            called.append(True)
+
+        client = make_client(on_unauthorized=on_unauthorized)
+
+        original_401 = _mock_response(
+            401,
+            raise_status=httpx.HTTPStatusError(
+                "401", request=MagicMock(), response=MagicMock(status_code=401)
+            ),
+        )
+        # Refresh also 401s. _try_refresh reads status_code (no raise).
+        refresh_401 = _mock_response(401)
+        client._client.request = AsyncMock(  # type: ignore[method-assign]
+            side_effect=[original_401, refresh_401],
+        )
+
+        result = await client.get("/api/test")
+
+        assert result is None
+        assert called == [True]
+
+    @pytest.mark.asyncio
+    async def test_refresh_endpoint_401_does_not_recurse(
+        self, make_client: Callable[..., APIClient]
+    ) -> None:
+        """A direct ``post('/api/v1/auth/refresh')`` that 401s must not try
+        to refresh itself — that would loop forever. The retry layer is
+        gated on the endpoint."""
+        import httpx
+
+        client = make_client()
+        response = _mock_response(
+            401,
+            raise_status=httpx.HTTPStatusError(
+                "401", request=MagicMock(), response=MagicMock(status_code=401)
+            ),
+        )
+        client._client.request = AsyncMock(return_value=response)  # type: ignore[method-assign]
+
+        result = await client.post("/api/v1/auth/refresh")
+
+        assert result is None
+        # Exactly one request — no refresh-and-retry of itself.
+        assert client._client.request.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_post_form_sends_form_encoded_body(
         self, make_client: Callable[..., APIClient]
     ) -> None:

@@ -25,6 +25,10 @@ The **Authentication Service** provides complete user management and JWT-based a
 - **HttpOnly session cookies** - Browser flows ride on the `aegis_session`
   cookie set by the backend; the token never has to be touched by
   frontend code
+- **Persistent sessions via refresh-token rotation** - Short-lived access
+  tokens (15 min default) paired with long-lived `aegis_refresh` cookies
+  (14 day default), rotated on every use with family-based reuse
+  detection. The frontend `APIClient` refreshes transparently on 401
 - **Sign-in and registration views out of the box** - The Overseer ships
   with `/login` and `/register` pages wired to the auth API, so the
   generated app is sign-in-ready the moment it boots
@@ -43,12 +47,14 @@ The **Authentication Service** provides complete user management and JWT-based a
 ```mermaid
 graph TB
     subgraph "Authentication Service Stack"
-        AuthService[🔐 Auth Service<br/>JWT + User Management]
+        AuthService[🔐 Auth Service<br/>JWT + Refresh + User Management]
 
         subgraph "API Endpoints"
             Register["POST /auth/register<br/>Create new user"]
-            Login["POST /auth/token<br/>Get access token"]
+            Login["POST /auth/token<br/>Mint access + refresh"]
+            Refresh["POST /auth/refresh<br/>Rotate refresh, mint access"]
             Profile["GET /auth/me<br/>Current user profile"]
+            Logout["POST /auth/logout<br/>Revoke refresh, clear cookies"]
         end
 
         subgraph "Required Components"
@@ -57,42 +63,55 @@ graph TB
         end
 
         subgraph "Security Layer"
-            JWT[🔑 JWT Tokens<br/>python-jose]
+            JWT[🔑 Access JWT<br/>short-lived, stateless<br/>python-jose]
+            RefreshSvc[♻️ RefreshService<br/>rotation + reuse detection<br/>family-based revocation]
             Passwords[🔒 Password Hashing<br/>passlib + bcrypt]
             OAuth2[📋 OAuth2 Flow<br/>FastAPI Security]
         end
 
         subgraph "Database Schema"
-            Users["👥 users table<br/>id, email, hashed_password<br/>created_at, updated_at"]
+            Users["👥 user table<br/>id, email, hashed_password<br/>created_at, updated_at"]
+            RefreshTokens["♻️ refresh_token table<br/>token (PK), user_id, family_id<br/>expires_at, revoked_at"]
         end
     end
 
     AuthService --> Register
     AuthService --> Login
+    AuthService --> Refresh
     AuthService --> Profile
+    AuthService --> Logout
 
     Register --> Backend
     Login --> Backend
+    Refresh --> Backend
     Profile --> Backend
+    Logout --> Backend
 
     Backend --> Database
 
     AuthService --> JWT
+    AuthService --> RefreshSvc
     AuthService --> Passwords
     AuthService --> OAuth2
 
+    RefreshSvc --> RefreshTokens
     Database --> Users
+    Database --> RefreshTokens
 
     style AuthService fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
     style Register fill:#f1f8e9,stroke:#388e3c,stroke-width:2px
     style Login fill:#f1f8e9,stroke:#388e3c,stroke-width:2px
+    style Refresh fill:#f1f8e9,stroke:#388e3c,stroke-width:2px
     style Profile fill:#f1f8e9,stroke:#388e3c,stroke-width:2px
+    style Logout fill:#f1f8e9,stroke:#388e3c,stroke-width:2px
     style Backend fill:#e1f5fe,stroke:#1976d2,stroke-width:2px
     style Database fill:#fff3e0,stroke:#f57c00,stroke-width:2px
     style JWT fill:#fff8e1,stroke:#ffa000,stroke-width:2px
+    style RefreshSvc fill:#fff8e1,stroke:#ffa000,stroke-width:2px
     style Passwords fill:#fff8e1,stroke:#ffa000,stroke-width:2px
     style OAuth2 fill:#fff8e1,stroke:#ffa000,stroke-width:2px
     style Users fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style RefreshTokens fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
 ```
 
 ## Authentication Flow
@@ -149,6 +168,36 @@ sequenceDiagram
     F-->>U: Show user data
 ```
 
+### Refresh-Token Rotation
+
+When the short-lived access JWT expires mid-session, the frontend `APIClient` quietly rotates the refresh token and retries — the user sees a 200, not a redirect to `/login`.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as APIClient
+    participant A as Auth API
+    participant R as RefreshService
+    participant D as Database
+
+    U->>C: Make API call
+    C->>A: GET /api/v1/things<br/>(aegis_session expired)
+    A-->>C: 401 Unauthorized
+    C->>A: POST /auth/refresh<br/>(aegis_refresh cookie)
+    A->>R: rotate(refresh_token)
+    R->>D: Lookup row by PK
+    D-->>R: Row found, not revoked
+    R->>D: Mark inbound revoked,<br/>insert successor in same family
+    D-->>R: Successor row
+    R-->>A: (new_token, user_id)
+    A-->>C: 200 + Set-Cookie<br/>(aegis_session, aegis_refresh)
+    C->>A: Retry GET /api/v1/things
+    A-->>C: 200 OK + payload
+    C-->>U: Render result
+
+    Note over A,D: Reuse path: if a refresh arrives with<br/>an already-revoked token, RefreshService<br/>revokes the entire family_id and 401s.
+```
+
 ## Quick Start
 
 ### 1. Generate Project with Auth
@@ -185,15 +234,23 @@ curl -X GET http://localhost:8000/auth/me \
 
 ## Configuration
 
-### JWT Settings
+### JWT + Refresh-Token Settings
 
-Configure JWT behavior in your environment:
+Configure token behavior in your environment:
 
 ```bash
 # .env
 JWT_SECRET_KEY=your-super-secret-key-here-make-it-long-and-random
 JWT_ALGORITHM=HS256
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# Access token: short-lived JWT verified statelessly on every request.
+ACCESS_TOKEN_EXPIRE_MINUTES=15
+
+# Refresh token: long-lived opaque DB row, rotated on every use.
+# Family-based reuse detection: replaying a rotated token revokes the
+# whole chain. The browser-side APIClient handles refresh transparently
+# on 401, so users see a 200, not a redirect to /login.
+REFRESH_TOKEN_EXPIRE_DAYS=14
 ```
 
 ### Password Security
