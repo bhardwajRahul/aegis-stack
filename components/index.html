@@ -760,15 +760,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#available-components" class="md-nav__link">
-    <span class="md-ellipsis">
-      Available Components
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -2900,15 +2891,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#available-components" class="md-nav__link">
-    <span class="md-ellipsis">
-      Available Components
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -3015,85 +2997,12 @@
 <p><strong>Multi-Container Architecture:</strong> Each component runs in its own Docker container (via docker-compose) for isolation and maintainability.</p>
 <p><strong>Backend + Frontend Container:</strong> FastAPI serves the Flet UI as an integrated web app - this is an architectural choice, not a limitation.</p>
 <p><strong>Independent Scaling:</strong> Each service can be scaled separately based on demand using Docker Compose replicas or orchestration tools.</p>
-<h2 id="available-components">Available Components</h2>
-<table>
-<thead>
-<tr>
-<th>Component</th>
-<th>Purpose</th>
-<th>Implementation</th>
-<th>Status</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Core</strong> (Backend + Overseer + CLI)</td>
-<td>API + UI + Management</td>
-<td>FastAPI + Flet + Typer</td>
-<td>✅ Always included</td>
-</tr>
-<tr>
-<td><strong>Database</strong></td>
-<td>Data persistence, ORM</td>
-<td>SQLite or PostgreSQL + SQLModel</td>
-<td>✅ Available</td>
-</tr>
-<tr>
-<td><strong>Inference</strong></td>
-<td>Local AI model serving</td>
-<td>Ollama (Docker or external)</td>
-<td>✅ Available</td>
-</tr>
-<tr>
-<td><strong>Cache</strong></td>
-<td>Message broker, pub/sub</td>
-<td>Redis</td>
-<td>✅ Available</td>
-</tr>
-<tr>
-<td><strong>Worker</strong></td>
-<td>Background task queues</td>
-<td>arq, Dramatiq, or TaskIQ</td>
-<td>✅ Available</td>
-</tr>
-<tr>
-<td><strong>Scheduler</strong></td>
-<td>Background tasks, cron jobs</td>
-<td>APScheduler</td>
-<td>✅ Available</td>
-</tr>
-<tr>
-<td><strong>Ingress</strong></td>
-<td>Reverse proxy, TLS, routing</td>
-<td>Traefik v3</td>
-<td>✅ Available</td>
-</tr>
-<tr>
-<td><strong>Observability</strong></td>
-<td>Tracing, metrics, logging</td>
-<td>Pydantic Logfire</td>
-<td>✅ Available</td>
-</tr>
-</tbody>
-</table>
 <div class="admonition tip">
 <p class="admonition-title">Component Composition</p>
 <p>Components can be combined to enable different capabilities. For detailed patterns on how components integrate with services and each other, see the <strong><a href="../integration-patterns/">Integration Patterns Reference</a></strong>.</p>
 </div>
 <p><a class="glightbox" href="../images/voltron.gif" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Components forming your complete stack" src="../images/voltron.gif" /></a></p>
 <p><strong>Individual components combine to form your complete application.</strong> Database + Scheduler + Worker + Auth + AI = A unified, production-ready system.</p>
-<hr />
-<p><strong>Next:</strong> Choose your first component combination and see the integration in action:</p>
-<ul>
-<li><strong><a href="database/">Database Component</a></strong> - SQLite or PostgreSQL with SQLModel ORM</li>
-<li><strong><a href="scheduler/">Scheduler Component</a></strong> - Background tasks and cron jobs</li>
-<li><strong><a href="worker/">Worker Component</a></strong> - Background task processing and queues</li>
-<li><strong><a href="ingress/">Ingress Component</a></strong> - Traefik reverse proxy and TLS</li>
-<li><strong><a href="observability/">Observability Component</a></strong> - Pydantic Logfire tracing and metrics</li>
-<li><strong><a href="../services/auth/">Auth Service</a></strong> - User authentication with JWT</li>
-<li><strong><a href="../services/ai/">AI Service</a></strong> - Multi-provider AI conversations</li>
-<li><strong><a href="../services/comms/">Comms Service</a></strong> - Email, SMS, and voice</li>
-</ul>
 
 
 
