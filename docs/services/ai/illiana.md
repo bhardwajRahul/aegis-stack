@@ -20,18 +20,18 @@ Illiana receives live data injected into her system prompt before every response
 ```mermaid
 graph TB
     subgraph "AI Service"
-        Illiana[Illiana<br/>System-Aware AI Assistant]
+        Illiana["Illiana<br/>System-Aware AI Assistant"]
 
         subgraph "Interfaces"
-            CLI[CLI Interface<br/>ai chat, llm, rag]
-            API[REST API<br/>/ai, /llm, /rag, /voice]
+            CLI["CLI Interface<br/>ai chat, llm, rag"]
+            API["REST API<br/>/ai, /llm, /rag, /voice"]
         end
 
         subgraph "Capabilities"
-            Catalog[LLM Catalog<br/>~2000 models]
-            RAG[RAG Service<br/>ChromaDB + Embeddings]
-            Voice[Voice<br/>TTS + STT]
-            Usage[Cost Tracking<br/>Usage Analytics]
+            Catalog["LLM Catalog<br/>~2000 models"]
+            RAG["RAG Service<br/>ChromaDB + Embeddings"]
+            Voice["Voice<br/>TTS + STT"]
+            Usage["Cost Tracking<br/>Usage Analytics"]
         end
 
         subgraph "Context Injection"
@@ -41,11 +41,11 @@ graph TB
             CatalogCtx[Catalog Context]
         end
 
-        Providers[Providers<br/>OpenAI, Anthropic, Google<br/>Groq, Mistral, Cohere<br/>Ollama, PUBLIC]
-        Conv[Conversations<br/>Memory / SQLite / PostgreSQL]
+        Providers["Providers<br/>OpenAI, Anthropic, Google<br/>Groq, Mistral, Cohere<br/>Ollama, PUBLIC"]
+        Conv["Conversations<br/>Memory / SQLite / PostgreSQL"]
     end
 
-    Backend[Backend Component<br/>FastAPI]
+    Backend["Backend Component<br/>FastAPI"]
 
     Illiana --> CLI
     Illiana --> API
@@ -60,16 +60,6 @@ graph TB
     CatalogCtx --> Illiana
     API --> Backend
 
-    style Illiana fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
-    style CLI fill:#e1f5fe,stroke:#1976d2,stroke-width:2px
-    style API fill:#e1f5fe,stroke:#1976d2,stroke-width:2px
-    style Providers fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    style Conv fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    style Catalog fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
-    style RAG fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
-    style Voice fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
-    style Usage fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
-    style Backend fill:#e1f5fe,stroke:#1976d2,stroke-width:2px
 ```
 
 ## Getting Started

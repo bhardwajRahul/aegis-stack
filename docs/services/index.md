@@ -11,21 +11,21 @@ Services are **business-level functionality** that your application provides to 
 ```mermaid
 graph TB
     subgraph "Services Layer (Business Logic)"
-        Auth[🔐 Auth Service<br/>JWT + User Management<br/>Registration, Login, Profiles]
-        AI[🤖 AI Service<br/>PydanticAI Integration<br/>Multi-Provider Chat]
-        Blog[📝 Blog Service<br/>Markdown Publishing<br/>Drafts, Tags, SEO]
-        Comms[📧 Comms Service<br/>Email, SMS, Voice<br/>Resend + Twilio]
-        Payment[💳 Payment Service<br/>Stripe Integration<br/>Checkout, Subscriptions]
-        Insights[📊 Insights Service<br/>Adoption Metrics<br/>GitHub, PyPI, Plausible]
+        Auth["🔐 Auth Service<br/>JWT + User Management<br/>Registration, Login, Profiles"]
+        AI["🤖 AI Service<br/>PydanticAI Integration<br/>Multi-Provider Chat"]
+        Blog["📝 Blog Service<br/>Markdown Publishing<br/>Drafts, Tags, SEO"]
+        Comms["📧 Comms Service<br/>Email, SMS, Voice<br/>Resend + Twilio"]
+        Payment["💳 Payment Service<br/>Stripe Integration<br/>Checkout, Subscriptions"]
+        Insights["📊 Insights Service<br/>Adoption Metrics<br/>GitHub, PyPI, Plausible"]
     end
 
     subgraph "Components Layer (Infrastructure)"
-        Backend[⚡ Backend<br/>FastAPI Routes]
-        Database[💾 Database<br/>SQLite / PostgreSQL]
-        Worker[🔄 Worker<br/>arq / Dramatiq / TaskIQ]
-        Scheduler[⏰ Scheduler<br/>APScheduler]
-        Observability[🔍 Observability<br/>Logfire]
-        Cache[🗄️ Cache<br/>Redis Sessions<br/>🚧 Coming Soon]
+        Backend["⚡ Backend<br/>FastAPI Routes"]
+        Database["💾 Database<br/>SQLite / PostgreSQL"]
+        Worker["🔄 Worker<br/>arq / Dramatiq / TaskIQ"]
+        Scheduler["⏰ Scheduler<br/>APScheduler"]
+        Observability["🔍 Observability<br/>Logfire"]
+        Cache["🗄️ Cache<br/>Redis Sessions<br/>🚧 Coming Soon"]
     end
 
     Auth --> Backend
@@ -39,17 +39,6 @@ graph TB
     Insights --> Backend
     Insights --> Database
 
-    style Auth fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
-    style AI fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
-    style Blog fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
-    style Comms fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
-    style Payment fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
-    style Insights fill:#fff3e0,stroke:#f57c00,stroke-width:2px,stroke-dasharray: 5 5
-    style Backend fill:#e1f5fe,stroke:#1976d2,stroke-width:2px
-    style Database fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    style Worker fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    style Scheduler fill:#ffe0b2,stroke:#ef6c00,stroke-width:2px
-    style Cache fill:#f0f0f0,stroke:#757575,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
 !!! tip "Architectural Guidance"
@@ -85,13 +74,13 @@ aegis init full-app --services auth,ai --components database,worker --no-interac
 ```mermaid
 graph LR
     subgraph "User Selection"
-        UserChoice[aegis init app<br/>--services auth]
+        UserChoice["aegis init app<br/>--services auth"]
     end
 
     subgraph "Auto-Resolution"
-        CoreComponents[Backend + Frontend<br/>Always Included]
+        CoreComponents["Backend + Frontend<br/>Always Included"]
         AuthSvc[Auth Service]
-        DatabaseComp[Database Component<br/>Auto-added by auth]
+        DatabaseComp["Database Component<br/>Auto-added by auth"]
     end
 
     subgraph "Generated Project"
@@ -114,16 +103,6 @@ graph LR
     CoreComponents --> API
     CoreComponents --> UI
 
-    style UserChoice fill:#e3f2fd
-    style CoreComponents fill:#e8f4fd
-    style AuthSvc fill:#e8f5e8
-    style DatabaseComp fill:#fff3e0
-    style AuthAPI fill:#f1f8e9
-    style UserModel fill:#f1f8e9
-    style JWT fill:#f1f8e9
-    style DB fill:#fef7e0
-    style API fill:#e8f4fd
-    style UI fill:#f3e5f5
 ```
 
 ## Service Categories
@@ -131,38 +110,29 @@ graph LR
 ```mermaid
 graph TB
     subgraph "🔐 Authentication Services"
-        AuthJWT[auth<br/>JWT + User Management]
-        AuthOAuth[oauth<br/>🚧 Future: Social Login]
-        AuthSAML[saml<br/>🚧 Future: Enterprise SSO]
+        AuthJWT["auth<br/>JWT + User Management"]
+        AuthOAuth["oauth<br/>🚧 Future: Social Login"]
+        AuthSAML["saml<br/>🚧 Future: Enterprise SSO"]
     end
 
     subgraph "🤖 AI Services"
-        AIPydantic[ai<br/>PydanticAI Multi-Provider]
-        AILangChain[ai_langchain<br/>🚧 Future: LangChain]
+        AIPydantic["ai<br/>PydanticAI Multi-Provider"]
+        AILangChain["ai_langchain<br/>🚧 Future: LangChain"]
     end
 
     subgraph "📧 Notification Services"
-        CommsService[comms<br/>Email, SMS, Voice]
-        Push[push<br/>🚧 Future: Push Notifications]
+        CommsService["comms<br/>Email, SMS, Voice"]
+        Push["push<br/>🚧 Future: Push Notifications"]
     end
 
     subgraph "📊 Analytics Services"
-        InsightsService[insights<br/>GitHub, PyPI, Plausible, Reddit]
+        InsightsService["insights<br/>GitHub, PyPI, Plausible, Reddit"]
     end
 
     subgraph "📝 Content Services"
-        BlogService[blog<br/>Markdown Posts + Tags]
+        BlogService["blog<br/>Markdown Posts + Tags"]
     end
 
-    style AuthJWT fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
-    style AuthOAuth fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
-    style AuthSAML fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
-    style AIPydantic fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
-    style AILangChain fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
-    style CommsService fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
-    style Push fill:#f0f0f0,stroke:#757575,stroke-dasharray: 5 5
-    style InsightsService fill:#fff3e0,stroke:#f57c00,stroke-width:2px,stroke-dasharray: 5 5
-    style BlogService fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
 ```
 
 ## Service Development Patterns
@@ -192,15 +162,15 @@ app/
 graph TB
     subgraph "Service Integration"
         ServiceAPI["Service API Routes<br/>Auth, Payment endpoints"]
-        ServiceLogic[Service Business Logic<br/>AuthService, PaymentService]
-        ServiceModels[Service Data Models<br/>User, Transaction]
-        ServiceSecurity[Service Security<br/>JWT, OAuth, API Keys]
+        ServiceLogic["Service Business Logic<br/>AuthService, PaymentService"]
+        ServiceModels["Service Data Models<br/>User, Transaction"]
+        ServiceSecurity["Service Security<br/>JWT, OAuth, API Keys"]
     end
 
     subgraph "Component Integration"
-        Backend[Backend Component<br/>Route Registration]
-        Database[Database Component<br/>Model Registration]
-        Worker[Worker Component<br/>Background Tasks]
+        Backend["Backend Component<br/>Route Registration"]
+        Database["Database Component<br/>Model Registration"]
+        Worker["Worker Component<br/>Background Tasks"]
     end
 
     ServiceAPI --> Backend
@@ -208,13 +178,6 @@ graph TB
     ServiceLogic --> Worker
     ServiceSecurity --> Backend
 
-    style ServiceAPI fill:#e8f5e8
-    style ServiceLogic fill:#e8f5e8
-    style ServiceModels fill:#e8f5e8
-    style ServiceSecurity fill:#e8f5e8
-    style Backend fill:#e1f5fe
-    style Database fill:#fff3e0
-    style Worker fill:#f3e5f5
 ```
 
 ## CLI Commands

@@ -25,18 +25,18 @@ For complete workflows with real-world examples, see **[Evolving Your Stack →]
 ```mermaid
 graph TB
     subgraph "Always Included"
-        API[FastAPI Backend<br/>REST API + Health]
-        Frontend[Flet Frontend<br/>Cross-platform UI]
-        CLI[CLI Commands<br/>Management Interface]
+        API["FastAPI Backend<br/>REST API + Health"]
+        Frontend["Flet Frontend<br/>Cross-platform UI"]
+        CLI["CLI Commands<br/>Management Interface"]
     end
     
     subgraph "Optional Infrastructure"
-        Scheduler[Scheduler<br/>APScheduler Jobs]
-        Database[Database<br/>SQLite / PostgreSQL]
-        Worker[Worker Queues<br/>arq / Dramatiq / TaskIQ]
-        Ingress[Ingress<br/>Traefik Proxy]
-        Observability[Observability<br/>Logfire]
-        Cache[Cache Layer<br/>Redis Sessions]
+        Scheduler["Scheduler<br/>APScheduler Jobs"]
+        Database["Database<br/>SQLite / PostgreSQL"]
+        Worker["Worker Queues<br/>arq / Dramatiq / TaskIQ"]
+        Ingress["Ingress<br/>Traefik Proxy"]
+        Observability["Observability<br/>Logfire"]
+        Cache["Cache Layer<br/>Redis Sessions"]
     end
     
     API --> Frontend
@@ -45,14 +45,6 @@ graph TB
     Scheduler -.->|persistence| Database
     Worker -.->|requires| Cache
     Scheduler -.->|backup job| Database
-    
-    style API fill:#e8f5e8
-    style Frontend fill:#fff3e0  
-    style CLI fill:#e1f5fe
-    style Scheduler fill:#f3e5f5
-    style Database fill:#f3e5f5
-    style Worker fill:#e8f5e8
-    style Ingress fill:#e1f5fe
 ```
 
 ## Component Deployment
@@ -62,11 +54,11 @@ Understanding how components deploy and scale is crucial for architectural decis
 ```mermaid
 graph TB
     subgraph "Multi-Container Architecture"
-        A0[Ingress<br/>Traefik Proxy]
-        A1[Webserver<br/>Backend + Frontend]
-        A2[Scheduler<br/>Background Jobs]
-        A3[Worker Pool<br/>Task Processing]
-        A4[Infrastructure<br/>Redis + Database]
+        A0["Ingress<br/>Traefik Proxy"]
+        A1["Webserver<br/>Backend + Frontend"]
+        A2["Scheduler<br/>Background Jobs"]
+        A3["Worker Pool<br/>Task Processing"]
+        A4["Infrastructure<br/>Redis + Database"]
     end
 
     subgraph "Independent Scaling"
@@ -82,17 +74,6 @@ graph TB
     A2 --> B2
     A3 --> B3
     A4 --> B4
-
-    style A0 fill:#e1f5fe
-    style A1 fill:#e8f5e8
-    style A2 fill:#fff3e0
-    style A3 fill:#f3e5f5
-    style A4 fill:#e1f5fe
-    style B0 fill:#e1f5fe
-    style B1 fill:#e8f5e8
-    style B2 fill:#fff3e0
-    style B3 fill:#f3e5f5
-    style B4 fill:#e1f5fe
 ```
 
 **Multi-Container Architecture:** Each component runs in its own Docker container (via docker-compose) for isolation and maintainability.

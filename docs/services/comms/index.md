@@ -30,22 +30,22 @@ The **Communications Service** provides email, SMS, and voice call capabilities 
 ```mermaid
 graph TB
     subgraph "Communications Service"
-        CommsService[📧 Comms Service<br/>Email, SMS, Voice]
+        CommsService["📧 Comms Service<br/>Email, SMS, Voice"]
 
-        CLI[💻 CLI Interface<br/>comms email, sms, call]
-        API[🌐 REST API<br/>/comms/email, /comms/sms, /comms/call]
+        CLI["💻 CLI Interface<br/>comms email, sms, call"]
+        API["🌐 REST API<br/>/comms/email, /comms/sms, /comms/call"]
 
         subgraph "Providers"
-            Resend[📨 Resend<br/>Email API]
-            Twilio[📱 Twilio<br/>SMS & Voice]
+            Resend["📨 Resend<br/>Email API"]
+            Twilio["📱 Twilio<br/>SMS & Voice"]
         end
     end
 
-    Backend[⚡ Backend Component<br/>FastAPI]
+    Backend["⚡ Backend Component<br/>FastAPI"]
 
     subgraph "Worker Component"
-        ArqQueues[📋 arq Queues<br/>Background Jobs]
-        Redis[(🔴 Redis<br/>Queue Storage)]
+        ArqQueues["📋 arq Queues<br/>Background Jobs"]
+        Redis[("🔴 Redis<br/>Queue Storage")]
     end
 
     CommsService --> CLI
@@ -56,14 +56,6 @@ graph TB
     CommsService -.->|async jobs| ArqQueues
     ArqQueues --> Redis
 
-    style CommsService fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
-    style CLI fill:#e1f5fe,stroke:#1976d2,stroke-width:2px
-    style API fill:#e1f5fe,stroke:#1976d2,stroke-width:2px
-    style Resend fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    style Twilio fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    style Backend fill:#e1f5fe,stroke:#1976d2,stroke-width:2px
-    style ArqQueues fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    style Redis fill:#ffebee,stroke:#c62828,stroke-width:2px
 ```
 
 ## Quick Start

@@ -263,6 +263,13 @@ SERVICES: dict[str, ServiceSpec] = {
                 # entries above so disabling auth removes them).
                 "app/components/frontend/auth",
                 "app/components/frontend/controls/auth",
+                # Entirely-gated stubs (templates wrapped in
+                # ``{% if include_auth %}``). Removing them at init means a
+                # later ``aegis add-service auth`` writes fresh content
+                # instead of seeing empty files and bailing — see #686.
+                "app/models/refresh_token.py",
+                "tests/components/test_frontend_auth_session.py",
+                "tests/services/test_refresh_service.py",
             ],
             # Auth org-level cleanup (cleanup_components lines 503-514) is
             # inline because it gates on "auth enabled AND auth_org off",

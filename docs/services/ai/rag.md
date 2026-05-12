@@ -47,8 +47,6 @@ graph LR
     ChromaDB --> Results[Ranked Results]
     Results --> Illiana[Illiana Prompt]
 
-    style ChromaDB fill:#e8f5e8,stroke:#2e7d32
-    style Illiana fill:#f3e5f5,stroke:#7b1fa2
 ```
 
 ### Pipeline

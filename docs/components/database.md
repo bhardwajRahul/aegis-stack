@@ -41,8 +41,6 @@ Choose your database based on your deployment needs:
     - Cross-container access challenges
     - Limited concurrency
 
-    **→ [Complete SQLite Implementation Guide](database/sqlite.md)**
-
 === "PostgreSQL"
 
     **Server-based • Production-ready • High concurrency**
@@ -70,8 +68,6 @@ Choose your database based on your deployment needs:
     - PostgreSQL service (via Docker Compose)
     - Network configuration
     - Credentials management
-
-    **→ [Complete PostgreSQL Implementation Guide](database/postgresql.md)**
 
 ## Choosing a Database
 
@@ -182,7 +178,5 @@ make health-detailed
 
 ## Next Steps
 
-- **[SQLite Implementation Guide](database/sqlite.md)** - File-based database setup and usage
-- **[PostgreSQL Implementation Guide](database/postgresql.md)** - Server-based database setup and usage
 - **[SQLModel Documentation](https://sqlmodel.tiangolo.com/)** - Complete ORM capabilities
 - **[Component Overview](./index.md)** - Understanding Aegis Stack's component architecture

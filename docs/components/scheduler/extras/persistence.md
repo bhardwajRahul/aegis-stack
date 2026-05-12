@@ -34,11 +34,11 @@ Advanced job persistence and monitoring capabilities for the scheduler component
 ```mermaid
 graph TB
     subgraph "Persistent Scheduler Architecture"
-        API[FastAPI Backend<br/>Port 8000]
-        Scheduler[Scheduler Service<br/>Background Jobs]
-        Database[(SQLite Database<br/>Job Persistence)]
-        Jobs[(Job Queue<br/>Persistent)]
-        Backup[Backup Job<br/>Daily at 2 AM]
+        API["FastAPI Backend<br/>Port 8000"]
+        Scheduler["Scheduler Component<br/>Background Jobs"]
+        Database[("SQLite Database<br/>Job Persistence")]
+        Jobs[("Job Queue<br/>Persistent")]
+        Backup["Backup Job<br/>Daily at 2 AM"]
     end
     
     API -.-> Scheduler
@@ -47,9 +47,6 @@ graph TB
     Jobs --> Backup
     Backup --> Database
     
-    style Scheduler fill:#e8f5e8
-    style Database fill:#f3e5f5
-    style Backup fill:#e1f5fe
 ```
 
 ## Automatic Database Integration

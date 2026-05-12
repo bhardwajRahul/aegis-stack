@@ -34,18 +34,18 @@ Payment processing with Stripe: checkout sessions, subscriptions, webhooks, and 
 ```mermaid
 graph TB
     subgraph "Payment Service"
-        PaymentService[Payment Service<br/>Checkout, Subscriptions, Refunds]
+        PaymentService["Payment Service<br/>Checkout, Subscriptions, Refunds"]
 
-        CLI[CLI Interface<br/>payment status, transactions, webhook]
-        API[REST API<br/>/api/v1/payment/*]
+        CLI["CLI Interface<br/>payment status, transactions, webhook"]
+        API["REST API<br/>/api/v1/payment/*"]
 
         subgraph "Providers"
-            Stripe[Stripe<br/>Hosted Checkout + API]
+            Stripe["Stripe<br/>Hosted Checkout + API"]
         end
     end
 
-    Backend[Backend Component<br/>FastAPI]
-    Database[(Database<br/>transactions, subscriptions,<br/>customers, providers)]
+    Backend["Backend Component<br/>FastAPI"]
+    Database[("Database<br/>transactions, subscriptions,<br/>customers, providers")]
 
     PaymentService --> CLI
     PaymentService --> API
@@ -54,10 +54,6 @@ graph TB
     PaymentService --> Database
     Stripe -.->|webhook events| API
 
-    style PaymentService fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
-    style CLI fill:#e1f5fe,stroke:#1976d2,stroke-width:2px
-    style API fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    style Stripe fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
 ```
 
 ## Provider Pattern

@@ -46,22 +46,22 @@ Insights solves this by:
 ```mermaid
 graph TB
     subgraph "Data Sources"
-        GH_API[GitHub Traffic API<br/>Clones, Views, Referrers]
-        GH_STARS[GitHub Stargazers API<br/>Star profiles]
-        CH[ClickHouse Public SQL<br/>PyPI downloads, GitHub events]
-        PL[Plausible API<br/>Doc site visitors]
-        RD[Reddit JSON API<br/>Post stats]
+        GH_API["GitHub Traffic API<br/>Clones, Views, Referrers"]
+        GH_STARS["GitHub Stargazers API<br/>Star profiles"]
+        CH["ClickHouse Public SQL<br/>PyPI downloads, GitHub events"]
+        PL["Plausible API<br/>Doc site visitors"]
+        RD["Reddit JSON API<br/>Post stats"]
     end
 
     subgraph "Insights Service"
-        Collectors[Collectors<br/>One per source]
-        DB[(insight_metric<br/>insight_event<br/>insight_source)]
-        Records[Record Detector<br/>Auto-milestone creation]
+        Collectors["Collectors<br/>One per source"]
+        DB[("insight_metric<br/>insight_event<br/>insight_source")]
+        Records["Record Detector<br/>Auto-milestone creation"]
     end
 
     subgraph "Presentation"
-        CLI[CLI Commands<br/>collect, status, stars]
-        Dashboard[Overseer Dashboard<br/>7 interactive tabs]
+        CLI["CLI Commands<br/>collect, status, stars"]
+        Dashboard["Overseer Dashboard<br/>7 interactive tabs"]
     end
 
     GH_API --> Collectors
