@@ -31,7 +31,7 @@ def _enable_auth():
     earlier tests and 429s the later ones (cookie tests in particular,
     since they each perform a fresh login).
     """
-    from app.components.backend.middleware.rate_limit import (
+    from app.components.backend.security.rate_limit import (
         login_limiter,
         password_reset_limiter,
         register_limiter,

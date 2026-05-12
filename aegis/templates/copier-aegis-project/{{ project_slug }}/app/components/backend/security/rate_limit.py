@@ -1,4 +1,11 @@
-"""Simple in-memory rate limiter for auth endpoints."""
+"""Simple in-memory rate limiter for auth endpoints.
+
+The ``RateLimiter`` class and its three pre-configured instances are the
+implementation. The ``*_rate_limit`` callables at the bottom of this
+module are thin ``Depends``-able wrappers; route handlers import those
+from ``app.components.backend.api.deps`` rather than reaching in here
+directly.
+"""
 
 import time
 from collections import defaultdict
@@ -69,3 +76,18 @@ password_reset_limiter = RateLimiter(
     window_seconds=settings.RATE_LIMIT_REGISTER_WINDOW,
     trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
 )
+
+
+def login_rate_limit(request: Request) -> None:
+    """FastAPI dependency: enforce the login rate limit."""
+    login_limiter.check(request)
+
+
+def register_rate_limit(request: Request) -> None:
+    """FastAPI dependency: enforce the registration rate limit."""
+    register_limiter.check(request)
+
+
+def password_reset_rate_limit(request: Request) -> None:
+    """FastAPI dependency: enforce the password-reset rate limit."""
+    password_reset_limiter.check(request)

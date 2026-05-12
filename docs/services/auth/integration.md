@@ -555,24 +555,28 @@ async def deactivate_user(
 Sliding-window, in-memory rate limiter. Three pre-configured instances cover the main auth endpoints:
 
 ```python
-# app/components/backend/middleware/rate_limit.py
+# app/components/backend/security/rate_limit.py
 login_limiter          = RateLimiter(max_requests=5,  window_seconds=60)
 register_limiter       = RateLimiter(max_requests=3,  window_seconds=60)
 password_reset_limiter = RateLimiter(max_requests=3,  window_seconds=60)
 ```
 
-Call `.check(request)` at the top of an endpoint. It raises `HTTP 429` with a `Retry-After` header if the limit is exceeded.
+The module also exposes thin `Depends`-able wrappers (`login_rate_limit`,
+`register_rate_limit`, `password_reset_rate_limit`) re-exported from
+`app/components/backend/api/deps.py`. Add the matching dep to your
+route signature; it raises `HTTP 429` with a `Retry-After` header when
+the limit is exceeded.
 
 ```python
-from app.components.backend.middleware.rate_limit import login_limiter
+from app.components.backend.api.deps import login_rate_limit
 
 @router.post("/token")
 async def login(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     user_service: UserService = Depends(get_user_service),
+    _rate_limit: None = Depends(login_rate_limit),
 ):
-    login_limiter.check(request)  # raises 429 if over limit
     # ... authentication logic
 ```
 

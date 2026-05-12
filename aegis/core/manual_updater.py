@@ -40,6 +40,23 @@ REGENERATE_ON_COMPONENT_CHANGE = {
     "app/components/backend/api/routing.py",
 }
 
+
+def _is_empty_stub(path: Path) -> bool:
+    """Return True if the file at ``path`` has no meaningful Python content.
+
+    Files left behind by a previous init where the owning service's
+    templates were gated off render as 0-byte or whitespace-only files.
+    ``add_component`` should treat them as fresh rather than preserve
+    them as "user files." See issue #686 — Failure A.
+    """
+    if path.name == "__init__.py":
+        return False
+    try:
+        return not path.read_text().strip()
+    except OSError:
+        return False
+
+
 # Files with Jinja conditionals that depend on auth level (basic/rbac/org).
 # Must be regenerated when upgrading auth level.
 REGENERATE_ON_AUTH_LEVEL_CHANGE = {
@@ -246,9 +263,16 @@ class ManualUpdater:
                             and AnswerKeys.AUTH_LEVEL in additional_data
                             and relative_path in REGENERATE_ON_AUTH_LEVEL_CHANGE
                         )
+                        # Existing-but-empty files are empty stubs left behind
+                        # by an earlier init where this service's templates
+                        # were gated off. They're not user content, so
+                        # treat them as fresh and write the rendered body.
+                        # See issue #686 — Failure A.
+                        is_empty_stub = _is_empty_stub(output_path)
                         if (
                             relative_path in REGENERATE_ON_COMPONENT_CHANGE
                             or is_auth_upgrade
+                            or is_empty_stub
                         ):
                             output_path.write_text(content)
                             verbose_print(f"   Regenerated: {relative_path}")

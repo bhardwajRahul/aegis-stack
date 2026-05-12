@@ -46,7 +46,12 @@ nav:
     - How I Build: process.md
   - Components:
     - Overview: components/index.md
-    - Backend: components/webserver.md
+    - Backend:
+      - Getting Started: components/backend/index.md
+      - Middleware: components/backend/middleware.md
+      - Lifecycle: components/backend/lifecycle.md
+      - Routes: components/backend/routes.md
+      - Authentication Integration: components/backend/auth.md
     - Database: components/database.md
     - Frontend: components/frontend.md
     - Scheduler:

@@ -245,9 +245,12 @@ def generate_with_copier(
     # Store template version in answers file for future reference
     # Copier only writes fields defined in copier.yml, so we add this manually
     # This allows 'aegis update' to show "v0.4.1" instead of commit hash
-    # Copier doesn't persist conditional fields (those with `when:`) to the answers
-    # file even when their value is provided via `data`. Patch them in manually so
-    # downstream code (project_map, aegis update) can read them back.
+    # Copier intermittently omits answers it considers "non-prompted" or
+    # otherwise computed (observed for ``include_insights``, conditional
+    # fields like ``worker_backend`` / ``scheduler_backend`` /
+    # ``auth_oauth``, etc.). Patch any ``copier_data`` key Copier dropped
+    # so downstream tooling (``aegis update``, ``aegis add-service``,
+    # shared-file re-rendering) sees the project's real state.
     answers_file = project_path / AnswerKeys.ANSWERS_FILENAME
     if answers_file.exists():
         answers = yaml.safe_load(answers_file.read_text()) or {}
@@ -256,19 +259,15 @@ def generate_with_copier(
         if template_version:
             answers["_template_version"] = template_version
 
-        # Persist conditional choice fields that Copier omits.
-        # ``include_oauth`` is gated on ``include_auth`` (``when:`` in
-        # copier.yml) so Copier strips it from the answers file even
-        # when explicitly set in ``data``. Without this patch,
-        # ``aegis update`` and any other tooling reading the answers
-        # file can't tell whether OAuth was selected at init time.
-        for key in (
-            AnswerKeys.WORKER_BACKEND,
-            AnswerKeys.SCHEDULER_BACKEND,
-            AnswerKeys.AUTH_OAUTH,
-        ):
-            if key in copier_data:
-                answers[key] = copier_data[key]
+        # Backfill any key Copier failed to persist. Specifically guards
+        # against ``add-service`` regenerating shared files like
+        # ``app/core/config.py`` with stale service flags (issue #686 —
+        # Failure B).
+        for key, value in copier_data.items():
+            if key.startswith("_"):
+                continue
+            if key not in answers:
+                answers[key] = value
 
         answers_file.write_text(yaml.safe_dump(answers, default_flow_style=False))
 
