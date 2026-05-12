@@ -473,6 +473,10 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     if not is_enabled(AnswerKeys.AUTH_OAUTH):
         remove_file(project_path, "app/components/backend/api/auth/oauth.py")
         remove_file(project_path, "app/components/backend/middleware/session.py")
+        remove_file(
+            project_path,
+            "app/components/frontend/controls/auth/oauth_button.py",
+        )
         remove_file(project_path, "tests/api/test_oauth_endpoints.py")
         remove_file(project_path, "tests/services/test_oauth_user_service.py")
 
@@ -608,41 +612,6 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         and not is_enabled(AnswerKeys.CACHE)
     ):
         remove_dir(project_path, "docs/components")
-
-    # Prune empty Python module stubs left behind by gated templates.
-    # Templates that wrap their whole body in ``{% if include_<svc> %} ... {%
-    # endif %}`` render as 0-byte / whitespace-only files when the service
-    # isn't selected at init. ``aegis add-service`` then sees the file
-    # exists and skips it, leaving the service scaffolding empty. Deleting
-    # them now means the later ``add_component`` writes a fresh file. See
-    # issue #686 — Failure A.
-    _prune_empty_python_stubs(project_path)
-
-
-def _prune_empty_python_stubs(project_path: Path) -> None:
-    """Delete .py files whose content is empty after stripping whitespace.
-
-    Scoped to ``app/`` and ``tests/`` — the only trees where templated
-    stubs land. Skipping the project root avoids walking ``.venv/``,
-    ``__pycache__/``, build artefacts, or anything user-authored.
-    ``__init__.py`` is preserved unconditionally — it's a package marker
-    and a legitimately-empty one still serves that purpose.
-    """
-    if not project_path.exists():
-        return
-    for subdir in ("app", "tests"):
-        root = project_path / subdir
-        if not root.exists():
-            continue
-        for py_file in root.rglob("*.py"):
-            if py_file.name == "__init__.py":
-                continue
-            try:
-                if not py_file.read_text().strip():
-                    py_file.unlink()
-            except OSError:
-                # File races with linting / formatting; safe to skip.
-                continue
 
 
 def _render_jinja_template(src: Path, dst: Path, project_path: Path) -> None:

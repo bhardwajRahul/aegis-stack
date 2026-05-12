@@ -53,7 +53,14 @@ nav:
       - Routes: components/backend/routes.md
       - Authentication Integration: components/backend/auth.md
     - Database: components/database.md
-    - Frontend: components/frontend.md
+    - Frontend:
+      - Getting Started: components/frontend/index.md
+      - Architecture: components/frontend/architecture.md
+      - Routing & Views: components/frontend/routing.md
+      - Session State: components/frontend/state.md
+      - API Client: components/frontend/api-client.md
+      - Events: components/frontend/events.md
+      - Example: components/frontend/example.md
     - Scheduler:
       - Getting Started: components/scheduler.md
       - Examples: components/scheduler/examples.md

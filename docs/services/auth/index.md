@@ -47,7 +47,7 @@ The **Authentication Service** provides complete user management and JWT-based a
 ```mermaid
 graph TB
     subgraph "Authentication Service Stack"
-        AuthService[🔐 Auth Service<br/>JWT + Refresh + User Management]
+        AuthService["🔐 Auth Service<br/>JWT + Refresh + User Management"]
 
         subgraph "API Endpoints"
             Register["POST /auth/register<br/>Create new user"]
@@ -58,15 +58,15 @@ graph TB
         end
 
         subgraph "Required Components"
-            Backend[⚡ Backend Component<br/>FastAPI Routes]
-            Database[💾 Database Component<br/>SQLite / PostgreSQL]
+            Backend["⚡ Backend Component<br/>FastAPI Routes"]
+            Database["💾 Database Component<br/>SQLite / PostgreSQL"]
         end
 
         subgraph "Security Layer"
-            JWT[🔑 Access JWT<br/>short-lived, stateless<br/>python-jose]
-            RefreshSvc[♻️ RefreshService<br/>rotation + reuse detection<br/>family-based revocation]
-            Passwords[🔒 Password Hashing<br/>passlib + bcrypt]
-            OAuth2[📋 OAuth2 Flow<br/>FastAPI Security]
+            JWT["🔑 Access JWT<br/>short-lived, stateless<br/>python-jose"]
+            RefreshSvc["♻️ RefreshService<br/>rotation + reuse detection<br/>family-based revocation"]
+            Passwords["🔒 Password Hashing<br/>passlib + bcrypt"]
+            OAuth2["📋 OAuth2 Flow<br/>FastAPI Security"]
         end
 
         subgraph "Database Schema"
@@ -98,20 +98,6 @@ graph TB
     Database --> Users
     Database --> RefreshTokens
 
-    style AuthService fill:#e8f5e8,stroke:#2e7d32,stroke-width:3px
-    style Register fill:#f1f8e9,stroke:#388e3c,stroke-width:2px
-    style Login fill:#f1f8e9,stroke:#388e3c,stroke-width:2px
-    style Refresh fill:#f1f8e9,stroke:#388e3c,stroke-width:2px
-    style Profile fill:#f1f8e9,stroke:#388e3c,stroke-width:2px
-    style Logout fill:#f1f8e9,stroke:#388e3c,stroke-width:2px
-    style Backend fill:#e1f5fe,stroke:#1976d2,stroke-width:2px
-    style Database fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    style JWT fill:#fff8e1,stroke:#ffa000,stroke-width:2px
-    style RefreshSvc fill:#fff8e1,stroke:#ffa000,stroke-width:2px
-    style Passwords fill:#fff8e1,stroke:#ffa000,stroke-width:2px
-    style OAuth2 fill:#fff8e1,stroke:#ffa000,stroke-width:2px
-    style Users fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    style RefreshTokens fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
 ```
 
 ## Authentication Flow

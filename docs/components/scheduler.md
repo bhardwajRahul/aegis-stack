@@ -26,10 +26,10 @@ The **Scheduler Component** provides background task scheduling and cron job cap
 ```mermaid
 graph TB
     subgraph "Scheduler Container"
-        Triggers[Triggers<br/>Cron & Intervals]
-        Scheduler[APScheduler<br/>Engine]
-        Jobs[(Job Queue<br/>In-Memory)]
-        Tasks[Your Tasks<br/>Custom Functions]
+        Triggers["Triggers<br/>Cron & Intervals"]
+        Scheduler["APScheduler<br/>Engine"]
+        Jobs[("Job Queue<br/>In-Memory")]
+        Tasks["Your Tasks<br/>Custom Functions"]
     end
     
     Triggers --> Scheduler
@@ -37,10 +37,6 @@ graph TB
     Jobs --> Tasks
     Tasks -.-> Scheduler
     
-    style Scheduler fill:#fff3e0
-    style Jobs fill:#f3e5f5
-    style Tasks fill:#e8f5e8
-    style Triggers fill:#e1f5fe
 ```
 
 *Jobs run in memory and reset on container restart. For persistent scheduling, see [Database Persistence](scheduler/extras/persistence.md).*

@@ -49,25 +49,25 @@ my-project/
 ```mermaid
 graph TB
     subgraph "Application Startup"
-        Hooks[Backend Hooks<br/>Auto-discovery]
-        MW[logfire_tracing.py<br/>register_middleware]
+        Hooks["Backend Hooks<br/>Auto-discovery"]
+        MW["logfire_tracing.py<br/>register_middleware"]
     end
 
     subgraph "Instrumentation"
-        FA[FastAPI<br/>Request tracing]
-        HX[HTTPX<br/>Outbound HTTP]
-        SA[SQLAlchemy<br/>Database queries]
-        RD[Redis<br/>Cache operations]
+        FA["FastAPI<br/>Request tracing"]
+        HX["HTTPX<br/>Outbound HTTP"]
+        SA["SQLAlchemy<br/>Database queries"]
+        RD["Redis<br/>Cache operations"]
     end
 
     subgraph "Logfire Cloud"
-        Cloud[Logfire Dashboard<br/>Traces + Metrics]
-        QA[Query API<br/>Analytics]
+        Cloud["Logfire Dashboard<br/>Traces + Metrics"]
+        QA["Query API<br/>Analytics"]
     end
 
     subgraph "Overseer Dashboard"
-        Card[Observability Card<br/>Status + Metrics]
-        Modal[Detail Modal<br/>Spans + Exceptions]
+        Card["Observability Card<br/>Status + Metrics"]
+        Modal["Detail Modal<br/>Spans + Exceptions"]
     end
 
     Hooks -->|discovers| MW
@@ -83,17 +83,6 @@ graph TB
 
     QA -->|LOGFIRE_READ_TOKEN| Card
     QA -->|LOGFIRE_READ_TOKEN| Modal
-
-    style Hooks fill:#e1f5fe
-    style MW fill:#e1f5fe
-    style FA fill:#e8f5e8
-    style HX fill:#e8f5e8
-    style SA fill:#f3e5f5
-    style RD fill:#f3e5f5
-    style Cloud fill:#fff3e0
-    style QA fill:#fff3e0
-    style Card fill:#e8f5e8
-    style Modal fill:#e8f5e8
 ```
 
 The middleware is auto-discovered by the backend hook system, no manual registration needed. On startup it configures Logfire with your project name and environment, then instruments each available integration.

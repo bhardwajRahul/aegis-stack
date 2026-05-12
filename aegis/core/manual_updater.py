@@ -53,7 +53,10 @@ def _is_empty_stub(path: Path) -> bool:
         return False
     try:
         return not path.read_text().strip()
-    except OSError:
+    except (OSError, UnicodeDecodeError):
+        # OSError: races with linting/formatting tools rewriting the file.
+        # UnicodeDecodeError: file is binary or non-UTF-8 — treat as
+        # non-empty so we never mistake unreadable content for a stub.
         return False
 
 

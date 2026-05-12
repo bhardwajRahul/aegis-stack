@@ -105,6 +105,13 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "tests/services/test_worker_health_registration.py",
                 "app/components/backend/api/worker.py",
                 "app/components/backend/api/worker_taskiq.py",
+                # Entirely-gated stubs (templates wrapped in
+                # ``{% if include_worker %}``). Without these here the
+                # files render as 0-byte stubs at init and confuse a
+                # later ``aegis add-component worker`` — see #686.
+                "app/components/backend/api/worker_dramatiq.py",
+                "app/components/backend/api/events.py",
+                "tests/components/test_worker_events.py",
                 "tests/api/test_worker_endpoints.py",
                 "app/components/frontend/dashboard/cards/worker_card.py",
                 "app/components/frontend/dashboard/modals/worker_modal.py",
