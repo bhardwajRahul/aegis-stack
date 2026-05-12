@@ -377,6 +377,11 @@ def add_service_command(
                     f"   {t('add_service.skipped_files', count=len(result.files_skipped))}",
                     fg="yellow",
                 )
+            if result.files_deleted:
+                typer.secho(
+                    f"   Cleaned {len(result.files_deleted)} empty stub file(s)",
+                    fg="cyan",
+                )
 
         # Now add each service sequentially
         for service in services_to_add:
@@ -466,6 +471,11 @@ def add_service_command(
                 typer.secho(
                     f"   {t('add_service.skipped_files', count=len(result.files_skipped))}",
                     fg="yellow",
+                )
+            if result.files_deleted:
+                typer.secho(
+                    f"   Cleaned {len(result.files_deleted)} empty stub file(s)",
+                    fg="cyan",
                 )
 
         # Generate migrations for services that need them

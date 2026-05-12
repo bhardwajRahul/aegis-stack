@@ -275,6 +275,17 @@ def generate_with_copier(
     # This must happen BEFORE post-generation tasks (which run linting on the remaining files)
     cleanup_components(project_path, copier_data)
 
+    # Sweep any empty .py stubs produced by whole-file Jinja gates
+    # (``{% if include_X %}...{% endif %}`` templates render as
+    # whitespace when the gate is False). Must precede the lint pass
+    # below; ``make fix`` chokes on modules referenced from
+    # ``__init__.py`` that are empty. See issue #686 — Failure A.
+    from .manual_updater import sweep_empty_stubs
+
+    swept = sweep_empty_stubs(project_path)
+    if swept:
+        verbose_print(f"   Swept {len(swept)} empty stub file(s)")
+
     # Run post-generation tasks with explicit working directory control
     # This ensures consistent behavior with Cookiecutter
     include_auth = copier_data.get(AnswerKeys.AUTH, False)

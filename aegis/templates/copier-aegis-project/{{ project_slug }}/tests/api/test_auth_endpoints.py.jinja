@@ -840,3 +840,188 @@ class TestSessionCookie:
 
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["email"] == created.email
+
+
+{% if include_auth_rbac %}
+class TestSetUserRole:
+    """Tests for PATCH /api/v1/auth/users/{user_id}/role (admin-only)."""
+
+    async def _admin_and_target(self, async_db_session: AsyncSession):
+        user_service = UserService(async_db_session)
+        admin = await user_service.create_user(
+            UserCreate(
+                email="role-admin@example.com",
+                full_name="Role Admin",
+                password="password123",
+            )
+        )
+        admin.role = "admin"
+        async_db_session.add(admin)
+        await async_db_session.commit()
+        await async_db_session.refresh(admin)
+
+        target = await user_service.create_user(
+            UserCreate(
+                email="role-target@example.com",
+                full_name="Role Target",
+                password="password123",
+            )
+        )
+        return admin, target
+
+    @pytest.mark.asyncio
+    async def test_unauthenticated_returns_401(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        _, target = await self._admin_and_target(async_db_session)
+
+        response = async_client_with_db.patch(
+            f"/api/v1/auth/users/{target.id}/role",
+            json={"role": "moderator"},
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    @pytest.mark.asyncio
+    async def test_non_admin_returns_403(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        user_service = UserService(async_db_session)
+        # Burn one signup so neither created user is auto-promoted.
+        await user_service.create_user(
+            UserCreate(
+                email="seed-admin@example.com",
+                full_name="Seed",
+                password="password123",
+            )
+        )
+        regular = await user_service.create_user(
+            UserCreate(
+                email="regular@example.com",
+                full_name="Regular",
+                password="password123",
+            )
+        )
+        target = await user_service.create_user(
+            UserCreate(
+                email="role-target@example.com",
+                full_name="Role Target",
+                password="password123",
+            )
+        )
+        token = create_access_token(data={"sub": regular.email})
+
+        response = async_client_with_db.patch(
+            f"/api/v1/auth/users/{target.id}/role",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"role": "admin"},
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    @pytest.mark.asyncio
+    async def test_admin_promotes_user_to_admin(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        admin, target = await self._admin_and_target(async_db_session)
+        token = create_access_token(data={"sub": admin.email})
+
+        response = async_client_with_db.patch(
+            f"/api/v1/auth/users/{target.id}/role",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"role": "admin"},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["role"] == "admin"
+
+        await async_db_session.refresh(target)
+        assert target.role == "admin"
+
+    @pytest.mark.asyncio
+    async def test_admin_demotes_another_admin(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        admin, target = await self._admin_and_target(async_db_session)
+        target.role = "admin"
+        async_db_session.add(target)
+        await async_db_session.commit()
+        await async_db_session.refresh(target)
+
+        token = create_access_token(data={"sub": admin.email})
+        response = async_client_with_db.patch(
+            f"/api/v1/auth/users/{target.id}/role",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"role": "user"},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["role"] == "user"
+
+    @pytest.mark.asyncio
+    async def test_admin_cannot_change_own_role(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        admin, _ = await self._admin_and_target(async_db_session)
+        token = create_access_token(data={"sub": admin.email})
+
+        response = async_client_with_db.patch(
+            f"/api/v1/auth/users/{admin.id}/role",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"role": "user"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "own role" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_invalid_role_returns_400(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        admin, target = await self._admin_and_target(async_db_session)
+        token = create_access_token(data={"sub": admin.email})
+
+        response = async_client_with_db.patch(
+            f"/api/v1/auth/users/{target.id}/role",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"role": "superuser"},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    @pytest.mark.asyncio
+    async def test_unknown_user_id_returns_404(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        admin, _ = await self._admin_and_target(async_db_session)
+        token = create_access_token(data={"sub": admin.email})
+
+        response = async_client_with_db.patch(
+            "/api/v1/auth/users/99999/role",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"role": "moderator"},
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_emits_role_changed_audit_event(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        admin, target = await self._admin_and_target(async_db_session)
+        token = create_access_token(data={"sub": admin.email})
+
+        caplog.set_level("INFO", logger="audit")
+        response = async_client_with_db.patch(
+            f"/api/v1/auth/users/{target.id}/role",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"role": "moderator"},
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        records = [r for r in caplog.records if r.name == "audit"]
+        events = [getattr(r, "audit", {}) for r in records]
+        role_changed = [e for e in events if e.get("event_type") == "auth.role_changed"]
+        assert role_changed, f"no auth.role_changed audit event in {events}"
+        evt = role_changed[-1]
+        assert evt["actor_id"] == admin.id
+        assert evt["target_type"] == "user"
+        assert evt["target_id"] == target.id
+        assert evt["new_role"] == "moderator"
+{% endif %}

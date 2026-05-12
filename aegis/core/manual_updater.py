@@ -60,6 +60,74 @@ def _is_empty_stub(path: Path) -> bool:
         return False
 
 
+# Directories that should never be swept. Some contain authored content
+# that may legitimately be empty (alembic version stubs), some contain
+# tooling artefacts (.venv, .git, __pycache__).
+_SWEEP_SKIP_DIRS = frozenset(
+    {
+        ".venv",
+        ".git",
+        "__pycache__",
+        "node_modules",
+        "versions",  # alembic/versions
+        "__snapshots__",
+    }
+)
+
+
+def sweep_empty_stubs(project_path: Path) -> list[str]:
+    """Delete 0-byte / whitespace-only ``.py`` files under ``project_path``.
+
+    Whole-file Jinja gates (``{% if include_X %}...{% endif %}``) render
+    empty files at init time when the gate is False. Those stubs are
+    invisible to per-component manifests, so a later ``add-service``
+    won't touch them and the project crashes at import time. This sweep
+    is the safety net: any empty ``.py`` that survives generation is
+    not authored content, so we delete it. See issue #686 — Failure A.
+
+    ``__init__.py`` files are preserved (empty is the *expected* state
+    for a package marker). Skips ``.venv``, ``.git``, ``__pycache__``,
+    ``node_modules``, ``alembic/versions/`` (one-line stubs are valid
+    there), and snapshot directories. Removes any parent directory that
+    becomes empty as a result.
+
+    Returns the list of deleted paths, relative to ``project_path``.
+    """
+    deleted: list[str] = []
+    affected_parents: set[Path] = set()
+
+    for path in project_path.rglob("*.py"):
+        # Symlinks are not ours to delete — skip.
+        if path.is_symlink():
+            continue
+        if any(
+            part in _SWEEP_SKIP_DIRS for part in path.relative_to(project_path).parts
+        ):
+            continue
+        if not _is_empty_stub(path):
+            continue
+        try:
+            path.unlink()
+        except OSError:
+            continue
+        deleted.append(str(path.relative_to(project_path)))
+        affected_parents.add(path.parent)
+
+    # Walk parents bottom-up; an emptied dir may empty its own parent.
+    for parent in sorted(affected_parents, key=lambda p: len(p.parts), reverse=True):
+        current = parent
+        while current != project_path and current.exists():
+            try:
+                if any(current.iterdir()):
+                    break
+                current.rmdir()
+            except OSError:
+                break
+            current = current.parent
+
+    return deleted
+
+
 # Files with Jinja conditionals that depend on auth level (basic/rbac/org).
 # Must be regenerated when upgrading auth level.
 REGENERATE_ON_AUTH_LEVEL_CHANGE = {
@@ -147,6 +215,28 @@ class ManualUpdater:
         # component code. See: #504
         copier_defaults = get_copier_defaults()
         self.answers = {**copier_defaults, **load_copier_answers(project_path)}
+
+        # Heal answer-file drift before any shared-file regen consumes
+        # ``self.answers``. Without this, a project whose
+        # ``.copier-answers.yml`` is missing flags for an already-
+        # installed service (e.g. ``include_insights``) regenerates
+        # ``app/core/config.py`` with the wrong shape and drops env-
+        # bound Settings fields. See issue #686 — Failure B.
+        #
+        # Only fill keys that are absent from the *persisted* answers
+        # file. An explicit ``include_database: false`` written by
+        # Copier must not be flipped to True just because the project
+        # happens to have an ``alembic/`` dir hanging around — that
+        # would over-promote and break the normal add-component path.
+        persisted_keys = set(load_copier_answers(project_path).keys())
+        reconciled = {
+            k: v
+            for k, v in self.reconcile_answers_from_disk().items()
+            if k not in persisted_keys
+        }
+        if reconciled:
+            self.answers = {**self.answers, **reconciled}
+            self._save_answers(self.answers)
 
         # Setup Jinja2 environment
         # Template files are at: template/{{ project_slug }}/...
@@ -302,6 +392,13 @@ class ManualUpdater:
             # Update .copier-answers.yml
             self._save_answers(updated_answers)
 
+            # Sweep any empty .py stubs left by whole-file Jinja gates.
+            # Must run AFTER shared-file regen — regen may legitimately
+            # turn a previously-empty file into a populated one (e.g.
+            # auth's deps.py going from gated-off to gated-on). See
+            # issue #686 — Failure A.
+            files_deleted = sweep_empty_stubs(self.project_path)
+
             if run_post_gen:
                 self.run_post_generation_tasks()
 
@@ -309,6 +406,7 @@ class ManualUpdater:
                 component=component,
                 files_modified=files_modified,
                 files_skipped=files_skipped,
+                files_deleted=files_deleted,
                 shared_files_updated=shared_files_updated,
                 shared_files_backed_up=shared_files_backed_up,
                 shared_files_need_manual_merge=shared_files_need_manual_merge,
@@ -919,6 +1017,123 @@ class ManualUpdater:
             )
 
         self.answers = answers
+
+    def reconcile_answers_from_disk(self) -> dict[str, Any]:
+        """Infer ``include_*`` / ``auth_level`` flags from filesystem markers.
+
+        Some legacy projects have a ``.copier-answers.yml`` that is
+        missing flags for services that are actually installed on disk
+        (we've seen this with ``include_insights`` and its sub-flags).
+        When that happens, ``_regenerate_shared_files`` renders shared
+        templates with the wrong gating and drops env-bound Settings
+        fields, which causes Pydantic ``extra_forbidden`` crashes on
+        boot. See issue #686 — Failure B.
+
+        This method walks well-known marker paths and returns a dict
+        of flags to set ``True`` (or, for ``auth_level``, the inferred
+        level). It only ever **promotes** — never demotes a flag that
+        is already ``True`` in answers — because file presence is a
+        strong "installed" signal but absence isn't a reliable "not
+        installed" signal (a service could have been partially removed
+        manually).
+        """
+        proj = self.project_path
+        inferred: dict[str, Any] = {}
+
+        def has_file(*relative: str) -> bool:
+            full = proj
+            for part in relative:
+                full = full / part
+            return full.is_file()
+
+        def has_nonstub_dir(*relative: str) -> bool:
+            full = proj
+            for part in relative:
+                full = full / part
+            if not full.is_dir():
+                return False
+            for child in full.rglob("*.py"):
+                if child.name == "__init__.py":
+                    continue
+                try:
+                    if child.read_text().strip():
+                        return True
+                except (OSError, UnicodeDecodeError):
+                    continue
+            return False
+
+        # Services
+        if has_file("app", "services", "auth", "auth_service.py"):
+            inferred[AnswerKeys.AUTH] = True
+        if has_file("app", "services", "ai", "ai_service.py"):
+            inferred[AnswerKeys.AI] = True
+        if has_nonstub_dir("app", "services", "insights"):
+            inferred[AnswerKeys.INSIGHTS] = True
+        if has_nonstub_dir("app", "services", "blog"):
+            inferred[AnswerKeys.BLOG] = True
+        if has_nonstub_dir("app", "services", "payment"):
+            inferred[AnswerKeys.PAYMENT] = True
+        if has_nonstub_dir("app", "services", "comms"):
+            inferred[AnswerKeys.COMMS] = True
+
+        # Components
+        if (proj / "alembic").is_dir() or has_nonstub_dir("app", "models"):
+            inferred[AnswerKeys.DATABASE] = True
+        if has_nonstub_dir("app", "components", "scheduler"):
+            inferred[AnswerKeys.SCHEDULER] = True
+        if has_nonstub_dir("app", "components", "worker"):
+            inferred[AnswerKeys.WORKER] = True
+        if has_nonstub_dir("app", "components", "backend", "observability"):
+            inferred[AnswerKeys.OBSERVABILITY] = True
+        if has_nonstub_dir("app", "components", "backend", "ingress"):
+            inferred[AnswerKeys.INGRESS] = True
+
+        # Auth level — only meaningful if auth itself is installed.
+        # RBAC is gated by inline ``{% if include_auth_rbac %}`` blocks
+        # in existing files rather than a dedicated module, so we sniff
+        # ``def require_role`` in the rendered auth_service.py — that
+        # symbol is only emitted when RBAC is on. Org is detected via
+        # the org_service.py module (whole-file gated).
+        if inferred.get(AnswerKeys.AUTH) or self.answers.get(AnswerKeys.AUTH):
+            auth_svc = proj / "app" / "services" / "auth" / "auth_service.py"
+            has_require_role = False
+            if auth_svc.is_file():
+                try:
+                    has_require_role = "def require_role" in auth_svc.read_text()
+                except (OSError, UnicodeDecodeError):
+                    has_require_role = False
+            if has_file("app", "services", "auth", "org_service.py"):
+                inferred[AnswerKeys.AUTH_LEVEL] = "org"
+                inferred[AnswerKeys.AUTH_ORG] = True
+                inferred[AnswerKeys.AUTH_RBAC] = True
+            elif has_require_role:
+                inferred[AnswerKeys.AUTH_LEVEL] = "rbac"
+                inferred[AnswerKeys.AUTH_RBAC] = True
+
+        # Auth OAuth marker — file may exist as a non-stub when oauth was wired
+        if has_file("app", "components", "backend", "api", "auth", "oauth.py"):
+            oauth_path = (
+                proj / "app" / "components" / "backend" / "api" / "auth" / "oauth.py"
+            )
+            try:
+                if oauth_path.read_text().strip():
+                    inferred[AnswerKeys.AUTH_OAUTH] = True
+            except (OSError, UnicodeDecodeError):
+                pass
+
+        # Insights sub-flags
+        collectors_dir = proj / "app" / "services" / "insights" / "collectors"
+        if collectors_dir.is_dir():
+            for source, key in (
+                ("github", AnswerKeys.INSIGHTS_GITHUB),
+                ("pypi", AnswerKeys.INSIGHTS_PYPI),
+                ("plausible", AnswerKeys.INSIGHTS_PLAUSIBLE),
+                ("reddit", AnswerKeys.INSIGHTS_REDDIT),
+            ):
+                if (collectors_dir / f"{source}_collector.py").is_file():
+                    inferred[key] = True
+
+        return inferred
 
     def run_post_generation_tasks(self) -> None:
         """
