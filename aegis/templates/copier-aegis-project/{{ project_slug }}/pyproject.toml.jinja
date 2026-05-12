@@ -205,6 +205,14 @@ force-single-line = false
 force-sort-within-sections = true
 known-first-party = ["app"]
 
+[tool.ruff.lint.per-file-ignores]
+# deps.py is a re-export shim that exposes FastAPI dependency-injection
+# providers from a single import surface. Each import is intentionally
+# unused inside this module; without this ignore, ``ruff --fix`` deletes
+# the re-exports during post-generation formatting and any consumer that
+# does ``from app.components.backend.api.deps import X`` breaks at boot.
+"app/components/backend/api/deps.py" = ["F401"]
+
 [tool.ty.rules]
 # Configure ty to ignore only genuine false positives or unavoidable issues.
 # Real type issues should be fixed, not ignored.

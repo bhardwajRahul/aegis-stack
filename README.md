@@ -60,7 +60,7 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 
 | Component | What you get | |
 |---|---|---|
-| **[Backend](https://lbedner.github.io/aegis-stack/components/webserver/)** | FastAPI + lifecycle hooks | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
+| **[Backend](https://lbedner.github.io/aegis-stack/components/backend/)** | FastAPI + lifecycle hooks | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
 | **[CLI](https://lbedner.github.io/aegis-stack/cli-reference/)** | Typer, first-class system interface | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
 | **[Frontend](https://lbedner.github.io/aegis-stack/components/frontend/)** | Flet, ships with the Overseer system dashboard | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
 | **[Cache](https://lbedner.github.io/aegis-stack/components/)** | Redis for caching, sessions, pub/sub | ![Optional](https://img.shields.io/badge/-optional-blue) |

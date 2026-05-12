@@ -132,6 +132,24 @@ SERVICES: dict[str, ServiceSpec] = {
             # the org/membership/invite tables only exist at that auth
             # level.
             deps_providers=[
+                # Rate-limit deps live in
+                # ``app.components.backend.security.rate_limit`` (issue #686
+                # — the original ``middleware/rate_limit.py`` placement was
+                # misleading because it isn't ASGI middleware). Re-exported
+                # here so route handlers can ``from
+                # app.components.backend.api.deps import login_rate_limit``.
+                SymbolWiring(
+                    module="app.components.backend.security.rate_limit",
+                    symbol="login_rate_limit",
+                ),
+                SymbolWiring(
+                    module="app.components.backend.security.rate_limit",
+                    symbol="password_reset_rate_limit",
+                ),
+                SymbolWiring(
+                    module="app.components.backend.security.rate_limit",
+                    symbol="register_rate_limit",
+                ),
                 SymbolWiring(
                     module="app.services.auth.deps",
                     symbol="get_user_service",
@@ -211,6 +229,12 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/models/org.py",
             "app/services/auth/",
             "app/core/security.py",
+            # Frontend auth scaffolding (login/register/session views and
+            # the auth-shell controls). Missing from this list meant
+            # ``aegis add-service auth`` never rendered these on an
+            # existing project — see issue #686.
+            "app/components/frontend/auth/",
+            "app/components/frontend/controls/auth/",
         ],
         files=FileManifest(
             # Mirrors cleanup_components() lines 486-499 (auth NOT enabled)
@@ -235,6 +259,10 @@ SERVICES: dict[str, ServiceSpec] = {
                 # Frontend dashboard files
                 "app/components/frontend/dashboard/cards/auth_card.py",
                 "app/components/frontend/dashboard/modals/auth_modal.py",
+                # Frontend auth views + controls (mirrors the template_files
+                # entries above so disabling auth removes them).
+                "app/components/frontend/auth",
+                "app/components/frontend/controls/auth",
             ],
             # Auth org-level cleanup (cleanup_components lines 503-514) is
             # inline because it gates on "auth enabled AND auth_org off",
@@ -458,7 +486,9 @@ SERVICES: dict[str, ServiceSpec] = {
                     symbol="router",
                     alias="insights_router",
                     prefix="/api/v1",
-                    tags=["insights"],
+                    # The inner router declares ``tags=["insights"]`` itself;
+                    # adding it here would emit a duplicate tag on every
+                    # endpoint. Keep this in sync with insights.py.jinja.
                 ),
             ],
             dashboard_cards=[

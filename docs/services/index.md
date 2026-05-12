@@ -126,17 +126,6 @@ graph LR
     style UI fill:#f3e5f5
 ```
 
-## Available Services
-
-| Service | Status | Description | Required Components |
-|---------|--------|-------------|-------------------|
-| **ai** | ✅ Available | Multi-provider AI chat with PydanticAI (OpenAI, Anthropic, Google, Groq, etc.) | backend |
-| **auth** | ✅ Available | User authentication and authorization with JWT tokens | backend, database |
-| **blog** | 🧪 Experimental | Markdown posts with draft/publish workflow, tags, and Overseer editing | backend, database |
-| **comms** | ✅ Available | Email (Resend), SMS, and voice calls (Twilio) | backend |
-| **insights** | 🧪 Experimental | Adoption metrics tracking (GitHub, PyPI, Plausible, Reddit) | backend, database, scheduler |
-| **payment** | 🧪 Experimental | Stripe checkout, subscriptions, refunds, webhooks, disputes | backend, database |
-
 ## Service Categories
 
 ```mermaid
