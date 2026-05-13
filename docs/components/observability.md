@@ -160,7 +160,7 @@ Results are cached for 2 minutes with a 5-minute backoff on failure to respect r
 
 ## Memory Footprint on Constrained Hosts
 
-The OpenTelemetry SDK that Logfire builds on is heavy: even with `send_to_logfire=False`, loading the SDK and its in-memory span batcher adds ~150-300 MiB of fixed overhead. On a 512 MiB container that is the difference between healthy and OOM-flapping (issue #627).
+The OpenTelemetry SDK that Logfire builds on is heavy: even with `send_to_logfire=False`, loading the SDK and its in-memory span batcher adds ~150-300 MiB of fixed overhead. On a 512 MiB container that is the difference between healthy and OOM-flapping.
 
 Two safeguards ship in the template:
 

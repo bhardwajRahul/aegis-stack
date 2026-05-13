@@ -358,7 +358,7 @@ class Settings(
     # slow or unreachable — the container leaks until OOM. These
     # caps backstop that. ``logfire_tracing.register_middleware``
     # mirrors them into ``os.environ`` so the OTEL SDK actually
-    # sees them. Issue #627.
+    # sees them.
     OTEL_BSP_MAX_QUEUE_SIZE: int = 1024
     OTEL_BSP_MAX_EXPORT_BATCH_SIZE: int = 256
     OTEL_BSP_EXPORT_TIMEOUT: int = 10000  # ms
