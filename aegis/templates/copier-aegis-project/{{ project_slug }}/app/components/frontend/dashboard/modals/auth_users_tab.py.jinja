@@ -10,6 +10,10 @@ from typing import Any
 
 import flet as ft
 from app.components.frontend.controls import (
+{% if include_auth_rbac %}
+    ActionMenu,
+    ActionMenuItem,
+{% endif %}
     ConfirmDialog,
     DataTable,
     DataTableColumn,
@@ -65,6 +69,10 @@ class UsersTableSection(ft.Container):
         users: list[dict[str, Any]],
         on_toggle: Any,
         on_delete: Any,
+{% if include_auth_rbac %}
+        on_change_role: Any = None,
+        current_user_id: int | None = None,
+{% endif %}
 {% if include_auth_org %}
         user_orgs: dict[int, list[str]] | None = None,
 {% endif %}
@@ -76,6 +84,9 @@ class UsersTableSection(ft.Container):
             DataTableColumn("Name", width=140, style="secondary"),
             DataTableColumn("Status", width=45, style=None),
             DataTableColumn("Verified", width=55, style=None),
+{% if include_auth_rbac %}
+            DataTableColumn("Role", width=75, style=None),
+{% endif %}
 {% if include_auth_org %}
             DataTableColumn("Org", width=120, style=None),
 {% endif %}
@@ -97,6 +108,16 @@ class UsersTableSection(ft.Container):
                 color=Theme.Colors.SUCCESS if is_verified else Theme.Colors.WARNING,
             )
 
+{% if include_auth_rbac %}
+            current_role = user.get("role", "user")
+            role_color = {
+                "admin": Theme.Colors.ERROR,
+                "moderator": Theme.Colors.INFO,
+                "user": Theme.Colors.SUCCESS,
+            }.get(current_role, Theme.Colors.INFO)
+            role_tag = Tag(text=current_role.capitalize(), color=role_color)
+
+{% endif %}
 {% if include_auth_org %}
             # Org membership display
             org_names = (user_orgs or {}).get(user.get("id"), [])
@@ -113,9 +134,38 @@ class UsersTableSection(ft.Container):
                 org_display = SecondaryText("-")
 
 {% endif %}
+{% if include_auth_rbac %}
+            # Role-change kebab. Hidden for the row representing the
+            # current user — backend rejects self-mutation with 400, but
+            # hiding it avoids a confusing snackbar.
+            is_self_row = (
+                current_user_id is not None and user.get("id") == current_user_id
+            )
+            role_menu_items = [
+                ActionMenuItem(
+                    label=f"Make {role.capitalize()}",
+                    icon=ft.Icons.SHIELD_OUTLINED
+                    if role == "admin"
+                    else ft.Icons.GAVEL
+                    if role == "moderator"
+                    else ft.Icons.PERSON_OUTLINE,
+                    on_click=lambda e, u=user, r=role: on_change_role(u, r),
+                )
+                for role in ("admin", "moderator", "user")
+                if role != current_role
+            ]
+            role_menu: Any = (
+                ActionMenu(items=role_menu_items)
+                if (role_menu_items and not is_self_row and on_change_role is not None)
+                else ft.Container(width=0, height=0)
+            )
+{% endif %}
             # Action buttons
             action_buttons = ft.Row(
                 [
+{% if include_auth_rbac %}
+                    role_menu,
+{% endif %}
                     ft.IconButton(
                         icon=ft.Icons.BLOCK if is_active else ft.Icons.CHECK_CIRCLE,
                         icon_size=18,
@@ -140,6 +190,9 @@ class UsersTableSection(ft.Container):
                     user.get("full_name") or "-",
                     status_tag,
                     verified_tag,
+{% if include_auth_rbac %}
+                    role_tag,
+{% endif %}
 {% if include_auth_org %}
                     org_display,
 {% endif %}
@@ -253,12 +306,20 @@ class AuthUsersTab(ft.Container):
 {% endif %}
     ) -> None:
         """Render the users table with loaded data."""
+{% if include_auth_rbac %}
+        current_user = get_session_state(self.page).current_user or {}
+        current_user_id = current_user.get("id")
+{% endif %}
         self._content_column.controls = [
             self._refresh_row(),
             UsersTableSection(
                 users,
                 on_toggle=self._on_toggle_user,
                 on_delete=self._on_delete_user,
+{% if include_auth_rbac %}
+                on_change_role=self._on_change_role,
+                current_user_id=current_user_id,
+{% endif %}
 {% if include_auth_org %}
                 user_orgs=user_orgs,
 {% endif %}
@@ -416,3 +477,45 @@ class AuthUsersTab(ft.Container):
                 else f"status {status}"
             )
             ErrorSnackBar(f"Delete failed: {detail}").launch(self.page)
+{% if include_auth_rbac %}
+
+    def _on_change_role(self, user: dict[str, Any], new_role: str) -> None:
+        """Confirm and apply a role change."""
+        page = self.page
+        if not page:
+            return
+
+        user_id = user["id"]
+        email = user.get("email", "user")
+
+        async def do_change() -> None:
+            await self._change_role(user_id, new_role)
+
+        ConfirmDialog(
+            page=page,
+            title=f"Make {new_role.capitalize()}",
+            message=f"Change '{email}' to the '{new_role}' role?",
+            confirm_text=f"Make {new_role.capitalize()}",
+            on_confirm=do_change,
+        ).show()
+
+    async def _change_role(self, user_id: int, new_role: str) -> None:
+        """Mutate a user's role via API."""
+        api = get_session_state(self.page).api_client
+        status, body = await api.request_with_status(
+            "PATCH",
+            f"/api/v1/auth/users/{user_id}/role",
+            json={"role": new_role},
+        )
+
+        if status == 200:
+            SuccessSnackBar(f"Role set to {new_role}").launch(self.page)
+            await self._load_users()
+        else:
+            detail = (
+                body.get("detail")
+                if isinstance(body, dict) and body.get("detail")
+                else f"status {status}"
+            )
+            ErrorSnackBar(f"Role change failed: {detail}").launch(self.page)
+{% endif %}
