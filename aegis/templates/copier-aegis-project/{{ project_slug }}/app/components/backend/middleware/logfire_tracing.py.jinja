@@ -7,7 +7,7 @@ body is a no-op — skipping ``configure()`` and the ``instrument_*()``
 calls avoids loading the OpenTelemetry SDK and the in-memory span
 batcher, which together add ~150-300 MiB of fixed overhead even with
 ``send_to_logfire=False``. On a 512 MiB container that is the
-difference between healthy and OOM-flapping (issue #627).
+difference between healthy and OOM-flapping.
 
 Set ``LOGFIRE_TOKEN`` in ``.env`` to enable.
 """
@@ -34,7 +34,7 @@ def register_middleware(app: FastAPI) -> None:
     # Cap the OTEL BatchSpanProcessor before the SDK reads its env.
     # ``setdefault`` so explicit operator overrides in ``.env`` /
     # compose still win. These bounds prevent unbounded memory growth
-    # when Logfire is slow or unreachable (issue #627).
+    # when Logfire is slow or unreachable.
     os.environ.setdefault(
         "OTEL_BSP_MAX_QUEUE_SIZE", str(settings.OTEL_BSP_MAX_QUEUE_SIZE)
     )

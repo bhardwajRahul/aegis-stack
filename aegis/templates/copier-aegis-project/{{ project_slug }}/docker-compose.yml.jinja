@@ -64,9 +64,6 @@ services:
     deploy:
       resources:
         limits:
-          # Issue #627: 768M leaves headroom for OTEL SDK overhead
-          # while staying under a 2 GB droplet's total budget.
-          # Reservations dropped — they compound over-provisioning.
           memory: 768M
           cpus: '0.5'
 {%- if include_ingress %}
@@ -165,8 +162,6 @@ services:
     deploy:
       resources:
         limits:
-          # Issue #627: actual worker RSS is ~70 MiB; 256 MiB is
-          # plenty even under spiky load test scenarios.
           memory: 256M
           cpus: '1.0'
     profiles:
@@ -221,7 +216,6 @@ services:
   redis:
     image: redis:7-alpine
     hostname: redis
-    # 64M Redis cap leaves headroom inside a 128M container.
     command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -233,7 +227,6 @@ services:
     deploy:
       resources:
         limits:
-          # Issue #627: Redis idles around 5 MiB; 128 MiB is plenty.
           memory: 128M
           cpus: '0.25'
     profiles:
@@ -325,7 +318,6 @@ services:
     deploy:
       resources:
         limits:
-          # Issue #627: Traefik idles around 20 MiB.
           memory: 128M
           cpus: '0.25'
     profiles:
