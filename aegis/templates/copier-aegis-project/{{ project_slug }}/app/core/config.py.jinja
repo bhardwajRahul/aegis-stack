@@ -351,6 +351,18 @@ class Settings(
     # Logfire project URL for linking to the dashboard
     # e.g. "https://logfire.pydantic.dev/myorg/myproject"
     LOGFIRE_PROJECT_URL: str | None = None
+
+    # OTEL span buffer limits. The default ``BatchSpanProcessor``
+    # config (2048-span queue, no export timeout) keeps failed
+    # Logfire export batches in memory forever when the cloud is
+    # slow or unreachable — the container leaks until OOM. These
+    # caps backstop that. ``logfire_tracing.register_middleware``
+    # mirrors them into ``os.environ`` so the OTEL SDK actually
+    # sees them. Issue #627.
+    OTEL_BSP_MAX_QUEUE_SIZE: int = 1024
+    OTEL_BSP_MAX_EXPORT_BATCH_SIZE: int = 256
+    OTEL_BSP_EXPORT_TIMEOUT: int = 10000  # ms
+    OTEL_BSP_SCHEDULE_DELAY: int = 5000  # ms
 {% endif %}
 
 {% if include_scheduler %}
