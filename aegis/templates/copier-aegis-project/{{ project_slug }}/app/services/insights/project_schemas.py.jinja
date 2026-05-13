@@ -15,12 +15,21 @@ class ProjectCreate(BaseModel):
     """Payload for ``POST /insights/projects``.
 
     Owner is taken from ``current_user``; never trust a client-supplied
-    owner. Credential fields (``github_token``, ``plausible_api_key``)
-    are encrypted at rest by the service layer.
+    owner. ``organization_id`` IS client-supplied — the endpoint
+    re-validates that the caller is a member of that org before the
+    write lands, so the trust boundary stays at the membership check,
+    not the schema. Credential fields (``github_token``,
+    ``plausible_api_key``) are encrypted at rest by the service layer.
     """
 
     slug: str = Field(min_length=3, max_length=64, pattern=_SLUG_PATTERN)
     name: str = Field(min_length=1, max_length=128)
+    organization_id: int = Field(
+        description=(
+            "Org that will own this project. The caller must be a "
+            "member; the endpoint verifies before insert."
+        )
+    )
     github_owner: str | None = Field(default=None, max_length=64)
     github_repo: str | None = Field(default=None, max_length=128)
     github_token: str | None = Field(default=None, max_length=512)

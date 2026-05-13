@@ -54,11 +54,11 @@ async def get_all_insights(
 {%- endif %}
 ) -> BulkInsightsResponse:
     """Bulk-load all insight data for the dashboard."""
-    cached = cache.get(CACHE_KEY)
+    cached = await cache.get(CACHE_KEY)
     if cached is not None:
         return cached
     result = await qs.load_all()
-    cache.set(CACHE_KEY, result)
+    await cache.set(CACHE_KEY, result)
     return result
 
 {%- if insights_per_user %}
@@ -80,13 +80,13 @@ async def get_project_insights(
 ) -> BulkInsightsResponse:
     """Bulk-load insights data for a single owned project."""
     cache_key = f"insights:project:{project.id}:all"
-    cached = cache.get(cache_key)
+    cached = await cache.get(cache_key)
     if cached is not None:
         return cached
     # Bind the existing query service to this project for the request.
     qs.project_id = project.id
     result = await qs.load_all()
-    cache.set(cache_key, result)
+    await cache.set(cache_key, result)
     return result
 
 
@@ -141,6 +141,31 @@ async def create_project(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"You already have a project with slug '{body.slug}'",
         )
+
+    # Verify the caller is a member of the org they're trying to create
+    # the project under. Without this, anyone could POST with another
+    # org's id and end up with a project visible to that org's members.
+    # Lookup is one SELECT against ``organization_member``.
+    from sqlmodel import select as _select
+
+    from app.models.org import OrganizationMember
+
+    is_member = (
+        await service.db.exec(  # type: ignore[attr-defined]
+            _select(OrganizationMember).where(
+                OrganizationMember.organization_id == body.organization_id,
+                OrganizationMember.user_id == current_user.id,
+            )
+        )
+    ).first()
+    if is_member is None:
+        # 404 not 403 so we don't leak "this org exists but you're not in it"
+        # vs "this org doesn't exist."
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found",
+        )
+
     project = await service.create(
         owner_user_id=current_user.id,  # type: ignore[arg-type]
         **body.model_dump(),

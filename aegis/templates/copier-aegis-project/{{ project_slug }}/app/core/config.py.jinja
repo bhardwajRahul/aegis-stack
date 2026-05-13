@@ -139,6 +139,11 @@ class Settings(
     REDIS_URL: str = "redis://redis:6379"  # Docker service name by default
     REDIS_URL_LOCAL: str | None = None  # Override for local CLI usage
     REDIS_DB: int = 0
+    # Logical Redis DB for the application cache (view caches, bulk
+    # caches, etc.). Separate from REDIS_DB so ``cache.clear()`` can't
+    # accidentally nuke arq's queue (which lives on REDIS_DB) and so a
+    # FLUSHDB against either namespace doesn't take the other down.
+    CACHE_REDIS_DB: int = 1
 
     @property
     def redis_url_effective(self) -> str:

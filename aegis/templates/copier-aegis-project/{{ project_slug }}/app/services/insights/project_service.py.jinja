@@ -43,6 +43,7 @@ class ProjectService:
         self,
         *,
         owner_user_id: int,
+        organization_id: int,
         slug: str,
         name: str,
         github_owner: str | None = None,
@@ -55,12 +56,19 @@ class ProjectService:
     ) -> Project:
         """Create a new project. Credentials are encrypted before insert.
 
+        ``organization_id`` is required — every project belongs to one
+        org. Downstream apps resolve it from their own policy (personal
+        org per user, active team org from a header, etc.).
+        ``owner_user_id`` stays as the implicit owner-membership
+        lookup; v2 reads will swap to membership-based resolution.
+
         The returned Project carries plaintext credentials (whatever the
         caller passed in). The DB row holds ciphertext.
         """
         now = _now()
         project = Project(
             owner_user_id=owner_user_id,
+            organization_id=organization_id,
             slug=slug,
             name=name,
             github_owner=github_owner,

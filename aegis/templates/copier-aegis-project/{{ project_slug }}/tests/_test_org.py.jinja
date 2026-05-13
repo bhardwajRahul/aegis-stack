@@ -1,0 +1,75 @@
+{% if insights_per_user -%}
+"""Shared test helper for creating an organization + owner membership.
+
+The ``insights[per_user]`` schema makes ``project.organization_id``
+NOT NULL. Test fixtures that build ``Project`` rows by hand (bypassing
+``ProjectService.create``) need a quick way to materialise an org +
+membership alongside their user. This helper is that shortcut.
+
+Template-neutral: the function is named ``ensure_org_for_user`` (not
+``ensure_personal_org``) because "personal org" is a downstream-app
+policy choice, not a template default. Each downstream app picks the
+slug / naming convention they want. This helper just makes test setup
+ergonomic — it doesn't define product semantics.
+"""
+
+from __future__ import annotations
+
+from app.models.org import (
+    ORG_ROLE_OWNER,
+    Organization,
+    OrganizationMember,
+)
+from app.models.user import User
+
+
+async def ensure_org_for_user(
+    session,
+    user: User,
+    *,
+    slug: str | None = None,
+    name: str | None = None,
+) -> int:
+    """Create an org + owner-membership for ``user`` if missing; return id.
+
+    Idempotent on ``slug``. Caller is responsible for committing — this
+    just stages rows on the session. Returns the org id so the caller
+    can pass it to ``Project(...)`` or the create endpoint's request body.
+
+    Defaults: ``slug=f"test-org-{user.id}"``, ``name=user.full_name``
+    or the email's local-part.
+
+    Note: the template's ``User`` model does not ship a
+    ``default_organization_id`` field — that's product-level policy that
+    downstream apps (e.g. Pulse) add to their User. Tests that need to
+    remember "this user's active org" should keep the returned id in
+    a local variable.
+    """
+    assert user.id is not None, "ensure_org_for_user needs a flushed user"
+
+    from sqlmodel import select
+
+    slug = slug or f"test-org-{user.id}"
+    existing = (
+        await session.exec(select(Organization).where(Organization.slug == slug))
+    ).first()
+    if existing is not None:
+        assert existing.id is not None
+        return existing.id
+
+    org = Organization(
+        name=name or user.full_name or user.email.split("@")[0],
+        slug=slug,
+        is_active=True,
+    )
+    session.add(org)
+    await session.flush()
+    assert org.id is not None
+    session.add(
+        OrganizationMember(
+            organization_id=org.id, user_id=user.id, role=ORG_ROLE_OWNER,
+        )
+    )
+    await session.flush()
+    return org.id
+{%- endif %}

@@ -493,6 +493,40 @@ class TestInsightsServiceResolver:
         assert resolved.count("database") == 1
         assert "scheduler" in resolved
 
+    def test_insights_per_user_requires_auth(self):
+        """``insights[per_user]`` without auth at all fails validation."""
+        errors = ServiceResolver.validate_services(["insights[per_user]"])
+        assert any("per_user" in e and "auth" in e for e in errors)
+
+    def test_insights_per_user_requires_auth_org_not_basic(self):
+        """``insights[per_user]`` + ``auth[basic]`` fails: the per-user
+        variant FKs to organization.id which only auth[org] ships."""
+        errors = ServiceResolver.validate_services(
+            ["auth[basic]", "insights[per_user]"]
+        )
+        assert errors, "expected an error for auth[basic] + insights[per_user]"
+        assert any("auth[org]" in e for e in errors)
+
+    def test_insights_per_user_requires_auth_org_not_rbac(self):
+        """``insights[per_user]`` + ``auth[rbac]`` also fails — rbac
+        doesn't ship the organization table either."""
+        errors = ServiceResolver.validate_services(["auth[rbac]", "insights[per_user]"])
+        assert errors
+        assert any("auth[org]" in e for e in errors)
+
+    def test_insights_per_user_with_auth_org_validates(self):
+        """``insights[per_user]`` + ``auth[org]`` is the supported
+        combination — validates clean."""
+        errors = ServiceResolver.validate_services(["auth[org]", "insights[per_user]"])
+        assert errors == []
+
+    def test_insights_per_user_with_bare_auth_defaults_to_basic(self):
+        """Bare ``auth`` (no brackets) defaults to basic, so it must
+        still fail the org-level requirement."""
+        errors = ServiceResolver.validate_services(["auth", "insights[per_user]"])
+        assert errors
+        assert any("auth[org]" in e for e in errors)
+
 
 class TestBlogServiceResolver:
     """Test blog service resolution."""

@@ -151,6 +151,60 @@ class ServiceResolver:
                             f"service '{required_service}'"
                         )
 
+        # Conditional service-to-service dependency: ``insights[per_user]``
+        # generates a ``project`` table that FKs to ``user.id`` and
+        # ``organization.id``, both shipped by the auth service. Without
+        # auth in the stack the generated migration would FK to non-
+        # existent tables and fail at ``alembic upgrade``. Surface that
+        # at resolver time instead.
+        #
+        # If a third option-conditional service dep shows up later,
+        # promote this to a generic ``auto_required_services`` field on
+        # ``OptionSpec`` (mirrors ``auto_requires`` for components).
+        for service in services:
+            base_service = extract_base_service_name(service)
+            if base_service != "insights":
+                continue
+            spec = SERVICES.get(base_service)
+            if spec is None or not is_spec_with_options(service):
+                continue
+            try:
+                parsed = parse_options(service, spec)
+            except ValueError:
+                # Parse error already reported above.
+                continue
+            if parsed.get("per_user"):
+                if "auth" not in base_services:
+                    errors.append(
+                        "Service 'insights[per_user]' requires service 'auth' "
+                        "(project rows FK to user.id and organization.id, both "
+                        "shipped by auth). Add auth alongside insights."
+                    )
+                else:
+                    # Auth is selected, but per_user FKs to
+                    # ``organization.id`` which only ``auth[org]`` ships.
+                    # Find the auth selection and verify its level.
+                    from .auth_service_parser import parse_auth_service_config
+
+                    for auth_service in services:
+                        if extract_base_service_name(auth_service) != "auth":
+                            continue
+                        try:
+                            auth_cfg = parse_auth_service_config(auth_service)
+                        except ValueError:
+                            # Parse error already reported elsewhere.
+                            break
+                        if auth_cfg.level != "org":
+                            errors.append(
+                                "Service 'insights[per_user]' requires "
+                                "'auth[org]'. The per-user variant ships "
+                                "migrations that foreign-key to "
+                                "organization.id; the org-level auth is what "
+                                "creates that table. Found auth level: "
+                                f"'{auth_cfg.level}'."
+                            )
+                        break
+
         return errors
 
     @staticmethod

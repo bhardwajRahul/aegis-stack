@@ -43,6 +43,25 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.integrations.main import create_integrated_app
 
 
+# Swap the module-level ``cache`` singleton to the in-memory dict
+# backend for the whole test session. The Redis-backed singleton
+# binds its async connection pool to the event loop alive when it
+# was constructed (at import time). pytest-asyncio creates a fresh
+# loop for every test, so the first test's Redis client becomes
+# unusable for every subsequent test. Production isn't affected
+# (uvicorn keeps one loop for the server's lifetime); only the
+# test suite needs this swap. Dict-mode keeps the same async API,
+# so call sites don't change.
+@pytest.fixture(autouse=True, scope="session")
+def _use_dict_backed_cache():
+    import app.core.cache as cache_module
+
+    original = cache_module.cache
+    cache_module.cache = cache_module.CacheService()
+    yield
+    cache_module.cache = original
+
+
 @pytest.fixture
 def app() -> FastAPI:
     """Create a configured FastAPI app instance for testing."""

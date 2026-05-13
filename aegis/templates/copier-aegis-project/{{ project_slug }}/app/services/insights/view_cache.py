@@ -52,11 +52,11 @@ async def cached_bulk(
     subsequent views in the session re-slice in memory (~20ms) instead
     of re-querying 25 times.
     """
-    cached = cache.get(BULK_CACHE_KEY)
+    cached = await cache.get(BULK_CACHE_KEY)
     if cached is not None:
         return cached  # type: ignore[no-any-return]
     bulk = await qs.load_all()
-    cache.set(BULK_CACHE_KEY, bulk)
+    await cache.set(BULK_CACHE_KEY, bulk)
     return bulk
 
 
@@ -74,13 +74,13 @@ async def cached_view(
     lightweight view-service transform — not the ~25-query DB load.
     """
     key = f"view:{tab}:{days}"
-    cached = cache.get(key)
+    cached = await cache.get(key)
     if cached is not None:
         return cached  # type: ignore[no-any-return]
     bulk = await cached_bulk(cache, qs)
     view_svc = InsightViewService(bulk)
     result = compute(view_svc)
-    cache.set(key, result)
+    await cache.set(key, result)
     return result
 
 
