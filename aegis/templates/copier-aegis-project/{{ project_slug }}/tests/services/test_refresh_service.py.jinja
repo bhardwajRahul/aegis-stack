@@ -145,4 +145,183 @@ class TestRefreshService:
         active = await service.list_active_for_user(user_id)
         assert all(row.revoked_at is None for row in active)
         assert len(active) == 1
+
+
+class TestRefreshServiceSessionMetadata:
+    """Coverage for the active-sessions extensions (#633)."""
+
+    @pytest.mark.asyncio
+    async def test_mint_persists_source_user_agent_ip(
+        self, async_db_session: AsyncSession
+    ):
+        user_id = await _make_user(async_db_session, "meta@example.com")
+        service = RefreshService(async_db_session)
+        token = await service.mint(
+            user_id,
+            source="password",
+            user_agent="pytest/1.0",
+            ip="127.0.0.1",
+        )
+        row = await async_db_session.get(RefreshToken, token)
+        assert row is not None
+        assert row.source == "password"
+        assert row.user_agent == "pytest/1.0"
+        assert row.ip == "127.0.0.1"
+
+    @pytest.mark.asyncio
+    async def test_rotate_bumps_last_used_and_carries_source_forward(
+        self, async_db_session: AsyncSession
+    ):
+        user_id = await _make_user(async_db_session, "rotate-meta@example.com")
+        service = RefreshService(async_db_session)
+        original = await service.mint(
+            user_id,
+            source="oauth:github",
+            user_agent="ua-original",
+            ip="1.1.1.1",
+        )
+        rotated = await service.rotate(
+            original, user_agent="ua-rotated", ip="2.2.2.2"
+        )
+        assert rotated is not None
+        new_token, _ = rotated
+
+        new_row = await async_db_session.get(RefreshToken, new_token)
+        assert new_row is not None
+        # source is sticky across rotation
+        assert new_row.source == "oauth:github"
+        # UA/IP refresh on rotation
+        assert new_row.user_agent == "ua-rotated"
+        assert new_row.ip == "2.2.2.2"
+        # last_used_at is set on the new row at rotation time
+        assert new_row.last_used_at is not None
+
+    @pytest.mark.asyncio
+    async def test_list_sessions_returns_one_per_family(
+        self, async_db_session: AsyncSession
+    ):
+        """After one mint + one rotation, ``list_sessions`` should
+        collapse to a single session entry (most recent live row per
+        family)."""
+        user_id = await _make_user(async_db_session, "list-sessions@example.com")
+        service = RefreshService(async_db_session)
+        original = await service.mint(user_id, source="password")
+        await service.rotate(original)
+
+        sessions = await service.list_sessions(user_id)
+        assert len(sessions) == 1
+
+    @pytest.mark.asyncio
+    async def test_list_sessions_excludes_revoked_families(
+        self, async_db_session: AsyncSession
+    ):
+        user_id = await _make_user(async_db_session, "revoked-list@example.com")
+        service = RefreshService(async_db_session)
+        t1 = await service.mint(user_id, source="password")
+        await service.mint(user_id, source="oauth:github")
+        await service.revoke(t1)
+
+        sessions = await service.list_sessions(user_id)
+        assert len(sessions) == 1
+        assert sessions[0].source == "oauth:github"
+
+    @pytest.mark.asyncio
+    async def test_revoke_session_kills_whole_family(
+        self, async_db_session: AsyncSession
+    ):
+        user_id = await _make_user(async_db_session, "revoke-fam@example.com")
+        service = RefreshService(async_db_session)
+        original = await service.mint(user_id, source="password")
+        rotated = await service.rotate(original)
+        assert rotated is not None
+        new_token, _ = rotated
+
+        new_row = await async_db_session.get(RefreshToken, new_token)
+        assert new_row is not None
+        ok = await service.revoke_session(new_row.family_id, user_id)
+        assert ok is True
+
+        sessions = await service.list_sessions(user_id)
+        assert sessions == []
+
+    @pytest.mark.asyncio
+    async def test_revoke_session_returns_false_for_other_user(
+        self, async_db_session: AsyncSession
+    ):
+        mine = await _make_user(async_db_session, "me@example.com")
+        theirs = await _make_user(async_db_session, "you@example.com")
+        service = RefreshService(async_db_session)
+        their_token = await service.mint(theirs, source="password")
+        their_row = await async_db_session.get(RefreshToken, their_token)
+        assert their_row is not None
+
+        ok = await service.revoke_session(their_row.family_id, mine)
+        assert ok is False
+
+        # Theirs is still live.
+        sessions = await service.list_sessions(theirs)
+        assert len(sessions) == 1
+
+    @pytest.mark.asyncio
+    async def test_revoke_other_sessions_keeps_one(
+        self, async_db_session: AsyncSession
+    ):
+        user_id = await _make_user(async_db_session, "logout-others@example.com")
+        service = RefreshService(async_db_session)
+        keep_token = await service.mint(user_id, source="password")
+        keep_row = await async_db_session.get(RefreshToken, keep_token)
+        assert keep_row is not None
+        await service.mint(user_id, source="oauth:github")
+        await service.mint(user_id, source="oauth:google")
+
+        revoked = await service.revoke_other_sessions(keep_row.family_id, user_id)
+        assert revoked == 2
+
+        sessions = await service.list_sessions(user_id)
+        assert len(sessions) == 1
+        assert sessions[0].family_id == keep_row.family_id
+
+
+{% if not include_scheduler %}
+class TestRefreshServiceLazySweep:
+    """Builds without the scheduler component clean up expired rows
+    opportunistically from ``rotate``. The first eligible rotation
+    primes the sweep; subsequent rotations within the interval are
+    skipped (the table delete is bounded to ~1/hour)."""
+
+    @pytest.mark.asyncio
+    async def test_rotate_sweeps_expired_rows(
+        self, async_db_session: AsyncSession
+    ):
+        from app.services.auth.refresh_service import (
+            REFRESH_TOKEN_RETENTION_DAYS,
+            RefreshService,
+        )
+
+        # Force the sweep gate open for this test — the class-level
+        # timestamp survives across tests in the same process.
+        RefreshService._last_sweep_at = None
+
+        user_id = await _make_user(async_db_session, "lazy-sweep@example.com")
+        service = RefreshService(async_db_session)
+
+        # Plant an expired row beyond the retention window.
+        old = RefreshToken(
+            token="expired-stub-token",
+            user_id=user_id,
+            family_id="expired-family",
+            expires_at=_now() - timedelta(days=REFRESH_TOKEN_RETENTION_DAYS + 1),
+            created_at=_now() - timedelta(days=REFRESH_TOKEN_RETENTION_DAYS + 2),
+        )
+        async_db_session.add(old)
+        await async_db_session.commit()
+
+        # A live token whose rotation will trigger the sweep.
+        live = await service.mint(user_id, source="password")
+        rotated = await service.rotate(live)
+        assert rotated is not None
+
+        gone = await async_db_session.get(RefreshToken, "expired-stub-token")
+        assert gone is None
+{% endif %}
 {%- endif %}

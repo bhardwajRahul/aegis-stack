@@ -491,7 +491,7 @@ AI_MIGRATION = ServiceMigrationSpec(
 
 AUTH_TOKENS_MIGRATION = ServiceMigrationSpec(
     service_name="auth_tokens",
-    description="Auth token tables (password reset, email verification)",
+    description="Auth token tables (password reset, email verification, refresh)",
     tables=[
         TableSpec(
             name="password_reset_token",
@@ -522,6 +522,35 @@ AUTH_TOKENS_MIGRATION = ServiceMigrationSpec(
             indexes=[
                 IndexSpec("ix_email_verification_token_user_id", ["user_id"]),
                 IndexSpec("ix_email_verification_token_token", ["token"], unique=True),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["user_id"], "user", ["id"]),
+            ],
+        ),
+        # Refresh token + session metadata. ``family_id`` groups all
+        # rotations of one device's session; ``source``/``user_agent``/
+        # ``ip``/``last_used_at`` power the active-sessions UI (#633).
+        # SQLite-only deployments previously got this table via
+        # ``SQLModel.metadata.create_all()``; Postgres deployments were
+        # broken without this migration spec.
+        TableSpec(
+            name="refresh_token",
+            columns=[
+                ColumnSpec("token", "sa.String(64)", nullable=False, primary_key=True),
+                ColumnSpec("user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("family_id", "sa.String(36)", nullable=False),
+                ColumnSpec("expires_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("revoked_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("source", "sa.String(32)", nullable=True),
+                ColumnSpec("user_agent", "sa.String(512)", nullable=True),
+                ColumnSpec("ip", "sa.String(64)", nullable=True),
+                ColumnSpec("last_used_at", "sa.DateTime()", nullable=True),
+            ],
+            indexes=[
+                IndexSpec("ix_refresh_token_user_id", ["user_id"]),
+                IndexSpec("ix_refresh_token_family_id", ["family_id"]),
+                IndexSpec("ix_refresh_token_source", ["source"]),
             ],
             foreign_keys=[
                 ForeignKeySpec(["user_id"], "user", ["id"]),

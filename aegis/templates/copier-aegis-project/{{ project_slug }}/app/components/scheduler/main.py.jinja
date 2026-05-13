@@ -21,6 +21,9 @@ from app.services.system.backup import backup_database_job
 {% if include_ai and ai_backend != "memory" %}
 from app.services.ai.jobs import sync_llm_catalog_job
 {% endif %}
+{% if include_auth %}
+from app.services.auth.cleanup_jobs import cleanup_expired_refresh_tokens_job
+{% endif %}
 {% if include_insights %}
 {% if insights_github %}
 from app.services.insights.jobs import collect_github_events_job, collect_github_stars_job, collect_github_traffic_job
@@ -440,6 +443,47 @@ def create_scheduler() -> AsyncIOScheduler:
             f"{existing_job.trigger}"
         )
 {% endif %}
+{% endif %}
+{% endif %}
+
+{% if include_auth %}
+    # Refresh token cleanup: prune rows whose ``expires_at`` is older
+    # than the retention window. Daily cadence is fine — refresh
+    # tokens live for days/weeks and the table grows by at most one
+    # row per device sign-in.
+    job_id = "auth_refresh_token_cleanup"
+{% if scheduler_backend != "memory" %}
+    job_exists = _job_exists_in_database(job_id)
+{% else %}
+    existing_job = scheduler.get_job(job_id)
+    job_exists = existing_job is not None
+{% endif %}
+
+    if not job_exists or force_update:
+        if job_exists and force_update:
+            logger.info(f"Force updating job '{job_id}' from code configuration")
+        else:
+            logger.info(f"Adding new job '{job_id}'")
+
+        scheduler.add_job(
+            cleanup_expired_refresh_tokens_job,
+            trigger="interval",
+            hours=24,
+            id=job_id,
+            name="Auth: Refresh Token Cleanup",
+            max_instances=1,
+            coalesce=True,
+            replace_existing=True,
+        )
+    else:
+{% if scheduler_backend != "memory" %}
+        msg = f"Job '{job_id}' exists in database, preserving current configuration"
+        logger.info(msg)
+{% else %}
+        logger.info(
+            f"Job '{job_id}' exists, preserving current configuration: "
+            f"{existing_job.trigger}"
+        )
 {% endif %}
 {% endif %}
 

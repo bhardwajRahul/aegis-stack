@@ -12,6 +12,7 @@ revokes every other row sharing that ``family_id`` and forces re-auth.
 
 from datetime import UTC, datetime
 
+from pydantic import BaseModel
 from sqlmodel import Field, SQLModel
 
 
@@ -19,7 +20,13 @@ class RefreshToken(SQLModel, table=True):
     """Server-side row backing one issued refresh token.
 
     ``family_id`` groups all tokens that descend from a single original
-    sign-in. Rotation preserves the family; reuse detection revokes it.
+    sign-in — the user-facing "session" is exactly one family. Rotation
+    preserves the family; reuse detection revokes it.
+
+    The metadata columns (``source``, ``user_agent``, ``ip``,
+    ``last_used_at``) back the active-sessions UI (issue #633). They
+    are nullable because rows minted before they were captured (or by
+    paths that don't have the request context) still need to be valid.
     """
 
     __tablename__ = "refresh_token"
@@ -32,4 +39,27 @@ class RefreshToken(SQLModel, table=True):
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
+    source: str | None = Field(default=None, max_length=32, index=True)
+    user_agent: str | None = Field(default=None, max_length=512)
+    ip: str | None = Field(default=None, max_length=64)
+    last_used_at: datetime | None = Field(default=None)
+
+
+class SessionResponse(BaseModel):
+    """Public view of a session (one row per ``family_id``).
+
+    Never carries the raw refresh token. ``id`` is the ``family_id``;
+    clients pass it back on ``DELETE /auth/sessions/{id}`` to revoke
+    that device. ``is_current`` is set for the row matching the
+    request's refresh cookie at the time of the call.
+    """
+
+    id: str
+    source: str | None
+    user_agent: str | None
+    ip: str | None
+    created_at: datetime
+    last_used_at: datetime | None
+    expires_at: datetime
+    is_current: bool
 {%- endif %}

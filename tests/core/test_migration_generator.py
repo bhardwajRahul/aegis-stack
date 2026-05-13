@@ -679,13 +679,29 @@ class TestAuthTokensMigrationSpec:
     """Test auth_tokens migration specification."""
 
     def test_auth_tokens_spec_exists(self) -> None:
-        """Verify auth_tokens is in MIGRATION_SPECS with 2 tables."""
+        """Verify auth_tokens is in MIGRATION_SPECS with all three
+        auth-token tables (refresh_token added for issue #633)."""
         assert "auth_tokens" in MIGRATION_SPECS
         assert AUTH_TOKENS_MIGRATION.service_name == "auth_tokens"
-        assert len(AUTH_TOKENS_MIGRATION.tables) == 2
+        assert len(AUTH_TOKENS_MIGRATION.tables) == 3
         table_names = [t.name for t in AUTH_TOKENS_MIGRATION.tables]
         assert "password_reset_token" in table_names
         assert "email_verification_token" in table_names
+        assert "refresh_token" in table_names
+
+    def test_auth_tokens_refresh_token_table(self) -> None:
+        """Verify refresh_token table has the session-metadata columns."""
+        table = next(
+            t for t in AUTH_TOKENS_MIGRATION.tables if t.name == "refresh_token"
+        )
+        column_names = [col.name for col in table.columns]
+        assert "token" in column_names
+        assert "user_id" in column_names
+        assert "family_id" in column_names
+        assert "source" in column_names
+        assert "user_agent" in column_names
+        assert "ip" in column_names
+        assert "last_used_at" in column_names
 
     def test_auth_tokens_password_reset_table(self) -> None:
         """Verify password_reset_token table has correct columns."""
