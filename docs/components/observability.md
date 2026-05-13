@@ -158,6 +158,32 @@ The health check queries the Logfire Query API (when `LOGFIRE_READ_TOKEN` is set
 
 Results are cached for 2 minutes with a 5-minute backoff on failure to respect rate limits.
 
+## Memory Footprint on Constrained Hosts
+
+The OpenTelemetry SDK that Logfire builds on is heavy: even with `send_to_logfire=False`, loading the SDK and its in-memory span batcher adds ~150-300 MiB of fixed overhead. On a 512 MiB container that is the difference between healthy and OOM-flapping (issue #627).
+
+Two safeguards ship in the template:
+
+1. **No-token short-circuit.** When `LOGFIRE_TOKEN` is empty, the middleware skips `logfire.configure()` and every `instrument_*()` call. The OTEL SDK is never loaded. You see this in the logs as `Logfire: token not set, instrumentation disabled`.
+
+2. **Bounded span buffer when the token is set.** The `BatchSpanProcessor` defaults (2048-span queue, no export timeout) leak when the Logfire endpoint is slow or unreachable, failed batches accumulate in RAM until OOM. The template caps them via four `OTEL_BSP_*` settings pushed into `os.environ` before `logfire.configure()` runs. Override via `.env` if you have headroom:
+
+   ```ini
+   # OTEL_BSP_MAX_QUEUE_SIZE=1024
+   # OTEL_BSP_MAX_EXPORT_BATCH_SIZE=256
+   # OTEL_BSP_EXPORT_TIMEOUT=10000
+   # OTEL_BSP_SCHEDULE_DELAY=5000
+   ```
+
+### Swap on small droplets
+
+For hosts with 4 GB RAM or less, add a 1 GB swap file as a safety net so a brief memory spike does not OOM-kill the webserver before the cgroup limit kicks in:
+
+```bash
+fallocate -l 1G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+```
+
 ## Next Steps
 
 - **[Component Overview](./index.md)**, Understanding Aegis Stack's component architecture

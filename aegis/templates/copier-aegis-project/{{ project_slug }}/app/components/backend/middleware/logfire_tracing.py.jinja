@@ -2,9 +2,17 @@
 Auto-discovered Logfire observability middleware.
 
 Configures Logfire and instruments FastAPI and other enabled components.
-When LOGFIRE_TOKEN is not set, instrumentation still runs but no data
-is sent to Logfire cloud. Set LOGFIRE_TOKEN in .env to enable.
+When ``LOGFIRE_TOKEN`` is not set, the entire ``register_middleware``
+body is a no-op — skipping ``configure()`` and the ``instrument_*()``
+calls avoids loading the OpenTelemetry SDK and the in-memory span
+batcher, which together add ~150-300 MiB of fixed overhead even with
+``send_to_logfire=False``. On a 512 MiB container that is the
+difference between healthy and OOM-flapping (issue #627).
+
+Set ``LOGFIRE_TOKEN`` in ``.env`` to enable.
 """
+
+import os
 
 import logfire
 from fastapi import FastAPI
@@ -14,11 +22,37 @@ from app.core.log import logger
 
 
 def register_middleware(app: FastAPI) -> None:
-    """Configure Logfire observability and instrument the application."""
+    """Configure Logfire observability and instrument the application.
+
+    No-op when ``LOGFIRE_TOKEN`` is empty — the OTEL SDK is heavy and
+    serves no purpose without a destination. See the module docstring.
+    """
+    if not settings.LOGFIRE_TOKEN:
+        logger.info("Logfire: token not set — instrumentation disabled")
+        return
+
+    # Cap the OTEL BatchSpanProcessor before the SDK reads its env.
+    # ``setdefault`` so explicit operator overrides in ``.env`` /
+    # compose still win. These bounds prevent unbounded memory growth
+    # when Logfire is slow or unreachable (issue #627).
+    os.environ.setdefault(
+        "OTEL_BSP_MAX_QUEUE_SIZE", str(settings.OTEL_BSP_MAX_QUEUE_SIZE)
+    )
+    os.environ.setdefault(
+        "OTEL_BSP_MAX_EXPORT_BATCH_SIZE",
+        str(settings.OTEL_BSP_MAX_EXPORT_BATCH_SIZE),
+    )
+    os.environ.setdefault(
+        "OTEL_BSP_EXPORT_TIMEOUT", str(settings.OTEL_BSP_EXPORT_TIMEOUT)
+    )
+    os.environ.setdefault(
+        "OTEL_BSP_SCHEDULE_DELAY", str(settings.OTEL_BSP_SCHEDULE_DELAY)
+    )
+
     logfire.configure(
         service_name=settings.PROJECT_NAME,
         environment=settings.APP_ENV,
-        send_to_logfire=bool(settings.LOGFIRE_TOKEN),
+        send_to_logfire=True,
         console=False,
     )
 
@@ -52,7 +86,4 @@ def register_middleware(app: FastAPI) -> None:
         logger.warning(f"Logfire: Could not instrument Redis: {e}")
 {%- endif %}
 
-    if settings.LOGFIRE_TOKEN:
-        logger.info("Logfire observability active (sending to Logfire cloud)")
-    else:
-        logger.info("Logfire instrumentation active (no token -- cloud disabled)")
+    logger.info("Logfire observability active (sending to Logfire cloud)")
