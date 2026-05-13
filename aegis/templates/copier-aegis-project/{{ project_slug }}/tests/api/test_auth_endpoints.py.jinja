@@ -842,6 +842,272 @@ class TestSessionCookie:
         assert response.json()["email"] == created.email
 
 
+class TestSessionsEndpoints:
+    """Tests for the active-sessions endpoints (#633).
+
+    The session id exposed by the API is the underlying ``family_id``;
+    the raw refresh token is never returned. ``is_current`` is set on
+    the row whose refresh-cookie value the request carried."""
+
+    async def _login_and_get_cookies(
+        self, client, email: str, password: str
+    ) -> dict[str, str]:
+        response = client.post(
+            "/api/v1/auth/token",
+            data={"username": email, "password": password},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        cookies = dict(client.cookies)
+        # Carry only the auth cookies — TestClient stores everything.
+        return {
+            k: v for k, v in cookies.items()
+            if k in ("aegis_session", "aegis_refresh")
+        }
+
+    @pytest.mark.asyncio
+    async def test_list_sessions_unauthenticated_returns_401(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        async_client_with_db.cookies.clear()
+        response = async_client_with_db.get("/api/v1/auth/sessions")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    @pytest.mark.asyncio
+    async def test_list_sessions_marks_current_session(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        user_service = UserService(async_db_session)
+        await user_service.create_user(
+            UserCreate(
+                email="sessions-cur@example.com",
+                full_name="Sessions Cur",
+                password="password123",
+            )
+        )
+
+        await self._login_and_get_cookies(
+            async_client_with_db, "sessions-cur@example.com", "password123"
+        )
+
+        response = async_client_with_db.get("/api/v1/auth/sessions")
+        assert response.status_code == status.HTTP_200_OK
+        body = response.json()
+        assert isinstance(body, list)
+        assert len(body) == 1
+        session = body[0]
+        # Public id is the family_id; raw token never appears.
+        assert "token" not in session
+        assert isinstance(session["id"], str)
+        assert session["is_current"] is True
+        assert session["source"] == "password"
+
+    @pytest.mark.asyncio
+    async def test_revoke_session_404_for_unknown_id(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        user_service = UserService(async_db_session)
+        await user_service.create_user(
+            UserCreate(
+                email="sessions-404@example.com",
+                full_name="Sessions 404",
+                password="password123",
+            )
+        )
+        await self._login_and_get_cookies(
+            async_client_with_db, "sessions-404@example.com", "password123"
+        )
+
+        response = async_client_with_db.delete(
+            "/api/v1/auth/sessions/not-a-real-family-id"
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_revoke_session_kills_target_session(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        user_service = UserService(async_db_session)
+        await user_service.create_user(
+            UserCreate(
+                email="sessions-kill@example.com",
+                full_name="Sessions Kill",
+                password="password123",
+            )
+        )
+        await self._login_and_get_cookies(
+            async_client_with_db, "sessions-kill@example.com", "password123"
+        )
+
+        list_resp = async_client_with_db.get("/api/v1/auth/sessions")
+        sid = list_resp.json()[0]["id"]
+
+        revoke = async_client_with_db.delete(
+            f"/api/v1/auth/sessions/{sid}"
+        )
+        assert revoke.status_code == status.HTTP_204_NO_CONTENT
+
+        # Session should now be gone from the listing. After revoking
+        # the current session, the access JWT is still valid (it lives
+        # up to its own exp), so the list endpoint is still callable.
+        after = async_client_with_db.get("/api/v1/auth/sessions")
+        assert after.status_code == status.HTTP_200_OK
+        assert all(s["id"] != sid for s in after.json())
+
+    @pytest.mark.asyncio
+    async def test_revoke_other_sessions_keeps_current(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        """Two sessions for the same user. Revoking 'others' keeps the
+        caller's current row and revokes the other family."""
+        user_service = UserService(async_db_session)
+        user = await user_service.create_user(
+            UserCreate(
+                email="sessions-others@example.com",
+                full_name="Sessions Others",
+                password="password123",
+            )
+        )
+
+        # Plant a second session for the user directly via the service
+        # so we don't have to juggle two cookie jars in the same TestClient.
+        from app.services.auth.refresh_service import RefreshService
+
+        rs = RefreshService(async_db_session)
+        await rs.mint(user.id, source="oauth:github", user_agent="other-device")
+
+        # Log in via the API — this becomes the "current" session.
+        await self._login_and_get_cookies(
+            async_client_with_db, "sessions-others@example.com", "password123"
+        )
+
+        # Sanity: two sessions are listed.
+        before = async_client_with_db.get("/api/v1/auth/sessions")
+        assert before.status_code == status.HTTP_200_OK
+        assert len(before.json()) == 2
+
+        response = async_client_with_db.delete("/api/v1/auth/sessions")
+        assert response.status_code == status.HTTP_200_OK
+        body = response.json()
+        assert body["revoked"] == 1
+
+        after = async_client_with_db.get("/api/v1/auth/sessions")
+        rows = after.json()
+        assert len(rows) == 1
+        assert rows[0]["is_current"] is True
+
+    @pytest.mark.asyncio
+    async def test_login_records_forwarded_ip_when_trust_proxy_headers(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        """With ``TRUST_PROXY_HEADERS`` on, the stored session IP must
+        be the ``X-Forwarded-For`` head, not the proxy address."""
+        from app.models.refresh_token import RefreshToken
+        from sqlmodel import select
+
+        user_service = UserService(async_db_session)
+        await user_service.create_user(
+            UserCreate(
+                email="proxy-on@example.com",
+                full_name="Proxy On",
+                password="password123",
+            )
+        )
+
+        previous_trust = settings.TRUST_PROXY_HEADERS
+        settings.TRUST_PROXY_HEADERS = True
+        try:
+            response = async_client_with_db.post(
+                "/api/v1/auth/token",
+                data={"username": "proxy-on@example.com", "password": "password123"},
+                headers={"X-Forwarded-For": "203.0.113.7, 10.0.0.1"},
+            )
+            assert response.status_code == status.HTTP_200_OK
+        finally:
+            settings.TRUST_PROXY_HEADERS = previous_trust
+
+        rows = (
+            await async_db_session.exec(
+                select(RefreshToken).where(RefreshToken.user_id.is_not(None))  # type: ignore[union-attr]
+            )
+        ).all()
+        # Just-minted refresh row carries the forwarded address.
+        ips = {r.ip for r in rows}
+        assert "203.0.113.7" in ips
+
+    @pytest.mark.asyncio
+    async def test_login_records_direct_ip_when_trust_proxy_headers_off(
+        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+    ):
+        """With ``TRUST_PROXY_HEADERS`` off (default), the stored
+        session IP ignores ``X-Forwarded-For`` and falls back to the
+        direct client address."""
+        from app.models.refresh_token import RefreshToken
+        from sqlmodel import select
+
+        user_service = UserService(async_db_session)
+        await user_service.create_user(
+            UserCreate(
+                email="proxy-off@example.com",
+                full_name="Proxy Off",
+                password="password123",
+            )
+        )
+
+        previous_trust = settings.TRUST_PROXY_HEADERS
+        settings.TRUST_PROXY_HEADERS = False
+        try:
+            response = async_client_with_db.post(
+                "/api/v1/auth/token",
+                data={"username": "proxy-off@example.com", "password": "password123"},
+                headers={"X-Forwarded-For": "203.0.113.7"},
+            )
+            assert response.status_code == status.HTTP_200_OK
+        finally:
+            settings.TRUST_PROXY_HEADERS = previous_trust
+
+        rows = (
+            await async_db_session.exec(
+                select(RefreshToken).where(RefreshToken.user_id.is_not(None))  # type: ignore[union-attr]
+            )
+        ).all()
+        ips = {r.ip for r in rows}
+        assert "203.0.113.7" not in ips
+
+    @pytest.mark.asyncio
+    async def test_revoke_session_emits_audit_event(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        user_service = UserService(async_db_session)
+        await user_service.create_user(
+            UserCreate(
+                email="sessions-audit@example.com",
+                full_name="Sessions Audit",
+                password="password123",
+            )
+        )
+        await self._login_and_get_cookies(
+            async_client_with_db, "sessions-audit@example.com", "password123"
+        )
+        sid = async_client_with_db.get("/api/v1/auth/sessions").json()[0]["id"]
+
+        caplog.set_level("INFO", logger="audit")
+        async_client_with_db.delete(f"/api/v1/auth/sessions/{sid}")
+
+        events = [
+            getattr(r, "audit", {})
+            for r in caplog.records
+            if r.name == "audit"
+        ]
+        revoked_events = [e for e in events if e.get("event_type") == "auth.session_revoked"]
+        assert revoked_events
+        evt = revoked_events[-1]
+        assert evt["target_type"] == "session"
+        assert evt["target_id"] == sid
+
+
 {% if include_auth_rbac %}
 class TestSetUserRole:
     """Tests for PATCH /api/v1/auth/users/{user_id}/role (admin-only)."""

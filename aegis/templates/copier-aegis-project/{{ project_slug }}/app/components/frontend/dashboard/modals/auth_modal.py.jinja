@@ -19,6 +19,7 @@ from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import get_status_detail
+from .auth_sessions_tab import AuthSessionsTab
 from .auth_users_tab import AuthUsersTab
 {% if include_auth_org %}
 from .auth_orgs_tab import AuthOrgsTab
@@ -269,6 +270,7 @@ class AuthDetailDialog(BaseDetailPopup):
         tabs_list = [
             ft.Tab(text="Overview", content=OverviewTab(component_data)),
             ft.Tab(text="Users", content=AuthUsersTab(metadata=metadata)),
+            ft.Tab(text="Sessions", content=AuthSessionsTab(metadata=metadata)),
 {% if include_auth_org %}
             ft.Tab(text="Organizations", content=AuthOrgsTab(metadata=metadata)),
 {% endif %}

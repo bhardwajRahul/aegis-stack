@@ -23,9 +23,11 @@ together.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
+from app.components.backend.security.rate_limit import get_session_metadata
 from app.core.db import get_async_db
 from app.services.auth.deps import get_refresh_service, get_user_service
 from app.core.config import settings
@@ -136,11 +138,27 @@ async def _finalize_oauth_signin(
     request: Request,
     user: User,
     refresh_service: RefreshService,
+    user_service: UserService,
+    *,
+    provider: str,
 ) -> RedirectResponse:
-    """Shared post-OAuth tail: mint access + refresh, set both cookies,
-    pop the stashed ``next`` (if any) and 303 there. Provider-agnostic."""
+    """Shared post-OAuth tail: stamp ``last_login``, mint access +
+    refresh with session metadata, set both cookies, pop the stashed
+    ``next`` (if any) and 303 there. Provider-agnostic.
+
+    ``provider`` becomes the ``source`` on the refresh-token row
+    (``"oauth:github"`` / ``"oauth:google"``), so the active-sessions
+    UI can show how each session was created.
+    """
+    await user_service.update_user(
+        user.id, last_login=datetime.now(UTC).replace(tzinfo=None)
+    )
     jwt = create_access_token({"sub": user.email})
-    refresh_token = await refresh_service.mint(user.id)
+    refresh_token = await refresh_service.mint(
+        user.id,
+        source=f"oauth:{provider}",
+        **get_session_metadata(request),
+    )
     nxt = _safe_next(request.session.pop("oauth_next", ""))
     response = RedirectResponse(
         url=nxt or "/app",
@@ -242,7 +260,9 @@ async def github_callback(
         return RedirectResponse(
             url="/login?oauth_error=signup_closed", status_code=302
         )
-    return await _finalize_oauth_signin(request, user, refresh_service)
+    return await _finalize_oauth_signin(
+        request, user, refresh_service, user_service, provider="github"
+    )
 
 
 @router.get("/google/start")
@@ -303,7 +323,9 @@ async def google_callback(
         return RedirectResponse(
             url="/login?oauth_error=signup_closed", status_code=302
         )
-    return await _finalize_oauth_signin(request, user, refresh_service)
+    return await _finalize_oauth_signin(
+        request, user, refresh_service, user_service, provider="google"
+    )
 
 
 # ---------------------------------------------------------------------------
