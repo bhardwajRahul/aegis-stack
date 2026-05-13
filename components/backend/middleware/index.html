@@ -12,9 +12,13 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/components/database/postgresql/">
+        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/components/backend/middleware/">
       
       
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../lifecycle/">
       
       
       <link rel="icon" href="../../../images/aegis_stack_layered_shield.svg">
@@ -22,7 +26,7 @@
     
     
       
-        <title>PostgreSQL Implementation - Aegis Stack</title>
+        <title>Middleware - Aegis Stack</title>
       
     
     
@@ -90,7 +94,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#postgresql-implementation" class="md-skip">
+        <a href="#middleware" class="md-skip">
           Skip to content
         </a>
       
@@ -123,7 +127,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              PostgreSQL Implementation
+              Middleware
             
           </span>
         </div>
@@ -274,10 +278,12 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
+      <li class="md-tabs__item md-tabs__item--active">
         <a href="../../" class="md-tabs__link">
           
   
@@ -629,24 +635,29 @@
       
   
   
+    
   
   
+  
     
     
     
     
-      
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
   
@@ -659,7 +670,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             Components
@@ -693,15 +704,224 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../webserver/" class="md-nav__link">
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
   
   
   <span class="md-ellipsis">
     Backend
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            Backend
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Middleware
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Middleware
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-auto-discovery-contract" class="md-nav__link">
+    <span class="md-ellipsis">
+      The Auto-Discovery Contract
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#middleware-that-ships-in-the-templates" class="md-nav__link">
+    <span class="md-ellipsis">
+      Middleware That Ships In The Templates
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Middleware That Ships In The Templates">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#corspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      cors.py
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sessionpy-auth-oauth-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      session.py (auth + OAuth only)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#logfire_tracingpy-observability-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      logfire_tracing.py (observability only)
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#authoring-a-custom-middleware" class="md-nav__link">
+    <span class="md-ellipsis">
+      Authoring A Custom Middleware
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pitfalls" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pitfalls
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      Reference
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lifecycle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Lifecycle
     
   </span>
   
@@ -719,7 +939,61 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Routes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Authentication Integration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../database/" class="md-nav__link">
         
   
   
@@ -741,9 +1015,23 @@
   
   
   
-    <li class="md-nav__item">
-      <a href="../../frontend/" class="md-nav__link">
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_4" id="__nav_3_4_label" tabindex="0">
+            
   
   
   <span class="md-ellipsis">
@@ -752,7 +1040,180 @@
   </span>
   
 
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4">
+            <span class="md-nav__icon md-icon"></span>
+            Frontend
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../frontend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
       </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../frontend/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../frontend/routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Routing & Views
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../frontend/state/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Session State
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../frontend/api-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Client
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../frontend/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Events
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../frontend/example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Example
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -2785,55 +3246,46 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
+  <a href="#the-auto-discovery-contract" class="md-nav__link">
     <span class="md-ellipsis">
-      Quick Start
+      The Auto-Discovery Contract
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#configuration" class="md-nav__link">
+  <a href="#middleware-that-ships-in-the-templates" class="md-nav__link">
     <span class="md-ellipsis">
-      Configuration
+      Middleware That Ships In The Templates
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#using-sqlmodel" class="md-nav__link">
-    <span class="md-ellipsis">
-      Using SQLModel
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#development-workflow" class="md-nav__link">
-    <span class="md-ellipsis">
-      Development Workflow
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Development Workflow">
+    <nav class="md-nav" aria-label="Middleware That Ships In The Templates">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#docker-recommended" class="md-nav__link">
+  <a href="#corspy" class="md-nav__link">
     <span class="md-ellipsis">
-      Docker (Recommended)
+      cors.py
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#direct-database-access" class="md-nav__link">
+  <a href="#sessionpy-auth-oauth-only" class="md-nav__link">
     <span class="md-ellipsis">
-      Direct Database Access
+      session.py (auth + OAuth only)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#logfire_tracingpy-observability-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      logfire_tracing.py (observability only)
     </span>
   </a>
   
@@ -2845,33 +3297,27 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#container-considerations" class="md-nav__link">
+  <a href="#authoring-a-custom-middleware" class="md-nav__link">
     <span class="md-ellipsis">
-      Container Considerations
+      Authoring A Custom Middleware
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Container Considerations">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#multi-container-support" class="md-nav__link">
-    <span class="md-ellipsis">
-      Multi-Container Support
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#see-also" class="md-nav__link">
+  <a href="#pitfalls" class="md-nav__link">
     <span class="md-ellipsis">
-      See Also
+      Pitfalls
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      Reference
     </span>
   </a>
   
@@ -2897,87 +3343,141 @@
   
 
 
-<h1 id="postgresql-implementation">PostgreSQL Implementation</h1>
-<p><strong>Part of the Database Component</strong> - See <a href="../">Database Component</a> for overview and shared patterns.</p>
-<div class="admonition danger">
-<p class="admonition-title">Not Yet Available</p>
-<p>PostgreSQL support is in active development and not yet released.</p>
-<p><strong>Expected:</strong> Early 2026</p>
-<p>For now, use <a href="../sqlite/">SQLite</a> which works great for most use cases.</p>
-</div>
-<p>Server-based database for multi-container deployments and higher concurrency.</p>
-<h2 id="quick-start">Quick Start</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Generate project with PostgreSQL</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-project<span class="w"> </span>--components<span class="w"> </span>database<span class="o">[</span>postgresql<span class="o">]</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nb">cd</span><span class="w"> </span>my-project
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1"># PostgreSQL automatically configured in docker-compose.yml</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>-d
+<h1 id="middleware">Middleware</h1>
+<p>Middleware in Aegis is <strong>auto-discovered</strong>. Any module dropped into
+<code>app/components/backend/middleware/</code> that exposes a <code>register_middleware</code>
+function is picked up at app build time. There is no central registry to
+edit and no import order to manage by hand.</p>
+<h2 id="the-auto-discovery-contract">The Auto-Discovery Contract</h2>
+<p><code>app/components/backend/hooks.py</code> walks <code>middleware/</code> at startup, imports
+every <code>*.py</code> file whose name does not begin with <code>_</code>, and calls
+<code>register_middleware(app)</code> on any module that defines it.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># app/components/backend/middleware/your_middleware.py</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">FastAPI</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">register_middleware</span><span class="p">(</span><span class="n">app</span><span class="p">:</span> <span class="n">FastAPI</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Auto-discovered middleware registration.&quot;&quot;&quot;</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">app</span><span class="o">.</span><span class="n">add_middleware</span><span class="p">(</span><span class="n">YourMiddleware</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Database initialized and ready to use.</p>
-<h2 id="configuration">Configuration</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># .env</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nv">DATABASE_URL</span><span class="o">=</span>postgresql://aegis:aegis@postgres:5432/aegis_db
-</span></code></pre></div>
-<p>PostgreSQL service automatically added to <code>docker-compose.yml</code> when you select it.</p>
-<h2 id="using-sqlmodel">Using SQLModel</h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Exact same code as SQLite</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sqlmodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">SQLModel</span><span class="p">,</span> <span class="n">Field</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">Shield</span><span class="p">(</span><span class="n">SQLModel</span><span class="p">,</span> <span class="n">table</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="n">defense_rating</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="c1"># Use in your code</span>
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">db_session</span>
-</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>
-</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="k">with</span> <span class="n">db_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
-</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="n">shield</span> <span class="o">=</span> <span class="n">Shield</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;Dragon Scale&quot;</span><span class="p">,</span> <span class="n">defense_rating</span><span class="o">=</span><span class="mi">95</span><span class="p">)</span>
-</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>    <span class="n">session</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">shield</span><span class="p">)</span>
-</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>    <span class="c1"># Auto-commits on exit</span>
-</span></code></pre></div>
-<p><strong>Your code works identically</strong> whether you use SQLite or PostgreSQL.</p>
-<h2 id="development-workflow">Development Workflow</h2>
-<h3 id="docker-recommended">Docker (Recommended)</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>make<span class="w"> </span>serve<span class="w">  </span><span class="c1"># Start everything including PostgreSQL</span>
-</span></code></pre></div>
-<h3 id="direct-database-access">Direct Database Access</h3>
-<p>Access PostgreSQL directly for inspection and debugging:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Connect to PostgreSQL CLI</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>docker<span class="w"> </span>compose<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>postgres<span class="w"> </span>psql<span class="w"> </span>-U<span class="w"> </span>aegis<span class="w"> </span>-d<span class="w"> </span>aegis_db
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Useful commands:</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="se">\d</span>t<span class="w">                  </span><span class="c1"># List all tables</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="se">\d</span><span class="w"> </span>shield<span class="w">            </span><span class="c1"># Describe table structure</span>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>SELECT<span class="w"> </span>*<span class="w"> </span>FROM<span class="w"> </span>shield<span class="p">;</span><span class="w">  </span><span class="c1"># Query data</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="se">\q</span><span class="w">                   </span><span class="c1"># Exit</span>
-</span></code></pre></div>
-<h2 id="container-considerations">Container Considerations</h2>
-<p><strong>PostgreSQL is network-based</strong> - any container can connect.</p>
-<h3 id="multi-container-support">Multi-Container Support</h3>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># All services can access PostgreSQL</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nt">services</span><span class="p">:</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span><span class="nt">postgres</span><span class="p">:</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgres:16-alpine</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span><span class="nt">api</span><span class="p">:</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">      </span><span class="nt">DATABASE_URL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgresql://aegis:aegis@postgres:5432/aegis_db</span><span class="w">  </span><span class="c1"># ✅</span>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">  </span><span class="nt">scheduler</span><span class="p">:</span>
-</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
-</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">      </span><span class="nt">DATABASE_URL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgresql://aegis:aegis@postgres:5432/aegis_db</span><span class="w">  </span><span class="c1"># ✅</span>
-</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>
-</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="w">  </span><span class="nt">worker</span><span class="p">:</span>
-</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
-</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="w">      </span><span class="nt">DATABASE_URL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">postgresql://aegis:aegis@postgres:5432/aegis_db</span><span class="w">  </span><span class="c1"># ✅</span>
-</span></code></pre></div>
-<p><strong>This is the key difference</strong> - PostgreSQL enables true microservice architectures.</p>
-<h2 id="see-also">See Also</h2>
+<p>A few rules worth knowing up front:</p>
 <ul>
-<li><strong><a href="../">Database Component</a></strong> - Overview and shared patterns</li>
-<li><strong><a href="../sqlite/">SQLite Implementation</a></strong> - File-based database option</li>
+<li><strong>The function is synchronous.</strong> Discovery happens before the lifespan
+  starts, so <code>register_middleware</code> runs at import time, not in the event
+  loop. Use <code>def</code>, not <code>async def</code>.</li>
+<li><strong>Files beginning with <code>_</code> are skipped.</strong> Use this for shared helpers
+  inside the directory.</li>
+<li><strong>Order is filesystem order.</strong> <code>Path.glob("*.py")</code> does not promise a
+  stable ordering across platforms. If two middleware modules must run in
+  a specific order, put them in the same file.</li>
+<li><strong>Modules that fail to import are logged, not raised.</strong> Discovery
+  catches exceptions per file so one broken middleware does not take down
+  the boot. Watch the logs.</li>
+</ul>
+<p>A module in <code>middleware/</code> that does <strong>not</strong> export <code>register_middleware</code>
+is ignored by the discovery loop. Keep modules in this directory that
+actually register middleware; security primitives consumed as FastAPI
+dependencies live under
+<a href="../auth/#2-rate-limiting-on-auth-endpoints"><code>app/components/backend/security/</code></a>
+and are exposed through <code>app/components/backend/api/deps.py</code>.</p>
+<h2 id="middleware-that-ships-in-the-templates">Middleware That Ships In The Templates</h2>
+<p>The following modules live under
+<code>app/components/backend/middleware/</code> in a generated project. Some are
+gated on the services you selected at <code>aegis init</code> time.</p>
+<h3 id="corspy"><code>cors.py</code></h3>
+<p>Registered always. Allows <code>http://localhost:3000</code> and
+<code>http://localhost:8080</code> with credentials and arbitrary methods and
+headers. The defaults exist for the Flet dev frontend and the FastAPI
+docs UI on <code>:8080</code>. To widen for a deployed frontend, edit the
+<code>allow_origins</code> list in this file, or replace it with values pulled from
+settings.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># app/components/backend/middleware/cors.py</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">def</span><span class="w"> </span><span class="nf">register_middleware</span><span class="p">(</span><span class="n">app</span><span class="p">:</span> <span class="n">FastAPI</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">app</span><span class="o">.</span><span class="n">add_middleware</span><span class="p">(</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>        <span class="n">CORSMiddleware</span><span class="p">,</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="n">allow_origins</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;http://localhost:3000&quot;</span><span class="p">,</span> <span class="s2">&quot;http://localhost:8080&quot;</span><span class="p">],</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>        <span class="n">allow_credentials</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="n">allow_methods</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;*&quot;</span><span class="p">],</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        <span class="n">allow_headers</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;*&quot;</span><span class="p">],</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="p">)</span>
+</span></code></pre></div>
+<h3 id="sessionpy-auth-oauth-only"><code>session.py</code> (auth + OAuth only)</h3>
+<p>Registered when the auth service is included with OAuth providers
+enabled. Wraps Starlette's <code>SessionMiddleware</code> so Authlib can stash the
+OAuth <code>state</code> and PKCE verifier between <code>/start</code> and <code>/callback</code>. Without
+it, the OAuth round-trip can't be verified.</p>
+<p>Two settings matter:</p>
+<ul>
+<li><code>OAUTH_SESSION_SECRET</code>: the signing secret for the session cookie.</li>
+<li><code>SESSION_COOKIE_SECURE</code>: explicit override of the <code>https_only</code> flag.
+  When unset, the cookie is marked secure in every environment except
+  <code>APP_ENV=dev</code>. The escape hatch (<code>SESSION_COOKIE_SECURE=false</code>) exists
+  for prod-over-plain-HTTP deployments where the browser would otherwise
+  silently drop the cookie.</li>
+</ul>
+<h3 id="logfire_tracingpy-observability-only"><code>logfire_tracing.py</code> (observability only)</h3>
+<p>Registered when the observability component is included. Configures
+Logfire with the project name and <code>APP_ENV</code>, then calls
+<code>logfire.instrument_fastapi(app, excluded_urls="/health/.*|/dashboard/.*")</code>
+and <code>logfire.instrument_httpx()</code>. When the database or Redis components
+are present it also instruments SQLAlchemy and Redis. When
+<code>LOGFIRE_TOKEN</code> is unset, instrumentation still runs locally but nothing
+is shipped to Logfire cloud.</p>
+<p><code>/health/*</code> and <code>/dashboard/*</code> are excluded from the FastAPI
+instrumentation on purpose: Overseer polls these every few seconds and
+they would otherwise dominate every trace view.</p>
+<h2 id="authoring-a-custom-middleware">Authoring A Custom Middleware</h2>
+<p>The contract is one file, one function. To add request ID injection:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># app/components/backend/middleware/request_id.py</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">FastAPI</span><span class="p">,</span> <span class="n">Request</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="kn">from</span><span class="w"> </span><span class="nn">starlette.middleware.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseHTTPMiddleware</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="kn">from</span><span class="w"> </span><span class="nn">starlette.responses</span><span class="w"> </span><span class="kn">import</span> <span class="n">Response</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="k">class</span><span class="w"> </span><span class="nc">RequestIDMiddleware</span><span class="p">(</span><span class="n">BaseHTTPMiddleware</span><span class="p">):</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">dispatch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">,</span> <span class="n">call_next</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>        <span class="n">request_id</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;X-Request-ID&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">str</span><span class="p">(</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">())</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>        <span class="n">request</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">request_id</span> <span class="o">=</span> <span class="n">request_id</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>        <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">call_next</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>        <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;X-Request-ID&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">request_id</span>
+</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>        <span class="k">return</span> <span class="n">response</span>
+</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>
+</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>
+</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="k">def</span><span class="w"> </span><span class="nf">register_middleware</span><span class="p">(</span><span class="n">app</span><span class="p">:</span> <span class="n">FastAPI</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-2-19"><a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Auto-discovered middleware registration.&quot;&quot;&quot;</span>
+</span><span id="__span-2-20"><a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>    <span class="n">app</span><span class="o">.</span><span class="n">add_middleware</span><span class="p">(</span><span class="n">RequestIDMiddleware</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Drop the file, restart the backend, and Overseer's Lifecycle tab will
+show the new middleware in the stack.</p>
+<div class="admonition example">
+<p class="admonition-title">Musings: Backend Middleware Auto-Discovery (November 22nd, 2025)</p>
+<p>I'm not sure how I ultimately feel about the auto-discovery middleware pattern. I don't have enough experience with FastAPI plugins yet, but it's something I'm thinking about as the architecture evolves.</p>
+<p>The current approach works well for explicit component registration, but auto-discovery could reduce boilerplate at the cost of making the registration flow less obvious. Trade-offs worth considering as Aegis Stack matures.</p>
+</div>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Registration order is not deterministic across platforms.</strong> If two
+  middleware modules must compose in a specific order, define both
+  classes in the same file and register them in one
+  <code>register_middleware</code> call so the order is explicit.</li>
+<li><strong><code>register_middleware</code> is sync.</strong> If you need to do async setup
+  (open a connection, fetch a remote config), do it in a
+  <a href="../lifecycle/">startup hook</a> and read the result from settings or a
+  module-level cache inside <code>register_middleware</code>.</li>
+<li><strong>A middleware module without <code>register_middleware</code> is silently
+  ignored.</strong> That is intentional, but if your new middleware never
+  fires, check the function name and that the file isn't prefixed with
+  <code>_</code>.</li>
+</ul>
+<h2 id="reference">Reference</h2>
+<ul>
+<li><code>app/components/backend/hooks.py</code>: discovery implementation
+  (<code>BackendHooks.discover_and_register_middleware</code>).</li>
+<li><code>app/components/backend/middleware/</code>: the built-in modules above.</li>
+<li><a href="../lifecycle/">Lifecycle</a>: for setup work that needs the event loop.</li>
+<li><a href="../auth/">Authentication Integration</a>: the rate-limiter dependency
+  pattern.</li>
 </ul>
 
 

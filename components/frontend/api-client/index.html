@@ -12,28 +12,28 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/components/webserver/">
+        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/components/frontend/api-client/">
       
       
-        <link rel="prev" href="../">
+        <link rel="prev" href="../state/">
       
       
-        <link rel="next" href="../database/">
+        <link rel="next" href="../events/">
       
       
-      <link rel="icon" href="../../images/aegis_stack_layered_shield.svg">
+      <link rel="icon" href="../../../images/aegis_stack_layered_shield.svg">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.16">
     
     
       
-        <title>Backend - Aegis Stack</title>
+        <title>API Client - Aegis Stack</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.7e37652d.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.7e37652d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.06af60db.min.css">
       
       
 
@@ -52,11 +52,11 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/custom.css">
+      <link rel="stylesheet" href="../../../stylesheets/custom.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -66,7 +66,7 @@
   <!-- Plausible Analytics -->
   <script defer data-domain="lbedner.github.io" src="https://plausible.io/js/script.js"></script>
 
-   <link href="../../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
+   <link href="../../../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
     html.glightbox-open { overflow: initial; height: 100%; }
     .gslide-title { margin-top: 0px; user-select: text; }
     .gslide-desc { color: #666; user-select: text; }
@@ -75,7 +75,7 @@
     .gdesc-inner { font-size: 0.75rem; }
     body[data-md-color-scheme="slate"] .gdesc-inner { background: var(--md-default-bg-color);}
     body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color);}
-    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../../assets/javascripts/glightbox.min.js"></script></head>
+    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../../../assets/javascripts/glightbox.min.js"></script></head>
   
   
     
@@ -94,7 +94,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#backend-component" class="md-skip">
+        <a href="#api-client" class="md-skip">
           Skip to content
         </a>
       
@@ -108,9 +108,9 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href="../../.." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
-  <img src="../../images/aegis_stack_layered_shield.svg" alt="logo">
+  <img src="../../../images/aegis_stack_layered_shield.svg" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -127,7 +127,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Backend
+              API Client
             
           </span>
         </div>
@@ -242,7 +242,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../.." class="md-tabs__link">
+        <a href="../../.." class="md-tabs__link">
           
   
   
@@ -262,7 +262,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../about/" class="md-tabs__link">
+        <a href="../../../about/" class="md-tabs__link">
           
   
   
@@ -284,7 +284,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../" class="md-tabs__link">
+        <a href="../../" class="md-tabs__link">
           
   
   
@@ -304,7 +304,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../services/" class="md-tabs__link">
+        <a href="../../../services/" class="md-tabs__link">
           
   
   
@@ -324,7 +324,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../overseer/" class="md-tabs__link">
+        <a href="../../../overseer/" class="md-tabs__link">
           
   
   
@@ -344,7 +344,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../deployment/" class="md-tabs__link">
+        <a href="../../../deployment/" class="md-tabs__link">
           
   
   
@@ -364,7 +364,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../cli-reference/" class="md-tabs__link">
+        <a href="../../../cli-reference/" class="md-tabs__link">
           
   
   
@@ -398,9 +398,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href="../../.." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
-  <img src="../../images/aegis_stack_layered_shield.svg" alt="logo">
+  <img src="../../../images/aegis_stack_layered_shield.svg" alt="logo">
 
     </a>
     Aegis Stack
@@ -468,7 +468,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -491,7 +491,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../installation/" class="md-nav__link">
+      <a href="../../../installation/" class="md-nav__link">
         
   
   
@@ -562,7 +562,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../about/" class="md-nav__link">
+      <a href="../../../about/" class="md-nav__link">
         
   
   
@@ -585,7 +585,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../technology/" class="md-nav__link">
+      <a href="../../../technology/" class="md-nav__link">
         
   
   
@@ -608,7 +608,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../process/" class="md-nav__link">
+      <a href="../../../process/" class="md-nav__link">
         
   
   
@@ -684,12 +684,334 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../../" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Backend
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            Backend
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../backend/middleware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Middleware
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../backend/lifecycle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Lifecycle
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../backend/routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Routes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../backend/auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Authentication Integration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../database/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Database
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3_4" id="__nav_3_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Frontend
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_4">
+            <span class="md-nav__icon md-icon"></span>
+            Frontend
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Routing & Views
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../state/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Session State
     
   </span>
   
@@ -721,7 +1043,7 @@
   
   
   <span class="md-ellipsis">
-    Backend
+    API Client
     
   </span>
   
@@ -734,7 +1056,7 @@
   
   
   <span class="md-ellipsis">
-    Backend
+    API Client
     
   </span>
   
@@ -757,27 +1079,54 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#adding-api-routes" class="md-nav__link">
+  <a href="#shape" class="md-nav__link">
     <span class="md-ellipsis">
-      Adding API Routes
+      Shape
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#adding-backend-hooks-auto-discovered" class="md-nav__link">
+  <a href="#one-client-per-session" class="md-nav__link">
     <span class="md-ellipsis">
-      Adding Backend Hooks (Auto-Discovered)
+      One client per session
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#integration" class="md-nav__link">
+  <a href="#the-cookie-jar-and-the-auth-flow" class="md-nav__link">
     <span class="md-ellipsis">
-      Integration
+      The cookie jar and the auth flow
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#on_unauthorized-the-401-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      on_unauthorized: the 401 handler
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-api-client-deliberately-does-not-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      What the API client deliberately does not do
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-this-lives-in-appcore-and-not-frontend" class="md-nav__link">
+    <span class="md-ellipsis">
+      Why this lives in app/core/ and not frontend/
     </span>
   </a>
   
@@ -808,12 +1157,12 @@
   
   
     <li class="md-nav__item">
-      <a href="../database/" class="md-nav__link">
+      <a href="../events/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Database
+    Events
     
   </span>
   
@@ -831,17 +1180,25 @@
   
   
     <li class="md-nav__item">
-      <a href="../frontend/" class="md-nav__link">
+      <a href="../example/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Frontend
+    Example
     
   </span>
   
 
       </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -895,7 +1252,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../scheduler/" class="md-nav__link">
+      <a href="../../scheduler/" class="md-nav__link">
         
   
   
@@ -918,7 +1275,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../scheduler/examples/" class="md-nav__link">
+      <a href="../../scheduler/examples/" class="md-nav__link">
         
   
   
@@ -941,7 +1298,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../scheduler/cli/" class="md-nav__link">
+      <a href="../../scheduler/cli/" class="md-nav__link">
         
   
   
@@ -1005,7 +1362,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../scheduler/extras/persistence/" class="md-nav__link">
+      <a href="../../scheduler/extras/persistence/" class="md-nav__link">
         
   
   
@@ -1085,7 +1442,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../worker/" class="md-nav__link">
+      <a href="../../worker/" class="md-nav__link">
         
   
   
@@ -1108,7 +1465,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../worker/configuration/" class="md-nav__link">
+      <a href="../../worker/configuration/" class="md-nav__link">
         
   
   
@@ -1131,7 +1488,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../worker/examples/" class="md-nav__link">
+      <a href="../../worker/examples/" class="md-nav__link">
         
   
   
@@ -1195,7 +1552,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../worker/extras/load-testing/" class="md-nav__link">
+      <a href="../../worker/extras/load-testing/" class="md-nav__link">
         
   
   
@@ -1234,7 +1591,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../ingress/" class="md-nav__link">
+      <a href="../../ingress/" class="md-nav__link">
         
   
   
@@ -1257,7 +1614,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../observability/" class="md-nav__link">
+      <a href="../../observability/" class="md-nav__link">
         
   
   
@@ -1328,7 +1685,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/" class="md-nav__link">
+      <a href="../../../services/" class="md-nav__link">
         
   
   
@@ -1392,7 +1749,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/" class="md-nav__link">
+      <a href="../../../services/ai/" class="md-nav__link">
         
   
   
@@ -1415,7 +1772,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/illiana/" class="md-nav__link">
+      <a href="../../../services/ai/illiana/" class="md-nav__link">
         
   
   
@@ -1438,7 +1795,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/llm-catalog/" class="md-nav__link">
+      <a href="../../../services/ai/llm-catalog/" class="md-nav__link">
         
   
   
@@ -1461,7 +1818,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/rag/" class="md-nav__link">
+      <a href="../../../services/ai/rag/" class="md-nav__link">
         
   
   
@@ -1484,7 +1841,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/cost-tracking/" class="md-nav__link">
+      <a href="../../../services/ai/cost-tracking/" class="md-nav__link">
         
   
   
@@ -1507,7 +1864,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/voice/" class="md-nav__link">
+      <a href="../../../services/ai/voice/" class="md-nav__link">
         
   
   
@@ -1530,7 +1887,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/engines/" class="md-nav__link">
+      <a href="../../../services/ai/engines/" class="md-nav__link">
         
   
   
@@ -1553,7 +1910,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/providers/" class="md-nav__link">
+      <a href="../../../services/ai/providers/" class="md-nav__link">
         
   
   
@@ -1576,7 +1933,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/api/" class="md-nav__link">
+      <a href="../../../services/ai/api/" class="md-nav__link">
         
   
   
@@ -1599,7 +1956,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/integration/" class="md-nav__link">
+      <a href="../../../services/ai/integration/" class="md-nav__link">
         
   
   
@@ -1622,7 +1979,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/cli/" class="md-nav__link">
+      <a href="../../../services/ai/cli/" class="md-nav__link">
         
   
   
@@ -1645,7 +2002,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/examples/" class="md-nav__link">
+      <a href="../../../services/ai/examples/" class="md-nav__link">
         
   
   
@@ -1717,7 +2074,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/" class="md-nav__link">
+      <a href="../../../services/auth/" class="md-nav__link">
         
   
   
@@ -1740,7 +2097,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/levels/" class="md-nav__link">
+      <a href="../../../services/auth/levels/" class="md-nav__link">
         
   
   
@@ -1763,7 +2120,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/api/" class="md-nav__link">
+      <a href="../../../services/auth/api/" class="md-nav__link">
         
   
   
@@ -1786,7 +2143,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/integration/" class="md-nav__link">
+      <a href="../../../services/auth/integration/" class="md-nav__link">
         
   
   
@@ -1809,7 +2166,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/cli/" class="md-nav__link">
+      <a href="../../../services/auth/cli/" class="md-nav__link">
         
   
   
@@ -1832,7 +2189,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/examples/" class="md-nav__link">
+      <a href="../../../services/auth/examples/" class="md-nav__link">
         
   
   
@@ -1904,7 +2261,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/blog/" class="md-nav__link">
+      <a href="../../../services/blog/" class="md-nav__link">
         
   
   
@@ -1927,7 +2284,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/blog/api/" class="md-nav__link">
+      <a href="../../../services/blog/api/" class="md-nav__link">
         
   
   
@@ -1950,7 +2307,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/blog/dashboard/" class="md-nav__link">
+      <a href="../../../services/blog/dashboard/" class="md-nav__link">
         
   
   
@@ -1973,7 +2330,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/blog/cli/" class="md-nav__link">
+      <a href="../../../services/blog/cli/" class="md-nav__link">
         
   
   
@@ -1996,7 +2353,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/blog/examples/" class="md-nav__link">
+      <a href="../../../services/blog/examples/" class="md-nav__link">
         
   
   
@@ -2068,7 +2425,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/comms/" class="md-nav__link">
+      <a href="../../../services/comms/" class="md-nav__link">
         
   
   
@@ -2091,7 +2448,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/comms/setup/" class="md-nav__link">
+      <a href="../../../services/comms/setup/" class="md-nav__link">
         
   
   
@@ -2114,7 +2471,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/comms/api/" class="md-nav__link">
+      <a href="../../../services/comms/api/" class="md-nav__link">
         
   
   
@@ -2137,7 +2494,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/comms/cli/" class="md-nav__link">
+      <a href="../../../services/comms/cli/" class="md-nav__link">
         
   
   
@@ -2209,7 +2566,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/" class="md-nav__link">
+      <a href="../../../services/insights/" class="md-nav__link">
         
   
   
@@ -2232,7 +2589,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/data-sources/" class="md-nav__link">
+      <a href="../../../services/insights/data-sources/" class="md-nav__link">
         
   
   
@@ -2255,7 +2612,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/cli/" class="md-nav__link">
+      <a href="../../../services/insights/cli/" class="md-nav__link">
         
   
   
@@ -2278,7 +2635,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/dashboard/" class="md-nav__link">
+      <a href="../../../services/insights/dashboard/" class="md-nav__link">
         
   
   
@@ -2301,7 +2658,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/configuration/" class="md-nav__link">
+      <a href="../../../services/insights/configuration/" class="md-nav__link">
         
   
   
@@ -2324,7 +2681,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/examples/" class="md-nav__link">
+      <a href="../../../services/insights/examples/" class="md-nav__link">
         
   
   
@@ -2396,7 +2753,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/" class="md-nav__link">
+      <a href="../../../services/payment/" class="md-nav__link">
         
   
   
@@ -2419,7 +2776,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/setup/" class="md-nav__link">
+      <a href="../../../services/payment/setup/" class="md-nav__link">
         
   
   
@@ -2442,7 +2799,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/dashboard/" class="md-nav__link">
+      <a href="../../../services/payment/dashboard/" class="md-nav__link">
         
   
   
@@ -2465,7 +2822,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/api/" class="md-nav__link">
+      <a href="../../../services/payment/api/" class="md-nav__link">
         
   
   
@@ -2488,7 +2845,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/cli/" class="md-nav__link">
+      <a href="../../../services/payment/cli/" class="md-nav__link">
         
   
   
@@ -2511,7 +2868,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/examples/" class="md-nav__link">
+      <a href="../../../services/payment/examples/" class="md-nav__link">
         
   
   
@@ -2590,7 +2947,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../overseer/" class="md-nav__link">
+      <a href="../../../overseer/" class="md-nav__link">
         
   
   
@@ -2613,7 +2970,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../overseer/story/" class="md-nav__link">
+      <a href="../../../overseer/story/" class="md-nav__link">
         
   
   
@@ -2636,7 +2993,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../overseer/integration/" class="md-nav__link">
+      <a href="../../../overseer/integration/" class="md-nav__link">
         
   
   
@@ -2707,7 +3064,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../deployment/" class="md-nav__link">
+      <a href="../../../deployment/" class="md-nav__link">
         
   
   
@@ -2778,7 +3135,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli-reference/" class="md-nav__link">
+      <a href="../../../cli-reference/" class="md-nav__link">
         
   
   
@@ -2801,7 +3158,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../evolving-your-stack/" class="md-nav__link">
+      <a href="../../../evolving-your-stack/" class="md-nav__link">
         
   
   
@@ -2824,7 +3181,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../integration-patterns/" class="md-nav__link">
+      <a href="../../../integration-patterns/" class="md-nav__link">
         
   
   
@@ -2874,27 +3231,54 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#adding-api-routes" class="md-nav__link">
+  <a href="#shape" class="md-nav__link">
     <span class="md-ellipsis">
-      Adding API Routes
+      Shape
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#adding-backend-hooks-auto-discovered" class="md-nav__link">
+  <a href="#one-client-per-session" class="md-nav__link">
     <span class="md-ellipsis">
-      Adding Backend Hooks (Auto-Discovered)
+      One client per session
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#integration" class="md-nav__link">
+  <a href="#the-cookie-jar-and-the-auth-flow" class="md-nav__link">
     <span class="md-ellipsis">
-      Integration
+      The cookie jar and the auth flow
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#on_unauthorized-the-401-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      on_unauthorized: the 401 handler
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-api-client-deliberately-does-not-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      What the API client deliberately does not do
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-this-lives-in-appcore-and-not-frontend" class="md-nav__link">
+    <span class="md-ellipsis">
+      Why this lives in app/core/ and not frontend/
     </span>
   </a>
   
@@ -2929,83 +3313,132 @@
   
 
 
-<h1 id="backend-component">Backend Component</h1>
-<div class="admonition example">
-<p class="admonition-title">Musings: On Backend Choices (November 2025)</p>
-<p>Most of my experience is with <a href="https://fastapi.tiangolo.com/">FastAPI</a>, but I did have the chance to do some <a href="https://flask.palletsprojects.com/">Flask</a> work in a production environment this past summer, and it was rather fun.</p>
-<p>Regarding using it as a backend, I mean, it's just another backend to learn, and if I can just deal with the sync/async stuff, it's something I can confidently say I wouldn't mind throwing in as an option.</p>
-<p>Of course, with Flet as the frontend (though perhaps forced dependency goes away?), FastAPI will always be there as its own backend. But all API related stuff is handled in Flask... In theory...</p>
-</div>
-<p>The <strong>Backend Component</strong> handles HTTP requests and API endpoints for your Aegis Stack application using <a href="https://fastapi.tiangolo.com/">FastAPI</a>.</p>
-<h2 id="adding-api-routes">Adding API Routes</h2>
-<p>API routes require <strong>explicit registration</strong> to maintain clear dependency tracking:</p>
-<p><strong>Step 1: Create your router</strong>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># app/components/backend/api/data.py</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">APIRouter</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.data_service</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_dashboard_stats</span><span class="p">,</span> <span class="n">trigger_manual_ingestion</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">router</span> <span class="o">=</span> <span class="n">APIRouter</span><span class="p">()</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/data/stats&quot;</span><span class="p">)</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_stats</span><span class="p">():</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">stats</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_dashboard_stats</span><span class="p">()</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;success&quot;</span><span class="p">,</span> <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="n">stats</span><span class="p">}</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="nd">@router</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s2">&quot;/data/ingest&quot;</span><span class="p">)</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">trigger_ingestion</span><span class="p">():</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="k">await</span> <span class="n">trigger_manual_ingestion</span><span class="p">()</span>
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="s2">&quot;ingestion_started&quot;</span><span class="p">}</span>
-</span></code></pre></div></p>
-<p><strong>Step 2: Register explicitly</strong>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># app/components/backend/api/routing.py</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.components.backend.api</span><span class="w"> </span><span class="kn">import</span> <span class="n">data</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">include_routers</span><span class="p">(</span><span class="n">app</span><span class="p">:</span> <span class="n">FastAPI</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">app</span><span class="o">.</span><span class="n">include_router</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">router</span><span class="p">,</span> <span class="n">prefix</span><span class="o">=</span><span class="s2">&quot;/api&quot;</span><span class="p">,</span> <span class="n">tags</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">])</span>
-</span></code></pre></div></p>
-<blockquote>
-<p><strong>Why manual registration?</strong> API routes define your application's public interface. Explicit registration makes dependencies clear and prevents accidental exposure of endpoints.</p>
-</blockquote>
-<h2 id="adding-backend-hooks-auto-discovered">Adding Backend Hooks (Auto-Discovered)</h2>
-<p>Backend hooks are <strong>automatically discovered</strong> by dropping files in designated folders:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>app/components/backend/
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>├── middleware/     # Auto-discovered middleware  
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>├── startup/        # Auto-discovered startup hooks
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>└── shutdown/       # Auto-discovered shutdown hooks
+<h1 id="api-client">API Client</h1>
+<p><code>APIClient</code> (in <code>app/core/client.py</code>) is the <strong>One True Client</strong> for the
+Aegis frontend. Every server call from a view, modal, or service should go
+through it. Raw <code>httpx.AsyncClient</code> use outside this module is a code smell.</p>
+<p>It does three things that the rest of the frontend relies on:</p>
+<ol>
+<li>Wraps a long-lived <code>httpx.AsyncClient</code> whose cookie jar persists across
+   requests within a session.</li>
+<li>Carries the HttpOnly <code>aegis_session</code> cookie automatically once the
+   backend issues it.</li>
+<li>Calls an <code>on_unauthorized</code> handler on 401, which is what drives the
+   "session expired, send the user to /login" path.</li>
+</ol>
+<p>Although this lives under <code>app/core/</code>, the pattern is frontend-agnostic.
+A future htmx or other Python front end would use the same client; the
+fact that Flet hosts it is incidental.</p>
+<h2 id="shape">Shape</h2>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">APIClient</span><span class="p">:</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>        <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>        <span class="n">base_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="n">on_unauthorized</span><span class="p">:</span> <span class="n">UnauthorizedHandler</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">endpoint</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span> <span class="o">|</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">post</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">endpoint</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">json</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span> <span class="o">|</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">post_form</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">endpoint</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span> <span class="o">|</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">aclose</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">clear_cookies</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
 </span></code></pre></div>
-<p><strong>Example: Add CORS middleware</strong>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># app/components/backend/middleware/cors.py</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">FastAPI</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">fastapi.middleware.cors</span><span class="w"> </span><span class="kn">import</span> <span class="n">CORSMiddleware</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">register_middleware</span><span class="p">(</span><span class="n">app</span><span class="p">:</span> <span class="n">FastAPI</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Auto-discovered middleware registration.&quot;&quot;&quot;</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">app</span><span class="o">.</span><span class="n">add_middleware</span><span class="p">(</span>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>        <span class="n">CORSMiddleware</span><span class="p">,</span>
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>        <span class="n">allow_origins</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;*&quot;</span><span class="p">],</span>
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>        <span class="n">allow_methods</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;*&quot;</span><span class="p">],</span>
-</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>        <span class="n">allow_headers</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;*&quot;</span><span class="p">]</span>
-</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>    <span class="p">)</span>
-</span></code></pre></div></p>
-<p><strong>No registration required</strong> - just drop the file and restart. See the <a href="../../integration-patterns/">Integration Patterns</a> for complete details.</p>
-<div class="admonition example">
-<p class="admonition-title">Musings: Backend Middleware Auto-Discovery (November 22nd, 2025)</p>
-<p>I'm not sure how I ultimately feel about the auto-discovery middleware pattern. I don't have enough experience with FastAPI plugins yet, but it's something I'm thinking about as the architecture evolves.</p>
-<p>The current approach works well for explicit component registration, but auto-discovery could reduce boilerplate at the cost of making the registration flow less obvious. Trade-offs worth considering as Aegis Stack matures.</p>
-</div>
-<h2 id="integration">Integration</h2>
-<p>FastAPI integrates with your application and provides:</p>
+<p>The verbs return parsed JSON (<code>dict | list</code>) on 2xx and <code>None</code> on error.
+Errors are logged inside the client; callers check for <code>None</code> (or for the
+expected type) rather than catching exceptions on every call.</p>
+<h2 id="one-client-per-session">One client per session</h2>
+<p><code>APIClient</code> is constructed once during the per-session bootstrap and
+attached to <a href="../state/"><code>SessionState</code></a>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># app/components/frontend/main.py (excerpt)</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">api_client</span> <span class="o">=</span> <span class="n">APIClient</span><span class="p">(</span><span class="n">on_unauthorized</span><span class="o">=</span><span class="n">_handle_unauthorized</span><span class="p">)</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">init_session_state</span><span class="p">(</span><span class="n">page</span><span class="p">,</span> <span class="n">api_client</span><span class="o">=</span><span class="n">api_client</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Why per-session rather than per-call:</p>
 <ul>
-<li><strong>Interactive docs</strong> at <code>/docs</code> (Swagger UI)</li>
-<li><strong>API schema</strong> at <code>/openapi.json</code>  </li>
-<li><strong>Health check</strong> at <code>/health</code></li>
-<li><strong>CORS enabled</strong> for frontend integration</li>
+<li><strong>The cookie jar has to persist.</strong> A fresh <code>httpx.AsyncClient</code> on every
+  call would mean a fresh empty jar on every call. The <code>aegis_session</code>
+  cookie would never make it back to the server.</li>
+<li><strong>Connection pooling.</strong> httpx reuses keep-alive connections inside an
+  <code>AsyncClient</code>. Constructing a new client per call defeats it.</li>
+<li><strong>Isolation between sessions.</strong> Two browser tabs (two Flet sessions)
+  get two <code>APIClient</code> instances, so their cookie jars cannot bleed into
+  each other. Sign-in as User A in one tab does not authenticate User B's
+  tab.</li>
 </ul>
+<p><code>APIClient.aclose()</code> releases the underlying connection pool and runs
+exactly once per session, from <code>clear_session_state(page)</code>. See
+<a href="../state/#teardown">Session State</a> for why it does not fire on
+<code>on_disconnect</code>.</p>
+<h2 id="the-cookie-jar-and-the-auth-flow">The cookie jar and the auth flow</h2>
+<p>The backend issues <code>Set-Cookie: aegis_session=&lt;token&gt;; HttpOnly</code> on:</p>
+<ul>
+<li><code>POST /api/v1/auth/token</code> (username + password sign-in)</li>
+<li><code>POST /api/v1/auth/register</code></li>
+<li>The OAuth callback redirect</li>
+</ul>
+<p><code>httpx.AsyncClient</code> parses <code>Set-Cookie</code> and adds the cookie to its jar
+automatically. Every subsequent request on the same client includes it
+in the <code>Cookie:</code> header. The view code does not need to know about it.</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant V as View
+    participant C as APIClient
+    participant B as FastAPI backend
+
+    V-&gt;&gt;C: post_form to /auth/token with credentials
+    C-&gt;&gt;B: POST /auth/token
+    B--&gt;&gt;C: 200 plus Set-Cookie aegis_session
+    Note over C: cookie lands in httpx jar
+    V-&gt;&gt;C: get /api/v1/insights/projects
+    C-&gt;&gt;B: GET with Cookie aegis_session
+    B--&gt;&gt;C: 200 plus JSON payload</code></pre>
+<p>Logout (<code>sign_out(page)</code> in <code>app/components/frontend/auth/session.py</code>):</p>
+<ol>
+<li>POSTs <code>/api/v1/auth/logout</code> so the backend can revoke server-side.</li>
+<li>Calls <code>api.clear_cookies()</code> to drop the jar locally. This is
+   belt-and-braces against a partial-failure replay even if the
+   server-side <code>delete-cookie</code> response was honored.</li>
+</ol>
+<h2 id="on_unauthorized-the-401-handler"><code>on_unauthorized</code>: the 401 handler</h2>
+<p><code>APIClient</code> accepts a callback that fires when the backend returns 401.
+The Aegis bootstrap wires this to a handler that signs the user out
+locally and routes them to <code>/login</code>. The contract:</p>
+<ul>
+<li>The handler can be sync or async; <code>APIClient</code> dispatches both.</li>
+<li>A re-entry guard (<code>_in_unauthorized</code>) stops the canonical recursive
+  case from looping forever. <code>sign_out</code> itself calls <code>/auth/logout</code>,
+  which 401s when the cookie is already stale, which is exactly when the
+  handler is firing.</li>
+<li>A second guard (<code>_in_refresh</code>) covers the refresh-on-401 retry layer:
+  if <code>/auth/refresh</code> itself returns 401, the client does not try to
+  refresh again.</li>
+</ul>
+<h2 id="what-the-api-client-deliberately-does-not-do">What the API client deliberately does not do</h2>
+<ul>
+<li><strong>No response model coercion.</strong> Endpoints return JSON; the client
+  returns <code>dict | list | None</code>. Views are free to pass the payload to a
+  Pydantic model for validation, but the client does not enforce one.
+  This keeps it usable across every endpoint without per-call generics.</li>
+<li><strong>No retry loop.</strong> Exactly one retry is built in for the
+  refresh-on-401 path; everything else is a single shot. Aegis does not
+  silently retry user-initiated calls.</li>
+<li><strong>No caching.</strong> The client is a thin wrapper. Caching, when wanted,
+  goes one layer up (the view's <code>_reload</code> method, or a service that
+  memoizes on top of the client).</li>
+</ul>
+<h2 id="why-this-lives-in-appcore-and-not-frontend">Why this lives in <code>app/core/</code> and not <code>frontend/</code></h2>
+<p><code>app/core/</code> is app-scoped: nothing in it takes a <code>page</code>. <code>APIClient</code>
+qualifies because it has no Flet dependency; it is just an httpx wrapper.
+The fact that Aegis instantiates one per Flet session is an integration
+detail handled by <code>init_session_state</code>. A second front end (or a CLI
+client, or a script) could import <code>APIClient</code> directly without pulling
+Flet in.</p>
 <h2 id="next-steps">Next Steps</h2>
 <ul>
-<li><strong><a href="https://fastapi.tiangolo.com/">FastAPI Documentation</a></strong> - Complete API framework capabilities</li>
-<li><strong><a href="https://fastapi.tiangolo.com/tutorial/">FastAPI Tutorial</a></strong> - Building APIs with FastAPI</li>
-<li><strong><a href="../">Component Overview</a></strong> - Understanding Aegis Stack's component architecture</li>
+<li><a href="../events/">Events</a>: the page lifecycle that triggers
+  <code>is_authenticated()</code> (which uses the client) on every connect and
+  protected route change.</li>
+<li><a href="../example/">Example</a>: a view that uses the client end-to-end.</li>
 </ul>
 
 
@@ -3078,16 +3511,16 @@
     
     
       
-      <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": "../../..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.50899def.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.50899def.min.js"></script>
       
         <script src="https://unpkg.com/mermaid@10.4.0/dist/mermaid.min.js"></script>
       
-        <script src="../../javascripts/mermaid-config.js"></script>
+        <script src="../../../javascripts/mermaid-config.js"></script>
       
-        <script src="../../javascripts/feedback.js"></script>
+        <script src="../../../javascripts/feedback.js"></script>
       
     
   <script id="init-glightbox">const lightbox = GLightbox({"touchNavigation": true, "loop": false, "zoomable": true, "draggable": true, "openEffect": "zoom", "closeEffect": "zoom", "slideEffect": "slide"});

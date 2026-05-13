@@ -12,9 +12,13 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/components/database/sqlite/">
+        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/components/frontend/routing/">
       
       
+        <link rel="prev" href="../architecture/">
+      
+      
+        <link rel="next" href="../state/">
       
       
       <link rel="icon" href="../../../images/aegis_stack_layered_shield.svg">
@@ -22,7 +26,7 @@
     
     
       
-        <title>SQLite Implementation - Aegis Stack</title>
+        <title>Routing & Views - Aegis Stack</title>
       
     
     
@@ -90,7 +94,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#sqlite-implementation" class="md-skip">
+        <a href="#routing-views" class="md-skip">
           Skip to content
         </a>
       
@@ -123,7 +127,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              SQLite Implementation
+              Routing & Views
             
           </span>
         </div>
@@ -274,10 +278,12 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
+      <li class="md-tabs__item md-tabs__item--active">
         <a href="../../" class="md-tabs__link">
           
   
@@ -629,24 +635,29 @@
       
   
   
+    
   
   
+  
     
     
     
     
-      
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
-          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
   
@@ -659,7 +670,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             Components
@@ -695,13 +706,54 @@
   
   
   
-    <li class="md-nav__item">
-      <a href="../../webserver/" class="md-nav__link">
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
   
   
   <span class="md-ellipsis">
     Backend
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            Backend
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../backend/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
     
   </span>
   
@@ -719,7 +771,107 @@
   
   
     <li class="md-nav__item">
-      <a href="../" class="md-nav__link">
+      <a href="../../backend/middleware/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Middleware
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../backend/lifecycle/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Lifecycle
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../backend/routes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Routes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../backend/auth/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Authentication Integration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../database/" class="md-nav__link">
         
   
   
@@ -739,11 +891,27 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../frontend/" class="md-nav__link">
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3_4" id="__nav_3_4_label" tabindex="0">
+            
   
   
   <span class="md-ellipsis">
@@ -752,7 +920,276 @@
   </span>
   
 
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_4">
+            <span class="md-nav__icon md-icon"></span>
+            Frontend
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
       </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Routing & Views
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Routing & Views
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-route-registry" class="md-nav__link">
+    <span class="md-ellipsis">
+      The route registry
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#route-change-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      Route change flow
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#baseview-and-its-three-hooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      BaseView and its three hooks
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#building-a-view-inline" class="md-nav__link">
+    <span class="md-ellipsis">
+      Building a view inline
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#view-pop" class="md-nav__link">
+    <span class="md-ellipsis">
+      View pop
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      Next Steps
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../state/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Session State
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    API Client
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Events
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../example/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Example
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
     </li>
   
 
@@ -2785,102 +3222,54 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#quick-start" class="md-nav__link">
+  <a href="#the-route-registry" class="md-nav__link">
     <span class="md-ellipsis">
-      Quick Start
+      The route registry
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#configuration" class="md-nav__link">
+  <a href="#route-change-flow" class="md-nav__link">
     <span class="md-ellipsis">
-      Configuration
+      Route change flow
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#using-sqlmodel" class="md-nav__link">
+  <a href="#baseview-and-its-three-hooks" class="md-nav__link">
     <span class="md-ellipsis">
-      Using SQLModel
+      BaseView and its three hooks
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#development-workflow" class="md-nav__link">
+  <a href="#building-a-view-inline" class="md-nav__link">
     <span class="md-ellipsis">
-      Development Workflow
+      Building a view inline
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Development Workflow">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#docker-recommended" class="md-nav__link">
-    <span class="md-ellipsis">
-      Docker (Recommended)
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#direct-database-access" class="md-nav__link">
-    <span class="md-ellipsis">
-      Direct Database Access
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#container-considerations" class="md-nav__link">
+  <a href="#view-pop" class="md-nav__link">
     <span class="md-ellipsis">
-      Container Considerations
+      View pop
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Container Considerations">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#this-works" class="md-nav__link">
-    <span class="md-ellipsis">
-      This Works
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#this-doesnt-work" class="md-nav__link">
-    <span class="md-ellipsis">
-      This Doesn't Work
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#see-also" class="md-nav__link">
+  <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
-      See Also
+      Next Steps
     </span>
   </a>
   
@@ -2906,83 +3295,164 @@
   
 
 
-<h1 id="sqlite-implementation">SQLite Implementation</h1>
-<p><strong>Part of the Database Component</strong> - See <a href="../">Database Component</a> for overview and shared patterns.</p>
-<p>File-based database with zero configuration - perfect for development and single-container deployments.</p>
-<h2 id="quick-start">Quick Start</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Generate project with database</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-project<span class="w"> </span>--components<span class="w"> </span>database
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nb">cd</span><span class="w"> </span>my-project
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1"># Database works immediately</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>cp<span class="w"> </span>.env.example<span class="w"> </span>.env
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>make<span class="w"> </span>serve
+<h1 id="routing-views">Routing &amp; Views</h1>
+<p>Aegis ships a tiny router on top of Flet's <code>page.on_route_change</code> slot and
+a <code>BaseView</code> ABC that gives every routed view the same three lifecycle
+hooks. The whole thing is about 150 lines of Python; it does not pretend
+to be a framework. The point is that view transitions are predictable:
+the outgoing view always gets a chance to clean up, the incoming view
+always gets a chance to load its data, and a browser refresh always tells
+the active view to reload.</p>
+<h2 id="the-route-registry">The route registry</h2>
+<p><code>ROUTE_TO_VIEW</code> is a <code>dict[str, type[BaseView]]</code> populated at app bootstrap
+by calling <code>register_route(route, view_cls)</code> for each routed view.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># app/components/frontend/main.py (excerpt)</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.components.frontend.core.routing</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_route</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.components.frontend.projects.project_list_view</span><span class="w"> </span><span class="kn">import</span> <span class="n">ProjectListView</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.components.frontend.core.routes</span><span class="w"> </span><span class="kn">import</span> <span class="n">PROJECTS_ROUTE</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">register_route</span><span class="p">(</span><span class="n">PROJECTS_ROUTE</span><span class="p">,</span> <span class="n">ProjectListView</span><span class="p">)</span>
 </span></code></pre></div>
-<p><strong>That's it.</strong> SQLite database created at <code>data/app.db</code> with zero configuration.</p>
-<h2 id="configuration">Configuration</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># .env</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nv">DATABASE_URL</span><span class="o">=</span>sqlite:///data/app.db
-</span></code></pre></div>
-<p>The database file is created automatically in the <code>data/</code> directory.</p>
-<h2 id="using-sqlmodel">Using SQLModel</h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Define your model</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">sqlmodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">SQLModel</span><span class="p">,</span> <span class="n">Field</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">Shield</span><span class="p">(</span><span class="n">SQLModel</span><span class="p">,</span> <span class="n">table</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">Field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="n">defense_rating</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="c1"># Use in your code</span>
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">db_session</span>
-</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>
-</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="k">with</span> <span class="n">db_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
-</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="n">shield</span> <span class="o">=</span> <span class="n">Shield</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;Dragon Scale&quot;</span><span class="p">,</span> <span class="n">defense_rating</span><span class="o">=</span><span class="mi">95</span><span class="p">)</span>
-</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>    <span class="n">session</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">shield</span><span class="p">)</span>
-</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>    <span class="c1"># Auto-commits on exit</span>
-</span></code></pre></div>
-<p>Works identically whether you use SQLite or PostgreSQL.</p>
-<h2 id="development-workflow">Development Workflow</h2>
-<h3 id="docker-recommended">Docker (Recommended)</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>make<span class="w"> </span>serve<span class="w">  </span><span class="c1"># Start everything</span>
-</span></code></pre></div>
-<h3 id="direct-database-access">Direct Database Access</h3>
-<p>Access SQLite database directly for inspection and debugging:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Open SQLite CLI</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>sqlite3<span class="w"> </span>data/app.db
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Useful commands:</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>.tables<span class="w">              </span><span class="c1"># List all tables</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>.schema<span class="w">              </span><span class="c1"># Show all schemas</span>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>.schema<span class="w"> </span>shield<span class="w">       </span><span class="c1"># Show specific table schema</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>SELECT<span class="w"> </span>*<span class="w"> </span>FROM<span class="w"> </span>shield<span class="p">;</span><span class="w">  </span><span class="c1"># Query data</span>
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>.quit<span class="w">                </span><span class="c1"># Exit</span>
-</span></code></pre></div>
-<h2 id="container-considerations">Container Considerations</h2>
-<p><strong>SQLite is file-based</strong> - it can't be shared across containers.</p>
-<h3 id="this-works">This Works</h3>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Single container with multiple services</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nt">services</span><span class="p">:</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span><span class="nt">app</span><span class="p">:</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="c1"># Backend + Scheduler in one container</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="nt">volumes</span><span class="p">:</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./data:/app/data</span><span class="w">  </span><span class="c1"># ✅ Single container accessing SQLite</span>
-</span></code></pre></div>
-<h3 id="this-doesnt-work">This Doesn't Work</h3>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Multiple containers trying to share SQLite</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nt">services</span><span class="p">:</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="nt">api</span><span class="p">:</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="nt">volumes</span><span class="p">:</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./data:/app/data</span><span class="w">  </span><span class="c1"># ❌ Container 1</span>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span><span class="nt">scheduler</span><span class="p">:</span>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">    </span><span class="nt">volumes</span><span class="p">:</span>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./data:/app/data</span><span class="w">  </span><span class="c1"># ❌ Container 2 - conflicts with Container 1</span>
-</span></code></pre></div>
-<p><strong>If you need multi-container database access, use PostgreSQL instead.</strong></p>
-<h2 id="see-also">See Also</h2>
+<p><code>core/routes.py</code> holds the route constants (<code>PROJECTS_ROUTE</code>, <code>LOGIN_ROUTE</code>,
+<code>PUBLIC_ROUTES</code>, ...). Public routes (login, register, the OAuth callback)
+skip the auth gate; everything else triggers an <code>is_authenticated()</code> check
+before the view is constructed.</p>
+<h2 id="route-change-flow">Route change flow</h2>
+<p>When <code>page.go("/projects?slug=x")</code> fires (directly, from a button, or from
+the address bar), the router runs this sequence in
+<code>app/components/frontend/core/routing.py</code>:</p>
+<pre class="mermaid"><code>sequenceDiagram
+    participant U as User
+    participant R as route_change
+    participant Cur as Current view
+    participant New as New view
+
+    U-&gt;&gt;R: page.on_route_change fires
+    R-&gt;&gt;R: reentrancy guard
+    R-&gt;&gt;R: auth gate
+    alt not authenticated
+        R-&gt;&gt;U: redirect to LOGIN_ROUTE
+    else authenticated
+        R-&gt;&gt;R: parse query params
+        R-&gt;&gt;Cur: await on_leave
+        R-&gt;&gt;New: instantiate view class
+        R-&gt;&gt;R: replace page.views and update
+        R-&gt;&gt;New: await on_enter with params
+    end</code></pre>
+<p>A few things to notice:</p>
 <ul>
-<li><strong><a href="../">Database Component</a></strong> - Overview and shared patterns</li>
-<li><strong><a href="../postgresql/">PostgreSQL Implementation</a></strong> - Multi-container database option</li>
+<li><strong>Reentrancy is guarded.</strong> A second route change that fires while the
+  first is still in flight is dropped with a warning. Rapid double-clicks
+  on a nav button cannot tear the state down halfway.</li>
+<li><strong><code>on_leave</code> runs before the swap.</strong> The outgoing view is asked to clean
+  up before its replacement is constructed. If <code>on_leave</code> raises, the
+  swap still happens; the router logs and moves on.</li>
+<li><strong>Query params are passed in.</strong> <code>on_enter(params)</code> receives a
+  <code>dict[str, Any]</code> parsed from the URL. Single-valued params come back as
+  strings; repeated params come back as lists.</li>
+<li><strong>Error handling is best-effort.</strong> If the route is not in <code>ROUTE_TO_VIEW</code>,
+  or <code>on_enter</code> raises, the router shows an <code>ErrorSnackBar</code> and logs.
+  Nothing about a bad navigation can wedge the page.</li>
+</ul>
+<h2 id="baseview-and-its-three-hooks"><code>BaseView</code> and its three hooks</h2>
+<p>Routed views subclass <code>BaseView</code> (defined in
+<code>app/components/frontend/controls/views/base.py</code>), which is itself a
+subclass of <code>ft.View</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">BaseView</span><span class="p">(</span><span class="n">ft</span><span class="o">.</span><span class="n">View</span><span class="p">,</span> <span class="n">ABC</span><span class="p">):</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">page</span><span class="p">:</span> <span class="n">ft</span><span class="o">.</span><span class="n">Page</span><span class="p">,</span> <span class="n">route</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">route</span><span class="o">=</span><span class="n">route</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">page</span> <span class="o">=</span> <span class="n">page</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="nd">@abstractmethod</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">on_enter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">on_leave</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="k">return</span> <span class="kc">None</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="nd">@abstractmethod</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">on_refresh</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span> <span class="o">...</span>
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Hook</th>
+<th>When it fires</th>
+<th>What to do here</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>on_enter(params)</code></td>
+<td>Router has just put this view on the page.</td>
+<td>Load data, spawn tasks, subscribe to streams.</td>
+</tr>
+<tr>
+<td><code>on_leave()</code></td>
+<td>Router is about to replace this view (or pop it).</td>
+<td>Cancel tasks, close streams, release resources.</td>
+</tr>
+<tr>
+<td><code>on_refresh()</code></td>
+<td>User refreshed the browser; the same route is being re-shown without a router transition.</td>
+<td>Reload data without remounting.</td>
+</tr>
+</tbody>
+</table>
+<p><code>on_enter</code> and <code>on_refresh</code> are both abstract because every view should
+think about both. A view that loads data on entry needs to reload it on
+refresh, and "do nothing on refresh" should be a deliberate choice you
+write down rather than a thing you forget.</p>
+<p><code>on_leave</code> defaults to a no-op because plenty of views genuinely have
+nothing to clean up. The moment you start a <code>page.run_task</code> handle and
+hold the reference on <code>self</code>, you owe <code>on_leave</code> a cancel call.</p>
+<h2 id="building-a-view-inline">Building a view inline</h2>
+<p>Views compose their layout inside <code>__init__</code>. There is no <code>_build_*</code>
+helper convention; the body of <code>__init__</code> <em>is</em> the layout. Hold references
+to anything you intend to mutate later:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">ProjectListView</span><span class="p">(</span><span class="n">BaseView</span><span class="p">):</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">page</span><span class="p">:</span> <span class="n">ft</span><span class="o">.</span><span class="n">Page</span><span class="p">,</span> <span class="n">route</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">page</span><span class="o">=</span><span class="n">page</span><span class="p">,</span> <span class="n">route</span><span class="o">=</span><span class="n">route</span><span class="p">,</span> <span class="n">scroll</span><span class="o">=</span><span class="n">ft</span><span class="o">.</span><span class="n">ScrollMode</span><span class="o">.</span><span class="n">AUTO</span><span class="p">)</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_body</span> <span class="o">=</span> <span class="n">ft</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>            <span class="n">controls</span><span class="o">=</span><span class="p">[</span><span class="n">BodyText</span><span class="p">(</span><span class="s2">&quot;Loading...&quot;</span><span class="p">)],</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>            <span class="n">spacing</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>            <span class="n">tight</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>        <span class="p">)</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">controls</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>            <span class="n">SectionCard</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s2">&quot;Owned projects&quot;</span><span class="p">,</span> <span class="n">body</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_body</span><span class="p">,</span> <span class="n">body_padding</span><span class="o">=</span><span class="mi">16</span><span class="p">),</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>        <span class="p">]</span>
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>
+</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">on_enter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reload</span><span class="p">()</span>
+</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>
+</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">on_refresh</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-2-19"><a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reload</span><span class="p">()</span>
+</span><span id="__span-2-20"><a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>
+</span><span id="__span-2-21"><a id="__codelineno-2-21" name="__codelineno-2-21" href="#__codelineno-2-21"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_reload</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-2-22"><a id="__codelineno-2-22" name="__codelineno-2-22" href="#__codelineno-2-22"></a>        <span class="n">api</span> <span class="o">=</span> <span class="n">get_session_state</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">page</span><span class="p">)</span><span class="o">.</span><span class="n">api_client</span>
+</span><span id="__span-2-23"><a id="__codelineno-2-23" name="__codelineno-2-23" href="#__codelineno-2-23"></a>        <span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">api</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/api/v1/insights/projects&quot;</span><span class="p">)</span>
+</span><span id="__span-2-24"><a id="__codelineno-2-24" name="__codelineno-2-24" href="#__codelineno-2-24"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_body</span><span class="o">.</span><span class="n">controls</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_build_row</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="p">(</span><span class="n">result</span> <span class="ow">or</span> <span class="p">[])]</span>
+</span><span id="__span-2-25"><a id="__codelineno-2-25" name="__codelineno-2-25" href="#__codelineno-2-25"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_body</span><span class="o">.</span><span class="n">update</span><span class="p">()</span>
+</span></code></pre></div>
+<p>Two patterns worth calling out:</p>
+<ul>
+<li><strong>Assign to <code>self.controls</code>, not <code>self.page.controls</code>.</strong> Flet renders
+  <code>view.controls</code> for routed views. Assigning to the page's controls is a
+  common early-Flet mistake that "works" only by accident.</li>
+<li><strong><code>on_enter</code> and <code>on_refresh</code> often share an implementation.</strong> A
+  private <code>_reload()</code> that both delegate to is the canonical shape.</li>
+</ul>
+<h2 id="view-pop">View pop</h2>
+<p>The router also handles <code>page.on_view_pop</code> (back button on nested views).
+It calls <code>on_leave</code> on the current view, pops it from <code>page.views</code>, then
+re-navigates to the now-top view's route. In a single-view-at-a-time
+project this rarely fires; it exists for views that push child views
+onto the stack.</p>
+<h2 id="next-steps">Next Steps</h2>
+<ul>
+<li><a href="../state/">Session State</a>: the <code>SessionState</code> that views read from in
+  <code>on_enter</code>, and the helper <code>get_session_state(page)</code> you see in the
+  example above.</li>
+<li><a href="../events/">Events</a>: how <code>on_refresh</code> connects to <code>page.on_connect</code>, and
+  the task-cancellation discipline that makes <code>on_leave</code> actually useful.</li>
 </ul>
 
 
