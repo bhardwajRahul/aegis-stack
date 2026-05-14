@@ -37,11 +37,20 @@ class ColumnSpec:
 
 @dataclass
 class IndexSpec:
-    """Specification for a database index."""
+    """Specification for a database index.
+
+    ``where`` is a partial-index predicate (SQL fragment, no leading
+    ``WHERE``). When set, it's rendered as both ``sqlite_where`` and
+    ``postgresql_where`` on ``op.create_index`` so the same predicate
+    applies to both backends. Used for partial unique indexes such as
+    ``UNIQUE (email) WHERE deleted_at IS NULL`` — supports soft-delete
+    flows that need to reuse the column value after deletion.
+    """
 
     name: str
     columns: list[str]
     unique: bool = False
+    where: str | None = None
 
 
 @dataclass
@@ -150,8 +159,21 @@ AUTH_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec("locked_until", "sa.DateTime()", nullable=True),
                 ColumnSpec("created_at", "sa.DateTime()", nullable=False),
                 ColumnSpec("updated_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
             ],
-            indexes=[IndexSpec("ix_user_email", ["email"], unique=True)],
+            indexes=[
+                # Partial unique: only enforces uniqueness over live rows
+                # so a re-registration after soft delete can reuse the
+                # email value. Both SQLite and Postgres support
+                # ``CREATE UNIQUE INDEX ... WHERE ...``.
+                IndexSpec(
+                    "ix_user_email",
+                    ["email"],
+                    unique=True,
+                    where="deleted_at IS NULL",
+                ),
+                IndexSpec("ix_user_deleted_at", ["deleted_at"]),
+            ],
         ),
         # UserOAuthIdentity - links a user to a third-party identity.
         # One user can have many identities (GitHub + Google). The
@@ -221,10 +243,18 @@ ORG_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec("is_active", "sa.Boolean()", nullable=False, default="True"),
                 ColumnSpec("created_at", "sa.DateTime()", nullable=False),
                 ColumnSpec("updated_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
             ],
             indexes=[
                 IndexSpec("ix_organization_name", ["name"]),
-                IndexSpec("ix_organization_slug", ["slug"], unique=True),
+                # Partial unique on slug — same rationale as user.email.
+                IndexSpec(
+                    "ix_organization_slug",
+                    ["slug"],
+                    unique=True,
+                    where="deleted_at IS NULL",
+                ),
+                IndexSpec("ix_organization_deleted_at", ["deleted_at"]),
             ],
         ),
         TableSpec(
@@ -1301,7 +1331,7 @@ def upgrade() -> None:
 {% endfor %}
     )
 {% for index in table.indexes %}
-    op.create_index(op.f('{{ index.name }}'), '{{ table.name }}', {{ index.columns }}{% if index.unique %}, unique=True{% endif %})
+    op.create_index(op.f('{{ index.name }}'), '{{ table.name }}', {{ index.columns }}{% if index.unique %}, unique=True{% endif %}{% if index.where %}, sqlite_where=sa.text("{{ index.where }}"), postgresql_where=sa.text("{{ index.where }}"){% endif %})
 {% endfor %}
 
 {% endfor %}
@@ -1325,7 +1355,7 @@ def upgrade() -> None:
         batch_op.create_foreign_key('fk_{{ alter.name }}_{{ fk.columns[0] }}_{{ fk.ref_table }}', '{{ fk.ref_table }}', {{ fk.columns }}, {{ fk.ref_columns }}{% if fk.ondelete %}, ondelete='{{ fk.ondelete }}'{% endif %})
 {% endfor %}
 {% for index in alter.add_indexes %}
-        batch_op.create_index('{{ index.name }}', {{ index.columns }}{% if index.unique %}, unique=True{% endif %})
+        batch_op.create_index('{{ index.name }}', {{ index.columns }}{% if index.unique %}, unique=True{% endif %}{% if index.where %}, sqlite_where=sa.text("{{ index.where }}"), postgresql_where=sa.text("{{ index.where }}"){% endif %})
 {% endfor %}
 
 {% endfor %}
@@ -1465,6 +1495,7 @@ def _render_migration(
                         "name": idx.name,
                         "columns": idx.columns,
                         "unique": idx.unique,
+                        "where": idx.where,
                     }
                     for idx in table.indexes
                 ],
@@ -1516,6 +1547,7 @@ def _render_migration(
                 "name": idx.name,
                 "columns": idx.columns,
                 "unique": idx.unique,
+                "where": idx.where,
             }
             for idx in alter.add_indexes
         ]

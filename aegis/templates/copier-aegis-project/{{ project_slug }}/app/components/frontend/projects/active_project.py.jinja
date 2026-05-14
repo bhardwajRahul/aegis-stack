@@ -1,0 +1,44 @@
+{% if insights_per_user -%}
+"""Active-project state for the dashboard switcher.
+
+Persists the user's selected project slug via Flet ``client_storage`` so
+the choice survives reloads, and caches it on ``SessionState`` for sync
+reads inside render code. This is intentionally per-browser, not
+per-user; the column-backed approach (``User.default_project_id``) can
+replace this later without changing the call sites here.
+"""
+
+from __future__ import annotations
+
+import flet as ft
+
+from app.components.frontend.state.session_state import get_session_state
+
+ACTIVE_PROJECT_KEY = "aegis.active_project_slug"
+_SESSION_CACHE_KEY = "active_project_slug"
+
+
+async def load_active_project(page: ft.Page) -> str | None:
+    """Hydrate the active-project slug from ``client_storage`` into session."""
+    raw = await page.client_storage.get_async(ACTIVE_PROJECT_KEY)
+    slug = raw if isinstance(raw, str) and raw else None
+    get_session_state(page).set(_SESSION_CACHE_KEY, slug)
+    return slug
+
+
+def get_active_project(page: ft.Page) -> str | None:
+    """Sync read of the active-project slug from session cache."""
+    value = get_session_state(page).get(_SESSION_CACHE_KEY)
+    return value if isinstance(value, str) and value else None
+
+
+async def set_active_project(page: ft.Page, slug: str | None) -> None:
+    """Persist the active-project slug; ``None`` clears it."""
+    state = get_session_state(page)
+    if slug:
+        await page.client_storage.set_async(ACTIVE_PROJECT_KEY, slug)
+        state.set(_SESSION_CACHE_KEY, slug)
+    else:
+        await page.client_storage.remove_async(ACTIVE_PROJECT_KEY)
+        state.set(_SESSION_CACHE_KEY, None)
+{%- endif %}

@@ -128,7 +128,9 @@ scheduler.modify_job("daily_reports", hour=7)  # Change to 7 AM
 
 The scheduler uses APScheduler's default settings. Configuration is managed via `app/core/config.py`:
 
-- `SCHEDULER_FORCE_UPDATE` (bool, default: `False`): Force update jobs from code during restart (persistence mode only). Set via environment variable `SCHEDULER_FORCE_UPDATE=true`
+- `SCHEDULER_TIMEZONE` (str, default: `"UTC"`): IANA timezone name; cron triggers inherit this.
+
+Code is the source of truth for job schedules. Every restart re-registers each job via `replace_existing=True`, so editing a trigger in `app/components/scheduler/main.py` and redeploying is all that's needed to change the schedule. Runtime edits via `scheduler.modify_job()` do not survive a restart by design.
 
 Individual jobs can configure their own behavior when defined:
 

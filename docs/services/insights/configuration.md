@@ -80,14 +80,7 @@ Sources are considered stale after 3x their configured interval. A stale source 
 
 ## Scheduler Setup
 
-For automated collection, ensure the scheduler component is included and the jobs are registered:
-
-```bash
-# Force job registration on restart
-SCHEDULER_FORCE_UPDATE=true
-```
-
-After the first restart with `SCHEDULER_FORCE_UPDATE=true`, set it back to `false`. The jobs persist in the scheduler database.
+For automated collection, include the scheduler component. The collector jobs are registered in `app/components/scheduler/main.py` and re-applied from code on every scheduler restart, so a normal redeploy is enough to pick them up.
 
 ## Database
 

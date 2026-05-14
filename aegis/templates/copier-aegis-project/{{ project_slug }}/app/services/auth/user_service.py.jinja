@@ -6,11 +6,7 @@ from datetime import UTC, datetime, timedelta
 {% if include_auth_rbac %}
 from sqlalchemy import func
 {% endif %}
-{% if include_auth_org %}
-from sqlmodel import delete, select
-{% else %}
-from sqlmodel import select
-{% endif %}
+from sqlmodel import delete, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
@@ -18,6 +14,7 @@ from app.core.security import get_password_hash
 {% if include_auth_org %}
 from app.models.org import OrganizationMember, OrgInvite
 {% endif %}
+from app.models.refresh_token import RefreshToken
 from app.models.user import EmailVerificationToken, PasswordResetToken, User, UserCreate
 {% if include_oauth %}
 from app.models.user import OAuthProvider, UserOAuthIdentity
@@ -33,6 +30,16 @@ class RegistrationClosed(Exception):
     email matches an existing local account, sign in normally.
     """
 {% endif %}
+
+
+class RestoreConflict(Exception):
+    """Raised by ``restore_user`` when the soft-deleted user's email is
+    already held by another live user. The partial unique index
+    ``ix_user_email`` allows re-registration after a soft delete, so
+    blindly clearing ``deleted_at`` could produce two live rows with the
+    same email — a constraint violation. The endpoint layer translates
+    this into a 409.
+    """
 
 
 class UserService:
@@ -79,14 +86,22 @@ class UserService:
         return user
 
     async def get_user_by_email(self, email: str) -> User | None:
-        """Get user by email address asynchronously."""
-        statement = select(User).where(User.email == email.lower())
+        """Get user by email address asynchronously. Skips soft-deleted users."""
+        statement = select(User).where(
+            User.email == email.lower(),
+            User.deleted_at.is_(None),
+        )
         result = await self.db.exec(statement)
         return result.first()
 
     async def get_user_by_id(self, user_id: int) -> User | None:
-        """Get user by ID asynchronously."""
-        return await self.db.get(User, user_id)
+        """Get user by ID asynchronously. Skips soft-deleted users."""
+        statement = select(User).where(
+            User.id == user_id,
+            User.deleted_at.is_(None),
+        )
+        result = await self.db.exec(statement)
+        return result.first()
 
     async def update_user(self, user_id: int, **updates) -> User | None:
         """Update user data asynchronously."""
@@ -114,41 +129,171 @@ class UserService:
         return await self.update_user(user_id, is_active=True)
 
     async def delete_user(self, user_id: int) -> bool:
-        """Permanently delete a user from the system.
+        """Soft-delete a user by setting ``deleted_at``.
 
-        Cleans up org memberships and invites before deleting.
+        The row stays in the database but is invisible to ``get_user_*``
+        and ``list_users``. Side-effects intended to neutralize the
+        user's live footprint:
+
+        - Revokes every live refresh-token row for the user so any
+          long-lived session is severed. On restore the user has to
+          sign in again.
+{%- if include_auth_org %}
+        - Hard-deletes any pending ``OrgInvite`` rows the user created
+          (the invitee shouldn't be able to accept into an account
+          that's been deactivated). Memberships are left in place so a
+          restore can re-grant access without re-inviting.
+{%- endif %}
+
+        Use ``hard_delete_user`` for permanent removal.
         """
         user = await self.get_user_by_id(user_id)
         if not user:
             return False
 
-{% if include_auth_org %}
-        # Remove org memberships
+        now = datetime.now(UTC).replace(tzinfo=None)
+        user.deleted_at = now
+        self.db.add(user)
+
+        # Revoke every live refresh token for this user. Bulk UPDATE so
+        # we don't have to load N rows; mirrors ``revoke_family``.
         await self.db.exec(
-            delete(OrganizationMember).where(OrganizationMember.user_id == user_id)
+            update(RefreshToken)
+            .where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
         )
-        # Remove invites created by this user
+{%- if include_auth_org %}
+
+        # Drop pending invites authored by this user.
         await self.db.exec(
             delete(OrgInvite).where(OrgInvite.invited_by == user_id)
         )
+{%- endif %}
 
+        await self.db.commit()
+        return True
+
+    async def hard_delete_user(self, user_id: int) -> bool:
+        """Permanently delete a user and every row that FKs to them.
+
+        Skips the ``deleted_at`` filter so already-soft-deleted users can
+        also be purged. Tests pass without this cleanup because
+        ``SQLModel.metadata.create_all`` doesn't enforce FK constraints
+        the way Postgres does — production would raise an integrity
+        error otherwise.
+
+        Cleaned tables (all FK ``user.id`` without ``ON DELETE CASCADE``):
+
+        - ``refresh_token``
+        - ``password_reset_token``
+        - ``email_verification_token``
+{%- if include_oauth %}
+        - ``user_oauth_identity``
+{%- endif %}
+{%- if include_auth_org %}
+        - ``organization_member`` (user_id)
+        - ``org_invite`` (invited_by)
+{%- endif %}
+        """
+        statement = select(User).where(User.id == user_id)
+        result = await self.db.exec(statement)
+        user = result.first()
+        if not user:
+            return False
+
+        await self.db.exec(
+            delete(RefreshToken).where(RefreshToken.user_id == user_id)
+        )
+        await self.db.exec(
+            delete(PasswordResetToken).where(
+                PasswordResetToken.user_id == user_id
+            )
+        )
+        await self.db.exec(
+            delete(EmailVerificationToken).where(
+                EmailVerificationToken.user_id == user_id
+            )
+        )
+{% if include_oauth %}
+        await self.db.exec(
+            delete(UserOAuthIdentity).where(
+                UserOAuthIdentity.user_id == user_id
+            )
+        )
+{% endif %}
+{% if include_auth_org %}
+        await self.db.exec(
+            delete(OrganizationMember).where(OrganizationMember.user_id == user_id)
+        )
+        await self.db.exec(
+            delete(OrgInvite).where(OrgInvite.invited_by == user_id)
+        )
 {% endif %}
         await self.db.delete(user)
         await self.db.commit()
         return True
 
     async def list_users(self) -> list[User]:
-        """List all users in the system asynchronously."""
-        statement = select(User).order_by(User.created_at.desc())
+        """List all users in the system asynchronously. Skips soft-deleted users."""
+        statement = (
+            select(User)
+            .where(User.deleted_at.is_(None))
+            .order_by(User.created_at.desc())
+        )
         result = await self.db.exec(statement)
         return list(result.all())
+
+    async def restore_user(self, user_id: int) -> User | None:
+        """Clear ``deleted_at`` on a previously soft-deleted user.
+
+        Looks the row up directly (bypassing the soft-delete filter on
+        ``get_user_by_id``). Returns ``None`` if the row doesn't exist or
+        is already live. Raises ``RestoreConflict`` if another live user
+        has claimed the email since the soft delete (partial unique
+        index ``ix_user_email`` would reject the commit otherwise).
+        """
+        statement = select(User).where(User.id == user_id)
+        result = await self.db.exec(statement)
+        user = result.first()
+        if not user or user.deleted_at is None:
+            return None
+
+        # Conflict check: did re-registration with the same email
+        # happen while this user was soft-deleted?
+        conflict_stmt = select(User).where(
+            User.email == user.email,
+            User.deleted_at.is_(None),
+            User.id != user.id,
+        )
+        conflict = (await self.db.exec(conflict_stmt)).first()
+        if conflict is not None:
+            raise RestoreConflict(
+                f"Email '{user.email}' is already in use by an active account"
+            )
+
+        user.deleted_at = None
+        user.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
 
     async def find_existing_emails_with_prefix(
         self, prefix: str, domain: str
     ) -> list[str]:
-        """Find existing emails that match the pattern prefix{number}@domain async."""
+        """Find existing emails matching ``prefix{number}@domain``.
+
+        Filters out soft-deleted users so callers using this to pick a
+        unique email don't get blocked by a stale row.
+        """
         pattern = f"{prefix}%@{domain}"
-        statement = select(User.email).where(User.email.like(pattern))
+        statement = select(User.email).where(
+            User.email.like(pattern),
+            User.deleted_at.is_(None),
+        )
         result = await self.db.exec(statement)
         return list(result.all())
 
@@ -302,8 +447,46 @@ class UserService:
         if identity is not None:
             user = await self.get_user_by_id(identity.user_id)
             if user is None:
-                # Identity row orphaned from a hard-deleted user — shouldn't
-                # happen thanks to ON DELETE CASCADE, but treat defensively.
+                # ``get_user_by_id`` filters out soft-deleted rows. Look the
+                # user up directly to distinguish the two cases:
+                #
+                # - soft-deleted user → auto-restore on OAuth re-sign-in
+                #   so "deleted my account, changed my mind" recovers
+                #   the original account cleanly (avatar, history, etc.).
+                # - truly missing (hard delete or never existed) → delete
+                #   the orphan identity row and fall through to Path 2/3
+                #   for a fresh signup.
+                raw_user = (
+                    await self.db.exec(
+                        select(User).where(User.id == identity.user_id)
+                    )
+                ).first()
+                if raw_user is not None and raw_user.deleted_at is not None:
+                    # Same conflict guard as ``restore_user``: if someone
+                    # re-registered with this email while the user was
+                    # soft-deleted, we can't restore the old row without
+                    # violating the partial unique index. Drop the orphan
+                    # identity and fall through so Path 2/3 produces a
+                    # fresh account (best-effort UX; admin can hard-delete
+                    # the soft-deleted row later if needed).
+                    conflict_stmt = select(User).where(
+                        User.email == raw_user.email,
+                        User.deleted_at.is_(None),
+                        User.id != raw_user.id,
+                    )
+                    conflict = (await self.db.exec(conflict_stmt)).first()
+                    if conflict is None:
+                        raw_user.deleted_at = None
+                        raw_user.updated_at = datetime.now(UTC).replace(tzinfo=None)
+                        self.db.add(raw_user)
+                        identity.provider_username = provider_username
+                        identity.provider_email = email
+                        identity.avatar_url = avatar_url
+                        identity.updated_at = datetime.now(UTC).replace(tzinfo=None)
+                        self.db.add(identity)
+                        await self.db.commit()
+                        await self.db.refresh(raw_user)
+                        return raw_user
                 await self.db.delete(identity)
                 await self.db.commit()
             else:

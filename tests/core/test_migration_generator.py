@@ -316,6 +316,58 @@ class TestGenerateMigration:
         # Only role is in auth_rbac migration, not base
         assert "'role'" not in content
 
+    def test_auth_migration_renders_partial_unique_email_index(
+        self, tmp_path: Path
+    ) -> None:
+        """The ``ix_user_email`` partial unique index must include the
+        ``WHERE deleted_at IS NULL`` predicate. Without this, alembic
+        creates a full unique index and re-registration after a soft
+        delete fails — even though the SQLModel side declares it as
+        partial (silent two-source drift)."""
+        result = generate_migration(tmp_path, "auth")
+        assert result is not None
+        content = result.read_text()
+        assert "ix_user_email" in content
+        # Both backends carry the same predicate so the index behaves
+        # identically on SQLite (dev/test) and Postgres (prod).
+        assert 'sqlite_where=sa.text("deleted_at IS NULL")' in content
+        assert 'postgresql_where=sa.text("deleted_at IS NULL")' in content
+
+    def test_alter_add_index_renders_partial_predicate(self, tmp_path: Path) -> None:
+        """``IndexSpec(..., where=...)`` inside an ``AlterTableSpec``
+        must render the same predicate as the create_table path.
+        Plugin authors hitting the alter branch otherwise get a silently
+        full index."""
+        from aegis.core.migration_generator import (
+            AlterTableSpec,
+            ServiceMigrationSpec,
+            _render_migration,
+        )
+
+        spec = ServiceMigrationSpec(
+            service_name="test_alter_partial",
+            description="exercises IndexSpec.where in alter path",
+            tables=[],
+            alter_tables=[
+                AlterTableSpec(
+                    name="some_table",
+                    add_indexes=[
+                        IndexSpec(
+                            "ix_some_table_email_active",
+                            ["email"],
+                            unique=True,
+                            where="deleted_at IS NULL",
+                        )
+                    ],
+                )
+            ],
+        )
+
+        content = _render_migration(spec, revision="999", down_revision=None)
+        assert "batch_op.create_index" in content
+        assert 'sqlite_where=sa.text("deleted_at IS NULL")' in content
+        assert 'postgresql_where=sa.text("deleted_at IS NULL")' in content
+
     def test_generates_auth_rbac_migration(self, tmp_path: Path) -> None:
         """Test generates auth_rbac migration with ALTER TABLE."""
         # Generate base auth first so rbac gets correct revision chain
@@ -439,6 +491,8 @@ class TestMigrationSpecs:
         assert "last_login" in column_names
         assert "failed_login_attempts" in column_names
         assert "locked_until" in column_names
+        # Soft-delete column (AUTH-029)
+        assert "deleted_at" in column_names
         # Only role is in RBAC migration
         assert "role" not in column_names
 

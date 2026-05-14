@@ -372,7 +372,6 @@ class Settings(
 
 {% if include_scheduler %}
     # Scheduler settings
-    SCHEDULER_FORCE_UPDATE: bool = False  # Force update jobs from code on restart
     SCHEDULER_TIMEZONE: str = "UTC"  # IANA timezone name; cron triggers inherit this
 {% endif %}
 

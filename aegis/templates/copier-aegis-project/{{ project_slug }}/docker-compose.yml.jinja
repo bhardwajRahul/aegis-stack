@@ -116,7 +116,6 @@ services:
 {%- if include_redis %}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
 {%- endif %}
-      - SCHEDULER_FORCE_UPDATE=${SCHEDULER_FORCE_UPDATE:-false}
     restart: unless-stopped
     deploy:
       resources:

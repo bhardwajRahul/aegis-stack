@@ -5,12 +5,14 @@ This module tests the integration between auth services, database,
 and other components in realistic scenarios.
 """
 
+from datetime import UTC, datetime
+
 import pytest
 from app.core.config import settings
 from app.core.security import create_access_token, verify_password, verify_token
 from app.models.user import User, UserCreate
 from app.services.auth.auth_service import get_current_user_from_token
-from app.services.auth.user_service import UserService
+from app.services.auth.user_service import RestoreConflict, UserService
 from fastapi import HTTPException
 from sqlmodel import Session, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -186,6 +188,248 @@ class TestAuthServiceIntegration:
         with pytest.raises(HTTPException) as exc_info:
             await get_current_user_from_token(token, UserService(async_db_session))
         assert exc_info.value.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_soft_delete_user(self, async_db_session: AsyncSession):
+        """``delete_user`` sets ``deleted_at`` and hides the user from lookups."""
+        user_service = UserService(async_db_session)
+        created = await user_service.create_user(
+            UserCreate(
+                email="softdelete@example.com",
+                full_name="Soft Delete",
+                password="password123",
+            )
+        )
+        assert created.deleted_at is None
+
+        assert await user_service.delete_user(created.id) is True
+
+        # Soft-deleted users are invisible to the service-layer getters.
+        assert await user_service.get_user_by_id(created.id) is None
+        assert await user_service.get_user_by_email(created.email) is None
+        assert not any(u.id == created.id for u in await user_service.list_users())
+
+        # Row still in the database with ``deleted_at`` set — verify with a
+        # raw query that bypasses the soft-delete filter.
+        raw = await async_db_session.exec(select(User).where(User.id == created.id))
+        row = raw.first()
+        assert row is not None
+        assert row.deleted_at is not None
+
+    @pytest.mark.asyncio
+    async def test_soft_deleted_user_cannot_authenticate(
+        self, async_db_session: AsyncSession
+    ):
+        """A token issued before soft-delete must stop working after."""
+        user_service = UserService(async_db_session)
+        created = await user_service.create_user(
+            UserCreate(
+                email="softauth@example.com",
+                full_name="Soft Auth",
+                password="password123",
+            )
+        )
+        token = create_access_token(data={"sub": created.email})
+
+        # Token works while the user is live.
+        live = await get_current_user_from_token(token, UserService(async_db_session))
+        assert live.id == created.id
+
+        # Soft-delete the user.
+        await user_service.delete_user(created.id)
+
+        # Same token now fails.
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user_from_token(token, UserService(async_db_session))
+        assert exc_info.value.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_hard_delete_user(self, async_db_session: AsyncSession):
+        """``hard_delete_user`` removes the row entirely."""
+        user_service = UserService(async_db_session)
+        created = await user_service.create_user(
+            UserCreate(
+                email="harddelete@example.com",
+                full_name="Hard Delete",
+                password="password123",
+            )
+        )
+
+        assert await user_service.hard_delete_user(created.id) is True
+
+        # Row is gone — even the bypass query returns nothing.
+        raw = await async_db_session.exec(select(User).where(User.id == created.id))
+        assert raw.first() is None
+
+    @pytest.mark.asyncio
+    async def test_reregister_after_soft_delete(self, async_db_session: AsyncSession):
+        """Same email can be reused after the original user is soft-deleted.
+
+        Exercises the partial unique index ``ix_user_email`` which only
+        enforces uniqueness for rows where ``deleted_at IS NULL``.
+        """
+        user_service = UserService(async_db_session)
+        email = "comeback@example.com"
+
+        first = await user_service.create_user(
+            UserCreate(email=email, full_name="First", password="password123")
+        )
+        await user_service.delete_user(first.id)
+
+        # Re-registration with the same email must succeed.
+        second = await user_service.create_user(
+            UserCreate(email=email, full_name="Second", password="password123")
+        )
+        assert second.id != first.id
+
+        # Lookups now resolve to the new user, not the soft-deleted one.
+        live = await user_service.get_user_by_email(email)
+        assert live is not None
+        assert live.id == second.id
+
+    @pytest.mark.asyncio
+    async def test_restore_user(self, async_db_session: AsyncSession):
+        """``restore_user`` clears ``deleted_at`` and re-enables auth."""
+        user_service = UserService(async_db_session)
+        created = await user_service.create_user(
+            UserCreate(
+                email="restore@example.com",
+                full_name="Restore",
+                password="password123",
+            )
+        )
+        await user_service.delete_user(created.id)
+        assert await user_service.get_user_by_id(created.id) is None
+
+        restored = await user_service.restore_user(created.id)
+        assert restored is not None
+        assert restored.id == created.id
+        assert restored.deleted_at is None
+
+        # Auth flow works again.
+        token = create_access_token(data={"sub": restored.email})
+        live = await get_current_user_from_token(token, UserService(async_db_session))
+        assert live.id == created.id
+
+    @pytest.mark.asyncio
+    async def test_restore_user_noop_on_live_user(
+        self, async_db_session: AsyncSession
+    ):
+        """``restore_user`` on a non-deleted user returns ``None``."""
+        user_service = UserService(async_db_session)
+        created = await user_service.create_user(
+            UserCreate(
+                email="live@example.com", full_name="Live", password="password123"
+            )
+        )
+        assert await user_service.restore_user(created.id) is None
+
+    @pytest.mark.asyncio
+    async def test_restore_user_conflict_when_email_reused(
+        self, async_db_session: AsyncSession
+    ):
+        """Restore must 409 when the email was reclaimed by re-registration."""
+        user_service = UserService(async_db_session)
+        email = "rebound@example.com"
+
+        original = await user_service.create_user(
+            UserCreate(email=email, full_name="Original", password="password123")
+        )
+        await user_service.delete_user(original.id)
+        # Re-register reuses the email (partial unique index permits it).
+        replacement = await user_service.create_user(
+            UserCreate(email=email, full_name="Replacement", password="password123")
+        )
+        assert replacement.id != original.id
+
+        # Attempt to restore the original — should refuse rather than
+        # silently fail the commit.
+        with pytest.raises(RestoreConflict):
+            await user_service.restore_user(original.id)
+
+        # And the original row is still soft-deleted (rollback worked).
+        raw = await async_db_session.exec(
+            select(User).where(User.id == original.id)
+        )
+        row = raw.first()
+        assert row is not None
+        assert row.deleted_at is not None
+
+    @pytest.mark.asyncio
+    async def test_hard_delete_user_purges_dependent_rows(
+        self, async_db_session: AsyncSession
+    ):
+        """``hard_delete_user`` must clean up every FK-referencing row.
+
+        ``refresh_token``, ``password_reset_token``, and
+        ``email_verification_token`` all FK ``user.id`` without
+        ``ON DELETE CASCADE``. A bare ``db.delete(user)`` would raise an
+        integrity error in Postgres; SQLite lets it through, masking the
+        production bug. This test exercises the explicit cleanup path.
+        """
+        from app.models.refresh_token import RefreshToken
+        from app.models.user import (
+            EmailVerificationToken,
+            PasswordResetToken,
+        )
+
+        user_service = UserService(async_db_session)
+        created = await user_service.create_user(
+            UserCreate(
+                email="depcleanup@example.com",
+                full_name="Dep Cleanup",
+                password="password123",
+            )
+        )
+
+        # Seed every dependent table.
+        await user_service.create_password_reset_token(created.email)
+        await user_service.create_email_verification_token(created.id)
+        async_db_session.add(
+            RefreshToken(
+                token="t-purge-1",
+                user_id=created.id,
+                family_id="fam-1",
+                expires_at=datetime.now(UTC).replace(tzinfo=None),
+                created_at=datetime.now(UTC).replace(tzinfo=None),
+            )
+        )
+        await async_db_session.commit()
+
+        assert await user_service.hard_delete_user(created.id) is True
+
+        # Every dependent table is now empty for this user.
+        for model, fk in (
+            (RefreshToken, RefreshToken.user_id),
+            (PasswordResetToken, PasswordResetToken.user_id),
+            (EmailVerificationToken, EmailVerificationToken.user_id),
+        ):
+            rows = await async_db_session.exec(
+                select(model).where(fk == created.id)
+            )
+            assert rows.first() is None, f"{model.__name__} not cleaned up"
+
+        raw = await async_db_session.exec(
+            select(User).where(User.id == created.id)
+        )
+        assert raw.first() is None
+
+    @pytest.mark.asyncio
+    async def test_hard_delete_after_soft_delete(self, async_db_session: AsyncSession):
+        """``hard_delete_user`` must work on already-soft-deleted users."""
+        user_service = UserService(async_db_session)
+        created = await user_service.create_user(
+            UserCreate(
+                email="softthenhard@example.com",
+                full_name="Soft Then Hard",
+                password="password123",
+            )
+        )
+        await user_service.delete_user(created.id)
+        assert await user_service.hard_delete_user(created.id) is True
+
+        raw = await async_db_session.exec(select(User).where(User.id == created.id))
+        assert raw.first() is None
 
     @pytest.mark.asyncio
     async def test_email_uniqueness_constraint(self, async_db_session: AsyncSession):

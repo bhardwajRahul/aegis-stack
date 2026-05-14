@@ -266,14 +266,16 @@ class TestCLIInit:
         scheduler_file = project_path / "app/components/scheduler/main.py"
         scheduler_content = scheduler_file.read_text()
 
-        # Check SCHEDULER_FORCE_UPDATE uses config system (not os.getenv)
+        # Code is the source of truth for job schedules — every add_job
+        # uses ``replace_existing=True`` and there is no FORCE_UPDATE knob.
         assert "from app.core.config import settings" in scheduler_content
-        assert "settings.SCHEDULER_FORCE_UPDATE" in scheduler_content
+        assert "replace_existing=True" in scheduler_content
+        assert "SCHEDULER_FORCE_UPDATE" not in scheduler_content
         assert "os.getenv" not in scheduler_content
 
-        # Check config.py has the setting
+        # Config no longer carries the old force-update flag.
         config_content = (project_path / "app/core/config.py").read_text()
-        assert "SCHEDULER_FORCE_UPDATE: bool = False" in config_content
+        assert "SCHEDULER_FORCE_UPDATE" not in config_content
 
     def _assert_worker_project_structure(self, project_path: Path) -> None:
         """Assert worker-specific project structure."""
