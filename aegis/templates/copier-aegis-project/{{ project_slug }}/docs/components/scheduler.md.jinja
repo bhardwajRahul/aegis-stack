@@ -175,39 +175,35 @@ async def cleanup_old_files():
 ```
 
 ### 2. Register Jobs in Scheduler
-Add jobs to the scheduler configuration:
+Add jobs to the scheduler configuration. Code is the source of truth:
+every startup re-registers each job via ``replace_existing=True``, so
+editing a trigger here and redeploying is all that's needed to change
+the schedule.
 
 ```python
 # app/components/scheduler/main.py
 from app.services.my_jobs import process_daily_reports, cleanup_old_files
 
 def create_scheduler() -> AsyncIOScheduler:
-# Configure persistent scheduler (already initialized above)
-    scheduler = AsyncIOScheduler(jobstores={'default': jobstore})
+    scheduler = AsyncIOScheduler(jobstores={"default": jobstore})
 
-    # Check for existing jobs to respect runtime modifications
-    force_update = os.getenv("SCHEDULER_FORCE_UPDATE", "false").lower() == "true"
+    scheduler.add_job(
+        func=process_daily_reports,
+        trigger=CronTrigger(hour=6, minute=0),
+        id="daily_reports",
+        name="Daily Report Generation",
+        replace_existing=True,
+    )
 
-    # Daily report at 6 AM (check if exists first)
-    if not _job_exists_in_database("daily_reports") or force_update:
-        scheduler.add_job(
-            func=process_daily_reports,
-            trigger=CronTrigger(hour=6, minute=0),
-            id="daily_reports",
-            name="Daily Report Generation",
-            replace_existing=True
-        )
+    scheduler.add_job(
+        func=cleanup_old_files,
+        trigger=CronTrigger(day_of_week="sun", hour=0, minute=0),
+        id="weekly_cleanup",
+        name="Weekly File Cleanup",
+        replace_existing=True,
+    )
 
-    # Weekly cleanup on Sundays at midnight
-    if not _job_exists_in_database("weekly_cleanup") or force_update:
-        scheduler.add_job(
-            func=cleanup_old_files,
-            trigger=CronTrigger(day_of_week="sun", hour=0, minute=0),
-            id="weekly_cleanup",
-            name="Weekly File Cleanup",
-            replace_existing=True
-        )
-return scheduler
+    return scheduler
 ```
 
 ## Job Scheduling Options
@@ -283,20 +279,14 @@ scheduler.modify_job("daily_reports", hour=7)  # Change to 7 AM
 
 ### Production Job Updates
 
-For persistent schedulers, use environment variables to control job updates:
+To change a schedule in production, edit the trigger in
+``app/components/scheduler/main.py`` and redeploy. Each ``add_job``
+call uses ``replace_existing=True``, so the new trigger overwrites
+the persisted row on the next scheduler restart.
 
-```bash
-# Force update all jobs from code configuration (useful during deployments)
-SCHEDULER_FORCE_UPDATE=true docker compose up -d scheduler
-
-# Normal startup (preserves runtime job modifications)
-docker compose up -d scheduler
-```
-
-This pattern allows:
-- **Development**: Jobs update automatically when code changes
-- **Production**: Runtime job modifications are preserved across restarts
-- **Deployments**: Force updates when needed with environment flag
+Runtime edits via ``scheduler.modify_job()`` are intentionally not
+preserved across restarts — code wins, so deploys never silently
+drift from the committed configuration.
 
 ## Error Handling
 
@@ -478,7 +468,6 @@ async def idempotent_job():
 - Confirm jobstore table creation
 
 **Jobs not persisting:**
-- Check if SCHEDULER_FORCE_UPDATE is set incorrectly
 - Verify database write permissions
 - Review SQLAlchemy jobstore logs
 **High memory usage:**
@@ -518,4 +507,4 @@ for job in scheduler.get_jobs():
 3. **Resource Limits**: Configure appropriate memory and CPU limits
 4. **Timezone Handling**: All jobs use UTC (configured automatically)
 5. **Error Notifications**: Implement alerting for critical job failures
-6. **Job Updates**: Use SCHEDULER_FORCE_UPDATE for deployment job updates
+6. **Job Updates**: Edit triggers in ``app/components/scheduler/main.py`` and redeploy — code is the source of truth

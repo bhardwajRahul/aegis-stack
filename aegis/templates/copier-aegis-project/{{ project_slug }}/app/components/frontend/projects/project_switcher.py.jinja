@@ -1,0 +1,199 @@
+{% if insights_per_user -%}
+"""Active-project switcher for the dashboard header.
+
+Lists the owned projects, lets the user pick one, and persists the
+choice via ``active_project`` helpers. On selection, calls back so the
+dashboard can refresh against the new project's data.
+
+Reuses ``ActionMenuItem`` so the menu rows match the rest of the UI.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+import flet as ft
+
+from app.components.frontend.controls.action_menu import ActionMenuItem
+from app.components.frontend.core.routes import (
+    PROJECT_NEW_ROUTE,
+    PROJECTS_ROUTE,
+)
+from app.components.frontend.projects.active_project import (
+    get_active_project,
+    set_active_project,
+)
+from app.components.frontend.state.session_state import get_session_state
+from app.components.frontend.theme import AegisTheme as Theme
+from app.core.log import logger
+
+
+class ProjectSwitcher(ft.PopupMenuButton):
+    """Header chrome dropdown for switching the active project."""
+
+    def __init__(
+        self,
+        *,
+        page: ft.Page,
+        on_change: Callable[[], Awaitable[None]],
+    ) -> None:
+        self._page = page
+        self._on_change = on_change
+        self._projects: list[dict[str, Any]] = []
+        # ``True`` after a failed ``reload``. Keeps the dashboard from
+        # collapsing into the "no projects" empty state on transient
+        # API errors (the user *has* projects, we just can't see them).
+        self._load_failed: bool = False
+        self._label = ft.Text(
+            value="Select project",
+            size=Theme.Typography.BODY,
+            color=ft.Colors.ON_SURFACE,
+            weight=ft.FontWeight.W_500,
+        )
+        super().__init__(
+            tooltip="Switch project",
+            content=ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Icon(
+                            ft.Icons.FOLDER_OPEN_OUTLINED,
+                            size=18,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                        self._label,
+                        ft.Icon(
+                            ft.Icons.ARROW_DROP_DOWN,
+                            size=18,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
+                        ),
+                    ],
+                    spacing=6,
+                    tight=True,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=ft.padding.symmetric(horizontal=10, vertical=6),
+                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                border_radius=8,
+            ),
+            items=[],
+        )
+
+    @property
+    def projects(self) -> list[dict[str, Any]]:
+        """Owned-projects list from the last ``reload()``."""
+        return self._projects
+
+    @property
+    def load_failed(self) -> bool:
+        """``True`` if the last ``reload()`` couldn't fetch the project list."""
+        return self._load_failed
+
+    async def reload(self) -> None:
+        """Re-fetch the owned-projects list and rebuild the menu.
+
+        Auto-selects the only project if exactly one is owned and
+        nothing is active yet; clears the active slug if the previously
+        active project no longer exists.
+
+        On API failure (non-list response) the cached project list is
+        preserved so the dashboard doesn't mistake a transient error
+        for a "no projects" state. Callers can read ``load_failed`` to
+        branch their UI.
+        """
+        api = get_session_state(self._page).api_client
+        result = await api.get("/api/v1/insights/projects")
+        if isinstance(result, list):
+            self._projects = [p for p in result if isinstance(p, dict)]
+            self._load_failed = False
+        else:
+            self._load_failed = True
+            logger.warning("dashboard.switcher.reload_failed")
+            self._render()
+            return
+
+        active = get_active_project(self._page)
+        slugs = {str(p.get("slug") or "") for p in self._projects}
+        if active and active not in slugs:
+            await set_active_project(self._page, None)
+            active = None
+        if active is None and len(self._projects) == 1:
+            only = str(self._projects[0].get("slug") or "")
+            if only:
+                await set_active_project(self._page, only)
+
+        self._render()
+
+    def _render(self) -> None:
+        active_slug = get_active_project(self._page)
+        active_name: str | None = None
+        for project in self._projects:
+            if project.get("slug") == active_slug:
+                active_name = str(project.get("name") or active_slug)
+                break
+
+        if self._load_failed:
+            self._label.value = "Projects unavailable"
+        elif active_name is not None:
+            self._label.value = active_name
+        elif self._projects:
+            self._label.value = "Select project"
+        else:
+            self._label.value = "No projects"
+
+        items: list[ft.PopupMenuItem] = []
+        for project in self._projects:
+            slug = str(project.get("slug") or "")
+            if not slug:
+                continue
+            name = str(project.get("name") or slug)
+            is_active = slug == active_slug
+            items.append(
+                ActionMenuItem(
+                    label=name,
+                    icon=(
+                        ft.Icons.CHECK
+                        if is_active
+                        else ft.Icons.FOLDER_OUTLINED
+                    ),
+                    on_click=self._make_select_handler(slug),
+                )
+            )
+        if self._projects:
+            items.append(ft.PopupMenuItem())
+
+        items.append(
+            ActionMenuItem(
+                label="Manage projects",
+                icon=ft.Icons.SETTINGS_OUTLINED,
+                on_click=lambda _: self._page.go(PROJECTS_ROUTE),
+            )
+        )
+        items.append(
+            ActionMenuItem(
+                label="New project",
+                icon=ft.Icons.ADD,
+                on_click=lambda _: self._page.go(PROJECT_NEW_ROUTE),
+            )
+        )
+
+        self.items = items
+        try:
+            self.update()
+        except (AssertionError, AttributeError):
+            # Not yet mounted on first build; the outer view.update() covers it.
+            pass
+
+    def _make_select_handler(
+        self, slug: str
+    ) -> Callable[[ft.ControlEvent], Awaitable[None]]:
+        async def _handle(_: ft.ControlEvent) -> None:
+            if slug == get_active_project(self._page):
+                return
+            await set_active_project(self._page, slug)
+            logger.info("dashboard.switcher.selected", slug=slug)
+            self._render()
+            await self._on_change()
+
+        return _handle
+{%- endif %}

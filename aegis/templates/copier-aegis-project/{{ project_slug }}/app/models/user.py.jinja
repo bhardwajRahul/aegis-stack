@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 from pydantic import EmailStr
+import sqlalchemy as sa
 from sqlalchemy import CheckConstraint, Column, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
@@ -114,7 +115,9 @@ class ChangePasswordRequest(SQLModel):
 class UserBase(SQLModel):
     """Base user model with shared fields."""
 
-    email: EmailStr = Field(unique=True, index=True)
+    # No ``index=True`` here — the partial unique index declared in
+    # ``User.__table_args__`` already covers ``email`` lookups.
+    email: EmailStr
     full_name: str | None = None
     is_active: bool = Field(default=True)
     is_verified: bool = Field(default=False)
@@ -126,6 +129,18 @@ class UserBase(SQLModel):
 class User(UserBase, table=True):
     """User database model."""
 
+    # Partial unique index on email — uniqueness only enforced for live
+    # rows, so re-registering after a soft delete reuses the same email.
+    __table_args__ = (
+        sa.Index(
+            "ix_user_email",
+            "email",
+            unique=True,
+            sqlite_where=sa.text("deleted_at IS NULL"),
+            postgresql_where=sa.text("deleted_at IS NULL"),
+        ),
+    )
+
     id: int | None = Field(default=None, primary_key=True)
     hashed_password: str
     last_login: datetime | None = None
@@ -133,6 +148,7 @@ class User(UserBase, table=True):
         default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
     updated_at: datetime | None = None
+    deleted_at: datetime | None = Field(default=None, index=True)
     failed_login_attempts: int = Field(default=0)
     locked_until: datetime | None = None
 

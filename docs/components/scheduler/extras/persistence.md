@@ -126,41 +126,25 @@ my-app health check --detailed
 
 ## Production Job Management
 
-### Environment-Based Updates
+### Code Is the Source of Truth
 
-For persistent schedulers, use environment variables to control job updates:
+Every restart re-registers each job from `app/components/scheduler/main.py` using `replace_existing=True`. To change a schedule:
 
-```bash
-# Force update all jobs from code configuration (useful during deployments)
-SCHEDULER_FORCE_UPDATE=true docker compose up -d scheduler
-
-# Normal startup (preserves runtime job modifications)
-docker compose up -d scheduler
-```
-
-This pattern allows:
-
-- **Development**: Jobs update automatically when code changes
-- **Production**: Runtime job modifications are preserved across restarts
-- **Deployments**: Force updates when needed with environment flag
-
-### Job Existence Checking
+1. Edit the trigger in `create_scheduler()`.
+2. Commit and redeploy.
+3. The new trigger overwrites the persisted row when the scheduler container restarts.
 
 ```python
-from app.core.config import settings
-
-# Check for existing jobs to respect runtime modifications
-force_update = settings.SCHEDULER_FORCE_UPDATE
-
-if not _job_exists_in_database("daily_reports") or force_update:
-    scheduler.add_job(
-        func=process_daily_reports,
-        trigger=CronTrigger(hour=6, minute=0),
-        id="daily_reports",
-        name="Daily Report Generation",
-        replace_existing=True
-    )
+scheduler.add_job(
+    func=process_daily_reports,
+    trigger=CronTrigger(hour=6, minute=0),
+    id="daily_reports",
+    name="Daily Report Generation",
+    replace_existing=True,
+)
 ```
+
+Runtime edits via `scheduler.modify_job()` are not preserved across restarts. This is deliberate: it keeps the deployed configuration aligned with what's committed in git, the same way Alembic migrations and Pydantic settings do. If a knob needs to be tunable without a deploy, expose it as a setting (env var), not as a runtime job edit.
 
 ## Database Schema
 

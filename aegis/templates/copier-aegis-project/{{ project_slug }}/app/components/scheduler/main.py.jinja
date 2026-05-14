@@ -13,7 +13,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 {% if scheduler_backend != "memory" %}
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from app.core.db import engine, init_database, db_session
-from app.services.scheduler.models import APSchedulerJob
 from app.services.system.backup import backup_database_job
 {% elif include_scheduler and include_database %}
 from app.services.system.backup import backup_database_job
@@ -41,6 +40,47 @@ from app.core.log import logger
 from app.services.system import activity
 
 {% if scheduler_backend != "memory" %}
+
+def _drop_unknown_persisted_jobs(scheduler: AsyncIOScheduler) -> None:
+    """Delete persisted rows whose ID isn't registered in code.
+
+    ``replace_existing=True`` keeps live jobs in sync when their triggers
+    change, but does nothing for jobs that were *removed* from
+    ``create_scheduler``. Without this sweep, the persistent jobstore
+    would keep firing the obsolete job indefinitely — breaking the
+    "code is the source of truth" promise. Runs after the ``add_job``
+    pass so the set of intended IDs is whatever ``scheduler.get_jobs()``
+    reports right now.
+    """
+    from sqlmodel import text
+
+    try:
+        intended_ids = {job.id for job in scheduler.get_jobs()}
+        with db_session() as session:
+            persisted_ids = {
+                row[0]
+                for row in session.exec(
+                    text("SELECT id FROM apscheduler_jobs")
+                ).fetchall()
+            }
+
+        orphans = persisted_ids - intended_ids
+        if not orphans:
+            return
+
+        with db_session(autocommit=True) as session:
+            for job_id in orphans:
+                session.exec(
+                    text("DELETE FROM apscheduler_jobs WHERE id = :id"),
+                    params={"id": job_id},
+                )
+        logger.info(
+            f"Removed {len(orphans)} orphan scheduled job(s) "
+            f"(no longer in code): {sorted(orphans)}"
+        )
+    except Exception as e:
+        logger.debug(f"Orphan job sweep skipped: {e}")
+
 
 def _cleanup_stale_jobs() -> None:
     """Remove persisted jobs whose func_ref can no longer be imported.
@@ -85,26 +125,7 @@ def _cleanup_stale_jobs() -> None:
     except Exception as e:
         logger.debug(f"Stale job cleanup skipped: {e}")
 
-
-def _job_exists_in_database(job_id: str) -> bool:
-    """Check if a job already exists in the persistence database using SQLModel."""
-    try:
-        from sqlmodel import select
-
-        with db_session() as session:
-            # Query for job by ID using modern SQLModel pattern
-            query = select(APSchedulerJob).where(APSchedulerJob.id == job_id)
-            result = session.exec(query)
-            job = result.first()
-            return job is not None
-    except Exception as e:
-        logger.warning(f"Could not check for existing job {job_id}: {e}")
-        # If we can't check, assume it doesn't exist (safer to add than skip)
-        return False
-
 {% endif %}
-
-
 
 
 def create_scheduler() -> AsyncIOScheduler:
@@ -145,304 +166,106 @@ def create_scheduler() -> AsyncIOScheduler:
     )
 {% endif %}
 
-    # ============================================================================
+    # ========================================================================
     # JOB SCHEDULE CONFIGURATION
     #
-    # PERSISTENCE BEHAVIOR:
-    # - Jobs are checked against the database first
-    # - Existing jobs are preserved (respects runtime modifications)
-    # - New jobs are added from code configuration
-    # - Set SCHEDULER_FORCE_UPDATE=true to override all jobs from code
-    #
-    # To update schedules during deployment:
-    #   SCHEDULER_FORCE_UPDATE=true docker-compose up -d scheduler
-    # ============================================================================
+    # Code is the source of truth. Every startup re-registers each job
+    # below via ``replace_existing=True``, so editing a trigger here and
+    # redeploying is all that's needed to change the schedule. Runtime
+    # edits to persisted jobs do not survive a restart by design.
+    # ========================================================================
 
 {% if scheduler_backend != "memory" or (include_scheduler and include_database) %}
-    # Check config flag for force updates (useful during deployments)
-    force_update = settings.SCHEDULER_FORCE_UPDATE
-{% if scheduler_backend != "memory" %}
-    if force_update:
-        # Wipe persisted jobs so each add_job below INSERTs cleanly.
-        # APScheduler's replace_existing=True catches IntegrityError Python-side
-        # but the failed INSERT still logs as a DB ERROR, making real errors
-        # hard to spot. DELETE FROM (portable across Postgres/SQLite/MySQL)
-        # avoids the noise entirely.
-        from sqlmodel import text
-
-        with db_session(autocommit=True) as session:
-            session.exec(text("DELETE FROM apscheduler_jobs"))
-        logger.info("SCHEDULER_FORCE_UPDATE=true: wiped apscheduler_jobs table")
-{% endif %}
-
-    # Database backup job (runs daily at 2 AM when database is available)
-    job_id = "database_backup"
-{% if scheduler_backend != "memory" %}
-    # For persistent schedulers, check database directly since
-    # scheduler hasn't loaded jobs yet
-    job_exists = _job_exists_in_database(job_id)
-{% else %}
-    # For memory schedulers, scheduler.get_job() works fine
-    existing_job = scheduler.get_job(job_id)
-    job_exists = existing_job is not None
-{% endif %}
-
-    if not job_exists or force_update:
-        if job_exists and force_update:
-            logger.info(f"Force updating job '{job_id}' from code configuration")
-        else:
-            logger.info(f"Adding new job '{job_id}'")
-
-        scheduler.add_job(
-            backup_database_job,
-            trigger="cron",
-            hour=2,
-            minute=0,
-            id=job_id,
-            name="Daily Database Backup",
-            max_instances=1,
-            coalesce=True,
-            replace_existing=True  # Safe to use since we check first
-        )
-    else:
-{% if scheduler_backend != "memory" %}
-        msg = f"Job '{job_id}' exists in database, preserving current configuration"
-        logger.info(msg)
-{% else %}
-        logger.info(
-            f"Job '{job_id}' exists, preserving current configuration: "
-            f"{existing_job.trigger}"
-        )
-{% endif %}
+    scheduler.add_job(
+        backup_database_job,
+        trigger="cron",
+        hour=2,
+        minute=0,
+        id="database_backup",
+        name="Daily Database Backup",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
 {% endif %}
 
 {% if include_ai and ai_backend != "memory" %}
-    # LLM catalog sync job (runs every 6 hours)
-    job_id = "llm_sync"
-{% if scheduler_backend != "memory" %}
-    job_exists = _job_exists_in_database(job_id)
-{% else %}
-    existing_job = scheduler.get_job(job_id)
-    job_exists = existing_job is not None
-{% endif %}
-
-    if not job_exists or force_update:
-        if job_exists and force_update:
-            logger.info(f"Force updating job '{job_id}' from code configuration")
-        else:
-            logger.info(f"Adding new job '{job_id}'")
-
-        scheduler.add_job(
-            sync_llm_catalog_job,
-            trigger="interval",
-            hours=6,
-            id=job_id,
-            name="LLM Catalog Sync",
-            max_instances=1,
-            coalesce=True,
-            replace_existing=True,
-        )
-    else:
-{% if scheduler_backend != "memory" %}
-        msg = f"Job '{job_id}' exists in database, preserving current configuration"
-        logger.info(msg)
-{% else %}
-        logger.info(
-            f"Job '{job_id}' exists, preserving current configuration: "
-            f"{existing_job.trigger}"
-        )
-{% endif %}
+    scheduler.add_job(
+        sync_llm_catalog_job,
+        trigger="interval",
+        hours=6,
+        id="llm_sync",
+        name="LLM Catalog Sync",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
 {% endif %}
 
 {% if include_insights %}
 {% if insights_github %}
-    # Insight: GitHub traffic collection
-    job_id = "insight_github_traffic"
-{% if scheduler_backend != "memory" %}
-    job_exists = _job_exists_in_database(job_id)
-{% else %}
-    existing_job = scheduler.get_job(job_id)
-    job_exists = existing_job is not None
-{% endif %}
+    scheduler.add_job(
+        collect_github_traffic_job,
+        trigger="cron",
+        hour=12,
+        minute=0,
+        id="insight_github_traffic",
+        name="Insight: GitHub Traffic",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
 
-    if not job_exists or force_update:
-        if job_exists and force_update:
-            logger.info(f"Force updating job '{job_id}' from code configuration")
-        else:
-            logger.info(f"Adding new job '{job_id}'")
+    scheduler.add_job(
+        collect_github_stars_job,
+        trigger="cron",
+        hour=12,
+        minute=0,
+        id="insight_github_stars",
+        name="Insight: GitHub Stars",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
 
-        scheduler.add_job(
-            collect_github_traffic_job,
-            trigger="cron",
-            hour=12,
-            minute=0,
-            id=job_id,
-            name="Insight: GitHub Traffic",
-            max_instances=1,
-            coalesce=True,
-            replace_existing=True,
-        )
-    else:
-{% if scheduler_backend != "memory" %}
-        msg = f"Job '{job_id}' exists in database, preserving current configuration"
-        logger.info(msg)
-{% else %}
-        logger.info(
-            f"Job '{job_id}' exists, preserving current configuration: "
-            f"{existing_job.trigger}"
-        )
-{% endif %}
-
-    # Insight: GitHub stars collection (daily)
-    job_id = "insight_github_stars"
-{% if scheduler_backend != "memory" %}
-    job_exists = _job_exists_in_database(job_id)
-{% else %}
-    existing_job = scheduler.get_job(job_id)
-    job_exists = existing_job is not None
-{% endif %}
-
-    if not job_exists or force_update:
-        if job_exists and force_update:
-            logger.info(f"Force updating job '{job_id}' from code configuration")
-        else:
-            logger.info(f"Adding new job '{job_id}'")
-
-        scheduler.add_job(
-            collect_github_stars_job,
-            trigger="cron",
-            hour=12,
-            minute=0,
-            id=job_id,
-            name="Insight: GitHub Stars",
-            max_instances=1,
-            coalesce=True,
-            replace_existing=True,
-        )
-    else:
-{% if scheduler_backend != "memory" %}
-        msg = f"Job '{job_id}' exists in database, preserving current configuration"
-        logger.info(msg)
-{% else %}
-        logger.info(
-            f"Job '{job_id}' exists, preserving current configuration: "
-            f"{existing_job.trigger}"
-        )
-{% endif %}
-
-    # Insight: GitHub events collection (daily via ClickHouse)
-    job_id = "insight_github_events"
-{% if scheduler_backend != "memory" %}
-    job_exists = _job_exists_in_database(job_id)
-{% else %}
-    existing_job = scheduler.get_job(job_id)
-    job_exists = existing_job is not None
-{% endif %}
-
-    if not job_exists or force_update:
-        if job_exists and force_update:
-            logger.info(f"Force updating job '{job_id}' from code configuration")
-        else:
-            logger.info(f"Adding new job '{job_id}'")
-
-        scheduler.add_job(
-            collect_github_events_job,
-            trigger="cron",
-            hour=12,
-            minute=0,
-            id=job_id,
-            name="Insight: GitHub Events",
-            max_instances=1,
-            coalesce=True,
-            replace_existing=True,
-        )
-    else:
-{% if scheduler_backend != "memory" %}
-        msg = f"Job '{job_id}' exists in database, preserving current configuration"
-        logger.info(msg)
-{% else %}
-        logger.info(
-            f"Job '{job_id}' exists, preserving current configuration: "
-            f"{existing_job.trigger}"
-        )
-{% endif %}
+    scheduler.add_job(
+        collect_github_events_job,
+        trigger="cron",
+        hour=12,
+        minute=0,
+        id="insight_github_events",
+        name="Insight: GitHub Events",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
 {% endif %}
 
 {% if insights_pypi %}
-    # Insight: PyPI downloads collection
-    job_id = "insight_pypi"
-{% if scheduler_backend != "memory" %}
-    job_exists = _job_exists_in_database(job_id)
-{% else %}
-    existing_job = scheduler.get_job(job_id)
-    job_exists = existing_job is not None
-{% endif %}
-
-    if not job_exists or force_update:
-        if job_exists and force_update:
-            logger.info(f"Force updating job '{job_id}' from code configuration")
-        else:
-            logger.info(f"Adding new job '{job_id}'")
-
-        scheduler.add_job(
-            collect_pypi_job,
-            trigger="cron",
-            hour=18,
-            minute=0,
-            id=job_id,
-            name="Insight: PyPI Downloads",
-            max_instances=1,
-            coalesce=True,
-            replace_existing=True,
-        )
-    else:
-{% if scheduler_backend != "memory" %}
-        msg = f"Job '{job_id}' exists in database, preserving current configuration"
-        logger.info(msg)
-{% else %}
-        logger.info(
-            f"Job '{job_id}' exists, preserving current configuration: "
-            f"{existing_job.trigger}"
-        )
-{% endif %}
+    scheduler.add_job(
+        collect_pypi_job,
+        trigger="cron",
+        hour=18,
+        minute=0,
+        id="insight_pypi",
+        name="Insight: PyPI Downloads",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
 {% endif %}
 
 {% if insights_plausible %}
-    # Insight: Plausible analytics collection
-    job_id = "insight_plausible"
-{% if scheduler_backend != "memory" %}
-    job_exists = _job_exists_in_database(job_id)
-{% else %}
-    existing_job = scheduler.get_job(job_id)
-    job_exists = existing_job is not None
-{% endif %}
-
-    if not job_exists or force_update:
-        if job_exists and force_update:
-            logger.info(f"Force updating job '{job_id}' from code configuration")
-        else:
-            logger.info(f"Adding new job '{job_id}'")
-
-        scheduler.add_job(
-            collect_plausible_job,
-            trigger="cron",
-            minute=0,
-            id=job_id,
-            name="Insight: Plausible Analytics",
-            max_instances=1,
-            coalesce=True,
-            replace_existing=True,
-        )
-    else:
-{% if scheduler_backend != "memory" %}
-        msg = f"Job '{job_id}' exists in database, preserving current configuration"
-        logger.info(msg)
-{% else %}
-        logger.info(
-            f"Job '{job_id}' exists, preserving current configuration: "
-            f"{existing_job.trigger}"
-        )
-{% endif %}
+    scheduler.add_job(
+        collect_plausible_job,
+        trigger="cron",
+        minute=0,
+        id="insight_plausible",
+        name="Insight: Plausible Analytics",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
 {% endif %}
 {% endif %}
 
@@ -451,44 +274,29 @@ def create_scheduler() -> AsyncIOScheduler:
     # than the retention window. Daily cadence is fine — refresh
     # tokens live for days/weeks and the table grows by at most one
     # row per device sign-in.
-    job_id = "auth_refresh_token_cleanup"
-{% if scheduler_backend != "memory" %}
-    job_exists = _job_exists_in_database(job_id)
-{% else %}
-    existing_job = scheduler.get_job(job_id)
-    job_exists = existing_job is not None
-{% endif %}
-
-    if not job_exists or force_update:
-        if job_exists and force_update:
-            logger.info(f"Force updating job '{job_id}' from code configuration")
-        else:
-            logger.info(f"Adding new job '{job_id}'")
-
-        scheduler.add_job(
-            cleanup_expired_refresh_tokens_job,
-            trigger="interval",
-            hours=24,
-            id=job_id,
-            name="Auth: Refresh Token Cleanup",
-            max_instances=1,
-            coalesce=True,
-            replace_existing=True,
-        )
-    else:
-{% if scheduler_backend != "memory" %}
-        msg = f"Job '{job_id}' exists in database, preserving current configuration"
-        logger.info(msg)
-{% else %}
-        logger.info(
-            f"Job '{job_id}' exists, preserving current configuration: "
-            f"{existing_job.trigger}"
-        )
-{% endif %}
+    scheduler.add_job(
+        cleanup_expired_refresh_tokens_job,
+        trigger="interval",
+        hours=24,
+        id="auth_refresh_token_cleanup",
+        name="Auth: Refresh Token Cleanup",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
 {% endif %}
 
     # Add your own scheduled jobs here by importing service functions
     # and calling scheduler.add_job() with your custom business logic
+
+{% if scheduler_backend != "memory" %}
+    # Drop persisted jobs whose ``add_job`` call has been removed from
+    # code since the last deploy. ``replace_existing=True`` covers the
+    # "schedule changed" case for jobs that still exist; this covers the
+    # "job deleted" case so persistent storage doesn't keep firing an
+    # obsolete job ID forever.
+    _drop_unknown_persisted_jobs(scheduler)
+{% endif %}
 
     return scheduler
 

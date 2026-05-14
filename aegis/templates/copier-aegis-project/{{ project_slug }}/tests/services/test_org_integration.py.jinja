@@ -17,8 +17,9 @@ from app.models.org import (
 from app.models.user import User, UserCreate
 from app.services.auth.invite_service import InviteService
 from app.services.auth.membership_service import MembershipService
-from app.services.auth.org_service import OrgService
+from app.services.auth.org_service import OrgService, RestoreConflict
 from app.services.auth.user_service import UserService
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 
@@ -129,6 +130,139 @@ class TestOrgServiceIntegration:
         """Test deleting a nonexistent organization returns False."""
         org_service = OrgService(async_db_session)
         assert await org_service.delete_org(999) is False
+
+    @pytest.mark.asyncio
+    async def test_soft_delete_org_keeps_row(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Soft-delete sets ``deleted_at`` and hides the org from lookups."""
+        org_service = OrgService(async_db_session)
+        org = await org_service.create_org(
+            OrgCreate(name="Soft Org", slug="soft-org")
+        )
+
+        assert await org_service.delete_org(org.id) is True
+
+        # Filtered queries can't see it.
+        assert await org_service.get_org_by_id(org.id) is None
+        assert await org_service.get_org_by_slug("soft-org") is None
+        assert not any(o.id == org.id for o in await org_service.list_orgs())
+
+        # Row still present with deleted_at populated.
+        raw = await async_db_session.exec(
+            select(Organization).where(Organization.id == org.id)
+        )
+        row = raw.first()
+        assert row is not None
+        assert row.deleted_at is not None
+
+    @pytest.mark.asyncio
+    async def test_hard_delete_org(self, async_db_session: AsyncSession) -> None:
+        """``hard_delete_org`` removes the org row entirely."""
+        org_service = OrgService(async_db_session)
+        org = await org_service.create_org(
+            OrgCreate(name="Hard Org", slug="hard-org")
+        )
+
+        assert await org_service.hard_delete_org(org.id) is True
+
+        raw = await async_db_session.exec(
+            select(Organization).where(Organization.id == org.id)
+        )
+        assert raw.first() is None
+
+    @pytest.mark.asyncio
+    async def test_reregister_slug_after_soft_delete(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Same slug can be reused after the original org is soft-deleted.
+
+        Exercises the partial unique index ``ix_organization_slug``.
+        """
+        org_service = OrgService(async_db_session)
+        first = await org_service.create_org(
+            OrgCreate(name="Acme", slug="acme")
+        )
+        await org_service.delete_org(first.id)
+
+        second = await org_service.create_org(
+            OrgCreate(name="Acme Returns", slug="acme")
+        )
+        assert second.id != first.id
+
+        live = await org_service.get_org_by_slug("acme")
+        assert live is not None
+        assert live.id == second.id
+
+    @pytest.mark.asyncio
+    async def test_restore_org(self, async_db_session: AsyncSession) -> None:
+        """``restore_org`` clears ``deleted_at`` on a soft-deleted org."""
+        org_service = OrgService(async_db_session)
+        org = await org_service.create_org(
+            OrgCreate(name="Restoreable", slug="restoreable")
+        )
+        await org_service.delete_org(org.id)
+        assert await org_service.get_org_by_id(org.id) is None
+
+        restored = await org_service.restore_org(org.id)
+        assert restored is not None
+        assert restored.id == org.id
+        assert restored.deleted_at is None
+        assert await org_service.get_org_by_id(org.id) is not None
+
+    @pytest.mark.asyncio
+    async def test_restore_org_noop_on_live(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """``restore_org`` on a non-deleted org returns ``None``."""
+        org_service = OrgService(async_db_session)
+        org = await org_service.create_org(
+            OrgCreate(name="Live Org", slug="live-org")
+        )
+        assert await org_service.restore_org(org.id) is None
+
+    @pytest.mark.asyncio
+    async def test_restore_org_conflict_when_slug_reused(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Restore must refuse if the slug was reclaimed by re-creation."""
+        org_service = OrgService(async_db_session)
+
+        original = await org_service.create_org(
+            OrgCreate(name="Acme", slug="acme")
+        )
+        await org_service.delete_org(original.id)
+        replacement = await org_service.create_org(
+            OrgCreate(name="Acme Returns", slug="acme")
+        )
+        assert replacement.id != original.id
+
+        with pytest.raises(RestoreConflict):
+            await org_service.restore_org(original.id)
+
+        raw = await async_db_session.exec(
+            select(Organization).where(Organization.id == original.id)
+        )
+        row = raw.first()
+        assert row is not None
+        assert row.deleted_at is not None
+
+    @pytest.mark.asyncio
+    async def test_hard_delete_org_after_soft_delete(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """``hard_delete_org`` purges an already-soft-deleted org."""
+        org_service = OrgService(async_db_session)
+        org = await org_service.create_org(
+            OrgCreate(name="Soft Then Hard", slug="soft-then-hard")
+        )
+        await org_service.delete_org(org.id)
+        assert await org_service.hard_delete_org(org.id) is True
+
+        raw = await async_db_session.exec(
+            select(Organization).where(Organization.id == org.id)
+        )
+        assert raw.first() is None
 
     @pytest.mark.asyncio
     async def test_list_orgs(self, async_db_session: AsyncSession) -> None:

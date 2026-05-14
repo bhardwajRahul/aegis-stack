@@ -18,7 +18,9 @@ class OrganizationBase(SQLModel):
     """Base organization model with shared fields."""
 
     name: str = Field(index=True)
-    slug: str = Field(unique=True, index=True)
+    # No ``index=True`` here — the partial unique index declared in
+    # ``Organization.__table_args__`` already covers ``slug`` lookups.
+    slug: str
     description: str | None = None
     is_active: bool = Field(default=True)
 
@@ -26,11 +28,25 @@ class OrganizationBase(SQLModel):
 class Organization(OrganizationBase, table=True):
     """Organization database model."""
 
+    # Partial unique index on slug — uniqueness only enforced for live
+    # rows, so an org can be recreated with the same slug after a soft
+    # delete.
+    __table_args__ = (
+        sa.Index(
+            "ix_organization_slug",
+            "slug",
+            unique=True,
+            sqlite_where=sa.text("deleted_at IS NULL"),
+            postgresql_where=sa.text("deleted_at IS NULL"),
+        ),
+    )
+
     id: int | None = Field(default=None, primary_key=True)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
     updated_at: datetime | None = None
+    deleted_at: datetime | None = Field(default=None, index=True)
 
 
 class OrganizationMember(SQLModel, table=True):

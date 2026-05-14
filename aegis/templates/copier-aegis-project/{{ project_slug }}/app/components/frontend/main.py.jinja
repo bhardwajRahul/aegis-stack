@@ -39,13 +39,20 @@ from app.components.frontend.controls.views.legacy_dashboard import (
 from app.components.frontend.core import events as frontend_events
 from app.components.frontend.core.routes import DASHBOARD_ROUTE
 {% if insights_per_user -%}
+from app.components.frontend.controls.buttons import PulseButton
+from app.components.frontend.controls.text import H3Text, SecondaryText
 from app.components.frontend.core.routes import (
     PROJECT_EDIT_ROUTE,
     PROJECT_NEW_ROUTE,
     PROJECTS_ROUTE,
 )
+from app.components.frontend.projects.active_project import (
+    get_active_project,
+    load_active_project,
+)
 from app.components.frontend.projects.project_form_view import ProjectFormView
 from app.components.frontend.projects.project_list_view import ProjectListView
+from app.components.frontend.projects.project_switcher import ProjectSwitcher
 {%- endif %}
 from app.components.frontend.core.routing import (
     register_route,
@@ -637,6 +644,15 @@ async def setup_dashboard(view: BaseView) -> None:
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
     )
 
+    {% if insights_per_user -%}
+    # Project switcher (active-project state + dropdown). ``on_change``
+    # is bound below once ``refresh_dashboard`` is defined.
+    async def _on_project_change() -> None:
+        await refresh_dashboard()
+
+    project_switcher = ProjectSwitcher(page=page, on_change=_on_project_change)
+    {%- endif %}
+
     # Header with modern layout: logo left, status+controls right
     header = ft.Container(
         content=ft.Row(
@@ -653,15 +669,7 @@ async def setup_dashboard(view: BaseView) -> None:
                         # Theme toggle
                         ft.Container(content=theme_button, padding=10),
                         {% if insights_per_user -%}
-                        ft.Container(
-                            content=ft.IconButton(
-                                icon=ft.Icons.FOLDER_OPEN_OUTLINED,
-                                tooltip="Projects",
-                                icon_color=ft.Colors.ON_SURFACE_VARIANT,
-                                on_click=lambda _: page.go(PROJECTS_ROUTE),
-                            ),
-                            padding=10,
-                        ),
+                        ft.Container(content=project_switcher, padding=10),
                         {%- endif %}
                         {% if include_auth -%}
                         # Sign out
@@ -793,12 +801,46 @@ async def setup_dashboard(view: BaseView) -> None:
         page=page,
     )
 
+    {% if insights_per_user -%}
+    async def _goto_new_project() -> None:
+        page.go(PROJECT_NEW_ROUTE)
+
+    # Empty-state CTA: shown only when the signed-in user has zero
+    # projects. Hidden by default; toggled by ``_apply_projects_state``
+    # after the switcher fetches its list.
+    empty_state_container = ft.Container(
+        visible=False,
+        padding=ft.padding.symmetric(vertical=48, horizontal=24),
+        alignment=ft.alignment.center,
+        content=ft.Column(
+            controls=[
+                H3Text("Create your first project"),
+                SecondaryText(
+                    "Projects are how you track GitHub repos, PyPI packages,"
+                    " and Plausible sites separately."
+                ),
+                ft.Container(height=12),
+                PulseButton(
+                    text="New project",
+                    on_click_callable=_goto_new_project,
+                ),
+            ],
+            spacing=8,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            tight=True,
+        ),
+    )
+    {%- endif %}
+
     # Mount controls onto the View. Header stays fixed; content scrolls.
     view.controls = [
         header,
         ft.Container(
             content=ft.Column(
                 [
+                    {% if insights_per_user -%}
+                    empty_state_container,
+                    {%- endif %}
                     stack_view_container,   # Stack + Activity view (default)
                     cards_view_container,   # Cards view
                     diagram_view_container, # Diagram view
@@ -812,6 +854,35 @@ async def setup_dashboard(view: BaseView) -> None:
         ),
     ]
     view.update()
+
+    {% if insights_per_user -%}
+    def _apply_projects_state() -> None:
+        """Toggle empty-state CTA vs. dashboard body based on owned-projects count.
+
+        Treats a failed project-list fetch as "show the dashboard body
+        anyway" rather than the empty-state CTA — a transient 5xx or
+        auth blip shouldn't make a user with existing projects see
+        "Create your first project."
+        """
+        has_projects = bool(project_switcher.projects)
+        show_empty_state = (
+            not has_projects and not project_switcher.load_failed
+        )
+        empty_state_container.visible = show_empty_state
+        if show_empty_state:
+            stack_view_container.visible = False
+            cards_view_container.visible = False
+            diagram_view_container.visible = False
+        else:
+            # Restore the view selected by the toggle.
+            stack_view_container.visible = current_view == 0
+            cards_view_container.visible = current_view == 1
+            diagram_view_container.visible = current_view == 2
+        try:
+            view.update()
+        except PageDisconnectedException:
+            logger.debug("Page disconnected during projects-state apply")
+    {%- endif %}
 
     # Single HTTP client for the whole session. Pulled from SessionState so
     # the bearer token + 401 handler are wired automatically — no raw
@@ -935,6 +1006,95 @@ async def setup_dashboard(view: BaseView) -> None:
                 height=240,
             )
 
+    {% if insights_per_user -%}
+    async def _override_insights_for_active_project(
+        components: dict[str, ComponentStatus],
+    ) -> None:
+        """Replace the aggregate insights metadata with the active project's slice.
+
+        Mirrors the staleness logic in ``app/services/insights/health.py``
+        (3x ``collection_interval_hours``), but scoped to the rows
+        returned by ``/api/v1/insights/projects/{slug}/all``. Bails out
+        cleanly if no project is active, the card isn't present, or the
+        request fails — the aggregate values stay as fallback.
+        """
+        slug = get_active_project(page)
+        if not slug:
+            return
+        insights_key = f"{SERVICE_PREFIX}{INSIGHT_COMPONENT_NAME}"
+        insights_comp = components.get(insights_key)
+        if insights_comp is None:
+            return
+
+        bulk = await api_client.get(f"/api/v1/insights/projects/{slug}/all")
+        if not isinstance(bulk, dict):
+            return
+
+        daily = bulk.get("daily") or {}
+        events = bulk.get("events") or {}
+        sources = bulk.get("sources") or []
+
+        total_metrics = 0
+        if isinstance(daily, dict):
+            for rows in daily.values():
+                if isinstance(rows, list):
+                    total_metrics += len(rows)
+        if isinstance(events, dict):
+            for rows in events.values():
+                if isinstance(rows, list):
+                    total_metrics += len(rows)
+
+        from datetime import datetime as _dt, timedelta as _td
+
+        now = _dt.now()
+        enabled_sources = 0
+        stale_sources: list[str] = []
+        for src in sources:
+            if not isinstance(src, dict):
+                continue
+            if not src.get("enabled", False):
+                continue
+            enabled_sources += 1
+            interval_hours = src.get("collection_interval_hours")
+            last_raw = src.get("last_collected_at")
+            key = str(src.get("key") or "")
+            if interval_hours is None or not key:
+                continue
+            if last_raw is None:
+                stale_sources.append(key)
+                continue
+            try:
+                last = _dt.fromisoformat(str(last_raw))
+            except (TypeError, ValueError):
+                continue
+            if now - last > _td(hours=int(interval_hours) * 3):
+                stale_sources.append(key)
+
+        if total_metrics == 0:
+            status = ComponentStatusType.WARNING
+            message = "No data collected yet"
+        elif stale_sources:
+            status = ComponentStatusType.WARNING
+            message = f"Stale sources: {', '.join(stale_sources)}"
+        else:
+            status = ComponentStatusType.HEALTHY
+            message = f"{total_metrics} metrics across {enabled_sources} sources"
+
+        components[insights_key] = ComponentStatus(
+            name=insights_comp.name,
+            status=status,
+            message=message,
+            response_time_ms=insights_comp.response_time_ms,
+            metadata={
+                "total_metrics": total_metrics,
+                "enabled_sources": enabled_sources,
+                "stale_sources": stale_sources,
+                "active_project_slug": slug,
+            },
+            sub_components=insights_comp.sub_components,
+        )
+    {%- endif %}
+
     async def refresh_dashboard() -> None:
         """Refresh the stunning marketing-grade dashboard."""
         try:
@@ -975,6 +1135,13 @@ async def setup_dashboard(view: BaseView) -> None:
                 else:
                     # For other groupings, add as-is
                     components[name] = _convert_component(comp_data)
+
+            {% if insights_per_user -%}
+            # When a project is active, override the aggregate insights
+            # card with the active project's slice so the dashboard
+            # reflects what the user actually owns.
+            await _override_insights_for_active_project(components)
+            {%- endif %}
 
             total_components = len(components)
             healthy_components = len([c for c in components.values() if c.healthy])
@@ -1190,6 +1357,18 @@ async def setup_dashboard(view: BaseView) -> None:
 
     # Initial load and start refresh
     await refresh_dashboard()
+
+    {% if insights_per_user -%}
+    # Hydrate the active project from client_storage, fetch the owned-
+    # projects list, then apply the dashboard / empty-state visibility.
+    await load_active_project(page)
+    await project_switcher.reload()
+    _apply_projects_state()
+    # If hydrating auto-selected the lone project, refresh to pick up
+    # the per-project context.
+    if get_active_project(page):
+        await refresh_dashboard()
+    {%- endif %}
 
     # Track tasks on the view so ``view.on_leave`` can cancel them when
     # the router navigates away (e.g. on logout).

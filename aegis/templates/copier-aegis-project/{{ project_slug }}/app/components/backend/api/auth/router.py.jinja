@@ -39,7 +39,7 @@ from app.models.user import EmailVerifyRequest, PasswordResetConfirm, PasswordRe
 from app.services.auth.auth_service import get_current_user_from_token
 from app.services.auth.deps import get_session_token
 from app.services.auth.refresh_service import RefreshService
-from app.services.auth.user_service import UserService
+from app.services.auth.user_service import RestoreConflict, UserService
 {% if include_auth_org %}
 from app.services.auth.invite_service import InviteService
 {% endif %}
@@ -631,18 +631,64 @@ async def activate_user(
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: int,
+    hard: bool = False,
     current_user: User = Depends(require_role("admin")),
     user_service: UserService = Depends(get_user_service),
     audit: AuditEmitter = Depends(get_audit),
 ) -> None:
-    """Permanently delete a user. Requires admin role."""
-    success = await user_service.delete_user(user_id)
+    """Delete a user. Requires admin role.
+
+    Default is a soft delete — the row stays with ``deleted_at`` set so it
+    can be restored via ``POST /users/{user_id}/restore``. Pass ``?hard=true``
+    for permanent removal (also drops org memberships and invites).
+    """
+    if hard:
+        success = await user_service.hard_delete_user(user_id)
+    else:
+        success = await user_service.delete_user(user_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    await audit.emit("auth.user_deleted", actor_id=current_user.id, target_type="user", target_id=user_id)
+    await audit.emit(
+        "auth.user_hard_deleted" if hard else "auth.user_deleted",
+        actor_id=current_user.id,
+        target_type="user",
+        target_id=user_id,
+    )
+
+
+@router.post("/users/{user_id}/restore", response_model=UserResponse)
+async def restore_user(
+    user_id: int,
+    current_user: User = Depends(require_role("admin")),
+    user_service: UserService = Depends(get_user_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> UserResponse:
+    """Clear ``deleted_at`` on a soft-deleted user. Requires admin role.
+
+    Returns 409 if another live user has claimed the same email since
+    the soft delete — partial unique index would reject the restore.
+    """
+    try:
+        restored = await user_service.restore_user(user_id)
+    except RestoreConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    if restored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found or not deleted",
+        )
+    await audit.emit(
+        "auth.user_restored",
+        actor_id=current_user.id,
+        target_type="user",
+        target_id=user_id,
+    )
+    return UserResponse.model_validate(restored)
 
 
 @router.patch("/users/{user_id}/role", response_model=UserResponse)
@@ -721,15 +767,55 @@ async def activate_user(
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: int,
+    hard: bool = False,
     user_service: UserService = Depends(get_user_service),
     audit: AuditEmitter = Depends(get_audit),
 ) -> None:
-    """Permanently delete a user."""
-    success = await user_service.delete_user(user_id)
+    """Delete a user.
+
+    Default is a soft delete (``deleted_at`` set, row preserved). Pass
+    ``?hard=true`` for permanent removal.
+    """
+    if hard:
+        success = await user_service.hard_delete_user(user_id)
+    else:
+        success = await user_service.delete_user(user_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    await audit.emit("auth.user_deleted", target_type="user", target_id=user_id)
+    await audit.emit(
+        "auth.user_hard_deleted" if hard else "auth.user_deleted",
+        target_type="user",
+        target_id=user_id,
+    )
+
+
+@router.post("/users/{user_id}/restore", response_model=UserResponse)
+async def restore_user(
+    user_id: int,
+    user_service: UserService = Depends(get_user_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> UserResponse:
+    """Clear ``deleted_at`` on a soft-deleted user.
+
+    Returns 409 if another live user has claimed the same email since
+    the soft delete.
+    """
+    try:
+        restored = await user_service.restore_user(user_id)
+    except RestoreConflict as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    if restored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found or not deleted",
+        )
+    await audit.emit(
+        "auth.user_restored", target_type="user", target_id=user_id
+    )
+    return UserResponse.model_validate(restored)
 {% endif %}

@@ -169,14 +169,17 @@ class MembershipService:
         ]
 
     async def list_user_orgs(self, user_id: int) -> list[Organization]:
-        """List all organizations a user belongs to."""
+        """List all organizations a user belongs to. Skips soft-deleted orgs."""
         statement = (
             select(Organization)
             .join(
                 OrganizationMember,
                 OrganizationMember.organization_id == Organization.id,
             )
-            .where(OrganizationMember.user_id == user_id)
+            .where(
+                OrganizationMember.user_id == user_id,
+                Organization.deleted_at.is_(None),
+            )
         )
         result = await self.db.exec(statement)
         return list(result.all())
