@@ -14,7 +14,7 @@ class TestCacheIntegration:
         """Second call to /insights/all returns cached data."""
         from app.core.cache import cache
 
-        cache.clear()
+        await cache.clear()
 
         resp1 = async_client_with_db.get(  # type: ignore[union-attr]
             "/api/v1/insights/all", headers=auth_headers
@@ -22,7 +22,7 @@ class TestCacheIntegration:
         assert resp1.status_code == 200
 
         # Cache should now have the data
-        cached = cache.get("insights:all")
+        cached = await cache.get("insights:all")
         assert cached is not None
 
         resp2 = async_client_with_db.get(  # type: ignore[union-attr]
@@ -34,8 +34,8 @@ class TestCacheIntegration:
     async def test_cache_invalidation(self) -> None:
         """Invalidating cache key removes cached data."""
         c = CacheService()
-        c.set("insights:all", {"test": True})
-        assert c.get("insights:all") is not None
+        await c.set("insights:all", {"test": True})
+        assert await c.get("insights:all") is not None
 
-        c.invalidate("insights:all")
-        assert c.get("insights:all") is None
+        await c.invalidate("insights:all")
+        assert await c.get("insights:all") is None

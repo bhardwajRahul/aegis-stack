@@ -215,8 +215,8 @@ STACK_COMBINATIONS = [
     StackCombination(
         name="insights_per_user",
         components=["database", "scheduler"],
-        services=["auth", "insights[per_user]"],
-        description="Per-user insights: auth + Project model + project_id FKs",
+        services=["auth[org]", "insights[per_user]"],
+        description="Per-user insights: auth[org] + Project model + project_id FKs",
         expected_files=[
             "app/services/insights/",
             "app/services/insights/project_service.py",

@@ -547,6 +547,15 @@ SERVICES: dict[str, ServiceSpec] = {
                 mode=OptionMode.FLAG,
                 choices=["per_user"],
                 default=False,
+                # NB: ``auto_requires`` here would only let us add
+                # COMPONENTS (the resolver validates each returned
+                # string as a component name). We need to require the
+                # ``auth`` SERVICE — declaring that lives in
+                # ``validate_service_dependencies`` instead, which has
+                # access to the full selected-services list and can
+                # error with "insights[per_user] requires the auth
+                # service" when missing. See that function for the
+                # check.
             ),
         ],
         pyproject_deps=[

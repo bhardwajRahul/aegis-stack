@@ -72,7 +72,14 @@ async def _ensure_project(session: AsyncSession) -> object | None:
     )
     session.add(user)
     await session.flush()
-    project = Project(slug="isvc", name="isvc", owner_user_id=user.id)  # type: ignore[arg-type]
+    from tests._test_org import ensure_org_for_user
+
+    org_id = await ensure_org_for_user(session, user)
+    project = Project(
+        slug="isvc", name="isvc",
+        owner_user_id=user.id,  # type: ignore[arg-type]
+        organization_id=org_id,
+    )
     session.add(project)
     await session.flush()
     return project

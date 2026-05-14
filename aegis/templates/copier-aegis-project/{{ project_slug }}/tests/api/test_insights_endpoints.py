@@ -81,10 +81,14 @@ async def _ensure_project(session: AsyncSession) -> object | None:
     )
     session.add(user)
     await session.flush()
+    from tests._test_org import ensure_org_for_user
+
+    org_id = await ensure_org_for_user(session, user)
     project = Project(
         slug="iep",
         name="iep",
         owner_user_id=user.id,  # type: ignore[arg-type]
+        organization_id=org_id,
     )
     session.add(project)
     await session.flush()
@@ -92,11 +96,15 @@ async def _ensure_project(session: AsyncSession) -> object | None:
 
 
 @pytest.fixture(autouse=True)
-def _clear_cache() -> None:
-    """Clear the cache before each test."""
+async def _clear_cache() -> None:
+    """Clear the cache before each test.
+
+    Async since ``CacheService`` is async-first (Redis-backed in
+    prod, dict-backed in tests via the autouse conftest swap).
+    """
     from app.core.cache import cache
 
-    cache.clear()
+    await cache.clear()
 
 
 class TestGetAllInsights:

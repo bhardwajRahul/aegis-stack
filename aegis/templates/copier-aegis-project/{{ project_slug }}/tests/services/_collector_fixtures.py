@@ -43,8 +43,8 @@ async def seed_project_for_collector(
     ``"github_pat_xxx"``, never real secrets.
 
     Each call uses a unique slug per default so two seed calls in the
-    same test session don't collide on the (owner_user_id, slug) unique
-    constraint — pass an explicit ``slug`` to control it.
+    same test session don't collide on the (organization_id, slug)
+    unique constraint — pass an explicit ``slug`` to control it.
     """
     try:
         from app.models.user import User
@@ -60,10 +60,17 @@ async def seed_project_for_collector(
     session.add(user)
     await session.flush()
 
+    # Org + owner membership — required since the per_user variant
+    # ships ``project.organization_id NOT NULL``.
+    from tests._test_org import ensure_org_for_user
+
+    org_id = await ensure_org_for_user(session, user)
+
     project = Project(
         slug=slug,
         name=name,
         owner_user_id=user.id,  # type: ignore[arg-type]
+        organization_id=org_id,
         github_owner=github_owner,
         github_repo=github_repo,
         github_token=github_token,

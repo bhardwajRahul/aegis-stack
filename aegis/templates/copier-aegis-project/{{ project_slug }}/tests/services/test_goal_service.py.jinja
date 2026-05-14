@@ -58,10 +58,14 @@ async def _seed_project(
     All goal tests now operate against a project, since the ``Goal`` model
     requires a non-null ``project_id``. Helper keeps fixture noise low.
     """
+    from tests._test_org import ensure_org_for_user
+
+    org_id = await ensure_org_for_user(session, user)
     project = Project(
         slug=slug,
         name=name,
         owner_user_id=user.id,  # type: ignore[arg-type]
+        organization_id=org_id,
     )
     session.add(project)
     await session.flush()

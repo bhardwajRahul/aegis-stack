@@ -90,7 +90,7 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
     ),
     "insights_per_user": ProjectTemplateSpec(
         components=("database", "scheduler"),
-        services=("auth", "insights[per_user]"),
+        services=("auth[org]", "insights[per_user]"),
     ),
     "payment_with_database": ProjectTemplateSpec(
         components=("database",), services=("payment",)

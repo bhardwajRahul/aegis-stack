@@ -640,6 +640,10 @@ def _build_insights_migration(per_user: bool) -> ServiceMigrationSpec:
 
     if per_user:
         # `project` must come first — every insights table FKs to it.
+        # Org-tenancy: every project belongs to an ``organization`` (auth-
+        # shipped). ``owner_user_id`` stays as the implicit owner-membership
+        # lookup; once v2 org-aware reads land, ownership transitions to
+        # membership-based and ``owner_user_id`` can be dropped.
         tables.append(
             TableSpec(
                 name="project",
@@ -648,6 +652,7 @@ def _build_insights_migration(per_user: bool) -> ServiceMigrationSpec:
                     ColumnSpec("slug", "sa.String(64)", nullable=False),
                     ColumnSpec("name", "sa.String(128)", nullable=False),
                     ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                    ColumnSpec("organization_id", "sa.Integer()", nullable=False),
                     ColumnSpec("github_owner", "sa.String(64)", nullable=True),
                     ColumnSpec("github_repo", "sa.String(128)", nullable=True),
                     # github_token / plausible_api_key store ciphertext;
@@ -662,18 +667,20 @@ def _build_insights_migration(per_user: bool) -> ServiceMigrationSpec:
                 ],
                 indexes=[
                     IndexSpec("ix_project_owner_user_id", ["owner_user_id"]),
+                    IndexSpec("ix_project_organization_id", ["organization_id"]),
                     IndexSpec("ix_project_slug", ["slug"]),
-                    # Same owner can't reuse a slug (enforces the URL handle
-                    # contract: ``/insights/projects/<slug>/...`` resolves
-                    # uniquely within a user's namespace).
+                    # Slug uniqueness follows the new ownership primitive:
+                    # one slug per org, but two different orgs can each
+                    # have a project named ``my-thing``.
                     IndexSpec(
-                        "uq_project_owner_slug",
-                        ["owner_user_id", "slug"],
+                        "uq_project_organization_slug",
+                        ["organization_id", "slug"],
                         unique=True,
                     ),
                 ],
                 foreign_keys=[
                     ForeignKeySpec(["owner_user_id"], "user", ["id"]),
+                    ForeignKeySpec(["organization_id"], "organization", ["id"]),
                 ],
             )
         )

@@ -17,11 +17,24 @@ from sqlalchemy import text
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 
-async def _seed_user(session: AsyncSession, email: str = "u@example.com") -> User:
+async def _seed_user(
+    session: AsyncSession, email: str = "u@example.com"
+) -> tuple[User, int]:
+    """Create a test user plus an org + owner membership.
+
+    Returns ``(user, org_id)`` — the template's ``User`` model doesn't
+    ship a ``default_organization_id`` field (that's downstream-app
+    policy à la Pulse), so the helper hands the org id back as a
+    second tuple element instead. Tests pass it as
+    ``organization_id=org_id`` when building Project rows.
+    """
+    from tests._test_org import ensure_org_for_user
+
     user = User(email=email, full_name="Test", hashed_password="x")
     session.add(user)
     await session.flush()
-    return user
+    org_id = await ensure_org_for_user(session, user)
+    return user, org_id
 
 
 async def _raw_project_row(session: AsyncSession, slug: str) -> dict:
@@ -44,11 +57,12 @@ async def _raw_project_row(session: AsyncSession, slug: str) -> dict:
 async def test_create_persists_credentials_encrypted_in_db(
     async_db_session: AsyncSession,
 ) -> None:
-    user = await _seed_user(async_db_session)
+    user, org_id = await _seed_user(async_db_session)
     service = ProjectService(async_db_session)
 
     await service.create(
         owner_user_id=user.id,  # type: ignore[arg-type]
+        organization_id=org_id,  # type: ignore[arg-type]
         slug="my-project",
         name="My Project",
         github_token="ghp_abc123",
@@ -67,11 +81,12 @@ async def test_create_persists_credentials_encrypted_in_db(
 async def test_create_returns_plaintext_to_caller(
     async_db_session: AsyncSession,
 ) -> None:
-    user = await _seed_user(async_db_session)
+    user, org_id = await _seed_user(async_db_session)
     service = ProjectService(async_db_session)
 
     project = await service.create(
         owner_user_id=user.id,  # type: ignore[arg-type]
+        organization_id=org_id,  # type: ignore[arg-type]
         slug="p", name="P", github_token="ghp_abc",
     )
 
@@ -83,11 +98,13 @@ async def test_create_handles_no_credentials(
     async_db_session: AsyncSession,
 ) -> None:
     """Empty credential fields stay None (don't get encrypted as None)."""
-    user = await _seed_user(async_db_session)
+    user, org_id = await _seed_user(async_db_session)
     service = ProjectService(async_db_session)
 
     project = await service.create(
-        owner_user_id=user.id, slug="p", name="P",  # type: ignore[arg-type]
+        owner_user_id=user.id,
+        organization_id=org_id,  # type: ignore[arg-type]
+        slug="p", name="P",  # type: ignore[arg-type]
     )
 
     assert project.github_token is None
@@ -103,10 +120,11 @@ async def test_create_handles_no_credentials(
 async def test_get_by_slug_returns_decrypted_credentials(
     async_db_session: AsyncSession,
 ) -> None:
-    user = await _seed_user(async_db_session)
+    user, org_id = await _seed_user(async_db_session)
     service = ProjectService(async_db_session)
     await service.create(
         owner_user_id=user.id,  # type: ignore[arg-type]
+        organization_id=org_id,  # type: ignore[arg-type]
         slug="p", name="P", github_token="ghp_secret",
     )
 
@@ -120,11 +138,12 @@ async def test_get_by_slug_returns_decrypted_credentials(
 async def test_get_by_slug_returns_none_for_non_owner(
     async_db_session: AsyncSession,
 ) -> None:
-    owner = await _seed_user(async_db_session, "owner@x.com")
-    intruder = await _seed_user(async_db_session, "intruder@x.com")
+    owner, owner_org_id = await _seed_user(async_db_session, "owner@x.com")
+    intruder, intruder_org_id = await _seed_user(async_db_session, "intruder@x.com")
     service = ProjectService(async_db_session)
     await service.create(
         owner_user_id=owner.id,  # type: ignore[arg-type]
+        organization_id=owner_org_id,  # type: ignore[arg-type]
         slug="p", name="P",
     )
 
@@ -137,11 +156,13 @@ async def test_get_by_slug_returns_none_for_non_owner(
 async def test_get_by_id_returns_none_for_non_owner(
     async_db_session: AsyncSession,
 ) -> None:
-    owner = await _seed_user(async_db_session, "owner@x.com")
-    intruder = await _seed_user(async_db_session, "intruder@x.com")
+    owner, owner_org_id = await _seed_user(async_db_session, "owner@x.com")
+    intruder, intruder_org_id = await _seed_user(async_db_session, "intruder@x.com")
     service = ProjectService(async_db_session)
     project = await service.create(
-        owner_user_id=owner.id, slug="p", name="P",  # type: ignore[arg-type]
+        owner_user_id=owner.id,
+        organization_id=owner_org_id,  # type: ignore[arg-type]
+        slug="p", name="P",  # type: ignore[arg-type]
     )
 
     fetched = await service.get_by_id_for_user(
@@ -160,12 +181,18 @@ async def test_get_by_id_returns_none_for_non_owner(
 async def test_list_for_user_filters_by_owner(
     async_db_session: AsyncSession,
 ) -> None:
-    a = await _seed_user(async_db_session, "a@x.com")
-    b = await _seed_user(async_db_session, "b@x.com")
+    a, a_org_id = await _seed_user(async_db_session, "a@x.com")
+    b, b_org_id = await _seed_user(async_db_session, "b@x.com")
     service = ProjectService(async_db_session)
-    await service.create(owner_user_id=a.id, slug="a1", name="a1")  # type: ignore[arg-type]
-    await service.create(owner_user_id=a.id, slug="a2", name="a2")  # type: ignore[arg-type]
-    await service.create(owner_user_id=b.id, slug="b1", name="b1")  # type: ignore[arg-type]
+    await service.create(owner_user_id=a.id,
+        organization_id=a_org_id,  # type: ignore[arg-type]
+        slug="a1", name="a1")  # type: ignore[arg-type]
+    await service.create(owner_user_id=a.id,
+        organization_id=a_org_id,  # type: ignore[arg-type]
+        slug="a2", name="a2")  # type: ignore[arg-type]
+    await service.create(owner_user_id=b.id,
+        organization_id=b_org_id,  # type: ignore[arg-type]
+        slug="b1", name="b1")  # type: ignore[arg-type]
 
     a_projects = await service.list_for_user(a.id)  # type: ignore[arg-type]
 
@@ -182,10 +209,11 @@ async def test_list_for_user_filters_by_owner(
 async def test_update_re_encrypts_changed_credentials(
     async_db_session: AsyncSession,
 ) -> None:
-    user = await _seed_user(async_db_session)
+    user, org_id = await _seed_user(async_db_session)
     service = ProjectService(async_db_session)
     await service.create(
         owner_user_id=user.id,  # type: ignore[arg-type]
+        organization_id=org_id,  # type: ignore[arg-type]
         slug="p", name="P", github_token="ghp_old",
     )
 
@@ -203,10 +231,12 @@ async def test_update_re_encrypts_changed_credentials(
 async def test_update_ignores_unknown_fields(
     async_db_session: AsyncSession,
 ) -> None:
-    user = await _seed_user(async_db_session)
+    user, org_id = await _seed_user(async_db_session)
     service = ProjectService(async_db_session)
     project = await service.create(
-        owner_user_id=user.id, slug="p", name="P",  # type: ignore[arg-type]
+        owner_user_id=user.id,
+        organization_id=org_id,  # type: ignore[arg-type]
+        slug="p", name="P",  # type: ignore[arg-type]
     )
     original_owner = project.owner_user_id
 
@@ -229,11 +259,13 @@ async def test_update_ignores_unknown_fields(
 async def test_update_returns_none_for_non_owner(
     async_db_session: AsyncSession,
 ) -> None:
-    owner = await _seed_user(async_db_session, "owner@x.com")
-    intruder = await _seed_user(async_db_session, "intruder@x.com")
+    owner, owner_org_id = await _seed_user(async_db_session, "owner@x.com")
+    intruder, intruder_org_id = await _seed_user(async_db_session, "intruder@x.com")
     service = ProjectService(async_db_session)
     await service.create(
-        owner_user_id=owner.id, slug="p", name="P",  # type: ignore[arg-type]
+        owner_user_id=owner.id,
+        organization_id=owner_org_id,  # type: ignore[arg-type]
+        slug="p", name="P",  # type: ignore[arg-type]
     )
 
     result = await service.update(
@@ -250,10 +282,12 @@ async def test_update_returns_none_for_non_owner(
 
 @pytest.mark.asyncio
 async def test_delete_removes_project(async_db_session: AsyncSession) -> None:
-    user = await _seed_user(async_db_session)
+    user, org_id = await _seed_user(async_db_session)
     service = ProjectService(async_db_session)
     await service.create(
-        owner_user_id=user.id, slug="p", name="P",  # type: ignore[arg-type]
+        owner_user_id=user.id,
+        organization_id=org_id,  # type: ignore[arg-type]
+        slug="p", name="P",  # type: ignore[arg-type]
     )
 
     deleted = await service.delete("p", user.id)  # type: ignore[arg-type]
@@ -266,11 +300,13 @@ async def test_delete_removes_project(async_db_session: AsyncSession) -> None:
 async def test_delete_returns_false_for_non_owner(
     async_db_session: AsyncSession,
 ) -> None:
-    owner = await _seed_user(async_db_session, "owner@x.com")
-    intruder = await _seed_user(async_db_session, "intruder@x.com")
+    owner, owner_org_id = await _seed_user(async_db_session, "owner@x.com")
+    intruder, intruder_org_id = await _seed_user(async_db_session, "intruder@x.com")
     service = ProjectService(async_db_session)
     await service.create(
-        owner_user_id=owner.id, slug="p", name="P",  # type: ignore[arg-type]
+        owner_user_id=owner.id,
+        organization_id=owner_org_id,  # type: ignore[arg-type]
+        slug="p", name="P",  # type: ignore[arg-type]
     )
 
     deleted = await service.delete("p", intruder.id)  # type: ignore[arg-type]
