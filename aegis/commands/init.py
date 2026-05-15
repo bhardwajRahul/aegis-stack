@@ -390,15 +390,31 @@ def init_command(
     project_path = base_output_dir / project_name
     if force and project_path.exists():
         typer.echo(t("init.removing_dir", path=project_path))
+        import errno
         import shutil
 
-        def _ignore_vanished(_func: object, _path: str, exc_info: object) -> None:
-            # Git pack-refs and similar create transient files like
-            # bitmap-ref-tips_* that vanish between enumeration and
-            # unlink. Swallow FileNotFoundError, re-raise everything else.
+        def _ignore_vanished(_func: object, path: str, exc_info: object) -> None:
+            # Two symmetric races against background git activity
+            # (pack-refs, gc, fsmonitor) on a ``.git`` we just created:
+            #
+            # 1. A file is enumerated then unlinked by git before we
+            #    can ``unlink`` it ourselves. Manifests as
+            #    ``FileNotFoundError`` — safe to ignore, the walk has
+            #    already done the work.
+            # 2. New files appear inside a directory between our walk
+            #    and the final ``rmdir`` of that directory, leaving it
+            #    non-empty. Manifests as ``OSError`` with
+            #    ``errno.ENOTEMPTY``. Re-rmtree the offending subdir;
+            #    its fresh contents will get cleaned up. The recursion
+            #    is bounded by how many times git can race us, which
+            #    in practice is once.
             exc = exc_info[1] if isinstance(exc_info, tuple) else None
-            if not isinstance(exc, FileNotFoundError):
-                raise exc  # type: ignore[misc]
+            if isinstance(exc, FileNotFoundError):
+                return
+            if isinstance(exc, OSError) and exc.errno == errno.ENOTEMPTY:
+                shutil.rmtree(path, onerror=_ignore_vanished)
+                return
+            raise exc  # type: ignore[misc]
 
         shutil.rmtree(project_path, onerror=_ignore_vanished)
 

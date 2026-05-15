@@ -3,17 +3,25 @@ Tests for authentication API endpoints.
 
 This module tests the auth endpoints including user registration,
 login, token validation, and protected endpoint access.
+
+Test-data setup uses ``user_factory`` from ``tests/conftest.py``.
+Many tests log in via ``POST /api/v1/auth/token`` and so need the
+factory's plaintext password; ``DEFAULT_USER_PASSWORD`` (imported
+from conftest) is the single source of truth for that value. Tests
+stay inline only when a literal email is the test's invariant
+(duplicate-email rejection, registration body contents).
 """
 
 import pytest
 from app.core.config import settings
 from app.core.security import create_access_token
-from app.models.user import UserCreate
 from app.services.auth.user_service import UserService
 from fastapi import status
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 from sqlmodel.ext.asyncio.session import AsyncSession
+
+from tests.conftest import DEFAULT_USER_PASSWORD as _PASSWORD
 
 
 @pytest.fixture(autouse=True)
@@ -55,11 +63,15 @@ class TestAuthEndpoints:
     async def test_register_new_user(
         self, async_client_with_db: TestClient, async_db_session: AsyncSession
     ):
-        """Test user registration with valid data."""
+        """Test user registration with valid data.
+
+        Inline: the test asserts the response body echoes the request
+        body, so the literal values need to be visible.
+        """
         user_data = {
             "email": "test@example.com",
             "full_name": "Test User",
-            "password": "testpassword123"
+            "password": "testpassword123",
         }
 
         response = async_client_with_db.post("/api/v1/auth/register", json=user_data)
@@ -78,27 +90,25 @@ class TestAuthEndpoints:
 
     @pytest.mark.asyncio
     async def test_register_duplicate_email(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
-        """Test registration with already existing email."""
-        # Create a user first
-        user_service = UserService(async_db_session)
-        existing_user = UserCreate(
-            email="existing@example.com",
-            full_name="Existing User",
-            password="password123"
-        )
-        await user_service.create_user(existing_user)
+        """Test registration with already existing email.
 
-        # Try to register with same email
-        duplicate_user_data = {
-            "email": "existing@example.com",
-            "full_name": "Another User",
-            "password": "differentpassword"
-        }
+        Inline-ish: the duplicate email is the invariant, pinned via
+        the factory override.
+        """
+        existing = await user_factory(email="existing@example.com")
 
         response = async_client_with_db.post(
-            "/api/v1/auth/register", json=duplicate_user_data
+            "/api/v1/auth/register",
+            json={
+                "email": existing.email,
+                "full_name": "Another User",
+                "password": "differentpassword",
+            },
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -107,104 +117,80 @@ class TestAuthEndpoints:
     @pytest.mark.asyncio
     async def test_register_invalid_data(self, async_client_with_db: TestClient):
         """Test registration with invalid data."""
-        invalid_user_data = {
-            "email": "not-an-email",  # Invalid email format
-            "password": "123"  # Too short
-        }
-
         response = async_client_with_db.post(
-            "/api/v1/auth/register", json=invalid_user_data
+            "/api/v1/auth/register",
+            json={
+                "email": "not-an-email",  # Invalid email format
+                "password": "123",  # Too short
+            },
         )
 
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     @pytest.mark.asyncio
     async def test_login_valid_credentials(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
         """Test login with valid credentials."""
-        # Create a user first
-        user_service = UserService(async_db_session)
-        user_data = UserCreate(
-            email="login@example.com",
-            full_name="Login User",
-            password="loginpassword123"
+        user = await user_factory()
+
+        response = async_client_with_db.post(
+            "/api/v1/auth/token",
+            data={"username": user.email, "password": _PASSWORD},
         )
-        await user_service.create_user(user_data)
-
-        # Login with valid credentials
-        login_data = {
-            "username": "login@example.com",  # OAuth2 uses username field
-            "password": "loginpassword123"
-        }
-
-        response = async_client_with_db.post("/api/v1/auth/token", data=login_data)
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert "access_token" in data
         assert data["token_type"] == "bearer"
-        assert len(data["access_token"]) > 0
+        assert data["access_token"]
 
     @pytest.mark.asyncio
     async def test_login_invalid_email(self, async_client_with_db: TestClient):
         """Test login with non-existent email."""
-        login_data = {
-            "username": "nonexistent@example.com",
-            "password": "somepassword"
-        }
-
-        response = async_client_with_db.post("/api/v1/auth/token", data=login_data)
+        response = async_client_with_db.post(
+            "/api/v1/auth/token",
+            data={"username": "nonexistent@example.com", "password": "somepassword"},
+        )
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         assert "incorrect" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_login_invalid_password(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
         """Test login with wrong password."""
-        # Create a user first
-        user_service = UserService(async_db_session)
-        user_data = UserCreate(
-            email="wrongpass@example.com",
-            full_name="Wrong Pass User",
-            password="correctpassword"
+        user = await user_factory()
+
+        response = async_client_with_db.post(
+            "/api/v1/auth/token",
+            data={"username": user.email, "password": "wrongpassword"},
         )
-        await user_service.create_user(user_data)
-
-        # Login with wrong password
-        login_data = {
-            "username": "wrongpass@example.com",
-            "password": "wrongpassword"
-        }
-
-        response = async_client_with_db.post("/api/v1/auth/token", data=login_data)
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
         assert "incorrect" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_get_current_user_valid_token(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
         """Test getting current user with valid token."""
-        # Create a user first
-        user_service = UserService(async_db_session)
-        user_data = UserCreate(
-            email="currentuser@example.com",
-            full_name="Current User",
-            password="password123"
-        )
-        created_user = await user_service.create_user(user_data)
-
-        # Create a valid token
+        created_user = await user_factory()
         token = create_access_token(data={"sub": created_user.email})
 
-        # Get current user
         response = async_client_with_db.get(
             "/api/v1/auth/me",
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -219,78 +205,59 @@ class TestAuthEndpoints:
     ):
         """Test getting current user with invalid token."""
         response = async_client_with_db.get(
-            "/api/v1/auth/me",
-            headers={"Authorization": "Bearer invalid_token"}
+            "/api/v1/auth/me", headers={"Authorization": "Bearer invalid_token"}
         )
-
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio
     async def test_get_current_user_no_token(self, async_client_with_db: TestClient):
         """Test getting current user without token."""
         response = async_client_with_db.get("/api/v1/auth/me")
-
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio
     async def test_get_current_user_expired_token(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
         """Test getting current user with expired token."""
-        # Create a user first
-        user_service = UserService(async_db_session)
-        user_data = UserCreate(
-            email="expiredtoken@example.com",
-            full_name="Expired Token User",
-            password="password123"
-        )
-        created_user = await user_service.create_user(user_data)
-
-        # Create an expired token (negative expiry)
         from datetime import timedelta
+
+        created_user = await user_factory()
         expired_token = create_access_token(
             data={"sub": created_user.email},
-            expires_delta=timedelta(seconds=-1)
+            expires_delta=timedelta(seconds=-1),
         )
 
-        # Try to get current user with expired token
         response = async_client_with_db.get(
             "/api/v1/auth/me",
-            headers={"Authorization": f"Bearer {expired_token}"}
+            headers={"Authorization": f"Bearer {expired_token}"},
         )
-
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio
     async def test_get_user_by_id_no_token_returns_401(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
         """Unauthenticated requests to GET /users/{id} are rejected."""
-        user_service = UserService(async_db_session)
-        target = await user_service.create_user(
-            UserCreate(
-                email="target@example.com",
-                full_name="Target User",
-                password="password123",
-            )
-        )
-
+        target = await user_factory()
         response = async_client_with_db.get(f"/api/v1/auth/users/{target.id}")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio
     async def test_get_user_by_id_self_returns_200(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
         """A user can read their own profile via /users/{id}."""
-        user_service = UserService(async_db_session)
-        me = await user_service.create_user(
-            UserCreate(
-                email="self@example.com",
-                full_name="Self User",
-                password="password123",
-            )
-        )
+        me = await user_factory()
         token = create_access_token(data={"sub": me.email})
 
         response = async_client_with_db.get(
@@ -302,36 +269,20 @@ class TestAuthEndpoints:
 
     @pytest.mark.asyncio
     async def test_get_user_by_id_other_user_returns_403(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
         """A non-admin user cannot read another user's profile."""
-        user_service = UserService(async_db_session)
 {% if include_auth_rbac %}
         # The first signup in any RBAC-enabled project is auto-promoted to
         # admin. Burn one throwaway user so ``viewer`` lands as a plain
         # ``"user"`` — exactly the case we want to assert 403 on.
-        await user_service.create_user(
-            UserCreate(
-                email="seed-admin@example.com",
-                full_name="Seed",
-                password="password123",
-            )
-        )
+        await user_factory()
 {% endif %}
-        viewer = await user_service.create_user(
-            UserCreate(
-                email="viewer@example.com",
-                full_name="Viewer",
-                password="password123",
-            )
-        )
-        target = await user_service.create_user(
-            UserCreate(
-                email="other@example.com",
-                full_name="Other",
-                password="password123",
-            )
-        )
+        viewer = await user_factory()
+        target = await user_factory()
         token = create_access_token(data={"sub": viewer.email})
 
         response = async_client_with_db.get(
@@ -343,29 +294,19 @@ class TestAuthEndpoints:
 {% if include_auth_rbac %}
     @pytest.mark.asyncio
     async def test_get_user_by_id_admin_can_read_anyone(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
         """An admin can read any user's profile."""
-        user_service = UserService(async_db_session)
-        admin = await user_service.create_user(
-            UserCreate(
-                email="admin@example.com",
-                full_name="Admin",
-                password="password123",
-            )
-        )
+        admin = await user_factory()
         admin.role = "admin"
         async_db_session.add(admin)
         await async_db_session.commit()
         await async_db_session.refresh(admin)
 
-        target = await user_service.create_user(
-            UserCreate(
-                email="target2@example.com",
-                full_name="Target Two",
-                password="password123",
-            )
-        )
+        target = await user_factory()
         token = create_access_token(data={"sub": admin.email})
 
         response = async_client_with_db.get(
@@ -384,12 +325,15 @@ class TestAuthIntegration:
     async def test_full_auth_flow(
         self, async_client_with_db: TestClient, async_db_session: AsyncSession
     ):
-        """Test complete auth flow: register -> login -> protected endpoint."""
-        # Step 1: Register new user
+        """Test complete auth flow: register -> login -> protected endpoint.
+
+        Inline: the test echoes the request body fields back from the
+        response, so the literal values matter.
+        """
         user_data = {
             "email": "fullflow@example.com",
             "full_name": "Full Flow User",
-            "password": "fullflowpassword123"
+            "password": "fullflowpassword123",
         }
 
         register_response = async_client_with_db.post(
@@ -397,23 +341,17 @@ class TestAuthIntegration:
         )
         assert register_response.status_code == status.HTTP_200_OK
 
-        # Step 2: Login with credentials
-        login_data = {
-            "username": user_data["email"],
-            "password": user_data["password"]
-        }
-
         login_response = async_client_with_db.post(
-            "/api/v1/auth/token", data=login_data
+            "/api/v1/auth/token",
+            data={"username": user_data["email"], "password": user_data["password"]},
         )
         assert login_response.status_code == status.HTTP_200_OK
 
         token = login_response.json()["access_token"]
 
-        # Step 3: Access protected endpoint
         me_response = async_client_with_db.get(
             "/api/v1/auth/me",
-            headers={"Authorization": f"Bearer {token}"}
+            headers={"Authorization": f"Bearer {token}"},
         )
 
         assert me_response.status_code == status.HTTP_200_OK
@@ -442,7 +380,7 @@ class TestAuthIntegration:
         user_data = {
             "email": "persistent@example.com",
             "full_name": "Persistent User",
-            "password": "persistentpassword"
+            "password": "persistentpassword",
         }
 
         register_response = async_client_with_db.post(
@@ -450,18 +388,12 @@ class TestAuthIntegration:
         )
         assert register_response.status_code == status.HTTP_200_OK
 
-        # Login in separate request
-        login_data = {
-            "username": user_data["email"],
-            "password": user_data["password"]
-        }
-
         login_response = async_client_with_db.post(
-            "/api/v1/auth/token", data=login_data
+            "/api/v1/auth/token",
+            data={"username": user_data["email"], "password": user_data["password"]},
         )
         assert login_response.status_code == status.HTTP_200_OK
 
-        # Verify user exists in database
         user_service = UserService(async_db_session)
         db_user = await user_service.get_user_by_email(user_data["email"])
 
@@ -490,23 +422,16 @@ class TestSessionCookie:
 
     @pytest.mark.asyncio
     async def test_login_sets_aegis_session_cookie(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ) -> None:
-        user_service = UserService(async_db_session)
-        await user_service.create_user(
-            UserCreate(
-                email="cookie-login@example.com",
-                full_name="Cookie Login",
-                password="cookielogin123",
-            )
-        )
+        user = await user_factory()
 
         response = async_client_with_db.post(
             "/api/v1/auth/token",
-            data={
-                "username": "cookie-login@example.com",
-                "password": "cookielogin123",
-            },
+            data={"username": user.email, "password": _PASSWORD},
         )
 
         assert response.status_code == status.HTTP_200_OK
@@ -541,26 +466,17 @@ class TestSessionCookie:
 
     @pytest.mark.asyncio
     async def test_logout_clears_aegis_session_cookie(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ) -> None:
-        user_service = UserService(async_db_session)
-        await user_service.create_user(
-            UserCreate(
-                email="cookie-logout@example.com",
-                full_name="Cookie Logout",
-                password="cookielogout123",
-            )
-        )
+        user = await user_factory()
         login = async_client_with_db.post(
             "/api/v1/auth/token",
-            data={
-                "username": "cookie-logout@example.com",
-                "password": "cookielogout123",
-            },
+            data={"username": user.email, "password": _PASSWORD},
         )
         assert login.status_code == status.HTTP_200_OK
-        # The TestClient's jar now carries aegis_session — logout will
-        # follow with a Cookie header automatically.
 
         response = async_client_with_db.post("/api/v1/auth/logout")
 
@@ -574,24 +490,16 @@ class TestSessionCookie:
 
     @pytest.mark.asyncio
     async def test_protected_route_accepts_session_cookie_alone(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ) -> None:
         """``/auth/me`` works with just the cookie — no Authorization header."""
-        user_service = UserService(async_db_session)
-        created = await user_service.create_user(
-            UserCreate(
-                email="cookie-only@example.com",
-                full_name="Cookie Only",
-                password="cookieonly123",
-            )
-        )
-        # Login to seed the jar with aegis_session.
+        created = await user_factory()
         login = async_client_with_db.post(
             "/api/v1/auth/token",
-            data={
-                "username": "cookie-only@example.com",
-                "password": "cookieonly123",
-            },
+            data={"username": created.email, "password": _PASSWORD},
         )
         assert login.status_code == status.HTTP_200_OK
 
@@ -603,38 +511,26 @@ class TestSessionCookie:
 
     @pytest.mark.asyncio
     async def test_cookie_wins_over_bearer_when_both_present(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ) -> None:
         """
         ``get_session_token`` returns ``aegis_session or bearer_token`` —
         cookie takes precedence so a stale bearer can't override a fresh
         cookie session.
         """
-        user_service = UserService(async_db_session)
-        cookie_user = await user_service.create_user(
-            UserCreate(
-                email="cookie-wins@example.com",
-                full_name="Cookie Wins",
-                password="cookiewins123",
-            )
-        )
-        await user_service.create_user(
-            UserCreate(
-                email="bearer-loses@example.com",
-                full_name="Bearer Loses",
-                password="bearerloses123",
-            )
-        )
+        cookie_user = await user_factory()
+        bearer_user = await user_factory()
+
         # Sign in as cookie-user (cookie now in jar).
         async_client_with_db.post(
             "/api/v1/auth/token",
-            data={
-                "username": "cookie-wins@example.com",
-                "password": "cookiewins123",
-            },
+            data={"username": cookie_user.email, "password": _PASSWORD},
         )
         # Mint a bearer token for a *different* user and send both.
-        bearer_for_other = create_access_token(data={"sub": "bearer-loses@example.com"})
+        bearer_for_other = create_access_token(data={"sub": bearer_user.email})
 
         response = async_client_with_db.get(
             "/api/v1/auth/me",
@@ -652,40 +548,27 @@ class TestSessionCookie:
         """
         ``/auth/logout`` must clear the cookie BEFORE the auth gate so a
         client with a stale/invalid cookie is not stuck unable to log out.
-        The endpoint can still 401 on the auth gate — that's fine, as
-        long as the response carries the cookie removal.
         """
-        # No login first — the TestClient has no session cookie. The
-        # cookie/bearer dep will produce None, the auth gate will 401.
+        # No login first — the TestClient has no session cookie.
         response = async_client_with_db.post("/api/v1/auth/logout")
 
-        # The endpoint 401s because there's no authenticated user.
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
-        # But the cookie removal is still on the response — that's the
-        # whole point of clearing-before-auth-check.
         set_cookie = response.headers.get("set-cookie", "")
         assert "aegis_session" in set_cookie
-        # ``response.delete_cookie`` emits an empty value + Max-Age=0.
         assert "Max-Age=0" in set_cookie
 
     @pytest.mark.asyncio
     async def test_login_sets_aegis_refresh_cookie(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ) -> None:
         """Login must also drop a long-lived refresh cookie, path-scoped."""
-        await UserService(async_db_session).create_user(
-            UserCreate(
-                email="refresh-login@example.com",
-                full_name="Refresh Login",
-                password="refreshlogin123",
-            )
-        )
+        user = await user_factory()
         response = async_client_with_db.post(
             "/api/v1/auth/token",
-            data={
-                "username": "refresh-login@example.com",
-                "password": "refreshlogin123",
-            },
+            data={"username": user.email, "password": _PASSWORD},
         )
         assert response.status_code == status.HTTP_200_OK
         assert "aegis_refresh" in response.cookies
@@ -697,23 +580,17 @@ class TestSessionCookie:
 
     @pytest.mark.asyncio
     async def test_refresh_rotates_tokens(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ) -> None:
         """``POST /auth/refresh`` returns a new access token and rotates the
         refresh cookie. The pre-refresh refresh value should be replaced."""
-        await UserService(async_db_session).create_user(
-            UserCreate(
-                email="rotate-endpoint@example.com",
-                full_name="Rotate",
-                password="rotateendpoint123",
-            )
-        )
+        user = await user_factory()
         login = async_client_with_db.post(
             "/api/v1/auth/token",
-            data={
-                "username": "rotate-endpoint@example.com",
-                "password": "rotateendpoint123",
-            },
+            data={"username": user.email, "password": _PASSWORD},
         )
         assert login.status_code == status.HTTP_200_OK
         original_refresh = async_client_with_db.cookies.get("aegis_refresh")
@@ -739,20 +616,17 @@ class TestSessionCookie:
 
     @pytest.mark.asyncio
     async def test_refresh_reuse_triggers_401(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ) -> None:
         """Replaying a previously-rotated refresh token must 401 — the
         service revokes the entire family on reuse."""
-        await UserService(async_db_session).create_user(
-            UserCreate(
-                email="reuse@example.com",
-                full_name="Reuse",
-                password="reuse123",
-            )
-        )
+        user = await user_factory()
         async_client_with_db.post(
             "/api/v1/auth/token",
-            data={"username": "reuse@example.com", "password": "reuse123"},
+            data={"username": user.email, "password": _PASSWORD},
         )
         original_refresh = async_client_with_db.cookies.get("aegis_refresh")
         assert original_refresh
@@ -764,8 +638,7 @@ class TestSessionCookie:
         assert rotated_refresh and rotated_refresh != original_refresh
 
         # Replay the original by sending it as an explicit cookie on the
-        # request, which dodges any jar-overwrite quirks (the rotated
-        # cookie also lives in the jar at the same path).
+        # request, which dodges any jar-overwrite quirks.
         async_client_with_db.cookies.clear()
         replay = async_client_with_db.post(
             "/api/v1/auth/refresh",
@@ -773,11 +646,7 @@ class TestSessionCookie:
         )
         assert replay.status_code == status.HTTP_401_UNAUTHORIZED
         # Regression: the 401 response must carry cookie-clearing Set-Cookie
-        # headers. Raising HTTPException after mutating the injected
-        # ``response`` drops those headers (FastAPI builds a fresh error
-        # response), which would leave the browser stuck retrying with a
-        # stale refresh cookie. Both ``aegis_session`` and ``aegis_refresh``
-        # must be cleared (Max-Age=0) on this failure response.
+        # headers.
         replay_set_cookie = replay.headers.get("set-cookie", "")
         assert "aegis_session" in replay_set_cookie
         assert "aegis_refresh" in replay_set_cookie
@@ -793,21 +662,15 @@ class TestSessionCookie:
 
     @pytest.mark.asyncio
     async def test_logout_clears_aegis_refresh_cookie(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ) -> None:
-        await UserService(async_db_session).create_user(
-            UserCreate(
-                email="refresh-logout@example.com",
-                full_name="Refresh Logout",
-                password="refreshlogout123",
-            )
-        )
+        user = await user_factory()
         async_client_with_db.post(
             "/api/v1/auth/token",
-            data={
-                "username": "refresh-logout@example.com",
-                "password": "refreshlogout123",
-            },
+            data={"username": user.email, "password": _PASSWORD},
         )
         response = async_client_with_db.post("/api/v1/auth/logout")
         assert response.status_code == status.HTTP_200_OK
@@ -817,20 +680,15 @@ class TestSessionCookie:
 
     @pytest.mark.asyncio
     async def test_bearer_still_works_without_cookie(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ) -> None:
         """API clients with no cookie jar still authenticate via bearer."""
-        user_service = UserService(async_db_session)
-        created = await user_service.create_user(
-            UserCreate(
-                email="bearer-only@example.com",
-                full_name="Bearer Only",
-                password="beareronly123",
-            )
-        )
+        created = await user_factory()
         token = create_access_token(data={"sub": created.email})
 
-        # Make sure no aegis_session is in the jar before the call.
         async_client_with_db.cookies.delete("aegis_session")
 
         response = async_client_with_db.get(
@@ -849,20 +707,13 @@ class TestSessionsEndpoints:
     the raw refresh token is never returned. ``is_current`` is set on
     the row whose refresh-cookie value the request carried."""
 
-    async def _login_and_get_cookies(
-        self, client, email: str, password: str
-    ) -> dict[str, str]:
+    async def _login(self, client, email: str) -> None:
+        """Seed ``client``'s cookie jar with the auth cookies."""
         response = client.post(
             "/api/v1/auth/token",
-            data={"username": email, "password": password},
+            data={"username": email, "password": _PASSWORD},
         )
         assert response.status_code == status.HTTP_200_OK
-        cookies = dict(client.cookies)
-        # Carry only the auth cookies — TestClient stores everything.
-        return {
-            k: v for k, v in cookies.items()
-            if k in ("aegis_session", "aegis_refresh")
-        }
 
     @pytest.mark.asyncio
     async def test_list_sessions_unauthenticated_returns_401(
@@ -874,20 +725,13 @@ class TestSessionsEndpoints:
 
     @pytest.mark.asyncio
     async def test_list_sessions_marks_current_session(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
-        user_service = UserService(async_db_session)
-        await user_service.create_user(
-            UserCreate(
-                email="sessions-cur@example.com",
-                full_name="Sessions Cur",
-                password="password123",
-            )
-        )
-
-        await self._login_and_get_cookies(
-            async_client_with_db, "sessions-cur@example.com", "password123"
-        )
+        user = await user_factory()
+        await self._login(async_client_with_db, user.email)
 
         response = async_client_with_db.get("/api/v1/auth/sessions")
         assert response.status_code == status.HTTP_200_OK
@@ -903,19 +747,13 @@ class TestSessionsEndpoints:
 
     @pytest.mark.asyncio
     async def test_revoke_session_404_for_unknown_id(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
-        user_service = UserService(async_db_session)
-        await user_service.create_user(
-            UserCreate(
-                email="sessions-404@example.com",
-                full_name="Sessions 404",
-                password="password123",
-            )
-        )
-        await self._login_and_get_cookies(
-            async_client_with_db, "sessions-404@example.com", "password123"
-        )
+        user = await user_factory()
+        await self._login(async_client_with_db, user.email)
 
         response = async_client_with_db.delete(
             "/api/v1/auth/sessions/not-a-real-family-id"
@@ -924,49 +762,34 @@ class TestSessionsEndpoints:
 
     @pytest.mark.asyncio
     async def test_revoke_session_kills_target_session(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
-        user_service = UserService(async_db_session)
-        await user_service.create_user(
-            UserCreate(
-                email="sessions-kill@example.com",
-                full_name="Sessions Kill",
-                password="password123",
-            )
-        )
-        await self._login_and_get_cookies(
-            async_client_with_db, "sessions-kill@example.com", "password123"
-        )
+        user = await user_factory()
+        await self._login(async_client_with_db, user.email)
 
         list_resp = async_client_with_db.get("/api/v1/auth/sessions")
         sid = list_resp.json()[0]["id"]
 
-        revoke = async_client_with_db.delete(
-            f"/api/v1/auth/sessions/{sid}"
-        )
+        revoke = async_client_with_db.delete(f"/api/v1/auth/sessions/{sid}")
         assert revoke.status_code == status.HTTP_204_NO_CONTENT
 
-        # Session should now be gone from the listing. After revoking
-        # the current session, the access JWT is still valid (it lives
-        # up to its own exp), so the list endpoint is still callable.
         after = async_client_with_db.get("/api/v1/auth/sessions")
         assert after.status_code == status.HTTP_200_OK
         assert all(s["id"] != sid for s in after.json())
 
     @pytest.mark.asyncio
     async def test_revoke_other_sessions_keeps_current(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
         """Two sessions for the same user. Revoking 'others' keeps the
         caller's current row and revokes the other family."""
-        user_service = UserService(async_db_session)
-        user = await user_service.create_user(
-            UserCreate(
-                email="sessions-others@example.com",
-                full_name="Sessions Others",
-                password="password123",
-            )
-        )
+        user = await user_factory()
 
         # Plant a second session for the user directly via the service
         # so we don't have to juggle two cookie jars in the same TestClient.
@@ -976,9 +799,7 @@ class TestSessionsEndpoints:
         await rs.mint(user.id, source="oauth:github", user_agent="other-device")
 
         # Log in via the API — this becomes the "current" session.
-        await self._login_and_get_cookies(
-            async_client_with_db, "sessions-others@example.com", "password123"
-        )
+        await self._login(async_client_with_db, user.email)
 
         # Sanity: two sessions are listed.
         before = async_client_with_db.get("/api/v1/auth/sessions")
@@ -997,28 +818,24 @@ class TestSessionsEndpoints:
 
     @pytest.mark.asyncio
     async def test_login_records_forwarded_ip_when_trust_proxy_headers(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
         """With ``TRUST_PROXY_HEADERS`` on, the stored session IP must
         be the ``X-Forwarded-For`` head, not the proxy address."""
         from app.models.refresh_token import RefreshToken
         from sqlmodel import select
 
-        user_service = UserService(async_db_session)
-        await user_service.create_user(
-            UserCreate(
-                email="proxy-on@example.com",
-                full_name="Proxy On",
-                password="password123",
-            )
-        )
+        user = await user_factory()
 
         previous_trust = settings.TRUST_PROXY_HEADERS
         settings.TRUST_PROXY_HEADERS = True
         try:
             response = async_client_with_db.post(
                 "/api/v1/auth/token",
-                data={"username": "proxy-on@example.com", "password": "password123"},
+                data={"username": user.email, "password": _PASSWORD},
                 headers={"X-Forwarded-For": "203.0.113.7, 10.0.0.1"},
             )
             assert response.status_code == status.HTTP_200_OK
@@ -1030,13 +847,15 @@ class TestSessionsEndpoints:
                 select(RefreshToken).where(RefreshToken.user_id.is_not(None))  # type: ignore[union-attr]
             )
         ).all()
-        # Just-minted refresh row carries the forwarded address.
         ips = {r.ip for r in rows}
         assert "203.0.113.7" in ips
 
     @pytest.mark.asyncio
     async def test_login_records_direct_ip_when_trust_proxy_headers_off(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
         """With ``TRUST_PROXY_HEADERS`` off (default), the stored
         session IP ignores ``X-Forwarded-For`` and falls back to the
@@ -1044,21 +863,14 @@ class TestSessionsEndpoints:
         from app.models.refresh_token import RefreshToken
         from sqlmodel import select
 
-        user_service = UserService(async_db_session)
-        await user_service.create_user(
-            UserCreate(
-                email="proxy-off@example.com",
-                full_name="Proxy Off",
-                password="password123",
-            )
-        )
+        user = await user_factory()
 
         previous_trust = settings.TRUST_PROXY_HEADERS
         settings.TRUST_PROXY_HEADERS = False
         try:
             response = async_client_with_db.post(
                 "/api/v1/auth/token",
-                data={"username": "proxy-off@example.com", "password": "password123"},
+                data={"username": user.email, "password": _PASSWORD},
                 headers={"X-Forwarded-For": "203.0.113.7"},
             )
             assert response.status_code == status.HTTP_200_OK
@@ -1078,19 +890,11 @@ class TestSessionsEndpoints:
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
+        user_factory,
         caplog: pytest.LogCaptureFixture,
     ):
-        user_service = UserService(async_db_session)
-        await user_service.create_user(
-            UserCreate(
-                email="sessions-audit@example.com",
-                full_name="Sessions Audit",
-                password="password123",
-            )
-        )
-        await self._login_and_get_cookies(
-            async_client_with_db, "sessions-audit@example.com", "password123"
-        )
+        user = await user_factory()
+        await self._login(async_client_with_db, user.email)
         sid = async_client_with_db.get("/api/v1/auth/sessions").json()[0]["id"]
 
         caplog.set_level("INFO", logger="audit")
@@ -1101,7 +905,9 @@ class TestSessionsEndpoints:
             for r in caplog.records
             if r.name == "audit"
         ]
-        revoked_events = [e for e in events if e.get("event_type") == "auth.session_revoked"]
+        revoked_events = [
+            e for e in events if e.get("event_type") == "auth.session_revoked"
+        ]
         assert revoked_events
         evt = revoked_events[-1]
         assert evt["target_type"] == "session"
@@ -1112,34 +918,26 @@ class TestSessionsEndpoints:
 class TestSetUserRole:
     """Tests for PATCH /api/v1/auth/users/{user_id}/role (admin-only)."""
 
-    async def _admin_and_target(self, async_db_session: AsyncSession):
-        user_service = UserService(async_db_session)
-        admin = await user_service.create_user(
-            UserCreate(
-                email="role-admin@example.com",
-                full_name="Role Admin",
-                password="password123",
-            )
-        )
+    async def _admin_and_target(
+        self, async_db_session: AsyncSession, user_factory
+    ):
+        admin = await user_factory()
         admin.role = "admin"
         async_db_session.add(admin)
         await async_db_session.commit()
         await async_db_session.refresh(admin)
 
-        target = await user_service.create_user(
-            UserCreate(
-                email="role-target@example.com",
-                full_name="Role Target",
-                password="password123",
-            )
-        )
+        target = await user_factory()
         return admin, target
 
     @pytest.mark.asyncio
     async def test_unauthenticated_returns_401(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
-        _, target = await self._admin_and_target(async_db_session)
+        _, target = await self._admin_and_target(async_db_session, user_factory)
 
         response = async_client_with_db.patch(
             f"/api/v1/auth/users/{target.id}/role",
@@ -1149,31 +947,15 @@ class TestSetUserRole:
 
     @pytest.mark.asyncio
     async def test_non_admin_returns_403(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
-        user_service = UserService(async_db_session)
         # Burn one signup so neither created user is auto-promoted.
-        await user_service.create_user(
-            UserCreate(
-                email="seed-admin@example.com",
-                full_name="Seed",
-                password="password123",
-            )
-        )
-        regular = await user_service.create_user(
-            UserCreate(
-                email="regular@example.com",
-                full_name="Regular",
-                password="password123",
-            )
-        )
-        target = await user_service.create_user(
-            UserCreate(
-                email="role-target@example.com",
-                full_name="Role Target",
-                password="password123",
-            )
-        )
+        await user_factory()
+        regular = await user_factory()
+        target = await user_factory()
         token = create_access_token(data={"sub": regular.email})
 
         response = async_client_with_db.patch(
@@ -1185,9 +967,12 @@ class TestSetUserRole:
 
     @pytest.mark.asyncio
     async def test_admin_promotes_user_to_admin(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
-        admin, target = await self._admin_and_target(async_db_session)
+        admin, target = await self._admin_and_target(async_db_session, user_factory)
         token = create_access_token(data={"sub": admin.email})
 
         response = async_client_with_db.patch(
@@ -1203,9 +988,12 @@ class TestSetUserRole:
 
     @pytest.mark.asyncio
     async def test_admin_demotes_another_admin(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
-        admin, target = await self._admin_and_target(async_db_session)
+        admin, target = await self._admin_and_target(async_db_session, user_factory)
         target.role = "admin"
         async_db_session.add(target)
         await async_db_session.commit()
@@ -1222,9 +1010,12 @@ class TestSetUserRole:
 
     @pytest.mark.asyncio
     async def test_admin_cannot_change_own_role(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
-        admin, _ = await self._admin_and_target(async_db_session)
+        admin, _ = await self._admin_and_target(async_db_session, user_factory)
         token = create_access_token(data={"sub": admin.email})
 
         response = async_client_with_db.patch(
@@ -1237,9 +1028,12 @@ class TestSetUserRole:
 
     @pytest.mark.asyncio
     async def test_invalid_role_returns_400(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
-        admin, target = await self._admin_and_target(async_db_session)
+        admin, target = await self._admin_and_target(async_db_session, user_factory)
         token = create_access_token(data={"sub": admin.email})
 
         response = async_client_with_db.patch(
@@ -1251,9 +1045,12 @@ class TestSetUserRole:
 
     @pytest.mark.asyncio
     async def test_unknown_user_id_returns_404(
-        self, async_client_with_db: TestClient, async_db_session: AsyncSession
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
     ):
-        admin, _ = await self._admin_and_target(async_db_session)
+        admin, _ = await self._admin_and_target(async_db_session, user_factory)
         token = create_access_token(data={"sub": admin.email})
 
         response = async_client_with_db.patch(
@@ -1268,9 +1065,10 @@ class TestSetUserRole:
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
+        user_factory,
         caplog: pytest.LogCaptureFixture,
     ):
-        admin, target = await self._admin_and_target(async_db_session)
+        admin, target = await self._admin_and_target(async_db_session, user_factory)
         token = create_access_token(data={"sub": admin.email})
 
         caplog.set_level("INFO", logger="audit")

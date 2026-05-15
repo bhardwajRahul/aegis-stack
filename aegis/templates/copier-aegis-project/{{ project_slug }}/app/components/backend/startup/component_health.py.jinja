@@ -291,6 +291,23 @@ async def _backend_component_health() -> ComponentStatus:
             "shutdown_hooks": [],
         }
 
+        # Local request-metrics summary (ephemeral, in-memory). The
+        # service is always-on and singleton; populated by the
+        # performance middleware. Empty until the first request lands.
+        # ``performance`` is the cross-endpoint roll-up shown on the
+        # Server card; ``performance_endpoints`` is the per-route
+        # detail consumed by the modal's Performance tab.
+        try:
+            from app.components.backend.middleware.performance import (
+                metrics_service,
+            )
+
+            performance_summary = metrics_service.get_summary_stats()
+            performance_endpoints = metrics_service.get_all_metrics()
+        except Exception:
+            performance_summary = {}
+            performance_endpoints = {}
+
         return ComponentStatus(
             name="backend",
             status=ComponentStatusType.HEALTHY,
@@ -305,6 +322,8 @@ async def _backend_component_health() -> ComponentStatus:
                 **route_metadata.model_dump_for_metadata(),
                 **middleware_metadata.model_dump_for_metadata(),
                 "lifecycle": lifecycle_data,
+                "performance": performance_summary,
+                "performance_endpoints": performance_endpoints,
             },
         )
     except Exception as e:

@@ -1,13 +1,16 @@
 {% if include_auth -%}
-"""Unit tests for ``RefreshService``: mint, rotate, revoke, reuse-detect."""
+"""Unit tests for ``RefreshService``: mint, rotate, revoke, reuse-detect.
+
+Test users come from ``user_factory`` (``tests/conftest.py``). The
+email value is never the test invariant here, so the factory's
+auto-uniqued default is always correct.
+"""
 
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from app.models.refresh_token import RefreshToken
-from app.models.user import UserCreate
 from app.services.auth.refresh_service import RefreshService
-from app.services.auth.user_service import UserService
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 
@@ -15,29 +18,24 @@ def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-async def _make_user(db: AsyncSession, email: str) -> int:
-    user = await UserService(db).create_user(
-        UserCreate(email=email, full_name="Test", password="password123")
-    )
-    return user.id  # type: ignore[return-value]
-
-
 class TestRefreshService:
     @pytest.mark.asyncio
-    async def test_mint_returns_url_safe_token(self, async_db_session: AsyncSession):
-        user_id = await _make_user(async_db_session, "mint@example.com")
-        token = await RefreshService(async_db_session).mint(user_id)
+    async def test_mint_returns_url_safe_token(
+        self, async_db_session: AsyncSession, user_factory
+    ):
+        user = await user_factory()
+        token = await RefreshService(async_db_session).mint(user.id)
         assert isinstance(token, str)
         assert len(token) >= 32
 
     @pytest.mark.asyncio
     async def test_validate_returns_user_id_for_live_token(
-        self, async_db_session: AsyncSession
+        self, async_db_session: AsyncSession, user_factory
     ):
-        user_id = await _make_user(async_db_session, "validate@example.com")
+        user = await user_factory()
         service = RefreshService(async_db_session)
-        token = await service.mint(user_id)
-        assert await service.validate(token) == user_id
+        token = await service.mint(user.id)
+        assert await service.validate(token) == user.id
 
     @pytest.mark.asyncio
     async def test_validate_returns_none_for_missing_token(
@@ -48,16 +46,16 @@ class TestRefreshService:
 
     @pytest.mark.asyncio
     async def test_rotate_revokes_inbound_and_mints_new(
-        self, async_db_session: AsyncSession
+        self, async_db_session: AsyncSession, user_factory
     ):
-        user_id = await _make_user(async_db_session, "rotate@example.com")
+        user = await user_factory()
         service = RefreshService(async_db_session)
-        original = await service.mint(user_id)
+        original = await service.mint(user.id)
 
         result = await service.rotate(original)
         assert result is not None
         new_token, returned_uid = result
-        assert returned_uid == user_id
+        assert returned_uid == user.id
         assert new_token != original
 
         # Inbound is revoked, new is live, both share family.
@@ -75,11 +73,11 @@ class TestRefreshService:
 
     @pytest.mark.asyncio
     async def test_rotate_returns_none_for_expired_token(
-        self, async_db_session: AsyncSession
+        self, async_db_session: AsyncSession, user_factory
     ):
-        user_id = await _make_user(async_db_session, "expired@example.com")
+        user = await user_factory()
         service = RefreshService(async_db_session)
-        token = await service.mint(user_id)
+        token = await service.mint(user.id)
         # Backdate expiration in place.
         row = await async_db_session.get(RefreshToken, token)
         assert row is not None
@@ -91,14 +89,14 @@ class TestRefreshService:
 
     @pytest.mark.asyncio
     async def test_reuse_of_revoked_token_nukes_family(
-        self, async_db_session: AsyncSession
+        self, async_db_session: AsyncSession, user_factory
     ):
         """Replay path: rotate a token successfully, then rotate the original
         again — service must revoke every live row in the family.
         """
-        user_id = await _make_user(async_db_session, "replay@example.com")
+        user = await user_factory()
         service = RefreshService(async_db_session)
-        original = await service.mint(user_id)
+        original = await service.mint(user.id)
 
         # First rotation succeeds.
         first = await service.rotate(original)
@@ -115,10 +113,12 @@ class TestRefreshService:
         assert successor_row.revoked_at is not None
 
     @pytest.mark.asyncio
-    async def test_revoke_marks_row_revoked(self, async_db_session: AsyncSession):
-        user_id = await _make_user(async_db_session, "revoke@example.com")
+    async def test_revoke_marks_row_revoked(
+        self, async_db_session: AsyncSession, user_factory
+    ):
+        user = await user_factory()
         service = RefreshService(async_db_session)
-        token = await service.mint(user_id)
+        token = await service.mint(user.id)
 
         await service.revoke(token)
 
@@ -134,15 +134,15 @@ class TestRefreshService:
 
     @pytest.mark.asyncio
     async def test_list_active_for_user_returns_only_live_rows(
-        self, async_db_session: AsyncSession
+        self, async_db_session: AsyncSession, user_factory
     ):
-        user_id = await _make_user(async_db_session, "active@example.com")
+        user = await user_factory()
         service = RefreshService(async_db_session)
-        live = await service.mint(user_id)
-        await service.mint(user_id)
+        live = await service.mint(user.id)
+        await service.mint(user.id)
         await service.revoke(live)
 
-        active = await service.list_active_for_user(user_id)
+        active = await service.list_active_for_user(user.id)
         assert all(row.revoked_at is None for row in active)
         assert len(active) == 1
 
@@ -152,12 +152,12 @@ class TestRefreshServiceSessionMetadata:
 
     @pytest.mark.asyncio
     async def test_mint_persists_source_user_agent_ip(
-        self, async_db_session: AsyncSession
+        self, async_db_session: AsyncSession, user_factory
     ):
-        user_id = await _make_user(async_db_session, "meta@example.com")
+        user = await user_factory()
         service = RefreshService(async_db_session)
         token = await service.mint(
-            user_id,
+            user.id,
             source="password",
             user_agent="pytest/1.0",
             ip="127.0.0.1",
@@ -170,12 +170,12 @@ class TestRefreshServiceSessionMetadata:
 
     @pytest.mark.asyncio
     async def test_rotate_bumps_last_used_and_carries_source_forward(
-        self, async_db_session: AsyncSession
+        self, async_db_session: AsyncSession, user_factory
     ):
-        user_id = await _make_user(async_db_session, "rotate-meta@example.com")
+        user = await user_factory()
         service = RefreshService(async_db_session)
         original = await service.mint(
-            user_id,
+            user.id,
             source="oauth:github",
             user_agent="ua-original",
             ip="1.1.1.1",
@@ -198,86 +198,86 @@ class TestRefreshServiceSessionMetadata:
 
     @pytest.mark.asyncio
     async def test_list_sessions_returns_one_per_family(
-        self, async_db_session: AsyncSession
+        self, async_db_session: AsyncSession, user_factory
     ):
         """After one mint + one rotation, ``list_sessions`` should
         collapse to a single session entry (most recent live row per
         family)."""
-        user_id = await _make_user(async_db_session, "list-sessions@example.com")
+        user = await user_factory()
         service = RefreshService(async_db_session)
-        original = await service.mint(user_id, source="password")
+        original = await service.mint(user.id, source="password")
         await service.rotate(original)
 
-        sessions = await service.list_sessions(user_id)
+        sessions = await service.list_sessions(user.id)
         assert len(sessions) == 1
 
     @pytest.mark.asyncio
     async def test_list_sessions_excludes_revoked_families(
-        self, async_db_session: AsyncSession
+        self, async_db_session: AsyncSession, user_factory
     ):
-        user_id = await _make_user(async_db_session, "revoked-list@example.com")
+        user = await user_factory()
         service = RefreshService(async_db_session)
-        t1 = await service.mint(user_id, source="password")
-        await service.mint(user_id, source="oauth:github")
+        t1 = await service.mint(user.id, source="password")
+        await service.mint(user.id, source="oauth:github")
         await service.revoke(t1)
 
-        sessions = await service.list_sessions(user_id)
+        sessions = await service.list_sessions(user.id)
         assert len(sessions) == 1
         assert sessions[0].source == "oauth:github"
 
     @pytest.mark.asyncio
     async def test_revoke_session_kills_whole_family(
-        self, async_db_session: AsyncSession
+        self, async_db_session: AsyncSession, user_factory
     ):
-        user_id = await _make_user(async_db_session, "revoke-fam@example.com")
+        user = await user_factory()
         service = RefreshService(async_db_session)
-        original = await service.mint(user_id, source="password")
+        original = await service.mint(user.id, source="password")
         rotated = await service.rotate(original)
         assert rotated is not None
         new_token, _ = rotated
 
         new_row = await async_db_session.get(RefreshToken, new_token)
         assert new_row is not None
-        ok = await service.revoke_session(new_row.family_id, user_id)
+        ok = await service.revoke_session(new_row.family_id, user.id)
         assert ok is True
 
-        sessions = await service.list_sessions(user_id)
+        sessions = await service.list_sessions(user.id)
         assert sessions == []
 
     @pytest.mark.asyncio
     async def test_revoke_session_returns_false_for_other_user(
-        self, async_db_session: AsyncSession
+        self, async_db_session: AsyncSession, user_factory
     ):
-        mine = await _make_user(async_db_session, "me@example.com")
-        theirs = await _make_user(async_db_session, "you@example.com")
+        mine = await user_factory()
+        theirs = await user_factory()
         service = RefreshService(async_db_session)
-        their_token = await service.mint(theirs, source="password")
+        their_token = await service.mint(theirs.id, source="password")
         their_row = await async_db_session.get(RefreshToken, their_token)
         assert their_row is not None
 
-        ok = await service.revoke_session(their_row.family_id, mine)
+        ok = await service.revoke_session(their_row.family_id, mine.id)
         assert ok is False
 
         # Theirs is still live.
-        sessions = await service.list_sessions(theirs)
+        sessions = await service.list_sessions(theirs.id)
         assert len(sessions) == 1
 
     @pytest.mark.asyncio
     async def test_revoke_other_sessions_keeps_one(
-        self, async_db_session: AsyncSession
+        self, async_db_session: AsyncSession, user_factory
     ):
-        user_id = await _make_user(async_db_session, "logout-others@example.com")
+        user = await user_factory()
         service = RefreshService(async_db_session)
-        keep_token = await service.mint(user_id, source="password")
+        keep_token = await service.mint(user.id, source="password")
         keep_row = await async_db_session.get(RefreshToken, keep_token)
         assert keep_row is not None
-        await service.mint(user_id, source="oauth:github")
-        await service.mint(user_id, source="oauth:google")
+        await service.mint(user.id, source="oauth:github")
+        await service.mint(user.id, source="oauth:google")
 
-        revoked = await service.revoke_other_sessions(keep_row.family_id, user_id)
+        revoked = await service.revoke_other_sessions(keep_row.family_id, user.id)
         assert revoked == 2
 
-        sessions = await service.list_sessions(user_id)
+        sessions = await service.list_sessions(user.id)
         assert len(sessions) == 1
         assert sessions[0].family_id == keep_row.family_id
 
@@ -291,7 +291,7 @@ class TestRefreshServiceLazySweep:
 
     @pytest.mark.asyncio
     async def test_rotate_sweeps_expired_rows(
-        self, async_db_session: AsyncSession
+        self, async_db_session: AsyncSession, user_factory
     ):
         from app.services.auth.refresh_service import (
             REFRESH_TOKEN_RETENTION_DAYS,
@@ -302,13 +302,13 @@ class TestRefreshServiceLazySweep:
         # timestamp survives across tests in the same process.
         RefreshService._last_sweep_at = None
 
-        user_id = await _make_user(async_db_session, "lazy-sweep@example.com")
+        user = await user_factory()
         service = RefreshService(async_db_session)
 
         # Plant an expired row beyond the retention window.
         old = RefreshToken(
             token="expired-stub-token",
-            user_id=user_id,
+            user_id=user.id,
             family_id="expired-family",
             expires_at=_now() - timedelta(days=REFRESH_TOKEN_RETENTION_DAYS + 1),
             created_at=_now() - timedelta(days=REFRESH_TOKEN_RETENTION_DAYS + 2),
@@ -317,7 +317,7 @@ class TestRefreshServiceLazySweep:
         await async_db_session.commit()
 
         # A live token whose rotation will trigger the sweep.
-        live = await service.mint(user_id, source="password")
+        live = await service.mint(user.id, source="password")
         rotated = await service.rotate(live)
         assert rotated is not None
 

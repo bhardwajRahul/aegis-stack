@@ -16,8 +16,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 from app.core.security import create_access_token
-from app.models.user import UserCreate
-from app.services.auth.user_service import UserService
 
 
 @pytest.fixture(autouse=True)
@@ -31,25 +29,26 @@ def _enable_auth():
         settings.AUTH_ENABLED = prior
 
 
-async def _seed_user_and_token(
-    session: AsyncSession, email: str = "u@example.com"
-) -> tuple[int, int, dict[str, str]]:
-    """Create a user + org + owner membership, return (user_id, org_id, auth_headers).
+@pytest.fixture
+async def project_owner_factory(async_db_session: AsyncSession, user_factory):
+    """Build a user + owned org + auth headers. Returns ``(user_id, org_id, headers)``.
 
-    The org is required since ``Project.organization_id`` is NOT NULL
-    (per_user variant). Returned as a tuple so tests can include the
-    org id in their POST bodies — the API endpoint verifies the
-    caller is a member of the org before creating the project.
+    Call the returned callable once per identity. Auto-unique emails
+    keep multiple owners isolated within a single test (e.g. the
+    cross-owner-isolation cases below). The org is required because
+    ``Project.organization_id`` is NOT NULL in the per-user variant;
+    the endpoint verifies the caller is a member before creating the
+    project.
     """
     from tests._test_org import ensure_org_for_user
 
-    svc = UserService(session)
-    user = await svc.create_user(
-        UserCreate(email=email, full_name="T", password="p"*12)
-    )
-    org_id = await ensure_org_for_user(session, user)
-    token = create_access_token(data={"sub": user.email})
-    return user.id, org_id, {"Authorization": f"Bearer {token}"}
+    async def _make() -> tuple[int, int, dict[str, str]]:
+        user = await user_factory()
+        org_id = await ensure_org_for_user(async_db_session, user)
+        token = create_access_token(data={"sub": user.email})
+        return user.id, org_id, {"Authorization": f"Bearer {token}"}
+
+    return _make
 
 
 # ---------------------------------------------------------------------------
@@ -63,8 +62,9 @@ class TestCreateProject:
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
+        project_owner_factory,
     ) -> None:
-        _, org_id, headers = await _seed_user_and_token(async_db_session)
+        _, org_id, headers = await project_owner_factory()
 
         response = async_client_with_db.post(
             "/api/v1/insights/projects",
@@ -83,9 +83,10 @@ class TestCreateProject:
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
+        project_owner_factory,
     ) -> None:
         """Client cannot impersonate by sending owner_user_id."""
-        user_id, org_id, headers = await _seed_user_and_token(async_db_session)
+        user_id, org_id, headers = await project_owner_factory()
 
         response = async_client_with_db.post(
             "/api/v1/insights/projects",
@@ -105,8 +106,9 @@ class TestCreateProject:
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
+        project_owner_factory,
     ) -> None:
-        _, org_id, headers = await _seed_user_and_token(async_db_session)
+        _, org_id, headers = await project_owner_factory()
 
         response = async_client_with_db.post(
             "/api/v1/insights/projects",
@@ -132,8 +134,9 @@ class TestCreateProject:
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
+        project_owner_factory,
     ) -> None:
-        _, org_id, headers = await _seed_user_and_token(async_db_session)
+        _, org_id, headers = await project_owner_factory()
 
         async_client_with_db.post(
             "/api/v1/insights/projects",
@@ -153,9 +156,10 @@ class TestCreateProject:
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
+        project_owner_factory,
     ) -> None:
         """Slug must be lowercase + digits + hyphens, 3–64 chars."""
-        _, org_id, headers = await _seed_user_and_token(async_db_session)
+        _, org_id, headers = await project_owner_factory()
 
         for bad_slug in ["UPPER", "with spaces", "ab", "-leading", "trailing-"]:
             response = async_client_with_db.post(
@@ -192,13 +196,10 @@ class TestListProjects:
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
+        project_owner_factory,
     ) -> None:
-        _, alice_org, alice_headers = await _seed_user_and_token(
-            async_db_session, "alice@x.com"
-        )
-        _, bob_org, bob_headers = await _seed_user_and_token(
-            async_db_session, "bob@x.com"
-        )
+        _, alice_org, alice_headers = await project_owner_factory()
+        _, bob_org, bob_headers = await project_owner_factory()
         async_client_with_db.post(
             "/api/v1/insights/projects",
             json={"organization_id": alice_org, "slug": "alice-1", "name": "A1"},
@@ -229,13 +230,10 @@ class TestGetProject:
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
+        project_owner_factory,
     ) -> None:
-        _, alice_org, alice_headers = await _seed_user_and_token(
-            async_db_session, "alice@x.com"
-        )
-        _, bob_org, bob_headers = await _seed_user_and_token(
-            async_db_session, "bob@x.com"
-        )
+        _, alice_org, alice_headers = await project_owner_factory()
+        _, bob_org, bob_headers = await project_owner_factory()
         async_client_with_db.post(
             "/api/v1/insights/projects",
             json={"organization_id": alice_org, "slug": "alice-only", "name": "A"},
@@ -260,8 +258,9 @@ class TestUpdateProject:
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
+        project_owner_factory,
     ) -> None:
-        _, org_id, headers = await _seed_user_and_token(async_db_session)
+        _, org_id, headers = await project_owner_factory()
         async_client_with_db.post(
             "/api/v1/insights/projects",
             json={"organization_id": org_id, 
@@ -291,13 +290,10 @@ class TestUpdateProject:
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
+        project_owner_factory,
     ) -> None:
-        _, alice_org, alice_headers = await _seed_user_and_token(
-            async_db_session, "alice@x.com"
-        )
-        _, bob_org, bob_headers = await _seed_user_and_token(
-            async_db_session, "bob@x.com"
-        )
+        _, alice_org, alice_headers = await project_owner_factory()
+        _, bob_org, bob_headers = await project_owner_factory()
         async_client_with_db.post(
             "/api/v1/insights/projects",
             json={"organization_id": alice_org, "slug": "alice-only", "name": "A"},
@@ -324,8 +320,9 @@ class TestGetProjectInsights:
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
+        project_owner_factory,
     ) -> None:
-        _, org_id, headers = await _seed_user_and_token(async_db_session)
+        _, org_id, headers = await project_owner_factory()
         async_client_with_db.post(
             "/api/v1/insights/projects",
             json={"organization_id": org_id, "slug": "proj", "name": "P"},
@@ -349,13 +346,10 @@ class TestGetProjectInsights:
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
+        project_owner_factory,
     ) -> None:
-        _, alice_org, alice_headers = await _seed_user_and_token(
-            async_db_session, "alice@x.com"
-        )
-        _, bob_org, bob_headers = await _seed_user_and_token(
-            async_db_session, "bob@x.com"
-        )
+        _, alice_org, alice_headers = await project_owner_factory()
+        _, bob_org, bob_headers = await project_owner_factory()
         async_client_with_db.post(
             "/api/v1/insights/projects",
             json={"organization_id": alice_org, "slug": "alice-only", "name": "A"},
@@ -380,8 +374,9 @@ class TestDeleteProject:
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
+        project_owner_factory,
     ) -> None:
-        _, org_id, headers = await _seed_user_and_token(async_db_session)
+        _, org_id, headers = await project_owner_factory()
         async_client_with_db.post(
             "/api/v1/insights/projects",
             json={"organization_id": org_id, "slug": "proj", "name": "P"},
@@ -403,13 +398,10 @@ class TestDeleteProject:
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
+        project_owner_factory,
     ) -> None:
-        _, alice_org, alice_headers = await _seed_user_and_token(
-            async_db_session, "alice@x.com"
-        )
-        _, bob_org, bob_headers = await _seed_user_and_token(
-            async_db_session, "bob@x.com"
-        )
+        _, alice_org, alice_headers = await project_owner_factory()
+        _, bob_org, bob_headers = await project_owner_factory()
         async_client_with_db.post(
             "/api/v1/insights/projects",
             json={"organization_id": alice_org, "slug": "alice-only", "name": "A"},

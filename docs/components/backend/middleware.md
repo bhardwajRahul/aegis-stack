@@ -1,106 +1,91 @@
 # Middleware
 
-Middleware in Aegis is **auto-discovered**. Any module dropped into
-`app/components/backend/middleware/` that exposes a `register_middleware`
-function is picked up at app build time. There is no central registry to
-edit and no import order to manage by hand.
+Middleware in Aegis is **auto-discovered**. Drop a Python file into
+`app/components/backend/middleware/` that exports a
+`register_middleware` function, and it runs on the next start. No
+central registry, no import order to manage.
 
-## The Auto-Discovery Contract
-
-`app/components/backend/hooks.py` walks `middleware/` at startup, imports
-every `*.py` file whose name does not begin with `_`, and calls
-`register_middleware(app)` on any module that defines it.
+## The Contract
 
 ```python
 # app/components/backend/middleware/your_middleware.py
 from fastapi import FastAPI
 
 def register_middleware(app: FastAPI) -> None:
-    """Auto-discovered middleware registration."""
     app.add_middleware(YourMiddleware, ...)
 ```
 
-A few rules worth knowing up front:
+That's the whole API. A few rules worth knowing:
 
-- **The function is synchronous.** Discovery happens before the lifespan
-  starts, so `register_middleware` runs at import time, not in the event
-  loop. Use `def`, not `async def`.
-- **Files beginning with `_` are skipped.** Use this for shared helpers
-  inside the directory.
-- **Order is filesystem order.** `Path.glob("*.py")` does not promise a
-  stable ordering across platforms. If two middleware modules must run in
-  a specific order, put them in the same file.
-- **Modules that fail to import are logged, not raised.** Discovery
-  catches exceptions per file so one broken middleware does not take down
-  the boot. Watch the logs.
+- **`register_middleware` is synchronous.** It runs at app build time,
+  before the event loop starts. Use `def`, not `async def`. If you
+  need async setup, do it in a [startup hook](lifecycle.md) and read
+  the result from settings or a module-level cache inside
+  `register_middleware`.
+- **Files beginning with `_` are skipped.** Use this for shared
+  helpers in the directory.
+- **Registration order is not guaranteed.** If two middleware modules
+  must compose in a specific order, define both classes in the same
+  file and register them in one `register_middleware` call so the
+  order is explicit.
+- **A module that doesn't export `register_middleware` is silently
+  ignored.** Intentional. If your new middleware never fires, check
+  the function name and that the filename isn't prefixed with `_`.
+- **Import errors are logged, not raised.** One broken middleware
+  won't take down the boot. Watch the logs.
 
-A module in `middleware/` that does **not** export `register_middleware`
-is ignored by the discovery loop. Keep modules in this directory that
-actually register middleware; security primitives consumed as FastAPI
-dependencies live under
-[`app/components/backend/security/`](auth.md#2-rate-limiting-on-auth-endpoints)
-and are exposed through `app/components/backend/api/deps.py`.
+## What Ships In The Templates
 
-## Middleware That Ships In The Templates
-
-The following modules live under
-`app/components/backend/middleware/` in a generated project. Some are
+The following middleware come with every generated project. Some are
 gated on the services you selected at `aegis init` time.
 
-### `cors.py`
+### Performance
 
-Registered always. Allows `http://localhost:3000` and
-`http://localhost:8080` with credentials and arbitrary methods and
-headers. The defaults exist for the Flet dev frontend and the FastAPI
-docs UI on `:8080`. To widen for a deployed frontend, edit the
-`allow_origins` list in this file, or replace it with values pulled from
-settings.
+Registered always. Times every HTTP request and surfaces live
+per-endpoint stats through the Server modal's Performance tab and
+`/api/v1/metrics/*`. In-process and ephemeral, with no external
+dependencies.
 
-```python
-# app/components/backend/middleware/cors.py
-def register_middleware(app: FastAPI) -> None:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:8080"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-```
+See [Performance Middleware](middleware/performance.md) for what you
+see, how to read it, and when to reach for observability instead.
 
-### `session.py` (auth + OAuth only)
+### CORS
 
-Registered when the auth service is included with OAuth providers
-enabled. Wraps Starlette's `SessionMiddleware` so Authlib can stash the
-OAuth `state` and PKCE verifier between `/start` and `/callback`. Without
-it, the OAuth round-trip can't be verified.
+Registered always. Out of the box, allows the local Flet dev
+frontend and the FastAPI docs UI to call the backend with
+credentials. To open up for a deployed frontend, widen the allowed
+origins list in the CORS module, or replace the hard-coded values
+with a setting.
 
-Two settings matter:
+### OAuth Session
 
-- `OAUTH_SESSION_SECRET`: the signing secret for the session cookie.
-- `SESSION_COOKIE_SECURE`: explicit override of the `https_only` flag.
-  When unset, the cookie is marked secure in every environment except
-  `APP_ENV=dev`. The escape hatch (`SESSION_COOKIE_SECURE=false`) exists
-  for prod-over-plain-HTTP deployments where the browser would otherwise
-  silently drop the cookie.
+Registered when the auth service is included with at least one OAuth
+provider enabled. Holds the OAuth state and PKCE verifier between
+the redirect to the provider and the callback. Without it, the OAuth
+round-trip can't be verified.
 
-### `logfire_tracing.py` (observability only)
+Two settings to know:
 
-Registered when the observability component is included. Configures
-Logfire with the project name and `APP_ENV`, then calls
-`logfire.instrument_fastapi(app, excluded_urls="/health/.*|/dashboard/.*")`
-and `logfire.instrument_httpx()`. When the database or Redis components
-are present it also instruments SQLAlchemy and Redis. When
-`LOGFIRE_TOKEN` is unset, instrumentation still runs locally but nothing
-is shipped to Logfire cloud.
+- `OAUTH_SESSION_SECRET`: signing secret for the session cookie.
+- `SESSION_COOKIE_SECURE`: explicit override of the cookie's secure
+  flag. Defaults to secure in every environment except
+  `APP_ENV=dev`. Set to `false` for prod-over-plain-HTTP setups
+  where browsers would otherwise drop the cookie.
 
-`/health/*` and `/dashboard/*` are excluded from the FastAPI
-instrumentation on purpose: Overseer polls these every few seconds and
-they would otherwise dominate every trace view.
+### Logfire Tracing
+
+Registered when the observability component is included. Wires up
+Logfire instrumentation for FastAPI, HTTPX, and (if present)
+SQLAlchemy and Redis. When `LOGFIRE_TOKEN` is unset, traces still
+run locally and nothing is shipped to Logfire cloud.
+
+Polling endpoints used by the dashboard are excluded from tracing
+on purpose; otherwise they'd drown out every other span.
 
 ## Authoring A Custom Middleware
 
-The contract is one file, one function. To add request ID injection:
+Drop one file, export one function. Example: inject and echo a
+request ID.
 
 ```python
 # app/components/backend/middleware/request_id.py
@@ -121,38 +106,20 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 
 def register_middleware(app: FastAPI) -> None:
-    """Auto-discovered middleware registration."""
     app.add_middleware(RequestIDMiddleware)
 ```
 
-Drop the file, restart the backend, and Overseer's Lifecycle tab will
-show the new middleware in the stack.
+Restart the backend, and the Lifecycle tab on the Server card shows
+your new middleware in the stack.
 
 !!! example "Musings: Backend Middleware Auto-Discovery (November 22nd, 2025)"
     I'm not sure how I ultimately feel about the auto-discovery middleware pattern. I don't have enough experience with FastAPI plugins yet, but it's something I'm thinking about as the architecture evolves.
 
     The current approach works well for explicit component registration, but auto-discovery could reduce boilerplate at the cost of making the registration flow less obvious. Trade-offs worth considering as Aegis Stack matures.
 
-## Pitfalls
+## See Also
 
-- **Registration order is not deterministic across platforms.** If two
-  middleware modules must compose in a specific order, define both
-  classes in the same file and register them in one
-  `register_middleware` call so the order is explicit.
-- **`register_middleware` is sync.** If you need to do async setup
-  (open a connection, fetch a remote config), do it in a
-  [startup hook](lifecycle.md) and read the result from settings or a
-  module-level cache inside `register_middleware`.
-- **A middleware module without `register_middleware` is silently
-  ignored.** That is intentional, but if your new middleware never
-  fires, check the function name and that the file isn't prefixed with
-  `_`.
-
-## Reference
-
-- `app/components/backend/hooks.py`: discovery implementation
-  (`BackendHooks.discover_and_register_middleware`).
-- `app/components/backend/middleware/`: the built-in modules above.
-- [Lifecycle](lifecycle.md): for setup work that needs the event loop.
-- [Authentication Integration](auth.md): the rate-limiter dependency
-  pattern.
+- [Lifecycle](lifecycle.md) for setup work that needs the event loop.
+- [Authentication Integration](auth.md) for the rate-limiter
+  dependency pattern, which lives alongside middleware but is
+  consumed as a FastAPI dependency rather than registered as one.

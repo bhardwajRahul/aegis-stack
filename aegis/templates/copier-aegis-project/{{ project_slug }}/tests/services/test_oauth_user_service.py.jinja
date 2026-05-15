@@ -19,7 +19,7 @@ authorize-redirect machinery.
 
 import pytest
 from app.core.config import settings
-from app.models.user import OAuthProvider, User, UserCreate, UserOAuthIdentity
+from app.models.user import OAuthProvider, User, UserOAuthIdentity
 from app.services.auth.user_service import RegistrationClosed, UserService
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -91,17 +91,16 @@ class TestUpsertFromOauth:
 
     @pytest.mark.asyncio
     async def test_links_to_existing_user_by_email(
-        self, async_db_session: AsyncSession
+        self, async_db_session: AsyncSession, user_factory
     ):
-        """Existing password user signs in with OAuth using same email -> link."""
+        """Existing password user signs in with OAuth using same email -> link.
+
+        Inline-ish: the OAuth email must match the existing user's email
+        for the bridge path to fire, so we pin both via ``user_factory``'s
+        ``email=`` override.
+        """
         user_service = UserService(async_db_session)
-        existing = await user_service.create_user(
-            UserCreate(
-                email="bridge@example.com",
-                full_name="Bridge User",
-                password="originalpassword",
-            )
-        )
+        existing = await user_factory(email="bridge@example.com")
         # Existing user starts unverified; OAuth should flip the flag
         # since the provider has already confirmed the email.
         assert existing.is_verified is False
@@ -109,7 +108,7 @@ class TestUpsertFromOauth:
         oauth_user = await user_service.upsert_from_oauth(
             provider=OAuthProvider.GOOGLE,
             provider_user_id="google-sub-1",
-            email="bridge@example.com",
+            email=existing.email,
             provider_username="Bridge User",
         )
 

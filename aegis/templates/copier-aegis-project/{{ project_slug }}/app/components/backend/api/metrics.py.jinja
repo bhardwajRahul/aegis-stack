@@ -1,0 +1,41 @@
+"""
+HTTP surface for the ephemeral request-metrics service.
+
+Data lives in ``app.components.backend.middleware.performance.metrics_service``
+— this file just exposes it. Auth-gated when the auth service is
+present (same pattern as worker / scheduler routes); open in
+auth-less projects, matching ``/health/``.
+"""
+
+from typing import Any
+
+from fastapi import APIRouter
+{%- if include_auth %}
+from fastapi import Depends
+
+from app.services.auth.deps import get_current_active_user
+{%- endif %}
+
+from app.components.backend.middleware.performance import metrics_service
+
+router = APIRouter(prefix="/metrics", tags=["metrics"])
+
+
+@router.get("/summary")
+async def get_performance_summary(
+{%- if include_auth %}
+    _current_user=Depends(get_current_active_user),
+{%- endif %}
+) -> dict[str, Any]:
+    """Cross-endpoint roll-up: total requests, avg, p95, slowest route."""
+    return metrics_service.get_summary_stats()
+
+
+@router.get("/endpoints")
+async def get_endpoint_metrics(
+{%- if include_auth %}
+    _current_user=Depends(get_current_active_user),
+{%- endif %}
+) -> dict[str, dict[str, Any]]:
+    """Per-endpoint counters + percentiles, keyed by ``"<METHOD> <pattern>"``."""
+    return metrics_service.get_all_metrics()
