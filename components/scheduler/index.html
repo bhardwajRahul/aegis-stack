@@ -3512,8 +3512,9 @@
 <h2 id="configuration">Configuration</h2>
 <p>The scheduler uses APScheduler's default settings. Configuration is managed via <code>app/core/config.py</code>:</p>
 <ul>
-<li><code>SCHEDULER_FORCE_UPDATE</code> (bool, default: <code>False</code>): Force update jobs from code during restart (persistence mode only). Set via environment variable <code>SCHEDULER_FORCE_UPDATE=true</code></li>
+<li><code>SCHEDULER_TIMEZONE</code> (str, default: <code>"UTC"</code>): IANA timezone name; cron triggers inherit this.</li>
 </ul>
+<p>Code is the source of truth for job schedules. Every restart re-registers each job via <code>replace_existing=True</code>, so editing a trigger in <code>app/components/scheduler/main.py</code> and redeploying is all that's needed to change the schedule. Runtime edits via <code>scheduler.modify_job()</code> do not survive a restart by design.</p>
 <p>Individual jobs can configure their own behavior when defined:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">scheduler</span><span class="o">.</span><span class="n">add_job</span><span class="p">(</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">my_task</span><span class="p">,</span>

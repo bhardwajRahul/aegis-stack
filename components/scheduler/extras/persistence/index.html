@@ -1403,18 +1403,9 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#environment-based-updates" class="md-nav__link">
+  <a href="#code-is-the-source-of-truth" class="md-nav__link">
     <span class="md-ellipsis">
-      Environment-Based Updates
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#job-existence-checking" class="md-nav__link">
-    <span class="md-ellipsis">
-      Job Existence Checking
+      Code Is the Source of Truth
     </span>
   </a>
   
@@ -3399,18 +3390,9 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#environment-based-updates" class="md-nav__link">
+  <a href="#code-is-the-source-of-truth" class="md-nav__link">
     <span class="md-ellipsis">
-      Environment-Based Updates
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#job-existence-checking" class="md-nav__link">
-    <span class="md-ellipsis">
-      Job Existence Checking
+      Code Is the Source of Truth
     </span>
   </a>
   
@@ -3560,46 +3542,33 @@
 <p><a class="glightbox" href="/aegis-stack/images/scheduler-card-light.png#only-light" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img src="/aegis-stack/images/scheduler-card-light.png#only-light" alt="Scheduler Dashboard Card" style="width: 100%;"></a>
 <a class="glightbox" href="/aegis-stack/images/scheduler-card-dark.png#only-dark" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img src="/aegis-stack/images/scheduler-card-dark.png#only-dark" alt="Scheduler Dashboard Card" style="width: 100%;"></a></p>
 <h2 id="production-job-management">Production Job Management</h2>
-<h3 id="environment-based-updates">Environment-Based Updates</h3>
-<p>For persistent schedulers, use environment variables to control job updates:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Force update all jobs from code configuration (useful during deployments)</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">SCHEDULER_FORCE_UPDATE</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span>scheduler
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Normal startup (preserves runtime job modifications)</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span>scheduler
+<h3 id="code-is-the-source-of-truth">Code Is the Source of Truth</h3>
+<p>Every restart re-registers each job from <code>app/components/scheduler/main.py</code> using <code>replace_existing=True</code>. To change a schedule:</p>
+<ol>
+<li>Edit the trigger in <code>create_scheduler()</code>.</li>
+<li>Commit and redeploy.</li>
+<li>The new trigger overwrites the persisted row when the scheduler container restarts.</li>
+</ol>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">scheduler</span><span class="o">.</span><span class="n">add_job</span><span class="p">(</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">func</span><span class="o">=</span><span class="n">process_daily_reports</span><span class="p">,</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">trigger</span><span class="o">=</span><span class="n">CronTrigger</span><span class="p">(</span><span class="n">hour</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">minute</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="nb">id</span><span class="o">=</span><span class="s2">&quot;daily_reports&quot;</span><span class="p">,</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Daily Report Generation&quot;</span><span class="p">,</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="n">replace_existing</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="p">)</span>
 </span></code></pre></div>
-<p>This pattern allows:</p>
-<ul>
-<li><strong>Development</strong>: Jobs update automatically when code changes</li>
-<li><strong>Production</strong>: Runtime job modifications are preserved across restarts</li>
-<li><strong>Deployments</strong>: Force updates when needed with environment flag</li>
-</ul>
-<h3 id="job-existence-checking">Job Existence Checking</h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">settings</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="c1"># Check for existing jobs to respect runtime modifications</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">force_update</span> <span class="o">=</span> <span class="n">settings</span><span class="o">.</span><span class="n">SCHEDULER_FORCE_UPDATE</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="k">if</span> <span class="ow">not</span> <span class="n">_job_exists_in_database</span><span class="p">(</span><span class="s2">&quot;daily_reports&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">force_update</span><span class="p">:</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="n">scheduler</span><span class="o">.</span><span class="n">add_job</span><span class="p">(</span>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>        <span class="n">func</span><span class="o">=</span><span class="n">process_daily_reports</span><span class="p">,</span>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>        <span class="n">trigger</span><span class="o">=</span><span class="n">CronTrigger</span><span class="p">(</span><span class="n">hour</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">minute</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>        <span class="nb">id</span><span class="o">=</span><span class="s2">&quot;daily_reports&quot;</span><span class="p">,</span>
-</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Daily Report Generation&quot;</span><span class="p">,</span>
-</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>        <span class="n">replace_existing</span><span class="o">=</span><span class="kc">True</span>
-</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    <span class="p">)</span>
-</span></code></pre></div>
+<p>Runtime edits via <code>scheduler.modify_job()</code> are not preserved across restarts. This is deliberate: it keeps the deployed configuration aligned with what's committed in git, the same way Alembic migrations and Pydantic settings do. If a knob needs to be tunable without a deploy, expose it as a setting (env var), not as a runtime job edit.</p>
 <h2 id="database-schema">Database Schema</h2>
 <p>The persistence layer creates this table automatically:</p>
-<div class="language-sql highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1">-- apscheduler_jobs table (created automatically)</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">apscheduler_jobs</span><span class="w"> </span><span class="p">(</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="nb">VARCHAR</span><span class="p">(</span><span class="mi">191</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="n">next_run_time</span><span class="w"> </span><span class="nb">FLOAT</span><span class="p">,</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">    </span><span class="n">job_state</span><span class="w"> </span><span class="nb">BLOB</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="p">);</span>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="c1">-- Indexes for performance</span>
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">ix_apscheduler_jobs_next_run_time</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">apscheduler_jobs</span><span class="w"> </span><span class="p">(</span><span class="n">next_run_time</span><span class="p">);</span>
+<div class="language-sql highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1">-- apscheduler_jobs table (created automatically)</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">apscheduler_jobs</span><span class="w"> </span><span class="p">(</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="nb">VARCHAR</span><span class="p">(</span><span class="mi">191</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="n">next_run_time</span><span class="w"> </span><span class="nb">FLOAT</span><span class="p">,</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="n">job_state</span><span class="w"> </span><span class="nb">BLOB</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">);</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="c1">-- Indexes for performance</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">ix_apscheduler_jobs_next_run_time</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">apscheduler_jobs</span><span class="w"> </span><span class="p">(</span><span class="n">next_run_time</span><span class="p">);</span>
 </span></code></pre></div>
 <h2 id="next-steps">Next Steps</h2>
 <ul>
