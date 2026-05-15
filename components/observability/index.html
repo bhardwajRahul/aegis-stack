@@ -1644,6 +1644,30 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#memory-footprint-on-constrained-hosts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Memory Footprint on Constrained Hosts
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Memory Footprint on Constrained Hosts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#swap-on-small-droplets" class="md-nav__link">
+    <span class="md-ellipsis">
+      Swap on small droplets
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       Next Steps
@@ -3349,6 +3373,30 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#memory-footprint-on-constrained-hosts" class="md-nav__link">
+    <span class="md-ellipsis">
+      Memory Footprint on Constrained Hosts
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Memory Footprint on Constrained Hosts">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#swap-on-small-droplets" class="md-nav__link">
+    <span class="md-ellipsis">
+      Swap on small droplets
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       Next Steps
@@ -3549,6 +3597,27 @@
 <li>Recent exceptions (last 24 hours)</li>
 </ul>
 <p>Results are cached for 2 minutes with a 5-minute backoff on failure to respect rate limits.</p>
+<h2 id="memory-footprint-on-constrained-hosts">Memory Footprint on Constrained Hosts</h2>
+<p>The OpenTelemetry SDK that Logfire builds on is heavy: even with <code>send_to_logfire=False</code>, loading the SDK and its in-memory span batcher adds ~150-300 MiB of fixed overhead. On a 512 MiB container that is the difference between healthy and OOM-flapping.</p>
+<p>Two safeguards ship in the template:</p>
+<ol>
+<li>
+<p><strong>No-token short-circuit.</strong> When <code>LOGFIRE_TOKEN</code> is empty, the middleware skips <code>logfire.configure()</code> and every <code>instrument_*()</code> call. The OTEL SDK is never loaded. You see this in the logs as <code>Logfire: token not set, instrumentation disabled</code>.</p>
+</li>
+<li>
+<p><strong>Bounded span buffer when the token is set.</strong> The <code>BatchSpanProcessor</code> defaults (2048-span queue, no export timeout) leak when the Logfire endpoint is slow or unreachable, failed batches accumulate in RAM until OOM. The template caps them via four <code>OTEL_BSP_*</code> settings pushed into <code>os.environ</code> before <code>logfire.configure()</code> runs. Override via <code>.env</code> if you have headroom:</p>
+</li>
+</ol>
+<div class="language-ini highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># OTEL_BSP_MAX_QUEUE_SIZE=1024</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># OTEL_BSP_MAX_EXPORT_BATCH_SIZE=256</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># OTEL_BSP_EXPORT_TIMEOUT=10000</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># OTEL_BSP_SCHEDULE_DELAY=5000</span>
+</span></code></pre></div>
+<h3 id="swap-on-small-droplets">Swap on small droplets</h3>
+<p>For hosts with 4 GB RAM or less, add a 1 GB swap file as a safety net so a brief memory spike does not OOM-kill the webserver before the cgroup limit kicks in:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>fallocate<span class="w"> </span>-l<span class="w"> </span>1G<span class="w"> </span>/swapfile<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>chmod<span class="w"> </span><span class="m">600</span><span class="w"> </span>/swapfile<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>mkswap<span class="w"> </span>/swapfile<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>swapon<span class="w"> </span>/swapfile
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;/swapfile none swap sw 0 0&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>/etc/fstab
+</span></code></pre></div>
 <h2 id="next-steps">Next Steps</h2>
 <ul>
 <li><strong><a href="../">Component Overview</a></strong>, Understanding Aegis Stack's component architecture</li>
