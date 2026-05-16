@@ -217,6 +217,27 @@ class RefreshService:
         await self.db.exec(stmt)  # type: ignore[call-overload]
         await self.db.commit()
 
+    async def revoke_all_for_user(self, user_id: int) -> None:
+        """Mark every live refresh token for ``user_id`` revoked.
+
+        Single UPDATE, no internal commit. The caller composes this into
+        a larger transaction (password reset, account close) so the
+        revoke and the cause-of-revoke land all-or-nothing.
+
+        For interactive "sign out everywhere else" flows that own their
+        own transaction, keep using :meth:`revoke_other_sessions`.
+        """
+        now = _now()
+        stmt = (
+            update(RefreshToken)
+            .where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.revoked_at.is_(None),  # type: ignore[union-attr]
+            )
+            .values(revoked_at=now)
+        )
+        await self.db.exec(stmt)  # type: ignore[call-overload]
+
     async def validate(self, token: str) -> int | None:
         """Return ``user_id`` if ``token`` is live (not expired, not revoked).
 

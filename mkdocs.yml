@@ -48,7 +48,9 @@ nav:
     - Overview: components/index.md
     - Backend:
       - Getting Started: components/backend/index.md
-      - Middleware: components/backend/middleware.md
+      - Middleware:
+        - Overview: components/backend/middleware.md
+        - Performance: components/backend/middleware/performance.md
       - Lifecycle: components/backend/lifecycle.md
       - Routes: components/backend/routes.md
       - Authentication Integration: components/backend/auth.md

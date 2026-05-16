@@ -567,17 +567,20 @@ def _open_modal(
 ) -> None:
     """Open a component detail modal, using cache for subsequent opens."""
     modal_cache: dict[str, ft.Container] = page.data.setdefault("_modal_cache", {})
-{% if include_insights %}
 
-    # Data-heavy modals: always recreate so they load fresh data
+    # Data-heavy modals: always recreate so they load fresh data on each open.
+    # Backend's Performance tab pulls per-request metrics that change on every
+    # call; a cached dialog freezes those numbers at first-open time.
+    no_cache = {"backend"}
+{%- if include_insights %}
     from app.services.insights.constants import INSIGHT_COMPONENT_NAME
 
-    no_cache = {f"service_{INSIGHT_COMPONENT_NAME}"}
+    no_cache.add(f"service_{INSIGHT_COMPONENT_NAME}")
+{%- endif %}
     if component_name in no_cache:
         old = modal_cache.pop(component_name, None)
         if old and old in page.overlay:
             page.overlay.remove(old)
-{% endif %}
 
     popup = modal_cache.get(component_name)
     if popup is None:
