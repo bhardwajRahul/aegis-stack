@@ -1,0 +1,35 @@
+{% extends "_layout.html" %}
+{% from "_macros.html" import summary_table, row %}
+
+{% block title %}You're now on {{ plan_name }} — {{ project_name }}{% endblock %}
+{% block preheader %}Your plan changed to {{ plan_name }}. Receipt + renewal details inside.{% endblock %}
+{% block heading %}You&rsquo;re now on {{ plan_name }}.{% endblock %}
+
+{% block body %}
+<p style="margin:0 0 12px 0;">
+  Your plan switched to <strong style="color:#FFFFFF;">{{ plan_name }}</strong>.
+  Stripe prorated the change, so you&rsquo;re only billed for the time you
+  spend on each tier.
+</p>
+<p style="margin:0; color:#7E8A9A;">
+  The new tier&rsquo;s features are live in your dashboard right now.
+</p>
+{% endblock %}
+
+{% block summary %}
+{% call summary_table() %}
+  {{ row("New plan", plan_name) }}
+  {{ row("Effective", period_start_human) }}
+  {{ row("Next renewal", period_end_human) }}
+  {{ row("Charged today", amount_formatted, emphasis=True) }}
+{% endcall %}
+{% endblock %}
+
+{% block cta_label %}Manage billing{% endblock %}
+
+{% block footer_note %}
+<p style="margin:20px 0 0 0; font-size:12px; color:#7E8A9A; line-height:1.6;">
+  Need to switch again or cancel? Both are one-click from
+  <a href="{{ billing_settings_url }}" style="color:#17CCBF; text-decoration:none;">Settings &middot; Billing</a>.
+</p>
+{% endblock %}

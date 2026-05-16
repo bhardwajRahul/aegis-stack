@@ -31,6 +31,17 @@ class Settings(
 
     # Project identity
     PROJECT_NAME: str = "{{ project_slug }}"
+    # Friendly display name shown to humans (email FROM/body, browser
+    # titles, etc.). PROJECT_NAME above is the URL-safe slug; this is
+    # the marketing-friendly form. Defaults to the value you typed when
+    # generating the project; override per-environment via env var.
+    PROJECT_DISPLAY_NAME: str = "{{ project_name }}"
+
+    # Public-facing base URL (used to build absolute links in outgoing
+    # emails - receipts, password reset, subscription welcome, etc.).
+    # Override per environment via .env (e.g. https://app.your-domain.com);
+    # the localhost default keeps dev working without configuration.
+    PUBLIC_BASE_URL: str = "http://localhost:8000"
 
     # Application environment: "dev" or "prod"
     APP_ENV: str = "dev"
@@ -289,7 +300,27 @@ class Settings(
     # Communications Service Configuration
     # Email (Resend) - Sign up at https://resend.com (free: 100 emails/day)
     RESEND_API_KEY: str | None = None
-    RESEND_FROM_EMAIL: str | None = None  # Must be a verified domain in Resend
+    # Sender address for every email this app sends (auth verification,
+    # password reset, payment receipts, etc.). Two formats accepted -
+    # the Resend SDK parses both:
+    #
+    #   1. Bare:           hello@your-domain.com
+    #   2. Display + addr: "Your Brand <hello@your-domain.com>"
+    #
+    # Format (2) is recommended in production - inboxes render the
+    # display name as the sender. The local-part doesn't need to exist
+    # as a real inbox; only the domain needs to be verified at
+    # resend.com/domains. Falling back to ``onboarding@resend.dev`` is
+    # the shared sandbox address and only delivers to the email you
+    # signed up to Resend with - every other recipient 403s.
+    RESEND_FROM_EMAIL: str | None = None
+    # Reply-To header attached to outbound mail. Lets recipients click
+    # "Reply" and reach a real inbox even when the FROM lives on a
+    # send-only verified subdomain (e.g. FROM=hello@send.example.com
+    # but replies should land at hello@example.com forwarded to your
+    # support inbox). Leave unset to let replies go to the FROM
+    # address (where they'll bounce unless that mailbox exists).
+    SUPPORT_REPLY_TO_EMAIL: str | None = None
 
     # SMS/Voice (Twilio) - Sign up at https://twilio.com/try-twilio ($15 trial)
     TWILIO_ACCOUNT_SID: str | None = None

@@ -2,6 +2,8 @@
 Pydantic schemas for payment API requests and responses.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -118,15 +120,46 @@ class TransactionListResponse(BaseModel):
 
 
 class SubscriptionResponse(BaseModel):
-    """Single subscription in API responses."""
+    """Single subscription in API responses.
+
+    ``display_name`` is the marketing-friendly label for the row. The
+    template ships a pass-through default that returns ``plan_name``
+    verbatim, so callers always have *something* user-facing to render.
+    Downstream apps with their own plan-slug shim (e.g. mapping Stripe
+    product names like "Aegis Pulse" -> "Pro") can wrap or override
+    ``from_row`` to inject their resolution.
+    """
 
     id: int
     provider_subscription_id: str
     plan_name: str
+    display_name: str
     status: str
     current_period_start: datetime
     current_period_end: datetime
     cancel_at_period_end: bool
+
+    @classmethod
+    def from_row(cls, sub: object) -> SubscriptionResponse:
+        """Build a response from a ``PaymentSubscription`` ORM row.
+
+        Centralises field mapping so every endpoint that serialises a
+        subscription gets the same shape. Pulse-style apps with a
+        ``plan_name`` -> ``display_name`` shim override this classmethod
+        in their own subclass; the template default is the safe
+        pass-through.
+        """
+        plan_name = sub.plan_name  # type: ignore[attr-defined]
+        return cls(
+            id=sub.id,  # type: ignore[attr-defined,arg-type]
+            provider_subscription_id=sub.provider_subscription_id,  # type: ignore[attr-defined]
+            plan_name=plan_name,
+            display_name=plan_name or "",
+            status=sub.status,  # type: ignore[attr-defined]
+            current_period_start=sub.current_period_start,  # type: ignore[attr-defined]
+            current_period_end=sub.current_period_end,  # type: ignore[attr-defined]
+            cancel_at_period_end=sub.cancel_at_period_end,  # type: ignore[attr-defined]
+        )
 
 
 class SubscriptionListResponse(BaseModel):

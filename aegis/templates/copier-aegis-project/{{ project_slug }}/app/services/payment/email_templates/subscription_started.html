@@ -1,0 +1,36 @@
+{% extends "_layout.html" %}
+{% from "_macros.html" import summary_table, row %}
+
+{% block title %}Welcome to {{ plan_name }} — {{ project_name }}{% endblock %}
+{% block preheader %}Your {{ plan_name }} plan is active.{% endblock %}
+{% block heading %}You&rsquo;re on {{ plan_name }}.{% endblock %}
+
+{% block body %}
+<p style="margin:0 0 12px 0;">
+  Thanks for upgrading. {{ plan_name }} is active on your account right now, and
+  the next renewal lands automatically on
+  <strong style="color:#FFFFFF;">{{ period_end_human }}</strong>.
+</p>
+<p style="margin:0; color:#7E8A9A;">
+  If anything looks off, reply to this email.
+</p>
+{% endblock %}
+
+{% block summary %}
+{% call summary_table() %}
+  {{ row("Plan", plan_name) }}
+  {{ row("Billing cycle", period_start_human ~ " — " ~ period_end_human) }}
+  {{ row("Charged today", amount_formatted, emphasis=True) }}
+{% endcall %}
+{% endblock %}
+
+{% block cta_label %}Open dashboard{% endblock %}
+
+{% block footer_note %}
+<p style="margin:20px 0 0 0; font-size:12px; color:#7E8A9A; line-height:1.6;">
+  Manage your plan or download a PDF invoice from
+  <a href="{{ billing_settings_url }}" style="color:#17CCBF; text-decoration:none;">Settings &middot; Billing</a>.
+  Cancel anytime; you&rsquo;ll keep the plan through the end of the current
+  period.
+</p>
+{% endblock %}

@@ -1,0 +1,46 @@
+{#
+  Reusable Jinja macros for payment email templates.
+
+  Two patterns to know:
+
+  - ``summary_table()`` is a **call-block** macro — invoke it with
+    ``{% call summary_table() %}...{% endcall %}`` and the rows go
+    inside the call block, between the <table> tags it renders.
+    Reads like HTML; one place to change the table styling.
+
+  - ``row(label, value, emphasis=False)`` is a plain macro for a
+    single label/value <tr>. ``emphasis=True`` bolds the value and
+    bumps the contrast — use it on the "Total today" / "Refund
+    amount" final row of each summary.
+
+  All styling is inline (email clients don't reliably honour <style>
+  blocks, especially Outlook).
+#}
+
+
+{% macro summary_table() %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin-top:24px; border-top:1px solid #272C36; padding-top:20px;">
+  {{ caller() }}
+</table>
+{% endmacro %}
+
+
+{% macro row(label, value, emphasis=False) %}
+<tr>
+  <td style="font-size:13px; color:#7E8A9A; padding:4px 0;">{{ label }}</td>
+  <td style="font-size:13px; color:{% if emphasis %}#FFFFFF{% else %}#EEF1F4{% endif %}; padding:4px 0; text-align:right;{% if emphasis %} font-weight:600;{% endif %}">{{ value }}</td>
+</tr>
+{% endmacro %}
+
+
+{#
+  Small muted paragraph sized for receipt fine-print (tax notes,
+  invoice-id callout, etc.). Sits below the summary table; not used
+  by every template.
+#}
+{% macro muted(text) %}
+<p style="margin:12px 0 0 0; font-size:12px; color:#7E8A9A; line-height:1.6;">
+  {{ text }}
+</p>
+{% endmacro %}

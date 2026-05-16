@@ -1,0 +1,36 @@
+{% extends "_layout.html" %}
+{% from "_macros.html" import summary_table, row %}
+
+{% block title %}Refund of {{ amount_formatted }} — {{ project_name }}{% endblock %}
+{% block preheader %}Your refund of {{ amount_formatted }} is on its way back.{% endblock %}
+{% block heading %}Refund processed.{% endblock %}
+
+{% block body %}
+<p style="margin:0 0 12px 0;">
+  We&rsquo;ve refunded <strong style="color:#FFFFFF;">{{ amount_formatted }}</strong>
+  to your original payment method. Most banks post the credit within 5-10
+  business days; some are faster.
+</p>
+<p style="margin:0; color:#7E8A9A;">
+  The refund references the original charge on
+  {{ original_charge_date_human }}; keep this email as your refund receipt.
+</p>
+{% endblock %}
+
+{% block summary %}
+{% call summary_table() %}
+  {{ row("Original charge", original_charge_date_human) }}
+  {{ row("Original receipt", invoice_number) }}
+  {{ row("Refund amount", amount_formatted, emphasis=True) }}
+{% endcall %}
+{% endblock %}
+
+{% block cta_label %}View billing history{% endblock %}
+
+{% block footer_note %}
+<p style="margin:20px 0 0 0; font-size:12px; color:#7E8A9A; line-height:1.6;">
+  Full payment history (including this refund) lives in
+  <a href="{{ billing_settings_url }}" style="color:#17CCBF; text-decoration:none;">Settings &middot; Billing</a>.
+  Reply if anything looks wrong.
+</p>
+{% endblock %}

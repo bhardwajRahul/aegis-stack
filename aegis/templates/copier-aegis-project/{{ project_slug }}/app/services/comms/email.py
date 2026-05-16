@@ -111,6 +111,7 @@ async def send_email_simple(
     subject: str,
     text: str | None = None,
     html: str | None = None,
+    reply_to: str | None = None,
 ) -> EmailResponse:
     """
     Send an email with simplified parameters.
@@ -122,6 +123,13 @@ async def send_email_simple(
         subject: Email subject
         text: Plain text body
         html: HTML body
+        reply_to: Optional Reply-To header. When set, recipients clicking
+            "Reply" route their response here instead of to the FROM
+            address. Useful when FROM lives on a send-only verified
+            subdomain but you want replies to land at a real inbox via
+            the registrar's email forwarding. Falls back to
+            ``settings.SUPPORT_REPLY_TO_EMAIL`` when not passed
+            explicitly, so every send-site is opted in by default.
 
     Returns:
         EmailResponse: Response with message ID and status
@@ -132,12 +140,21 @@ async def send_email_simple(
     """
     # Normalize 'to' to list
     recipients = [to] if isinstance(to, str) else to
+    # Default to the project-wide support address so individual call
+    # sites don't have to thread it through. Explicit reply_to= still
+    # wins for callers that want to override per-send.
+    effective_reply_to = reply_to or settings.SUPPORT_REPLY_TO_EMAIL
+    # SendEmailRequest expects a list (Resend allows multiple Reply-To
+    # addresses on a single message). Wrap our single-string convenience
+    # input on the way in.
+    reply_to_list = [effective_reply_to] if effective_reply_to else None
 
     request = SendEmailRequest(
         to=recipients,  # type: ignore[arg-type]
         subject=subject,
         text=text,
         html=html,
+        reply_to=reply_to_list,  # type: ignore[arg-type]
     )
 
     return await send_email(request)

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="supported-color-schemes" content="dark light">
+  <title>{% block title %}{{ project_name }}{% endblock %}</title>
+</head>
+{# Preheader — hidden in the inbox but shown as preview text. #}
+<body style="margin:0; padding:0; background:#090B0D; color:#EEF1F4; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="display:none; max-height:0; overflow:hidden; font-size:1px; color:#090B0D; line-height:1px; mso-hide:all;">
+    {% block preheader %}{% endblock %}
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#090B0D;">
+    <tr>
+      <td align="center" style="padding:40px 20px;">
+
+        <table role="presentation" width="520" cellpadding="0" cellspacing="0" border="0" style="max-width:520px; width:100%;">
+
+          {# Brand header — project_name comes from settings.PROJECT_DISPLAY_NAME,
+             passed in by the email helpers on every render. Replace the
+             palette below to rebrand without touching the structure. #}
+          <tr>
+            <td style="padding:0 0 28px 0;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="vertical-align:middle; padding-right:8px;">
+                    <div style="width:8px; height:8px; background:#17CCBF; border-radius:999px;"></div>
+                  </td>
+                  <td style="vertical-align:middle;">
+                    <span style="font-size:14px; font-weight:600; color:#FFFFFF; letter-spacing:0.02em;">{{ project_name }}</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          {# Card #}
+          <tr>
+            <td style="background:#111418; border:1px solid #272C36; border-radius:12px; padding:36px 32px;">
+
+              <h1 style="margin:0 0 16px 0; font-size:22px; font-weight:600; color:#FFFFFF; line-height:1.3;">
+                {% block heading %}{% endblock %}
+              </h1>
+
+              <div style="font-size:15px; line-height:1.6; color:#EEF1F4;">
+                {% block body %}{% endblock %}
+              </div>
+
+              {# Optional receipt / summary block — money emails fill this in.
+                 Empty for non-money templates. #}
+              {% block summary %}{% endblock %}
+
+              {# Optional CTA — money emails set both cta_url + cta_label.
+                 Skipped entirely when ``cta_url`` is undefined / empty. #}
+              {% if cta_url %}
+              <div style="margin:28px 0 8px 0;">
+                <a href="{{ cta_url }}"
+                   style="display:inline-block; background:rgba(23,204,191,0.1); color:#FFFFFF; text-decoration:none; font-size:14px; font-weight:500; padding:12px 24px; border:1px solid #17CCBF; border-radius:8px;">
+                  {% block cta_label %}{% endblock %}
+                </a>
+              </div>
+              {% endif %}
+
+              {% block footer_note %}{% endblock %}
+
+            </td>
+          </tr>
+
+          {# Footer — replace the tagline with your own product line. #}
+          <tr>
+            <td style="padding:24px 0 0 0; font-size:12px; color:#7E8A9A; text-align:center; line-height:1.5;">
+              Built with Aegis Stack.<br>
+              <span style="color:#7E8A9A;">Reply to this email and we&rsquo;ll get back to you.</span>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
