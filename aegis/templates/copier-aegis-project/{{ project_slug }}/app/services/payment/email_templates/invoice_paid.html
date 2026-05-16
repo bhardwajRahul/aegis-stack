@@ -1,0 +1,48 @@
+{% extends "_layout.html" %}
+{% from "_macros.html" import summary_table, row, muted %}
+
+{# This is THE receipt — Stripe's automated receipts are typically
+   disabled in the dashboard (Settings -> Emails -> Successful payment
+   receipts OFF) when this template ships, so this email becomes the
+   only payment confirmation the customer receives. It needs every
+   field the customer would want for personal accounting: invoice
+   number, dates, plan, amount, currency, and a link to the hosted
+   invoice page for the PDF version. #}
+
+{% block title %}Receipt for {{ amount_formatted }} — {{ project_name }}{% endblock %}
+{% block preheader %}Receipt for your {{ plan_name }} subscription. Invoice {{ invoice_number }}.{% endblock %}
+{% block heading %}Payment received.{% endblock %}
+
+{% block body %}
+<p style="margin:0 0 12px 0;">
+  Thanks. We&rsquo;ve charged <strong style="color:#FFFFFF;">{{ amount_formatted }}</strong>
+  for your {{ plan_name }} subscription. The next renewal is on
+  {{ period_end_human }}.
+</p>
+<p style="margin:0; color:#7E8A9A;">
+  This email is your receipt &mdash; keep it for your records, or download
+  a PDF invoice from the link below.
+</p>
+{% endblock %}
+
+{% block summary %}
+{% call summary_table() %}
+  {{ row("Receipt #", invoice_number) }}
+  {{ row("Date", charged_at_human) }}
+  {{ row("Plan", plan_name) }}
+  {{ row("Period", period_start_human ~ " — " ~ period_end_human) }}
+  {{ row("Total", amount_formatted, emphasis=True) }}
+{% endcall %}
+{{ muted("Charged in " ~ currency_code ~ ". Tax (where applicable) is included in the total.") }}
+{% endblock %}
+
+{% block cta_label %}Download PDF invoice{% endblock %}
+
+{% block footer_note %}
+<p style="margin:20px 0 0 0; font-size:12px; color:#7E8A9A; line-height:1.6;">
+  Your subscription, full payment history, and tax-receipt PDFs all live
+  in
+  <a href="{{ billing_settings_url }}" style="color:#17CCBF; text-decoration:none;">Settings &middot; Billing</a>.
+  Cancel or switch tiers anytime from there.
+</p>
+{% endblock %}

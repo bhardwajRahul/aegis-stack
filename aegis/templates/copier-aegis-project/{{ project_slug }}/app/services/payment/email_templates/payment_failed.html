@@ -1,0 +1,40 @@
+{% extends "_layout.html" %}
+{% from "_macros.html" import summary_table, row %}
+
+{# Dunning email — Stripe retries failing cards on its own (3-4 times
+   over ~14 days by default), but we still want the customer to know
+   *now* so they can fix it before service interrupts. #}
+
+{% block title %}We couldn't charge your card — {{ project_name }}{% endblock %}
+{% block preheader %}Update your payment method to keep your {{ plan_name }} subscription active.{% endblock %}
+{% block heading %}We couldn&rsquo;t charge your card.{% endblock %}
+
+{% block body %}
+<p style="margin:0 0 12px 0;">
+  We tried to renew your <strong style="color:#FFFFFF;">{{ plan_name }}</strong>
+  subscription and the charge didn&rsquo;t go through. Most of the time this
+  is a simple expiration, an address mismatch, or a bank flag — quick to fix.
+</p>
+<p style="margin:0; color:#7E8A9A;">
+  We&rsquo;ll keep retrying automatically over the next few days. Your plan
+  stays active until those retries are exhausted; update your card before
+  then to avoid an interruption.
+</p>
+{% endblock %}
+
+{% block summary %}
+{% call summary_table() %}
+  {{ row("Plan", plan_name) }}
+  {{ row("Attempted", charged_at_human) }}
+  {{ row("Amount", amount_formatted, emphasis=True) }}
+{% endcall %}
+{% endblock %}
+
+{% block cta_label %}Update payment method{% endblock %}
+
+{% block footer_note %}
+<p style="margin:20px 0 0 0; font-size:12px; color:#7E8A9A; line-height:1.6;">
+  The button opens your billing portal where you can swap or update the
+  card. Questions? Reply to this email.
+</p>
+{% endblock %}

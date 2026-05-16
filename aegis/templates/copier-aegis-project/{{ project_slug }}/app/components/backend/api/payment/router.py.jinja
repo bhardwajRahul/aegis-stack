@@ -185,18 +185,7 @@ async def list_subscriptions(
         status=status,
     )
     return SubscriptionListResponse(
-        subscriptions=[
-            SubscriptionResponse(
-                id=s.id,  # type: ignore[arg-type]
-                provider_subscription_id=s.provider_subscription_id,
-                plan_name=s.plan_name,
-                status=s.status,
-                current_period_start=s.current_period_start,
-                current_period_end=s.current_period_end,
-                cancel_at_period_end=s.cancel_at_period_end,
-            )
-            for s in subs
-        ],
+        subscriptions=[SubscriptionResponse.from_row(s) for s in subs],
         total=len(subs),
     )
 

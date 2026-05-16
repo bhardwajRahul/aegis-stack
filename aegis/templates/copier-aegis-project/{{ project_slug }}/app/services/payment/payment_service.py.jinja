@@ -8,11 +8,14 @@ transaction data to the local database.
 
 from datetime import UTC, datetime, timedelta
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
+
+if TYPE_CHECKING:
+    from app.services.payment.email_helpers import EmailDeliveryResult
 
 from .constants import (
     DisputeStatus,
@@ -136,6 +139,63 @@ class PaymentService:
             "session_id": checkout.session_id,
             "checkout_url": checkout.checkout_url,
         }
+
+    async def _tag_with_email_result(
+        self,
+        row: PaymentTransaction | PaymentSubscription,
+        result: "EmailDeliveryResult",
+    ) -> None:
+        """Persist the email-send outcome onto a row's ``metadata_``
+        JSON column under an ``email`` key.
+
+        Surfaces failed sends to operator-side SQL without log grepping::
+
+            SELECT id, amount, metadata_->'email' AS email_result
+            FROM payment_transaction
+            WHERE metadata_ #>> '{email,error}' IS NOT NULL;
+
+        We reassign the dict (rather than mutating in place) so
+        SQLAlchemy's change detection notices without us reaching for
+        ``flag_modified()`` — the existing handlers already follow
+        this convention for the same column.
+        """
+        existing = dict(row.metadata_ or {})
+        existing["email"] = result.model_dump(mode="json")
+        row.metadata_ = existing
+        self.db.add(row)
+        await self.db.flush()
+
+    async def _email_for_stripe_customer(
+        self, stripe_customer_id: str | None
+    ) -> str | None:
+        """Resolve a Stripe customer id to the user-facing email address.
+
+        Tries the locally-stored ``PaymentCustomer.email`` first (set at
+        customer-create time on the authed checkout path), falls back to
+        ``User.email`` via ``PaymentCustomer.user_id`` so renamed users
+        still get their mail. Returns None for anonymous checkouts (no
+        local row) or fully-orphaned rows; the calling email helper
+        treats None as "skip" rather than 500ing.
+        """
+        if not stripe_customer_id:
+            return None
+        result = await self.db.exec(
+            select(PaymentCustomer).where(
+                PaymentCustomer.provider_customer_id == stripe_customer_id
+            )
+        )
+        customer = result.first()
+        if customer is None:
+            return None
+        if customer.email:
+            return customer.email
+        if customer.user_id:
+            from app.models.user import User as _User
+
+            user = await self.db.get(_User, customer.user_id)
+            if user is not None:
+                return user.email
+        return None
 
     async def _ensure_customer_for_user(
         self, user_id: int | None, user_email: str | None
@@ -396,6 +456,15 @@ class PaymentService:
             WebhookEventType.SUBSCRIPTION_CREATED: self._handle_subscription_event,
             WebhookEventType.SUBSCRIPTION_UPDATED: self._handle_subscription_event,
             WebhookEventType.SUBSCRIPTION_DELETED: self._handle_subscription_deleted,
+            # Subscription money: Stripe fires both ``invoice.paid`` and
+            # ``invoice.payment_succeeded`` for the same payment. Route them
+            # to the same handler — the idempotency check on the invoice id
+            # makes the duplicate harmless.
+            WebhookEventType.INVOICE_PAID: self._handle_invoice_payment,
+            WebhookEventType.INVOICE_PAYMENT_SUCCEEDED: self._handle_invoice_payment,
+            WebhookEventType.INVOICE_PAYMENT_FAILED: (
+                self._handle_invoice_payment_failed
+            ),
             WebhookEventType.EARLY_FRAUD_WARNING_CREATED: (
                 self._handle_early_fraud_warning
             ),
@@ -488,17 +557,252 @@ class PaymentService:
             )
         )
         txn = result.first()
-        if txn:
-            refunded = data.get("amount_refunded", 0)
-            total = data.get("amount", txn.amount)
-            txn.status = (
-                TransactionStatus.REFUNDED
-                if refunded >= total
-                else TransactionStatus.PARTIALLY_REFUNDED
+        if not txn:
+            return
+
+        # Track whether status actually transitioned this call — Stripe
+        # re-sends charge.refunded events for partial refunds in some
+        # flows, and we don't want to email twice for the same state.
+        refunded = data.get("amount_refunded", 0)
+        total = data.get("amount", txn.amount)
+        new_status = (
+            TransactionStatus.REFUNDED
+            if refunded >= total
+            else TransactionStatus.PARTIALLY_REFUNDED
+        )
+        status_changed = txn.status != new_status
+        txn.status = new_status
+        txn.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        self.db.add(txn)
+        await self.db.flush()
+
+        if status_changed:
+            from app.services.payment.email_helpers import send_refund_processed
+
+            to = await self._email_for_stripe_customer(data.get("customer"))
+            refunded_at_unix = data.get("created")
+            refunded_at = (
+                datetime.fromtimestamp(refunded_at_unix, tz=UTC).replace(tzinfo=None)
+                if refunded_at_unix
+                else datetime.now(UTC).replace(tzinfo=None)
             )
-            txn.updated_at = datetime.now(UTC).replace(tzinfo=None)
-            self.db.add(txn)
-            await self.db.flush()
+            email_result = await send_refund_processed(
+                to=to or "",
+                amount_cents=refunded,
+                currency=txn.currency,
+                refunded_at=refunded_at,
+                original_charge_at=txn.created_at,
+                invoice_number=(txn.metadata_ or {}).get("invoice_number")
+                or txn.provider_transaction_id
+                or "",
+            )
+            await self._tag_with_email_result(txn, email_result)
+
+    async def _handle_invoice_payment(self, event: WebhookEvent) -> None:
+        """Handle ``invoice.paid`` and ``invoice.payment_succeeded``.
+
+        Subscription charges (initial + renewals) ride on Stripe invoices,
+        not the ``checkout.session.completed`` event. We only see the real
+        money here. Stripe sends both event types for the same payment for
+        backward compat — the idempotency check on the invoice id makes the
+        duplicate harmless.
+        """
+        data = event.data
+        invoice_id = data.get("id", "")
+        if not invoice_id:
+            logger.warning("invoice payment event missing id; skipping")
+            return
+
+        # Idempotency across redelivery and the duplicate ``invoice.paid``/
+        # ``invoice.payment_succeeded`` event pair.
+        existing = await self.db.exec(
+            select(PaymentTransaction).where(
+                PaymentTransaction.provider_transaction_id == invoice_id
+            )
+        )
+        if existing.first():
+            return
+
+        provider = await self.get_or_create_provider()
+
+        customer_id = None
+        stripe_customer_id = data.get("customer")
+        if stripe_customer_id:
+            cust = await self.db.exec(
+                select(PaymentCustomer).where(
+                    PaymentCustomer.provider_customer_id == stripe_customer_id
+                )
+            )
+            customer = cust.first()
+            if customer:
+                customer_id = customer.id
+            else:
+                logger.warning(
+                    "invoice payment for unknown customer %s; recording with "
+                    "customer_id=NULL",
+                    stripe_customer_id,
+                )
+
+        amount = data.get("amount_paid") or data.get("total") or 0
+        currency = data.get("currency") or "usd"
+        number = data.get("number") or invoice_id
+        description = f"Invoice {number}"
+
+        metadata: dict[str, Any] = {}
+        sub_id = data.get("subscription")
+        if sub_id:
+            metadata["subscription_id"] = sub_id
+        hosted_url = data.get("hosted_invoice_url")
+        if hosted_url:
+            metadata["hosted_invoice_url"] = hosted_url
+
+        txn = PaymentTransaction(
+            provider_id=provider.id,  # type: ignore[arg-type]
+            customer_id=customer_id,
+            provider_transaction_id=invoice_id,
+            type=TransactionType.CHARGE,
+            status=TransactionStatus.SUCCEEDED,
+            amount=amount,
+            currency=currency,
+            description=description,
+            metadata_=metadata,
+        )
+        self.db.add(txn)
+        await self.db.flush()
+
+        # Receipt. If Stripe's automated receipts are disabled
+        # (Settings -> Emails -> Successful payments OFF), this email
+        # is the only payment confirmation the customer gets. The
+        # hosted invoice URL goes to the CTA so they can download a
+        # PDF for their records.
+        from app.services.payment.email_helpers import send_invoice_paid
+
+        to = await self._email_for_stripe_customer(data.get("customer"))
+        plan_name = "your subscription"
+        period_start: datetime | None = None
+        period_end: datetime | None = None
+        if sub_id:
+            sub_row = await self.db.exec(
+                select(PaymentSubscription).where(
+                    PaymentSubscription.provider_subscription_id == sub_id
+                )
+            )
+            sub = sub_row.first()
+            if sub:
+                plan_name = sub.plan_name or plan_name
+                period_start = sub.current_period_start
+                period_end = sub.current_period_end
+        charged_at_unix = data.get("created") or data.get(
+            "status_transitions", {}
+        ).get("paid_at")
+        charged_at = (
+            datetime.fromtimestamp(charged_at_unix, tz=UTC).replace(tzinfo=None)
+            if charged_at_unix
+            else datetime.now(UTC).replace(tzinfo=None)
+        )
+        email_result = await send_invoice_paid(
+            to=to or "",
+            plan_name=plan_name,
+            invoice_number=number,
+            amount_cents=amount,
+            currency=currency,
+            charged_at=charged_at,
+            period_start=period_start,
+            period_end=period_end,
+            hosted_invoice_url=hosted_url,
+        )
+        await self._tag_with_email_result(txn, email_result)
+
+    async def _handle_invoice_payment_failed(self, event: WebhookEvent) -> None:
+        """Handle ``invoice.payment_failed`` — record a FAILED CHARGE row.
+
+        Idempotent on the invoice id. If you want each dunning attempt as
+        its own row instead, key off ``invoice_id + ":" + attempt_count``.
+        """
+        data = event.data
+        invoice_id = data.get("id", "")
+        if not invoice_id:
+            logger.warning("invoice.payment_failed missing id; skipping")
+            return
+
+        existing = await self.db.exec(
+            select(PaymentTransaction).where(
+                PaymentTransaction.provider_transaction_id == invoice_id
+            )
+        )
+        if existing.first():
+            return
+
+        provider = await self.get_or_create_provider()
+
+        customer_id = None
+        stripe_customer_id = data.get("customer")
+        if stripe_customer_id:
+            cust = await self.db.exec(
+                select(PaymentCustomer).where(
+                    PaymentCustomer.provider_customer_id == stripe_customer_id
+                )
+            )
+            customer = cust.first()
+            if customer:
+                customer_id = customer.id
+
+        amount = data.get("amount_due") or data.get("total") or 0
+        currency = data.get("currency") or "usd"
+        number = data.get("number") or invoice_id
+
+        txn = PaymentTransaction(
+            provider_id=provider.id,  # type: ignore[arg-type]
+            customer_id=customer_id,
+            provider_transaction_id=invoice_id,
+            type=TransactionType.CHARGE,
+            status=TransactionStatus.FAILED,
+            amount=amount,
+            currency=currency,
+            description=f"Invoice {number} (payment failed)",
+            metadata_={"subscription_id": data.get("subscription")}
+            if data.get("subscription")
+            else {},
+        )
+        self.db.add(txn)
+        await self.db.flush()
+
+        # Dunning email — Stripe retries the card on its own, but the
+        # customer needs to know NOW so they can update payment before
+        # service drops. Resolve plan name from the subscription if we
+        # can; fall back to a generic label.
+        from app.services.payment.email_helpers import send_payment_failed
+
+        to = await self._email_for_stripe_customer(data.get("customer"))
+        plan_name = "your subscription"
+        sub_id = data.get("subscription")
+        if sub_id:
+            sub_row = await self.db.exec(
+                select(PaymentSubscription).where(
+                    PaymentSubscription.provider_subscription_id == sub_id
+                )
+            )
+            sub = sub_row.first()
+            if sub and sub.plan_name:
+                plan_name = sub.plan_name
+        attempted_at_unix = data.get("created")
+        attempted_at = (
+            datetime.fromtimestamp(attempted_at_unix, tz=UTC).replace(tzinfo=None)
+            if attempted_at_unix
+            else datetime.now(UTC).replace(tzinfo=None)
+        )
+        # Stripe's "update payment method" URL on the invoice — same
+        # surface Stripe's dunning emails would link to.
+        update_url = data.get("hosted_invoice_url")
+        email_result = await send_payment_failed(
+            to=to or "",
+            plan_name=plan_name,
+            amount_cents=amount,
+            currency=currency,
+            attempted_at=attempted_at,
+            update_payment_url=update_url,
+        )
+        await self._tag_with_email_result(txn, email_result)
 
     async def _handle_subscription_event(self, event: WebhookEvent) -> None:
         """Handle subscription created/updated."""
@@ -513,9 +817,17 @@ class PaymentService:
         existing = result.first()
 
         plan_name = ""
+        unit_amount: int | None = None
+        currency: str | None = None
         items = data.get("items", {}).get("data", [])
         if items:
-            plan_name = items[0].get("price", {}).get("nickname", "") or items[0].get("price", {}).get("id", "")
+            price = items[0].get("price") or {}
+            plan_name = price.get("nickname", "") or price.get("id", "")
+            # Used by the subscription_started / _updated emails so the
+            # "Charged today" row reflects the real plan amount instead
+            # of rendering ``$0.00 USD`` from a missing field.
+            unit_amount = price.get("unit_amount")
+            currency = price.get("currency")
 
         period_start = datetime.fromtimestamp(
             data.get("current_period_start", 0), tz=UTC
@@ -524,7 +836,16 @@ class PaymentService:
             data.get("current_period_end", 0), tz=UTC
         ).replace(tzinfo=None)
 
+        # Track whether we actually changed the plan_name on an update —
+        # drives whether we email. Pure status / period rolls don't need
+        # a "your plan changed" notification.
+        plan_name_changed = False
+        is_new = existing is None
+
         if existing:
+            plan_name_changed = bool(
+                plan_name and plan_name != existing.plan_name
+            )
             existing.status = data.get("status", existing.status)
             existing.plan_name = plan_name or existing.plan_name
             existing.current_period_start = period_start
@@ -562,6 +883,58 @@ class PaymentService:
 
         await self.db.flush()
 
+        # Notification side-effect — runs after the subscription row is
+        # flushed, but still inside the outer webhook transaction (the
+        # route commits when ``handle_webhook`` returns). The helper
+        # itself swallows failures so a Resend hiccup doesn't 5xx the
+        # webhook, but the awaited send is on the request path and will
+        # add latency. Move to an outbox / background task if that ever
+        # becomes a problem.
+        # We email on:
+        #   - SUBSCRIPTION_CREATED: always, when the row was new
+        #   - SUBSCRIPTION_UPDATED: only when plan_name actually changed
+        # Pure status flips / period rolls don't email — too noisy.
+        from .constants import WebhookEventType
+
+        target_sub_result = await self.db.exec(
+            select(PaymentSubscription).where(
+                PaymentSubscription.provider_subscription_id == provider_sub_id
+            )
+        )
+        target_sub = target_sub_result.first()
+
+        if event.event_type == WebhookEventType.SUBSCRIPTION_CREATED and is_new:
+            from app.services.payment.email_helpers import send_subscription_started
+
+            to = await self._email_for_stripe_customer(data.get("customer"))
+            email_result = await send_subscription_started(
+                to=to or "",
+                plan_name=plan_name or "your subscription",
+                period_start=period_start,
+                period_end=period_end,
+                amount_cents=unit_amount,
+                currency=currency,
+            )
+            if target_sub is not None:
+                await self._tag_with_email_result(target_sub, email_result)
+        elif (
+            event.event_type == WebhookEventType.SUBSCRIPTION_UPDATED
+            and plan_name_changed
+        ):
+            from app.services.payment.email_helpers import send_subscription_updated
+
+            to = await self._email_for_stripe_customer(data.get("customer"))
+            email_result = await send_subscription_updated(
+                to=to or "",
+                plan_name=plan_name or "your subscription",
+                period_start=period_start,
+                period_end=period_end,
+                amount_cents=unit_amount,
+                currency=currency,
+            )
+            if target_sub is not None:
+                await self._tag_with_email_result(target_sub, email_result)
+
     async def _handle_subscription_deleted(self, event: WebhookEvent) -> None:
         """Handle subscription deleted — mark as canceled."""
         data = event.data
@@ -578,6 +951,18 @@ class PaymentService:
             sub.updated_at = datetime.now(UTC).replace(tzinfo=None)
             self.db.add(sub)
             await self.db.flush()
+
+            from app.services.payment.email_helpers import (
+                send_subscription_canceled,
+            )
+
+            to = await self._email_for_stripe_customer(data.get("customer"))
+            email_result = await send_subscription_canceled(
+                to=to or "",
+                plan_name=sub.plan_name or "your subscription",
+                period_end=sub.current_period_end,
+            )
+            await self._tag_with_email_result(sub, email_result)
 
     # -- Fraud and disputes --------------------------------------------------
 

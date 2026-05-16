@@ -198,6 +198,7 @@ class TestSendEmailSimple:
         ):
             mock_settings.RESEND_API_KEY = "re_test_key"
             mock_settings.RESEND_FROM_EMAIL = "test@example.com"
+            mock_settings.SUPPORT_REPLY_TO_EMAIL = None
             mock_resend.Emails.send.return_value = {"id": "email-789"}
 
             result = await send_email_simple(
@@ -217,6 +218,7 @@ class TestSendEmailSimple:
         ):
             mock_settings.RESEND_API_KEY = "re_test_key"
             mock_settings.RESEND_FROM_EMAIL = "test@example.com"
+            mock_settings.SUPPORT_REPLY_TO_EMAIL = None
             mock_resend.Emails.send.return_value = {"id": "email-101"}
 
             result = await send_email_simple(

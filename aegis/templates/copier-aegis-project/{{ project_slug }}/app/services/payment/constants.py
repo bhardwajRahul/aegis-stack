@@ -112,6 +112,7 @@ class WebhookEventType:
     PAYMENT_SUCCEEDED = "payment_intent.succeeded"
     PAYMENT_FAILED = "payment_intent.payment_failed"
     INVOICE_PAID = "invoice.paid"
+    INVOICE_PAYMENT_SUCCEEDED = "invoice.payment_succeeded"
     INVOICE_PAYMENT_FAILED = "invoice.payment_failed"
     SUBSCRIPTION_CREATED = "customer.subscription.created"
     SUBSCRIPTION_UPDATED = "customer.subscription.updated"
