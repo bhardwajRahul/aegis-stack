@@ -5,8 +5,6 @@ Displays comprehensive Logfire trace analytics including
 overview metrics, slowest spans, recent exceptions, and configuration.
 """
 
-from datetime import UTC, datetime
-
 import flet as ft
 from app.components.frontend.controls import (
     BodyText,
@@ -25,6 +23,8 @@ from app.services.system.ui import get_component_title
 
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
+from app.core.formatting import format_relative_time
+
 from .modal_sections import PIE_CHART_COLORS, EmptyStatePlaceholder, MetricCard
 
 # Number of spans to show in the overview bar chart
@@ -45,34 +45,10 @@ def _format_latency(ms: float) -> str:
     return f"{ms / 1000:.2f} s"
 
 
-def _format_timestamp(ts: str) -> str:
-    """Format ISO timestamp as relative time (e.g., '3 minutes ago')."""
-    if not ts:
-        return ""
-    try:
-        if "T" in ts:
-            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-        else:
-            return ts
-
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=UTC)
-
-        now = datetime.now(UTC)
-        seconds = (now - dt).total_seconds()
-
-        if seconds < 0 or seconds < 60:
-            return "just now"
-        elif seconds < 3600:
-            mins = int(seconds / 60)
-            return f"{mins} minute{'s' if mins != 1 else ''} ago"
-        elif seconds < 86400:
-            hours = int(seconds / 3600)
-            return f"{hours} hour{'s' if hours != 1 else ''} ago"
-        else:
-            return dt.strftime("%b %d %H:%M")
-    except (IndexError, TypeError, ValueError):
-        return str(ts)
+# ``_format_timestamp`` was replaced with the shared
+# ``app.core.formatting.format_relative_time`` helper so the same
+# relative-time formatting backs this modal, the Load Tests tab, and any
+# future displays.
 
 
 # =============================================================================
@@ -417,7 +393,7 @@ class ExceptionsSection(ft.Container):
             exc_type = exc.get("exception_type", "")
             span_name = exc.get("span_name", "unknown")
             message = exc.get("exception_message") or exc.get("message", "")
-            timestamp = _format_timestamp(exc.get("timestamp", ""))
+            timestamp = format_relative_time(exc.get("timestamp", ""))
             count = exc.get("count", 1)
 
             # Show exception type if available, otherwise span name

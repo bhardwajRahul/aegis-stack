@@ -15,6 +15,7 @@ from app.components.frontend.controls import (
     ExpandArrow,
     H3Text,
     LabelText,
+    MethodBadge,
     PrimaryText,
     SecondaryText,
 )
@@ -29,6 +30,7 @@ from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import create_progress_indicator, get_status_detail
 from .base_detail_popup import BaseDetailPopup
+from .load_tests_tab import LoadTestsTab
 from .modal_sections import (
     FlowConnector,
     FlowSection,
@@ -63,15 +65,6 @@ def _get_metric_color(percent: float) -> str:
         return Theme.Colors.SUCCESS
 
 
-# HTTP method colors for route badges
-METHOD_COLORS = {
-    "GET": ft.Colors.BLUE,
-    "POST": ft.Colors.GREEN,
-    "PUT": ft.Colors.ORANGE,
-    "PATCH": ft.Colors.PURPLE,
-    "DELETE": ft.Colors.RED,
-}
-
 # Keywords to detect auth dependencies
 AUTH_KEYWORDS = [
     "auth",
@@ -90,16 +83,6 @@ def _has_auth_dependencies(dependencies: list[str]) -> bool:
         return False
     return any(
         any(keyword in dep.lower() for keyword in AUTH_KEYWORDS) for dep in dependencies
-    )
-
-
-def _create_method_badge(method: str) -> ft.Container:
-    """Create a colored badge for an HTTP method."""
-    return ft.Container(
-        content=LabelText(method, color=Theme.Colors.BADGE_TEXT),
-        padding=ft.padding.symmetric(horizontal=6, vertical=2),
-        bgcolor=METHOD_COLORS.get(method, ft.Colors.ON_SURFACE_VARIANT),
-        border_radius=4,
     )
 
 
@@ -126,7 +109,7 @@ class RouteTableRow(ft.Container):
         summary_display = summary[:40] + "..." if len(summary) > 40 else summary
 
         # Method badges (show first method prominently)
-        method_badges = [_create_method_badge(m) for m in methods]
+        method_badges = [MethodBadge(m) for m in methods]
 
         # Arrow for expand indicator (reusable control)
         self.expand_arrow = ExpandArrow(expanded=False)
@@ -957,7 +940,7 @@ class PerformanceTab(ft.Container):
         p95_ms = float(stats.get("p95_ms", 0.0) or 0.0)
 
         cells = [
-            _create_method_badge(method),
+            MethodBadge(method),
             path or key,
             str(count),
             f"{avg_ms:.1f}",
@@ -1022,6 +1005,8 @@ class BackendDetailDialog(BaseDetailPopup):
                 performance_tab = PerformanceTab(backend_component)
             with _span("overseer.modal.backend.lifecycle_tab"):
                 lifecycle_tab = LifecycleTab(backend_component)
+            with _span("overseer.modal.backend.load_tests_tab"):
+                load_tests_tab = LoadTestsTab()
 
             tabs = ft.Tabs(
                 selected_index=0,
@@ -1031,6 +1016,7 @@ class BackendDetailDialog(BaseDetailPopup):
                     ft.Tab(text="Routes", content=routes_tab),
                     ft.Tab(text="Performance", content=performance_tab),
                     ft.Tab(text="Lifecycle", content=lifecycle_tab),
+                    ft.Tab(text="Load Tests", content=load_tests_tab),
                 ],
                 expand=True,
                 label_color=ft.Colors.ON_SURFACE,

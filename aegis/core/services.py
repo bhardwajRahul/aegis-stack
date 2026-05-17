@@ -401,7 +401,9 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/cli/slash_commands.py",
                 "app/cli/llm.py",
                 "app/cli/status_line.py",
-                "app/core/formatting.py",
+                # ``app/core/formatting.py`` is NOT removed on AI-off —
+                # it also backs the always-shipping API load test CLI +
+                # dashboard tab (``format_relative_time``).
                 "tests/api/test_ai_endpoints.py",
                 "tests/services/test_conversation_persistence.py",
                 "tests/cli/test_ai_rendering.py",

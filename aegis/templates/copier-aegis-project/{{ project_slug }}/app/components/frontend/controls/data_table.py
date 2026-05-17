@@ -22,13 +22,21 @@ class DataTableColumn:
     style: Literal["primary", "secondary", "body"] | None = "body"
 
 
-def get_alignment(alignment: str) -> ft.Alignment | None:
-    """Convert alignment string to Flet alignment."""
+def get_alignment(alignment: str) -> ft.Alignment:
+    """Convert alignment string to Flet alignment.
+
+    Default is ``center_left``, not ``None``. A finite-width Container
+    with ``alignment=None`` stretches its content to fill the cell, which
+    blows up pill-shaped controls like ``MethodBadge`` (a Container with
+    no explicit width). Setting an explicit alignment keeps controls at
+    their natural size, anchored to the cell edge; text cells are
+    unaffected because their content already left-aligns naturally.
+    """
     if alignment == "right":
         return ft.alignment.center_right
     elif alignment == "center":
         return ft.alignment.center
-    return None
+    return ft.alignment.center_left
 
 
 def style_cell(value: Any, style: str | None) -> ft.Control:

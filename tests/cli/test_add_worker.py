@@ -179,8 +179,15 @@ class TestAddWorkerComponent:
 
         assert result.success, f"Command failed: {result.stderr}"
 
-        # Verify load test service files exist
-        assert (project_path / "app" / "services" / "load_test.py").exists()
+        # Verify load test service files exist. The service was refactored
+        # from a flat ``load_test.py`` into a package; ``load_test_models.py``
+        # remains as a back-compat shim.
+        assert (
+            project_path / "app" / "services" / "load_test" / "__init__.py"
+        ).exists()
+        assert (
+            project_path / "app" / "services" / "load_test" / "worker" / "service.py"
+        ).exists()
         assert (project_path / "app" / "services" / "load_test_models.py").exists()
 
     def test_add_worker_creates_test_files(

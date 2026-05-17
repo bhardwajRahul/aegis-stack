@@ -54,6 +54,7 @@ nav:
       - Lifecycle: components/backend/lifecycle.md
       - Routes: components/backend/routes.md
       - Authentication Integration: components/backend/auth.md
+      - API Load Testing: components/backend/load-testing.md
     - Database: components/database.md
     - Frontend:
       - Getting Started: components/frontend/index.md

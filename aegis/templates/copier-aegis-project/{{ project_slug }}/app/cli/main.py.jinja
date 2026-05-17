@@ -54,6 +54,11 @@ def main_callback(
 app.add_typer(health.app, name="health")
 app.add_typer(docs.app, name="docs")
 
+# API load testing — no component dependencies, ships in every project
+from app.cli import api_load_test as _api_load_test  # noqa: E402
+
+app.add_typer(_api_load_test.app, name="api-load-test")
+
 # Conditionally register load-test command if worker components are available
 try:
     load_test_module = importlib.import_module("app.cli.load_test")

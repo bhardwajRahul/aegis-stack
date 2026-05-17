@@ -291,7 +291,11 @@ class TestCLIInit:
             "app/components/worker/constants.py",
             "app/components/worker/registry.py",
             "app/components/worker/pools.py",
-            "app/services/load_test.py",
+            # ``load_test.py`` became a package post-refactor; assert the
+            # package entry + worker subpackage. ``load_test_models.py``
+            # stays as a back-compat shim.
+            "app/services/load_test/__init__.py",
+            "app/services/load_test/worker/service.py",
             "app/services/load_test_models.py",
         ]
 

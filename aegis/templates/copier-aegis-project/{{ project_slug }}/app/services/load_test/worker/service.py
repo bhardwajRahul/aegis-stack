@@ -11,7 +11,7 @@ from app.components.worker.constants import LoadTestTypes
 from app.components.worker.pools import get_queue_pool
 from app.core.config import get_load_test_queue
 from app.core.log import logger
-from app.services.load_test_models import (
+from app.services.load_test.worker.models import (
     LoadTestConfiguration,
     LoadTestMetrics,
     LoadTestResult,
@@ -415,7 +415,7 @@ class LoadTestService:
         recommendations = LoadTestService._generate_recommendations_pydantic(result)
 
         # Add analysis to result
-        from app.services.load_test_models import LoadTestAnalysis
+        from app.services.load_test.worker.models import LoadTestAnalysis
 
         analysis = LoadTestAnalysis(
             test_type_info=test_info,

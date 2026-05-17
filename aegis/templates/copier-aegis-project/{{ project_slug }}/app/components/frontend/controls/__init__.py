@@ -11,6 +11,7 @@ from .form_fields import (
     FormSecretField,
     FormTextField,
 )
+from .method_badge import METHOD_COLORS, MethodBadge
 from .section_card import SectionCard
 from .service_card import ServiceCard
 from .severity_filter import SeverityFilter
@@ -69,6 +70,8 @@ __all__ = [
     "Tag",
     "StatusTag",
     "TechBadge",
+    "MethodBadge",
+    "METHOD_COLORS",
     # Card layout controls
     "SectionCard",
     "ServiceCard",

@@ -423,7 +423,12 @@ class TestAddCommand:
             "app/components/worker/queues/system.py",
             "app/components/worker/queues/load_test.py",
             "app/components/worker/tasks/system_tasks.py",
-            "app/services/load_test.py",
+            # ``load_test.py`` was promoted to a package after the
+            # api-load-test refactor; check the package entry + worker
+            # subpackage instead. ``load_test_models.py`` stays as a
+            # back-compat shim.
+            "app/services/load_test/__init__.py",
+            "app/services/load_test/worker/service.py",
             "app/services/load_test_models.py",
             "tests/api/test_worker_endpoints.py",
             "tests/services/test_worker_health_registration.py",

@@ -63,6 +63,11 @@ def format_timestamp(iso_str: str | None) -> str:
         return "\u2014"
 
 
+# ``format_relative_time`` was lifted to ``app.core.formatting`` so the
+# CLI's ``api-load-test recent`` table can share the same helper. Import
+# from there directly.
+
+
 class InfoCard(ft.Container):
     """Info card displaying a label and value with consistent card styling."""
 

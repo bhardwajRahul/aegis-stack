@@ -170,7 +170,10 @@ def get_component_file_mapping() -> dict[str, list[str]]:
             "app/cli/slash_commands.py",
             "app/cli/llm.py",
             "app/cli/status_line.py",
-            "app/core/formatting.py",
+            # ``app/core/formatting.py`` used to live here (AI-only token-
+            # cost helpers) but now also exports ``format_relative_time``
+            # consumed by the always-shipping API load test CLI + dashboard
+            # tab. Keep it on disk regardless of AI selection.
             "app/models/conversation.py",
             "tests/services/test_conversation_persistence.py",
             "tests/cli/test_ai_rendering.py",
