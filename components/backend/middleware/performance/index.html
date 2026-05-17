@@ -12,28 +12,28 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/components/observability/">
+        <link rel="canonical" href="https://lbedner.github.io/aegis-stack/components/backend/middleware/performance/">
       
       
-        <link rel="prev" href="../ingress/">
+        <link rel="prev" href="../">
       
       
-        <link rel="next" href="../../services/">
+        <link rel="next" href="../../lifecycle/">
       
       
-      <link rel="icon" href="../../images/aegis_stack_layered_shield.svg">
+      <link rel="icon" href="../../../../images/aegis_stack_layered_shield.svg">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.16">
     
     
       
-        <title>Observability - Aegis Stack</title>
+        <title>Performance - Aegis Stack</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.7e37652d.min.css">
+      <link rel="stylesheet" href="../../../../assets/stylesheets/main.7e37652d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+        <link rel="stylesheet" href="../../../../assets/stylesheets/palette.06af60db.min.css">
       
       
 
@@ -52,11 +52,11 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../../stylesheets/custom.css">
+      <link rel="stylesheet" href="../../../../stylesheets/custom.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -66,7 +66,7 @@
   <!-- Plausible Analytics -->
   <script defer data-domain="lbedner.github.io" src="https://plausible.io/js/script.js"></script>
 
-   <link href="../../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
+   <link href="../../../../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
     html.glightbox-open { overflow: initial; height: 100%; }
     .gslide-title { margin-top: 0px; user-select: text; }
     .gslide-desc { color: #666; user-select: text; }
@@ -75,7 +75,7 @@
     .gdesc-inner { font-size: 0.75rem; }
     body[data-md-color-scheme="slate"] .gdesc-inner { background: var(--md-default-bg-color);}
     body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color);}
-    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../../assets/javascripts/glightbox.min.js"></script></head>
+    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../../../../assets/javascripts/glightbox.min.js"></script></head>
   
   
     
@@ -94,7 +94,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#observability-component" class="md-skip">
+        <a href="#performance-middleware" class="md-skip">
           Skip to content
         </a>
       
@@ -108,9 +108,9 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href="../../../.." title="Aegis Stack" class="md-header__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
-  <img src="../../images/aegis_stack_layered_shield.svg" alt="logo">
+  <img src="../../../../images/aegis_stack_layered_shield.svg" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -127,7 +127,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Observability
+              Performance
             
           </span>
         </div>
@@ -242,7 +242,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../.." class="md-tabs__link">
+        <a href="../../../.." class="md-tabs__link">
           
   
   
@@ -262,7 +262,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../about/" class="md-tabs__link">
+        <a href="../../../../about/" class="md-tabs__link">
           
   
   
@@ -284,7 +284,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../" class="md-tabs__link">
+        <a href="../../../" class="md-tabs__link">
           
   
   
@@ -304,7 +304,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../services/" class="md-tabs__link">
+        <a href="../../../../services/" class="md-tabs__link">
           
   
   
@@ -324,7 +324,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../overseer/" class="md-tabs__link">
+        <a href="../../../../overseer/" class="md-tabs__link">
           
   
   
@@ -344,7 +344,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../deployment/" class="md-tabs__link">
+        <a href="../../../../deployment/" class="md-tabs__link">
           
   
   
@@ -364,7 +364,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../cli-reference/" class="md-tabs__link">
+        <a href="../../../../cli-reference/" class="md-tabs__link">
           
   
   
@@ -398,9 +398,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
+    <a href="../../../.." title="Aegis Stack" class="md-nav__button md-logo" aria-label="Aegis Stack" data-md-component="logo">
       
-  <img src="../../images/aegis_stack_layered_shield.svg" alt="logo">
+  <img src="../../../../images/aegis_stack_layered_shield.svg" alt="logo">
 
     </a>
     Aegis Stack
@@ -468,7 +468,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href="../../../.." class="md-nav__link">
         
   
   
@@ -491,7 +491,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../installation/" class="md-nav__link">
+      <a href="../../../../installation/" class="md-nav__link">
         
   
   
@@ -562,7 +562,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../about/" class="md-nav__link">
+      <a href="../../../../about/" class="md-nav__link">
         
   
   
@@ -585,7 +585,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../technology/" class="md-nav__link">
+      <a href="../../../../technology/" class="md-nav__link">
         
   
   
@@ -608,7 +608,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../process/" class="md-nav__link">
+      <a href="../../../../process/" class="md-nav__link">
         
   
   
@@ -684,6 +684,138 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Overview
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Backend
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            Backend
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting Started
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3_2_2" id="__nav_3_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Middleware
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            Middleware
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../" class="md-nav__link">
         
   
@@ -704,138 +836,32 @@
                 
   
   
+    
   
   
-    
-    
-    
-    
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
       
       
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
+        
       
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
-        
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
           
-          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
-            
   
   
   <span class="md-ellipsis">
-    Backend
+    Performance
     
   </span>
   
 
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_2">
-            <span class="md-nav__icon md-icon"></span>
-            Backend
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../backend/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Getting Started
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    
-    
-    
-    
+          <span class="md-nav__icon md-icon"></span>
+        </label>
       
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2_2" >
-        
-          
-          <label class="md-nav__link" for="__nav_3_2_2" id="__nav_3_2_2_label" tabindex="0">
-            
-  
-  
-  <span class="md-ellipsis">
-    Middleware
-    
-  </span>
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_3_2_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3_2_2">
-            <span class="md-nav__icon md-icon"></span>
-            Middleware
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../backend/middleware/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Overview
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../backend/middleware/performance/" class="md-nav__link">
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -846,6 +872,95 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-you-get" class="md-nav__link">
+    <span class="md-ellipsis">
+      What You Get
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-you-see-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      Where You See It
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Where You See It">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#performance-tab" class="md-nav__link">
+    <span class="md-ellipsis">
+      Performance Tab
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#metrics-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      Metrics API
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#caveats" class="md-nav__link">
+    <span class="md-ellipsis">
+      Caveats
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#percentiles-are-a-recent-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      Percentiles Are A Recent Window
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-reach-for-observability-instead" class="md-nav__link">
+    <span class="md-ellipsis">
+      When To Reach For Observability Instead
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -866,7 +981,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../backend/lifecycle/" class="md-nav__link">
+      <a href="../../lifecycle/" class="md-nav__link">
         
   
   
@@ -889,7 +1004,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../backend/routes/" class="md-nav__link">
+      <a href="../../routes/" class="md-nav__link">
         
   
   
@@ -912,7 +1027,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../backend/auth/" class="md-nav__link">
+      <a href="../../auth/" class="md-nav__link">
         
   
   
@@ -943,7 +1058,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../database/" class="md-nav__link">
+      <a href="../../../database/" class="md-nav__link">
         
   
   
@@ -1007,7 +1122,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../frontend/" class="md-nav__link">
+      <a href="../../../frontend/" class="md-nav__link">
         
   
   
@@ -1030,7 +1145,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../frontend/architecture/" class="md-nav__link">
+      <a href="../../../frontend/architecture/" class="md-nav__link">
         
   
   
@@ -1053,7 +1168,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../frontend/routing/" class="md-nav__link">
+      <a href="../../../frontend/routing/" class="md-nav__link">
         
   
   
@@ -1076,7 +1191,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../frontend/state/" class="md-nav__link">
+      <a href="../../../frontend/state/" class="md-nav__link">
         
   
   
@@ -1099,7 +1214,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../frontend/api-client/" class="md-nav__link">
+      <a href="../../../frontend/api-client/" class="md-nav__link">
         
   
   
@@ -1122,7 +1237,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../frontend/events/" class="md-nav__link">
+      <a href="../../../frontend/events/" class="md-nav__link">
         
   
   
@@ -1145,7 +1260,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../frontend/example/" class="md-nav__link">
+      <a href="../../../frontend/example/" class="md-nav__link">
         
   
   
@@ -1217,7 +1332,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../scheduler/" class="md-nav__link">
+      <a href="../../../scheduler/" class="md-nav__link">
         
   
   
@@ -1240,7 +1355,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../scheduler/examples/" class="md-nav__link">
+      <a href="../../../scheduler/examples/" class="md-nav__link">
         
   
   
@@ -1263,7 +1378,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../scheduler/cli/" class="md-nav__link">
+      <a href="../../../scheduler/cli/" class="md-nav__link">
         
   
   
@@ -1327,7 +1442,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../scheduler/extras/persistence/" class="md-nav__link">
+      <a href="../../../scheduler/extras/persistence/" class="md-nav__link">
         
   
   
@@ -1407,7 +1522,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../worker/" class="md-nav__link">
+      <a href="../../../worker/" class="md-nav__link">
         
   
   
@@ -1430,7 +1545,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../worker/configuration/" class="md-nav__link">
+      <a href="../../../worker/configuration/" class="md-nav__link">
         
   
   
@@ -1453,7 +1568,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../worker/examples/" class="md-nav__link">
+      <a href="../../../worker/examples/" class="md-nav__link">
         
   
   
@@ -1517,7 +1632,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../worker/extras/load-testing/" class="md-nav__link">
+      <a href="../../../worker/extras/load-testing/" class="md-nav__link">
         
   
   
@@ -1556,7 +1671,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../ingress/" class="md-nav__link">
+      <a href="../../../ingress/" class="md-nav__link">
         
   
   
@@ -1576,32 +1691,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    Observability
-    
-  </span>
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../../observability/" class="md-nav__link">
         
   
   
@@ -1612,146 +1705,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#what-observability-adds" class="md-nav__link">
-    <span class="md-ellipsis">
-      What Observability Adds
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#generated-files" class="md-nav__link">
-    <span class="md-ellipsis">
-      Generated Files
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#how-it-works" class="md-nav__link">
-    <span class="md-ellipsis">
-      How It Works
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#environment-variables" class="md-nav__link">
-    <span class="md-ellipsis">
-      Environment Variables
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#component-integrations" class="md-nav__link">
-    <span class="md-ellipsis">
-      Component Integrations
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#overseer-integration" class="md-nav__link">
-    <span class="md-ellipsis">
-      Overseer Integration
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Overseer Integration">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#dashboard-card" class="md-nav__link">
-    <span class="md-ellipsis">
-      Dashboard Card
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#detail-modal" class="md-nav__link">
-    <span class="md-ellipsis">
-      Detail Modal
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#health-check" class="md-nav__link">
-    <span class="md-ellipsis">
-      Health Check
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#memory-footprint-on-constrained-hosts" class="md-nav__link">
-    <span class="md-ellipsis">
-      Memory Footprint on Constrained Hosts
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Memory Footprint on Constrained Hosts">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#swap-on-small-droplets" class="md-nav__link">
-    <span class="md-ellipsis">
-      Swap on small droplets
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
-    <span class="md-ellipsis">
-      Next Steps
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1812,7 +1765,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/" class="md-nav__link">
+      <a href="../../../../services/" class="md-nav__link">
         
   
   
@@ -1876,7 +1829,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/" class="md-nav__link">
+      <a href="../../../../services/ai/" class="md-nav__link">
         
   
   
@@ -1899,7 +1852,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/illiana/" class="md-nav__link">
+      <a href="../../../../services/ai/illiana/" class="md-nav__link">
         
   
   
@@ -1922,7 +1875,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/llm-catalog/" class="md-nav__link">
+      <a href="../../../../services/ai/llm-catalog/" class="md-nav__link">
         
   
   
@@ -1945,7 +1898,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/rag/" class="md-nav__link">
+      <a href="../../../../services/ai/rag/" class="md-nav__link">
         
   
   
@@ -1968,7 +1921,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/cost-tracking/" class="md-nav__link">
+      <a href="../../../../services/ai/cost-tracking/" class="md-nav__link">
         
   
   
@@ -1991,7 +1944,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/voice/" class="md-nav__link">
+      <a href="../../../../services/ai/voice/" class="md-nav__link">
         
   
   
@@ -2014,7 +1967,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/engines/" class="md-nav__link">
+      <a href="../../../../services/ai/engines/" class="md-nav__link">
         
   
   
@@ -2037,7 +1990,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/providers/" class="md-nav__link">
+      <a href="../../../../services/ai/providers/" class="md-nav__link">
         
   
   
@@ -2060,7 +2013,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/api/" class="md-nav__link">
+      <a href="../../../../services/ai/api/" class="md-nav__link">
         
   
   
@@ -2083,7 +2036,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/integration/" class="md-nav__link">
+      <a href="../../../../services/ai/integration/" class="md-nav__link">
         
   
   
@@ -2106,7 +2059,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/cli/" class="md-nav__link">
+      <a href="../../../../services/ai/cli/" class="md-nav__link">
         
   
   
@@ -2129,7 +2082,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/ai/examples/" class="md-nav__link">
+      <a href="../../../../services/ai/examples/" class="md-nav__link">
         
   
   
@@ -2201,7 +2154,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/" class="md-nav__link">
+      <a href="../../../../services/auth/" class="md-nav__link">
         
   
   
@@ -2224,7 +2177,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/levels/" class="md-nav__link">
+      <a href="../../../../services/auth/levels/" class="md-nav__link">
         
   
   
@@ -2247,7 +2200,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/api/" class="md-nav__link">
+      <a href="../../../../services/auth/api/" class="md-nav__link">
         
   
   
@@ -2270,7 +2223,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/integration/" class="md-nav__link">
+      <a href="../../../../services/auth/integration/" class="md-nav__link">
         
   
   
@@ -2293,7 +2246,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/cli/" class="md-nav__link">
+      <a href="../../../../services/auth/cli/" class="md-nav__link">
         
   
   
@@ -2316,7 +2269,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/auth/examples/" class="md-nav__link">
+      <a href="../../../../services/auth/examples/" class="md-nav__link">
         
   
   
@@ -2388,7 +2341,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/blog/" class="md-nav__link">
+      <a href="../../../../services/blog/" class="md-nav__link">
         
   
   
@@ -2411,7 +2364,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/blog/api/" class="md-nav__link">
+      <a href="../../../../services/blog/api/" class="md-nav__link">
         
   
   
@@ -2434,7 +2387,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/blog/dashboard/" class="md-nav__link">
+      <a href="../../../../services/blog/dashboard/" class="md-nav__link">
         
   
   
@@ -2457,7 +2410,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/blog/cli/" class="md-nav__link">
+      <a href="../../../../services/blog/cli/" class="md-nav__link">
         
   
   
@@ -2480,7 +2433,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/blog/examples/" class="md-nav__link">
+      <a href="../../../../services/blog/examples/" class="md-nav__link">
         
   
   
@@ -2552,7 +2505,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/comms/" class="md-nav__link">
+      <a href="../../../../services/comms/" class="md-nav__link">
         
   
   
@@ -2575,7 +2528,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/comms/setup/" class="md-nav__link">
+      <a href="../../../../services/comms/setup/" class="md-nav__link">
         
   
   
@@ -2598,7 +2551,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/comms/api/" class="md-nav__link">
+      <a href="../../../../services/comms/api/" class="md-nav__link">
         
   
   
@@ -2621,7 +2574,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/comms/cli/" class="md-nav__link">
+      <a href="../../../../services/comms/cli/" class="md-nav__link">
         
   
   
@@ -2693,7 +2646,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/" class="md-nav__link">
+      <a href="../../../../services/insights/" class="md-nav__link">
         
   
   
@@ -2716,7 +2669,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/data-sources/" class="md-nav__link">
+      <a href="../../../../services/insights/data-sources/" class="md-nav__link">
         
   
   
@@ -2739,7 +2692,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/cli/" class="md-nav__link">
+      <a href="../../../../services/insights/cli/" class="md-nav__link">
         
   
   
@@ -2762,7 +2715,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/dashboard/" class="md-nav__link">
+      <a href="../../../../services/insights/dashboard/" class="md-nav__link">
         
   
   
@@ -2785,7 +2738,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/configuration/" class="md-nav__link">
+      <a href="../../../../services/insights/configuration/" class="md-nav__link">
         
   
   
@@ -2808,7 +2761,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/insights/examples/" class="md-nav__link">
+      <a href="../../../../services/insights/examples/" class="md-nav__link">
         
   
   
@@ -2880,7 +2833,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/" class="md-nav__link">
+      <a href="../../../../services/payment/" class="md-nav__link">
         
   
   
@@ -2903,7 +2856,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/setup/" class="md-nav__link">
+      <a href="../../../../services/payment/setup/" class="md-nav__link">
         
   
   
@@ -2926,7 +2879,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/dashboard/" class="md-nav__link">
+      <a href="../../../../services/payment/dashboard/" class="md-nav__link">
         
   
   
@@ -2949,7 +2902,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/api/" class="md-nav__link">
+      <a href="../../../../services/payment/api/" class="md-nav__link">
         
   
   
@@ -2972,7 +2925,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/cli/" class="md-nav__link">
+      <a href="../../../../services/payment/cli/" class="md-nav__link">
         
   
   
@@ -2995,7 +2948,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../services/payment/examples/" class="md-nav__link">
+      <a href="../../../../services/payment/examples/" class="md-nav__link">
         
   
   
@@ -3074,7 +3027,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../overseer/" class="md-nav__link">
+      <a href="../../../../overseer/" class="md-nav__link">
         
   
   
@@ -3097,7 +3050,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../overseer/story/" class="md-nav__link">
+      <a href="../../../../overseer/story/" class="md-nav__link">
         
   
   
@@ -3120,7 +3073,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../overseer/integration/" class="md-nav__link">
+      <a href="../../../../overseer/integration/" class="md-nav__link">
         
   
   
@@ -3191,7 +3144,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../deployment/" class="md-nav__link">
+      <a href="../../../../deployment/" class="md-nav__link">
         
   
   
@@ -3262,7 +3215,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli-reference/" class="md-nav__link">
+      <a href="../../../../cli-reference/" class="md-nav__link">
         
   
   
@@ -3285,7 +3238,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../evolving-your-stack/" class="md-nav__link">
+      <a href="../../../../evolving-your-stack/" class="md-nav__link">
         
   
   
@@ -3308,7 +3261,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../integration-patterns/" class="md-nav__link">
+      <a href="../../../../integration-patterns/" class="md-nav__link">
         
   
   
@@ -3358,82 +3311,37 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-observability-adds" class="md-nav__link">
+  <a href="#what-you-get" class="md-nav__link">
     <span class="md-ellipsis">
-      What Observability Adds
+      What You Get
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#generated-files" class="md-nav__link">
+  <a href="#where-you-see-it" class="md-nav__link">
     <span class="md-ellipsis">
-      Generated Files
+      Where You See It
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#how-it-works" class="md-nav__link">
-    <span class="md-ellipsis">
-      How It Works
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#environment-variables" class="md-nav__link">
-    <span class="md-ellipsis">
-      Environment Variables
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#component-integrations" class="md-nav__link">
-    <span class="md-ellipsis">
-      Component Integrations
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#overseer-integration" class="md-nav__link">
-    <span class="md-ellipsis">
-      Overseer Integration
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Overseer Integration">
+    <nav class="md-nav" aria-label="Where You See It">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#dashboard-card" class="md-nav__link">
+  <a href="#performance-tab" class="md-nav__link">
     <span class="md-ellipsis">
-      Dashboard Card
+      Performance Tab
     </span>
   </a>
   
 </li>
         
           <li class="md-nav__item">
-  <a href="#detail-modal" class="md-nav__link">
+  <a href="#metrics-api" class="md-nav__link">
     <span class="md-ellipsis">
-      Detail Modal
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#health-check" class="md-nav__link">
-    <span class="md-ellipsis">
-      Health Check
+      Metrics API
     </span>
   </a>
   
@@ -3445,33 +3353,27 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#memory-footprint-on-constrained-hosts" class="md-nav__link">
+  <a href="#caveats" class="md-nav__link">
     <span class="md-ellipsis">
-      Memory Footprint on Constrained Hosts
+      Caveats
     </span>
   </a>
-  
-    <nav class="md-nav" aria-label="Memory Footprint on Constrained Hosts">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#swap-on-small-droplets" class="md-nav__link">
-    <span class="md-ellipsis">
-      Swap on small droplets
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#next-steps" class="md-nav__link">
+  <a href="#percentiles-are-a-recent-window" class="md-nav__link">
     <span class="md-ellipsis">
-      Next Steps
+      Percentiles Are A Recent Window
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-reach-for-observability-instead" class="md-nav__link">
+    <span class="md-ellipsis">
+      When To Reach For Observability Instead
     </span>
   </a>
   
@@ -3497,205 +3399,97 @@
   
 
 
-<h1 id="observability-component">Observability Component</h1>
-<div class="admonition example">
-<p class="admonition-title">Musings: On Observability in Overseer (March 21st, 2026)</p>
-<p>This is a weird one. I don't see this as a true replacement for the Logfire UI, but they do give enough useful info to warrant a spot in Overseer. I just have to find the balance.</p>
-</div>
-<p><a class="glightbox" href="../../images/observability_exceptions.png" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img src="../../images/observability_exceptions.png" alt="Observability - Exception tracking with full stack traces"></a></p>
-<p>Distributed tracing, metrics, and log correlation with <a href="https://logfire.pydantic.dev/">Pydantic Logfire</a>. Auto-instruments your application and adapts to whichever components you have enabled.</p>
-<div class="admonition info">
-<p class="admonition-title">Adding Observability to Your Project</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-project<span class="w"> </span>--components<span class="w"> </span>observability
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>observability<span class="w">    </span><span class="c1"># for existing projects</span>
-</span></code></pre></div>
-</div>
-<h2 id="what-observability-adds">What Observability Adds</h2>
-<p>When you include the observability component, your project gets:</p>
+<h1 id="performance-middleware">Performance Middleware</h1>
+<p>Every Aegis project ships with built-in request timing. You don't have
+to enable it, configure it, or stand anything up. Open the Server
+card on the dashboard, click the Performance tab, and you see live
+per-endpoint stats for your running backend.</p>
+<p>It is meant for <strong>live debugging of the current process</strong>. There is
+no database, no Redis, no external collector. Stats live in the
+process and reset when the backend restarts. For durable,
+cross-process telemetry, add the
+<a href="../../../observability/">observability component</a> (Logfire, OTEL);
+this is the always-on view that does not need it.</p>
+<h2 id="what-you-get">What You Get</h2>
+<p>Every HTTP request is timed and bucketed by its route pattern
+(<code>/users/{id}</code>, not <code>/users/123</code>), so many real requests collapse
+into one row. For each endpoint you see:</p>
 <ul>
-<li><strong>Pydantic Logfire integration</strong> with automatic configuration</li>
-<li><strong>FastAPI instrumentation</strong>: traces every request (health/dashboard endpoints excluded)</li>
-<li><strong>HTTPX instrumentation</strong>: traces outbound HTTP calls</li>
-<li><strong>SQLAlchemy instrumentation</strong>: auto-enabled when the database component is present</li>
-<li><strong>Redis instrumentation</strong>: auto-enabled when the redis component is present</li>
-<li><strong>Health check integration</strong> with the Overseer dashboard, including Logfire Query API analytics</li>
-<li><strong>Dashboard card + detail modal</strong> with trace metrics, slowest spans, and exception tracking</li>
-<li><strong>Graceful degradation</strong>: works without a cloud token (local instrumentation only)</li>
+<li>Request count</li>
+<li>Average, min, max response time</li>
+<li>Median, p95, p99 response time</li>
+<li>Time of the most recent request</li>
 </ul>
-<h2 id="generated-files">Generated Files</h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>my-project/
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>├── app/
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│   └── components/
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>│       ├── backend/
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>│       │   └── middleware/
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>│       │       └── logfire_tracing.py    # Auto-discovered Logfire middleware
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>│       └── frontend/
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>│           └── dashboard/
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>│               ├── cards/
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>│               │   └── observability_card.py   # Overseer dashboard card
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>│               └── modals/
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>│                   └── observability_modal.py  # Detail modal with tabs
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>└── .env.example                          # Updated with Logfire variables
-</span></code></pre></div>
-<h2 id="how-it-works">How It Works</h2>
-<pre class="mermaid"><code>graph TB
-    subgraph "Application Startup"
-        Hooks["Backend Hooks&lt;br/&gt;Auto-discovery"]
-        MW["logfire_tracing.py&lt;br/&gt;register_middleware"]
-    end
-
-    subgraph "Instrumentation"
-        FA["FastAPI&lt;br/&gt;Request tracing"]
-        HX["HTTPX&lt;br/&gt;Outbound HTTP"]
-        SA["SQLAlchemy&lt;br/&gt;Database queries"]
-        RD["Redis&lt;br/&gt;Cache operations"]
-    end
-
-    subgraph "Logfire Cloud"
-        Cloud["Logfire Dashboard&lt;br/&gt;Traces + Metrics"]
-        QA["Query API&lt;br/&gt;Analytics"]
-    end
-
-    subgraph "Overseer Dashboard"
-        Card["Observability Card&lt;br/&gt;Status + Metrics"]
-        Modal["Detail Modal&lt;br/&gt;Spans + Exceptions"]
-    end
-
-    Hooks --&gt;|discovers| MW
-    MW --&gt; FA
-    MW --&gt; HX
-    MW -.-&gt;|if database| SA
-    MW -.-&gt;|if redis| RD
-
-    FA --&gt;|LOGFIRE_TOKEN| Cloud
-    HX --&gt;|LOGFIRE_TOKEN| Cloud
-    SA --&gt;|LOGFIRE_TOKEN| Cloud
-    RD --&gt;|LOGFIRE_TOKEN| Cloud
-
-    QA --&gt;|LOGFIRE_READ_TOKEN| Card
-    QA --&gt;|LOGFIRE_READ_TOKEN| Modal</code></pre>
-<p>The middleware is auto-discovered by the backend hook system, no manual registration needed. On startup it configures Logfire with your project name and environment, then instruments each available integration.</p>
-<p>When <code>LOGFIRE_TOKEN</code> is set, traces are sent to Logfire cloud. Without a token, instrumentation still runs locally (useful for development and structured logging).</p>
-<h2 id="environment-variables">Environment Variables</h2>
+<p>Plus a cross-endpoint roll-up: total requests, slowest endpoint,
+global average and p95.</p>
+<p>Every response also carries an <code>X-Response-Time</code> header in
+milliseconds, so the same data is available to clients without
+opening the dashboard.</p>
+<h2 id="where-you-see-it">Where You See It</h2>
+<h3 id="performance-tab">Performance Tab</h3>
+<p>Dashboard, Server card, Performance tab. The tab fetches the latest
+numbers on every open and renders an expandable table sorted by
+call count. Click a row to see the full distribution.</p>
+<p><a class="glightbox" href="../../../../images/backend_dashboard_performance.png" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img src="../../../../images/backend_dashboard_performance.png" alt="Overseer Backend modal — Performance tab showing total request, tracked endpoints, average and p95, slowest endpoint, and the expandable per-endpoint table"></a></p>
+<p>A fresh process with no traffic yet shows an empty-state message
+rather than a zero-row table.</p>
+<h3 id="metrics-api">Metrics API</h3>
 <table>
 <thead>
 <tr>
-<th>Variable</th>
-<th>Default</th>
-<th>Description</th>
+<th>Endpoint</th>
+<th>Returns</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>LOGFIRE_TOKEN</code></td>
-<td>-</td>
-<td>Enables sending traces to Logfire cloud</td>
+<td><code>GET /api/v1/metrics/summary</code></td>
+<td>Cross-endpoint roll-up</td>
 </tr>
 <tr>
-<td><code>LOGFIRE_READ_TOKEN</code></td>
-<td>-</td>
-<td>Enables Query API analytics in the Overseer dashboard</td>
-</tr>
-<tr>
-<td><code>LOGFIRE_PROJECT_URL</code></td>
-<td>-</td>
-<td>Link to your Logfire project dashboard</td>
+<td><code>GET /api/v1/metrics/endpoints</code></td>
+<td>Per-endpoint detail, keyed by <code>"&lt;METHOD&gt; &lt;pattern&gt;"</code></td>
 </tr>
 </tbody>
 </table>
-<p>Set these in your <code>.env</code> file:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Observability (Logfire)</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">LOGFIRE_TOKEN</span><span class="o">=</span>your-write-token
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nv">LOGFIRE_READ_TOKEN</span><span class="o">=</span>your-read-token
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="nv">LOGFIRE_PROJECT_URL</span><span class="o">=</span>https://logfire.pydantic.dev/myorg/myproject
-</span></code></pre></div>
-<h2 id="component-integrations">Component Integrations</h2>
-<p>Observability automatically adapts its instrumentation based on which components are enabled in your project:</p>
-<table>
-<thead>
-<tr>
-<th>Component</th>
-<th>Integration</th>
-<th>What Gets Traced</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Backend</strong> (always)</td>
-<td><code>logfire.instrument_fastapi()</code></td>
-<td>All HTTP requests (excludes <code>/health/*</code> and <code>/dashboard/*</code>)</td>
-</tr>
-<tr>
-<td><strong>HTTPX</strong> (always)</td>
-<td><code>logfire.instrument_httpx()</code></td>
-<td>All outbound HTTP calls</td>
-</tr>
-<tr>
-<td><strong>Database</strong></td>
-<td><code>logfire.instrument_sqlalchemy()</code></td>
-<td>SQL queries via the shared engine</td>
-</tr>
-<tr>
-<td><strong>Redis</strong></td>
-<td><code>logfire.instrument_redis()</code></td>
-<td>Redis commands and pub/sub</td>
-</tr>
-</tbody>
-</table>
-<p>This is handled at template generation time, the <code>logfire[fastapi,httpx]</code> dependency automatically includes extras like <code>sqlalchemy</code> and <code>redis</code> when those components are present.</p>
-<h2 id="overseer-integration">Overseer Integration</h2>
-<p>The observability component integrates with the Overseer dashboard through a status card and a detail modal.</p>
-<h3 id="dashboard-card">Dashboard Card</h3>
-<p>The card displays real-time Logfire status:</p>
-<ul>
-<li><strong>With Query API</strong> (<code>LOGFIRE_READ_TOKEN</code> set): Shows trace count, exception count, average latency, and max latency for the last hour</li>
-<li><strong>Without Query API</strong>: Shows cloud connection status with a hint to add the read token</li>
-</ul>
-<h3 id="detail-modal">Detail Modal</h3>
-<p>Clicking the card opens a detail modal with four tabs:</p>
-<p><strong>Overview</strong>, Key metrics (traces, spans, exceptions, latency) plus a bar chart of the slowest spans:</p>
-<p><a class="glightbox" href="../../images/observability_overview.png" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img src="../../images/observability_overview.png" alt="Observability Overview Tab"></a></p>
-<p><strong>Slowest Spans</strong>, Full table with avg, p95, and max latency per span type, with error counts highlighted in red:</p>
-<p><a class="glightbox" href="../../images/observability_slowest_spans.png" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img src="../../images/observability_slowest_spans.png" alt="Observability Slowest Spans Tab"></a></p>
-<p><strong>Exceptions</strong>, Expandable table of exceptions from the last 24 hours, grouped by type. Click to expand and see the full stack trace.</p>
-<p><strong>Config</strong>, Service name, cloud status, Query API availability, and project URL link</p>
-<h3 id="health-check">Health Check</h3>
-<p>The health check queries the Logfire Query API (when <code>LOGFIRE_READ_TOKEN</code> is set) and reports:</p>
-<ul>
-<li>Total spans and traces (last hour)</li>
-<li>Exception count</li>
-<li>Average and max latency</li>
-<li>Top 20 slowest spans</li>
-<li>Recent exceptions (last 24 hours)</li>
-</ul>
-<p>Results are cached for 2 minutes with a 5-minute backoff on failure to respect rate limits.</p>
-<h2 id="memory-footprint-on-constrained-hosts">Memory Footprint on Constrained Hosts</h2>
-<p>The OpenTelemetry SDK that Logfire builds on is heavy: even with <code>send_to_logfire=False</code>, loading the SDK and its in-memory span batcher adds ~150-300 MiB of fixed overhead. On a 512 MiB container that is the difference between healthy and OOM-flapping.</p>
-<p>Two safeguards ship in the template:</p>
-<ol>
-<li>
-<p><strong>No-token short-circuit.</strong> When <code>LOGFIRE_TOKEN</code> is empty, the middleware skips <code>logfire.configure()</code> and every <code>instrument_*()</code> call. The OTEL SDK is never loaded. You see this in the logs as <code>Logfire: token not set, instrumentation disabled</code>.</p>
-</li>
-<li>
-<p><strong>Bounded span buffer when the token is set.</strong> The <code>BatchSpanProcessor</code> defaults (2048-span queue, no export timeout) leak when the Logfire endpoint is slow or unreachable, failed batches accumulate in RAM until OOM. The template caps them via four <code>OTEL_BSP_*</code> settings pushed into <code>os.environ</code> before <code>logfire.configure()</code> runs. Override via <code>.env</code> if you have headroom:</p>
-</li>
-</ol>
-<div class="language-ini highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># OTEL_BSP_MAX_QUEUE_SIZE=1024</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># OTEL_BSP_MAX_EXPORT_BATCH_SIZE=256</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># OTEL_BSP_EXPORT_TIMEOUT=10000</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># OTEL_BSP_SCHEDULE_DELAY=5000</span>
-</span></code></pre></div>
-<h3 id="swap-on-small-droplets">Swap on small droplets</h3>
-<p>For hosts with 4 GB RAM or less, add a 1 GB swap file as a safety net so a brief memory spike does not OOM-kill the webserver before the cgroup limit kicks in:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>fallocate<span class="w"> </span>-l<span class="w"> </span>1G<span class="w"> </span>/swapfile<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>chmod<span class="w"> </span><span class="m">600</span><span class="w"> </span>/swapfile<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>mkswap<span class="w"> </span>/swapfile<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>swapon<span class="w"> </span>/swapfile
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">&#39;/swapfile none swap sw 0 0&#39;</span><span class="w"> </span>&gt;&gt;<span class="w"> </span>/etc/fstab
-</span></code></pre></div>
-<h2 id="next-steps">Next Steps</h2>
-<ul>
-<li><strong><a href="../">Component Overview</a></strong>, Understanding Aegis Stack's component architecture</li>
-<li><strong><a href="../../integration-patterns/">Integration Patterns</a></strong>, How components work together</li>
-<li><strong><a href="https://logfire.pydantic.dev/">Pydantic Logfire Documentation</a></strong>, Complete Logfire reference</li>
-</ul>
+<p>Both are auth-gated when the auth service is included, and open
+otherwise.</p>
+<h2 id="caveats">Caveats</h2>
+<div class="admonition warning">
+<p class="admonition-title">One counter per worker</p>
+<p>Under multiple worker processes (gunicorn <code>-w 4</code>,
+uvicorn <code>--workers 4</code>), each worker keeps its own independent
+counter. The modal shows whichever worker happened to handle
+your request, and successive opens can disagree. For aggregated
+cross-worker telemetry, route through the observability
+component instead.</p>
+</div>
+<div class="admonition warning">
+<p class="admonition-title">Resets on restart</p>
+<p>No persistence. Restart the backend and every count drops to
+zero. This is intentional: the goal is "what's slow right now,"
+not historical trend analysis. If you want history, use
+observability.</p>
+</div>
+<h2 id="percentiles-are-a-recent-window">Percentiles Are A Recent Window</h2>
+<p>Counts, averages, min, and max are all-time over the current
+process. <strong>Percentiles (median, p95, p99) are computed over the most
+recent 100 samples per endpoint</strong>, which keeps the math cheap and
+the memory bounded. The trade-off: percentiles track recent
+behavior rather than the whole lifetime, so a deploy that slowed
+down an hour ago stops showing in p95 once 100 newer requests have
+landed.</p>
+<p>This is usually what you want when you're looking at "is the app
+slow <em>right now</em>."</p>
+<h2 id="when-to-reach-for-observability-instead">When To Reach For Observability Instead</h2>
+<p>This middleware is great at: live debugging, cheap percentiles per
+endpoint, sanity-checking a deploy, finding the obviously slow
+route. It is not a replacement for proper observability, and is bad
+at: anything that needs history, anything that needs to aggregate
+across worker processes, anything that needs alerting, anything
+involving traces or downstream calls.</p>
+<p>Add observability when you outgrow the in-process view. The two
+coexist; you don't have to pick.</p>
 
 
 
@@ -3767,16 +3561,16 @@
     
     
       
-      <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": "../../../..", "features": ["navigation.tabs", "navigation.top", "search.highlight", "search.suggest", "content.code.copy", "content.code.annotate"], "search": "../../../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.50899def.min.js"></script>
+      <script src="../../../../assets/javascripts/bundle.50899def.min.js"></script>
       
         <script src="https://unpkg.com/mermaid@10.4.0/dist/mermaid.min.js"></script>
       
-        <script src="../../javascripts/mermaid-config.js"></script>
+        <script src="../../../../javascripts/mermaid-config.js"></script>
       
-        <script src="../../javascripts/feedback.js"></script>
+        <script src="../../../../javascripts/feedback.js"></script>
       
     
   <script id="init-glightbox">const lightbox = GLightbox({"touchNavigation": true, "loop": false, "zoomable": true, "draggable": true, "openEffect": "zoom", "closeEffect": "zoom", "slideEffect": "slide"});
