@@ -14,8 +14,9 @@ import pytest
 
 from .test_utils import CLITestResult, run_project_command
 
-# Mark all tests in this module as slow
-pytestmark = pytest.mark.slow
+# Mark all tests in this module as slow; keep them on a single xdist worker so
+# they share the session-scoped generated_db_project fixture (one uv sync, not N).
+pytestmark = [pytest.mark.slow, pytest.mark.xdist_group("db-runtime")]
 
 
 def _run_db_test(

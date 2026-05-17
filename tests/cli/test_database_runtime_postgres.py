@@ -20,8 +20,14 @@ from .test_utils import CLITestResult, run_project_command
 # PostgreSQL test configuration (password can be overridden via environment)
 POSTGRES_TEST_PASSWORD = os.environ.get("POSTGRES_TEST_PASSWORD", "postgres")
 
-# Mark all tests in this module as postgres and slow
-pytestmark = [pytest.mark.postgres, pytest.mark.slow]
+# Mark all tests in this module as postgres and slow; pin to one xdist worker
+# so all tests share the single hardcoded test database without racing on
+# DROP/CREATE DATABASE.
+pytestmark = [
+    pytest.mark.postgres,
+    pytest.mark.slow,
+    pytest.mark.xdist_group("db-runtime-postgres"),
+]
 
 
 def _postgres_available() -> bool:

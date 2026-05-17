@@ -33,6 +33,8 @@ from .test_utils import (
     validate_pyproject_dependencies,
 )
 
+pytestmark = pytest.mark.xdist_group("generated_stacks")
+
 
 class StackCombination:
     """Represents a stack component combination for testing."""

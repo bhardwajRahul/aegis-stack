@@ -65,7 +65,7 @@ jobs:
       run: uv sync --all-extras
     
     - name: Run tests
-      run: uv run pytest -v -m "not slow"
+      run: uv run pytest -n auto --dist=loadgroup -v -m "not slow"
 
   test-uvx:
     runs-on: ubuntu-latest

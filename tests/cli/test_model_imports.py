@@ -17,6 +17,8 @@ import pytest
 
 from .test_stack_generation import STACK_COMBINATIONS, StackCombination
 
+pytestmark = pytest.mark.xdist_group("generated_stacks")
+
 
 def _get_expected_models_for_combination(combination: StackCombination) -> list[str]:
     """Get expected model classes for a given component combination."""

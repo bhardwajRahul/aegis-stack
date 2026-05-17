@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from filelock import FileLock
 
 from aegis.core.copier_manager import generate_with_copier
 from aegis.core.template_generator import TemplateGenerator
@@ -111,29 +112,63 @@ def project_template_cache(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Callable[[ProjectTemplateSpec], Path]:
     """
-    Generate reusable project skeletons once per test session.
+    Generate reusable project skeletons once per test session, shared across xdist workers.
 
-    Returns:
-        Callable that returns the cached project path for a given spec.
+    Cache root selection:
+      - Under xdist, ``tmp_path_factory.getbasetemp()`` is per-worker
+        (``.../pytest-N/popen-gw0``), so we climb to its parent
+        (``.../pytest-N``) which is per-session and shared across workers.
+        Result: 16 workers, 1 cache build per spec instead of 16.
+      - Without xdist, ``getbasetemp()`` is already per-session and not
+        shared with anyone, so we use it directly. We DO NOT use
+        ``getbasetemp().parent`` outside xdist — that's
+        ``/tmp/pytest-of-<user>/``, persisted across runs and branch
+        checkouts, which would serve stale projects after template edits.
+
+    Atomic generation: write to a sibling temp dir, then rename onto the
+    final target only on success. A partial directory after a crash will
+    never be mistaken for a valid cache entry.
     """
-    cache_root = tmp_path_factory.mktemp("aegis-project-cache")
-    cache: dict[ProjectTemplateSpec, Path] = {}
-
-    def build_project(spec: ProjectTemplateSpec) -> Path:
-        spec_hash = hashlib.sha1(repr(spec).encode("utf-8")).hexdigest()[:10]
-        project_name = f"cached-{spec_hash}"
-        template_gen = TemplateGenerator(
-            project_name=project_name,
-            selected_components=list(spec.components),
-            scheduler_backend=spec.scheduler_backend,
-            selected_services=list(spec.services),
-        )
-        return generate_with_copier(template_gen, cache_root, dev_mode=True)
+    if os.environ.get("PYTEST_XDIST_WORKER"):
+        shared_root = tmp_path_factory.getbasetemp().parent / "aegis-shared-cache"
+    else:
+        shared_root = tmp_path_factory.getbasetemp() / "aegis-shared-cache"
+    shared_root.mkdir(exist_ok=True)
+    in_memory: dict[ProjectTemplateSpec, Path] = {}
 
     def get_project(spec: ProjectTemplateSpec) -> Path:
-        if spec not in cache:
-            cache[spec] = build_project(spec)
-        return cache[spec]
+        if spec in in_memory:
+            return in_memory[spec]
+        spec_hash = hashlib.sha1(repr(spec).encode("utf-8")).hexdigest()[:10]
+        project_name = f"cached-{spec_hash}"
+        target = shared_root / project_name
+        # Lock per-spec so concurrent workers don't both build the same project;
+        # workers wanting different specs proceed in parallel.
+        with FileLock(str(shared_root / f"{project_name}.lock")):
+            if not target.exists():
+                staging_parent = Path(
+                    tempfile.mkdtemp(prefix=f"{project_name}.staging-", dir=shared_root)
+                )
+                try:
+                    template_gen = TemplateGenerator(
+                        project_name=project_name,
+                        selected_components=list(spec.components),
+                        scheduler_backend=spec.scheduler_backend,
+                        selected_services=list(spec.services),
+                    )
+                    generate_with_copier(template_gen, staging_parent, dev_mode=True)
+                    staged = staging_parent / project_name
+                    if not staged.exists():
+                        raise FileNotFoundError(
+                            f"Generated project not found at expected staging path: {staged}"
+                        )
+                    # Atomic publish: rename only succeeds whole or not at all,
+                    # so a partial project is never visible to other workers.
+                    staged.rename(target)
+                finally:
+                    shutil.rmtree(staging_parent, ignore_errors=True)
+        in_memory[spec] = target
+        return target
 
     return get_project
 
@@ -185,7 +220,12 @@ def generated_stacks(
     """
     Generate all stack combinations once per test session.
 
-    This dramatically reduces test time by avoiding duplicate stack generation.
+    Runs serially — ``run_aegis_init`` invokes the aegis CLI in-process via
+    Typer's ``CliRunner``, so it shares module state, cwd, and copier caches.
+    A ThreadPoolExecutor here races on all of those. Parallelizing this lane
+    would require a ProcessPoolExecutor (with subprocess isolation) or a
+    refactor of ``run_aegis_init`` to shell out — both bigger changes.
+
     Returns a dict mapping stack names to (combination, result) tuples.
     """
     stacks = {}
