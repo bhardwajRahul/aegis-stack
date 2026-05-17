@@ -11,7 +11,6 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -1098,44 +1097,63 @@ class PaymentService:
                     period_end,
                 )
             else:
+                # Normalize once so the pre-check and the insert below
+                # agree on the row's effective status. Webhooks rarely
+                # ship an empty ``status``, but Stripe's schema allows
+                # it - and without this, a falsy status would skip the
+                # pre-check while the insert silently defaulted to
+                # ACTIVE, tripping the partial unique index with no
+                # try/except to catch it.
+                effective_status = sub.status or SubscriptionStatus.ACTIVE
+
+                # Pre-check against the partial unique index on
+                # ``payment_subscription (customer_id) WHERE status IN
+                # ('active', 'trialing')``. If another active sub
+                # already exists for this customer (operator-side
+                # mistake, direct API create, replay race), skip the
+                # insert before flushing - SQLAlchemy treats a failed
+                # ``session.flush()`` as a session-poisoning event
+                # even inside ``begin_nested``, so we can't rely on a
+                # SAVEPOINT to scope the rollback cleanly. The DB
+                # index stays as the race-condition backstop: if a
+                # concurrent webhook commits the duplicate between our
+                # pre-check and our flush, the index will fire, the
+                # webhook route catches it and returns 400. Stripe
+                # does not retry 4xx, but that is acceptable here -
+                # the competing insert already committed the row we
+                # would have created.
+                if effective_status in ("active", "trialing"):
+                    existing_active = (await self.db.exec(
+                        select(PaymentSubscription).where(
+                            PaymentSubscription.customer_id == customer_id,
+                            PaymentSubscription.status.in_(  # type: ignore[attr-defined]
+                                ["active", "trialing"]
+                            ),
+                        )
+                    )).first()
+                    if existing_active is not None:
+                        logger.warning(
+                            "subscription_event: refused duplicate active "
+                            "sub for customer=%s provider_sub=%s "
+                            "(existing active row id=%s wins).",
+                            sub.customer,
+                            sub.id,
+                            existing_active.id,
+                        )
+                        return
+
                 new_sub = PaymentSubscription(
                     customer_id=customer_id,
                     provider_subscription_id=sub.id,
                     plan_name=plan_name,
-                    status=sub.status or SubscriptionStatus.ACTIVE,
+                    status=effective_status,
                     current_period_start=period_start,
                     current_period_end=period_end,
                     cancel_at_period_end=sub.cancel_at_period_end,
                 )
                 self.db.add(new_sub)
 
-        # Defensive catch for the partial unique index on
-        # ``payment_subscription (customer_id) WHERE status IN
-        # ('active', 'trialing')``. If the provider somehow has two
-        # active subs for the same customer (operator-side mistake,
-        # direct API create, replay race), this insert would otherwise
-        # throw IntegrityError, return 5xx, and trigger an infinite
-        # retry loop. Treat as "we already have an active sub; the
-        # second one is noise" - log loudly, scope the rollback, let
-        # the webhook ack.
-        #
-        # ``begin_nested()`` opens a SAVEPOINT - only the failed insert
-        # rolls back, the outer webhook transaction (including any
-        # earlier writes from sibling handlers in the same request)
-        # stays intact. Plain ``session.rollback()`` would nuke
-        # everything, which is fragile if the handler is ever chained.
-        try:
-            async with self.db.begin_nested():
-                await self.db.flush()
-        except IntegrityError as exc:
-            logger.warning(
-                "subscription_event: refused duplicate active sub for "
-                "customer=%s provider_sub=%s (existing active row wins). %s",
-                sub.customer,
-                sub.id,
-                exc,
-            )
-            return
+        await self.db.flush()
 
         # Notification side-effect. We email on:
         #   - SUBSCRIPTION_CREATED: always, when the row was new

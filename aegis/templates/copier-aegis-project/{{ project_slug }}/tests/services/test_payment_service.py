@@ -214,7 +214,7 @@ class TestGetSubscriptions:
         async_db_session.add(customer)
         await async_db_session.flush()
 
-        now = datetime.now()
+        now = datetime.now(UTC).replace(tzinfo=None)
         sub = PaymentSubscription(
             customer_id=customer.id,  # type: ignore[arg-type]
             provider_subscription_id="sub_test",
@@ -803,6 +803,104 @@ class TestHandleWebhookDispatch:
 
         result = await service.handle_webhook(b"{}", "sig")
         assert result["event_type"] == "some.event.we.dont.handle"
+
+
+class TestSubscriptionCreatedDuplicateActive:
+    """``customer.subscription.created`` must refuse a second active row.
+
+    The handler pre-checks the partial unique index on
+    ``payment_subscription (customer_id) WHERE status IN
+    ('active', 'trialing')``. The status used by the pre-check has to
+    match the status the insert would use — otherwise a webhook with
+    falsy ``status`` would skip the check and then default to ACTIVE on
+    insert, tripping the index with no try/except to catch it.
+    """
+
+    @staticmethod
+    async def _seed_customer_with_active_sub(
+        session: AsyncSession,
+    ) -> PaymentCustomer:
+        provider = await _seed_provider(session)
+        customer = PaymentCustomer(
+            user_id=1,
+            provider_id=provider.id,  # type: ignore[arg-type]
+            provider_customer_id="cus_dup_active",
+        )
+        session.add(customer)
+        await session.flush()
+        now = datetime.now(UTC).replace(tzinfo=None)
+        session.add(
+            PaymentSubscription(
+                customer_id=customer.id,  # type: ignore[arg-type]
+                provider_subscription_id="sub_existing",
+                plan_name="Pro",
+                status=SubscriptionStatus.ACTIVE,
+                current_period_start=now,
+                current_period_end=now + timedelta(days=30),
+            )
+        )
+        await session.commit()
+        return customer
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("incoming_status", ["", None])
+    async def test_falsy_status_does_not_create_duplicate(
+        self,
+        async_db_session: AsyncSession,
+        incoming_status: str | None,
+    ) -> None:
+        """Empty or null status defaults to ACTIVE on insert; the pre-check
+        must use that same effective status, not the raw value."""
+        from sqlmodel import select
+
+        await self._seed_customer_with_active_sub(async_db_session)
+
+        service = PaymentService(async_db_session)
+        period_start = int(datetime.now(UTC).timestamp())
+        period_end = period_start + 30 * 24 * 3600
+        service.provider.verify_webhook = AsyncMock(
+            return_value=WebhookEvent(
+                event_type="customer.subscription.created",
+                provider_key=ProviderKeys.STRIPE,
+                data={
+                    "id": "sub_new_falsy_status",
+                    "customer": "cus_dup_active",
+                    "status": incoming_status,
+                    "cancel_at_period_end": False,
+                    "items": {
+                        "data": [
+                            {
+                                "current_period_start": period_start,
+                                "current_period_end": period_end,
+                                "price": {
+                                    "id": "price_test",
+                                    "nickname": "Pro",
+                                    "unit_amount": 2999,
+                                    "currency": "usd",
+                                },
+                            }
+                        ]
+                    },
+                },
+            )
+        )
+
+        await service.handle_webhook(b"{}", "sig")
+
+        rows = (
+            await async_db_session.exec(
+                select(PaymentSubscription).where(
+                    PaymentSubscription.provider_subscription_id.in_(  # type: ignore[attr-defined]
+                        ["sub_existing", "sub_new_falsy_status"]
+                    )
+                )
+            )
+        ).all()
+        assert len(rows) == 1, (
+            f"Expected pre-check to refuse duplicate active sub for falsy "
+            f"status={incoming_status!r}; got {len(rows)} rows instead."
+        )
+        assert rows[0].provider_subscription_id == "sub_existing"
 
 
 # ---------------------------------------------------------------------------
@@ -1451,7 +1549,7 @@ class TestSubscriptionScoping:
         bob = await _seed_customer(
             async_db_session, provider, user_id=2, provider_customer_id="cus_b"
         )
-        now = datetime.now()
+        now = datetime.now(UTC).replace(tzinfo=None)
 
         # Alice has one active + one canceled sub - the partial unique
         # index on (customer_id) WHERE status IN ('active','trialing')
@@ -1640,7 +1738,7 @@ class TestRefundAndCancelScoping:
         bob = await _seed_customer(
             async_db_session, provider, user_id=2, provider_customer_id="cus_b"
         )
-        now = datetime.now()
+        now = datetime.now(UTC).replace(tzinfo=None)
         bob_sub = PaymentSubscription(
             customer_id=bob.id,  # type: ignore[arg-type]
             provider_subscription_id="sub_bob",
