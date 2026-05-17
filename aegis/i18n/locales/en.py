@@ -832,4 +832,235 @@ MESSAGES: dict[str, str] = {
     "deploy.restart_restarting": "Restarting services...",
     "deploy.restart_success": "Services restarted",
     "deploy.restart_failed": "Failed to restart services",
+    # ── Shared CLI help text ───────────────────────────────────────────
+    "common.help_project_path_full": (
+        "Path to the Aegis Stack project (default: current directory)"
+    ),
+    "common.help_project_path": ("Path to the project (default: current directory)"),
+    "common.help_yes": "Skip confirmation prompt",
+    "common.help_yes_plural": "Skip confirmation prompts",
+    "common.help_interactive_components": "Use interactive component selection",
+    "common.help_interactive_services": "Use interactive service selection",
+    "common.help_force": "Force through version mismatch warnings",
+    # ── init CLI help ──────────────────────────────────────────────────
+    "init.help_arg_name": "Name of the new Aegis Stack project to create",
+    "init.help_opt_components": (
+        "Comma-separated list of components (redis,worker,scheduler,database)"
+    ),
+    "init.help_opt_python": (
+        "Python version for generated project (3.11, 3.12, 3.13, or 3.14)"
+    ),
+    "init.help_opt_force": "Overwrite existing directory if it exists",
+    "init.help_opt_directory": (
+        "Directory to create the project in (default: current directory)"
+    ),
+    "init.help_opt_template_version": (
+        "Generate from specific template version (tag, commit, or branch)"
+    ),
+    "init.help_opt_no_llm_sync": (
+        "Skip LLM catalog sync after project generation (AI service only)"
+    ),
+    "init.help_opt_dev": (
+        "Dev mode: read templates from working tree (uncommitted changes)"
+    ),
+    "init.help_opt_services": (
+        "Services: auth, ai. AI options: ai[framework,backend,providers] "
+        "where framework={frameworks}, backend={backends}, "
+        "providers={providers}"
+    ),
+    # ── add CLI help ───────────────────────────────────────────────────
+    "add.help_arg_components": (
+        "Comma-separated list of components to add (scheduler,worker,database)"
+    ),
+    "add.help_opt_scheduler_backend": (
+        "Scheduler backend: 'memory' (default) or 'sqlite' (enables persistence)"
+    ),
+    # ── update CLI help ────────────────────────────────────────────────
+    "update.help_opt_to_version": "Update to specific version (default: latest)",
+    "update.help_opt_dry_run": "Preview changes without applying",
+    "update.help_opt_template_path": (
+        "Use custom template path instead of installed version"
+    ),
+    # ── remove CLI help ────────────────────────────────────────────────
+    "remove.help_arg_components": (
+        "Comma-separated list of components to remove (scheduler,worker,database)"
+    ),
+    # ── add-service CLI help ───────────────────────────────────────────
+    "add_service.help_arg_services": (
+        "Comma-separated list of services to add (auth,ai)"
+    ),
+    # ── remove-service CLI help ────────────────────────────────────────
+    "remove_service.help_arg_services": (
+        "Comma-separated list of services to remove (auth,ai,comms)"
+    ),
+    # ── ingress CLI help ───────────────────────────────────────────────
+    "ingress.help_opt_domain": ("Domain name for TLS certificate (e.g., example.com)"),
+    "ingress.help_opt_email": "Email for Let's Encrypt certificate notifications",
+    # ── deploy CLI help ────────────────────────────────────────────────
+    "deploy.help_opt_host": "Server IP address or hostname",
+    "deploy.help_opt_user": "SSH user for deployment",
+    "deploy.help_opt_path": "Deployment path on server",
+    "deploy.help_opt_public_key": (
+        "Path to a public key to install in the deploy user's authorized_keys "
+        "(idempotent). Use this so you don't have to ssh-copy-id by hand "
+        "before deploying."
+    ),
+    "deploy.help_opt_build": "Build images before deploying",
+    "deploy.help_opt_backup": "Create backup before deploying",
+    "deploy.help_opt_health": "Run health check after deploying",
+    "deploy.help_opt_rollback_backup": (
+        "Backup timestamp to rollback to (default: latest)"
+    ),
+    "deploy.help_opt_logs_follow": "Follow log output",
+    "deploy.help_opt_logs_service": "Show logs for specific service",
+    "deploy.help_opt_shell_service": "Service to connect to",
+    "deploy.help_opt_gh_repo": (
+        "GitHub repo as owner/name (default: auto-detect from git remote origin)"
+    ),
+    "deploy.help_opt_gh_tags": (
+        "Also trigger the deploy workflow on pushes to v* tags"
+    ),
+    "deploy.help_opt_gh_overwrite": (
+        "Overwrite existing GitHub secrets and deploy.yml workflow"
+    ),
+    "deploy.help_opt_dry_run": "Print planned actions without making any changes",
+    "deploy.help_opt_local_key_path": (
+        "Path to copy the generated private key to before cleanup. "
+        "Default: no local copy (the key only lives in GitHub secrets)."
+    ),
+    # ── plugins CLI (typer.Typer + commands) ───────────────────────────
+    "plugins.help": "Inspect installed Aegis plugins and search the registry",
+    "plugins.cannot_read_answers": (
+        "Could not read {path}: {error}. Compat checks will be skipped."
+    ),
+    # `aegis plugins list`
+    "plugins.help_list": (
+        "List installed plugins and their compatibility with this project."
+    ),
+    "plugins.help_opt_list_project_path": (
+        "Project to evaluate compat against (defaults to cwd if it's an Aegis project)."
+    ),
+    "plugins.help_opt_list_verbose": "Show description column.",
+    "plugins.section_in_tree": "In-tree (first-party)",
+    "plugins.section_external": "External plugins",
+    "plugins.col_name": "Name",
+    "plugins.col_version": "Version",
+    "plugins.col_kind": "Kind",
+    "plugins.col_description": "Description",
+    "plugins.col_status": "Status",
+    "plugins.no_external_installed": (
+        "No external plugins installed. "
+        "Install one with: pip install aegis-plugin-<name>"
+    ),
+    # `aegis plugins info`
+    "plugins.help_info": "Show detailed information about a single plugin.",
+    "plugins.help_arg_info_name": "Plugin name (e.g. 'auth', 'scraper')",
+    "plugins.help_opt_info_project_path": "Project to evaluate compat against.",
+    "plugins.not_installed_named": "No plugin named '{name}' is installed.",
+    "plugins.available_list": "Available: {names}",
+    "plugins.label_first_party": "(first-party)",
+    "plugins.label_verified": "(verified)",
+    "plugins.label_unverified": "(community, unverified)",
+    "plugins.label_kind": "Kind:",
+    "plugins.label_type": "Type:",
+    "plugins.label_requires_components": "Requires comp:",
+    "plugins.label_recommends_components": "Recommends:",
+    "plugins.label_requires_services": "Requires svcs:",
+    "plugins.label_requires_plugins": "Requires plug:",
+    "plugins.label_conflicts": "Conflicts:",
+    "plugins.label_python_deps": "Python deps:",
+    "plugins.deps_more": "(+{count} more)",
+    "plugins.section_options": "Options",
+    "plugins.option_choices": "choices:",
+    "plugins.option_default": "default:",
+    "plugins.option_auto_requires": "(has auto_requires)",
+    "plugins.info_files": (
+        "Files: {files}   Migrations: {migrations} ({tables} tables)   CLI: {cli}"
+    ),
+    "plugins.cli_yes": "yes",
+    "plugins.cli_no": "no",
+    "plugins.section_compat": "Compat",
+    # `aegis plugins update`
+    "plugins.help_update": (
+        "Re-render an installed plugin's templates at its currently "
+        "pip-installed version."
+    ),
+    "plugins.help_arg_update_name": (
+        "Plugin to update. Required unless --all is given."
+    ),
+    "plugins.help_opt_update_all": (
+        "Update every plugin currently in this project's _plugins."
+    ),
+    "plugins.help_opt_update_force": (
+        "Apply the update even when the new plugin version's aegis_version "
+        "constraint excludes the running CLI."
+    ),
+    "plugins.update_need_target": "Pass a plugin name or use --all.",
+    "plugins.update_either_not_both": ("Pass either a plugin name OR --all, not both."),
+    "plugins.update_no_plugins_installed": (
+        "No plugins are installed in this project."
+    ),
+    "plugins.update_not_in_project": (
+        "Plugin '{name}' is not installed in this project."
+    ),
+    "plugins.update_use_list_hint": (
+        "Use `aegis plugins list` to see what's available, and "
+        "`aegis add <name>` to install."
+    ),
+    "plugins.update_not_pip_installed": (
+        "Plugin '{name}' is in the project's _plugins list but not currently "
+        "pip-installed; run `pip install aegis-plugin-{name}` first."
+    ),
+    "plugins.update_already_at": "{name} (already at {version})",
+    "plugins.update_forcing": ("Forcing update despite version mismatch: {error}"),
+    "plugins.update_progress": "Updating plugin: {name} ({old} → {new})",
+    "plugins.update_confirm_apply": "Apply update to '{name}'?",
+    "plugins.update_skipped_by_user": "{name} (skipped by user)",
+    "plugins.update_legacy_strings": (
+        "Skipping legacy string-shaped _plugins entries: {entries}. "
+        "Re-add them with `aegis add <name>` to upgrade to the current "
+        "dict format."
+    ),
+    "plugins.update_summary_updated": "Updated: {count}",
+    "plugins.update_summary_skipped": "Skipped: {count}",
+    "plugins.update_summary_failed": "Failed: {count}",
+    # `aegis plugins create`
+    "plugins.help_create": "Scaffold a new aegis-plugin-<name> Python package.",
+    "plugins.help_arg_create_name": (
+        "Plugin name (lowercase, no hyphens). Becomes the Python package "
+        "aegis_plugin_<name> and the install name aegis-plugin-<name>."
+    ),
+    "plugins.help_opt_create_target": (
+        "Parent directory the plugin scaffold lands inside."
+    ),
+    "plugins.help_opt_create_author": "Author string for pyproject.toml + README.",
+    "plugins.help_opt_create_description": "One-line plugin description.",
+    "plugins.create_target_missing": "Target directory does not exist: {target}",
+    "plugins.create_already_exists": "Directory already exists: {output}",
+    "plugins.create_pick_different": (
+        "Pick a different name or remove the existing directory."
+    ),
+    "plugins.create_starting": "Creating plugin: {name}",
+    "plugins.create_label_target": "Target:",
+    "plugins.create_label_author": "Author:",
+    "plugins.create_label_description": "Description:",
+    "plugins.create_default_marker": "(default)",
+    "plugins.create_confirm": "Create the scaffold?",
+    "plugins.create_cancelled": "Cancelled.",
+    "plugins.create_success": "Created {count} files under {output}",
+    "plugins.create_next_steps_header": "Next steps:",
+    "plugins.create_next_steps_confirm_comment": ("confirm the plugin is discovered"),
+    "plugins.create_next_steps_edit_comment": (
+        "Edit src/aegis_plugin_<name>/plugin.py to add wiring"
+    ),
+    # `aegis plugins search`
+    "plugins.help_search": "Search the official plugin registry.",
+    "plugins.help_arg_search_keyword": "Optional keyword to search for",
+    "plugins.search_not_available": "Plugin registry is not yet available.",
+    "plugins.search_install_hint": (
+        "For now: pip install aegis-plugin-<name>, then aegis plugins list."
+    ),
+    "plugins.search_future_keyword": (
+        "Once the registry is live, this command will search for '{keyword}'."
+    ),
 }

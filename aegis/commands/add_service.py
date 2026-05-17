@@ -42,7 +42,7 @@ from ..core.migration_generator import (
 from ..core.project_map import render_project_map
 from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES, get_service_dependencies
-from ..i18n import t
+from ..i18n import lazy_t, t
 
 
 def _translated_component_desc(name: str, fallback: str) -> str:
@@ -62,21 +62,21 @@ def _translated_service_desc(name: str, fallback: str) -> str:
 def add_service_command(
     services: str | None = typer.Argument(
         None,
-        help="Comma-separated list of services to add (auth,ai)",
+        help=lazy_t("add_service.help_arg_services"),
     ),
     interactive: bool = typer.Option(
         False,
         "--interactive",
         "-i",
-        help="Use interactive service selection",
+        help=lazy_t("common.help_interactive_services"),
     ),
     project_path: str = typer.Option(
         ".",
         "--project-path",
         "-p",
-        help="Path to the Aegis Stack project (default: current directory)",
+        help=lazy_t("common.help_project_path_full"),
     ),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    yes: bool = typer.Option(False, "--yes", "-y", help=lazy_t("common.help_yes")),
 ) -> None:
     """
     Add services to an existing Aegis Stack project.

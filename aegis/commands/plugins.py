@@ -38,10 +38,11 @@ from ..core.plugins.compat import CompatStatus, check_compat
 from ..core.plugins.discovery import discover_plugin_cli_apps, discover_plugins
 from ..core.plugins.spec import PluginKind, PluginSpec
 from ..core.services import SERVICES
+from ..i18n import lazy_t, t
 
 plugins_app = typer.Typer(
     name="plugins",
-    help="Inspect installed Aegis plugins and search the registry",
+    help=lazy_t("plugins.help"),
     no_args_is_help=True,
 )
 
@@ -95,7 +96,7 @@ def _resolve_answers(project_path: Path | None) -> dict | None:
         return None
     except (OSError, yaml.YAMLError) as exc:
         typer.secho(
-            f"Could not read {answers_file}: {exc}. Compat checks will be skipped.",
+            t("plugins.cannot_read_answers", path=answers_file, error=exc),
             err=True,
             fg=typer.colors.YELLOW,
         )
@@ -142,17 +143,16 @@ def _core_command_reserved_names() -> set[str]:
 # ---------------------------------------------------------------------
 
 
-@plugins_app.command("list")
+@plugins_app.command("list", help=lazy_t("plugins.help_list"))
 def plugins_list_command(
     project_path: Path | None = typer.Option(
         None,
         "--project-path",
         "-p",
-        help="Project to evaluate compat against (defaults to cwd if "
-        "it's an Aegis project).",
+        help=lazy_t("plugins.help_opt_list_project_path"),
     ),
     verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Show description column."
+        False, "--verbose", "-v", help=lazy_t("plugins.help_opt_list_verbose")
     ),
 ) -> None:
     """List installed plugins and their compatibility with this project."""
@@ -169,12 +169,12 @@ def plugins_list_command(
             return
         table = Table(title=title, show_lines=False, expand=False)
         table.add_column("", style="bold", no_wrap=True)
-        table.add_column("Name", style="cyan")
-        table.add_column("Version")
-        table.add_column("Kind")
+        table.add_column(t("plugins.col_name"), style="cyan")
+        table.add_column(t("plugins.col_version"))
+        table.add_column(t("plugins.col_kind"))
         if verbose:
-            table.add_column("Description", overflow="fold")
-        table.add_column("Status", overflow="fold")
+            table.add_column(t("plugins.col_description"), overflow="fold")
+        table.add_column(t("plugins.col_status"), overflow="fold")
 
         for spec in specs:
             report = check_compat(
@@ -199,14 +199,11 @@ def plugins_list_command(
             table.add_row(*row)
         console.print(table)
 
-    _add_section("In-tree (first-party)", in_tree, in_tree_flag=True)
-    _add_section("External plugins", external, in_tree_flag=False)
+    _add_section(t("plugins.section_in_tree"), in_tree, in_tree_flag=True)
+    _add_section(t("plugins.section_external"), external, in_tree_flag=False)
 
     if not external:
-        console.print(
-            "\n[dim]No external plugins installed. "
-            "Install one with: pip install aegis-plugin-<name>[/dim]"
-        )
+        console.print(f"\n[dim]{t('plugins.no_external_installed')}[/dim]")
 
 
 # ---------------------------------------------------------------------
@@ -214,11 +211,14 @@ def plugins_list_command(
 # ---------------------------------------------------------------------
 
 
-@plugins_app.command("info")
+@plugins_app.command("info", help=lazy_t("plugins.help_info"))
 def plugins_info_command(
-    name: str = typer.Argument(..., help="Plugin name (e.g. 'auth', 'scraper')"),
+    name: str = typer.Argument(..., help=lazy_t("plugins.help_arg_info_name")),
     project_path: Path | None = typer.Option(
-        None, "--project-path", "-p", help="Project to evaluate compat against."
+        None,
+        "--project-path",
+        "-p",
+        help=lazy_t("plugins.help_opt_info_project_path"),
     ),
 ) -> None:
     """Show detailed information about a single plugin."""
@@ -241,10 +241,12 @@ def plugins_info_command(
                 break
 
     if spec is None:
-        console.print(f"[red]No plugin named {name!r} is installed.[/red]")
+        console.print(f"[red]{t('plugins.not_installed_named', name=name)}[/red]")
         all_names = sorted(s.name for s in in_tree + external)
         if all_names:
-            console.print(f"[dim]Available: {', '.join(all_names)}[/dim]")
+            console.print(
+                f"[dim]{t('plugins.available_list', names=', '.join(all_names))}[/dim]"
+            )
         raise typer.Exit(code=1)
 
     answers = _resolve_answers(project_path)
@@ -270,58 +272,69 @@ def plugins_info_command(
     # (`[bold cyan]`, `[green]`, …) stay raw.
     header = f"[bold cyan]{_escape(spec.name)}[/bold cyan] {_escape(spec.version)}"
     if is_in_tree:
-        header += "  [green](first-party)[/green]"
+        header += f"  [green]{t('plugins.label_first_party')}[/green]"
     elif spec.verified:
-        header += "  [green](verified)[/green]"
+        header += f"  [green]{t('plugins.label_verified')}[/green]"
     else:
-        header += "  [yellow](community — unverified)[/yellow]"
+        header += f"  [yellow]{t('plugins.label_unverified')}[/yellow]"
     lines.append(header)
     lines.append(f"[dim]{_escape(spec.description)}[/dim]")
     lines.append("")
-    lines.append(f"  Kind:           {_kind_label(spec)}")
+    lines.append(f"  {t('plugins.label_kind'):<15} {_kind_label(spec)}")
     if spec.type is not None:
         type_value = getattr(spec.type, "value", str(spec.type))
-        lines.append(f"  Type:           {type_value}")
+        lines.append(f"  {t('plugins.label_type'):<15} {type_value}")
 
     if spec.required_components:
         lines.append(
-            f"  Requires comp:  {_escape(', '.join(spec.required_components))}"
+            f"  {t('plugins.label_requires_components'):<15} "
+            f"{_escape(', '.join(spec.required_components))}"
         )
     if spec.recommended_components:
         lines.append(
-            f"  Recommends:     {_escape(', '.join(spec.recommended_components))}"
+            f"  {t('plugins.label_recommends_components'):<15} "
+            f"{_escape(', '.join(spec.recommended_components))}"
         )
     if spec.required_services:
-        lines.append(f"  Requires svcs:  {_escape(', '.join(spec.required_services))}")
+        lines.append(
+            f"  {t('plugins.label_requires_services'):<15} "
+            f"{_escape(', '.join(spec.required_services))}"
+        )
     if spec.required_plugins:
-        lines.append(f"  Requires plug:  {_escape(', '.join(spec.required_plugins))}")
+        lines.append(
+            f"  {t('plugins.label_requires_plugins'):<15} "
+            f"{_escape(', '.join(spec.required_plugins))}"
+        )
     if spec.conflicts:
-        lines.append(f"  Conflicts:      {_escape(', '.join(spec.conflicts))}")
+        lines.append(
+            f"  {t('plugins.label_conflicts'):<15} {_escape(', '.join(spec.conflicts))}"
+        )
     if spec.pyproject_deps:
         # Module-level _escape import handles deps like
         # ``python-jose[cryptography]==3.3.0`` that contain literal
         # square brackets Rich would otherwise treat as markup.
         deps_preview = ", ".join(_escape(d) for d in spec.pyproject_deps[:5])
         more = (
-            f" (+{len(spec.pyproject_deps) - 5} more)"
+            " " + t("plugins.deps_more", count=len(spec.pyproject_deps) - 5)
             if len(spec.pyproject_deps) > 5
             else ""
         )
-        lines.append(f"  Python deps:    {deps_preview}{more}")
+        lines.append(f"  {t('plugins.label_python_deps'):<15} {deps_preview}{more}")
 
     lines.append("")
     if spec.options:
-        lines.append("[bold]Options[/bold]")
+        lines.append(f"[bold]{t('plugins.section_options')}[/bold]")
         for opt in spec.options:
             mode = getattr(opt.mode, "value", str(opt.mode))
             choices = _escape(", ".join(opt.choices)) if opt.choices else "—"
             default = (
                 _escape(str(opt.default)) if opt.default not in (None, []) else "—"
             )
-            auto = " (has auto_requires)" if opt.auto_requires else ""
+            auto = f" {t('plugins.option_auto_requires')}" if opt.auto_requires else ""
             lines.append(
-                f"  {_escape(opt.name):<10} [{mode:<6}]  choices: {choices}  "
-                f"default: {default}{auto}"
+                f"  {_escape(opt.name):<10} [{mode:<6}]  "
+                f"{t('plugins.option_choices')} {choices}  "
+                f"{t('plugins.option_default')} {default}{auto}"
             )
         lines.append("")
 
@@ -329,14 +342,20 @@ def plugins_info_command(
     migration_count = len(spec.migrations)
     table_count = sum(len(m.tables) for m in spec.migrations)
     lines.append(
-        f"  Files: {file_count}   "
-        f"Migrations: {migration_count} ({table_count} tables)   "
-        f"CLI: {'yes' if has_cli else 'no'}"
+        "  "
+        + t(
+            "plugins.info_files",
+            files=file_count,
+            migrations=migration_count,
+            tables=table_count,
+            cli=t("plugins.cli_yes") if has_cli else t("plugins.cli_no"),
+        )
     )
 
     lines.append("")
     lines.append(
-        f"[bold]Compat[/bold]  {_status_marker(report.status)} {_escape(report.detail)}"
+        f"[bold]{t('plugins.section_compat')}[/bold]  "
+        f"{_status_marker(report.status)} {_escape(report.detail)}"
     )
 
     console.print(Panel("\n".join(lines), expand=False))
@@ -365,10 +384,10 @@ def _installed_plugin_entries(answers: dict) -> list[dict]:
     legacy_strings = [item for item in raw if isinstance(item, str)]
     if legacy_strings:
         typer.secho(
-            "Skipping legacy string-shaped _plugins entries: "
-            f"{', '.join(repr(s) for s in legacy_strings)}. "
-            "Re-add them with `aegis add <name>` to upgrade to the "
-            "current dict format.",
+            t(
+                "plugins.update_legacy_strings",
+                entries=", ".join(repr(s) for s in legacy_strings),
+            ),
             fg=typer.colors.YELLOW,
             err=True,
         )
@@ -409,30 +428,31 @@ def _resolve_installed_spec(name: str) -> tuple[PluginSpec, str] | None:
     return None
 
 
-@plugins_app.command("update")
+@plugins_app.command("update", help=lazy_t("plugins.help_update"))
 def plugins_update_command(
     plugin_name: str | None = typer.Argument(
         None,
-        help="Plugin to update. Required unless --all is given.",
+        help=lazy_t("plugins.help_arg_update_name"),
     ),
     all_: bool = typer.Option(
         False,
         "--all",
-        help="Update every plugin currently in this project's ``_plugins``.",
+        help=lazy_t("plugins.help_opt_update_all"),
     ),
     project_path: str = typer.Option(
         ".",
         "--project-path",
         "-p",
-        help="Path to the Aegis project (default: current directory).",
+        help=lazy_t("common.help_project_path_full"),
     ),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts."),
+    yes: bool = typer.Option(
+        False, "--yes", "-y", help=lazy_t("common.help_yes_plural")
+    ),
     force: bool = typer.Option(
         False,
         "--force",
         "-f",
-        help="Apply the update even when the new plugin version's "
-        "``aegis_version`` constraint excludes the running CLI (#777).",
+        help=lazy_t("plugins.help_opt_update_force"),
     ),
 ) -> None:
     """Re-render an installed plugin's templates at its currently
@@ -454,11 +474,11 @@ def plugins_update_command(
     from ..core.manual_updater import ManualUpdater
 
     if not all_ and not plugin_name:
-        typer.secho("Pass a plugin name or use --all.", fg=typer.colors.RED, err=True)
+        typer.secho(t("plugins.update_need_target"), fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
     if all_ and plugin_name:
         typer.secho(
-            "Pass either a plugin name OR --all, not both.",
+            t("plugins.update_either_not_both"),
             fg=typer.colors.RED,
             err=True,
         )
@@ -473,7 +493,7 @@ def plugins_update_command(
 
     installed = _installed_plugin_entries(answers)
     if not installed:
-        typer.secho("No plugins are installed in this project.", fg=typer.colors.YELLOW)
+        typer.secho(t("plugins.update_no_plugins_installed"), fg=typer.colors.YELLOW)
         return
 
     targets: list[dict]
@@ -483,14 +503,11 @@ def plugins_update_command(
         targets = [p for p in installed if p.get("name") == plugin_name]
         if not targets:
             typer.secho(
-                f"Plugin {plugin_name!r} is not installed in this project.",
+                t("plugins.update_not_in_project", name=plugin_name),
                 fg=typer.colors.RED,
                 err=True,
             )
-            typer.echo(
-                "   Use ``aegis plugins list`` to see what's available, "
-                "and ``aegis add <name>`` to install."
-            )
+            typer.echo("   " + t("plugins.update_use_list_hint"))
             raise typer.Exit(1)
 
     # Check disk vs. recorded version for each target. We touch the
@@ -509,9 +526,7 @@ def plugins_update_command(
             failed.append(
                 (
                     name,
-                    f"plugin {name!r} is in the project's _plugins list but "
-                    f"not currently pip-installed; run "
-                    f"``pip install aegis-plugin-{name}`` first.",
+                    t("plugins.update_not_pip_installed", name=name),
                 )
             )
             continue
@@ -520,7 +535,13 @@ def plugins_update_command(
         installed_version = installed_spec.version
 
         if installed_version == recorded_version:
-            skipped.append(f"{name} (already at {installed_version})")
+            skipped.append(
+                t(
+                    "plugins.update_already_at",
+                    name=name,
+                    version=installed_version,
+                )
+            )
             continue
 
         # Aegis-version compat (#777). Plugin authors may have
@@ -533,7 +554,7 @@ def plugins_update_command(
         if not compatible:
             if force:
                 typer.secho(
-                    f"Forcing update despite version mismatch: {error_msg}",
+                    t("plugins.update_forcing", error=error_msg),
                     fg=typer.colors.YELLOW,
                 )
             else:
@@ -541,10 +562,18 @@ def plugins_update_command(
                 continue
 
         typer.echo(
-            f"\nUpdating plugin: {name} ({recorded_version} → {installed_version})"
+            "\n"
+            + t(
+                "plugins.update_progress",
+                name=name,
+                old=recorded_version,
+                new=installed_version,
+            )
         )
-        if not yes and not typer.confirm(f"Apply update to {name!r}?", default=True):
-            skipped.append(f"{name} (skipped by user)")
+        if not yes and not typer.confirm(
+            t("plugins.update_confirm_apply", name=name), default=True
+        ):
+            skipped.append(t("plugins.update_skipped_by_user", name=name))
             continue
 
         updater = ManualUpdater(target_path)
@@ -564,15 +593,22 @@ def plugins_update_command(
     # Summary
     typer.echo()
     if updated:
-        typer.secho(f"Updated: {len(updated)}", fg=typer.colors.GREEN)
+        typer.secho(
+            t("plugins.update_summary_updated", count=len(updated)),
+            fg=typer.colors.GREEN,
+        )
         for line in updated:
             typer.echo(f"   • {line}")
     if skipped:
-        typer.echo(f"Skipped: {len(skipped)}")
+        typer.echo(t("plugins.update_summary_skipped", count=len(skipped)))
         for line in skipped:
             typer.echo(f"   • {line}")
     if failed:
-        typer.secho(f"Failed: {len(failed)}", fg=typer.colors.RED, err=True)
+        typer.secho(
+            t("plugins.update_summary_failed", count=len(failed)),
+            fg=typer.colors.RED,
+            err=True,
+        )
         for name, msg in failed:
             typer.secho(f"   • {name}: {msg}", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
@@ -583,31 +619,29 @@ def plugins_update_command(
 # ---------------------------------------------------------------------
 
 
-@plugins_app.command("create")
+@plugins_app.command("create", help=lazy_t("plugins.help_create"))
 def plugins_create_command(
     name: str = typer.Argument(
         ...,
-        help="Plugin name (lowercase, no hyphens). Becomes the Python "
-        "package ``aegis_plugin_<name>`` and the install name "
-        "``aegis-plugin-<name>``.",
+        help=lazy_t("plugins.help_arg_create_name"),
     ),
     target_dir: str = typer.Option(
         ".",
         "--target-dir",
         "-d",
-        help="Parent directory the plugin scaffold lands inside.",
+        help=lazy_t("plugins.help_opt_create_target"),
     ),
     author: str = typer.Option(
         "",
         "--author",
-        help="Author string for pyproject.toml + README.",
+        help=lazy_t("plugins.help_opt_create_author"),
     ),
     description: str = typer.Option(
         "",
         "--description",
-        help="One-line plugin description.",
+        help=lazy_t("plugins.help_opt_create_description"),
     ),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt."),
+    yes: bool = typer.Option(False, "--yes", "-y", help=lazy_t("common.help_yes")),
 ) -> None:
     """Scaffold a new ``aegis-plugin-<name>`` Python package.
 
@@ -636,7 +670,7 @@ def plugins_create_command(
     target = Path(target_dir).resolve()
     if not target.is_dir():
         typer.secho(
-            f"Target directory does not exist: {target}",
+            t("plugins.create_target_missing", target=target),
             fg=typer.colors.RED,
             err=True,
         )
@@ -645,22 +679,24 @@ def plugins_create_command(
     output_root = target / f"aegis-plugin-{name}"
     if output_root.exists():
         typer.secho(
-            f"Directory already exists: {output_root}",
+            t("plugins.create_already_exists", output=output_root),
             fg=typer.colors.RED,
             err=True,
         )
         typer.echo(
-            "   Pick a different name or remove the existing directory.",
+            "   " + t("plugins.create_pick_different"),
             err=True,
         )
         raise typer.Exit(1)
 
-    typer.echo(f"Creating plugin: {name}")
-    typer.echo(f"   Target: {output_root}")
-    typer.echo(f"   Author: {author or '(default)'}")
-    typer.echo(f"   Description: {description or f'Aegis Stack plugin: {name}'}")
-    if not yes and not typer.confirm("Create the scaffold?", default=True):
-        typer.secho("Cancelled.", fg=typer.colors.YELLOW)
+    typer.echo(t("plugins.create_starting", name=name))
+    typer.echo(f"   {t('plugins.create_label_target')} {output_root}")
+    default_marker = t("plugins.create_default_marker")
+    typer.echo(f"   {t('plugins.create_label_author')} {author or default_marker}")
+    desc_default = description or f"Aegis Stack plugin: {name}"
+    typer.echo(f"   {t('plugins.create_label_description')} {desc_default}")
+    if not yes and not typer.confirm(t("plugins.create_confirm"), default=True):
+        typer.secho(t("plugins.create_cancelled"), fg=typer.colors.YELLOW)
         raise typer.Exit(0)
 
     written = scaffold_plugin(
@@ -671,14 +707,16 @@ def plugins_create_command(
     )
 
     typer.secho(
-        f"\nCreated {len(written)} files under {output_root}",
+        "\n" + t("plugins.create_success", count=len(written), output=output_root),
         fg=typer.colors.GREEN,
     )
-    typer.echo("\nNext steps:")
+    typer.echo("\n" + t("plugins.create_next_steps_header"))
     typer.echo(f"   cd {output_root}")
     typer.echo("   pip install -e .")
-    typer.echo("   aegis plugins list   # confirm the plugin is discovered")
-    typer.echo("   # Edit src/aegis_plugin_<name>/plugin.py to add wiring")
+    typer.echo(
+        f"   aegis plugins list   # {t('plugins.create_next_steps_confirm_comment')}"
+    )
+    typer.echo(f"   # {t('plugins.create_next_steps_edit_comment')}")
 
 
 # ---------------------------------------------------------------------
@@ -686,9 +724,9 @@ def plugins_create_command(
 # ---------------------------------------------------------------------
 
 
-@plugins_app.command("search")
+@plugins_app.command("search", help=lazy_t("plugins.help_search"))
 def plugins_search_command(
-    keyword: str = typer.Argument("", help="Optional keyword to search for"),
+    keyword: str = typer.Argument("", help=lazy_t("plugins.help_arg_search_keyword")),
 ) -> None:
     """Search the official plugin registry.
 
@@ -697,11 +735,9 @@ def plugins_search_command(
     directly.
     """
     typer.secho(
-        "Plugin registry is not yet available (ticket #773).",
+        t("plugins.search_not_available"),
         fg=typer.colors.YELLOW,
     )
-    typer.echo("For now: pip install aegis-plugin-<name>, then aegis plugins list.")
+    typer.echo(t("plugins.search_install_hint"))
     if keyword:
-        typer.echo(
-            f"Once the registry is live, this command will search for {keyword!r}."
-        )
+        typer.echo(t("plugins.search_future_keyword", keyword=keyword))

@@ -15,7 +15,7 @@ from pathlib import Path
 import typer
 import yaml
 
-from ..i18n import t
+from ..i18n import lazy_t, t
 
 _BACKUP_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}$")
 
@@ -378,14 +378,16 @@ def _run_health_check(
 
 def deploy_init_command(
     host: str | None = typer.Option(
-        None, "--host", "-h", help="Server IP address or hostname"
+        None, "--host", "-h", help=lazy_t("deploy.help_opt_host")
     ),
-    user: str = typer.Option("root", "--user", "-u", help="SSH user for deployment"),
+    user: str = typer.Option(
+        "root", "--user", "-u", help=lazy_t("deploy.help_opt_user")
+    ),
     path: str | None = typer.Option(
-        None, "--path", "-p", help="Deployment path on server"
+        None, "--path", "-p", help=lazy_t("deploy.help_opt_path")
     ),
     project_path: str | None = typer.Option(
-        None, "--project-path", help="Path to the project (default: current directory)"
+        None, "--project-path", help=lazy_t("common.help_project_path")
     ),
 ) -> None:
     """
@@ -439,16 +441,12 @@ def deploy_init_command(
 
 def deploy_setup_command(
     project_path: str | None = typer.Option(
-        None, "--project-path", help="Path to the project (default: current directory)"
+        None, "--project-path", help=lazy_t("common.help_project_path")
     ),
     public_key: str | None = typer.Option(
         None,
         "--public-key",
-        help=(
-            "Path to a public key to install in the deploy user's "
-            "authorized_keys (idempotent). Use this so you don't have to "
-            "ssh-copy-id by hand before deploying."
-        ),
+        help=lazy_t("deploy.help_opt_public_key"),
     ),
 ) -> None:
     """
@@ -585,18 +583,18 @@ def deploy_setup_command(
 
 def deploy_command(
     project_path: str | None = typer.Option(
-        None, "--project-path", help="Path to the project (default: current directory)"
+        None, "--project-path", help=lazy_t("common.help_project_path")
     ),
     build: bool = typer.Option(
-        True, "--build/--no-build", help="Build images before deploying"
+        True, "--build/--no-build", help=lazy_t("deploy.help_opt_build")
     ),
     backup: bool = typer.Option(
-        True, "--backup/--no-backup", help="Create backup before deploying"
+        True, "--backup/--no-backup", help=lazy_t("deploy.help_opt_backup")
     ),
     health_check: bool = typer.Option(
         True,
         "--health-check/--no-health-check",
-        help="Run health check after deploying",
+        help=lazy_t("deploy.help_opt_health"),
     ),
 ) -> None:
     """
@@ -786,7 +784,7 @@ def deploy_command(
 
 def deploy_backup_command(
     project_path: str | None = typer.Option(
-        None, "--project-path", help="Path to the project (default: current directory)"
+        None, "--project-path", help=lazy_t("common.help_project_path")
     ),
 ) -> None:
     """
@@ -829,7 +827,7 @@ def deploy_backup_command(
 
 def deploy_backups_command(
     project_path: str | None = typer.Option(
-        None, "--project-path", help="Path to the project (default: current directory)"
+        None, "--project-path", help=lazy_t("common.help_project_path")
     ),
 ) -> None:
     """
@@ -894,10 +892,10 @@ def deploy_backups_command(
 
 def deploy_rollback_command(
     backup: str | None = typer.Option(
-        None, "--backup", "-b", help="Backup timestamp to rollback to (default: latest)"
+        None, "--backup", "-b", help=lazy_t("deploy.help_opt_rollback_backup")
     ),
     project_path: str | None = typer.Option(
-        None, "--project-path", help="Path to the project (default: current directory)"
+        None, "--project-path", help=lazy_t("common.help_project_path")
     ),
 ) -> None:
     """
@@ -961,13 +959,13 @@ def deploy_rollback_command(
 
 def deploy_logs_command(
     follow: bool = typer.Option(
-        True, "--follow/--no-follow", "-f", help="Follow log output"
+        True, "--follow/--no-follow", "-f", help=lazy_t("deploy.help_opt_logs_follow")
     ),
     service: str | None = typer.Option(
-        None, "--service", "-s", help="Show logs for specific service"
+        None, "--service", "-s", help=lazy_t("deploy.help_opt_logs_service")
     ),
     project_path: str | None = typer.Option(
-        None, "--project-path", help="Path to the project (default: current directory)"
+        None, "--project-path", help=lazy_t("common.help_project_path")
     ),
 ) -> None:
     """
@@ -999,7 +997,7 @@ def deploy_logs_command(
 
 def deploy_status_command(
     project_path: str | None = typer.Option(
-        None, "--project-path", help="Path to the project (default: current directory)"
+        None, "--project-path", help=lazy_t("common.help_project_path")
     ),
 ) -> None:
     """
@@ -1027,7 +1025,7 @@ def deploy_status_command(
 
 def deploy_stop_command(
     project_path: str | None = typer.Option(
-        None, "--project-path", help="Path to the project (default: current directory)"
+        None, "--project-path", help=lazy_t("common.help_project_path")
     ),
 ) -> None:
     """
@@ -1060,7 +1058,7 @@ def deploy_stop_command(
 
 def deploy_restart_command(
     project_path: str | None = typer.Option(
-        None, "--project-path", help="Path to the project (default: current directory)"
+        None, "--project-path", help=lazy_t("common.help_project_path")
     ),
 ) -> None:
     """
@@ -1093,10 +1091,10 @@ def deploy_restart_command(
 
 def deploy_shell_command(
     service: str = typer.Option(
-        "webserver", "--service", "-s", help="Service to connect to"
+        "webserver", "--service", "-s", help=lazy_t("deploy.help_opt_shell_service")
     ),
     project_path: str | None = typer.Option(
-        None, "--project-path", help="Path to the project (default: current directory)"
+        None, "--project-path", help=lazy_t("common.help_project_path")
     ),
 ) -> None:
     """
@@ -1304,35 +1302,32 @@ jobs:
 
 def deploy_cd_setup_command(
     project_path: str | None = typer.Option(
-        None, "--project-path", help="Path to the project (default: current directory)"
+        None, "--project-path", help=lazy_t("common.help_project_path")
     ),
     repo: str | None = typer.Option(
         None,
         "--repo",
-        help="GitHub repo as owner/name (default: auto-detect from git remote origin)",
+        help=lazy_t("deploy.help_opt_gh_repo"),
     ),
     on_tag: bool = typer.Option(
         False,
         "--on-tag",
-        help="Also trigger the deploy workflow on pushes to v* tags",
+        help=lazy_t("deploy.help_opt_gh_tags"),
     ),
     force: bool = typer.Option(
         False,
         "--force",
-        help="Overwrite existing GitHub secrets and deploy.yml workflow",
+        help=lazy_t("deploy.help_opt_gh_overwrite"),
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Print planned actions without making any changes",
+        help=lazy_t("deploy.help_opt_dry_run"),
     ),
     keep_key: str | None = typer.Option(
         None,
         "--keep-key",
-        help=(
-            "Path to copy the generated private key to before cleanup. "
-            "Default: no local copy (the key only lives in GitHub secrets)."
-        ),
+        help=lazy_t("deploy.help_opt_local_key_path"),
     ),
 ) -> None:
     """

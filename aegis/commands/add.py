@@ -26,7 +26,7 @@ from ..core.plugins.spec import PluginSpec
 from ..core.project_map import render_project_map
 from ..core.services import SERVICES
 from ..core.version_compatibility import validate_version_compatibility
-from ..i18n import t
+from ..i18n import lazy_t, t
 
 
 def _strip_brackets(spec_str: str) -> str:
@@ -310,32 +310,32 @@ def _translated_desc(name: str, fallback: str) -> str:
 def add_command(
     components: str | None = typer.Argument(
         None,
-        help="Comma-separated list of components to add (scheduler,worker,database)",
+        help=lazy_t("add.help_arg_components"),
     ),
     interactive: bool = typer.Option(
         False,
         "--interactive",
         "-i",
-        help="Use interactive component selection",
+        help=lazy_t("common.help_interactive_components"),
     ),
     backend: str | None = typer.Option(
         None,
         "--backend",
         "-b",
-        help="Scheduler backend: 'memory' (default) or 'sqlite' (enables persistence)",
+        help=lazy_t("add.help_opt_scheduler_backend"),
     ),
     project_path: str = typer.Option(
         ".",
         "--project-path",
         "-p",
-        help="Path to the Aegis Stack project (default: current directory)",
+        help=lazy_t("common.help_project_path_full"),
     ),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    yes: bool = typer.Option(False, "--yes", "-y", help=lazy_t("common.help_yes")),
     force: bool = typer.Option(
         False,
         "--force",
         "-f",
-        help="Force through version mismatch warnings",
+        help=lazy_t("common.help_force"),
     ),
 ) -> None:
     """

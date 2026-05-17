@@ -39,6 +39,37 @@ from .core.verbosity import set_verbose
 from .i18n import detect_locale, set_locale
 from .i18n.locales import AVAILABLE_LOCALES
 
+
+def _resolve_locale_callback(value: str | None) -> str | None:
+    """Eager callback: validate + set locale during argument parsing.
+
+    Marked ``is_eager=True`` on the ``--lang`` Option so it runs before
+    typer/click processes ``--help``. That's the whole point: typer
+    short-circuits its main callback on ``--help``, so a non-eager
+    callback would never fire and lazy_t() help strings would render
+    against the default English locale. Eager callbacks fire during
+    argument parsing, before help rendering, with no module-import
+    side effect.
+    """
+    if value:
+        from .i18n.registry import _normalize_locale
+
+        resolved = _normalize_locale(value)
+        # _normalize_locale falls back to "en" for unknown inputs,
+        # so check if the input actually maps to a real locale.
+        base = value.lower().replace("-", "_").split(".")[0].split("@")[0]
+        if resolved == "en" and not base.startswith("en"):
+            typer.secho(
+                f"Unsupported language '{value}'. Available: "
+                f"{', '.join(sorted(AVAILABLE_LOCALES))}",
+                fg="red",
+                err=True,
+            )
+            raise typer.Exit(1)
+    set_locale(value if value else detect_locale())
+    return value
+
+
 # Create the main Typer application
 app = typer.Typer(
     name="aegis",
@@ -69,25 +100,14 @@ def main(
         "--lang",
         help="Output language (de, en, es, fr, ja, ko, ru, zh, zh_Hant). Default: auto-detect from AEGIS_LANG or system locale",
         envvar="AEGIS_LANG",
+        callback=_resolve_locale_callback,
+        is_eager=True,
     ),
 ) -> None:
     """Aegis Stack CLI - Global options and configuration."""
     set_verbose(verbose)
-    if lang:
-        from .i18n.registry import _normalize_locale
-
-        resolved = _normalize_locale(lang)
-        # _normalize_locale falls back to "en" for unknown inputs,
-        # so check if the input actually maps to a real locale
-        base = lang.lower().replace("-", "_").split(".")[0].split("@")[0]
-        if resolved == "en" and not base.startswith("en"):
-            typer.secho(
-                f"Unsupported language '{lang}'. Available: {', '.join(sorted(AVAILABLE_LOCALES))}",
-                fg="red",
-                err=True,
-            )
-            raise typer.Exit(1)
-    set_locale(lang if lang else detect_locale())
+    # Locale resolution + validation already handled by _resolve_locale_callback
+    # (eager) so that --help paths see the right locale.
 
 
 # Register commands

@@ -18,7 +18,7 @@ from ..core.manual_updater import ManualUpdater
 from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES
 from ..core.version_compatibility import validate_version_compatibility
-from ..i18n import t
+from ..i18n import lazy_t, t
 
 
 def _translated_service_desc(name: str, fallback: str) -> str:
@@ -31,26 +31,26 @@ def _translated_service_desc(name: str, fallback: str) -> str:
 def remove_service_command(
     services: str | None = typer.Argument(
         None,
-        help="Comma-separated list of services to remove (auth,ai,comms)",
+        help=lazy_t("remove_service.help_arg_services"),
     ),
     interactive: bool = typer.Option(
         False,
         "--interactive",
         "-i",
-        help="Use interactive service selection",
+        help=lazy_t("common.help_interactive_services"),
     ),
     project_path: str = typer.Option(
         ".",
         "--project-path",
         "-p",
-        help="Path to the Aegis Stack project (default: current directory)",
+        help=lazy_t("common.help_project_path_full"),
     ),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    yes: bool = typer.Option(False, "--yes", "-y", help=lazy_t("common.help_yes")),
     force: bool = typer.Option(
         False,
         "--force",
         "-f",
-        help="Force through version mismatch warnings",
+        help=lazy_t("common.help_force"),
     ),
 ) -> None:
     """

@@ -30,27 +30,25 @@ from ..core.components import (
 from ..core.dependency_resolver import DependencyResolver
 from ..core.service_resolver import ServiceResolver
 from ..core.template_generator import TemplateGenerator
-from ..i18n import t
+from ..i18n import lazy_t, t
 
 # Build services help text dynamically from constants
-_SERVICES_HELP = (
-    f"Services: auth, ai. AI options: ai[framework,backend,providers] "
-    f"where framework={'|'.join(sorted(FRAMEWORKS))}, "
-    f"backend={'|'.join(sorted(BACKENDS))}, "
-    f"providers={'|'.join(sorted(PROVIDERS))}"
+_SERVICES_HELP = lazy_t(
+    "init.help_opt_services",
+    frameworks="|".join(sorted(FRAMEWORKS)),
+    backends="|".join(sorted(BACKENDS)),
+    providers="|".join(sorted(PROVIDERS)),
 )
 
 
 def init_command(
-    project_name: str = typer.Argument(
-        ..., help="Name of the new Aegis Stack project to create"
-    ),
+    project_name: str = typer.Argument(..., help=lazy_t("init.help_arg_name")),
     components: str | None = typer.Option(
         None,
         "--components",
         "-c",
         callback=validate_and_resolve_components,
-        help="Comma-separated list of components (redis,worker,scheduler,database)",
+        help=lazy_t("init.help_opt_components"),
     ),
     services: str | None = typer.Option(
         None,
@@ -62,38 +60,38 @@ def init_command(
     python_version: str = typer.Option(
         DEFAULT_PYTHON_VERSION,
         "--python-version",
-        help="Python version for generated project (3.11, 3.12, 3.13, or 3.14)",
+        help=lazy_t("init.help_opt_python"),
     ),
     interactive: bool = typer.Option(
         True,
         "--interactive/--no-interactive",
         "-i/-ni",
-        help="Use interactive component selection",
+        help=lazy_t("common.help_interactive_components"),
     ),
     force: bool = typer.Option(
-        False, "--force", "-f", help="Overwrite existing directory if it exists"
+        False, "--force", "-f", help=lazy_t("init.help_opt_force")
     ),
     output_dir: str | None = typer.Option(
         None,
         "--output-dir",
         "-o",
-        help="Directory to create the project in (default: current directory)",
+        help=lazy_t("init.help_opt_directory"),
     ),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    yes: bool = typer.Option(False, "--yes", "-y", help=lazy_t("common.help_yes")),
     to_version: str | None = typer.Option(
         None,
         "--to-version",
-        help="Generate from specific template version (tag, commit, or branch)",
+        help=lazy_t("init.help_opt_template_version"),
     ),
     skip_llm_sync: bool = typer.Option(
         False,
         "--skip-llm-sync",
-        help="Skip LLM catalog sync after project generation (AI service only)",
+        help=lazy_t("init.help_opt_no_llm_sync"),
     ),
     dev: bool = typer.Option(
         False,
         "--dev",
-        help="Dev mode: read templates from working tree (uncommitted changes)",
+        help=lazy_t("init.help_opt_dev"),
     ),
 ) -> None:
     """

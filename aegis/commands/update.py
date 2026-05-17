@@ -35,7 +35,7 @@ from ..core.template_cleanup import (
     sync_template_changes,
 )
 from ..core.version_compatibility import get_cli_version, get_project_template_version
-from ..i18n import t
+from ..i18n import lazy_t, t
 
 
 def _detect_existing_features(target_path: Path) -> dict[str, bool]:
@@ -155,30 +155,30 @@ def update_command(
     to_version: str | None = typer.Option(
         None,
         "--to-version",
-        help="Update to specific version (default: latest)",
+        help=lazy_t("update.help_opt_to_version"),
     ),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
-        help="Preview changes without applying",
+        help=lazy_t("update.help_opt_dry_run"),
     ),
     project_path: str = typer.Option(
         ".",
         "--project-path",
         "-p",
-        help="Path to the Aegis Stack project (default: current directory)",
+        help=lazy_t("common.help_project_path_full"),
     ),
     template_path: str | None = typer.Option(
         None,
         "--template-path",
         "-t",
-        help="Use custom template path instead of installed version",
+        help=lazy_t("update.help_opt_template_path"),
     ),
     yes: bool = typer.Option(
         False,
         "--yes",
         "-y",
-        help="Skip confirmation prompt",
+        help=lazy_t("common.help_yes"),
     ),
 ) -> None:
     """

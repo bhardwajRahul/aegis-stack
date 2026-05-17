@@ -13,7 +13,7 @@ from ..cli.validation import validate_copier_project, validate_git_repository
 from ..constants import AnswerKeys, ComponentNames
 from ..core.copier_manager import load_copier_answers
 from ..core.manual_updater import PROJECT_SLUG_PLACEHOLDER, ManualUpdater
-from ..i18n import t
+from ..i18n import lazy_t, t
 
 # Default placeholder email from copier template
 _PLACEHOLDER_EMAIL = "your.email@example.com"
@@ -24,21 +24,21 @@ def ingress_enable_command(
         None,
         "--domain",
         "-d",
-        help="Domain name for TLS certificate (e.g., example.com)",
+        help=lazy_t("ingress.help_opt_domain"),
     ),
     email: str | None = typer.Option(
         None,
         "--email",
         "-e",
-        help="Email for Let's Encrypt certificate notifications",
+        help=lazy_t("ingress.help_opt_email"),
     ),
     project_path: str = typer.Option(
         ".",
         "--project-path",
         "-p",
-        help="Path to the Aegis Stack project (default: current directory)",
+        help=lazy_t("common.help_project_path_full"),
     ),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    yes: bool = typer.Option(False, "--yes", "-y", help=lazy_t("common.help_yes")),
 ) -> None:
     """
     Enable TLS (HTTPS) on a project with the ingress component.

@@ -22,7 +22,7 @@ from ..core.plugins.discovery import discover_plugins
 from ..core.plugins.spec import PluginSpec
 from ..core.services import SERVICES
 from ..core.version_compatibility import validate_version_compatibility
-from ..i18n import t
+from ..i18n import lazy_t, t
 
 
 def _resolve_plugin_for_remove(name: str) -> PluginSpec | None:
@@ -121,26 +121,26 @@ def _translated_desc(name: str, fallback: str) -> str:
 def remove_command(
     components: str | None = typer.Argument(
         None,
-        help="Comma-separated list of components to remove (scheduler,worker,database)",
+        help=lazy_t("remove.help_arg_components"),
     ),
     interactive: bool = typer.Option(
         False,
         "--interactive",
         "-i",
-        help="Use interactive component selection",
+        help=lazy_t("common.help_interactive_components"),
     ),
     project_path: str = typer.Option(
         ".",
         "--project-path",
         "-p",
-        help="Path to the Aegis Stack project (default: current directory)",
+        help=lazy_t("common.help_project_path_full"),
     ),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+    yes: bool = typer.Option(False, "--yes", "-y", help=lazy_t("common.help_yes")),
     force: bool = typer.Option(
         False,
         "--force",
         "-f",
-        help="Force through version mismatch warnings",
+        help=lazy_t("common.help_force"),
     ),
 ) -> None:
     """

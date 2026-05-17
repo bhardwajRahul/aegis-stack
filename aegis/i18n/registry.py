@@ -2,7 +2,12 @@
 
 import os
 
-_current_locale: str = "en"
+# Sentinel ``None`` = "not yet resolved". The first call to translate()
+# or get_locale() resolves the active locale via detect_locale() so we
+# never need a module-import-time set_locale() side effect just to make
+# lazy_t() help text see AEGIS_LANG. set_locale() (called by the CLI's
+# eager --lang callback) overrides this any time before resolution.
+_current_locale: str | None = None
 _messages: dict[str, dict[str, str]] = {}
 
 
@@ -15,7 +20,11 @@ def set_locale(locale: str) -> None:
 
 
 def get_locale() -> str:
-    """Get the active locale code."""
+    """Get the active locale code, resolving lazily on first access."""
+    global _current_locale
+    if _current_locale is None:
+        _current_locale = detect_locale()
+        _load_locale(_current_locale)
     return _current_locale
 
 
@@ -112,10 +121,11 @@ def translate(key: str, **kwargs: object) -> str:
 
     Fallback chain: current locale -> English -> raw key.
     """
-    _load_locale(_current_locale)
+    locale = get_locale()
+    _load_locale(locale)
     _load_locale("en")
 
-    msg = _messages.get(_current_locale, {}).get(key)
+    msg = _messages.get(locale, {}).get(key)
     if msg is None:
         msg = _messages.get("en", {}).get(key)
     if msg is None:
