@@ -19,6 +19,7 @@ from .base import (
     CatalogEntry,
     CheckoutResult,
     CustomerResult,
+    PlanChangeResult,
     ProviderHealth,
     RefundResult,
     TransactionResult,
@@ -67,6 +68,7 @@ class StripeProvider(BasePaymentProvider):
         cancel_url: str,
         customer_id: str | None = None,
         metadata: dict[str, Any] | None = None,
+        trial_period_days: int | None = None,
     ) -> CheckoutResult:
         """Create a Stripe Checkout Session."""
         params: dict[str, Any] = {
@@ -79,8 +81,14 @@ class StripeProvider(BasePaymentProvider):
             params["customer"] = customer_id
         if metadata:
             params["metadata"] = metadata
+        # Trial period only makes sense for subscriptions; Stripe rejects
+        # ``subscription_data`` on one-shot payment sessions.
+        if mode == "subscription" and trial_period_days and trial_period_days > 0:
+            params["subscription_data"] = {
+                "trial_period_days": int(trial_period_days),
+            }
 
-        session = stripe.checkout.Session.create(**params)
+        session = await stripe.checkout.Session.create_async(**params)
         return CheckoutResult(
             session_id=session.id,
             checkout_url=session.url or "",
@@ -91,7 +99,7 @@ class StripeProvider(BasePaymentProvider):
         self, provider_transaction_id: str
     ) -> TransactionResult:
         """Fetch a PaymentIntent from Stripe."""
-        pi = stripe.PaymentIntent.retrieve(provider_transaction_id)
+        pi = await stripe.PaymentIntent.retrieve_async(provider_transaction_id)
         return TransactionResult(
             provider_transaction_id=pi.id,
             status=pi.status or "unknown",
@@ -123,12 +131,90 @@ class StripeProvider(BasePaymentProvider):
         if reason and reason in RefundReason.STRIPE_ACCEPTED:
             params["reason"] = reason
 
-        refund = stripe.Refund.create(**params)
+        refund = await stripe.Refund.create_async(**params)
         return RefundResult(
             provider_refund_id=refund.id,
             status=refund.status or "pending",
             amount=refund.amount or 0,
             currency=refund.currency or "usd",
+        )
+
+    async def change_subscription_plan(
+        self,
+        provider_subscription_id: str,
+        new_price_id: str,
+        *,
+        proration_behavior: str = "create_prorations",
+    ) -> PlanChangeResult:
+        """Swap the price on an existing Stripe subscription.
+
+        Stripe requires the **subscription item id** (``si_xxx``), not
+        the subscription id, to target a specific line for price swap.
+        We retrieve the subscription first, grab the first item's id,
+        then issue the modify with the new price. Two assumptions
+        baked in:
+
+        - We only handle **single-item** subscriptions (one plan per
+          sub). For per-seat / multi-item subs, swap on the intended
+          item id explicitly.
+        - ``proration_behavior`` defaults to ``"create_prorations"`` —
+          Stripe charges the prorated upgrade fee on the next renewal.
+          Pass ``"always_invoice"`` to bill it immediately, or
+          ``"none"`` to defer the switch to next cycle.
+        """
+        sub = await stripe.Subscription.retrieve_async(provider_subscription_id)
+        items = (sub.get("items") or {}).get("data") if isinstance(sub, dict) else None
+        if items is None:
+            items_obj = getattr(sub, "items", None)
+            items = list(items_obj.data) if items_obj else []
+        if not items:
+            raise RuntimeError(
+                f"Stripe subscription {provider_subscription_id} has no items "
+                f"- cannot change plan."
+            )
+        item_id = items[0].get("id") if isinstance(items[0], dict) else items[0].id
+        if not item_id:
+            raise RuntimeError(
+                f"Stripe subscription item missing id on {provider_subscription_id}."
+            )
+
+        updated = await stripe.Subscription.modify_async(
+            provider_subscription_id,
+            items=[{"id": item_id, "price": new_price_id}],
+            proration_behavior=proration_behavior,
+        )
+
+        # Read the prorated amount Stripe will bill (if any). With
+        # ``create_prorations`` the proration shows up on the upcoming
+        # invoice - we surface 0 here and let the actual receipt email
+        # carry the dollar figure when the invoice fires.
+        proration_amount = 0
+        if proration_behavior == "always_invoice":
+            latest_inv = getattr(updated, "latest_invoice", None)
+            if latest_inv:
+                inv_id = (
+                    latest_inv if isinstance(latest_inv, str) else latest_inv.id
+                )
+                try:
+                    inv = await stripe.Invoice.retrieve_async(inv_id)
+                    proration_amount = int(getattr(inv, "amount_paid", 0) or 0)
+                except stripe.StripeError as exc:
+                    # Surface 0 + log so a genuine zero is distinguishable
+                    # from a failed retrieve. The receipt email that fires
+                    # off the actual invoice carries the authoritative
+                    # dollar figure either way.
+                    logger.warning(
+                        "change_subscription_plan: failed to read "
+                        "proration amount from invoice %s: %s",
+                        inv_id,
+                        exc,
+                    )
+
+        return PlanChangeResult(
+            provider_subscription_id=updated.id,
+            status=getattr(updated, "status", "") or "",
+            new_price_id=new_price_id,
+            proration_amount_cents=proration_amount,
         )
 
     async def create_customer(
@@ -139,7 +225,7 @@ class StripeProvider(BasePaymentProvider):
         if name:
             params["name"] = name
 
-        customer = stripe.Customer.create(**params)
+        customer = await stripe.Customer.create_async(**params)
         return CustomerResult(
             provider_customer_id=customer.id,
             email=customer.email,
@@ -189,7 +275,7 @@ class StripeProvider(BasePaymentProvider):
 
         try:
             # Probe API connectivity; result intentionally discarded.
-            stripe.Balance.retrieve()
+            await stripe.Balance.retrieve_async()
             is_test = self._api_key.startswith("sk_test_")
             return ProviderHealth(
                 provider_key=self.provider_key,
@@ -223,7 +309,7 @@ class StripeProvider(BasePaymentProvider):
         if not self._api_key:
             return []
 
-        response = stripe.Price.list(
+        response = await stripe.Price.list_async(
             active=True,
             expand=["data.product"],
             limit=100,

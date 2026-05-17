@@ -739,6 +739,7 @@ class TestHandleWebhookDispatch:
                 event_type="charge.refunded",
                 provider_key=ProviderKeys.STRIPE,
                 data={
+                    "id": "ch_test_wh_refund",
                     "payment_intent": "pi_test_wh_refund",
                     "amount": 3000,
                     "amount_refunded": 3000,
@@ -773,6 +774,7 @@ class TestHandleWebhookDispatch:
                 event_type="charge.refunded",
                 provider_key=ProviderKeys.STRIPE,
                 data={
+                    "id": "ch_test_wh_partial",
                     "payment_intent": "pi_test_wh_partial",
                     "amount": 3000,
                     "amount_refunded": 1000,
@@ -1451,13 +1453,20 @@ class TestSubscriptionScoping:
         )
         now = datetime.now()
 
-        for cust, pid in ((alice, "sub_a1"), (alice, "sub_a2"), (bob, "sub_b1")):
+        # Alice has one active + one canceled sub - the partial unique
+        # index on (customer_id) WHERE status IN ('active','trialing')
+        # rejects two active rows per customer.
+        for cust, pid, status in (
+            (alice, "sub_a1", SubscriptionStatus.ACTIVE),
+            (alice, "sub_a2", SubscriptionStatus.CANCELED),
+            (bob, "sub_b1", SubscriptionStatus.ACTIVE),
+        ):
             async_db_session.add(
                 PaymentSubscription(
                     customer_id=cust.id,  # type: ignore[arg-type]
                     provider_subscription_id=pid,
                     plan_name="Pro",
-                    status=SubscriptionStatus.ACTIVE,
+                    status=status,
                     current_period_start=now,
                     current_period_end=now,
                 )

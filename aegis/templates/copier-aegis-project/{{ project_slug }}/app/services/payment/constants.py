@@ -117,6 +117,10 @@ class WebhookEventType:
     SUBSCRIPTION_CREATED = "customer.subscription.created"
     SUBSCRIPTION_UPDATED = "customer.subscription.updated"
     SUBSCRIPTION_DELETED = "customer.subscription.deleted"
+    # Fires ~3 days before a trial converts to a paid charge. Stripe
+    # sends it once per trial; the handler emails a heads-up so the
+    # customer can cancel / update payment before the first charge.
+    SUBSCRIPTION_TRIAL_WILL_END = "customer.subscription.trial_will_end"
     CHARGE_REFUNDED = "charge.refunded"
 
     # Fraud and disputes

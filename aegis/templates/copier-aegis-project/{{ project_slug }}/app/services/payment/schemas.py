@@ -85,6 +85,45 @@ class RefundRequest(BaseModel):
         return v
 
 
+class ChangePlanRequest(BaseModel):
+    """Request to swap the price on an existing subscription.
+
+    Mirrors Stripe's ``Subscription.modify`` semantics: the same row
+    stays in place, only the line-item price changes, and proration
+    is handled per the requested behavior. Validates the
+    ``proration_behavior`` enum at the schema boundary so the API
+    returns a 422 (Pydantic) instead of bubbling Stripe's wording.
+    """
+
+    new_price_id: str = Field(
+        description="Stripe Price ID to switch into (e.g., price_xxx)",
+    )
+    proration_behavior: str | None = Field(
+        default=None,
+        description=(
+            "How Stripe should bill the price difference. "
+            "``create_prorations`` (default): add proration line items "
+            "to the upcoming invoice. ``always_invoice``: issue a "
+            "separate invoice immediately for the prorated delta. "
+            "``none``: switch takes effect at next renewal, no "
+            "proration. ``None`` defers to the service's default."
+        ),
+    )
+
+    @field_validator("proration_behavior")
+    @classmethod
+    def _validate_proration_behavior(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        allowed = {"create_prorations", "always_invoice", "none"}
+        if v not in allowed:
+            raise ValueError(
+                f"Invalid proration_behavior {v!r}. "
+                f"Must be one of: {', '.join(sorted(allowed))}"
+            )
+        return v
+
+
 # ---------------------------------------------------------------------------
 # Response schemas
 # ---------------------------------------------------------------------------

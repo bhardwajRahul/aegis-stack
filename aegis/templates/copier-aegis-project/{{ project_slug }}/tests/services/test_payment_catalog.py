@@ -236,7 +236,11 @@ class TestStripeListCatalogMapping:
                 ),
             ]
         )
-        with patch.object(stripe_mod.stripe.Price, "list", return_value=response):
+        with patch.object(
+            stripe_mod.stripe.Price,
+            "list_async",
+            new=AsyncMock(return_value=response),
+        ):
             entries = await provider.list_catalog()
 
         assert len(entries) == 2
@@ -262,7 +266,11 @@ class TestStripeListCatalogMapping:
                 _fake_price("price_tiered", None),  # unit_amount missing
             ]
         )
-        with patch.object(stripe_mod.stripe.Price, "list", return_value=response):
+        with patch.object(
+            stripe_mod.stripe.Price,
+            "list_async",
+            new=AsyncMock(return_value=response),
+        ):
             entries = await provider.list_catalog()
 
         assert [e.price_id for e in entries] == ["price_live"]

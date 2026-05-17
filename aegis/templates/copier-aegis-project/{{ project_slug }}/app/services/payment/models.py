@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import JSON, Column, Index, UniqueConstraint
+from sqlalchemy import JSON, Column, Index, UniqueConstraint, text
 from sqlmodel import Field, Relationship, SQLModel
 
 # ---------------------------------------------------------------------------
@@ -129,9 +129,43 @@ class PaymentTransaction(SQLModel, table=True):
 
 
 class PaymentSubscription(SQLModel, table=True):
-    """Active subscription tracking."""
+    """Active subscription tracking.
+
+    Invariant: at most one currently-active subscription per customer.
+    ``active`` and ``trialing`` are functionally the same for access-
+    gating purposes - both grant the user paid features, whether or
+    not Stripe is currently charging. ``past_due``, ``incomplete``,
+    ``canceled``, etc. are NOT part of the active set; they're
+    historical and may exist alongside a fresh active row.
+
+    The partial unique index below enforces this at the database
+    layer. Postgres only - SQLite supports partial indexes but
+    SQLAlchemy's reflection of ``postgresql_where`` doesn't translate
+    cleanly, so on SQLite this index degenerates to a non-partial
+    unique on ``customer_id`` and would over-constrain (canceled +
+    active couldn't coexist for the same customer). Most production
+    deployments are Postgres so this is the right default; drop the
+    declaration here if you ship on SQLite and rely on the app-layer
+    gate alone.
+    """
 
     __tablename__ = "payment_subscription"
+    __table_args__ = (
+        Index(
+            "uq_payment_subscription_active_per_customer",
+            "customer_id",
+            unique=True,
+            # Both dialects need the filter declared explicitly -
+            # SQLAlchemy doesn't broadcast ``postgresql_where`` to
+            # other backends. Without ``sqlite_where`` SQLite would
+            # build a plain ``UNIQUE (customer_id)`` (no WHERE),
+            # over-constraining the table by also forbidding a
+            # canceled-row + active-row coexistence for the same
+            # customer.
+            postgresql_where=text("status IN ('active', 'trialing')"),
+            sqlite_where=text("status IN ('active', 'trialing')"),
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     customer_id: int = Field(foreign_key="payment_customer.id", index=True)
