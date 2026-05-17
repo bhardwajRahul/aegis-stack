@@ -4,11 +4,19 @@
 
 # Run tests (excluding slow tests)
 test: ## Run tests (excluding slow tests - use 'test-all' for everything)
-	@uv run pytest -m "not slow"
+	@uv run pytest -n auto --dist=loadgroup -m "not slow"
 
 # Run all tests including slow ones
 test-all: ## Run all tests including slow ones (for CI/CD)
-	@uv run pytest
+	@uv run pytest -n auto --dist=loadgroup
+
+# Run tests serially (skip xdist; useful for debugging flakes)
+test-serial: ## Run tests serially without xdist
+	@uv run pytest -m "not slow"
+
+# Show full per-test timing (no filter, parallel, ranked by duration)
+test-perf: ## Run all tests with full duration ranking
+	@uv run pytest -n auto --dist=loadgroup --durations=0
 
 # Run linting	
 lint: ## Run linting with ruff

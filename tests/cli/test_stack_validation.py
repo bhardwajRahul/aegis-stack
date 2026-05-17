@@ -21,6 +21,8 @@ import pytest
 from .test_stack_generation import STACK_COMBINATIONS, StackCombination
 from .test_utils import CLITestResult, run_quality_checks
 
+pytestmark = pytest.mark.xdist_group("generated_stacks")
+
 # Note: ValidationResult merged into CLITestResult in test_utils.py
 
 
