@@ -18,6 +18,7 @@ from app.services.payment.payment_service import PaymentService
 from app.services.payment.schemas import (
     CatalogEntryResponse,
     CatalogResponse,
+    ChangePlanRequest,
     CheckoutRequest,
     CheckoutResponse,
     DisputeListResponse,
@@ -202,6 +203,62 @@ async def cancel_subscription(
     if not sub:
         raise HTTPException(status_code=404, detail="Subscription not found")
     return {"status": "canceled", "cancel_at_period_end": "true"}
+
+
+@router.post("/subscriptions/{subscription_id}/change-plan")
+async def change_subscription_plan(
+    subscription_id: int,
+    request: ChangePlanRequest,
+    service: PaymentService = Depends(get_payment_service),
+) -> dict[str, str]:
+    """Change the price on an existing subscription in place.
+
+    This is the proper "switch tier" flow: the payment provider's
+    plan-modify API swaps the line-item price on the same subscription
+    row and handles proration automatically. The customer ends up with
+    **one** subscription on the new plan, not two parallel ones (which
+    is what would happen if the UI mistakenly called ``/checkout`` to
+    start a fresh subscription against an already-subscribed customer).
+
+    Downstream apps typically add a user-scoped wrapper around this -
+    see ``PaymentService.change_subscription_plan``'s ``user_id``
+    argument - plus a 409 guard on ``/checkout`` to refuse fresh
+    checkouts when an active sub already exists.
+    """
+    kwargs: dict[str, object] = {"new_price_id": request.new_price_id}
+    if request.proration_behavior is not None:
+        kwargs["proration_behavior"] = request.proration_behavior
+
+    try:
+        sub = await service.change_subscription_plan(
+            subscription_id,
+            **kwargs,
+        )
+    except ValueError as e:
+        # Service-layer guard (e.g. invalid proration_behavior). Schema
+        # validates the same set, but a direct service call from CLI /
+        # admin tooling without the schema would hit this branch.
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except stripe.InvalidRequestError as e:
+        raise HTTPException(
+            status_code=400, detail=e.user_message or str(e)
+        ) from e
+    except stripe.CardError as e:
+        raise HTTPException(
+            status_code=400, detail=e.user_message or str(e)
+        ) from e
+    except stripe.AuthenticationError as e:
+        raise HTTPException(
+            status_code=401, detail=e.user_message or str(e)
+        ) from e
+
+    if not sub:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    return {
+        "status": "plan_changed",
+        "subscription_id": str(sub.id),
+        "new_price_id": request.new_price_id,
+    }
 
 
 # -- Disputes ----------------------------------------------------------------

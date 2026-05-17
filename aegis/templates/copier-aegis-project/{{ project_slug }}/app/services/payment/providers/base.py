@@ -48,6 +48,22 @@ class CustomerResult(BaseModel):
     email: str | None = None
 
 
+class PlanChangeResult(BaseModel):
+    """Result of changing a subscription's plan in place.
+
+    Returned by ``change_subscription_plan``. Carries the updated
+    subscription's status so the caller can confirm the provider
+    accepted the modification before tagging emails, plus the
+    prorated amount so we can surface "we charged $X today" copy
+    if the proration_behavior issues an immediate invoice.
+    """
+
+    provider_subscription_id: str
+    status: str
+    new_price_id: str
+    proration_amount_cents: int = 0
+
+
 class WebhookEvent(BaseModel):
     """Parsed and verified webhook event."""
 
@@ -123,8 +139,14 @@ class BasePaymentProvider(ABC):
         cancel_url: str,
         customer_id: str | None = None,
         metadata: dict[str, Any] | None = None,
+        trial_period_days: int | None = None,
     ) -> CheckoutResult:
-        """Create a checkout session. Returns a URL to redirect the user to."""
+        """Create a checkout session. Returns a URL to redirect the user to.
+
+        ``trial_period_days``: when set and ``mode == 'subscription'``,
+        the provider starts the subscription in a trial state for N
+        days. Ignored for one-shot ``payment`` mode.
+        """
         ...
 
     @abstractmethod
@@ -145,6 +167,31 @@ class BasePaymentProvider(ABC):
         Providers must map it to their own accepted enum (or drop values
         the provider's API doesn't accept) to avoid upstream validation
         errors.
+        """
+        ...
+
+    @abstractmethod
+    async def change_subscription_plan(
+        self,
+        provider_subscription_id: str,
+        new_price_id: str,
+        *,
+        proration_behavior: str = "create_prorations",
+    ) -> PlanChangeResult:
+        """Swap the price on an existing subscription in place.
+
+        Implements the real plan-change flow: the customer's existing
+        subscription stays the same row in the provider, but its line
+        item gets a new price. Stripe (and any reasonable provider)
+        handles proration automatically — billing the difference now
+        and recalculating the renewal — so the customer doesn't end
+        up with two parallel subscriptions on the same product.
+
+        ``proration_behavior`` follows Stripe's enum:
+        ``"create_prorations"`` (default — bill the difference on the
+        upcoming invoice), ``"always_invoice"`` (issue a separate
+        prorated invoice immediately), or ``"none"`` (no charge —
+        the switch takes effect at next renewal).
         """
         ...
 

@@ -1,0 +1,40 @@
+{% extends "_layout.html" %}
+{% from "_macros.html" import summary_table, row %}
+
+{# Trial-end reminder. Stripe fires customer.subscription.trial_will_end
+   roughly three days before the trial converts. We tell the customer
+   the exact date + amount of the first charge and link to billing so
+   they can update their card or cancel without surprise. #}
+
+{% block title %}Your {{ plan_name }} trial ends soon — {{ project_name }}{% endblock %}
+{% block preheader %}Your card will be charged {{ amount_formatted }} on {{ trial_end_human }}.{% endblock %}
+{% block heading %}Your trial ends on {{ trial_end_human }}.{% endblock %}
+
+{% block body %}
+<p style="margin:0 0 12px 0;">
+  Just a heads-up - your <strong style="color:#FFFFFF;">{{ plan_name }}</strong>
+  trial wraps up on {{ trial_end_human }} and we&rsquo;ll charge
+  <strong style="color:#FFFFFF;">{{ amount_formatted }}</strong> to the card
+  on file. No action needed if you&rsquo;re sticking around.
+</p>
+<p style="margin:0; color:#7E8A9A;">
+  Want to cancel, switch tiers, or update the card before the charge?
+  Manage everything from billing - it&rsquo;s one click.
+</p>
+{% endblock %}
+
+{% block summary %}
+{% call summary_table() %}
+  {{ row("Plan", plan_name) }}
+  {{ row("First charge date", trial_end_human) }}
+  {{ row("Amount", amount_formatted, emphasis=True) }}
+{% endcall %}
+{% endblock %}
+
+{% block cta_label %}Manage billing{% endblock %}
+
+{% block footer_note %}
+<p style="margin:20px 0 0 0; font-size:12px; color:#7E8A9A; line-height:1.6;">
+  Reply to this email if you have any questions before then.
+</p>
+{% endblock %}

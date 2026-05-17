@@ -418,3 +418,34 @@ async def send_refund_processed(
             "cta_url": _billing_settings_url(),
         },
     )
+
+
+async def send_trial_ending_soon(
+    *,
+    to: str,
+    plan_name: str,
+    trial_end: datetime | None,
+    amount_cents: int | None,
+    currency: str | None,
+) -> EmailDeliveryResult:
+    """Reminder fired ~3 days before a trial converts to a paid charge.
+
+    Stripe sends ``customer.subscription.trial_will_end`` exactly once
+    per trial, so this helper is invoked once per subscription. The
+    template tells the customer the exact date their card will be
+    charged and how much, plus a billing link in case they want to
+    cancel or switch cards before then.
+    """
+    return await _render_and_send(
+        template="trial_ending_soon.html",
+        to=to,
+        subject=f"Your {plan_name} trial ends soon",
+        kind="trial_ending_soon",
+        ctx={
+            "plan_name": plan_name,
+            "trial_end_human": _human_date(trial_end),
+            "amount_formatted": _money(amount_cents, currency),
+            "billing_settings_url": _billing_settings_url(),
+            "cta_url": _billing_settings_url(),
+        },
+    )
