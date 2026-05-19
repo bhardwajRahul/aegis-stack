@@ -33,6 +33,19 @@ def _truncate_password(password: str) -> str:
     return password[:72]
 
 
+def _effective_token_minutes() -> int:
+    """``ACCESS_TOKEN_EXPIRE_MINUTES``, scaled up in dev.
+
+    Dev iteration is annoying when the session expires every 15 min, so
+    ``APP_ENV == "dev"`` multiplies by ``DEV_TOKEN_EXPIRE_MULTIPLIER``
+    (default 4 → 1h). Prod / staging are unchanged.
+    """
+    minutes = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    if settings.APP_ENV == "dev":
+        minutes *= settings.DEV_TOKEN_EXPIRE_MULTIPLIER
+    return minutes
+
+
 def create_access_token(
     data: dict[str, Any], expires_delta: timedelta | None = None
 ) -> str:
@@ -41,9 +54,7 @@ def create_access_token(
     if expires_delta:
         expire = datetime.now(UTC) + expires_delta
     else:
-        expire = datetime.now(UTC) + timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        )
+        expire = datetime.now(UTC) + timedelta(minutes=_effective_token_minutes())
 
     to_encode.update({"exp": expire, "jti": secrets.token_urlsafe(16)})
     encoded_jwt = jwt.encode(
@@ -100,7 +111,7 @@ def set_session_cookie(response: Response, token: str) -> None:
     response.set_cookie(
         SESSION_COOKIE_NAME,
         token,
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        max_age=_effective_token_minutes() * 60,
         httponly=True,
         samesite="lax",
         secure=secure,

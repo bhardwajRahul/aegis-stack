@@ -1,13 +1,13 @@
 {% if insights_per_user -%}
 """
 Tests for the symmetric encryption helper used to protect sensitive
-column values (e.g., per-project GitHub PATs and Plausible API keys).
+column values (e.g., per-project API keys and OAuth tokens).
 
-The helper derives a Fernet key deterministically from
-``settings.SECRET_KEY`` so encrypted-at-rest data round-trips across
-process restarts as long as the secret is stable. Rotating
-``SECRET_KEY`` invalidates every previously-encrypted value — the same
-contract Flet's ``flet.security.encrypt`` provides on the frontend.
+The helper derives an AES-256-GCM key deterministically from
+``settings.ENCRYPTION_KEY`` (or ``SECRET_KEY`` as a backward-compat
+fallback). Encrypted-at-rest data round-trips across process restarts
+as long as the secret is stable. Rotating the secret invalidates every
+previously-encrypted value, by design.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ class TestEncryption:
         assert plaintext not in ciphertext
 
     def test_two_encryptions_of_same_value_differ(self) -> None:
-        """Fernet uses a fresh random IV per call, so ciphertexts must differ."""
+        """AES-GCM uses a fresh random nonce per call, so ciphertexts must differ."""
         plaintext = "ghp_abc123"
 
         a = encrypt_secret(plaintext)
@@ -49,20 +49,20 @@ class TestEncryption:
         assert decrypt_secret(b) == plaintext
 
     def test_decrypt_with_wrong_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Rotating SECRET_KEY invalidates existing ciphertexts."""
+        """Rotating the encryption secret invalidates existing ciphertexts."""
         from app.core.encryption import _reset_cache
 
         ciphertext = encrypt_secret("ghp_abc123")
 
-        # Swap the secret and clear the cached Fernet so the next call
+        # Swap the secret and clear the cached cipher so the next call
         # rebuilds with the new key.
         from app.core.config import settings
 
         monkeypatch.setattr(settings, "SECRET_KEY", "totally-different-secret")
+        monkeypatch.setattr(settings, "ENCRYPTION_KEY", None, raising=False)
         _reset_cache()
 
-        # Fernet raises InvalidToken specifically on a key mismatch;
-        # asserting the precise type keeps unrelated failures (e.g. the
+        # Asserting the precise type keeps unrelated failures (e.g. the
         # cache mechanism throwing a TypeError) from masquerading as a
         # successful test.
         with pytest.raises(InvalidToken):
@@ -79,4 +79,57 @@ class TestEncryption:
         plaintext = "tøken-with-üñïcödé-✨"
         ciphertext = encrypt_secret(plaintext)
         assert decrypt_secret(ciphertext) == plaintext
+
+    def test_context_round_trip_binds_ciphertext(self) -> None:
+        """AAD context round-trips: same context on encrypt + decrypt works."""
+        plaintext = "ghp_abc123"
+        ctx = "project:7:github_token"
+
+        ciphertext = encrypt_secret(plaintext, context=ctx)
+        assert decrypt_secret(ciphertext, context=ctx) == plaintext
+
+    def test_context_mismatch_raises(self) -> None:
+        """Decrypting with a different context fails — the row-binding check."""
+        ciphertext = encrypt_secret("ghp_abc123", context="project:7:github_token")
+
+        # Wrong context (e.g. an attacker copied the ciphertext into row 12).
+        with pytest.raises(InvalidToken):
+            decrypt_secret(ciphertext, context="project:12:github_token")
+
+    def test_encryption_key_rotation_invalidates(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Rotating ``ENCRYPTION_KEY`` (the primary path) invalidates ciphertexts.
+
+        The ``test_decrypt_with_wrong_key_raises`` test above exercises the
+        ``SECRET_KEY`` fallback; this exercises the ``ENCRYPTION_KEY``
+        primary path so we don't lose coverage if someone reorders the
+        precedence in ``_encryption_key_material``.
+        """
+        from app.core.config import settings
+        from app.core.encryption import _reset_cache
+
+        # Establish the starting key explicitly so the test doesn't depend
+        # on whatever ``ENCRYPTION_KEY`` happens to be in the test env.
+        monkeypatch.setattr(settings, "ENCRYPTION_KEY", "starting-key", raising=False)
+        _reset_cache()
+        ciphertext = encrypt_secret("ghp_abc123")
+
+        # Rotate.
+        monkeypatch.setattr(settings, "ENCRYPTION_KEY", "rotated-key", raising=False)
+        _reset_cache()
+
+        with pytest.raises(InvalidToken):
+            decrypt_secret(ciphertext)
+
+        # Restore for the rest of the test session.
+        _reset_cache()
+
+    def test_v2_prefix_is_present(self) -> None:
+        """New ciphertexts use the v2 prefix so legacy detection works."""
+        from app.core.encryption import is_legacy_ciphertext
+
+        ciphertext = encrypt_secret("ghp_abc123")
+        assert ciphertext.startswith("v2:")
+        assert not is_legacy_ciphertext(ciphertext)
 {%- endif %}

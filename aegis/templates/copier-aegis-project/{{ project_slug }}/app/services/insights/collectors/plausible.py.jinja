@@ -68,10 +68,40 @@ class PlausibleCollector(BaseCollector):
         {%- endif %}
 
         if not api_key or not sites_str:
+            # Plausible is opt-in. When unconfigured, return
+            # ``success=True, skipped=True`` so the collection run isn't
+            # marked failed for a source the user deliberately didn't
+            # wire up — see ``CollectionResult.skipped`` in base.py.
+            # Tailor the note to the caller's config surface so the user
+            # knows which knob to turn (project columns vs env vars).
+            {% if insights_per_user -%}
+            if self.project is not None:
+                missing = []
+                if not self.project.plausible_site:
+                    missing.append("Plausible site")
+                if not self.project.plausible_api_key:
+                    missing.append("Plausible API key")
+                note = (
+                    f"Not configured on project '{self.project.slug}' "
+                    f"(missing {' and '.join(missing)}). Set in project "
+                    "settings to enable."
+                )
+            else:
+                note = (
+                    "Not configured (INSIGHT_PLAUSIBLE_API_KEY / "
+                    "INSIGHT_PLAUSIBLE_SITES env vars unset)."
+                )
+            {% else -%}
+            note = (
+                "Not configured (INSIGHT_PLAUSIBLE_API_KEY / "
+                "INSIGHT_PLAUSIBLE_SITES env vars unset)."
+            )
+            {%- endif %}
             return CollectionResult(
                 source_key=self.source_key,
-                success=False,
-                error="Missing INSIGHT_PLAUSIBLE_API_KEY or INSIGHT_PLAUSIBLE_SITES",
+                success=True,
+                skipped=True,
+                error=note,
             )
 
         sites = [s.strip() for s in sites_str.split(",") if s.strip()]

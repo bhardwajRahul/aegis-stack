@@ -149,8 +149,12 @@ class CollectorService:
 
         try:
             result = await collector.collect(**kwargs)
-            if result.success:
-                # Update last_collected_at on the source
+            if result.success and not result.skipped:
+                # Gated on ``not skipped`` because an unconfigured optional
+                # source returns ``success=True, skipped=True`` to render
+                # as a yellow notice instead of a red error — nothing was
+                # actually collected, so we must not bump the timestamp,
+                # invalidate caches, or run record checks.
                 from datetime import datetime
                 stmt = select(InsightSource).where(InsightSource.key == source_key)
                 source = (await self.db.exec(stmt)).first()
@@ -178,6 +182,12 @@ class CollectorService:
                     source_key,
                     result.rows_written,
                     result.rows_skipped,
+                )
+            elif result.skipped:
+                logger.info(
+                    "Collector '%s' skipped: %s",
+                    source_key,
+                    result.error or "not configured",
                 )
             else:
                 logger.warning(

@@ -37,6 +37,11 @@ class CollectionResult(BaseModel):
 
     source_key: str
     success: bool
+    # ``skipped`` distinguishes "ran cleanly, did nothing because the
+    # source isn't configured for this project" from a real failure.
+    # The CLI / job runner render it as yellow notice instead of red
+    # error so unconfigured optional sources don't look broken.
+    skipped: bool = False
     rows_written: int = Field(default=0, ge=0)
     rows_skipped: int = Field(default=0, ge=0)
     records_broken: list[str] = Field(default_factory=list)
