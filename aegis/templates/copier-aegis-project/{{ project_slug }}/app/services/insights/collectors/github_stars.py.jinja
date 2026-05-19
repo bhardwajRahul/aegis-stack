@@ -33,8 +33,12 @@ class GitHubStarsCollector(BaseCollector):
     async def collect(self) -> CollectionResult:
         """Collect new stars with user profiles."""
         {% if insights_per_user -%}
-        # Project takes precedence; fall back to env vars only when this
-        # collector wasn't bound to one (CLI / single-tenant deploy).
+        # Project-bound resolution intentionally does NOT fall back to
+        # the operator's ``INSIGHT_GITHUB_TOKEN`` env var. Doing so
+        # would let any project owner harvest data the operator's
+        # token has access to but the user does not (private stargazer
+        # lists, private repo traffic). Env-var fallback only fires in
+        # the no-project path (single-tenant CLI mode).
         if self.project is not None:
             token = self.project.github_token
             owner = self.project.github_owner
@@ -50,10 +54,41 @@ class GitHubStarsCollector(BaseCollector):
         {%- endif %}
 
         if not token or not owner or not repo:
+            missing = []
+            if not token:
+                {% if insights_per_user -%}
+                if self.project is not None:
+                    missing.append(
+                        "GitHub authorisation for this project "
+                        "(paste a PAT in project settings)"
+                    )
+                else:
+                    missing.append("INSIGHT_GITHUB_TOKEN")
+                {% else -%}
+                missing.append("INSIGHT_GITHUB_TOKEN")
+                {%- endif %}
+            if not owner:
+                {% if insights_per_user -%}
+                if self.project is not None:
+                    missing.append("github_owner (project setting)")
+                else:
+                    missing.append("INSIGHT_GITHUB_OWNER")
+                {% else -%}
+                missing.append("INSIGHT_GITHUB_OWNER")
+                {%- endif %}
+            if not repo:
+                {% if insights_per_user -%}
+                if self.project is not None:
+                    missing.append("github_repo (project setting)")
+                else:
+                    missing.append("INSIGHT_GITHUB_REPO")
+                {% else -%}
+                missing.append("INSIGHT_GITHUB_REPO")
+                {%- endif %}
             return CollectionResult(
                 source_key=self.source_key,
                 success=False,
-                error="Missing INSIGHT_GITHUB_TOKEN, INSIGHT_GITHUB_OWNER, or INSIGHT_GITHUB_REPO",
+                error="Missing: " + "; ".join(missing),
             )
 
         headers = {
