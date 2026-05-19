@@ -10,7 +10,8 @@ from sqlmodel import delete, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, verify_password
+from app.services.auth.hooks import run_post_user_created
 {% if include_auth_org %}
 from app.models.org import OrganizationMember, OrgInvite
 {% endif %}
@@ -78,8 +79,11 @@ class UserService:
             created_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
-        # Save to database
+        # Save to database. Flush so ``user.id`` is populated before
+        # hooks run; they get a real id (e.g. for FK rows they stage).
         self.db.add(user)
+        await self.db.flush()
+        await run_post_user_created(self.db, user)
         await self.db.commit()
         await self.db.refresh(user)
 
@@ -361,17 +365,88 @@ class UserService:
 
         await self.db.commit()
 
+    async def change_password(
+        self, user_id: int, current_password: str, new_password: str
+    ) -> bool:
+        """Verify the caller's current password and set a new one.
+
+        Returns ``False`` if the current password is wrong so the API can
+        surface a 400 without leaking internal state. Raises ``ValueError``
+        if the user doesn't exist (caller's auth context got us here, so
+        this is an invariant violation, not a normal flow).
+        """
+        user = await self.get_user_by_id(user_id)
+        if user is None:
+            raise ValueError("User not found")
+
+        if not verify_password(current_password, user.hashed_password):
+            return False
+
+        user.hashed_password = get_password_hash(new_password)
+        self.db.add(user)
+        await self.db.commit()
+        return True
+
+    async def authenticate_credentials(
+        self, email: str, password: str
+    ) -> tuple[User | None, str | None]:
+        """Validate email + password and return the user on success.
+
+        Shared between the API ``/token`` endpoint and any web ``/login``
+        form handler so both paths stay in lockstep (lockout, failed-attempt
+        counters, last_login bump). Callers own rate-limiting and audit
+        emission — those vary by entry point.
+
+        Returns ``(user, None)`` on success, or ``(None, "locked" | "invalid")``
+        on failure. The error string lets the caller choose 403 vs 401 or a
+        redirect destination without re-implementing the check.
+        """
+        user = await self.get_user_by_email(email)
+
+        if user and await self.is_account_locked(user):
+            return None, "locked"
+
+        if not user or not verify_password(password, user.hashed_password):
+            if user:
+                await self.record_failed_login(email)
+            return None, "invalid"
+
+        await self.reset_login_attempts(user.id)
+        await self.update_user(
+            user.id, last_login=datetime.now(UTC).replace(tzinfo=None)
+        )
+        return user, None
+
     async def create_email_verification_token(self, user_id: int) -> str:
         """Create an email verification token for a user.
 
-        Returns the token string.
+        Invalidates any previously-issued unused tokens for this user first,
+        so a resend immediately locks out the old link. Prevents an
+        intercepted email from remaining live after the user hits "Resend".
+        Returns the new token string.
         """
+        await self._invalidate_prior_email_verification_tokens(user_id)
+
         token = secrets.token_urlsafe(32)
         verification_token = EmailVerificationToken(user_id=user_id, token=token)
         self.db.add(verification_token)
         await self.db.commit()
         await self.db.refresh(verification_token)
         return token
+
+    async def _invalidate_prior_email_verification_tokens(self, user_id: int) -> None:
+        """Mark all unused email-verification tokens for this user as used.
+
+        Called whenever a fresh token is about to be issued.
+        """
+        stmt = select(EmailVerificationToken).where(
+            EmailVerificationToken.user_id == user_id,
+            EmailVerificationToken.used == False,  # noqa: E712
+        )
+        result = await self.db.exec(stmt)
+        for tok in result.all():
+            tok.used = True
+            self.db.add(tok)
 
     async def record_failed_login(self, email: str) -> None:
         """Increment failed login attempts and lock account if threshold reached."""
@@ -562,6 +637,10 @@ class UserService:
                 avatar_url=avatar_url,
             )
         )
+        # OAuth signup creates a new local user — same hook fires as
+        # password signup so downstream tenancy/onboarding logic only
+        # has one place to subscribe.
+        await run_post_user_created(self.db, user)
         await self.db.commit()
         await self.db.refresh(user)
         return user

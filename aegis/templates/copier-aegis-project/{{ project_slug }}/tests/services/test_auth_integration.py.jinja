@@ -729,3 +729,161 @@ class TestAuthDatabaseInitialization:
             assert hasattr(created_user, "updated_at")
         except Exception as e:
             pytest.fail(f"User model fields don't match database schema: {e}")
+
+
+class TestChangePassword:
+    """``UserService.change_password`` verifies the current password
+    before mutating, and returns ``False`` (not raising) on mismatch so
+    callers can surface a 400 without leaking which field was wrong."""
+
+    @pytest.mark.asyncio
+    async def test_change_password_success(
+        self, async_db_session: AsyncSession, user_factory
+    ):
+        from app.core.security import verify_password
+
+        user = await user_factory(password="oldpassword123")
+        user_service = UserService(async_db_session)
+        original_hash = user.hashed_password
+
+        result = await user_service.change_password(
+            user.id, current_password="oldpassword123", new_password="newpassword456"
+        )
+
+        assert result is True
+        refreshed = await user_service.get_user_by_id(user.id)
+        assert refreshed is not None
+        assert refreshed.hashed_password != original_hash
+        assert verify_password("newpassword456", refreshed.hashed_password)
+
+    @pytest.mark.asyncio
+    async def test_change_password_wrong_current_returns_false(
+        self, async_db_session: AsyncSession, user_factory
+    ):
+        user = await user_factory(password="oldpassword123")
+        user_service = UserService(async_db_session)
+        original_hash = user.hashed_password
+
+        result = await user_service.change_password(
+            user.id, current_password="WRONGPASSWORD", new_password="newpassword456"
+        )
+
+        assert result is False
+        # Hash must not change on failed verify — otherwise the call would
+        # silently rotate to a value the caller doesn't know.
+        refreshed = await user_service.get_user_by_id(user.id)
+        assert refreshed is not None
+        assert refreshed.hashed_password == original_hash
+
+
+class TestAuthenticateCredentials:
+    """``UserService.authenticate_credentials`` is the shared login check.
+    Returns ``(user, None)`` on success, ``(None, "locked"|"invalid")``
+    on failure. Maintains lockout counters + ``last_login`` bump."""
+
+    @pytest.mark.asyncio
+    async def test_authenticate_credentials_success(
+        self, async_db_session: AsyncSession, user_factory
+    ):
+        user = await user_factory(password="rightpassword123")
+        # Pre-populate a failed attempt so we can verify it gets reset.
+        user.failed_login_attempts = 2
+        async_db_session.add(user)
+        await async_db_session.commit()
+
+        user_service = UserService(async_db_session)
+        result_user, err = await user_service.authenticate_credentials(
+            user.email, "rightpassword123"
+        )
+
+        assert result_user is not None
+        assert result_user.id == user.id
+        assert err is None
+        # Refresh from DB — both counters and last_login should have moved.
+        refreshed = await user_service.get_user_by_id(user.id)
+        assert refreshed is not None
+        assert refreshed.failed_login_attempts == 0
+        assert refreshed.last_login is not None
+
+    @pytest.mark.asyncio
+    async def test_authenticate_credentials_invalid_password(
+        self, async_db_session: AsyncSession, user_factory
+    ):
+        user = await user_factory(password="rightpassword123")
+        starting_attempts = user.failed_login_attempts
+        user_service = UserService(async_db_session)
+
+        result_user, err = await user_service.authenticate_credentials(
+            user.email, "WRONG"
+        )
+
+        assert result_user is None
+        assert err == "invalid"
+        refreshed = await user_service.get_user_by_id(user.id)
+        assert refreshed is not None
+        assert refreshed.failed_login_attempts == starting_attempts + 1
+
+    @pytest.mark.asyncio
+    async def test_authenticate_credentials_locked_account(
+        self, async_db_session: AsyncSession, user_factory
+    ):
+        from datetime import UTC, datetime, timedelta
+
+        user = await user_factory(password="rightpassword123")
+        # Lock the account by setting ``locked_until`` to a future time.
+        user.locked_until = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
+        user.failed_login_attempts = 5
+        async_db_session.add(user)
+        await async_db_session.commit()
+
+        user_service = UserService(async_db_session)
+        # Even with the CORRECT password, a locked account refuses.
+        result_user, err = await user_service.authenticate_credentials(
+            user.email, "rightpassword123"
+        )
+
+        assert result_user is None
+        assert err == "locked"
+        # Counters must not move — the auto-unlock check shouldn't fire
+        # because the lock is still in the future.
+        refreshed = await user_service.get_user_by_id(user.id)
+        assert refreshed is not None
+        assert refreshed.failed_login_attempts == 5
+
+
+class TestEmailVerificationTokenResendInvalidates:
+    """A resent verification email must invalidate any prior unused token
+    for the same user, so an intercepted earlier email can't be redeemed
+    after the user requests a new one."""
+
+    @pytest.mark.asyncio
+    async def test_resend_marks_prior_token_used(
+        self, async_db_session: AsyncSession, user_factory
+    ):
+        from sqlmodel import select
+
+        from app.models.user import EmailVerificationToken
+
+        user = await user_factory()
+        user_service = UserService(async_db_session)
+
+        first_token = await user_service.create_email_verification_token(user.id)
+        second_token = await user_service.create_email_verification_token(user.id)
+
+        assert first_token != second_token
+
+        # The first token row must now be marked used.
+        stmt = select(EmailVerificationToken).where(
+            EmailVerificationToken.token == first_token
+        )
+        first_row = (await async_db_session.exec(stmt)).first()
+        assert first_row is not None
+        assert first_row.used is True
+
+        # The second (fresh) token is the only one still live.
+        stmt = select(EmailVerificationToken).where(
+            EmailVerificationToken.token == second_token
+        )
+        second_row = (await async_db_session.exec(stmt)).first()
+        assert second_row is not None
+        assert second_row.used is False

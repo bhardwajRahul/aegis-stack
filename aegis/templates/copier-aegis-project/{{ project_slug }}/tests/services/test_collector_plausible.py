@@ -168,9 +168,13 @@ class TestPlausibleCollectorSuccess:
 
     @pytest.mark.asyncio
     async def test_collect_missing_config(self, async_db_session: AsyncSession) -> None:
-        """Missing API key or sites returns error."""
+        """Missing API key or sites returns ``skipped=True`` — not a failure.
+
+        Plausible is opt-in; unconfigured sources should render as a
+        yellow notice in the CLI / job runner, not red error.
+        """
         await _seed_plausible(async_db_session)
-        # Project with NO credentials — verifies the "missing config" error path.
+        # Project with NO credentials — verifies the "skipped (not configured)" path.
         project = await seed_project_for_collector(
             async_db_session,
             plausible_api_key=None,
@@ -186,8 +190,9 @@ class TestPlausibleCollectorSuccess:
             collector = PlausibleCollector(async_db_session, **collector_kwargs(project))
             result = await collector.collect()
 
-        assert result.success is False
-        assert "Missing" in result.error
+        assert result.success is True
+        assert result.skipped is True
+        assert "Not configured" in result.error
 
     @pytest.mark.asyncio
     async def test_collect_api_error(self, async_db_session: AsyncSession) -> None:

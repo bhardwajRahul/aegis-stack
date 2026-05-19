@@ -97,10 +97,29 @@ class Settings(
     AUTH_ENABLED: bool = False  # Auth service not included; dev user is synthesized
 {%- endif %}
     DEV_USER_ROLE: str = "admin"  # Role for synthetic dev user when AUTH_ENABLED=false
+    # Email allowlist for ``require_admin`` — gates operator-only routes
+    # (refund actions, dispute review, aggregate revenue charts, etc.).
+    # Empty list 403s everyone when ``AUTH_ENABLED=True``; safe default
+    # before someone deliberately grants themselves admin. Set in
+    # ``.env`` as a JSON list: ``ADMIN_USER_EMAILS=["you@example.com"]``.
+    ADMIN_USER_EMAILS: list[str] = []
     INVITE_ACCEPTANCE_MODE: str = "email"  # "email" requires email match, "token" allows anyone with token
     SECRET_KEY: str = "change-this-secret-key-in-production-use-env-variable"
+    # Distinct secret for column-level at-rest encryption (AES-GCM v2 in
+    # ``app/core/encryption.py``). Splits JWT-signing and credential-
+    # encryption blast radii so leaking one secret doesn't compromise
+    # both. When unset, encryption.py falls back to ``SECRET_KEY`` with
+    # a one-time warning. Set in ``.env`` for production deploys.
+    ENCRYPTION_KEY: str | None = None
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    # Dev-only multiplier on ``ACCESS_TOKEN_EXPIRE_MINUTES``. When
+    # ``APP_ENV == "dev"``, the effective session length becomes
+    # ``ACCESS_TOKEN_EXPIRE_MINUTES * DEV_TOKEN_EXPIRE_MULTIPLIER`` so
+    # devs aren't logged out every 15 minutes during iteration. Prod /
+    # staging are unaffected (the multiplier doesn't fire). Override in
+    # ``.env`` if 4x isn't enough — e.g. ``DEV_TOKEN_EXPIRE_MULTIPLIER=16``.
+    DEV_TOKEN_EXPIRE_MULTIPLIER: int = 4
     REFRESH_TOKEN_EXPIRE_DAYS: int = 14
     PASSWORD_RESET_EXPIRE_MINUTES: int = 60
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24

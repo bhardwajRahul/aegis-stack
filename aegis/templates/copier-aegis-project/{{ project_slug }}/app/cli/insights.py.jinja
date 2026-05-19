@@ -118,6 +118,15 @@ async def _collect(source: str | None, lookback_days: int = 1) -> None:
 
 
 def _print_collection_result(result: "CollectionResult") -> None:
+    if result.skipped:
+        # Source ran successfully but did nothing because it isn't
+        # configured for this project. Yellow, not red — the user
+        # didn't ask for it.
+        typer.secho(
+            f"  {result.source_key}: SKIPPED — {result.error or 'not configured'}",
+            fg=typer.colors.YELLOW,
+        )
+        return
     if result.success:
         typer.secho(
             t("insights.collect_success",
