@@ -86,6 +86,45 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 
 [Services Docs →](https://lbedner.github.io/aegis-stack/services/)
 
+## Integrations
+
+Aegis Stack is the orchestration layer. Services and components wire into best-in-class tools you already trust, so you keep your vendor choices and your data.
+
+<table width="100%">
+<tr>
+<td align="center" width="16.66%"><a href="https://www.anthropic.com"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/anthropic-dark.svg"><img src="docs/images/integrations/anthropic.svg" style="height:32px;width:auto" alt="Anthropic" title="Anthropic: AI provider" /></picture></a></td>
+<td align="center" width="16.66%"><a href="https://astral.sh"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/astral-dark.svg"><img src="docs/images/integrations/astral.svg" style="height:32px;width:auto" alt="Astral" title="Astral: ruff, uv, ty, uvx toolchain" /></picture></a></td>
+<td align="center" width="16.66%"><a href="https://www.trychroma.com"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/chromadb-dark.svg"><img src="docs/images/integrations/chromadb.svg" style="height:32px;width:auto" alt="ChromaDB" title="ChromaDB: Vector store for AI service" /></picture></a></td>
+<td align="center" width="16.66%"><a href="https://dramatiq.io"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/dramatiq-dark.png"><img src="docs/images/integrations/dramatiq.png" style="height:32px;width:auto" alt="Dramatiq" title="Dramatiq: Worker backend" /></picture></a></td>
+<td align="center" width="16.66%"><a href="https://fastapi.tiangolo.com"><img src="docs/images/integrations/fastapi.svg" style="height:32px;width:auto" alt="FastAPI" title="FastAPI: Backend web framework" /></a></td>
+<td align="center" width="16.66%"><a href="https://flet.dev"><img src="docs/images/integrations/flet.svg" style="height:32px;width:auto" alt="Flet" title="Flet: Frontend framework" /></a></td>
+</tr>
+<tr>
+<td align="center" width="16.66%"><a href="https://github.com"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/github-dark.svg"><img src="docs/images/integrations/github.svg" style="height:32px;width:auto" alt="GitHub" title="GitHub: OAuth provider" /></picture></a></td>
+<td align="center" width="16.66%"><a href="https://www.google.com"><img src="docs/images/integrations/google.svg" style="height:32px;width:auto" alt="Google" title="Google: AI provider and OAuth" /></a></td>
+<td align="center" width="16.66%"><a href="https://www.langchain.com"><img src="docs/images/integrations/langchain.png" style="height:32px;width:auto" alt="LangChain" title="LangChain: AI provider abstraction" /></a></td>
+<td align="center" width="16.66%"><a href="https://neon.tech"><img src="docs/images/integrations/neon.svg" style="height:32px;width:auto" alt="Neon" title="Neon: Serverless Postgres (planned)" /></a></td>
+<td align="center" width="16.66%"><a href="https://ollama.com"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/ollama-dark.svg"><img src="docs/images/integrations/ollama.svg" style="height:32px;width:auto" alt="Ollama" title="Ollama: Local LLM runtime" /></picture></a></td>
+<td align="center" width="16.66%"><a href="https://plausible.io"><img src="docs/images/integrations/plausibleanalytics.svg" style="height:32px;width:auto" alt="Plausible" title="Plausible: Analytics source for Insights service" /></a></td>
+</tr>
+<tr>
+<td align="center" width="16.66%"><a href="https://www.postgresql.org"><img src="docs/images/integrations/postgresql.svg" style="height:32px;width:auto" alt="Postgres" title="Postgres: Database component" /></a></td>
+<td align="center" width="16.66%"><a href="https://pydantic.dev"><img src="docs/images/integrations/pydantic.svg" style="height:32px;width:auto" alt="Pydantic" title="Pydantic: validation, Pydantic AI, Logfire (observability)" /></a></td>
+<td align="center" width="16.66%"><a href="https://www.reddit.com"><img src="docs/images/integrations/reddit.svg" style="height:32px;width:auto" alt="Reddit" title="Reddit: Insights service signal source" /></a></td>
+<td align="center" width="16.66%"><a href="https://redis.io"><img src="docs/images/integrations/redis.svg" style="height:32px;width:auto" alt="Redis" title="Redis: Cache component, worker queue backing" /></a></td>
+<td align="center" width="16.66%"><a href="https://resend.com"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/resend-dark.svg"><img src="docs/images/integrations/resend.svg" style="height:32px;width:auto" alt="Resend" title="Resend: Transactional email" /></picture></a></td>
+<td align="center" width="16.66%"><a href="https://www.sqlite.org"><img src="docs/images/integrations/sqlite.svg" style="height:32px;width:auto" alt="SQLite" title="SQLite: Database component (default)" /></a></td>
+</tr>
+<tr>
+<td align="center" width="16.66%"><a href="https://stripe.com"><img src="docs/images/integrations/stripe.svg" style="height:32px;width:auto" alt="Stripe" title="Stripe: Payments service" /></a></td>
+<td align="center" width="16.66%"><a href="https://supabase.com"><img src="docs/images/integrations/supabase.svg" style="height:32px;width:auto" alt="Supabase" title="Supabase: Auth backend and hosted Postgres (planned)" /></a></td>
+<td align="center" width="16.66%"><a href="https://taskiq-python.github.io"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/taskiq-dark.svg"><img src="docs/images/integrations/taskiq.svg" style="height:32px;width:auto" alt="Taskiq" title="Taskiq: Worker backend" /></picture></a></td>
+<td align="center" width="16.66%"><a href="https://traefik.io"><img src="docs/images/integrations/traefikproxy.svg" style="height:32px;width:auto" alt="Traefik" title="Traefik: Ingress and reverse proxy" /></a></td>
+<td align="center" width="16.66%"><a href="https://www.twilio.com"><img src="docs/images/integrations/twilio.svg" style="height:32px;width:auto" alt="Twilio" title="Twilio: SMS and voice for Comms service" /></a></td>
+<td align="center" width="16.66%"><a href="https://typer.tiangolo.com"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/typer-dark.svg"><img src="docs/images/integrations/typer.svg" style="height:32px;width:auto" alt="Typer" title="Typer: CLI framework" /></picture></a></td>
+</tr>
+</table>
+
 ## CI/CD for Your Stack
 
 Every generated project ships with GitHub Actions and developer tooling pre-wired, so the first push to GitHub runs checks automatically, and one command wires up continuous deployment to your server.

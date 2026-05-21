@@ -51,6 +51,19 @@ with open("README.md") as readme:
     # MkDocs serves them from ``images/...`` (the docs root has no ``docs/``
     # segment, but GitHub's renderer needs the prefix). Catches the hero SVG
     # plus every ``<img>``-wrapped GIF in the README.
+    # The README uses <picture> + prefers-color-scheme for theme-aware
+    # logos because that is the only form GitHub.com honors. MkDocs
+    # Material has its own light/dark toggle that is independent of the
+    # OS preference, so <picture> renders the wrong asset whenever the
+    # docs theme and OS disagree. Rewrite each <picture> block into the
+    # dual-<img> ``#only-light`` / ``#only-dark`` form that Material's
+    # theme toggle drives.
+    content = re.sub(
+        r'<picture><source media="\(prefers-color-scheme: dark\)" srcset="([^"]+)"><img src="([^"]+)"([^/]*)/></picture>',
+        r'<img src="\2#only-light"\3/><img src="\1#only-dark"\3/>',
+        content,
+    )
+
     content = re.sub(
         r'src="docs/images/([^"]+)"',
         r'src="images/\1"',

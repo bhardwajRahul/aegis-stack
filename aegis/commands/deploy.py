@@ -687,6 +687,8 @@ def deploy_command(
             ".aegis/",
             "--exclude",
             "backups/",
+            "--exclude",
+            "node_modules/",
             f"{project_root}/",
             f"{user}@{host}:{deploy_path}/",
         ]
