@@ -53,8 +53,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://lbedner.github.io/aegis-stack/"
-Documentation = "https://lbedner.github.io/aegis-stack/"
+Homepage = "https://docs.aegis-stack.io/"
+Documentation = "https://docs.aegis-stack.io/"
 Repository = "https://github.com/lbedner/aegis-stack.git"
 Issues = "https://github.com/lbedner/aegis-stack/issues"
 

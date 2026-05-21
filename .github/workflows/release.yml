@@ -141,7 +141,7 @@ jobs:
             ## Links
 
             - [PyPI](https://pypi.org/project/aegis-stack/${{ steps.version.outputs.VERSION }}/)
-            - [Documentation](https://lbedner.github.io/aegis-stack/)
+            - [Documentation](https://docs.aegis-stack.io/)
             - [Changelog](https://github.com/lbedner/aegis-stack/blob/main/CHANGELOG.md)
           files: dist/*
           prerelease: false

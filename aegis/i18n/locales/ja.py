@@ -418,7 +418,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "コミュニケーション",
     "projectmap.docs": "ドキュメント",
     # ── 生成後：フッター ───────────────────────────────────────────────
-    "postgen.docs_link": "ドキュメント：https://lbedner.github.io/aegis-stack",
+    "postgen.docs_link": "ドキュメント：https://docs.aegis-stack.io",
     "postgen.star_prompt": ("Aegis Stack が役に立ったら、ぜひスターをお願いします："),
     # ── add-service コマンド ───────────────────────────────────────────
     "add_service.title": "Aegis Stack — サービス追加",
@@ -773,6 +773,28 @@ MESSAGES: dict[str, str] = {
         "デプロイ完了但しヘルスチェック失敗。ログを確認：aegis deploy-logs"
     ),
     "deploy.complete": "デプロイ完了！",
+    "deploy.rolling_starting": "{host} へローリングデプロイ中...",
+    "deploy.rolling_building": "Webサーバーイメージをビルド中...",
+    "deploy.rolling_pausing": "ワーカーキューを一時停止中...",
+    "deploy.rolling_pause_failed": (
+        "一時停止フラグの設定に失敗。ワーカーがジョブの途中で "
+        "SIGTERM される可能性があります。"
+    ),
+    "deploy.rolling_draining": ("ワーカーのドレインを最大 {seconds} 秒待機中..."),
+    "deploy.rolling_drain_timeout": (
+        "ワーカーが時間内にドレインされませんでした。一時停止フラグ "
+        "を解除し、中断します。"
+    ),
+    "deploy.rolling_recreating": "再作成中：{services}",
+    "deploy.rolling_webserver": (
+        "Webサーバーをローリング再起動中（docker-rollout）..."
+    ),
+    "deploy.rolling_rollout_failed": (
+        "docker rollout に失敗しました。デプロイ先ホストの "
+        "~/.docker/cli-plugins/ にプラグインがインストールされて "
+        "いますか？"
+    ),
+    "deploy.rolling_complete": "ローリングデプロイ完了！",
     "deploy.app_running": "   アプリケーション：http://{host}",
     "deploy.overseer": "   Overseer ダッシュボード：http://{host}/dashboard/",
     "deploy.view_logs": "   ログ確認：aegis deploy-logs",
@@ -852,6 +874,16 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_build": "デプロイ前にイメージをビルド",
     "deploy.help_opt_backup": "デプロイ前にバックアップを作成",
     "deploy.help_opt_health": "デプロイ完了後にヘルスチェックを実行",
+    "deploy.help_opt_rolling": (
+        "HTTPダウンタイムなしのコードのみデプロイ。docker-rollout で "
+        "Webサーバーをロールし、ワーカーキューを一時停止して実行中の "
+        "ジョブを安全に終わらせます。DB マイグレーションはスキップ "
+        "します。"
+    ),
+    "deploy.help_opt_drain_timeout": (
+        "ローリングデプロイでキューを一時停止した後、ワーカーが "
+        "ドレインされるまで待機する秒数（既定：90）。"
+    ),
     "deploy.help_opt_rollback_backup": "ロールバック先のバックアップタイムスタンプ（デフォルト：最新）",
     "deploy.help_opt_logs_follow": "ログ出力を継続して表示",
     "deploy.help_opt_logs_service": "指定したサービスのログのみ表示",

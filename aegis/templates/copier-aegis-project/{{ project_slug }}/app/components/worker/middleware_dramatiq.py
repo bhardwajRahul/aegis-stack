@@ -16,6 +16,7 @@ import threading
 
 import dramatiq
 import redis
+from app.components.worker.heartbeat import mark_busy_sync, mark_idle_sync
 from app.core.config import settings
 from app.core.log import logger
 
@@ -151,6 +152,7 @@ class EventPublishMiddleware(dramatiq.Middleware):
         dequeued but before the actor function runs.
         """
         if self._redis:
+            mark_busy_sync(self._redis)
             _sync_publish(
                 self._redis,
                 "job.started",
@@ -201,3 +203,4 @@ class EventPublishMiddleware(dramatiq.Middleware):
                 task_name=message.actor_name,
                 queue_name=message.queue_name,
             )
+            mark_idle_sync(self._redis)

@@ -75,7 +75,7 @@ with open("README.md") as readme:
     content = re.sub(r"\]\(docs/([^)]+\.md)\)", r"](\1)", content)
 
     # Convert absolute docs URLs to relative for MkDocs (works locally and deployed)
-    content = content.replace("https://lbedner.github.io/aegis-stack/", "")
+    content = content.replace("https://docs.aegis-stack.io/", "")
 
     # Fix trailing slash links to explicit file references for MkDocs
     # Check if it's a directory (has index.md) or a top-level page

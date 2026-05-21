@@ -430,7 +430,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "Comunicaciones",
     "projectmap.docs": "Documentación",
     # ── Post-generation: footer ───────────────────────────────────────
-    "postgen.docs_link": "Docs: https://lbedner.github.io/aegis-stack",
+    "postgen.docs_link": "Docs: https://docs.aegis-stack.io",
     "postgen.star_prompt": (
         "Si Aegis Stack te facilitó la vida, considera dejar una estrella:"
     ),
@@ -791,6 +791,28 @@ MESSAGES: dict[str, str] = {
         "Despliegue completado pero verificación de salud falló. Revisa logs con: aegis deploy-logs"
     ),
     "deploy.complete": "¡Despliegue completado!",
+    "deploy.rolling_starting": "Despliegue continuo a {host}...",
+    "deploy.rolling_building": "Construyendo imagen del servidor web...",
+    "deploy.rolling_pausing": "Pausando la cola del worker...",
+    "deploy.rolling_pause_failed": (
+        "No se pudo activar el indicador de pausa; los workers podrían "
+        "recibir SIGTERM en mitad de un job."
+    ),
+    "deploy.rolling_draining": (
+        "Esperando hasta {seconds}s a que los workers se vacíen..."
+    ),
+    "deploy.rolling_drain_timeout": (
+        "Los workers no se vaciaron a tiempo. Indicador de pausa limpiado; abortando."
+    ),
+    "deploy.rolling_recreating": "Recreando: {services}",
+    "deploy.rolling_webserver": (
+        "Reinicio continuo del servidor web (docker-rollout)..."
+    ),
+    "deploy.rolling_rollout_failed": (
+        "docker rollout falló. ¿Está el plugin instalado en "
+        "~/.docker/cli-plugins/ en el host de despliegue?"
+    ),
+    "deploy.rolling_complete": "¡Despliegue continuo completado!",
     "deploy.app_running": "   Aplicación corriendo en: http://{host}",
     "deploy.overseer": "   Dashboard Overseer: http://{host}/dashboard/",
     "deploy.view_logs": "   Ver logs: aegis deploy-logs",
@@ -870,6 +892,16 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_build": "Construir las imágenes antes de desplegar",
     "deploy.help_opt_backup": "Crear un respaldo antes de desplegar",
     "deploy.help_opt_health": "Ejecutar comprobación de salud tras desplegar",
+    "deploy.help_opt_rolling": (
+        "Despliegue continuo sin tiempo de inactividad HTTP, solo código. "
+        "Rota el servidor web con docker-rollout y pausa la cola del "
+        "worker para que los jobs en curso terminen limpiamente. Omite "
+        "las migraciones de base de datos."
+    ),
+    "deploy.help_opt_drain_timeout": (
+        "Segundos a esperar a que los workers se vacíen tras pausar la "
+        "cola durante un despliegue continuo (por defecto: 90)."
+    ),
     "deploy.help_opt_rollback_backup": "Marca de tiempo del respaldo al que hacer rollback (por defecto: el más reciente)",
     "deploy.help_opt_logs_follow": "Seguir la salida de los logs en tiempo real",
     "deploy.help_opt_logs_service": "Mostrar los logs de un servicio en concreto",

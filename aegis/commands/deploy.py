@@ -372,6 +372,234 @@ def _run_health_check(
 
 
 # ---------------------------------------------------------------------------
+# Rolling deploy (code-only, zero HTTP downtime)
+# ---------------------------------------------------------------------------
+
+ROLLING_PAUSE_KEY = "taskiq:paused"
+ROLLING_DRAIN_TIMEOUT_DEFAULT = 90  # seconds
+ROLLING_DRAIN_POLL_SECONDS = 1
+
+
+def _rolling_compose_prefix(deploy_path: str) -> str:
+    """Compose prefix that omits ``--profile prod`` so per-service
+    ``up -d --no-deps`` targeting works for prod profile and
+    profile-less services alike.
+    """
+    safe_path = shlex.quote(deploy_path)
+    return (
+        f"cd {safe_path} && "
+        f"docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+    )
+
+
+def _rolling_running_services(host: str, user: str, deploy_path: str) -> set[str]:
+    """Return the set of currently-running compose service names."""
+    prefix = _rolling_compose_prefix(deploy_path)
+    result = _run_remote_capture(
+        host, user, f"{prefix} ps --services --filter status=running"
+    )
+    if result.returncode != 0:
+        return set()
+    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+
+def _rolling_clear_pause(host: str, user: str, deploy_path: str) -> None:
+    """Best-effort clear of the queue-pause flag. Safe to call repeatedly."""
+    prefix = _rolling_compose_prefix(deploy_path)
+    subprocess.run(
+        [
+            "ssh",
+            f"{user}@{host}",
+            f"{prefix} exec -T redis redis-cli DEL {ROLLING_PAUSE_KEY} >/dev/null 2>&1 || true",
+        ],
+        capture_output=True,
+    )
+
+
+def _rolling_wait_for_drain(
+    host: str, user: str, deploy_path: str, timeout_seconds: int
+) -> bool:
+    """Poll ``KEYS worker:*:busy`` until empty or timeout.
+
+    Returns True if workers drained, False on timeout. The check works
+    for any worker library that registers per-job heartbeat keys with
+    that prefix (taskiq today, dramatiq / arq via the template's
+    heartbeat module).
+    """
+    prefix = _rolling_compose_prefix(deploy_path)
+    drain_script = (
+        f"deadline=$(( $(date +%s) + {timeout_seconds} )); "
+        "while : ; do "
+        f"  busy=$({prefix} exec -T redis redis-cli --no-raw KEYS 'worker:*:busy' | tr -d '\\r'); "
+        '  if [ -z "$busy" ]; then echo drained; exit 0; fi; '
+        '  if [ "$(date +%s)" -ge "$deadline" ]; then '
+        '    echo "drain timeout; still busy: $busy" >&2; exit 1; '
+        "  fi; "
+        f"  sleep {ROLLING_DRAIN_POLL_SECONDS}; "
+        "done"
+    )
+    result = _run_remote(host, user, drain_script)
+    return result.returncode == 0
+
+
+def _run_rolling_deploy(
+    host: str,
+    user: str,
+    deploy_path: str,
+    project_root: Path,
+    build: bool,
+    health_check: bool,
+    health_cfg: dict,
+    drain_timeout: int,
+) -> None:
+    """Zero-HTTP-downtime deploy of code-only changes.
+
+    Webserver rolls via ``docker-rollout`` so HTTP keeps serving the old
+    container until the new one is healthy. Scheduler and workers hard-
+    restart, but the worker queue is paused first so in-flight jobs
+    complete cleanly instead of being SIGTERMed. Database, Redis, and
+    Traefik are untouched.
+
+    Skips DB migrations — use the standard ``aegis deploy`` for those.
+    """
+    typer.secho(t("deploy.rolling_starting", host=host), fg="blue", bold=True)
+
+    # Step 1: rsync working tree
+    typer.echo(t("deploy.syncing"))
+    rsync_result = subprocess.run(
+        [
+            "rsync",
+            "-avz",
+            "--exclude",
+            ".git",
+            "--exclude",
+            "__pycache__",
+            "--exclude",
+            ".venv",
+            "--exclude",
+            "*.pyc",
+            "--exclude",
+            ".pytest_cache",
+            "--exclude",
+            ".ruff_cache",
+            "--exclude",
+            "data/",
+            "--exclude",
+            ".env",
+            "--exclude",
+            ".env.deploy",
+            "--exclude",
+            ".aegis/",
+            "--exclude",
+            "backups/",
+            "--exclude",
+            "node_modules/",
+            f"{project_root}/",
+            f"{user}@{host}:{deploy_path}/",
+        ]
+    )
+    if rsync_result.returncode != 0:
+        typer.secho(t("deploy.sync_failed"), fg="red", err=True)
+        raise typer.Exit(1)
+
+    # Step 2: scp .env (prefer .env.deploy)
+    deploy_env_file = project_root / ".env.deploy"
+    dev_env_file = project_root / ".env"
+    env_file: Path | None = None
+    if deploy_env_file.exists():
+        env_file = deploy_env_file
+    elif dev_env_file.exists():
+        env_file = dev_env_file
+
+    if env_file is not None:
+        typer.echo(t("deploy.copying_env", file=env_file.name))
+        safe_path = shlex.quote(f"{deploy_path}/.env")
+        env_result = subprocess.run(
+            ["scp", str(env_file), f"{user}@{host}:{safe_path}"]
+        )
+        if env_result.returncode != 0:
+            typer.secho(t("deploy.env_copy_failed"), fg="red", err=True)
+            raise typer.Exit(1)
+
+    prefix = _rolling_compose_prefix(deploy_path)
+    running = _rolling_running_services(host, user, deploy_path)
+    worker_services = sorted(
+        s for s in running if s.startswith("worker-") or s == "scheduler"
+    )
+    has_webserver = "webserver" in running
+
+    # Step 3: build the webserver image (new code lands here)
+    if build and has_webserver:
+        typer.echo(t("deploy.rolling_building"))
+        build_result = _run_remote(host, user, f"{prefix} build webserver")
+        if build_result.returncode != 0:
+            typer.secho(t("deploy.start_failed"), fg="red", err=True)
+            raise typer.Exit(1)
+
+    # Step 4 + 5: pause the queue and wait for in-flight jobs to drain
+    pause_set = False
+    if worker_services and any(s.startswith("worker-") for s in worker_services):
+        typer.echo(t("deploy.rolling_pausing"))
+        pause_result = _run_remote(
+            host,
+            user,
+            f"{prefix} exec -T redis redis-cli SET {ROLLING_PAUSE_KEY} 1 >/dev/null",
+        )
+        pause_set = pause_result.returncode == 0
+        if not pause_set:
+            typer.secho(t("deploy.rolling_pause_failed"), fg="yellow")
+
+    try:
+        if pause_set:
+            typer.echo(t("deploy.rolling_draining", seconds=drain_timeout))
+            if not _rolling_wait_for_drain(host, user, deploy_path, drain_timeout):
+                typer.secho(t("deploy.rolling_drain_timeout"), fg="red", err=True)
+                raise typer.Exit(1)
+
+        # Step 6: recreate scheduler + workers (no --deps so deps stay up)
+        if worker_services:
+            typer.echo(
+                t("deploy.rolling_recreating", services=" ".join(worker_services))
+            )
+            recreate = _run_remote(
+                host,
+                user,
+                f"{prefix} up -d --force-recreate --no-deps {' '.join(worker_services)}",
+            )
+            if recreate.returncode != 0:
+                typer.secho(t("deploy.start_failed"), fg="red", err=True)
+                raise typer.Exit(1)
+
+        # Step 7: rolling-restart the webserver via docker-rollout
+        if has_webserver:
+            typer.echo(t("deploy.rolling_webserver"))
+            safe_deploy = shlex.quote(deploy_path)
+            rollout = _run_remote(
+                host,
+                user,
+                f"cd {safe_deploy} && docker rollout "
+                "-f docker-compose.yml -f docker-compose.prod.yml webserver",
+            )
+            if rollout.returncode != 0:
+                typer.secho(t("deploy.rolling_rollout_failed"), fg="red", err=True)
+                raise typer.Exit(1)
+    finally:
+        # Step 8: always clear the pause flag — never wedge workers
+        if pause_set:
+            _rolling_clear_pause(host, user, deploy_path)
+
+    # Step 9: health check
+    if health_check:
+        healthy = _run_health_check(host, user, retries=health_cfg["retries"])
+        if not healthy:
+            typer.secho(t("deploy.health_failed_hint"), fg="yellow")
+            raise typer.Exit(1)
+
+    typer.secho(f"\n{t('deploy.rolling_complete')}", fg="green", bold=True)
+    typer.echo(t("deploy.app_running", host=host))
+
+
+# ---------------------------------------------------------------------------
 # CLI Commands
 # ---------------------------------------------------------------------------
 
@@ -596,6 +824,16 @@ def deploy_command(
         "--health-check/--no-health-check",
         help=lazy_t("deploy.help_opt_health"),
     ),
+    rolling: bool = typer.Option(
+        False,
+        "--rolling",
+        help=lazy_t("deploy.help_opt_rolling"),
+    ),
+    drain_timeout: int = typer.Option(
+        ROLLING_DRAIN_TIMEOUT_DEFAULT,
+        "--drain-timeout",
+        help=lazy_t("deploy.help_opt_drain_timeout"),
+    ),
 ) -> None:
     """
     Deploy the project to the configured server.
@@ -605,10 +843,16 @@ def deploy_command(
     check afterward. If the health check fails, auto-rollback restores
     the previous version.
 
+    Pass ``--rolling`` for zero-HTTP-downtime code-only deploys: the
+    webserver rolls over via docker-rollout and the worker queue is
+    paused so in-flight jobs finish cleanly before workers restart.
+    Skips DB migrations — use the standard path for those.
+
     Examples:\\n
         - aegis deploy\\n
         - aegis deploy --no-build\\n
         - aegis deploy --no-backup --no-health-check\\n
+        - aegis deploy --rolling\\n
     """
     config = _load_deploy_config(project_path)
     if not config:
@@ -626,6 +870,19 @@ def deploy_command(
     health_cfg = _get_health_config(config)
 
     project_root = Path(project_path) if project_path else _get_project_root()
+
+    if rolling:
+        _run_rolling_deploy(
+            host=host,
+            user=user,
+            deploy_path=deploy_path,
+            project_root=project_root,
+            build=build,
+            health_check=health_check,
+            health_cfg=health_cfg,
+            drain_timeout=drain_timeout,
+        )
+        return
 
     typer.secho(t("deploy.deploying", host=host), fg="blue", bold=True)
 

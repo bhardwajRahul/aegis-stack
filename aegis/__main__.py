@@ -81,7 +81,7 @@ app = typer.Typer(
     ),
     epilog=(
         "Try it instantly: uvx aegis-stack init my-project\n"
-        "More info: https://lbedner.github.io/aegis-stack/"
+        "More info: https://docs.aegis-stack.io/"
     ),
     add_completion=False,
 )

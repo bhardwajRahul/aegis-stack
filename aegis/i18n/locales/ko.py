@@ -405,7 +405,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "통신",
     "projectmap.docs": "문서",
     # ── Post-generation: footer ───────────────────────────────────────
-    "postgen.docs_link": "문서: https://lbedner.github.io/aegis-stack",
+    "postgen.docs_link": "문서: https://docs.aegis-stack.io",
     "postgen.star_prompt": ("Aegis Stack이 도움이 되었다면 별점을 남겨주세요:"),
     # ── Add-service command ────────────────────────────────────────────
     "add_service.title": "Aegis Stack - 서비스 추가",
@@ -748,6 +748,23 @@ MESSAGES: dict[str, str] = {
         "배포 완료되었지만 헬스 체크 실패. 로그 확인: aegis deploy-logs"
     ),
     "deploy.complete": "배포 완료!",
+    "deploy.rolling_starting": "{host}에 롤링 배포 중...",
+    "deploy.rolling_building": "웹서버 이미지 빌드 중...",
+    "deploy.rolling_pausing": "워커 큐 일시중지 중...",
+    "deploy.rolling_pause_failed": (
+        "일시중지 플래그를 설정하지 못했습니다. 워커가 작업 도중 SIGTERM될 수 있습니다."
+    ),
+    "deploy.rolling_draining": ("워커 드레인을 최대 {seconds}초 대기 중..."),
+    "deploy.rolling_drain_timeout": (
+        "워커가 시간 내에 드레인되지 않았습니다. 일시중지 플래그를 해제하고 중단합니다."
+    ),
+    "deploy.rolling_recreating": "재생성: {services}",
+    "deploy.rolling_webserver": ("웹서버 롤링 재시작 중(docker-rollout)..."),
+    "deploy.rolling_rollout_failed": (
+        "docker rollout 실패. 배포 호스트의 ~/.docker/cli-plugins/에 "
+        "플러그인이 설치되어 있나요?"
+    ),
+    "deploy.rolling_complete": "롤링 배포 완료!",
     "deploy.app_running": "   애플리케이션 실행 중: http://{host}",
     "deploy.overseer": "   Overseer 대시보드: http://{host}/dashboard/",
     "deploy.view_logs": "   로그 확인: aegis deploy-logs",
@@ -823,6 +840,15 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_build": "배포 전에 이미지를 빌드",
     "deploy.help_opt_backup": "배포 전에 백업 생성",
     "deploy.help_opt_health": "배포 후 헬스 체크 실행",
+    "deploy.help_opt_rolling": (
+        "HTTP 다운타임 없는 코드 전용 배포. docker-rollout으로 "
+        "웹서버를 롤링하고 워커 큐를 일시중지해 진행 중인 작업이 "
+        "안전하게 완료되도록 합니다. DB 마이그레이션은 건너뜁니다."
+    ),
+    "deploy.help_opt_drain_timeout": (
+        "롤링 배포 시 큐를 일시중지한 후 워커가 드레인될 때까지 "
+        "기다리는 시간(초). 기본값: 90."
+    ),
     "deploy.help_opt_rollback_backup": "롤백할 백업의 타임스탬프 (기본값: 가장 최근)",
     "deploy.help_opt_logs_follow": "로그 출력을 계속 따라가며 표시",
     "deploy.help_opt_logs_service": "특정 서비스의 로그만 표시",

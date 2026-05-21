@@ -330,7 +330,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "通信",
     "projectmap.docs": "文档",
     # ── 项目生成后：底部信息 ──────────────────────────────────────────
-    "postgen.docs_link": "文档：https://lbedner.github.io/aegis-stack",
+    "postgen.docs_link": "文档：https://docs.aegis-stack.io",
     "postgen.star_prompt": "如果对你有帮助，欢迎点个 Star：",
     # ── add-service 命令 ────────────────────────────────────────────────
     "add_service.title": "Aegis Stack — 添加服务",
@@ -635,6 +635,23 @@ MESSAGES: dict[str, str] = {
         "部署完成但健康检查失败，请查看日志：aegis deploy-logs"
     ),
     "deploy.complete": "部署完成",
+    "deploy.rolling_starting": "正在向 {host} 滚动部署...",
+    "deploy.rolling_building": "正在构建 Web 服务器镜像...",
+    "deploy.rolling_pausing": "正在暂停 worker 队列...",
+    "deploy.rolling_pause_failed": (
+        "暂停标志设置失败，worker 可能在任务执行中被 SIGTERM。"
+    ),
+    "deploy.rolling_draining": ("等待 worker 完成处理，最长 {seconds} 秒..."),
+    "deploy.rolling_drain_timeout": (
+        "worker 未在限时内完成，已清除暂停标志，部署中止。"
+    ),
+    "deploy.rolling_recreating": "正在重建：{services}",
+    "deploy.rolling_webserver": ("正在滚动重启 Web 服务器（docker-rollout）..."),
+    "deploy.rolling_rollout_failed": (
+        "docker rollout 执行失败。部署主机的 ~/.docker/cli-plugins/ "
+        "中是否已安装该插件？"
+    ),
+    "deploy.rolling_complete": "滚动部署完成",
     "deploy.app_running": "   访问地址：http://{host}",
     "deploy.overseer": "   控制台：http://{host}/dashboard/",
     "deploy.view_logs": "   查看日志：aegis deploy-logs",
@@ -710,6 +727,14 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_build": "部署前先构建镜像",
     "deploy.help_opt_backup": "部署前先创建备份",
     "deploy.help_opt_health": "部署完成后执行健康检查",
+    "deploy.help_opt_rolling": (
+        "仅代码、HTTP 零停机部署。通过 docker-rollout 滚动更新 Web "
+        "服务器，并暂停 worker 队列，让在途任务平稳收尾。跳过数据库 "
+        "迁移。"
+    ),
+    "deploy.help_opt_drain_timeout": (
+        "滚动部署时暂停队列后，等待 worker 完成处理的秒数（默认 90）。"
+    ),
     "deploy.help_opt_rollback_backup": "要回滚到的备份时间戳（默认值：最新备份）",
     "deploy.help_opt_logs_follow": "持续跟踪日志输出",
     "deploy.help_opt_logs_service": "仅显示指定服务的日志",

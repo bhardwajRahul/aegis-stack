@@ -408,7 +408,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "Коммуникации",
     "projectmap.docs": "Документация",
     # ── Пост-генерация: подвал ─────────────────────────────────────────
-    "postgen.docs_link": "Документация: https://lbedner.github.io/aegis-stack",
+    "postgen.docs_link": "Документация: https://docs.aegis-stack.io",
     "postgen.star_prompt": ("Если Aegis Stack оказался полезен, поставьте звёздочку:"),
     # ── Команда add-service ────────────────────────────────────────────
     "add_service.title": "Aegis Stack — Добавление сервисов",
@@ -759,6 +759,26 @@ MESSAGES: dict[str, str] = {
         "Деплой завершён, но проверка состояния не пройдена. Проверьте логи: aegis deploy-logs"
     ),
     "deploy.complete": "Развёртывание завершено!",
+    "deploy.rolling_starting": "Плавное развёртывание на {host}...",
+    "deploy.rolling_building": "Сборка образа веб-сервера...",
+    "deploy.rolling_pausing": "Приостановка очереди воркеров...",
+    "deploy.rolling_pause_failed": (
+        "Не удалось установить флаг паузы; воркеры могут получить "
+        "SIGTERM посреди задачи."
+    ),
+    "deploy.rolling_draining": (
+        "Ожидание до {seconds}с для завершения работы воркеров..."
+    ),
+    "deploy.rolling_drain_timeout": (
+        "Воркеры не завершились вовремя. Флаг паузы очищен; прерываем."
+    ),
+    "deploy.rolling_recreating": "Пересоздание: {services}",
+    "deploy.rolling_webserver": ("Плавный перезапуск веб-сервера (docker-rollout)..."),
+    "deploy.rolling_rollout_failed": (
+        "docker rollout завершился ошибкой. Установлен ли плагин в "
+        "~/.docker/cli-plugins/ на хосте развёртывания?"
+    ),
+    "deploy.rolling_complete": "Плавное развёртывание завершено!",
     "deploy.app_running": "   Приложение работает по: http://{host}",
     "deploy.overseer": "   Панель Overseer: http://{host}/dashboard/",
     "deploy.view_logs": "   Просмотр логов: aegis deploy-logs",
@@ -836,6 +856,16 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_build": "Собрать образы перед деплоем",
     "deploy.help_opt_backup": "Создать бэкап перед деплоем",
     "deploy.help_opt_health": "Выполнить проверку работоспособности после деплоя",
+    "deploy.help_opt_rolling": (
+        "Развёртывание только кода без HTTP-простоя. Перекатывает "
+        "веб-сервер через docker-rollout и приостанавливает очередь "
+        "воркеров, чтобы выполняющиеся задачи завершились корректно. "
+        "Пропускает миграции БД."
+    ),
+    "deploy.help_opt_drain_timeout": (
+        "Секунд ожидания завершения работы воркеров после приостановки "
+        "очереди при плавном развёртывании (по умолчанию: 90)."
+    ),
     "deploy.help_opt_rollback_backup": "Метка времени бэкапа для отката (по умолчанию: последний)",
     "deploy.help_opt_logs_follow": "Следить за выводом логов в реальном времени",
     "deploy.help_opt_logs_service": "Показать логи только для указанного сервиса",

@@ -14,7 +14,7 @@ app = typer.Typer(name="docs", help=lazy_t("docs.help"), invoke_without_command=
 console = Console()
 
 # Base URL for Aegis Stack documentation
-AEGIS_BASE = "https://lbedner.github.io/aegis-stack"
+AEGIS_BASE = "https://docs.aegis-stack.io"
 
 # Documentation config: name -> (aegis_path, external_url, description)
 # Components

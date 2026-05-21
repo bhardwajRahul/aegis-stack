@@ -430,7 +430,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "Communications",
     "projectmap.docs": "Documentation",
     # ── Post-generation: footer ───────────────────────────────────────
-    "postgen.docs_link": "Docs : https://lbedner.github.io/aegis-stack",
+    "postgen.docs_link": "Docs : https://docs.aegis-stack.io",
     "postgen.star_prompt": (
         "Si Aegis Stack vous a simplifié la vie, pensez à laisser une étoile :"
     ),
@@ -791,6 +791,28 @@ MESSAGES: dict[str, str] = {
         "Déploiement terminé mais la vérification de santé a échoué. Consultez les logs avec : aegis deploy-logs"
     ),
     "deploy.complete": "Déploiement terminé !",
+    "deploy.rolling_starting": "Déploiement continu vers {host}...",
+    "deploy.rolling_building": "Construction de l'image du serveur web...",
+    "deploy.rolling_pausing": "Mise en pause de la file des workers...",
+    "deploy.rolling_pause_failed": (
+        "Impossible d'activer le drapeau de pause ; les workers risquent "
+        "de recevoir SIGTERM en plein traitement."
+    ),
+    "deploy.rolling_draining": (
+        "Attente jusqu'à {seconds}s pour le drainage des workers..."
+    ),
+    "deploy.rolling_drain_timeout": (
+        "Les workers n'ont pas été drainés à temps. Drapeau de pause effacé ; abandon."
+    ),
+    "deploy.rolling_recreating": "Recréation : {services}",
+    "deploy.rolling_webserver": (
+        "Redémarrage continu du serveur web (docker-rollout)..."
+    ),
+    "deploy.rolling_rollout_failed": (
+        "docker rollout a échoué. Le plugin est-il installé sous "
+        "~/.docker/cli-plugins/ sur l'hôte de déploiement ?"
+    ),
+    "deploy.rolling_complete": "Déploiement continu terminé !",
     "deploy.app_running": "   Application accessible à : http://{host}",
     "deploy.overseer": "   Tableau de bord Overseer : http://{host}/dashboard/",
     "deploy.view_logs": "   Voir les logs : aegis deploy-logs",
@@ -870,6 +892,16 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_build": "Construire les images avant le déploiement",
     "deploy.help_opt_backup": "Créer une sauvegarde avant le déploiement",
     "deploy.help_opt_health": "Exécuter un contrôle de santé après le déploiement",
+    "deploy.help_opt_rolling": (
+        "Déploiement code-only sans interruption HTTP. Roule le serveur "
+        "web via docker-rollout et met en pause la file des workers pour "
+        "que les jobs en cours se terminent proprement. Ignore les "
+        "migrations de base de données."
+    ),
+    "deploy.help_opt_drain_timeout": (
+        "Secondes d'attente pour le drainage des workers après la mise "
+        "en pause de la file lors d'un déploiement continu (défaut : 90)."
+    ),
     "deploy.help_opt_rollback_backup": "Horodatage de la sauvegarde vers laquelle revenir (par défaut : la plus récente)",
     "deploy.help_opt_logs_follow": "Suivre la sortie des logs en continu",
     "deploy.help_opt_logs_service": "Afficher uniquement les logs d'un service donné",

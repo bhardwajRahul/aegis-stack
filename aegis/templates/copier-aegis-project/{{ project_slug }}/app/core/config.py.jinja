@@ -137,6 +137,11 @@ class Settings(
     RATE_LIMIT_LOGIN_WINDOW: int = 60
     RATE_LIMIT_REGISTER_MAX: int = 3
     RATE_LIMIT_REGISTER_WINDOW: int = 60
+    # Resend-verification is a user-initiated button; a tighter-than-register
+    # limit would feel punishing during legit retries. 3 per 5 min strikes
+    # the balance — still spam-proof, far less fiddly.
+    RATE_LIMIT_RESEND_VERIFICATION_MAX: int = 3
+    RATE_LIMIT_RESEND_VERIFICATION_WINDOW: int = 300
 
     # Account lockout settings
     ACCOUNT_LOCKOUT_ATTEMPTS: int = 5
