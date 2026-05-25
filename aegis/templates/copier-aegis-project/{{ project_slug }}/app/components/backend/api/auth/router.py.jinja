@@ -15,6 +15,7 @@ from app.components.backend.api.deps import (
     login_rate_limit,
     password_reset_rate_limit,
     register_rate_limit,
+    resend_verification_rate_limit,
 )
 from app.components.backend.security.rate_limit import (
     get_client_ip,
@@ -35,9 +36,19 @@ from app.core.security import (
 from app.models.org import AcceptInviteRequest, InviteResponse
 {% endif %}
 from app.models.refresh_token import RefreshToken, SessionResponse
-from app.models.user import EmailVerifyRequest, PasswordResetConfirm, PasswordResetRequest, UserCreate, UserResponse
+from app.models.user import (
+    EmailVerifyRequest,
+    PasswordResetConfirm,
+    PasswordResetRequest,
+    ResendVerificationResponse,
+    StatusMessage,
+    TokenResponse,
+    User,
+    UserCreate,
+    UserResponse,
+)
 from app.services.auth.auth_service import get_current_user_from_token
-from app.services.auth.deps import get_session_token
+from app.services.auth.deps import get_current_active_user, get_session_token
 from app.services.auth.refresh_service import RefreshService
 from app.services.auth.user_service import RestoreConflict, UserService
 {% if include_auth_org %}
@@ -47,7 +58,6 @@ from app.services.auth.invite_service import InviteService
 from pydantic import BaseModel
 
 from app.core.security import VALID_ROLES
-from app.models.user import User
 from app.services.auth.auth_service import require_role
 
 
@@ -147,7 +157,7 @@ async def accept_invite(
 {% endif %}
 
 
-@router.post("/token")
+@router.post("/token", response_model=TokenResponse)
 async def login(
     request: Request,
     response: Response,
@@ -156,7 +166,7 @@ async def login(
     refresh_service: RefreshService = Depends(get_refresh_service),
     audit: AuditEmitter = Depends(get_audit),
     _rate_limit: None = Depends(login_rate_limit),
-):
+) -> TokenResponse:
     """Login and get access token.
 
     Sets the HttpOnly ``aegis_session`` cookie *and* returns the token in
@@ -216,17 +226,17 @@ async def login(
 
     await audit.emit("auth.login_success", actor_email=form_data.username, actor_id=user.id, ip_address=ip_address)
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    return TokenResponse(access_token=access_token)
 
 
-@router.post("/password-reset/request")
+@router.post("/password-reset/request", response_model=StatusMessage)
 async def request_password_reset(
     request: Request,
     body: PasswordResetRequest,
     user_service: UserService = Depends(get_user_service),
     audit: AuditEmitter = Depends(get_audit),
     _rate_limit: None = Depends(password_reset_rate_limit),
-) -> dict[str, str]:
+) -> StatusMessage:
     """Request a password reset token.
 
     Always returns 200 regardless of whether the email exists,
@@ -234,15 +244,15 @@ async def request_password_reset(
     """
     await user_service.create_password_reset_token(body.email)
     await audit.emit("auth.password_reset_requested", actor_email=body.email)
-    return {"detail": "If an account exists, a reset token has been created"}
+    return StatusMessage(detail="If an account exists, a reset token has been created")
 
 
-@router.post("/password-reset/confirm")
+@router.post("/password-reset/confirm", response_model=StatusMessage)
 async def confirm_password_reset(
     body: PasswordResetConfirm,
     user_service: UserService = Depends(get_user_service),
     audit: AuditEmitter = Depends(get_audit),
-) -> dict[str, str]:
+) -> StatusMessage:
     """Confirm a password reset using a valid token."""
     try:
         await user_service.reset_password(body.token, body.new_password)
@@ -252,15 +262,15 @@ async def confirm_password_reset(
             detail=str(e),
         )
     await audit.emit("auth.password_reset_confirmed")
-    return {"detail": "Password has been reset successfully"}
+    return StatusMessage(detail="Password has been reset successfully")
 
 
-@router.post("/verify-email")
+@router.post("/verify-email", response_model=StatusMessage)
 async def verify_email(
     body: EmailVerifyRequest,
     user_service: UserService = Depends(get_user_service),
     audit: AuditEmitter = Depends(get_audit),
-) -> dict[str, str]:
+) -> StatusMessage:
     """Verify a user's email using a valid verification token."""
     try:
         await user_service.verify_email(body.token)
@@ -270,10 +280,41 @@ async def verify_email(
             detail=str(e),
         )
     await audit.emit("auth.email_verified")
-    return {"detail": "Email has been verified successfully"}
+    return StatusMessage(detail="Email has been verified successfully")
 
 
-@router.post("/refresh")
+@router.post("/resend-verification", response_model=ResendVerificationResponse)
+async def resend_verification(
+    current_user: User = Depends(get_current_active_user),
+    user_service: UserService = Depends(get_user_service),
+    audit: AuditEmitter = Depends(get_audit),
+    _rate_limit: None = Depends(resend_verification_rate_limit),
+) -> ResendVerificationResponse:
+    """Re-send the email-verification link to the current user.
+
+    Wired up at ``/api/v1/auth/resend-verification`` to back the "Resend
+    verification email" button on ``/verify-pending``. Idempotent on
+    the already-verified path: returns ``already_verified`` without
+    generating a new token or burning a provider credit. Rate-limited
+    via ``resend_verification_rate_limit`` so a held-down button can't
+    pummel the mail provider.
+    """
+    if current_user.is_verified:
+        await audit.emit(
+            "auth.resend_verification.noop_already_verified",
+            actor_id=current_user.id,
+        )
+        return ResendVerificationResponse(status="already_verified")
+
+    # ``create_email_verification_token`` creates the token row AND
+    # calls ``send_verification_email`` — single call covers the whole
+    # flow including provider delivery.
+    await user_service.create_email_verification_token(current_user.id)
+    await audit.emit("auth.resend_verification.sent", actor_id=current_user.id)
+    return ResendVerificationResponse(status="sent")
+
+
+@router.post("/refresh", response_model=TokenResponse)
 async def refresh(
     request: Request,
     response: Response,
@@ -336,7 +377,7 @@ async def refresh(
 {% endif %}
     set_session_cookie(response, access_token)
     set_refresh_cookie(response, new_refresh)
-    return {"access_token": access_token, "token_type": "bearer"}
+    return TokenResponse(access_token=access_token)
 
 
 @router.get("/me", response_model=UserResponse)
@@ -349,7 +390,7 @@ async def get_current_user(
     return UserResponse.model_validate(user)
 
 
-@router.post("/logout")
+@router.post("/logout", response_model=StatusMessage)
 async def logout(
     request: Request,
     response: Response,
@@ -395,7 +436,7 @@ async def logout(
         await refresh_service.revoke(refresh_cookie)
 
     await audit.emit("auth.logout", actor_id=current_user.id)
-    return {"detail": "Logged out"}
+    return StatusMessage(detail="Logged out")
 
 
 async def _current_session_family(

@@ -35,15 +35,23 @@ def cli_test_timeout() -> int:
 
 @pytest.fixture
 def temp_output_dir() -> Generator[Path, None, None]:
-    """Create a temporary directory for test project generation."""
-    with tempfile.TemporaryDirectory() as temp_dir:
+    """Create a temporary directory for test project generation.
+
+    ``ignore_cleanup_errors`` papers over a known CI race: copier
+    shallow-clones aegis-stack into the tempdir, and git can still be
+    holding handles in ``.git/objects/`` when pytest tries to rmtree.
+    The OS reaps the dir eventually; we don't want the test to fail.
+    """
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
         yield Path(temp_dir)
 
 
 @pytest.fixture(scope="session")
 def session_temp_dir() -> Generator[Path, None, None]:
     """Create a session-scoped temporary directory for shared stack generation."""
-    with tempfile.TemporaryDirectory(prefix="aegis-test-session-") as temp_dir:
+    with tempfile.TemporaryDirectory(
+        prefix="aegis-test-session-", ignore_cleanup_errors=True
+    ) as temp_dir:
         yield Path(temp_dir)
 
 

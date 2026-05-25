@@ -11,6 +11,7 @@ from typing import Any
 
 import redis.asyncio as aioredis
 from app.components.worker.events import publish_event
+from app.components.worker.heartbeat import mark_busy, mark_idle
 from app.core.config import settings
 from app.core.log import logger
 from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
@@ -65,6 +66,7 @@ class EventPublishMiddleware(TaskiqMiddleware):
         is acknowledged from the stream but before the task function runs.
         """
         if self._redis:
+            await mark_busy(self._redis)
             await publish_event(
                 self._redis,
                 "job.started",
@@ -105,3 +107,4 @@ class EventPublishMiddleware(TaskiqMiddleware):
                 success=not result.is_err,
                 error=error_msg,
             )
+            await mark_idle(self._redis)

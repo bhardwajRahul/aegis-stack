@@ -48,7 +48,7 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 
 > **CLI in 9 languages:** English, German, Spanish, French, Japanese, Korean, Russian, Simplified Chinese, Traditional Chinese. Use `aegis --lang <code>` or set `AEGIS_LANG`.
 
-**Installation alternatives:** See the [Installation Guide](https://lbedner.github.io/aegis-stack/installation/) for `uv tool install`, `pip install`, and development setup.
+**Installation alternatives:** See the [Installation Guide](https://docs.aegis-stack.io/installation/) for `uv tool install`, `pip install`, and development setup.
 
 ## Customizing Your Stack
 
@@ -60,31 +60,31 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 
 | Component | What you get | |
 |---|---|---|
-| **[Backend](https://lbedner.github.io/aegis-stack/components/backend/)** | FastAPI + lifecycle hooks, in-memory request metrics, API load testing for every route | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
-| **[CLI](https://lbedner.github.io/aegis-stack/cli-reference/)** | Typer, first-class system interface | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
-| **[Frontend](https://lbedner.github.io/aegis-stack/components/frontend/)** | Flet, ships with the Overseer system dashboard | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
-| **[Cache](https://lbedner.github.io/aegis-stack/components/)** | Redis for caching, sessions, pub/sub | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Database](https://lbedner.github.io/aegis-stack/components/database/)** | Postgres or SQLite + SQLModel ORM | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Inference](https://lbedner.github.io/aegis-stack/components/)** | Local AI models via Ollama | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Ingress](https://lbedner.github.io/aegis-stack/components/ingress/)** | Traefik v3 reverse proxy with TLS | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Observability](https://lbedner.github.io/aegis-stack/components/observability/)** | Pydantic Logfire tracing + metrics + logging | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Scheduler](https://lbedner.github.io/aegis-stack/components/scheduler/)** | APScheduler with persistent jobs | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Worker](https://lbedner.github.io/aegis-stack/components/worker/)** | Pluggable Arq, Taskiq, or Dramatiq | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Backend](https://docs.aegis-stack.io/components/backend/)** | FastAPI + lifecycle hooks, in-memory request metrics, API load testing for every route | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
+| **[CLI](https://docs.aegis-stack.io/cli-reference/)** | Typer, first-class system interface | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
+| **[Frontend](https://docs.aegis-stack.io/components/frontend/)** | Flet, ships with the Overseer system dashboard | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
+| **[Cache](https://docs.aegis-stack.io/components/)** | Redis for caching, sessions, pub/sub | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Database](https://docs.aegis-stack.io/components/database/)** | Postgres or SQLite + SQLModel ORM | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Inference](https://docs.aegis-stack.io/components/)** | Local AI models via Ollama | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Ingress](https://docs.aegis-stack.io/components/ingress/)** | Traefik v3 reverse proxy with TLS | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Observability](https://docs.aegis-stack.io/components/observability/)** | Pydantic Logfire tracing + metrics + logging | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Scheduler](https://docs.aegis-stack.io/components/scheduler/)** | APScheduler with persistent jobs | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Worker](https://docs.aegis-stack.io/components/worker/)** | Pluggable Arq, Taskiq, or Dramatiq | ![Optional](https://img.shields.io/badge/-optional-blue) |
 
-[Components Docs →](https://lbedner.github.io/aegis-stack/components/)
+[Components Docs →](https://docs.aegis-stack.io/components/)
 
 ### Services
 
 | Service | What you get | |
 |---|---|---|
-| **[AI](https://lbedner.github.io/aegis-stack/services/ai/)** | Conversational agents, RAG, model catalog, TTS and STT (PydanticAI / LangChain across 7 providers) | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Auth](https://lbedner.github.io/aegis-stack/services/auth/)** | Persistent sessions with refresh-token rotation, GitHub/Google sign-in, RBAC, multi-tenant Organizations | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Blog](https://lbedner.github.io/aegis-stack/services/blog/)** | Markdown publishing with drafts, tags, and an Overseer editor | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Comms](https://lbedner.github.io/aegis-stack/services/comms/)** | Transactional email (Resend) + SMS / voice (Twilio) | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Insights](https://lbedner.github.io/aegis-stack/services/insights/)** | Adoption metrics across GitHub, PyPI, Plausible, Reddit | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Payments](https://lbedner.github.io/aegis-stack/services/payment/)** | Stripe checkout, subscriptions, refunds, disputes | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[AI](https://docs.aegis-stack.io/services/ai/)** | Conversational agents, RAG, model catalog, TTS and STT (PydanticAI / LangChain across 7 providers) | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Auth](https://docs.aegis-stack.io/services/auth/)** | Persistent sessions with refresh-token rotation, GitHub/Google sign-in, RBAC, multi-tenant Organizations | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Blog](https://docs.aegis-stack.io/services/blog/)** | Markdown publishing with drafts, tags, and an Overseer editor | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Comms](https://docs.aegis-stack.io/services/comms/)** | Transactional email (Resend) + SMS / voice (Twilio) | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Insights](https://docs.aegis-stack.io/services/insights/)** | Adoption metrics across GitHub, PyPI, Plausible, Reddit | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Payments](https://docs.aegis-stack.io/services/payment/)** | Stripe checkout, subscriptions, refunds, disputes | ![Optional](https://img.shields.io/badge/-optional-blue) |
 
-[Services Docs →](https://lbedner.github.io/aegis-stack/services/)
+[Services Docs →](https://docs.aegis-stack.io/services/)
 
 ## Integrations
 
@@ -145,12 +145,12 @@ Every generated project ships with GitHub Actions and developer tooling pre-wire
 
 | Capability | What you get | |
 |---|---|---|
-| **[Deploy CLI](https://lbedner.github.io/aegis-stack/deployment/)** | One-command deploys to any VPS over SSH (rsync + Docker), no PaaS lock-in | ![Available](https://img.shields.io/badge/-available-2ea043) |
-| **[Server Setup](https://lbedner.github.io/aegis-stack/deployment/#aegis-deploy-setup)** | `aegis deploy-setup` provisions Ubuntu, Debian, or Fedora boxes (Docker + firewall) | ![Available](https://img.shields.io/badge/-available-2ea043) |
-| **[Backups & Rollback](https://lbedner.github.io/aegis-stack/deployment/#backup-and-rollback)** | `pg_dump` before every deploy, retention policy, automatic rollback on failed health checks | ![Available](https://img.shields.io/badge/-available-2ea043) |
-| **[TLS / HTTPS](https://lbedner.github.io/aegis-stack/deployment/#tlshttps-with-lets-encrypt)** | Let's Encrypt via the Traefik ingress component, zero config when a domain is set | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Deploy CLI](https://docs.aegis-stack.io/deployment/)** | One-command deploys to any VPS over SSH (rsync + Docker), no PaaS lock-in | ![Available](https://img.shields.io/badge/-available-2ea043) |
+| **[Server Setup](https://docs.aegis-stack.io/deployment/#aegis-deploy-setup)** | `aegis deploy-setup` provisions Ubuntu, Debian, or Fedora boxes (Docker + firewall) | ![Available](https://img.shields.io/badge/-available-2ea043) |
+| **[Backups & Rollback](https://docs.aegis-stack.io/deployment/#backup-and-rollback)** | `pg_dump` before every deploy, retention policy, automatic rollback on failed health checks | ![Available](https://img.shields.io/badge/-available-2ea043) |
+| **[TLS / HTTPS](https://docs.aegis-stack.io/deployment/#tlshttps-with-lets-encrypt)** | Let's Encrypt via the Traefik ingress component, zero config when a domain is set | ![Optional](https://img.shields.io/badge/-optional-blue) |
 
-[Deployment Docs →](https://lbedner.github.io/aegis-stack/deployment/)
+[Deployment Docs →](https://docs.aegis-stack.io/deployment/)
 
 Components compose into capabilities you didn't have to build:
 
@@ -194,7 +194,7 @@ aegis update
 
 <img src="docs/images/aegis-evolution-demo.gif" alt="Component Evolution Demo" width="480">
 
-Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your Stack](https://lbedner.github.io/aegis-stack/evolving-your-stack/)** for the complete guide.
+Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your Stack](https://docs.aegis-stack.io/evolving-your-stack/)** for the complete guide.
 
 ## Overseer - Your Application's Control Plane
 
@@ -202,7 +202,7 @@ Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your S
 
 <sub>[Live Demo: sector-7g.dev/dashboard](https://sector-7g.dev/dashboard/)</sub>
 
-**[Overseer](https://lbedner.github.io/aegis-stack/overseer/)** is the embedded control plane that ships with every Aegis Stack project.
+**[Overseer](https://docs.aegis-stack.io/overseer/)** is the embedded control plane that ships with every Aegis Stack project.
 
 - Live health of every component and service in one view
 - Worker queues, scheduled jobs, recent runs
@@ -237,12 +237,12 @@ When the AI service is enabled, Aegis exposes an additional interface: **Illiana
 
 ## Learn More
 
-- **[Overseer](https://lbedner.github.io/aegis-stack/overseer/)** - Built-in system dashboard
-- **[Deployment](https://lbedner.github.io/aegis-stack/deployment/)** - Deploy with backups, rollback, and health checks
-- **[CLI Reference](https://lbedner.github.io/aegis-stack/cli-reference/)** - Complete command reference
-- **[Evolving Your Stack](https://lbedner.github.io/aegis-stack/evolving-your-stack/)** - Add/remove components as needs change
-- **[Technology Stack](https://lbedner.github.io/aegis-stack/technology/)** - Battle-tested technology choices
-- **[About](https://lbedner.github.io/aegis-stack/about/)** - The philosophy and vision behind Aegis Stack
+- **[Overseer](https://docs.aegis-stack.io/overseer/)** - Built-in system dashboard
+- **[Deployment](https://docs.aegis-stack.io/deployment/)** - Deploy with backups, rollback, and health checks
+- **[CLI Reference](https://docs.aegis-stack.io/cli-reference/)** - Complete command reference
+- **[Evolving Your Stack](https://docs.aegis-stack.io/evolving-your-stack/)** - Add/remove components as needs change
+- **[Technology Stack](https://docs.aegis-stack.io/technology/)** - Battle-tested technology choices
+- **[About](https://docs.aegis-stack.io/about/)** - The philosophy and vision behind Aegis Stack
 
 ## For The Veterans
 

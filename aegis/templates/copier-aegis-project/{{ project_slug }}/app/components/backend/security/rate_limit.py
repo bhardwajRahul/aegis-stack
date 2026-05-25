@@ -114,6 +114,15 @@ password_reset_limiter = RateLimiter(
     window_seconds=settings.RATE_LIMIT_REGISTER_WINDOW,
     trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
 )
+# Separate bucket for verification-email resends. Its own dedicated
+# settings keep it from inheriting the tighter register limit — this
+# is a user-facing button, not a signup path, and legit retries
+# shouldn't feel punishing.
+resend_verification_limiter = RateLimiter(
+    max_requests=settings.RATE_LIMIT_RESEND_VERIFICATION_MAX,
+    window_seconds=settings.RATE_LIMIT_RESEND_VERIFICATION_WINDOW,
+    trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
+)
 
 
 def login_rate_limit(request: Request) -> None:
@@ -129,3 +138,8 @@ def register_rate_limit(request: Request) -> None:
 def password_reset_rate_limit(request: Request) -> None:
     """FastAPI dependency: enforce the password-reset rate limit."""
     password_reset_limiter.check(request)
+
+
+def resend_verification_rate_limit(request: Request) -> None:
+    """FastAPI dependency: enforce the resend-verification rate limit."""
+    resend_verification_limiter.check(request)

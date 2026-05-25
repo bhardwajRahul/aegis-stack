@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import redis.asyncio as aioredis
+from app.components.worker.broker import PausableRedisStreamBroker
 from app.components.worker.events import publish_event
 from app.components.worker.middleware import EventPublishMiddleware
 from app.core.config import settings
@@ -19,7 +20,7 @@ from app.services.load_test_workloads import (
     run_io_simulation,
     run_memory_operations,
 )
-from taskiq_redis import RedisAsyncResultBackend, RedisStreamBroker
+from taskiq_redis import RedisAsyncResultBackend
 
 # Use redis_url_effective for Docker vs local auto-detection
 redis_url = (
@@ -31,7 +32,7 @@ redis_url = (
 # Create the broker with Redis backend (using streams for acknowledgement support)
 # Use unique queue_name to ensure workers don't consume from each other's streams
 broker = (
-    RedisStreamBroker(url=redis_url, queue_name="taskiq:load_test")
+    PausableRedisStreamBroker(url=redis_url, queue_name="taskiq:load_test")
     .with_result_backend(
         RedisAsyncResultBackend(redis_url=redis_url, result_ex_time=60)
     )

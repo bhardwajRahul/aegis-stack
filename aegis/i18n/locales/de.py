@@ -428,7 +428,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "Kommunikation",
     "projectmap.docs": "Dokumentation",
     # ── Post-generation: footer ───────────────────────────────────────
-    "postgen.docs_link": "Doku: https://lbedner.github.io/aegis-stack",
+    "postgen.docs_link": "Doku: https://docs.aegis-stack.io",
     "postgen.star_prompt": (
         "Falls Aegis Stack dir geholfen hat, hinterlasse gerne einen Stern:"
     ),
@@ -789,6 +789,28 @@ MESSAGES: dict[str, str] = {
         "Deployment abgeschlossen, aber Health Check fehlgeschlagen. Logs prüfen mit: aegis deploy-logs"
     ),
     "deploy.complete": "Deployment abgeschlossen!",
+    "deploy.rolling_starting": "Rolling-Deployment nach {host}...",
+    "deploy.rolling_building": "Webserver-Image wird gebaut...",
+    "deploy.rolling_pausing": "Worker-Queue wird pausiert...",
+    "deploy.rolling_pause_failed": (
+        "Pause-Flag konnte nicht gesetzt werden; Worker werden eventuell "
+        "mitten im Job per SIGTERM beendet."
+    ),
+    "deploy.rolling_draining": (
+        "Warte bis zu {seconds}s, bis die Worker geleert sind..."
+    ),
+    "deploy.rolling_drain_timeout": (
+        "Worker wurden nicht rechtzeitig geleert. Pause-Flag entfernt; Abbruch."
+    ),
+    "deploy.rolling_recreating": "Neuerstellung: {services}",
+    "deploy.rolling_webserver": (
+        "Webserver wird rollend neugestartet (docker-rollout)..."
+    ),
+    "deploy.rolling_rollout_failed": (
+        "docker rollout ist fehlgeschlagen. Ist das Plugin unter "
+        "~/.docker/cli-plugins/ auf dem Deploy-Host installiert?"
+    ),
+    "deploy.rolling_complete": "Rolling-Deployment abgeschlossen!",
     "deploy.app_running": "   Anwendung läuft unter: http://{host}",
     "deploy.overseer": "   Overseer Dashboard: http://{host}/dashboard/",
     "deploy.view_logs": "   Logs anzeigen: aegis deploy-logs",
@@ -868,6 +890,16 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_build": "Images vor dem Deployment bauen",
     "deploy.help_opt_backup": "Vor dem Deployment ein Backup erstellen",
     "deploy.help_opt_health": "Nach dem Deployment einen Health-Check ausführen",
+    "deploy.help_opt_rolling": (
+        "Code-only Deployment ohne HTTP-Downtime. Rollt den Webserver per "
+        "docker-rollout und pausiert die Worker-Queue, damit laufende "
+        "Jobs sauber abgeschlossen werden. Überspringt DB-Migrationen."
+    ),
+    "deploy.help_opt_drain_timeout": (
+        "Sekunden, die auf das Leeren der Worker gewartet wird, nachdem "
+        "die Queue während eines Rolling-Deployments pausiert wurde "
+        "(Standard: 90)."
+    ),
     "deploy.help_opt_rollback_backup": "Backup-Zeitstempel, auf den zurückgerollt werden soll (Standardwert: neuestes)",
     "deploy.help_opt_logs_follow": "Logausgabe live mitlesen",
     "deploy.help_opt_logs_service": "Logs nur für einen bestimmten Service anzeigen",

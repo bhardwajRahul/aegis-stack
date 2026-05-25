@@ -330,7 +330,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "通信",
     "projectmap.docs": "文檔",
     # ── 專案生成後：底部訊息 ──────────────────────────────────────────
-    "postgen.docs_link": "文檔：https://lbedner.github.io/aegis-stack",
+    "postgen.docs_link": "文檔：https://docs.aegis-stack.io",
     "postgen.star_prompt": "如果對你有幫助，歡迎點個 Star：",
     # ── add-service 命令 ────────────────────────────────────────────────
     "add_service.title": "Aegis Stack — 添加服務",
@@ -635,6 +635,23 @@ MESSAGES: dict[str, str] = {
         "部署完成但健康檢查失敗，請查看日志：aegis deploy-logs"
     ),
     "deploy.complete": "部署完成",
+    "deploy.rolling_starting": "正在向 {host} 滾動部署...",
+    "deploy.rolling_building": "正在建置 Web 伺服器映像...",
+    "deploy.rolling_pausing": "正在暫停 worker 佇列...",
+    "deploy.rolling_pause_failed": (
+        "暫停旗標設定失敗，worker 可能在任務執行中被 SIGTERM。"
+    ),
+    "deploy.rolling_draining": ("等待 worker 完成處理，最長 {seconds} 秒..."),
+    "deploy.rolling_drain_timeout": (
+        "worker 未在限時內完成，已清除暫停旗標，部署中止。"
+    ),
+    "deploy.rolling_recreating": "正在重建：{services}",
+    "deploy.rolling_webserver": ("正在滾動重啟 Web 伺服器（docker-rollout）..."),
+    "deploy.rolling_rollout_failed": (
+        "docker rollout 執行失敗。部署主機的 ~/.docker/cli-plugins/ "
+        "中是否已安裝該外掛？"
+    ),
+    "deploy.rolling_complete": "滾動部署完成",
     "deploy.app_running": "   訪問地址：http://{host}",
     "deploy.overseer": "   控制臺：http://{host}/dashboard/",
     "deploy.view_logs": "   查看日志：aegis deploy-logs",
@@ -710,6 +727,14 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_build": "部署前先建構映像",
     "deploy.help_opt_backup": "部署前先建立備份",
     "deploy.help_opt_health": "部署完成後執行健康檢查",
+    "deploy.help_opt_rolling": (
+        "僅程式碼、HTTP 零停機部署。透過 docker-rollout 滾動更新 Web "
+        "伺服器，並暫停 worker 佇列，讓在途任務平穩收尾。跳過資料庫 "
+        "遷移。"
+    ),
+    "deploy.help_opt_drain_timeout": (
+        "滾動部署時暫停佇列後，等待 worker 完成處理的秒數（預設 90）。"
+    ),
     "deploy.help_opt_rollback_backup": "要回復到的備份時間戳記（預設值：最新備份）",
     "deploy.help_opt_logs_follow": "持續追蹤日誌輸出",
     "deploy.help_opt_logs_service": "僅顯示指定服務的日誌",

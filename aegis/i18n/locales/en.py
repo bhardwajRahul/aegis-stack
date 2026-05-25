@@ -434,7 +434,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.comms": "Communications",
     "projectmap.docs": "Documentation",
     # ── Post-generation: footer ───────────────────────────────────────
-    "postgen.docs_link": "Docs: https://lbedner.github.io/aegis-stack",
+    "postgen.docs_link": "Docs: https://docs.aegis-stack.io",
     "postgen.star_prompt": (
         "If Aegis Stack made your life easier, consider leaving a star:"
     ),
@@ -795,6 +795,23 @@ MESSAGES: dict[str, str] = {
         "Deploy completed but health check failed. Check logs with: aegis deploy-logs"
     ),
     "deploy.complete": "Deployment complete!",
+    "deploy.rolling_starting": "Rolling deploy to {host}...",
+    "deploy.rolling_building": "Building webserver image...",
+    "deploy.rolling_pausing": "Pausing worker queue...",
+    "deploy.rolling_pause_failed": (
+        "Could not SET pause flag; workers may get SIGTERMed mid-job."
+    ),
+    "deploy.rolling_draining": ("Waiting up to {seconds}s for workers to drain..."),
+    "deploy.rolling_drain_timeout": (
+        "Workers did not drain in time. Pause flag cleared; aborting."
+    ),
+    "deploy.rolling_recreating": "Recreating: {services}",
+    "deploy.rolling_webserver": "Rolling-restarting webserver (docker-rollout)...",
+    "deploy.rolling_rollout_failed": (
+        "docker rollout failed. Is the plugin installed under ~/.docker/cli-plugins/ "
+        "on the deploy host?"
+    ),
+    "deploy.rolling_complete": "Rolling deploy complete!",
     "deploy.app_running": ("   Application running at: http://{host}"),
     "deploy.overseer": ("   Overseer dashboard: http://{host}/dashboard/"),
     "deploy.view_logs": "   View logs: aegis deploy-logs",
@@ -908,6 +925,15 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_build": "Build images before deploying",
     "deploy.help_opt_backup": "Create backup before deploying",
     "deploy.help_opt_health": "Run health check after deploying",
+    "deploy.help_opt_rolling": (
+        "Zero-HTTP-downtime code-only deploy. Rolls the webserver via "
+        "docker-rollout and pauses the worker queue so in-flight jobs "
+        "finish cleanly. Skips DB migrations."
+    ),
+    "deploy.help_opt_drain_timeout": (
+        "Seconds to wait for workers to drain after pausing the queue "
+        "during a rolling deploy (default: 90)."
+    ),
     "deploy.help_opt_rollback_backup": (
         "Backup timestamp to rollback to (default: latest)"
     ),

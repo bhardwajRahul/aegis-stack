@@ -151,6 +151,10 @@ SERVICES: dict[str, ServiceSpec] = {
                     symbol="register_rate_limit",
                 ),
                 SymbolWiring(
+                    module="app.components.backend.security.rate_limit",
+                    symbol="resend_verification_rate_limit",
+                ),
+                SymbolWiring(
                     module="app.services.auth.deps",
                     symbol="get_user_service",
                 ),

@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import EmailStr
 import sqlalchemy as sa
@@ -110,6 +111,47 @@ class ChangePasswordRequest(SQLModel):
 
     current_password: str
     new_password: str = Field(min_length=8)
+
+
+class StatusMessage(SQLModel):
+    """Generic side-effect response — single human-readable ``detail`` field.
+
+    Used by auth endpoints that don't return entity data
+    (``/password-reset/{request,confirm}``, ``/verify-email``, ``/logout``).
+    Wrapping these in a typed model means the OpenAPI schema describes
+    the response shape correctly and clients aren't guessing at the
+    JSON keys.
+    """
+
+    detail: str
+
+
+class TokenResponse(SQLModel):
+    """OAuth2-spec token response from ``/auth/token``.
+
+    Shape is fixed by RFC 6749 §5.1 — clients (and the OAuth2 lib) expect
+    these exact field names. We declare it as a model so OpenAPI describes
+    it accurately rather than as an untyped dict.
+    """
+
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+
+
+class ResendVerificationResponse(SQLModel):
+    """Response from ``/auth/resend-verification``.
+
+    ``status`` is one of:
+
+    - ``"sent"`` — a new verification email was queued for delivery.
+    - ``"already_verified"`` — the user's email is already verified;
+      no-op, no email sent.
+
+    Kept as a Literal so OpenAPI consumers can discriminate without
+    parsing free-form strings.
+    """
+
+    status: Literal["sent", "already_verified"]
 
 
 class UserBase(SQLModel):
