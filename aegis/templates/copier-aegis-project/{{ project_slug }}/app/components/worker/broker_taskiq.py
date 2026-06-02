@@ -2,7 +2,7 @@
 Pause-aware TaskIQ broker for rolling deploys.
 
 Wraps ``RedisStreamBroker`` so the consume loop gates on a Redis flag
-(``taskiq:paused``) before pulling each batch from the stream. During a
+(``aegis:queue:paused``) before pulling each batch from the stream. During a
 rolling deploy (``aegis deploy --rolling``), the deploy script SETs the
 flag, waits for in-flight jobs to drain via the per-worker heartbeat
 key, then restarts worker containers. Workers that finish their current
@@ -20,7 +20,7 @@ from taskiq import AckableMessage
 from taskiq_redis import RedisStreamBroker
 from taskiq_redis.redis_broker import logger as _broker_logger
 
-PAUSE_KEY = "taskiq:paused"
+PAUSE_KEY = "aegis:queue:paused"
 PAUSE_POLL_SECONDS = 1.0
 
 

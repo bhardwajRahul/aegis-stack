@@ -375,7 +375,7 @@ def _run_health_check(
 # Rolling deploy (code-only, zero HTTP downtime)
 # ---------------------------------------------------------------------------
 
-ROLLING_PAUSE_KEY = "taskiq:paused"
+ROLLING_PAUSE_KEY = "aegis:queue:paused"
 ROLLING_DRAIN_TIMEOUT_DEFAULT = 90  # seconds
 ROLLING_DRAIN_POLL_SECONDS = 1
 
@@ -419,7 +419,7 @@ def _rolling_clear_pause(host: str, user: str, deploy_path: str) -> None:
 def _rolling_wait_for_drain(
     host: str, user: str, deploy_path: str, timeout_seconds: int
 ) -> bool:
-    """Poll ``KEYS worker:*:busy`` until empty or timeout.
+    """Poll ``SCAN worker:*:busy`` until empty or timeout.
 
     Returns True if workers drained, False on timeout. The check works
     for any worker library that registers per-job heartbeat keys with
@@ -430,10 +430,10 @@ def _rolling_wait_for_drain(
     drain_script = (
         f"deadline=$(( $(date +%s) + {timeout_seconds} )); "
         "while : ; do "
-        f"  busy=$({prefix} exec -T redis redis-cli --no-raw KEYS 'worker:*:busy' | tr -d '\\r'); "
+        f"  busy=$({prefix} exec -T redis redis-cli --scan --pattern 'worker:*:busy' | tr -d '\\r' | sed '/^$/d'); "
         '  if [ -z "$busy" ]; then echo drained; exit 0; fi; '
         '  if [ "$(date +%s)" -ge "$deadline" ]; then '
-        '    echo "drain timeout; still busy: $busy" >&2; exit 1; '
+        '    echo "drain timeout; still busy:" >&2; echo "$busy" >&2; exit 1; '
         "  fi; "
         f"  sleep {ROLLING_DRAIN_POLL_SECONDS}; "
         "done"

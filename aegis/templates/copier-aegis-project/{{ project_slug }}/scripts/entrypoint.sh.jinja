@@ -41,14 +41,34 @@ elif [ "$run_command" = "worker" ]; then
     # Worker processes (default: 2) - controls parallelism for CPU-bound tasks
     worker_processes="${WORKER_PROCESSES:-2}"
 
-    echo "Starting ${queue_type} taskiq worker with ${worker_processes} processes..."
+    # Dev hot-reload caveat: TaskIQ's ``--workers N`` (N>1) uses Python's
+    # multiprocessing forkserver, which imports the broker module ONCE
+    # and freezes that module state. Watchfiles then respawns individual
+    # worker forks but they inherit the frozen modules — newly-added
+    # @broker.task functions never reach the live workers and ``.kiq()``
+    # enqueues land in Redis as "task not found".
+    #
+    # In dev (APP_ENV=dev or WORKER_WATCH=true) drop to one worker
+    # process and skip the forkserver entirely. The single process
+    # re-imports modules fresh on every restart, so new tasks register
+    # immediately. TaskIQ's built-in ``--reload`` flag is broken in
+    # current releases (FileWatcher: NoneType is not callable), so we
+    # rely on the outer docker-compose watch loop to bounce the single
+    # process when files change.
+    if [ "$APP_ENV" = "dev" ] || [ "$WORKER_WATCH" = "true" ]; then
+        worker_processes=1
+        echo "Starting ${queue_type} taskiq worker with auto-reload (1 process, forkserver disabled)..."
+    else
+        echo "Starting ${queue_type} taskiq worker with ${worker_processes} processes..."
+    fi
     exec uv run taskiq worker "${broker_module}" --workers "${worker_processes}" "$@"
 {%- elif worker_backend == "dramatiq" %}
     # Worker component using Dramatiq
     queue_type="${1:-system}"  # Default to system queue if not specified
     shift
 
-    # Broker module + queue module (dramatiq discovers actors by importing modules)
+    # Broker module + queue module (dramatiq discovers actors by importing modules).
+    # broker_dramatiq.py is renamed to broker.py during post-generation.
     broker_module="app.components.worker.broker"
     queue_module="app.components.worker.queues.${queue_type}"
 
@@ -56,9 +76,19 @@ elif [ "$run_command" = "worker" ]; then
     worker_processes="${WORKER_PROCESSES:-2}"
     worker_threads="${WORKER_THREADS:-8}"
 
-    echo "Starting ${queue_type} dramatiq worker with ${worker_processes} processes, ${worker_threads} threads..."
-    exec uv run dramatiq "${broker_module}" "${queue_module}" --queues "${queue_type}" \
-        --processes "${worker_processes}" --threads "${worker_threads}" "$@"
+    # Dev hot-reload via dramatiq's built-in ``--watch DIR`` flag.
+    # Gated by APP_ENV=dev or WORKER_WATCH=true to match the arq /
+    # taskiq branches above — picking any backend in dev should feel
+    # the same.
+    if [ "$APP_ENV" = "dev" ] || [ "$WORKER_WATCH" = "true" ]; then
+        echo "Starting ${queue_type} dramatiq worker with auto-reload (${worker_processes} processes, ${worker_threads} threads)..."
+        exec uv run dramatiq "${broker_module}" "${queue_module}" --queues "${queue_type}" \
+            --processes "${worker_processes}" --threads "${worker_threads}" --watch /code/app "$@"
+    else
+        echo "Starting ${queue_type} dramatiq worker with ${worker_processes} processes, ${worker_threads} threads..."
+        exec uv run dramatiq "${broker_module}" "${queue_module}" --queues "${queue_type}" \
+            --processes "${worker_processes}" --threads "${worker_threads}" "$@"
+    fi
 {%- else %}
     # Worker component using STANDARD arq CLI
     queue_type="${1:-system}"  # Default to system queue if not specified

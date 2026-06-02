@@ -1,0 +1,101 @@
+{%- if include_worker and worker_backend == "taskiq" %}
+"""Tests for the pause-aware TaskIQ broker used during rolling deploys."""
+
+from __future__ import annotations
+
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+# ``broker_taskiq.py`` is renamed to ``broker.py`` during post-generation
+# (only the selected backend's files survive), so this import resolves in
+# the generated project.
+from app.components.worker import broker as broker_module
+from app.components.worker.broker import PAUSE_KEY, PausableRedisStreamBroker
+
+
+def _make_broker() -> PausableRedisStreamBroker:
+    b = PausableRedisStreamBroker.__new__(PausableRedisStreamBroker)
+    b.connection_pool = MagicMock()
+    b.consumer_group_name = "g"
+    b.consumer_name = "c"
+    b.queue_name = "q"
+    b.additional_streams = {}
+    b.block = 10
+    b.count = 1
+    b.idle_timeout = 1000
+    b.unacknowledged_batch_size = 1
+    return b
+
+
+class _RedisCtx:
+    """Async-context-manager wrapper around an AsyncMock redis."""
+
+    def __init__(self, conn: AsyncMock) -> None:
+        self._conn = conn
+
+    async def __aenter__(self) -> AsyncMock:
+        return self._conn
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_listen_gates_while_paused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """While PAUSE_KEY is set, no xreadgroup/xautoclaim calls should fire."""
+    conn = AsyncMock()
+    conn.get.return_value = b"1"  # paused
+    conn.xreadgroup.return_value = []
+    conn.xautoclaim.return_value = (b"0-0", [])
+
+    monkeypatch.setattr(broker_module, "PAUSE_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(
+        broker_module.aioredis, "Redis", lambda **_: _RedisCtx(conn), raising=True
+    )
+
+    b = _make_broker()
+
+    async def consume() -> None:
+        async for _msg in b.listen():
+            return
+
+    task = asyncio.create_task(consume())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    try:
+        await task
+    except (asyncio.CancelledError, Exception):
+        pass
+
+    conn.get.assert_called_with(PAUSE_KEY)
+    conn.xreadgroup.assert_not_called()
+    conn.xautoclaim.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_listen_fetches_when_not_paused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With PAUSE_KEY unset, listen() yields the first message from xreadgroup."""
+    conn = AsyncMock()
+    conn.get.return_value = None  # not paused
+    conn.xreadgroup.return_value = [
+        (b"q", [(b"1-0", {b"data": b"payload"})]),
+    ]
+
+    monkeypatch.setattr(
+        broker_module.aioredis, "Redis", lambda **_: _RedisCtx(conn), raising=True
+    )
+
+    b = _make_broker()
+
+    with patch.object(b, "_ack_generator", return_value=AsyncMock()):
+        agen = b.listen()
+        msg = await asyncio.wait_for(agen.__anext__(), timeout=1.0)
+        await agen.aclose()
+
+    assert msg.data == b"payload"
+    conn.xreadgroup.assert_called_once()
+{%- endif %}
