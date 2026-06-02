@@ -16,6 +16,7 @@ import typer
 from aegis.constants import (
     AnswerKeys,
     ComponentNames,
+    OllamaMode,
     StorageBackends,
     WorkerBackends,
 )
@@ -536,8 +537,8 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     # ``app.services.ai.ollama`` (which is a stub when ``ollama_mode=none``)
     # and from ``app.services.ai.etl``. When Ollama is off the whole
     # chain must come out so the module graph stays importable.
-    ollama_mode = context.get(AnswerKeys.OLLAMA_MODE, "none")
-    if ollama_mode == "none":
+    ollama_mode = context.get(AnswerKeys.OLLAMA_MODE, OllamaMode.NONE)
+    if ollama_mode == OllamaMode.NONE:
         remove_dir(project_path, "tests/services/ai/etl")
         remove_dir(project_path, "app/services/ai/etl")
         # llm router + API imports ``app.services.ai.etl`` at module load.

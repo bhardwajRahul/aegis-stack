@@ -13,6 +13,7 @@ from ..constants import (
     AIProviders,
     AuthLevels,
     ComponentNames,
+    OllamaMode,
     StorageBackends,
 )
 from ..i18n import t
@@ -310,8 +311,8 @@ SERVICES: dict[str, ServiceSpec] = {
                     alias="llm_router",
                     prefix="/api/v1",
                     when=lambda opts: (
-                        opts.get("ai_backend") != "memory"
-                        and opts.get("ollama_mode") != "none"
+                        opts.get("ai_backend") != StorageBackends.MEMORY
+                        and opts.get("ollama_mode") != OllamaMode.NONE
                     ),
                 ),
                 RouterWiring(

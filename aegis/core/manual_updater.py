@@ -16,7 +16,7 @@ from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from pydantic import BaseModel, Field
 
 from aegis.config.shared_files import SHARED_TEMPLATE_FILES
-from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
+from aegis.constants import AnswerKeys, AuthLevels, ComponentNames, StorageBackends
 from aegis.i18n import t
 
 from .component_files import get_component_files, get_copier_defaults, get_template_path
@@ -1103,11 +1103,11 @@ class ManualUpdater:
                 except (OSError, UnicodeDecodeError):
                     has_require_role = False
             if has_file("app", "services", "auth", "org_service.py"):
-                inferred[AnswerKeys.AUTH_LEVEL] = "org"
+                inferred[AnswerKeys.AUTH_LEVEL] = AuthLevels.ORG
                 inferred[AnswerKeys.AUTH_ORG] = True
                 inferred[AnswerKeys.AUTH_RBAC] = True
             elif has_require_role:
-                inferred[AnswerKeys.AUTH_LEVEL] = "rbac"
+                inferred[AnswerKeys.AUTH_LEVEL] = AuthLevels.RBAC
                 inferred[AnswerKeys.AUTH_RBAC] = True
 
         # Auth OAuth marker — file may exist as a non-stub when oauth was wired

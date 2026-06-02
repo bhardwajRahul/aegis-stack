@@ -23,6 +23,8 @@ from typing import Any
 
 from jinja2 import Environment, Template, TemplateNotFound
 
+from ..constants import AnswerKeys, AuthLevels, StorageBackends
+
 
 @dataclass
 class ColumnSpec:
@@ -1600,7 +1602,7 @@ def _resolve_spec(
         return None
 
     if service_name == "insights" and context is not None:
-        flag = context.get("insights_per_user")
+        flag = context.get(AnswerKeys.INSIGHTS_PER_USER)
         per_user = flag == "yes" or flag is True
         if per_user:
             return _build_insights_migration(per_user=True)
@@ -1699,7 +1701,7 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     services = []
 
     # Auth service (base user table)
-    include_auth = context.get("include_auth")
+    include_auth = context.get(AnswerKeys.AUTH)
     if include_auth == "yes" or include_auth is True:
         services.append("auth")
 
@@ -1708,49 +1710,54 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
         services.append("auth_tokens")
 
     # Auth RBAC columns (rbac or org level)
-    include_auth_rbac = context.get("include_auth_rbac")
-    auth_level = context.get("auth_level")
+    include_auth_rbac = context.get(AnswerKeys.AUTH_RBAC)
+    auth_level = context.get(AnswerKeys.AUTH_LEVEL)
     rbac_enabled = (
         include_auth_rbac == "yes"
         or include_auth_rbac is True
-        or (isinstance(auth_level, str) and auth_level.lower() in ("rbac", "org"))
+        or (
+            isinstance(auth_level, str)
+            and auth_level.lower() in (AuthLevels.RBAC, AuthLevels.ORG)
+        )
     )
     if (include_auth == "yes" or include_auth is True) and rbac_enabled:
         services.append("auth_rbac")
 
     # Auth org tables (only with org-level auth)
-    include_auth_org = context.get("include_auth_org")
+    include_auth_org = context.get(AnswerKeys.AUTH_ORG)
     org_enabled = (
         include_auth_org == "yes"
         or include_auth_org is True
-        or (isinstance(auth_level, str) and auth_level.lower() == "org")
+        or (isinstance(auth_level, str) and auth_level.lower() == AuthLevels.ORG)
     )
     if (include_auth == "yes" or include_auth is True) and org_enabled:
         services.append("auth_org")
 
     # AI service (only with persistence backend)
-    include_ai = context.get("include_ai")
-    ai_backend = context.get("ai_backend", "memory")
-    if (include_ai == "yes" or include_ai is True) and ai_backend != "memory":
+    include_ai = context.get(AnswerKeys.AI)
+    ai_backend = context.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
+    if (
+        include_ai == "yes" or include_ai is True
+    ) and ai_backend != StorageBackends.MEMORY:
         services.append("ai")
 
     # AI Voice service (only if AI with persistence and voice enabled)
-    ai_voice = context.get("ai_voice")
+    ai_voice = context.get(AnswerKeys.AI_VOICE)
     if (
         (include_ai == "yes" or include_ai is True)
-        and ai_backend != "memory"
+        and ai_backend != StorageBackends.MEMORY
         and (ai_voice == "yes" or ai_voice is True)
     ):
         services.append("ai_voice")
 
     # Insights service (always needs database)
-    include_insights = context.get("include_insights")
+    include_insights = context.get(AnswerKeys.INSIGHTS)
     include_insights_on = include_insights == "yes" or include_insights is True
     if include_insights_on:
         services.append("insights")
 
     # Payment service (always needs database)
-    include_payment = context.get("include_payment")
+    include_payment = context.get(AnswerKeys.PAYMENT)
     include_payment_on = include_payment == "yes" or include_payment is True
     if include_payment_on:
         services.append("payment")
@@ -1763,7 +1770,7 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
         services.append("payment_auth_link")
 
     # Blog service (always needs database)
-    include_blog = context.get("include_blog")
+    include_blog = context.get(AnswerKeys.BLOG)
     include_blog_on = include_blog == "yes" or include_blog is True
     if include_blog_on:
         services.append("blog")

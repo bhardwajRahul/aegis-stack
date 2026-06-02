@@ -13,7 +13,7 @@ from pathlib import Path
 import typer
 
 from .. import __version__ as aegis_version
-from ..constants import AnswerKeys
+from ..constants import AnswerKeys, StorageBackends
 from ..core.copier_manager import is_copier_project, load_copier_answers
 from ..core.copier_updater import (
     analyze_conflict_files,
@@ -583,8 +583,8 @@ def update_command(
             include_insights = answers.get(AnswerKeys.INSIGHTS, False)
             include_payment = answers.get(AnswerKeys.PAYMENT, False)
             include_blog = answers.get(AnswerKeys.BLOG, False)
-            ai_backend = answers.get(AnswerKeys.AI_BACKEND, "memory")
-            ai_needs_migrations = include_ai and ai_backend != "memory"
+            ai_backend = answers.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
+            ai_needs_migrations = include_ai and ai_backend != StorageBackends.MEMORY
             include_migrations = (
                 include_auth
                 or ai_needs_migrations

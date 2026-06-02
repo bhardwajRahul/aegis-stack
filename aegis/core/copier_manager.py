@@ -22,7 +22,16 @@ from ..config.defaults import (
     GITHUB_TEMPLATE_URL,
     version_to_git_tag,
 )
-from ..constants import AnswerKeys, PaymentProviders, StorageBackends
+from ..constants import (
+    AIFrameworks,
+    AIProviders,
+    AnswerKeys,
+    AuthLevels,
+    OllamaMode,
+    PaymentProviders,
+    StorageBackends,
+    WorkerBackends,
+)
 from .migration_generator import (
     generate_migrations_for_services,
     get_services_needing_migrations,
@@ -107,7 +116,7 @@ def generate_with_copier(
         == "yes",
         AnswerKeys.WORKER: template_context[AnswerKeys.WORKER] == "yes",
         AnswerKeys.WORKER_BACKEND: template_context.get(
-            AnswerKeys.WORKER_BACKEND, "arq"
+            AnswerKeys.WORKER_BACKEND, WorkerBackends.ARQ
         ),
         AnswerKeys.REDIS: template_context[AnswerKeys.REDIS] == "yes",
         AnswerKeys.DATABASE: template_context[AnswerKeys.DATABASE] == "yes",
@@ -119,7 +128,9 @@ def generate_with_copier(
         AnswerKeys.OBSERVABILITY: template_context.get(AnswerKeys.OBSERVABILITY, "no")
         == "yes",
         AnswerKeys.AUTH: template_context.get(AnswerKeys.AUTH, "no") == "yes",
-        AnswerKeys.AUTH_LEVEL: template_context.get(AnswerKeys.AUTH_LEVEL, "basic"),
+        AnswerKeys.AUTH_LEVEL: template_context.get(
+            AnswerKeys.AUTH_LEVEL, AuthLevels.BASIC
+        ),
         AnswerKeys.AUTH_RBAC: template_context.get(AnswerKeys.AUTH_RBAC, "no") == "yes",
         AnswerKeys.AUTH_ORG: template_context.get(AnswerKeys.AUTH_ORG, "no") == "yes",
         AnswerKeys.AUTH_OAUTH: template_context.get(AnswerKeys.AUTH_OAUTH, "no")
@@ -128,10 +139,10 @@ def generate_with_copier(
         AnswerKeys.COMMS: template_context.get(AnswerKeys.COMMS, "no") == "yes",
         AnswerKeys.BLOG: template_context.get(AnswerKeys.BLOG, "no") == "yes",
         AnswerKeys.AI_FRAMEWORK: template_context.get(
-            AnswerKeys.AI_FRAMEWORK, "pydantic-ai"
+            AnswerKeys.AI_FRAMEWORK, AIFrameworks.PYDANTIC_AI
         ),
         AnswerKeys.AI_PROVIDERS: template_context.get(
-            AnswerKeys.AI_PROVIDERS, "openai"
+            AnswerKeys.AI_PROVIDERS, AIProviders.OPENAI
         ),
         AnswerKeys.AI_BACKEND: template_context.get(
             AnswerKeys.AI_BACKEND, StorageBackends.MEMORY
@@ -142,7 +153,9 @@ def generate_with_copier(
         == "yes",
         AnswerKeys.AI_RAG: template_context.get(AnswerKeys.AI_RAG, "no") == "yes",
         AnswerKeys.AI_VOICE: template_context.get(AnswerKeys.AI_VOICE, "no") == "yes",
-        AnswerKeys.OLLAMA_MODE: template_context.get(AnswerKeys.OLLAMA_MODE, "none"),
+        AnswerKeys.OLLAMA_MODE: template_context.get(
+            AnswerKeys.OLLAMA_MODE, OllamaMode.NONE
+        ),
         AnswerKeys.INSIGHTS: template_context.get(AnswerKeys.INSIGHTS, "no") == "yes",
         AnswerKeys.INSIGHTS_GITHUB: template_context.get(
             AnswerKeys.INSIGHTS_GITHUB, "no"
@@ -325,17 +338,21 @@ def generate_with_copier(
         # Get ai_voice from copier_data (it's a boolean after conversion)
         ai_voice_enabled: bool = copier_data.get(AnswerKeys.AI_VOICE, False) is True
         context = {
-            "include_auth": is_auth_included,
-            "include_auth_org": copier_data.get(AnswerKeys.AUTH_ORG, False) is True,
-            "auth_level": copier_data.get(AnswerKeys.AUTH_LEVEL, "basic"),
-            "include_ai": is_ai_included,
-            "ai_backend": ai_backend_str,
-            "ai_voice": ai_voice_enabled,
-            "include_insights": is_insights_included,
-            "insights_per_user": copier_data.get(AnswerKeys.INSIGHTS_PER_USER, False)
+            AnswerKeys.AUTH: is_auth_included,
+            AnswerKeys.AUTH_ORG: copier_data.get(AnswerKeys.AUTH_ORG, False) is True,
+            AnswerKeys.AUTH_LEVEL: copier_data.get(
+                AnswerKeys.AUTH_LEVEL, AuthLevels.BASIC
+            ),
+            AnswerKeys.AI: is_ai_included,
+            AnswerKeys.AI_BACKEND: ai_backend_str,
+            AnswerKeys.AI_VOICE: ai_voice_enabled,
+            AnswerKeys.INSIGHTS: is_insights_included,
+            AnswerKeys.INSIGHTS_PER_USER: copier_data.get(
+                AnswerKeys.INSIGHTS_PER_USER, False
+            )
             is True,
-            "include_blog": is_blog_included,
-            "include_payment": is_payment_included,
+            AnswerKeys.BLOG: is_blog_included,
+            AnswerKeys.PAYMENT: is_payment_included,
         }
         services = get_services_needing_migrations(context)
         if services:

@@ -15,6 +15,7 @@ from ..cli.validation import (
     validate_git_repository,
 )
 from ..constants import (
+    AIProviders,
     AnswerKeys,
     AuthLevels,
     ComponentNames,
@@ -411,7 +412,7 @@ def add_service_command(
             # For AI service, use the captured configuration
             if base_service == AnswerKeys.SERVICE_AI:
                 # Use providers from interactive config, or default to openai
-                providers = ai_config.get("providers", ["openai"])
+                providers = ai_config.get("providers", [AIProviders.OPENAI])
                 if isinstance(providers, list):
                     service_data[AnswerKeys.AI_PROVIDERS] = ",".join(providers)
                 else:

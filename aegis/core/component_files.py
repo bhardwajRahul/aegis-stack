@@ -11,6 +11,8 @@ from typing import Any
 
 import yaml
 
+from ..constants import AnswerKeys, ComponentNames, StorageBackends
+
 # Constants
 PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
 JINJA_EXTENSION = ".jinja"
@@ -248,7 +250,10 @@ def get_component_files(
     component_files = mapping.get(component, []).copy()
 
     # For scheduler, handle backend variants
-    if component == "scheduler" and backend_variant == "sqlite":
+    if (
+        component == ComponentNames.SCHEDULER
+        and backend_variant == StorageBackends.SQLITE
+    ):
         # Add persistence files for sqlite backend
         persistence_files = mapping.get("scheduler_persistence", [])
         component_files.extend(persistence_files)
@@ -273,8 +278,6 @@ def get_all_component_files() -> dict[str, list[str]]:
     """
     # List of known components and services (from copier.yml variables)
     # Uses constants where available via ComponentNames and AnswerKeys
-    from ..constants import AnswerKeys, ComponentNames
-
     components = [
         ComponentNames.SCHEDULER,
         ComponentNames.WORKER,
@@ -293,8 +296,12 @@ def get_all_component_files() -> dict[str, list[str]]:
             result[component] = files
 
     # Add scheduler backend variants
-    result["scheduler_memory"] = get_component_files("scheduler", "memory")
-    result["scheduler_sqlite"] = get_component_files("scheduler", "sqlite")
+    result["scheduler_memory"] = get_component_files(
+        ComponentNames.SCHEDULER, StorageBackends.MEMORY
+    )
+    result["scheduler_sqlite"] = get_component_files(
+        ComponentNames.SCHEDULER, StorageBackends.SQLITE
+    )
 
     return result
 

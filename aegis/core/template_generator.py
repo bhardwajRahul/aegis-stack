@@ -12,6 +12,7 @@ from .. import __version__ as aegis_version
 from ..config.defaults import DEFAULT_PYTHON_VERSION
 from ..constants import (
     AIFrameworks,
+    AIProviders,
     AnswerKeys,
     AuthLevels,
     ComponentNames,
@@ -33,12 +34,6 @@ from .insights_service_parser import (
     parse_insights_service_config,
 )
 from .services import SERVICES
-
-# Service names for bracket syntax detection
-SERVICE_AI = "ai"
-SERVICE_AUTH = "auth"
-SERVICE_INSIGHTS = "insights"
-SERVICE_BLOG = "blog"
 
 
 class TemplateGenerator:
@@ -114,7 +109,7 @@ class TemplateGenerator:
         user_specified_ai_backend = False
 
         for service in self.selected_services:
-            if extract_base_service_name(service) == SERVICE_AI:
+            if extract_base_service_name(service) == AnswerKeys.SERVICE_AI:
                 if is_ai_service_with_options(service):
                     ai_config = parse_ai_service_config(service)
                     self.ai_backend = ai_config.backend
@@ -134,7 +129,7 @@ class TemplateGenerator:
         self.auth_level = AuthLevels.BASIC  # Default to basic
         self._user_specified_auth_level = False
         for service in self.selected_services:
-            if extract_base_service_name(service) == SERVICE_AUTH:
+            if extract_base_service_name(service) == AnswerKeys.SERVICE_AUTH:
                 if is_auth_service_with_options(service):
                     auth_config = parse_auth_service_config(service)
                     self.auth_level = auth_config.level
@@ -148,7 +143,7 @@ class TemplateGenerator:
         self.insights_sources: list[str] = DEFAULT_SOURCES.copy()
         self.insights_per_user: bool = False
         for service in self.selected_services:
-            if extract_base_service_name(service) == SERVICE_INSIGHTS:
+            if extract_base_service_name(service) == AnswerKeys.SERVICE_INSIGHTS:
                 if is_insights_service_with_options(service):
                     insights_config = parse_insights_service_config(service)
                     self.insights_sources = insights_config.sources
@@ -159,7 +154,7 @@ class TemplateGenerator:
         # use SQLite for persistence (analytics, conversation history, LLM tracking)
         if not user_specified_ai_backend:
             has_ai = any(
-                extract_base_service_name(s) == SERVICE_AI
+                extract_base_service_name(s) == AnswerKeys.SERVICE_AI
                 for s in self.selected_services
             )
             has_database = any(
@@ -426,7 +421,8 @@ class TemplateGenerator:
             for s in self.selected_services
         )
         if not has_ai:
-            return "openai"  # Default for PUBLIC provider
+            # Safe default when the AI service is not selected.
+            return AIProviders.OPENAI
 
         # Import here to avoid circular imports
         from ..cli.interactive import get_ai_provider_selection

@@ -5,6 +5,7 @@ This module handles service dependency resolution, converting service selections
 to their required components and validating service-to-component compatibility.
 """
 
+from ..constants import AnswerKeys, AuthLevels
 from ..i18n import t
 from .component_utils import extract_base_component_name, extract_base_service_name
 from .dependency_resolver import DependencyResolver
@@ -163,7 +164,7 @@ class ServiceResolver:
         # ``OptionSpec`` (mirrors ``auto_requires`` for components).
         for service in services:
             base_service = extract_base_service_name(service)
-            if base_service != "insights":
+            if base_service != AnswerKeys.SERVICE_INSIGHTS:
                 continue
             spec = SERVICES.get(base_service)
             if spec is None or not is_spec_with_options(service):
@@ -187,14 +188,17 @@ class ServiceResolver:
                     from .auth_service_parser import parse_auth_service_config
 
                     for auth_service in services:
-                        if extract_base_service_name(auth_service) != "auth":
+                        if (
+                            extract_base_service_name(auth_service)
+                            != AnswerKeys.SERVICE_AUTH
+                        ):
                             continue
                         try:
                             auth_cfg = parse_auth_service_config(auth_service)
                         except ValueError:
                             # Parse error already reported elsewhere.
                             break
-                        if auth_cfg.level != "org":
+                        if auth_cfg.level != AuthLevels.ORG:
                             errors.append(
                                 "Service 'insights[per_user]' requires "
                                 "'auth[org]'. The per-user variant ships "
