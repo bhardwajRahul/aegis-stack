@@ -13,6 +13,7 @@ tab gracefully shows guidance instead of an error.
 from typing import Any
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     DataTableColumn,
@@ -23,7 +24,6 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-
 from app.core.formatting import format_relative_time
 
 from .modal_sections import MetricCard
@@ -128,13 +128,9 @@ class LoadTestsTab(ft.Container):
                 obj = obj.get(key)
             return float(obj) if isinstance(obj, (int, float)) else default
 
-        throughputs = [
-            _metric(r, "metrics", "overall_throughput") for r in runs
-        ]
+        throughputs = [_metric(r, "metrics", "overall_throughput") for r in runs]
         p95s = [_metric(r, "metrics", "latency_ms_p95") for r in runs]
-        failures = sum(
-            int(_metric(r, "metrics", "tasks_failed")) for r in runs
-        )
+        failures = sum(int(_metric(r, "metrics", "tasks_failed")) for r in runs)
         avg_throughput = sum(throughputs) / total_runs if total_runs else 0.0
         avg_p95 = sum(p95s) / total_runs if total_runs else 0.0
 
@@ -147,7 +143,7 @@ class LoadTestsTab(ft.Container):
             MetricCard(
                 value=f"{avg_throughput:.0f}",
                 label="Avg req/s",
-                color=ft.Colors.GREEN,
+                color=Theme.Colors.SUCCESS,
             ),
             MetricCard(
                 value=f"{avg_p95:.1f}",
@@ -228,7 +224,9 @@ class LoadTestsTab(ft.Container):
 
         status_codes = metrics.get("status_codes") or {}
         status_text = (
-            ", ".join(f"{code}: {count}" for code, count in sorted(status_codes.items()))
+            ", ".join(
+                f"{code}: {count}" for code, count in sorted(status_codes.items())
+            )
             or "—"
         )
 
@@ -245,9 +243,7 @@ class LoadTestsTab(ft.Container):
                     )
                 )
             if len(errors) > 5:
-                error_lines.append(
-                    SecondaryText(f"... and {len(errors) - 5} more")
-                )
+                error_lines.append(SecondaryText(f"... and {len(errors) - 5} more"))
 
         return ft.Column(
             [

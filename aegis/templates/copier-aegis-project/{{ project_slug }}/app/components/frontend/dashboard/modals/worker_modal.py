@@ -9,6 +9,7 @@ import contextlib
 import time
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     DataTableColumn,
@@ -16,6 +17,7 @@ from app.components.frontend.controls import (
     ExpandableRow,
     PrimaryText,
     SecondaryText,
+    status_dot,
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.components.worker.registry import (
@@ -181,7 +183,7 @@ def _compute_queue_values(
 ) -> dict[str, str | float | None]:
     """Compute display values for a queue health row.
 
-    Returns dict with keys: status_icon, status_color, status_text,
+    Returns dict with keys: status_color, status_text,
     queued_jobs, jobs_ongoing, jobs_completed, jobs_failed,
     success_rate, rate_color.
     """
@@ -198,27 +200,27 @@ def _compute_queue_values(
     message = queue_component.message or ""
     if not worker_alive:
         if "no functions" in message.lower():
-            status_icon = "⚪"  # No tasks defined
+            # No tasks defined
             status_color = ft.Colors.GREY_600
             status_text = "No Tasks"
         else:
-            status_icon = "🔴"  # Offline - problem
+            # Offline - problem
             status_color = Theme.Colors.ERROR
             status_text = "Offline"
     elif failure_rate > FAILURE_RATE_CRITICAL_THRESHOLD:
-        status_icon = "🔴"  # Failing
+        # Failing
         status_color = Theme.Colors.ERROR
         status_text = "Failing"
     elif failure_rate > FAILURE_RATE_WARNING_THRESHOLD:
-        status_icon = "🟠"  # Degraded
+        # Degraded
         status_color = Theme.Colors.WARNING
         status_text = "Degraded"
     elif jobs_ongoing > 0:
-        status_icon = "🔵"  # Active - processing
+        # Active - processing
         status_color = Theme.Colors.INFO
         status_text = "Active"
     else:
-        status_icon = "🟢"  # Healthy
+        # Healthy
         status_color = Theme.Colors.SUCCESS
         status_text = "Online"
 
@@ -236,7 +238,6 @@ def _compute_queue_values(
         rate_color = Theme.Colors.ERROR
 
     return {
-        "status_icon": status_icon,
         "status_color": status_color,
         "status_text": status_text,
         "queued_jobs": queued_jobs,
@@ -273,9 +274,13 @@ def _build_queue_health_row(queue_component: ComponentStatus) -> ExpandableRow:
     """
     queue_name = queue_component.name
     vals = _compute_queue_values(queue_component)
+    status_color = str(vals["status_color"])
 
     cells = [
-        ft.Text(vals["status_icon"], size=16),
+        ft.Container(
+            content=status_dot(status_color),
+            alignment=ft.alignment.center,
+        ),
         PrimaryText(queue_name, size=Theme.Typography.BODY),
         BodyText(str(vals["queued_jobs"]), text_align=ft.TextAlign.CENTER),
         BodyText(str(vals["jobs_ongoing"]), text_align=ft.TextAlign.CENTER),
@@ -718,10 +723,10 @@ class QueueHealthSection(ft.Container):
                 continue
 
             vals = _compute_queue_values(queue_comp)
-            # cells: [0]=icon, [1]=name, [2]=queued, [3]=processing,
+            # cells: [0]=status dot, [1]=name, [2]=queued, [3]=processing,
             #         [4]=completed, [5]=failed, [6]=rate,
             #         [7]=tasks/s, [8]=ETA, [9]=status
-            cells[0].value = vals["status_icon"]
+            cells[0].content.bgcolor = vals["status_color"]
             cells[2].value = str(vals["queued_jobs"])
             cells[3].value = str(vals["jobs_ongoing"])
             cells[4].value = str(vals["jobs_completed"])
@@ -760,7 +765,7 @@ class QueueHealthSection(ft.Container):
         self._increment_cell(queue, 3)
         cells = self._queue_cells.get(queue)
         if cells:
-            cells[0].value = "🔵"
+            cells[0].content.bgcolor = Theme.Colors.INFO
             cells[9].value = "Active"
             cells[9].color = Theme.Colors.INFO
 
@@ -782,7 +787,7 @@ class QueueHealthSection(ft.Container):
                 # by 1). Zero out queued to prevent the stale value from
                 # persisting in the UI.
                 cells[2].value = "0"
-                cells[0].value = "🟢"
+                cells[0].content.bgcolor = Theme.Colors.SUCCESS
                 cells[9].value = "Online"
                 cells[9].color = Theme.Colors.SUCCESS
                 self._queue_tracking.pop(queue, None)
@@ -909,11 +914,11 @@ class QueueHealthSection(ft.Container):
         cells[8].color = ft.Colors.ON_SURFACE_VARIANT
         # set_queue_totals is the authoritative baseline — set status here
         if ongoing > 0:
-            cells[0].value = "🔵"
+            cells[0].content.bgcolor = Theme.Colors.INFO
             cells[9].value = "Active"
             cells[9].color = Theme.Colors.INFO
         else:
-            cells[0].value = "🟢"
+            cells[0].content.bgcolor = Theme.Colors.SUCCESS
             cells[9].value = "Online"
             cells[9].color = Theme.Colors.SUCCESS
 

@@ -8,7 +8,8 @@ Table layout matching the worker card pattern.
 import contextlib
 
 import flet as ft
-from app.components.frontend.controls import SecondaryText
+
+from app.components.frontend.controls import SecondaryText, status_dot
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
@@ -135,15 +136,13 @@ class SchedulerCard:
                 schedule_display = simplify_schedule(schedule)
                 next_run_display = format_next_run_time(next_run)
 
-                # Active jobs have green status
-                status_icon = "🟢"
-
                 row = ft.Container(
                     content=ft.Row(
                         [
                             ft.Container(
-                                content=ft.Text(status_icon, size=12),
+                                content=status_dot(Theme.Colors.SUCCESS),
                                 width=16,
+                                alignment=ft.alignment.center,
                             ),
                             ft.Container(
                                 content=ft.Text(name, style=cell_style),

@@ -230,6 +230,7 @@ def test_format_eta_hours() -> None:
 from app.components.frontend.dashboard.modals.worker_modal import (  # noqa: E402
     _compute_queue_values,
 )
+from app.components.frontend.theme import AegisTheme as Theme  # noqa: E402
 from app.services.system.models import ComponentStatus  # noqa: E402
 
 
@@ -263,7 +264,7 @@ def test_queue_values_online() -> None:
     """Alive worker with no active jobs should show Online / green."""
     vals = _compute_queue_values(_make_queue_status(worker_alive=True))
     assert vals["status_text"] == "Online"
-    assert vals["status_icon"] == "🟢"
+    assert vals["status_color"] == Theme.Colors.SUCCESS
 
 
 def test_queue_values_active() -> None:
@@ -272,14 +273,14 @@ def test_queue_values_active() -> None:
         _make_queue_status(worker_alive=True, jobs_ongoing=3)
     )
     assert vals["status_text"] == "Active"
-    assert vals["status_icon"] == "🔵"
+    assert vals["status_color"] == Theme.Colors.INFO
 
 
 def test_queue_values_offline() -> None:
     """Dead worker should show Offline / red."""
     vals = _compute_queue_values(_make_queue_status(worker_alive=False))
     assert vals["status_text"] == "Offline"
-    assert vals["status_icon"] == "🔴"
+    assert vals["status_color"] == Theme.Colors.ERROR
 
 
 def test_queue_values_degraded() -> None:

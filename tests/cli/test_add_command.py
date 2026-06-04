@@ -331,13 +331,14 @@ class TestAddCommand:
         # Verify database NOT auto-added
         assert updated_answers.get("include_database") is False
 
-    def test_add_scheduler_invalid_backend_postgres(
+    def test_add_scheduler_postgres_backend(
         self, project_factory: ProjectFactory
     ) -> None:
-        """Test that postgres backend shows not-yet-supported error."""
+        """Postgres scheduler backend is supported: it auto-adds a postgres
+        database and generates the schema-qualified job_execution migration.
+        """
         project_path = project_factory()
 
-        # Try to add scheduler with postgres backend
         result = run_aegis_command(
             "add",
             "scheduler",
@@ -348,11 +349,23 @@ class TestAddCommand:
             "--yes",
         )
 
-        # Should fail with helpful error
-        assert not result.success
-        assert "invalid scheduler backend" in result.stderr.lower()
-        assert "postgres" in result.stderr.lower()
-        assert "future release" in result.stderr.lower()
+        assert result.success
+
+        # Database auto-added with a matching postgres engine
+        answers = load_copier_answers(project_path)
+        assert answers.get("include_scheduler") is True
+        assert answers.get("database_engine") == "postgres"
+
+        # Schema-qualified migration generated for scheduler.job_execution
+        scheduler_migrations = list(
+            (project_path / "alembic" / "versions").glob("*_scheduler.py")
+        )
+        assert scheduler_migrations, "expected a generated scheduler migration"
+        content = scheduler_migrations[0].read_text()
+        assert 'CREATE SCHEMA IF NOT EXISTS "scheduler"' in content
+        # post-generation `ruff --fix` may normalise quote style
+        assert ('schema="scheduler"' in content) or ("schema='scheduler'" in content)
+        assert "job_execution" in content
 
     def test_add_scheduler_invalid_backend_error(
         self, project_factory: ProjectFactory

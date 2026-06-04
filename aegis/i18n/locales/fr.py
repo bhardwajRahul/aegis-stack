@@ -283,6 +283,8 @@ MESSAGES: dict[str, str] = {
     "add.valid_backends": "Options valides : {options}",
     "add.postgres_coming": "Note : le support PostgreSQL arrive dans une prochaine version",
     "add.auto_added_db": "Composant base de données ajouté automatiquement pour la persistance du scheduler",
+    "add.generated_migration": "Migration générée : {name}",
+    "add.scheduler_db_engine_mismatch": "Impossible d'utiliser le backend de scheduler '{backend}' : le moteur de base de données du projet est '{engine}'. Ils doivent correspondre.",
     # ── Remove command ────────────────────────────────────────────────
     "remove.title": "Aegis Stack - Suppression de composants",
     "remove.project": "Projet : {path}",

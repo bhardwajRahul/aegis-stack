@@ -287,6 +287,11 @@ MESSAGES: dict[str, str] = {
     "add.valid_backends": "Valid options: {options}",
     "add.postgres_coming": "Note: PostgreSQL support coming in future release",
     "add.auto_added_db": ("Auto-added database component for scheduler persistence"),
+    "add.generated_migration": "Generated migration: {name}",
+    "add.scheduler_db_engine_mismatch": (
+        "Cannot use scheduler backend '{backend}': the project's database "
+        "engine is '{engine}'. They must match."
+    ),
     # ── Remove command ────────────────────────────────────────────────
     "remove.title": "Aegis Stack - Remove Components",
     "remove.project": "Project: {path}",
@@ -890,7 +895,8 @@ MESSAGES: dict[str, str] = {
         "Comma-separated list of components to add (scheduler,worker,database)"
     ),
     "add.help_opt_scheduler_backend": (
-        "Scheduler backend: 'memory' (default) or 'sqlite' (enables persistence)"
+        "Scheduler backend: 'memory' (default), 'sqlite', or 'postgres' "
+        "(the latter two enable persistence; must match the database engine)"
     ),
     # ── update CLI help ────────────────────────────────────────────────
     "update.help_opt_to_version": "Update to specific version (default: latest)",

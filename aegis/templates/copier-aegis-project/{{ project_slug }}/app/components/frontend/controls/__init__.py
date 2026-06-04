@@ -15,6 +15,7 @@ from .method_badge import METHOD_COLORS, MethodBadge
 from .section_card import SectionCard
 from .service_card import ServiceCard
 from .severity_filter import SeverityFilter
+from .status_dot import status_dot
 from .table import (
     TableCellText,
     TableHeaderText,
@@ -89,4 +90,6 @@ __all__ = [
     "FormActionButtons",
     # Filter controls
     "SeverityFilter",
+    # Status indicators
+    "status_dot",
 ]

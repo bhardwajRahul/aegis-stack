@@ -7,8 +7,10 @@ individual service statuses.
 """
 
 import flet as ft
+
 from app.components.frontend.controls import LabelText, PrimaryText
 from app.components.frontend.controls.tech_badge import TechBadge
+from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer
@@ -171,7 +173,7 @@ class ServicesCard:
                     dependencies_healthy = False
                     break
 
-        dep_color = ft.Colors.GREEN if dependencies_healthy else ft.Colors.ORANGE
+        dep_color = Theme.Colors.SUCCESS if dependencies_healthy else ft.Colors.ORANGE
         stats_items.append(
             ft.Container(
                 content=ft.Column(

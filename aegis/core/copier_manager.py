@@ -331,6 +331,18 @@ def generate_with_copier(
     is_sqlite = database_engine == StorageBackends.SQLITE
     is_payment_included: bool = copier_data.get(AnswerKeys.PAYMENT, False) is True
     needs_migration_files = needs_migration_files or is_payment_included
+    # Scheduler component: job_execution history table. Postgres only — the
+    # table lives in a ``scheduler`` schema (CREATE SCHEMA), which SQLite
+    # can't run; SQLite scheduler stacks get the table via create_all.
+    is_scheduler_included: bool = copier_data.get(AnswerKeys.SCHEDULER, False) is True
+    scheduler_backend_str: str = str(
+        copier_data.get(AnswerKeys.SCHEDULER_BACKEND, StorageBackends.MEMORY)
+        or StorageBackends.MEMORY
+    )
+    scheduler_needs_migrations = (
+        is_scheduler_included and scheduler_backend_str == StorageBackends.POSTGRES
+    )
+    needs_migration_files = needs_migration_files or scheduler_needs_migrations
     run_migrations = needs_migration_files and is_sqlite
 
     # Generate migrations for services that need them (always, regardless of engine)
@@ -353,6 +365,8 @@ def generate_with_copier(
             is True,
             AnswerKeys.BLOG: is_blog_included,
             AnswerKeys.PAYMENT: is_payment_included,
+            AnswerKeys.SCHEDULER: is_scheduler_included,
+            AnswerKeys.SCHEDULER_BACKEND: scheduler_backend_str,
         }
         services = get_services_needing_migrations(context)
         if services:

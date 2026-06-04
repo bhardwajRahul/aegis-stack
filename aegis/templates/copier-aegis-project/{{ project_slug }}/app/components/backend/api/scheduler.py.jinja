@@ -1,15 +1,29 @@
 {%- if scheduler_backend != "memory" %}
 """Scheduled job API endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException
+import importlib
+import inspect
+import traceback
+from collections.abc import Callable
+from typing import Any
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from starlette.concurrency import run_in_threadpool
 
 from app.components.backend.api.models import (
+    JobExecutionStatsResponse,
+    ScheduledExecutionListResponse,
     ScheduledTaskDetailResponse,
     ScheduledTaskListResponse,
     ScheduledTaskStatisticsResponse,
+    TriggerJobResponse,
 )
 from app.core.log import logger
-from app.services.scheduler import ScheduledTaskManager
+from app.services.scheduler import (
+    ScheduledTaskManager,
+    record_job_finished,
+    record_job_started,
+)
 {%- if include_auth %}
 {%- if include_auth_rbac %}
 from app.services.auth.auth_service import require_role
@@ -41,6 +55,49 @@ router = APIRouter(
 async def get_task_manager() -> ScheduledTaskManager:
     """Dependency to provide ScheduledTaskManager instance."""
     return ScheduledTaskManager()
+
+
+def _import_job_function(func_ref: str) -> Callable[..., Any] | None:
+    """Import an APScheduler ``module:callable`` reference, or None."""
+    try:
+        module_name, _, attr = func_ref.partition(":")
+        if not module_name or not attr:
+            return None
+        func = getattr(importlib.import_module(module_name), attr, None)
+        return func if callable(func) else None
+    except Exception as e:
+        logger.error(f"Failed to import job function '{func_ref}': {e}")
+        return None
+
+
+async def _run_triggered_job(
+    func: Callable[..., Any], job_id: str, job_name: str
+) -> None:
+    """Run a manually-triggered job in the backend and record its execution.
+
+    Runs in the backend process (not the scheduler); async jobs are awaited,
+    sync jobs go to a threadpool. The run is written to the same execution
+    history as scheduled runs, so it shows up in the History view.
+    """
+    execution_id = await run_in_threadpool(record_job_started, job_id, job_name)
+    try:
+        if inspect.iscoroutinefunction(func):
+            await func()
+        else:
+            await run_in_threadpool(func)
+        await run_in_threadpool(
+            record_job_finished, execution_id, job_id, success=True
+        )
+    except Exception as e:
+        await run_in_threadpool(
+            record_job_finished,
+            execution_id,
+            job_id,
+            success=False,
+            error=str(e),
+            traceback=traceback.format_exc(),
+        )
+        logger.error(f"Triggered job '{job_id}' failed: {e}")
 
 
 @router.get("/jobs", response_model=ScheduledTaskListResponse)
@@ -141,5 +198,127 @@ async def get_scheduler_statistics(
                 "error": "internal_error",
                 "message": f"Failed to retrieve statistics: {str(e)}"
             }
+        )
+
+
+@router.get("/executions", response_model=ScheduledExecutionListResponse)
+async def list_job_executions(
+    offset: int = 0,
+    limit: int = 25,
+    status: str | None = None,
+    job_id: str | None = None,
+    order: str = "desc",
+    manager: ScheduledTaskManager = Depends(get_task_manager),
+) -> ScheduledExecutionListResponse:
+    """Get paginated scheduled-job execution history (newest first)."""
+    try:
+        executions, total = await manager.list_executions(
+            offset=offset,
+            limit=limit,
+            status=status,
+            job_id=job_id,
+            order=order,
+        )
+        return ScheduledExecutionListResponse(executions=executions, total=total)
+
+    except Exception as e:
+        logger.error(f"Failed to list job executions: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"Failed to retrieve executions: {str(e)}"
+            }
+        )
+
+
+@router.get("/jobs/{job_id}/stats", response_model=JobExecutionStatsResponse)
+async def get_job_execution_stats(
+    job_id: str, manager: ScheduledTaskManager = Depends(get_task_manager)
+) -> JobExecutionStatsResponse:
+    """Get aggregate execution stats for one scheduled job."""
+    try:
+        stats = await manager.get_job_stats(job_id)
+        return JobExecutionStatsResponse(**stats)
+
+    except Exception as e:
+        logger.error(f"Failed to get execution stats for {job_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"Failed to retrieve job stats: {str(e)}"
+            }
+        )
+
+
+@router.post(
+    "/jobs/{job_id}/run", response_model=TriggerJobResponse, status_code=202
+)
+async def trigger_scheduled_job(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    manager: ScheduledTaskManager = Depends(get_task_manager),
+) -> TriggerJobResponse:
+    """Manually trigger a scheduled job to run now, in the background.
+
+    The job runs in the backend process and is recorded to execution history
+    like a scheduled run. Returns 202 immediately; poll the executions API
+    for the outcome.
+    """
+    try:
+        task = await manager.get_task(job_id)
+        if task is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "job_not_found",
+                    "message": f"Scheduled job '{job_id}' not found",
+                },
+            )
+
+        if await manager.is_job_running(job_id):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "job_already_running",
+                    "message": f"Job '{job_id}' is already running",
+                },
+            )
+
+        func = _import_job_function(task.function)
+        if func is None:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "job_not_runnable",
+                    "message": (
+                        f"Could not resolve job function '{task.function}'"
+                    ),
+                },
+            )
+
+        background_tasks.add_task(_run_triggered_job, func, job_id, task.name)
+        return TriggerJobResponse(
+            job_id=job_id,
+            status="triggered",
+            message=f"Job '{task.name}' triggered",
+        )
+
+    except HTTPException:
+        raise
+    except RuntimeError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "scheduler_unavailable", "message": str(e)},
+        )
+    except Exception as e:
+        logger.error(f"Failed to trigger job {job_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"Failed to trigger job: {str(e)}",
+            },
         )
 {%- endif %}

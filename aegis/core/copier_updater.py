@@ -227,14 +227,22 @@ def update_with_copier_native(
         include_insights = answers.get(AnswerKeys.INSIGHTS, False)
         include_payment = answers.get(AnswerKeys.PAYMENT, False)
         include_blog = answers.get(AnswerKeys.BLOG, False)
+        include_scheduler = answers.get(AnswerKeys.SCHEDULER, False)
         ai_backend = answers.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
+        scheduler_backend = answers.get(
+            AnswerKeys.SCHEDULER_BACKEND, StorageBackends.MEMORY
+        )
         ai_needs_migrations = include_ai and ai_backend != StorageBackends.MEMORY
+        scheduler_needs_migrations = (
+            include_scheduler and scheduler_backend == StorageBackends.POSTGRES
+        )
         include_migrations = (
             include_auth
             or ai_needs_migrations
             or include_insights
             or include_payment
             or include_blog
+            or scheduler_needs_migrations
         )
         # AI needs seeding when using persistence backend (same condition as migrations)
         ai_needs_seeding = ai_needs_migrations

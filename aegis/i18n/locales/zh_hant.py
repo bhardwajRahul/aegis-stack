@@ -216,6 +216,8 @@ MESSAGES: dict[str, str] = {
     "add.valid_backends": "可選項：{options}",
     "add.postgres_coming": "注：PostgreSQL 支援將在後續版本提供",
     "add.auto_added_db": "已自動添加數據庫元件用於調度器持久化",
+    "add.generated_migration": "已生成遷移：{name}",
+    "add.scheduler_db_engine_mismatch": "無法使用排程器後端 '{backend}'：專案的資料庫引擎是 '{engine}'，兩者必須一致。",
     # ── remove 命令 ───────────────────────────────────────────────────
     "remove.title": "Aegis Stack — 移除元件",
     "remove.project": "專案：{path}",

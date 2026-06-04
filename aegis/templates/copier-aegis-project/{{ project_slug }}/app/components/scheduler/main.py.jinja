@@ -8,11 +8,23 @@ Add your own jobs by importing service functions and calling scheduler.add_job()
 import asyncio
 from typing import Any
 
-from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, EVENT_JOB_MISSED
+from apscheduler.events import (
+    EVENT_JOB_ERROR,
+    EVENT_JOB_EXECUTED,
+    EVENT_JOB_MISSED,
+    EVENT_JOB_SUBMITTED,
+)
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 {% if scheduler_backend != "memory" %}
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from app.core.db import engine, init_database, db_session
+from app.services.scheduler.execution_log import (
+    cancel_stale_running_rows,
+    prune_executions,
+    record_job_finished,
+    record_job_missed,
+    record_job_started,
+)
 from app.services.system.backup import backup_database_job
 {% elif include_scheduler and include_database %}
 from app.services.system.backup import backup_database_job
@@ -307,9 +319,37 @@ async def run_scheduler() -> None:
     logger.info("Starting {{ project_name }} Scheduler")
 
     scheduler = create_scheduler()
+{%- if scheduler_backend != "memory" %}
+
+    # Maps an in-flight run (job_id, scheduled_run_time) to its JobExecution
+    # row id, so EXECUTED/ERROR can close the row that SUBMITTED opened. The
+    # scheduler is a single process, so a plain dict needs no locking.
+    running_executions: dict[tuple[str, str], int] = {}
+{%- endif %}
 
     def _on_job_event(event: Any) -> None:
-        """Emit activity events for job execution results."""
+        """Emit activity events (and persist execution history) for jobs."""
+{%- if scheduler_backend != "memory" %}
+        # JobSubmissionEvent uses `scheduled_run_times` (list); JobExecutionEvent
+        # uses `scheduled_run_time` (singular). Normalise to a single value so
+        # the run_key matches across SUBMITTED → EXECUTED/ERROR.
+        if event.code == EVENT_JOB_SUBMITTED:
+            run_times = getattr(event, "scheduled_run_times", None)
+            scheduled = run_times[0] if run_times else None
+        else:
+            scheduled = getattr(event, "scheduled_run_time", None)
+        run_key = (event.job_id, scheduled.isoformat() if scheduled else "")
+        if event.code == EVENT_JOB_SUBMITTED:
+            job = scheduler.get_job(event.job_id)
+            execution_id = record_job_started(
+                event.job_id,
+                job.name if job else event.job_id,
+                scheduled,
+            )
+            if execution_id is not None:
+                running_executions[run_key] = execution_id
+            return
+{%- endif %}
         if event.code == EVENT_JOB_EXECUTED:
             activity.add_event(
                 component="scheduler",
@@ -317,6 +357,14 @@ async def run_scheduler() -> None:
                 message=f"Job '{event.job_id}' completed",
                 status="success",
             )
+{%- if scheduler_backend != "memory" %}
+            record_job_finished(
+                running_executions.pop(run_key, None),
+                event.job_id,
+                success=True,
+            )
+            prune_executions(event.job_id)
+{%- endif %}
         elif event.code == EVENT_JOB_ERROR:
             activity.add_event(
                 component="scheduler",
@@ -325,6 +373,16 @@ async def run_scheduler() -> None:
                 status="error",
                 details=str(event.exception),
             )
+{%- if scheduler_backend != "memory" %}
+            record_job_finished(
+                running_executions.pop(run_key, None),
+                event.job_id,
+                success=False,
+                error=str(event.exception),
+                traceback=event.traceback,
+            )
+            prune_executions(event.job_id)
+{%- endif %}
         elif event.code == EVENT_JOB_MISSED:
             activity.add_event(
                 component="scheduler",
@@ -333,13 +391,20 @@ async def run_scheduler() -> None:
                 status="warning",
                 details=f"scheduled_run={event.scheduled_run_time.isoformat()}",
             )
+{%- if scheduler_backend != "memory" %}
+            record_job_missed(event.job_id, scheduled)
+{%- endif %}
 
     try:
         scheduler.start()
         scheduler.add_listener(
             _on_job_event,
-            EVENT_JOB_EXECUTED | EVENT_JOB_ERROR | EVENT_JOB_MISSED,
+            EVENT_JOB_EXECUTED | EVENT_JOB_ERROR | EVENT_JOB_MISSED
+{%- if scheduler_backend != "memory" %} | EVENT_JOB_SUBMITTED{% endif %},
         )
+{%- if scheduler_backend != "memory" %}
+        cancel_stale_running_rows()
+{%- endif %}
         logger.info("Scheduler started successfully")
         logger.info(f"{len(scheduler.get_jobs())} jobs scheduled:")
 

@@ -303,4 +303,60 @@ class ScheduledTaskStatisticsResponse(BaseModel):
     """Response model for scheduled task statistics."""
 
     statistics: TaskStatistics = Field(..., description="Task statistics summary")
+
+
+class JobExecutionRead(BaseModel):
+    """A single scheduled-job run for the history list.
+
+    ``traceback`` is intentionally omitted here to keep list payloads small;
+    ``error_message`` carries the short failure reason.
+    """
+
+    id: int
+    job_id: str
+    job_name: str
+    scheduled_run_time: datetime | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    duration_ms: float | None = None
+    status: str
+    error_message: str | None = None
+
+
+class ScheduledExecutionListResponse(BaseModel):
+    """Response model for paginated job execution history."""
+
+    executions: list[JobExecutionRead] = Field(
+        ..., description="Job execution records, newest first"
+    )
+    total: int = Field(..., description="Total executions matching the filters")
+
+
+class JobRunSummary(BaseModel):
+    """Compact summary of a single run (used for ``last_run``)."""
+
+    status: str
+    started_at: datetime | None = None
+    duration_ms: float | None = None
+
+
+class JobExecutionStatsResponse(BaseModel):
+    """Aggregate execution stats for one scheduled job."""
+
+    total_runs: int = Field(..., description="Total recorded runs")
+    success_count: int = Field(..., description="Successful runs")
+    failure_count: int = Field(..., description="Failed runs")
+    success_rate: float = Field(..., description="Success percentage (0-100)")
+    avg_duration_ms: float | None = Field(
+        None, description="Average run duration in ms"
+    )
+    last_run: JobRunSummary | None = Field(None, description="Most recent run")
+
+
+class TriggerJobResponse(BaseModel):
+    """Response for a manual job trigger (Run Now)."""
+
+    job_id: str = Field(..., description="The triggered job id")
+    status: str = Field("triggered", description="Trigger outcome")
+    message: str = Field(..., description="Human-readable status")
 {%- endif %}

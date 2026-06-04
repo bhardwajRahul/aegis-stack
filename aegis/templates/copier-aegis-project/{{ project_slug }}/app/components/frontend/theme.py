@@ -31,7 +31,7 @@ class DarkColorPalette:
     ACCENT_SECONDARY: str = "#248F87"  # Darker teal (secondary accent)
 
     # Semantic colors
-    ACCENT_SUCCESS: str = "#22C55E"  # Success green
+    ACCENT_SUCCESS: str = "#17CCBF"  # Success teal (brand standard)
     ACCENT_WARNING: str = "#F5A623"  # Warning orange/amber
     ACCENT_STOP: str = "#E23E3E"  # Destructive/error red
     ERROR: str = "#E23E3E"  # Alias for destructive
@@ -53,7 +53,7 @@ class LightColorPalette:
     TEXT_PRIMARY_DEFAULT: str = "#212121"
     TEXT_SECONDARY_DEFAULT: str = "#495057"
     ACCENT: str = "#2563eb"
-    ACCENT_SUCCESS: str = "#22C55E"
+    ACCENT_SUCCESS: str = "#17CCBF"  # Success teal (brand standard)
     ACCENT_STOP: str = "#EF4444"
     ERROR: str = "#D32F2F"
     BORDER_PRIMARY: str = "#E0E3E7"
@@ -94,7 +94,7 @@ class AegisTheme:
         ACCENT_GLOW = DarkColorPalette.ACCENT
 
         # Status colors
-        SUCCESS = DarkColorPalette.ACCENT_SUCCESS  # #52D869
+        SUCCESS = DarkColorPalette.ACCENT_SUCCESS  # teal (brand standard)
         ERROR = DarkColorPalette.ERROR  # #FF6B6B
         WARNING = ft.Colors.AMBER_400
         INFO = ft.Colors.BLUE
@@ -402,9 +402,9 @@ class ThemeManager:
         """Get (background, text, border) colors for status indicators."""
         if is_healthy:
             if self.is_dark_mode:
-                return (ft.Colors.GREEN_900, ft.Colors.GREEN_100, ft.Colors.GREEN)
+                return (ft.Colors.TEAL_900, ft.Colors.TEAL_100, ft.Colors.TEAL)
             else:
-                return (ft.Colors.GREEN_100, ft.Colors.GREEN_800, ft.Colors.GREEN)
+                return (ft.Colors.TEAL_100, ft.Colors.TEAL_800, ft.Colors.TEAL)
         else:
             if self.is_dark_mode:
                 return (ft.Colors.RED_900, ft.Colors.RED_100, ft.Colors.ERROR)
@@ -438,7 +438,7 @@ class ThemeManager:
         ACCENT_GLOW = "#17CCBF"  # Teal glow
 
         # Status Colors (Semantic feedback)
-        SUCCESS = ft.Colors.GREEN_400
+        SUCCESS = "#17CCBF"  # Success teal (brand standard)
         WARNING = ft.Colors.AMBER_400
         ERROR = ft.Colors.RED_400
         INFO = ft.Colors.BLUE

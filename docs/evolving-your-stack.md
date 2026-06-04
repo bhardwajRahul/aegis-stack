@@ -76,7 +76,6 @@ Now add your daily report:
 # app/components/scheduler.py
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 
 def register_jobs(scheduler: AsyncIOScheduler) -> None:
     """Register all scheduled jobs."""
@@ -84,7 +83,9 @@ def register_jobs(scheduler: AsyncIOScheduler) -> None:
     # Daily report at 9 AM
     scheduler.add_job(
         generate_daily_report,
-        trigger=CronTrigger(hour=9, minute=0),
+        trigger="cron",
+        hour=9,
+        minute=0,
         id="daily_report",
         name="Generate Daily Report",
         replace_existing=True,

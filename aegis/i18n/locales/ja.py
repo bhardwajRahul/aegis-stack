@@ -273,6 +273,8 @@ MESSAGES: dict[str, str] = {
     "add.valid_backends": "有効なオプション：{options}",
     "add.postgres_coming": "注意：PostgreSQL 対応は今後のリリースで追加予定です",
     "add.auto_added_db": "スケジューラ永続化のためデータベースコンポーネントを自動追加",
+    "add.generated_migration": "マイグレーションを生成しました: {name}",
+    "add.scheduler_db_engine_mismatch": "スケジューラバックエンド '{backend}' は使用できません。プロジェクトのデータベースエンジンは '{engine}' です。両者は一致する必要があります。",
     # ── remove コマンド ────────────────────────────────────────────────
     "remove.title": "Aegis Stack — コンポーネント削除",
     "remove.project": "プロジェクト：{path}",

@@ -262,6 +262,8 @@ MESSAGES: dict[str, str] = {
     "add.valid_backends": "유효한 옵션: {options}",
     "add.postgres_coming": "참고: PostgreSQL 지원은 향후 릴리스에서 추가 예정",
     "add.auto_added_db": "스케줄러 영속성을 위한 데이터베이스 컴포넌트 자동 추가됨",
+    "add.generated_migration": "마이그레이션 생성됨: {name}",
+    "add.scheduler_db_engine_mismatch": "스케줄러 백엔드 '{backend}'를 사용할 수 없습니다: 프로젝트의 데이터베이스 엔진이 '{engine}'입니다. 서로 일치해야 합니다.",
     # ── Remove command ────────────────────────────────────────────────
     "remove.title": "Aegis Stack - 컴포넌트 제거",
     "remove.project": "프로젝트: {path}",

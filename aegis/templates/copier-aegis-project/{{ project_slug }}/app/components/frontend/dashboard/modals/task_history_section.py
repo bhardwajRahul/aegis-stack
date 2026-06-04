@@ -1,28 +1,33 @@
 """
 Task History Section
 
-Displays per-task history with inspection capability.
-Fetches data from the task history API and renders a scrollable,
-paginated table with expandable error details for failed tasks.
-Includes two independent hover-to-reveal filter icons (status + queue)
-with immediate visual feedback on pill selection.
+Background-worker task history: a thin configuration of the shared
+``PaginatedHistorySection`` (status + queue filters, per-queue endpoints,
+worker-specific columns and row layout). All filter / pagination / load
+machinery is reused from ``history_table``.
 """
 
-import contextlib
-import threading
+from typing import Any
 
 import flet as ft
+
 from app.components.frontend.controls import (
     BodyText,
     DataTableColumn,
-    ExpandableDataTable,
     ExpandableRow,
     PrimaryText,
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.core.log import logger
+from app.core.formatting import format_relative_time
 
+from .history_table import (
+    FilterOption,
+    FilterSpec,
+    PaginatedHistorySection,
+    build_error_detail_block,
+    build_status_dot_cell,
+)
 from .modal_sections import format_duration_ms, format_timestamp
 
 # Column widths
@@ -32,34 +37,27 @@ COL_WIDTH_DURATION = 80
 COL_WIDTH_ENQUEUED = 150
 COL_WIDTH_STATUS = 80
 
-# Pagination
-PAGE_SIZE = 25
-
-# Status display mapping
-_STATUS_DISPLAY: dict[str, tuple[str, str]] = {
-    "enqueued": ("⏳", "Enqueued"),
-    "running": ("🔵", "Running"),
-    "completed": ("🟢", "Done"),
-    "failed": ("🔴", "Failed"),
+# Status display: api value -> label (dot color derived from _STATUS_COLORS)
+_STATUS_DISPLAY: dict[str, str] = {
+    "enqueued": "Enqueued",
+    "running": "Running",
+    "completed": "Done",
+    "failed": "Failed",
 }
 
 # Status filter options: (label, api_value, color)
-_STATUS_FILTER_OPTIONS: list[tuple[str, str, str]] = [
+_STATUS_FILTER_OPTIONS: list[FilterOption] = [
     ("All", "all", Theme.Colors.ACCENT),
     ("Completed", "completed", Theme.Colors.SUCCESS),
     ("Failed", "failed", Theme.Colors.ERROR),
     ("Running", "running", Theme.Colors.INFO),
 ]
 
-_PILL_WIDTH = 80
-_PILL_HEIGHT = 28
-_PILL_SELECTED_OPACITY = 0.15
-
 
 def _build_task_row(task: dict[str, str]) -> ExpandableRow:
     """Build a table row for a single task record."""
     status = task.get("status", "unknown")
-    icon, status_label = _STATUS_DISPLAY.get(status, ("⚪", status))
+    status_label = _STATUS_DISPLAY.get(status, status)
     has_error = status == "failed" and task.get("error")
 
     status_color = (
@@ -73,7 +71,7 @@ def _build_task_row(task: dict[str, str]) -> ExpandableRow:
     )
 
     cells = [
-        ft.Text(icon, size=16),
+        build_status_dot_cell(status_color),
         PrimaryText(
             task.get("name", "unknown"),
             size=Theme.Typography.BODY,
@@ -85,7 +83,7 @@ def _build_task_row(task: dict[str, str]) -> ExpandableRow:
             text_align=ft.TextAlign.CENTER,
         ),
         SecondaryText(
-            format_timestamp(task.get("enqueued_at")),
+            format_relative_time(task.get("enqueued_at")),
             text_align=ft.TextAlign.CENTER,
         ),
         SecondaryText(
@@ -96,10 +94,8 @@ def _build_task_row(task: dict[str, str]) -> ExpandableRow:
         ),
     ]
 
-    # Expanded content — description, metadata, and error details
     expanded_items: list[ft.Control] = []
 
-    # Task description (from function docstring)
     description = task.get("description", "")
     if description:
         expanded_items.append(
@@ -112,7 +108,6 @@ def _build_task_row(task: dict[str, str]) -> ExpandableRow:
         )
         expanded_items.append(ft.Container(height=6))
 
-    # Error details for failed tasks
     if has_error:
         error_text = task.get("error", "")
         expanded_items.append(
@@ -124,25 +119,9 @@ def _build_task_row(task: dict[str, str]) -> ExpandableRow:
             )
         )
         expanded_items.append(ft.Container(height=4))
-        expanded_items.append(
-            ft.Container(
-                content=ft.Text(
-                    error_text,
-                    size=12,
-                    color=ft.Colors.ON_SURFACE,
-                    selectable=True,
-                ),
-                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
-                border_radius=6,
-                padding=ft.padding.all(10),
-                border=ft.border.all(
-                    1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)
-                ),
-            )
-        )
+        expanded_items.append(build_error_detail_block(error_text))
         expanded_items.append(ft.Container(height=4))
 
-    # Metadata row (always shown)
     expanded_items.append(
         ft.Row(
             [
@@ -162,507 +141,94 @@ def _build_task_row(task: dict[str, str]) -> ExpandableRow:
         )
     )
 
-    expanded = ft.Container(
-        content=ft.Column(expanded_items, spacing=2),
-        padding=ft.padding.all(8),
+    return ExpandableRow(
+        cells=cells,
+        expanded_content=ft.Container(
+            content=ft.Column(expanded_items, spacing=2),
+            padding=ft.padding.all(8),
+        ),
     )
 
-    return ExpandableRow(cells=cells, expanded_content=expanded)
 
-
-class TaskHistorySection(ft.Container):
-    """Task history section with two independent hover-to-reveal filter icons."""
+class TaskHistorySection(PaginatedHistorySection):
+    """Task history across background-worker queues."""
 
     def __init__(self, page: ft.Page) -> None:
-        super().__init__()
-        self.padding = Theme.Spacing.MD
-        self._page = page
-        self._current_queue = "all"
-        self._current_status = "all"
-        self._offset = 0
-        self._total = 0
-        self._loading = False
-
-        # Independent collapse timers for each filter zone
-        self._status_collapse_timer: threading.Timer | None = None
-        self._queue_collapse_timer: threading.Timer | None = None
-
-        _anim = ft.Animation(200, ft.AnimationCurve.EASE_OUT)
-
-        # ── Status filter zone ───────────────────────────────────────────
-        self._status_pills: list[ft.Container] = []
-        for label, value, color in _STATUS_FILTER_OPTIONS:
-            pill = self._build_status_pill(label, value, color)
-            self._status_pills.append(pill)
-
-        self._status_filter_wrapper = ft.Container(
-            content=ft.Row(self._status_pills, spacing=Theme.Spacing.XS),
-            width=0,
-            opacity=0,
-            clip_behavior=ft.ClipBehavior.HARD_EDGE,
-            animate=_anim,
-            animate_opacity=_anim,
-        )
-
-        self._status_filter_dot = ft.Container(
-            width=6,
-            height=6,
-            border_radius=3,
-            bgcolor=Theme.Colors.ACCENT,
-            opacity=0,
-            animate_opacity=_anim,
-        )
-
-        self._status_filter_zone = ft.Container(
-            content=ft.Row(
-                [
-                    self._status_filter_wrapper,
-                    self._status_filter_dot,
-                    ft.Icon(
-                        ft.Icons.FILTER_LIST,
-                        size=16,
-                        color=Theme.Colors.TEXT_SECONDARY,
-                    ),
-                ],
-                spacing=6,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            on_hover=self._handle_status_hover,
-        )
-
-        # ── Queue filter zone ────────────────────────────────────────────
-        self._queue_names = ["all"]
+        queue_names = ["all"]
         try:
             from app.core.config import get_available_queues
 
-            self._queue_names.extend(get_available_queues())
+            queue_names.extend(get_available_queues())
         except Exception:
             pass
 
-        self._queue_pills: list[ft.Container] = []
-        for q in self._queue_names:
-            pill = self._build_queue_pill(q)
-            self._queue_pills.append(pill)
-
-        self._queue_filter_wrapper = ft.Container(
-            content=ft.Row(self._queue_pills, spacing=Theme.Spacing.XS),
-            width=0,
-            opacity=0,
-            clip_behavior=ft.ClipBehavior.HARD_EDGE,
-            animate=_anim,
-            animate_opacity=_anim,
-        )
-
-        self._queue_filter_dot = ft.Container(
-            width=6,
-            height=6,
-            border_radius=3,
-            bgcolor=Theme.Colors.INFO,
-            opacity=0,
-            animate_opacity=_anim,
-        )
-
-        self._queue_filter_zone = ft.Container(
-            content=ft.Row(
-                [
-                    self._queue_filter_wrapper,
-                    self._queue_filter_dot,
-                    ft.Icon(
-                        ft.Icons.STACKED_BAR_CHART,
-                        size=16,
-                        color=Theme.Colors.TEXT_SECONDARY,
-                    ),
-                ],
-                spacing=6,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-            on_hover=self._handle_queue_hover,
-        )
-
-        # Refresh button
-        self._refresh_btn = ft.IconButton(
-            icon=ft.Icons.REFRESH,
-            icon_size=16,
-            tooltip="Refresh",
-            on_click=self._on_refresh,
-        )
-
-        # Loading indicator
-        self._loading_indicator = ft.ProgressRing(
-            width=16,
-            height=16,
-            stroke_width=2,
-            visible=False,
-        )
-
-        # Pagination controls
-        self._page_info = SecondaryText("", size=12)
-        self._prev_btn = ft.IconButton(
-            icon=ft.Icons.CHEVRON_LEFT,
-            icon_size=16,
-            tooltip="Previous",
-            on_click=self._on_prev,
-            disabled=True,
-        )
-        self._next_btn = ft.IconButton(
-            icon=ft.Icons.CHEVRON_RIGHT,
-            icon_size=16,
-            tooltip="Next",
-            on_click=self._on_next,
-            disabled=True,
-        )
-
-        # ── Single toolbar row ──
-        toolbar = ft.Row(
-            [
-                self._status_filter_zone,
-                self._queue_filter_zone,
-                self._refresh_btn,
-                self._loading_indicator,
-                ft.Container(expand=True),
-                self._prev_btn,
-                self._page_info,
-                self._next_btn,
+        super().__init__(
+            page,
+            columns=[
+                DataTableColumn("", width=COL_WIDTH_STATUS_ICON),
+                DataTableColumn("Task Name"),
+                DataTableColumn("Queue", width=COL_WIDTH_QUEUE, alignment="center"),
+                DataTableColumn(
+                    "Duration", width=COL_WIDTH_DURATION, alignment="center"
+                ),
+                DataTableColumn(
+                    "Enqueued", width=COL_WIDTH_ENQUEUED, alignment="center"
+                ),
+                DataTableColumn("Status", width=COL_WIDTH_STATUS, alignment="center"),
             ],
-            spacing=4,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        )
-
-        # Table columns
-        self._columns = [
-            DataTableColumn("", width=COL_WIDTH_STATUS_ICON),
-            DataTableColumn("Task Name"),
-            DataTableColumn("Queue", width=COL_WIDTH_QUEUE, alignment="center"),
-            DataTableColumn("Duration", width=COL_WIDTH_DURATION, alignment="center"),
-            DataTableColumn("Enqueued", width=COL_WIDTH_ENQUEUED, alignment="center"),
-            DataTableColumn("Status", width=COL_WIDTH_STATUS, alignment="center"),
-        ]
-
-        # Initial empty table
-        self._table = ExpandableDataTable(
-            columns=self._columns,
-            rows=[],
-            row_padding=6,
             empty_message="No task history available",
+            filter_specs={
+                "status": FilterSpec(
+                    icon=ft.Icons.FILTER_LIST,
+                    options=_STATUS_FILTER_OPTIONS,
+                    dot_color=Theme.Colors.ACCENT,
+                ),
+                "queue": FilterSpec(
+                    icon=ft.Icons.STACKED_BAR_CHART,
+                    options=[
+                        ("All" if q == "all" else q, q, Theme.Colors.INFO)
+                        for q in queue_names
+                    ],
+                    dot_color=Theme.Colors.INFO,
+                ),
+            },
         )
 
-        self.content = ft.Column(
-            [toolbar, self._table],
-            spacing=Theme.Spacing.SM,
-        )
-
-    def _build_status_pill(self, label: str, value: str, color: str) -> ft.Container:
-        """Build a single status filter pill."""
-        is_selected = value == self._current_status
-        return ft.Container(
-            content=ft.Text(
-                label,
-                size=Theme.Typography.BODY_SMALL,
-                weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                color=color if is_selected else Theme.Colors.TEXT_SECONDARY,
-                text_align=ft.TextAlign.CENTER,
-            ),
-            width=_PILL_WIDTH,
-            height=_PILL_HEIGHT,
-            alignment=ft.alignment.center,
-            border_radius=Theme.Components.BADGE_RADIUS,
-            bgcolor=(
-                ft.Colors.with_opacity(_PILL_SELECTED_OPACITY, color)
-                if is_selected
-                else ft.Colors.TRANSPARENT
-            ),
-            on_click=lambda e, v=value: self._on_status_change(v),
-            ink=True,
-        )
-
-    def _build_queue_pill(self, queue_name: str) -> ft.Container:
-        """Build a single queue filter pill."""
-        display = "All" if queue_name == "all" else queue_name
-        is_selected = queue_name == self._current_queue
-        color = Theme.Colors.INFO
-        return ft.Container(
-            content=ft.Text(
-                display,
-                size=Theme.Typography.BODY_SMALL,
-                weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                color=color if is_selected else Theme.Colors.TEXT_SECONDARY,
-                text_align=ft.TextAlign.CENTER,
-            ),
-            width=_PILL_WIDTH,
-            height=_PILL_HEIGHT,
-            alignment=ft.alignment.center,
-            border_radius=Theme.Components.BADGE_RADIUS,
-            bgcolor=(
-                ft.Colors.with_opacity(_PILL_SELECTED_OPACITY, color)
-                if is_selected
-                else ft.Colors.TRANSPARENT
-            ),
-            on_click=lambda e, q=queue_name: self._on_queue_pill_change(q),
-            ink=True,
-        )
-
-    # ── Status filter hover/collapse ─────────────────────────────────────
-
-    def _handle_status_hover(self, e: ft.HoverEvent) -> None:
-        """Expand status pills on hover enter, schedule collapse on leave."""
-        if e.data == "true":
-            if self._status_collapse_timer:
-                self._status_collapse_timer.cancel()
-                self._status_collapse_timer = None
-            self._expand_status_filters()
-        else:
-            self._status_collapse_timer = threading.Timer(
-                0.4,
-                self._delayed_status_collapse,
-            )
-            self._status_collapse_timer.start()
-
-    def _expand_status_filters(self) -> None:
-        """Reveal the status filter pills."""
-        n_status = len(_STATUS_FILTER_OPTIONS)
-        expanded_width = n_status * (_PILL_WIDTH + 4)
-        self._status_filter_wrapper.width = expanded_width
-        self._status_filter_wrapper.opacity = 1
-        self._status_filter_dot.opacity = 0
-        if self.page:
-            self._status_filter_zone.update()
-
-    def _collapse_status_filters(self) -> None:
-        """Hide the status pills and show dot if filtered."""
-        self._status_filter_wrapper.width = 0
-        self._status_filter_wrapper.opacity = 0
-        self._update_status_dot()
-
-    def _delayed_status_collapse(self) -> None:
-        """Timer callback — collapse status pills and push update."""
-        self._status_collapse_timer = None
-        self._collapse_status_filters()
-        if self.page:
-            self._status_filter_zone.update()
-
-    def _update_status_dot(self) -> None:
-        """Show/hide the status indicator dot."""
-        if self._current_status != "all":
-            for _, value, color in _STATUS_FILTER_OPTIONS:
-                if value == self._current_status:
-                    self._status_filter_dot.bgcolor = color
-                    break
-            self._status_filter_dot.opacity = 1
-        else:
-            self._status_filter_dot.opacity = 0
-
-    # ── Queue filter hover/collapse ──────────────────────────────────────
-
-    def _handle_queue_hover(self, e: ft.HoverEvent) -> None:
-        """Expand queue pills on hover enter, schedule collapse on leave."""
-        if e.data == "true":
-            if self._queue_collapse_timer:
-                self._queue_collapse_timer.cancel()
-                self._queue_collapse_timer = None
-            self._expand_queue_filters()
-        else:
-            self._queue_collapse_timer = threading.Timer(
-                0.4,
-                self._delayed_queue_collapse,
-            )
-            self._queue_collapse_timer.start()
-
-    def _expand_queue_filters(self) -> None:
-        """Reveal the queue filter pills."""
-        n_queues = len(self._queue_names)
-        expanded_width = n_queues * (_PILL_WIDTH + 4)
-        self._queue_filter_wrapper.width = expanded_width
-        self._queue_filter_wrapper.opacity = 1
-        self._queue_filter_dot.opacity = 0
-        if self.page:
-            self._queue_filter_zone.update()
-
-    def _collapse_queue_filters(self) -> None:
-        """Hide the queue pills and show dot if filtered."""
-        self._queue_filter_wrapper.width = 0
-        self._queue_filter_wrapper.opacity = 0
-        self._update_queue_dot()
-
-    def _delayed_queue_collapse(self) -> None:
-        """Timer callback — collapse queue pills and push update."""
-        self._queue_collapse_timer = None
-        self._collapse_queue_filters()
-        if self.page:
-            self._queue_filter_zone.update()
-
-    def _update_queue_dot(self) -> None:
-        """Show/hide the queue indicator dot."""
-        if self._current_queue != "all":
-            self._queue_filter_dot.opacity = 1
-        else:
-            self._queue_filter_dot.opacity = 0
-
-    # ── Filter change handlers ───────────────────────────────────────────
-
-    def _on_status_change(self, status: str) -> None:
-        """Handle status filter pill click with immediate visual feedback."""
-        if status == self._current_status:
-            return
-        self._current_status = status
-        self._offset = 0
-
-        # Update pill visuals immediately
-        for i, (_, value, color) in enumerate(_STATUS_FILTER_OPTIONS):
-            is_selected = value == self._current_status
-            pill = self._status_pills[i]
-            pill.bgcolor = (
-                ft.Colors.with_opacity(_PILL_SELECTED_OPACITY, color)
-                if is_selected
-                else ft.Colors.TRANSPARENT
-            )
-            text = pill.content
-            text.color = color if is_selected else Theme.Colors.TEXT_SECONDARY
-
-        # Push visual update before data load
-        if self.page:
-            self._status_filter_zone.update()
-
-        self._schedule_load()
-
-    def _on_queue_pill_change(self, queue: str) -> None:
-        """Handle queue filter pill click with immediate visual feedback."""
-        if queue == self._current_queue:
-            return
-        self._current_queue = queue
-        self._offset = 0
-
-        # Update queue pill visuals immediately
-        color = Theme.Colors.INFO
-        for i, q in enumerate(self._queue_names):
-            is_selected = q == self._current_queue
-            pill = self._queue_pills[i]
-            pill.bgcolor = (
-                ft.Colors.with_opacity(_PILL_SELECTED_OPACITY, color)
-                if is_selected
-                else ft.Colors.TRANSPARENT
-            )
-            text = pill.content
-            text.color = color if is_selected else Theme.Colors.TEXT_SECONDARY
-
-        # Push visual update before data load
-        if self.page:
-            self._queue_filter_zone.update()
-
-        self._schedule_load()
-
-    def did_mount(self) -> None:
-        """Load initial data after the control is mounted."""
-        self._schedule_load()
-
-    def _schedule_load(self) -> None:
-        """Schedule an async data load on the page's event loop."""
-        if self._page and hasattr(self._page, "run_task"):
-            self._page.run_task(self._load_data)
-
-    def _build_query_params(self) -> dict[str, str | int]:
-        """Build query params dict for the API request."""
+    async def fetch(self, offset: int, limit: int) -> tuple[list[dict[str, Any]], int]:
         params: dict[str, str | int] = {
-            "offset": self._offset,
-            "limit": PAGE_SIZE,
+            "offset": offset,
+            "limit": limit,
             "order": "desc",
         }
-        if self._current_status != "all":
-            params["status"] = self._current_status
-        return params
+        status = self.filters["status"].value
+        if status != "all":
+            params["status"] = status
 
-    async def _load_data(self) -> None:
-        """Fetch task history from the API."""
-        if self._loading:
-            return
-        self._loading = True
-        self._loading_indicator.visible = True
-        with contextlib.suppress(Exception):
-            self._loading_indicator.update()
+        api = self.api_client()
+        queue = self.filters["queue"].value
 
-        try:
-            from app.components.frontend.state.session_state import (
-                get_session_state,
-            )
+        if queue == "all":
+            # Fetch from all queues and merge, newest first.
+            all_tasks: list[dict[str, Any]] = []
+            total = 0
+            try:
+                from app.core.config import get_available_queues
 
-            api = get_session_state(self.page).api_client
-            queue = self._current_queue
-            params = self._build_query_params()
-
-            if queue == "all":
-                # Fetch from all queues and merge
-                all_tasks: list[dict[str, str]] = []
-                total = 0
-                try:
-                    from app.core.config import get_available_queues
-
-                    queues = get_available_queues()
-                except Exception:
-                    queues = []
-                for q in queues:
-                    data = await api.get(f"/api/v1/tasks/history/{q}", params=params)
-                    if isinstance(data, dict):
-                        all_tasks.extend(data.get("tasks", []))
-                        total += data.get("total", 0)
-                # Sort merged results by enqueued_at descending
-                all_tasks.sort(key=lambda t: t.get("enqueued_at", ""), reverse=True)
-                tasks = all_tasks[:PAGE_SIZE]
-                self._total = total
-            else:
-                data = await api.get(f"/api/v1/tasks/history/{queue}", params=params)
+                queues = get_available_queues()
+            except Exception:
+                queues = []
+            for q in queues:
+                data = await api.get(f"/api/v1/tasks/history/{q}", params=params)
                 if isinstance(data, dict):
-                    tasks = data.get("tasks", [])
-                    self._total = data.get("total", 0)
-                else:
-                    tasks = []
-                    self._total = 0
+                    all_tasks.extend(data.get("tasks", []))
+                    total += data.get("total", 0)
+            all_tasks.sort(key=lambda t: t.get("enqueued_at", ""), reverse=True)
+            return all_tasks[:limit], total
 
-            # Build rows
-            rows = [_build_task_row(t) for t in tasks]
-            self._table._rows = rows
-            self._table._expanded = [False] * len(rows)
-            self._table._build()
+        data = await api.get(f"/api/v1/tasks/history/{queue}", params=params)
+        if isinstance(data, dict):
+            return data.get("tasks", []), data.get("total", 0)
+        return [], 0
 
-            # Update pagination
-            self._update_pagination()
-            self._table.update()
-
-        except Exception as e:
-            logger.debug(f"Failed to load task history: {e}")
-        finally:
-            self._loading = False
-            self._loading_indicator.visible = False
-            with contextlib.suppress(Exception):
-                self._loading_indicator.update()
-
-    def _update_pagination(self) -> None:
-        """Update pagination controls based on current state."""
-        end = min(self._offset + PAGE_SIZE, self._total)
-        if self._total > 0:
-            self._page_info.value = f"{self._offset + 1}-{end} of {self._total}"
-        else:
-            self._page_info.value = "No records"
-
-        self._prev_btn.disabled = self._offset <= 0
-        self._next_btn.disabled = (self._offset + PAGE_SIZE) >= self._total
-
-        try:
-            self._page_info.update()
-            self._prev_btn.update()
-            self._next_btn.update()
-        except Exception:
-            pass
-
-    def _on_refresh(self, e: ft.ControlEvent) -> None:
-        """Handle refresh button click."""
-        self._schedule_load()
-
-    def _on_prev(self, e: ft.ControlEvent) -> None:
-        """Handle previous page."""
-        self._offset = max(0, self._offset - PAGE_SIZE)
-        self._schedule_load()
-
-    def _on_next(self, e: ft.ControlEvent) -> None:
-        """Handle next page."""
-        if self._offset + PAGE_SIZE < self._total:
-            self._offset += PAGE_SIZE
-            self._schedule_load()
+    def build_row(self, record: dict[str, Any]) -> ExpandableRow:
+        return _build_task_row(record)

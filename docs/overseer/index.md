@@ -34,6 +34,7 @@ The dashboard displays:
 - System metrics (CPU, memory, disk usage)
 - Status hierarchy (Healthy, Warning, Unhealthy, Info)
 - Web dashboard with auto-refresh (30-second polling)
+- Scheduler job execution: trigger jobs manually, view execution history and stats
 
 ## How It Works
 
@@ -92,5 +93,6 @@ Want to know how this came to be?
 
 ## Next Steps
 
+- **[Running Jobs](../components/scheduler/running-jobs.md)** - Trigger scheduler jobs manually, view execution history
 - **[The Overseer Story](story.md)** - Evolution from Streamlit to Aegis Stack and vision
 - **[Integration Guide](integration.md)** - Add health checks to custom components/services

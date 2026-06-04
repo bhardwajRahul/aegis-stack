@@ -147,7 +147,7 @@ from app.services.my_service import process_data
 
 # Add to create_scheduler function
 scheduler.add_job(
-    func=lambda: process_data("scheduled"),
+    lambda: process_data("scheduled"),
     trigger="cron",
     hour=2,  # Run at 2 AM daily
     id="daily_processing",

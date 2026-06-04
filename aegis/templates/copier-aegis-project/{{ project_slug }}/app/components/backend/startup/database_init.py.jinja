@@ -9,6 +9,8 @@ when the backend starts up (only when database component is included).
 {% if database_engine == "sqlite" %}
 from pathlib import Path
 {% endif %}
+from typing import Any
+
 from app.core.log import logger
 
 {% if include_auth %}
@@ -21,8 +23,11 @@ from app.models.org import Organization, OrganizationMember  # noqa: F401
 {% if include_blog %}
 from app.services.blog.models import BlogPost, BlogPostTag, BlogTag  # noqa: F401
 {% endif %}
+{% if include_scheduler and scheduler_backend != "memory" %}
+from app.services.scheduler.models import JobExecution  # noqa: F401
+{% endif %}
 
-{% set needs_migrations = include_auth or include_blog or include_insights or include_payment or (include_ai and ai_backend != "memory") %}
+{% set needs_migrations = include_auth or include_blog or include_insights or include_payment or (include_ai and ai_backend != "memory") or (include_scheduler and scheduler_backend != "memory") %}
 {% if database_engine == "postgres" and needs_migrations %}
 def _check_and_stamp_existing_tables() -> None:
     """
@@ -36,6 +41,8 @@ def _check_and_stamp_existing_tables() -> None:
     Fix: If signature table for a migration exists, stamp it as complete.
     """
     try:
+        from pathlib import Path
+
         from alembic import command
         from alembic.config import Config
         from alembic.runtime.migration import MigrationContext
@@ -47,10 +54,10 @@ def _check_and_stamp_existing_tables() -> None:
         alembic_cfg = Config("alembic/alembic.ini")
         script = ScriptDirectory.from_config(alembic_cfg)
 
-        # Get existing tables and current revision
+        # Existing tables (schema-qualified) and the current revision.
         with db_session(autocommit=False) as session:
             inspector = inspect(session.connection())
-            existing_tables = set(inspector.get_table_names())
+            existing_tables = _existing_tables_by_schema(inspector)
 
             context = MigrationContext.configure(session.connection())
             current_rev = context.get_current_revision()
@@ -65,13 +72,16 @@ def _check_and_stamp_existing_tables() -> None:
             "ai": ("table", "llm_vendor"),
             "ai_voice": ("table", "voice_usage"),
             "blog": ("table", "blog_post"),
+            "scheduler": ("table", "scheduler.job_execution"),
         }
 
         # Build signature mapping from migration filenames
         signatures: dict[str, tuple[str, ...]] = {}
         for rev in script.walk_revisions():
             if rev.down_revision is not None or rev.revision:
-                parts = rev.path.stem.split("_", 1)
+                # ``rev.path`` is a str in alembic 1.16; wrap so ``.stem``
+                # works (Path() accepts both str and Path).
+                parts = Path(rev.path).stem.split("_", 1)
                 if len(parts) > 1:
                     service_name = parts[1]
                     sig = service_signatures.get(service_name)
@@ -81,6 +91,8 @@ def _check_and_stamp_existing_tables() -> None:
         # Get column info for alter-table checks
         db_columns: dict[str, set[str]] = {}
         for table_name in existing_tables:
+            if "." in table_name:
+                continue  # column signatures only target default-schema tables
             try:
                 cols = inspector.get_columns(table_name)
                 db_columns[table_name] = {c["name"] for c in cols}
@@ -193,12 +205,74 @@ def _run_migrations() -> bool:
 
         alembic_cfg = Config("alembic/alembic.ini")
         command.upgrade(alembic_cfg, "head")
+
+        # Safety net: the recovery above can stamp the DB to head without
+        # running a migration whose table is genuinely missing. Backfill any
+        # such tables so the schema is never left stamped-but-incomplete.
+        _create_missing_tables()
+
         logger.info("Database migrations applied successfully")
         return True
     except Exception as e:
         logger.error(f"Failed to run migrations: {e}")
         return False
 {% endif %}
+
+
+def _existing_tables_by_schema(inspector: Any) -> set[str]:
+    """Existing tables across every schema our models use, keyed to match
+    ``SQLModel.metadata.tables``: schema-qualified (``schema.name``) for
+    non-default schemas, bare otherwise. Without the qualification a table
+    in a component schema (e.g. ``scheduler``) reads as missing.
+    """
+    from sqlmodel import SQLModel
+
+    model_schemas = {table.schema for table in SQLModel.metadata.tables.values()}
+    existing: set[str] = set()
+    for schema in model_schemas:
+        for name in inspector.get_table_names(schema=schema):
+            existing.add(f"{schema}.{name}" if schema else name)
+    return existing
+
+
+def _create_missing_tables() -> None:
+    """Create any model table still missing after migrations.
+
+    A safety net for the stale-revision / stamp recovery: stamping the DB to
+    head can mark a migration "applied" without running it, leaving a table
+    it should have created absent (e.g. a new component table against a
+    persisted volume from a different project lineage). This recreates only
+    the missing tables (and their schema) directly from the model metadata,
+    so the schema can never be left stamped-but-incomplete. Idempotent.
+    """
+    try:
+        from sqlalchemy import inspect as sa_inspect
+        from sqlmodel import SQLModel, text
+
+        from app.core.db import engine
+
+        existing = _existing_tables_by_schema(sa_inspect(engine))
+        missing = [
+            table
+            for key, table in SQLModel.metadata.tables.items()
+            if key not in existing and key != "alembic_version"
+        ]
+        if not missing:
+            return
+
+        # create_all does not create schemas; ensure non-default ones exist.
+        schemas = {table.schema for table in missing if table.schema}
+        with engine.begin() as conn:
+            for schema in schemas:
+                conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
+
+        SQLModel.metadata.create_all(engine, tables=missing)
+        logger.warning(
+            "Created missing table(s) after migrations: "
+            f"{sorted(table.name for table in missing)}"
+        )
+    except Exception as e:
+        logger.debug(f"Missing-table backfill skipped: {e}")
 
 
 def _check_schema_mismatch() -> None:
@@ -216,7 +290,7 @@ def _check_schema_mismatch() -> None:
         from app.core.db import engine
 
         inspector = sa_inspect(engine)
-        existing_tables = set(inspector.get_table_names())
+        existing_tables = _existing_tables_by_schema(inspector)
 
         # Only check tables in SQLModel metadata (our models)
         expected_tables = set(SQLModel.metadata.tables.keys())
@@ -224,14 +298,16 @@ def _check_schema_mismatch() -> None:
 
         # Check columns for tables that exist in both
         missing_columns: dict[str, set[str]] = {}
-        for table_name in expected_tables & existing_tables:
-            model_cols = {
-                c.name for c in SQLModel.metadata.tables[table_name].columns
+        for table_key in expected_tables & existing_tables:
+            table_obj = SQLModel.metadata.tables[table_key]
+            model_cols = {c.name for c in table_obj.columns}
+            db_cols = {
+                c["name"]
+                for c in inspector.get_columns(table_obj.name, schema=table_obj.schema)
             }
-            db_cols = {c["name"] for c in inspector.get_columns(table_name)}
             missing = model_cols - db_cols
             if missing:
-                missing_columns[table_name] = missing
+                missing_columns[table_key] = missing
 
         if missing_tables or missing_columns:
             logger.error("=" * 60)

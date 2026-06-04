@@ -5,6 +5,7 @@ These tests validate the migration generation functionality that creates
 Alembic migration files on-demand for services like auth and AI.
 """
 
+import ast
 from pathlib import Path
 
 from aegis.core.migration_generator import (
@@ -16,11 +17,16 @@ from aegis.core.migration_generator import (
     INSIGHTS_MIGRATION,
     MIGRATION_SPECS,
     ORG_MIGRATION,
+    SCHEDULER_MIGRATION,
     VOICE_MIGRATION,
+    CheckConstraintSpec,
     ColumnSpec,
+    ForeignKeySpec,
     IndexSpec,
+    ServiceMigrationSpec,
     TableSpec,
     _build_insights_migration,
+    _render_migration,
     generate_migration,
     generate_migrations_for_services,
     get_existing_migrations,
@@ -1179,3 +1185,122 @@ class TestForeignKeyOnDeleteRendering:
 
         assert "ondelete=" not in content
         assert "CASCADE" not in content
+
+
+class TestSchemaQualifiedRendering:
+    """Schema support: a spec can render its tables into a Postgres schema."""
+
+    def _schema_spec(self) -> ServiceMigrationSpec:
+        """A spec exercising every schema-rendering path in one go:
+        columns-only PK, intra-schema FK, cross-schema FK, index, check.
+        """
+        return ServiceMigrationSpec(
+            service_name="widget",
+            description="Widget tables",
+            schema="widget",
+            tables=[
+                TableSpec(
+                    name="parent",
+                    columns=[
+                        ColumnSpec(
+                            "id", "sa.Integer()", nullable=False, primary_key=True
+                        ),
+                        ColumnSpec("name", "sa.String(64)", nullable=False),
+                    ],
+                    indexes=[IndexSpec("ix_parent_name", ["name"])],
+                ),
+                TableSpec(
+                    name="child",
+                    columns=[
+                        ColumnSpec(
+                            "id", "sa.Integer()", nullable=False, primary_key=True
+                        ),
+                        ColumnSpec("parent_id", "sa.Integer()", nullable=False),
+                        ColumnSpec("user_id", "sa.Integer()", nullable=True),
+                        ColumnSpec("status", "sa.String(8)", nullable=False),
+                    ],
+                    indexes=[IndexSpec("ix_child_parent", ["parent_id"])],
+                    foreign_keys=[
+                        # intra-schema: resolves to the spec's own schema
+                        ForeignKeySpec(
+                            ["parent_id"], "parent", ["id"], ondelete="CASCADE"
+                        ),
+                        # cross-schema: explicit ref_schema
+                        ForeignKeySpec(["user_id"], "user", ["id"], ref_schema="auth"),
+                    ],
+                    check_constraints=[
+                        CheckConstraintSpec("ck_child_status", "status IN ('a', 'b')"),
+                    ],
+                ),
+            ],
+        )
+
+    def test_schema_spec_renders_valid_python(self) -> None:
+        """A schema'd spec compiles and creates the schema first."""
+        src = _render_migration(self._schema_spec(), "002", "001")
+        ast.parse(src)  # raises SyntaxError on bad render
+        assert 'CREATE SCHEMA IF NOT EXISTS "widget"' in src
+
+    def test_tables_indexes_qualified(self) -> None:
+        """create_table and create_index carry the schema kwarg."""
+        src = _render_migration(self._schema_spec(), "002", "001")
+        assert src.count("schema='widget'") >= 2  # both tables
+        assert "schema='widget')" in src  # on create_index
+
+    def test_fk_referents_qualified(self) -> None:
+        """Intra-schema FKs use the spec schema; cross-schema use ref_schema."""
+        src = _render_migration(self._schema_spec(), "002", "001")
+        assert "['widget.parent.id']" in src  # intra-schema
+        assert "['auth.user.id']" in src  # cross-schema
+
+    def test_no_schema_spec_is_unqualified(self) -> None:
+        """A spec without a schema renders no schema artifacts (back-compat)."""
+        src = _render_migration(AUTH_MIGRATION, "001", None)
+        ast.parse(src)
+        assert "CREATE SCHEMA" not in src
+        assert "schema=" not in src
+        # FK referents stay bare (no leading schema)
+        assert "['user.id']" in src
+
+
+class TestSchedulerComponentMigration:
+    """The scheduler component rides the service migration rail."""
+
+    def test_scheduler_in_registry(self) -> None:
+        """Component migration is collected alongside services."""
+        assert "scheduler" in MIGRATION_SPECS
+        assert MIGRATION_SPECS["scheduler"].schema == "scheduler"
+
+    def test_spec_schema_and_table(self) -> None:
+        assert SCHEDULER_MIGRATION.schema == "scheduler"
+        assert [t.name for t in SCHEDULER_MIGRATION.tables] == ["job_execution"]
+
+    def test_selected_for_postgres(self) -> None:
+        """Postgres scheduler persistence selects the schema'd migration."""
+        context = {"include_scheduler": True, "scheduler_backend": "postgres"}
+        assert "scheduler" in get_services_needing_migrations(context)
+
+    def test_not_selected_for_sqlite(self) -> None:
+        """SQLite scheduler uses create_all, not a migration (no CREATE SCHEMA)."""
+        context = {"include_scheduler": True, "scheduler_backend": "sqlite"}
+        assert "scheduler" not in get_services_needing_migrations(context)
+
+    def test_not_selected_for_memory(self) -> None:
+        context = {"include_scheduler": True, "scheduler_backend": "memory"}
+        assert "scheduler" not in get_services_needing_migrations(context)
+
+    def test_not_selected_when_absent(self) -> None:
+        context = {"include_auth": True}
+        assert "scheduler" not in get_services_needing_migrations(context)
+
+    def test_generates_valid_schema_migration(self, tmp_path: Path) -> None:
+        """The generated file creates scheduler.job_execution and compiles."""
+        migration_path = generate_migration(tmp_path, "scheduler")
+        assert migration_path is not None
+        content = migration_path.read_text()
+        ast.parse(content)
+        assert 'CREATE SCHEMA IF NOT EXISTS "scheduler"' in content
+        assert "'job_execution'" in content
+        assert "schema='scheduler'" in content
+        # composite index for "last N runs of one job"
+        assert "ix_job_execution_job_started" in content

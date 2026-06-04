@@ -267,6 +267,8 @@ MESSAGES: dict[str, str] = {
     "add.valid_backends": "Допустимые варианты: {options}",
     "add.postgres_coming": "Примечание: поддержка PostgreSQL появится в будущих версиях",
     "add.auto_added_db": "Автоматически добавлен компонент БД для хранения данных планировщика",
+    "add.generated_migration": "Создана миграция: {name}",
+    "add.scheduler_db_engine_mismatch": "Невозможно использовать бэкенд планировщика '{backend}': движок базы данных проекта — '{engine}'. Они должны совпадать.",
     # ── Команда remove ────────────────────────────────────────────────
     "remove.title": "Aegis Stack — Удаление компонентов",
     "remove.project": "Проект: {path}",

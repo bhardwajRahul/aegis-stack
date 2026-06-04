@@ -446,7 +446,7 @@ class OverviewTab(ft.Container):
             MetricCard(
                 value=str(total_endpoints),
                 label="Endpoints",
-                color=ft.Colors.GREEN,
+                color=Theme.Colors.SUCCESS,
             ),
             MetricCard(
                 value=str(total_middleware),
@@ -860,7 +860,7 @@ class PerformanceTab(ft.Container):
             MetricCard(
                 value=str(summary.get("tracked_endpoints", 0)),
                 label="Tracked Endpoints",
-                color=ft.Colors.GREEN,
+                color=Theme.Colors.SUCCESS,
             ),
             MetricCard(
                 value=f"{float(summary.get('avg_ms', 0.0) or 0.0):.1f}",

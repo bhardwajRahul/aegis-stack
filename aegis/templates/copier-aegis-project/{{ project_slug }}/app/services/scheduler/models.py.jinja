@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 {%- if scheduler_backend != "memory" %}
-from sqlalchemy import Column, Float, LargeBinary, String
+from sqlalchemy import Column, DateTime, Float, LargeBinary, String, Text
 from sqlmodel import Field as SQLField, SQLModel
 {% endif %}
 
@@ -49,6 +49,49 @@ class APSchedulerJob(SQLModel, table=True):
             APScheduler writes pickled job data to this table - we're just reading it.
         """
         return pickle.loads(self.job_state)  # type: ignore[no-any-return]
+
+
+class JobExecution(SQLModel, table=True):
+    """One row per scheduled-job run (success, failure, or in-flight).
+
+    Written by the scheduler's APScheduler event listeners; read by the
+    backend API for the dashboard History view. ``job_id`` is APScheduler's
+    job id (not an FK) and ``job_name`` is denormalized so history survives
+    a job being removed from the schedule.
+    {%- if database_engine == "postgres" %}
+
+    Lives in a dedicated ``scheduler`` Postgres schema, kept apart from
+    service tables. SQLite has no schemas, so there it lands in the single
+    database file unqualified.
+    {%- endif %}
+    """
+
+    __tablename__ = "job_execution"
+{%- if database_engine == "postgres" %}
+    __table_args__ = {"schema": "scheduler"}
+{%- endif %}
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    job_id: str = SQLField(
+        sa_column=Column(String(191), index=True, nullable=False)
+    )
+    job_name: str = SQLField(
+        default="", sa_column=Column(String(255), nullable=False)
+    )
+    scheduled_run_time: datetime | None = SQLField(default=None)
+    started_at: datetime = SQLField(
+        sa_column=Column(DateTime, index=True, nullable=False)
+    )
+    finished_at: datetime | None = SQLField(default=None)
+    duration_ms: float | None = SQLField(default=None)
+    # running | success | failed | missed
+    status: str = SQLField(
+        default="running", sa_column=Column(String(16), index=True, nullable=False)
+    )
+    error_message: str | None = SQLField(
+        default=None, sa_column=Column(Text, nullable=True)
+    )
+    traceback: str | None = SQLField(default=None, sa_column=Column(Text, nullable=True))
 
 
 # ============================================================================

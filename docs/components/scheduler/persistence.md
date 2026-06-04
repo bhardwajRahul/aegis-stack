@@ -118,52 +118,88 @@ my-app health check --detailed
         └─ report_gen: Weekly on Monday → in 3d
 ```
 
-### Dashboard UI Card
+## Keeping the Jobstore in Sync With Code
 
-<img src="/aegis-stack/images/scheduler-card-light.png#only-light" alt="Scheduler Dashboard Card" style="width: 100%;">
-<img src="/aegis-stack/images/scheduler-card-dark.png#only-dark" alt="Scheduler Dashboard Card" style="width: 100%;">
+`app/components/scheduler/main.py` is the source of truth for every job. On each start, `create_scheduler()` re-registers them all, and with a persistent jobstore the stored rows are reconciled against code three ways:
 
+- **Changed schedule** - every `add_job` call passes `replace_existing=True`, so an edited trigger overwrites the persisted row on the next restart.
+- **Removed job** - `_drop_unknown_persisted_jobs()` deletes persisted rows whose ID is no longer registered in code, so a job you delete stops firing instead of running forever from its stored row.
+- **Un-importable job** - `_cleanup_stale_jobs()` drops persisted jobs whose function can no longer be imported, which handles a Docker volume carrying jobs from a previous project configuration.
 
-## Production Job Management
-
-### Code Is the Source of Truth
-
-Every restart re-registers each job from `app/components/scheduler/main.py` using `replace_existing=True`. To change a schedule:
-
-1. Edit the trigger in `create_scheduler()`.
-2. Commit and redeploy.
-3. The new trigger overwrites the persisted row when the scheduler container restarts.
+To change a schedule, edit the trigger in `create_scheduler()`, commit, and redeploy:
 
 ```python
 scheduler.add_job(
-    func=process_daily_reports,
-    trigger=CronTrigger(hour=6, minute=0),
+    process_daily_reports,
+    trigger="cron",
+    hour=6,
+    minute=0,
     id="daily_reports",
     name="Daily Report Generation",
+    max_instances=1,
+    coalesce=True,
     replace_existing=True,
 )
 ```
 
-Runtime edits via `scheduler.modify_job()` are not preserved across restarts. This is deliberate: it keeps the deployed configuration aligned with what's committed in git, the same way Alembic migrations and Pydantic settings do. If a knob needs to be tunable without a deploy, expose it as a setting (env var), not as a runtime job edit.
+Runtime edits via `scheduler.modify_job()` are not preserved across restarts. This is deliberate: it keeps the deployed configuration aligned with what's committed in git, the same way Alembic migrations and Pydantic settings do. If a knob needs to be tunable without a deploy, expose it as a setting (env var), not a runtime job edit.
 
 ## Database Schema
 
-The persistence layer creates this table automatically:
+The persistence layer creates two tables. APScheduler manages the first; Aegis Stack manages the second.
 
 ```sql
--- apscheduler_jobs table (created automatically)
+-- apscheduler_jobs table (created automatically by APScheduler)
 CREATE TABLE apscheduler_jobs (
     id VARCHAR(191) NOT NULL PRIMARY KEY,
     next_run_time FLOAT,
     job_state BLOB NOT NULL
 );
 
--- Indexes for performance
 CREATE INDEX ix_apscheduler_jobs_next_run_time ON apscheduler_jobs (next_run_time);
 ```
 
+```sql
+-- job_execution table (created by Alembic migration on Postgres, create_all on SQLite)
+-- On Postgres stacks this table lives in the "scheduler" schema.
+CREATE TABLE scheduler.job_execution (
+    id                 SERIAL PRIMARY KEY,
+    job_id             VARCHAR NOT NULL,
+    job_name           VARCHAR NOT NULL,
+    scheduled_run_time TIMESTAMP,
+    started_at         TIMESTAMP NOT NULL,
+    finished_at        TIMESTAMP,
+    duration_ms        FLOAT,
+    status             VARCHAR NOT NULL,  -- running | success | failed | missed
+    error_message      VARCHAR(2000),
+    traceback          VARCHAR(8000)
+);
+```
+
+!!! info "Postgres schema isolation"
+    On Postgres stacks the `scheduler` schema is created by an Alembic migration that runs on first deploy. SQLite stacks use `create_all` at startup with no schema prefix.
+
+## Execution History
+
+Every scheduled job run and every manual "Run Now" trigger is recorded in `job_execution`.
+
+### Retention Policy
+
+Each job keeps at most **100 rows**. Older rows are pruned opportunistically after each run completes, so the table stays small regardless of how long the scheduler has been running.
+
+### Stale Row Cleanup
+
+When the scheduler process starts, any rows still in `running` status from a previous crash are immediately marked `failed` with the message:
+
+```
+Run did not complete (scheduler restarted)
+```
+
+This prevents stale "forever running" rows from polluting history or skewing aggregate stats.
+
 ## Next Steps
 
-- **[Scheduler Component](../../scheduler.md)** - Return to scheduler overview
-- **[Database Component](../../database.md)** - Database setup and configuration
-- **[Examples](../examples.md)** - Real-world persistent job patterns
+- **[Running Jobs](./running-jobs.md)** - Trigger jobs manually, view execution history, API reference
+- **[Scheduler Component](../scheduler.md)** - Return to scheduler overview
+- **[Database Component](../database.md)** - Database setup and configuration
+- **[Examples](./examples.md)** - Real-world persistent job patterns

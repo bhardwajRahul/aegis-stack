@@ -39,7 +39,7 @@ graph TB
     
 ```
 
-*Jobs run in memory and reset on container restart. For persistent scheduling, see [Database Persistence](scheduler/extras/persistence.md).*
+*Jobs run in memory and reset on container restart. For persistent scheduling, see [Database Persistence](scheduler/persistence.md).*
 
 ## Adding Scheduled Tasks
 
@@ -166,5 +166,5 @@ scheduler.add_job(
 
 - **[CLI Interface](scheduler/cli.md)** - Command-line task management (requires persistence)
 - **[Examples](scheduler/examples.md)** - Real-world scheduling patterns and timing examples
-- **[Database Persistence](scheduler/extras/persistence.md)** - Job persistence and monitoring
+- **[Database Persistence](scheduler/persistence.md)** - Job persistence and monitoring
 - **[Component Overview](./index.md)** - How components work together

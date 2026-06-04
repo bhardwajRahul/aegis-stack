@@ -1,8 +1,15 @@
 {%- if scheduler_backend != "memory" %}
 """Scheduler service layer for async task management."""
 
+from .execution_log import (
+    prune_executions,
+    record_job_finished,
+    record_job_missed,
+    record_job_started,
+)
 from .models import (
     APSchedulerJob,
+    JobExecution,
     ScheduledTask,
     TaskStatistics,
     SchedulerHealthMetadata,
@@ -15,7 +22,12 @@ __all__ = [
     "ScheduledTask",
     "TaskStatistics",
     "APSchedulerJob",
+    "JobExecution",
     "SchedulerHealthMetadata",
     "UpcomingTask",
+    "record_job_started",
+    "record_job_finished",
+    "record_job_missed",
+    "prune_executions",
 ]
 {% endif %}

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .file_manifest import FileManifest
+from .migration_generator import SCHEDULER_MIGRATION
 from .plugins.spec import PluginKind, PluginSpec
 
 
@@ -24,7 +25,7 @@ class SchedulerBackend(str, Enum):
 
     MEMORY = "memory"  # In-memory (no persistence, default)
     SQLITE = "sqlite"  # SQLite database (requires database component)
-    POSTGRES = "postgres"  # PostgreSQL (future support)
+    POSTGRES = "postgres"  # PostgreSQL (requires a postgres database)
 
 
 # Core components that are always included in every project
@@ -125,16 +126,24 @@ COMPONENTS: dict[str, ComponentSpec] = {
         pyproject_deps=["apscheduler==3.10.4"],
         docker_services=["scheduler"],
         template_files=["app/components/scheduler.py", "app/entrypoints/scheduler.py"],
+        # job_execution history table (Postgres ``scheduler`` schema). Only
+        # generated when scheduler_backend != memory — see
+        # get_services_needing_migrations().
+        migrations=[SCHEDULER_MIGRATION],
         files=FileManifest(
             primary=[
                 "app/entrypoints/scheduler.py",
                 "app/components/scheduler",
+                "app/services/scheduler/execution_log.py",
                 "tests/components/test_scheduler.py",
+                "tests/services/test_scheduler_execution_log.py",
+                "tests/services/test_scheduler_executions_read.py",
                 "docs/components/scheduler.md",
                 "app/components/backend/api/scheduler.py",
                 "tests/api/test_scheduler_endpoints.py",
                 "app/components/frontend/dashboard/cards/scheduler_card.py",
                 "app/components/frontend/dashboard/modals/scheduler_modal.py",
+                "app/components/frontend/dashboard/modals/scheduler_history_section.py",
                 "tests/services/test_scheduled_task_manager.py",
             ],
             # scheduler persistence cleanup is option-driven

@@ -409,5 +409,5 @@ def test_job_configuration():
 ## Next Steps
 
 - **[Scheduler Component](../scheduler.md)** - Return to scheduler overview
-- **[Database Persistence](extras/persistence.md)** - Job persistence and monitoring  
+- **[Database Persistence](persistence.md)** - Job persistence and monitoring  
 - **[Component Overview](../index.md)** - How components work together

@@ -228,4 +228,4 @@ docker exec my-app-container my-app tasks list
 - **[CLI Reference](../../cli-reference.md)** - Complete CLI overview and all commands
 - **[Scheduler Component](../scheduler.md)** - Main scheduler documentation
 - **[Examples](examples.md)** - Real-world scheduling patterns
-- **[Database Persistence](extras/persistence.md)** - Job persistence setup
+- **[Database Persistence](persistence.md)** - Job persistence setup

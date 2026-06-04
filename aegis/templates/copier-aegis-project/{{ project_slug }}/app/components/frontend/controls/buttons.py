@@ -351,10 +351,10 @@ class ConfirmDialog(ft.AlertDialog):
         message: str,
         confirm_text: str = "Confirm",
         cancel_text: str = "Cancel",
-        on_confirm: Callable | None = None,
+        on_confirm: AsyncClickCallable | None = None,
         destructive: bool = False,
         secondary_text: str | None = None,
-        on_secondary: Callable | None = None,
+        on_secondary: AsyncClickCallable | None = None,
         secondary_destructive: bool = False,
     ) -> None:
         """
@@ -366,12 +366,11 @@ class ConfirmDialog(ft.AlertDialog):
             message: Dialog message/content
             confirm_text: Text for confirm button
             cancel_text: Text for cancel button
-            on_confirm: Callback when confirmed (can be sync or async)
+            on_confirm: Async callback when confirmed.
             destructive: If True, confirm button is styled as destructive (red)
             secondary_text: When set, renders a third button between
                 Cancel and Confirm with this label.
-            on_secondary: Callback when the secondary button is clicked
-                (sync or async).
+            on_secondary: Async callback when the secondary button is clicked.
             secondary_destructive: If True, the secondary button uses
                 the red destructive variant; otherwise it stays muted.
         """
@@ -418,26 +417,18 @@ class ConfirmDialog(ft.AlertDialog):
         """Close the dialog and dispatch the confirm callback."""
         self.open = False
         self._page.update()
-        self._dispatch(self._on_confirm)
+        await self._dispatch(self._on_confirm)
 
     async def _handle_secondary(self) -> None:
         """Close the dialog and dispatch the secondary callback."""
         self.open = False
         self._page.update()
-        self._dispatch(self._on_secondary)
+        await self._dispatch(self._on_secondary)
 
-    def _dispatch(self, callback: Callable | None) -> None:
+    async def _dispatch(self, callback: AsyncClickCallable | None) -> None:
         if callback is None:
             return
-        import asyncio
-        import inspect
-
-        if inspect.iscoroutinefunction(callback):
-            self._page.run_task(callback)
-        else:
-            result = callback()
-            if asyncio.iscoroutine(result):
-                self._page.run_task(lambda: result)
+        await callback()
 
     def show(self) -> None:
         """Show the dialog."""

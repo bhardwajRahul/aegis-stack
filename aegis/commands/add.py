@@ -522,8 +522,12 @@ def add_command(
         # Use explicit backend flag/bracket syntax if provided, otherwise detect
         scheduler_backend = backend or detect_scheduler_backend(components_to_add)
 
-        # Validate backend (only memory and sqlite supported)
-        valid_backends = [StorageBackends.MEMORY, StorageBackends.SQLITE]
+        # Validate backend (memory, sqlite, postgres)
+        valid_backends = [
+            StorageBackends.MEMORY,
+            StorageBackends.SQLITE,
+            StorageBackends.POSTGRES,
+        ]
         if scheduler_backend not in valid_backends:
             typer.secho(
                 t("add.invalid_scheduler_backend", backend=scheduler_backend),
@@ -534,13 +538,39 @@ def add_command(
                 f"   {t('add.valid_backends', options=', '.join(valid_backends))}",
                 err=True,
             )
-            if scheduler_backend == StorageBackends.POSTGRES:
-                typer.echo(f"   {t('add.postgres_coming')}", err=True)
             raise typer.Exit(1)
 
-        # Auto-add database component for sqlite backend
+        # A persistent scheduler must match the project's database engine. If
+        # a database already exists with a different engine, the schema'd
+        # migration (postgres) or create_all (sqlite) won't line up — fail
+        # loudly rather than generate a broken stack.
+        existing_db_engine = existing_answers.get(AnswerKeys.DATABASE_ENGINE)
+        db_already_enabled = (
+            existing_answers.get(AnswerKeys.include_key(ComponentNames.DATABASE))
+            is True
+        )
         if (
-            scheduler_backend == StorageBackends.SQLITE
+            scheduler_backend in (StorageBackends.SQLITE, StorageBackends.POSTGRES)
+            and db_already_enabled
+            and existing_db_engine
+            and existing_db_engine != scheduler_backend
+        ):
+            typer.secho(
+                t(
+                    "add.scheduler_db_engine_mismatch",
+                    backend=scheduler_backend,
+                    engine=existing_db_engine,
+                ),
+                fg="red",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        # Persistent backends need a database component; auto-add one (with a
+        # matching engine) if the project doesn't have it yet.
+        if (
+            scheduler_backend in (StorageBackends.SQLITE, StorageBackends.POSTGRES)
+            and not db_already_enabled
             and ComponentNames.DATABASE not in components_to_add
         ):
             components_to_add.append(ComponentNames.DATABASE)
@@ -579,10 +609,15 @@ def add_command(
             scheduler_backend == StorageBackends.SQLITE
         )
 
-    # Add database engine configuration if adding database
+    # Add database engine configuration if adding database. Match the
+    # scheduler backend when adding the DB for a persistent scheduler;
+    # default to SQLite otherwise.
     if ComponentNames.DATABASE in components_to_add:
-        # SQLite is the only supported engine for now
-        update_data[AnswerKeys.DATABASE_ENGINE] = StorageBackends.SQLITE
+        update_data[AnswerKeys.DATABASE_ENGINE] = (
+            StorageBackends.POSTGRES
+            if scheduler_backend == StorageBackends.POSTGRES
+            else StorageBackends.SQLITE
+        )
 
     # Add components using ManualUpdater
     # This is the standard approach for adding components at the same template version
@@ -640,6 +675,32 @@ def add_command(
                     f"   {t('add.skipped_files', count=len(result.files_skipped))}",
                     fg="yellow",
                 )
+
+        # Generate migrations for newly-added components that own tables.
+        # Today that's scheduler[postgres] -> scheduler.job_execution; the
+        # schema'd migration runs at backend startup on Postgres. SQLite
+        # scheduler creates its table via create_all, so it needs no file.
+        if (
+            ComponentNames.SCHEDULER in components_to_add
+            and scheduler_backend == StorageBackends.POSTGRES
+        ):
+            from ..core.migration_generator import (
+                bootstrap_alembic,
+                generate_migration,
+                service_has_migration,
+            )
+
+            if not (target_path / "alembic").exists():
+                bootstrap_alembic(target_path, updater.jinja_env, updater.answers)
+            if not service_has_migration(target_path, ComponentNames.SCHEDULER):
+                migration_path = generate_migration(
+                    target_path, ComponentNames.SCHEDULER
+                )
+                if migration_path:
+                    typer.secho(
+                        f"   {t('add.generated_migration', name=migration_path.name)}",
+                        fg="green",
+                    )
 
         typer.secho(f"\n{t('add.success')}", fg="green")
 
