@@ -1,14 +1,7 @@
 {%- if scheduler_backend != "memory" %}
 """Scheduled job API endpoints."""
 
-import importlib
-import inspect
-import traceback
-from collections.abc import Callable
-from typing import Any
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from starlette.concurrency import run_in_threadpool
 
 from app.components.backend.api.models import (
     JobExecutionStatsResponse,
@@ -21,8 +14,8 @@ from app.components.backend.api.models import (
 from app.core.log import logger
 from app.services.scheduler import (
     ScheduledTaskManager,
-    record_job_finished,
-    record_job_started,
+    import_job_function,
+    run_triggered_job,
 )
 {%- if include_auth %}
 {%- if include_auth_rbac %}
@@ -55,49 +48,6 @@ router = APIRouter(
 async def get_task_manager() -> ScheduledTaskManager:
     """Dependency to provide ScheduledTaskManager instance."""
     return ScheduledTaskManager()
-
-
-def _import_job_function(func_ref: str) -> Callable[..., Any] | None:
-    """Import an APScheduler ``module:callable`` reference, or None."""
-    try:
-        module_name, _, attr = func_ref.partition(":")
-        if not module_name or not attr:
-            return None
-        func = getattr(importlib.import_module(module_name), attr, None)
-        return func if callable(func) else None
-    except Exception as e:
-        logger.error(f"Failed to import job function '{func_ref}': {e}")
-        return None
-
-
-async def _run_triggered_job(
-    func: Callable[..., Any], job_id: str, job_name: str
-) -> None:
-    """Run a manually-triggered job in the backend and record its execution.
-
-    Runs in the backend process (not the scheduler); async jobs are awaited,
-    sync jobs go to a threadpool. The run is written to the same execution
-    history as scheduled runs, so it shows up in the History view.
-    """
-    execution_id = await run_in_threadpool(record_job_started, job_id, job_name)
-    try:
-        if inspect.iscoroutinefunction(func):
-            await func()
-        else:
-            await run_in_threadpool(func)
-        await run_in_threadpool(
-            record_job_finished, execution_id, job_id, success=True
-        )
-    except Exception as e:
-        await run_in_threadpool(
-            record_job_finished,
-            execution_id,
-            job_id,
-            success=False,
-            error=str(e),
-            traceback=traceback.format_exc(),
-        )
-        logger.error(f"Triggered job '{job_id}' failed: {e}")
 
 
 @router.get("/jobs", response_model=ScheduledTaskListResponse)
@@ -286,7 +236,7 @@ async def trigger_scheduled_job(
                 },
             )
 
-        func = _import_job_function(task.function)
+        func = import_job_function(task.function)
         if func is None:
             raise HTTPException(
                 status_code=422,
@@ -298,7 +248,7 @@ async def trigger_scheduled_job(
                 },
             )
 
-        background_tasks.add_task(_run_triggered_job, func, job_id, task.name)
+        background_tasks.add_task(run_triggered_job, func, job_id, task.name)
         return TriggerJobResponse(
             job_id=job_id,
             status="triggered",

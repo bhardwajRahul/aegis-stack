@@ -13,16 +13,16 @@ The scheduler provides a `tasks` CLI for managing scheduled jobs when persistenc
 ## Quick Start
 
 ```bash
-# Check if CLI is available
-my-app --help
-
 # List all scheduled jobs
 my-app tasks list
 
-# View scheduler statistics
-my-app tasks stats
+# Run a job right now
+my-app tasks trigger database_backup
 
-# View execution history
+# See a job's execution stats
+my-app tasks stats database_backup
+
+# See recent execution history
 my-app tasks history
 ```
 
@@ -36,119 +36,101 @@ List all scheduled jobs with their status and next run times.
 my-app tasks list
 ```
 
-**Example Output:**
-```
-Scheduled Jobs (1 total)
-┌─────────────────────┬───────────────────────┬─────────┬──────────────────────────────┐
-│ Job ID              │ Name                  │ Status  │ Next Run                     │
-├─────────────────────┼───────────────────────┼─────────┼──────────────────────────────┤
-│ daily_health_check  │ Daily Health Check    │ active  │ 2024-09-07 09:00:00          │
-└─────────────────────┴───────────────────────┴─────────┴──────────────────────────────┘
-```
-
 Shows:
 
 - **Job ID** - Unique identifier for the scheduled task
 - **Name** - Human-readable job name
-- **Status** - `active` (scheduled) or `paused`
+- **Status** - `Active` (scheduled) or `Paused`
 - **Next Run** - When the job will execute next
-
-### `tasks stats`
-
-View overall scheduler statistics and metrics.
-
-```bash
-my-app tasks stats
-```
-
-**Example Output:**
-```
-Overall Scheduler Statistics
-╭───────────────────────────────────────────────────────── Scheduler Statistics ──────────────────────────────────────────────────────────╮
-│ Scheduler Overview                                                                                                                      │
-│                                                                                                                                         │
-│ Total Jobs: 1                                                                                                                           │
-│ Active Jobs: 1                                                                                                                          │
-│ Paused Jobs: 0                                                                                                                          │
-│                                                                                                                                         │
-│ Total Executions: 0                                                                                                                     │
-│ Successful: 0                                                                                                                           │
-│ Failed: 0                                                                                                                               │
-│                                                                                                                                         │
-│ Overall Success Rate: 0.0%                                                                                                              │
-│ Avg Execution Time: 0.0ms                                                                                                               │
-│                                                                                                                                         │
-│ Scheduler Uptime: Unknown                                                                                                               │
-│ Last Activity: No recent activity                                                                                                       │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-```
-
-**Job-Specific Statistics:**
-```bash
-my-app tasks stats --job-id JOB_ID
-```
-
-**Example:**
-```bash
-my-app tasks stats --job-id daily_health_check
-```
-
-### `tasks history`
-
-View recent job execution history.
-
-```bash
-my-app tasks history [--limit N] [--job-id JOB_ID]
-```
-
-**Options:**
-
-- `--limit N` - Limit results to N most recent executions (default: 10)
-- `--job-id JOB_ID` - Filter to specific job only
-
-**Examples:**
-```bash
-# Last 10 executions across all jobs
-my-app tasks history
-
-# Last 20 executions  
-my-app tasks history --limit 20
-
-# History for specific job
-my-app tasks history --job-id daily_health_check
-
-# Last 5 runs of specific job
-my-app tasks history --job-id cleanup_temp_files --limit 5
-```
+- **Trigger** - The trigger type (`cron`, `interval`, `date`)
 
 ### `tasks trigger`
 
-Trigger manual execution of a scheduled job.
+Run a scheduled job immediately, in the CLI process, and record the run to
+execution history (so it also shows up in the dashboard History tab).
 
 ```bash
-my-app tasks trigger JOB_ID [--wait] [--timeout SECONDS]
+my-app tasks trigger JOB_ID [--force]
+```
+
+The command waits for the job to finish and reports the outcome. By default it
+refuses to start if a previous run of the same job is still in progress; pass
+`--force` (`-f`) to run anyway.
+
+**Example:**
+```bash
+$ my-app tasks trigger database_backup
+Running job: Daily Database Backup
+Job completed successfully: Daily Database Backup
+```
+
+!!! note "Runs in the calling environment"
+    `tasks trigger` runs the job **in the process you invoke it from** (unlike
+    the dashboard's Run Now, which runs it in the backend). Jobs that shell out
+    to system tools (the `database_backup` job calls `pg_dump`, which must be
+    at least the server's major version) therefore depend on your environment.
+    Run such jobs where a matching client lives -- inside the container:
+
+    ```bash
+    docker compose exec scheduler my-app tasks trigger database_backup
+    ```
+
+    Running from a host with an older/missing client fails with a clear error
+    rather than a misleading success.
+
+A failing job records the failure (with traceback) to history and exits
+non-zero, so it composes with scripts and CI.
+
+### `tasks stats`
+
+Show aggregate execution statistics for a single job.
+
+```bash
+my-app tasks stats JOB_ID
+```
+
+**Example:**
+```
+$ my-app tasks stats database_backup
+          Execution Stats: database_backup
+┌──────────────────┬───────────────────────────────┐
+│ Total runs       │ 3                             │
+│ Succeeded        │ 2                             │
+│ Failed           │ 1                             │
+│ Success rate     │ 66.7%                         │
+│ Average duration │ 142 ms                        │
+│ Last run         │ success @ 2026-06-04 20:16:05 │
+└──────────────────┴───────────────────────────────┘
+```
+
+Stats are computed from the retained execution history (up to ~100 runs per
+job). A job with no recorded runs prints a short notice instead.
+
+### `tasks history`
+
+Show recent job execution history, newest first.
+
+```bash
+my-app tasks history [--job JOB_ID] [--limit N]
 ```
 
 **Options:**
 
-- `--wait` - Wait for job completion before returning
-- `--timeout SECONDS` - Maximum wait time when using `--wait` (default: 30)
+- `--job`, `-j JOB_ID` - Only show history for this job
+- `--limit`, `-n N` - Maximum number of records to show (default: 20)
 
-**Examples:**
-```bash
-# Trigger job and return immediately
-my-app tasks trigger daily_health_check
-
-# Trigger job and wait for completion
-my-app tasks trigger daily_health_check --wait
-
-# Trigger with custom timeout
-my-app tasks trigger cleanup_temp_files --wait --timeout 60
+**Example:**
 ```
+$ my-app tasks history --job database_backup --limit 5
+                          Execution History
+┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━┓
+┃ Started             ┃ Name                  ┃ Status  ┃   Duration ┃
+┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━┩
+│ 2026-06-04 20:16:05 │ Daily Database Backup │ success │      90 ms │
+└─────────────────────┴───────────────────────┴─────────┴────────────┘
 
-!!! warning "Implementation Status"
-    Manual job triggering is currently not implemented but is planned for future releases.
-    The command will return an appropriate message indicating this limitation.
+Total executions: 3
+```
 
 ## CLI Availability
 

@@ -1,6 +1,6 @@
 # Running Jobs
 
-Aegis Stack gives you two ways to execute a scheduled job outside its normal schedule: the Overseer dashboard and the REST API directly.
+Aegis Stack gives you three ways to execute a scheduled job outside its normal schedule: the Overseer dashboard, the CLI, and the REST API directly. All three record the run to the same execution history.
 
 ## Overseer Dashboard
 
@@ -24,6 +24,23 @@ Shows paginated execution history with a status filter. Each row displays:
 - Relative start time ("2 minutes ago")
 
 Expanding a row shows the full job ID, the scheduled run time, and the finished time. Failed rows also surface the error message.
+
+## CLI
+
+The generated `tasks` CLI can trigger jobs and inspect their history without the backend running. Unlike the API (which runs the job in the backend and returns immediately), the CLI runs the job in-process and waits for the result, so it composes with scripts and CI.
+
+```bash
+# Run a job now and wait for the outcome
+my-app tasks trigger database_backup
+
+# Aggregate stats for one job
+my-app tasks stats database_backup
+
+# Recent execution history
+my-app tasks history --job database_backup --limit 20
+```
+
+See the [Scheduler CLI](./cli.md) for the full command reference.
 
 ## REST API
 

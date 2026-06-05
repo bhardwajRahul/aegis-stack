@@ -43,44 +43,56 @@ async def backup_database_job() -> None:
 {% endif %}
     Keeps the last 7 daily backups to prevent disk space issues.
     """
-    try:
-        # Ensure backup directory exists
-        backup_dir = Path("backups")
-        backup_dir.mkdir(exist_ok=True)
+    # Ensure backup directory exists
+    backup_dir = Path("backups")
+    backup_dir.mkdir(exist_ok=True)
 
-        # Create timestamped backup filename
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Create timestamped backup filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 {% if database_engine == "sqlite" %}
-        backup_filename = f"{BACKUP_FILE_PREFIX}{timestamp}.db"
-        backup_path = backup_dir / backup_filename
+    backup_filename = f"{BACKUP_FILE_PREFIX}{timestamp}.db"
+    backup_path = backup_dir / backup_filename
 
-        # Copy database file
-        if Path(DATABASE_PATH).exists():
-            shutil.copy2(DATABASE_PATH, backup_path)
-            logger.info(f"Database backup created: {backup_path}")
-        else:
-            logger.warning(f"Database file not found for backup: {DATABASE_PATH}")
+    # Copy the database file. A missing source means nothing was backed up,
+    # which is a failure the operator needs to see -- don't swallow it.
+    if not Path(DATABASE_PATH).exists():
+        raise RuntimeError(f"Database file not found for backup: {DATABASE_PATH}")
+    shutil.copy2(DATABASE_PATH, backup_path)
+    logger.info(f"Database backup created: {backup_path}")
 {% else %}
-        backup_filename = f"{BACKUP_FILE_PREFIX}{timestamp}.sql"
-        backup_path = backup_dir / backup_filename
+    backup_filename = f"{BACKUP_FILE_PREFIX}{timestamp}.sql"
+    backup_path = backup_dir / backup_filename
 
-        # Run pg_dump to create backup
+    # Run pg_dump. Raise on failure so the run is recorded as failed instead
+    # of a silent "success" that left no usable dump behind.
+    try:
         result = subprocess.run(
             ["pg_dump", settings.database_url_effective, "-f", str(backup_path)],
             capture_output=True,
             text=True,
         )
-        if result.returncode == 0:
-            logger.info(f"Database backup created: {backup_path}")
-        else:
-            logger.error(f"pg_dump failed: {result.stderr}")
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            "pg_dump not found. Install the PostgreSQL client "
+            "(postgresql-client), or run this inside the container where a "
+            "matching client is available."
+        ) from e
+    if result.returncode != 0:
+        backup_path.unlink(missing_ok=True)  # drop any partial dump
+        stderr = result.stderr.strip()
+        # pg_dump refuses to dump a server newer than the client.
+        if "server version" in stderr:
+            stderr += (
+                " (the local pg_dump is older than the database server -- run "
+                "this inside the container, or upgrade your pg_dump client)"
+            )
+        raise RuntimeError(f"pg_dump failed: {stderr}")
+    logger.info(f"Database backup created: {backup_path}")
 {% endif %}
 
-        # Clean up old backups (keep last 7) - always run regardless of backup success
-        await _cleanup_old_backups(backup_dir)
-
-    except Exception as e:
-        logger.error(f"Database backup failed: {e}")
+    # Prune old backups (keep last 7). Only reached on a successful backup, so
+    # a failed run never deletes known-good backups.
+    await _cleanup_old_backups(backup_dir)
 
 
 async def _cleanup_old_backups(backup_dir: Path, keep_count: int = 7) -> None:
