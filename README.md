@@ -235,6 +235,12 @@ When the AI service is enabled, Aegis exposes an additional interface: **Illiana
 - Opt-in: only available when the AI service is on
 - Nothing in the stack depends on her being there
 
+## Powered By Aegis Stack
+
+- **[Aegis Pulse](https://pulse.aegis-stack.io/)** - Package analytics with honest decomposition (Total / Filtered / Human)
+- **[Sector 7G](https://sector-7g.dev/dashboard/)** - Live demo: millions of tasks on a single $5 VPS, zero restarts
+- **[NWVault Revival](https://167.99.48.44/)** - Searchable archive of the original Neverwinter Vault (2002-2014), built in 24 hours
+
 ## Learn More
 
 - **[Overseer](https://docs.aegis-stack.io/overseer/)** - Built-in system dashboard
