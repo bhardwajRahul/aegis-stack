@@ -11,13 +11,17 @@ build: ## Build Docker image
 	@echo "Building Docker image..."
 	@$(COMPOSE_DEV) build webserver
 
-serve: build ## Run all services (builds if needed)
+serve: build ## Run all services (auto-selects a free host port if the default is taken)
 	@echo "Starting services... (Press Ctrl+C to stop)"
-	@$(COMPOSE_DEV) --profile dev up --remove-orphans
+	@ports="$$(bash scripts/resolve-ports.sh{% if include_ingress %} --ingress{% endif %}{% if database_engine == "postgres" %} --postgres{% endif %}{% if include_redis %} --redis{% endif %}{% if ollama_mode == "docker" %} --ollama{% endif %})" && \
+		eval "$$ports" && \
+		$(COMPOSE_DEV) --profile dev up --remove-orphans
 
-serve-bg: ## Run all services in background
+serve-bg: ## Run all services in background (auto-selects a free host port if the default is taken)
 	@echo "Starting services in background..."
-	@$(COMPOSE_DEV) --profile dev up -d --remove-orphans
+	@ports="$$(bash scripts/resolve-ports.sh{% if include_ingress %} --ingress{% endif %}{% if database_engine == "postgres" %} --postgres{% endif %}{% if include_redis %} --redis{% endif %}{% if ollama_mode == "docker" %} --ollama{% endif %})" && \
+		eval "$$ports" && \
+		$(COMPOSE_DEV) --profile dev up -d --remove-orphans
 
 stop: ## Gracefully stop all services
 	@echo "Stopping services..."

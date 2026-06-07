@@ -24,7 +24,9 @@ services:
       - webserver
 {%- if not include_ingress %}
     ports:
-      - "${PORT:-8000}:${PORT:-8000}"
+      # Host port auto-selected by `make serve` (WEBSERVER_HOST_PORT);
+      # falls back to PORT for a raw `docker compose up`.
+      - "${WEBSERVER_HOST_PORT:-${PORT:-8000}}:${PORT:-8000}"
 {%- endif %}
 {%- if include_redis or database_engine == "postgres" or ollama_mode == "docker" %}
     depends_on:

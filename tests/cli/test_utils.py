@@ -25,7 +25,11 @@ QUALITY_CHECK_TIMEOUTS = {
     "cli_install": 60,
     "lint": 60,
     "typecheck": 120,
-    "tests": 120,
+    # The heaviest stack (everything: ingress + every service + all infra)
+    # has the largest internal suite and was flaking at the old 120s limit
+    # on slower CI runners (e.g. 122s). 180s matches dependency_install's
+    # headroom and stops the borderline-timeout flake.
+    "tests": 180,
 }
 
 STANDARD_ENV_OVERRIDES = {

@@ -81,7 +81,9 @@ This Aegis Stack project includes the following components:
    make serve
    ```
 
-The application will be available at `http://127.0.0.1:8000`.
+The application will be available at `http://127.0.0.1:8000`. If port 8000 is
+already taken, `make serve` picks the next free port and prints the URL it
+chose, so two stacks can run side by side without editing any config.
 
 ## Development
 
