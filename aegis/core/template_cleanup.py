@@ -270,6 +270,49 @@ def sync_template_changes(
     return result
 
 
+def merge_three_way_text(current: str, base: str, other: str) -> tuple[int, str]:
+    """Run a 3-way merge on three text blobs via ``git merge-file``.
+
+    ``current`` is the local file (kept on the "ours" side of any conflict),
+    ``base`` is the common ancestor, ``other`` is the incoming version.
+
+    Returns ``(returncode, merged_text)``:
+      - ``0``: clean merge, no conflicts.
+      - ``1..127``: that many conflicts; ``merged_text`` carries git-style
+        conflict markers labelled ``current`` / ``other``.
+      - anything else (incl. ``-1`` when git is missing): the merge could
+        not run; ``merged_text`` is empty and callers should not write it.
+    """
+    with tempfile.TemporaryDirectory() as temp_dir:
+        dp = Path(temp_dir)
+        cur, bas, oth = dp / "current", dp / "base", dp / "other"
+        cur.write_text(current, encoding="utf-8")
+        bas.write_text(base, encoding="utf-8")
+        oth.write_text(other, encoding="utf-8")
+        try:
+            merge = subprocess.run(
+                [
+                    "git",
+                    "merge-file",
+                    "-p",
+                    "-L",
+                    "current",
+                    "-L",
+                    "base",
+                    "-L",
+                    "other",
+                    str(cur),
+                    str(bas),
+                    str(oth),
+                ],
+                capture_output=True,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return (-1, "")
+        return (merge.returncode, merge.stdout.decode("utf-8", errors="replace"))
+
+
 def _three_way_merge(
     project_file: Path,
     old_file: Path,

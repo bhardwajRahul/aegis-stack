@@ -331,6 +331,9 @@ MESSAGES: dict[str, str] = {
     # ── Manual updater ─────────────────────────────────────────────────
     "updater.processing_files": "Verarbeite {count} Komponentendateien...",
     "updater.updating_shared": "Aktualisiere gemeinsame Template-Dateien...",
+    "updater.shared_preserved": "Lokale Änderungen beibehalten (Regenerierung übersprungen, manuell zusammenführen): {file}",
+    "updater.shared_merged": "Template-Änderungen in deine angepasste Datei zusammengeführt: {file}",
+    "updater.shared_conflict": "Merge-Konflikt (Markierungen geschrieben, manuell auflösen): {file}",
     "updater.running_postgen": "Führe Nachgenerierungsaufgaben aus...",
     "updater.deps_synced": "Abhängigkeiten synchronisiert (uv sync)",
     "updater.code_formatted": "Code formatiert (make fix)",
@@ -460,6 +463,7 @@ MESSAGES: dict[str, str] = {
     "add_service.failed_component": "Komponente {component} konnte nicht hinzugefügt werden: {error}",
     "add_service.added_files": "{count} Dateien hinzugefügt",
     "add_service.skipped_files": "{count} vorhandene Dateien übersprungen",
+    "add_service.preserved_files": "{count} gemeinsame Datei(en) benötigen manuelle Prüfung (siehe Meldungen oben)",
     "add_service.adding_service": "Füge Service hinzu: {service}...",
     "add_service.failed_service": "Service {service} konnte nicht hinzugefügt werden: {error}",
     "add_service.resolve_failed": "Service-Abhängigkeiten konnten nicht aufgelöst werden: {error}",

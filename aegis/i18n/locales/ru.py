@@ -313,6 +313,9 @@ MESSAGES: dict[str, str] = {
     # ── Ручной updater ─────────────────────────────────────────────────
     "updater.processing_files": "Обработка файлов компонентов: {count}...",
     "updater.updating_shared": "Обновление общих файлов шаблонов...",
+    "updater.shared_preserved": "Локальные изменения сохранены (перегенерация пропущена, объедините вручную): {file}",
+    "updater.shared_merged": "Изменения шаблона объединены с вашим настроенным файлом: {file}",
+    "updater.shared_conflict": "Конфликт слияния (маркеры записаны, разрешите вручную): {file}",
     "updater.running_postgen": "Выполнение пост-генерационных задач...",
     "updater.deps_synced": "Зависимости синхронизированы (uv sync)",
     "updater.code_formatted": "Код отформатирован (make fix)",
@@ -438,6 +441,7 @@ MESSAGES: dict[str, str] = {
     "add_service.failed_component": "Не удалось добавить компонент {component}: {error}",
     "add_service.added_files": "Добавлено файлов: {count}",
     "add_service.skipped_files": "Пропущено файлов: {count}",
+    "add_service.preserved_files": "Требуется ручная проверка общих файлов: {count} (см. сообщения выше)",
     "add_service.adding_service": "Добавление сервиса: {service}...",
     "add_service.failed_service": "Не удалось добавить сервис {service}: {error}",
     "add_service.resolve_failed": "Не удалось разрешить зависимости сервиса: {error}",

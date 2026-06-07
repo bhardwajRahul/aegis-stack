@@ -308,6 +308,9 @@ MESSAGES: dict[str, str] = {
     # ── Manual updater ─────────────────────────────────────────────────
     "updater.processing_files": "{count}개 컴포넌트 파일 처리 중...",
     "updater.updating_shared": "공유 템플릿 파일 업데이트 중...",
+    "updater.shared_preserved": "로컬 변경 사항을 보존했습니다 (재생성 건너뜀, 수동으로 병합하세요): {file}",
+    "updater.shared_merged": "템플릿 변경 사항을 사용자 지정 파일에 병합했습니다: {file}",
+    "updater.shared_conflict": "병합 충돌 (마커가 기록됨, 수동으로 해결하세요): {file}",
     "updater.running_postgen": "후처리 작업 실행 중...",
     "updater.deps_synced": "의존성 동기화 완료 (uv sync)",
     "updater.code_formatted": "코드 포맷팅 완료 (make fix)",
@@ -433,6 +436,7 @@ MESSAGES: dict[str, str] = {
     "add_service.failed_component": "컴포넌트 {component} 추가 실패: {error}",
     "add_service.added_files": "{count}개 파일 추가 완료",
     "add_service.skipped_files": "{count}개 기존 파일 건너뜀",
+    "add_service.preserved_files": "{count}개의 공유 파일은 수동 검토가 필요합니다 (위 메시지 참조)",
     "add_service.adding_service": "서비스 추가 중: {service}...",
     "add_service.failed_service": "서비스 {service} 추가 실패: {error}",
     "add_service.resolve_failed": "서비스 의존성 해결 실패: {error}",

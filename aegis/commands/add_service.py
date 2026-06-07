@@ -383,6 +383,11 @@ def add_service_command(
                     f"   Cleaned {len(result.files_deleted)} empty stub file(s)",
                     fg="cyan",
                 )
+            if result.shared_files_need_manual_merge:
+                typer.secho(
+                    f"   {t('add_service.preserved_files', count=len(result.shared_files_need_manual_merge))}",
+                    fg="yellow",
+                )
 
         # Now add each service sequentially
         for service in services_to_add:
@@ -477,6 +482,11 @@ def add_service_command(
                 typer.secho(
                     f"   Cleaned {len(result.files_deleted)} empty stub file(s)",
                     fg="cyan",
+                )
+            if result.shared_files_need_manual_merge:
+                typer.secho(
+                    f"   {t('add_service.preserved_files', count=len(result.shared_files_need_manual_merge))}",
+                    fg="yellow",
                 )
 
         # Generate migrations for services that need them

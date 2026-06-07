@@ -333,6 +333,9 @@ MESSAGES: dict[str, str] = {
     # ── Manual updater ─────────────────────────────────────────────────
     "updater.processing_files": "Procesando {count} archivos de componentes...",
     "updater.updating_shared": "Actualizando archivos de plantilla compartidos...",
+    "updater.shared_preserved": "Cambios locales conservados (regeneración omitida, combina manualmente): {file}",
+    "updater.shared_merged": "Cambios de plantilla combinados en tu archivo personalizado: {file}",
+    "updater.shared_conflict": "Conflicto de combinación (marcadores escritos, resuelve manualmente): {file}",
     "updater.running_postgen": "Ejecutando tareas post-generación...",
     "updater.deps_synced": "Dependencias sincronizadas (uv sync)",
     "updater.code_formatted": "Código formateado (make fix)",
@@ -462,6 +465,7 @@ MESSAGES: dict[str, str] = {
     "add_service.failed_component": "Error al agregar componente {component}: {error}",
     "add_service.added_files": "{count} archivos agregados",
     "add_service.skipped_files": "{count} archivos existentes omitidos",
+    "add_service.preserved_files": "{count} archivo(s) compartido(s) requieren revisión manual (ver mensajes arriba)",
     "add_service.adding_service": "Agregando servicio: {service}...",
     "add_service.failed_service": "Error al agregar servicio {service}: {error}",
     "add_service.resolve_failed": "Error al resolver dependencias de servicio: {error}",

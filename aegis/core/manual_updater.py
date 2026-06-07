@@ -8,6 +8,8 @@ and copies files to the target project.
 
 import shutil
 import subprocess
+import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +24,7 @@ from aegis.i18n import t
 from .component_files import get_component_files, get_copier_defaults, get_template_path
 from .copier_manager import is_copier_project, load_copier_answers
 from .plugins.template_resolver import get_plugin_template_root
+from .template_cleanup import merge_three_way_text
 from .verbosity import verbose_print
 
 # Constants
@@ -58,6 +61,30 @@ def _is_empty_stub(path: Path) -> bool:
         # UnicodeDecodeError: file is binary or non-UTF-8 — treat as
         # non-empty so we never mistake unreadable content for a stub.
         return False
+
+
+def _normalize_for_compare(text: str) -> str:
+    """Canonicalize text for divergence comparison.
+
+    Strips per-line trailing whitespace and trailing blank lines, and
+    normalizes line endings. This absorbs the only difference between a
+    file as Copier wrote it at init and the same file as
+    ``_render_template_file`` re-renders it: blank-line whitespace, which
+    differs because Copier and this module configure Jinja differently.
+    """
+    lines = text.replace("\r\n", "\n").split("\n")
+    return "\n".join(line.rstrip() for line in lines).rstrip("\n")
+
+
+def _ruff_executable() -> str | None:
+    """Locate a ruff binary, preferring the one in the running interpreter's
+    environment. ``ruff`` is a runtime dependency of aegis, so this is
+    normally present; returns None if it cannot be found (callers then bias
+    toward preserving the file rather than overwriting it)."""
+    candidate = Path(sys.executable).parent / "ruff"
+    if candidate.is_file():
+        return str(candidate)
+    return shutil.which("ruff")
 
 
 # Directories that should never be swept. Some contain authored content
@@ -630,6 +657,180 @@ class ManualUpdater:
 
         return env_vars
 
+    def _run_ruff(self, src: str, check_select: str | None) -> str | None:
+        """Run ruff over ``src`` and return the result, or None on any failure.
+
+        ``check_select`` controls the ``ruff check --fix`` step that runs
+        before ``ruff format``:
+          - ``""``  → check with the project's configured rule set (used for
+            equality comparison, where matching ``make fix`` exactly matters).
+          - a value like ``"I"`` → check with only those rules (used before a
+            merge, where we must NOT delete code — isort never removes).
+          - ``None`` → skip check entirely, format only.
+
+        The temp file lives in the project so ruff discovers the project's
+        ``[tool.ruff]`` config by walking up from the file's location.
+        """
+        ruff = _ruff_executable()
+        if ruff is None:
+            return None
+        tmp_path = ""
+        try:
+            with tempfile.NamedTemporaryFile(
+                "w",
+                suffix=".py",
+                dir=str(self.project_path),
+                delete=False,
+                encoding="utf-8",
+            ) as handle:
+                handle.write(src)
+                tmp_path = handle.name
+            steps: list[list[str]] = []
+            if check_select == "":
+                steps.append([ruff, "check", "--fix", "--quiet", tmp_path])
+            elif check_select is not None:
+                steps.append(
+                    [
+                        ruff,
+                        "check",
+                        "--fix",
+                        "--select",
+                        check_select,
+                        "--quiet",
+                        tmp_path,
+                    ]
+                )
+            steps.append([ruff, "format", "--quiet", tmp_path])
+            for args in steps:
+                proc = subprocess.run(
+                    args, cwd=str(self.project_path), capture_output=True, timeout=30
+                )
+                # ``ruff check --fix`` exits 1 when fixable issues remain after
+                # fixing (normal — e.g. unfixable lint rules); only >=2 is a
+                # real error (bad config, unreadable file). ``ruff format``
+                # exits non-zero only on error (e.g. unparseable input). Either
+                # way, bail to None so the caller preserves the file rather than
+                # acting on partially/unformatted output.
+                is_format = args[1] == "format"
+                if (is_format and proc.returncode != 0) or (
+                    not is_format and proc.returncode >= 2
+                ):
+                    return None
+            return Path(tmp_path).read_text()
+        except (OSError, subprocess.SubprocessError):
+            return None
+        finally:
+            if tmp_path:
+                Path(tmp_path).unlink(missing_ok=True)
+
+    def _ruff_normalize(self, src: str) -> str | None:
+        """Return ``src`` run through the project's full ruff (check --fix + format).
+
+        Used only to compare two snippets for *semantic* equality: applying
+        the same transformation to both sides cancels formatting-only
+        differences (import merging/sorting, quote style, line wrapping)
+        that ``make fix`` introduces but a user did not. Because the
+        transform is applied symmetrically, the exact ruff version is
+        irrelevant — only determinism matters. Result is never written to
+        disk, so the destructive rules (unused-import removal) are fine here.
+        """
+        return self._run_ruff(src, "")
+
+    def _ruff_format_safe(self, src: str) -> str | None:
+        """Normalize Python for *merging* without ever deleting code.
+
+        Runs ``ruff check --fix --select I`` (import sorting/merging only,
+        which never removes imports) then ``ruff format``. Unlike
+        :meth:`_ruff_normalize`, the output IS written to disk, so it must be
+        non-destructive — a full ``check --fix`` could strip an import the
+        file relies on indirectly. Neutralizes the dominant formatting noise
+        (whitespace, quotes, line wrapping, import grouping) so a 3-way merge
+        doesn't raise spurious conflicts.
+        """
+        return self._run_ruff(src, "I")
+
+    def _shared_file_is_pristine(self, output_path: Path, template_file: str) -> bool:
+        """Return True if ``output_path`` still matches the template default.
+
+        "Pristine" means the project hasn't hand-edited this shared file, so
+        it's safe to regenerate. The check renders the template for the
+        project's *current* configuration and compares it to the file on
+        disk, ignoring whitespace. For Python files that still differ, it
+        re-compares after normalizing both sides through ruff, so a file
+        that ``make fix`` reformatted (but nobody edited) is still
+        recognized as pristine. See issue #715.
+        """
+        baseline = self._render_template_file(template_file, self.answers)
+        if baseline is None:
+            # Can't establish a baseline — treat as diverged so we never
+            # overwrite a file we can't verify.
+            return False
+
+        existing = output_path.read_text()
+        if _normalize_for_compare(existing) == _normalize_for_compare(baseline):
+            return True
+
+        # Non-Python files have no formatter to look through: a remaining
+        # difference is a real edit.
+        if not output_path.name.endswith(".py"):
+            return False
+
+        existing_norm = self._ruff_normalize(existing)
+        baseline_norm = self._ruff_normalize(baseline)
+        if existing_norm is None or baseline_norm is None:
+            return False
+        return _normalize_for_compare(existing_norm) == _normalize_for_compare(
+            baseline_norm
+        )
+
+    def _merge_shared_file(
+        self, output_path: Path, template_file: str, content: str
+    ) -> str | None:
+        """3-way merge a diverged shared file in place (issue #715, Phase B).
+
+        Merges the template's change for this operation into the user's
+        edited file:
+          - base   = template render at the project's current answers
+          - ours   = template render at the updated answers (``content``)
+          - theirs = the file on disk
+
+        Python files are normalized through ruff first so formatting (not the
+        user) doesn't create spurious conflicts. Returns:
+          - ``"unchanged"`` → this operation doesn't change this file; left
+            untouched (nothing to merge).
+          - ``"merged"``   → clean merge written to disk.
+          - ``"conflict"`` → written with git-style conflict markers.
+          - ``None``       → merge could not run (git/ruff missing, no base);
+            the caller falls back to preserving the file untouched.
+        """
+        base = self._render_template_file(template_file, self.answers)
+        if base is None:
+            return None
+        if content == base:
+            # The template output for this file is identical before and after
+            # the operation — there's no change to merge, so don't touch the
+            # user's customized file at all.
+            return "unchanged"
+        theirs = output_path.read_text()
+        ours = content
+
+        if output_path.name.endswith(".py"):
+            theirs_n = self._ruff_format_safe(theirs)
+            base_n = self._ruff_format_safe(base)
+            ours_n = self._ruff_format_safe(ours)
+            if theirs_n is None or base_n is None or ours_n is None:
+                return None  # ruff unavailable — fall back to preserve
+            theirs, base, ours = theirs_n, base_n, ours_n
+
+        returncode, merged = merge_three_way_text(theirs, base, ours)
+        if returncode == 0:
+            output_path.write_text(merged)
+            return "merged"
+        if 1 <= returncode <= 127:
+            output_path.write_text(merged)
+            return "conflict"
+        return None  # git merge-file unavailable/errored — preserve instead
+
     def _regenerate_shared_files(
         self, updated_answers: dict[str, Any]
     ) -> tuple[list[str], list[str], list[str]]:
@@ -671,14 +872,41 @@ class ManualUpdater:
             if content is None:
                 continue  # Template not found
 
-            if policy.get("backup"):
-                # Create backup before overwriting
-                backup_path = output_path.with_suffix(output_path.suffix + ".backup")
-                shutil.copy(output_path, backup_path)
-                verbose_print(f"   Backed up: {shared_file}")
-                shared_files_backed_up.append(shared_file)
-
             if policy.get("overwrite"):
+                # Divergence guard (issue #715): regenerating a shared file
+                # means overwriting it with the template default. That is only
+                # safe when the project hasn't hand-edited it — otherwise the
+                # edit is silently destroyed. If the file has diverged, 3-way
+                # merge this operation's template change into the user's file
+                # (Phase B); fall back to preserving it untouched if the merge
+                # can't run.
+                if not self._shared_file_is_pristine(output_path, template_file):
+                    status = self._merge_shared_file(
+                        output_path, template_file, content
+                    )
+                    if status == "unchanged":
+                        # Operation doesn't touch this file; leave it as-is.
+                        continue
+                    if status == "merged":
+                        print(f"   {t('updater.shared_merged', file=shared_file)}")
+                        shared_files_updated.append(shared_file)
+                    elif status == "conflict":
+                        print(f"   {t('updater.shared_conflict', file=shared_file)}")
+                        shared_files_need_manual_merge.append(shared_file)
+                    else:
+                        print(f"   {t('updater.shared_preserved', file=shared_file)}")
+                        shared_files_need_manual_merge.append(shared_file)
+                    continue
+
+                if policy.get("backup"):
+                    # Create backup before overwriting
+                    backup_path = output_path.with_suffix(
+                        output_path.suffix + ".backup"
+                    )
+                    shutil.copy(output_path, backup_path)
+                    verbose_print(f"   Backed up: {shared_file}")
+                    shared_files_backed_up.append(shared_file)
+
                 # Regenerate with updated answers
                 output_path.write_text(content)
                 verbose_print(f"   Updated: {shared_file}")

@@ -252,6 +252,9 @@ MESSAGES: dict[str, str] = {
     # ── 手動更新器 ────────────────────────────────────────────────────
     "updater.processing_files": "正在處理 {count} 個檔案……",
     "updater.updating_shared": "正在更新共享模板檔案……",
+    "updater.shared_preserved": "已保留本機變更（已略過重新產生，請手動合併）：{file}",
+    "updater.shared_merged": "已將範本變更合併到你的自訂檔案中：{file}",
+    "updater.shared_conflict": "合併衝突（已寫入標記，請手動解決）：{file}",
     "updater.running_postgen": "正在執行生成後任務……",
     "updater.deps_synced": "依賴已同步（uv sync）",
     "updater.code_formatted": "代碼已格式化（make fix）",
@@ -354,6 +357,7 @@ MESSAGES: dict[str, str] = {
     "add_service.failed_component": "添加元件 {component} 失敗：{error}",
     "add_service.added_files": "添加了 {count} 個檔案",
     "add_service.skipped_files": "跳過了 {count} 個已有檔案",
+    "add_service.preserved_files": "{count} 個共用檔案需要手動檢查（見上方訊息）",
     "add_service.adding_service": "正在添加服務：{service}……",
     "add_service.failed_service": "添加服務 {service} 失敗：{error}",
     "add_service.resolve_failed": "服務依賴解析失敗：{error}",
