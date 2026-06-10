@@ -90,6 +90,55 @@ class TestRemoveCommand:
             project_path / "tests" / "components" / "test_scheduler.py"
         ).exists()
 
+    def test_remove_ai_deletes_gated_rag_voice_extras(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Removing a service deletes its option-gated extras, not just the add base.
+
+        ``rag`` / ``voice`` files live in the AI spec's ``extras`` (kept out of
+        the add base so init never writes empty stubs). The remove path uses
+        the full footprint (``get_component_files(..., full=True)``), so they
+        must be deleted too — otherwise they leak behind. This pins that
+        behavior end-to-end; before the manifest refactor these files survived
+        ``aegis remove ai``.
+        """
+        project_path = project_factory("ai_with_rag_voice")
+
+        # Representative gated-extra files (check files, not dirs — an emptied
+        # directory may linger; the behavior under test is file deletion).
+        rag_service = project_path / "app" / "services" / "rag" / "service.py"
+        rag_cli = project_path / "app" / "cli" / "rag.py"
+        rag_router = (
+            project_path
+            / "app"
+            / "components"
+            / "backend"
+            / "api"
+            / "rag"
+            / "router.py"
+        )
+        voice_router = (
+            project_path
+            / "app"
+            / "components"
+            / "backend"
+            / "api"
+            / "voice"
+            / "router.py"
+        )
+        for f in (rag_service, rag_cli, rag_router, voice_router):
+            assert f.exists(), f"precondition: {f.name} should be generated"
+
+        result = run_aegis_command(
+            "remove", "ai", "--project-path", str(project_path), "--yes"
+        )
+        assert result.success, f"Command failed: {result.stderr}"
+
+        # Full footprint deleted, including the gated rag/voice extras that the
+        # add base excludes.
+        for f in (rag_service, rag_cli, rag_router, voice_router):
+            assert not f.exists(), f"{f} should be deleted with the AI service"
+
     def test_remove_not_enabled_component(
         self, project_factory: "ProjectFactory"
     ) -> None:

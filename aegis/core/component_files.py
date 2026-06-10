@@ -11,7 +11,7 @@ from typing import Any
 
 import yaml
 
-from ..constants import AnswerKeys, ComponentNames, StorageBackends
+from ..constants import ComponentNames, StorageBackends
 
 # Constants
 PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
@@ -219,18 +219,41 @@ def _expand_directories_to_files(paths: list[str]) -> list[str]:
     return expanded_paths
 
 
+def _spec_extras(component: str) -> dict[str, list[str]]:
+    """Return the ``extras`` groups declared on a component/service spec."""
+    from .components import COMPONENTS
+    from .services import SERVICES
+
+    spec = COMPONENTS.get(component) or SERVICES.get(component)
+    return spec.files.extras if spec is not None else {}
+
+
 def get_component_files(
-    component: str, backend_variant: str | None = None
+    component: str, backend_variant: str | None = None, *, full: bool = False
 ) -> list[str]:
     """
     Get list of file paths that belong to a component.
 
-    Uses the centralized component file mapping from post_gen_tasks.py
-    to ensure consistency between generation and updates.
+    Derived from each spec's ``FileManifest`` via
+    :func:`aegis.core.post_gen_tasks.get_component_file_mapping`, so generation
+    and updates stay consistent.
+
+    The default (``full=False``) returns the *add base*: the spec's ``primary``
+    files, plus scheduler persistence files for database backends
+    (sqlite/postgres — the templates gate them on ``scheduler_backend !=
+    "memory"``). These render real content for the chosen options, so
+    ``aegis add`` never writes empty stubs.
+
+    With ``full=True`` it returns the *complete footprint*: ``primary`` plus
+    every ``extras`` group the spec owns (``ai_rag``, ``ai_voice``,
+    ``scheduler_persistence``, ...). Used by ``aegis remove`` so a component is
+    fully deleted regardless of which options were enabled; over-deletion is
+    safe because missing paths are no-ops.
 
     Args:
         component: Component name (e.g., "scheduler", "worker", "database")
         backend_variant: Optional backend variant (e.g., "memory", "sqlite") for scheduler
+        full: When True, include every gated extra group (remove footprint)
 
     Returns:
         List of file paths relative to project root
@@ -245,65 +268,28 @@ def get_component_files(
     from .post_gen_tasks import get_component_file_mapping
 
     mapping = get_component_file_mapping()
+    base = mapping.get(component, []).copy()
 
-    # Get base component files
-    component_files = mapping.get(component, []).copy()
+    if full:
+        # Remove path: complete footprint = primary + every gated extra group.
+        for extra_files in _spec_extras(component).values():
+            base.extend(extra_files)
+        return sorted(set(_expand_directories_to_files(base)))
 
-    # For scheduler, handle backend variants
-    if (
-        component == ComponentNames.SCHEDULER
-        and backend_variant == StorageBackends.SQLITE
-    ):
-        # Add persistence files for sqlite backend
-        persistence_files = mapping.get("scheduler_persistence", [])
-        component_files.extend(persistence_files)
+    if component == ComponentNames.SCHEDULER:
+        # Scheduler persistence files are gated on ``scheduler_backend !=
+        # memory``. On a database backend (sqlite/postgres) they render real
+        # content (add them); on the memory backend they render empty, so
+        # subtract them from the add base to avoid writing 0-byte stubs.
+        persistence = mapping.get("scheduler_persistence", [])
+        base_files = set(_expand_directories_to_files(base))
+        persistence_files = set(_expand_directories_to_files(persistence))
+        if backend_variant in (StorageBackends.SQLITE, StorageBackends.POSTGRES):
+            return sorted(base_files | persistence_files)
+        return sorted(base_files - persistence_files)
 
     # Expand directories to include all nested files
-    component_files = _expand_directories_to_files(component_files)
-
-    return sorted(set(component_files))
-
-
-def get_all_component_files() -> dict[str, list[str]]:
-    """
-    Get file mappings for all components.
-
-    Returns:
-        Dictionary mapping component names to their file paths
-
-    Example:
-        >>> files = get_all_component_files()
-        >>> files["scheduler"]
-        ['app/components/scheduler', 'app/entrypoints/scheduler.py', ...]
-    """
-    # List of known components and services (from copier.yml variables)
-    # Uses constants where available via ComponentNames and AnswerKeys
-    components = [
-        ComponentNames.SCHEDULER,
-        ComponentNames.WORKER,
-        ComponentNames.DATABASE,
-        AnswerKeys.SERVICE_AUTH,
-        AnswerKeys.SERVICE_AI,
-        AnswerKeys.SERVICE_BLOG,
-        ComponentNames.OBSERVABILITY,
-    ]
-
-    result: dict[str, list[str]] = {}
-
-    for component in components:
-        files = get_component_files(component)
-        if files:
-            result[component] = files
-
-    # Add scheduler backend variants
-    result["scheduler_memory"] = get_component_files(
-        ComponentNames.SCHEDULER, StorageBackends.MEMORY
-    )
-    result["scheduler_sqlite"] = get_component_files(
-        ComponentNames.SCHEDULER, StorageBackends.SQLITE
-    )
-
-    return result
+    return sorted(set(_expand_directories_to_files(base)))
 
 
 def get_service_files(service: str) -> list[str]:

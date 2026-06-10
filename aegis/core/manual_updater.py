@@ -28,7 +28,6 @@ from .template_cleanup import merge_three_way_text
 from .verbosity import verbose_print
 
 # Constants
-COPIER_ANSWERS_FILE = ".copier-answers.yml"
 COPIER_ANSWERS_HEADER = (
     "# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY\n"
 )
@@ -546,7 +545,10 @@ class ManualUpdater:
                 if component == ComponentNames.SCHEDULER
                 else None
             )
-            component_files = get_component_files(component, backend_variant)
+            # Removal deletes the complete footprint (primary + every gated
+            # extra), so option-specific files (auth org, AI rag/voice,
+            # scheduler persistence) don't leak behind.
+            component_files = get_component_files(component, backend_variant, full=True)
 
             # Delete each file
             deleted_paths: list[Path] = []
@@ -1229,7 +1231,7 @@ class ManualUpdater:
         """
         import yaml
 
-        answers_file = self.project_path / COPIER_ANSWERS_FILE
+        answers_file = self.project_path / AnswerKeys.ANSWERS_FILENAME
 
         # Preserve metadata
         answers_with_meta = {

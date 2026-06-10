@@ -7,6 +7,13 @@ Shared template files are files that:
 3. Need to be regenerated when components are added/removed
 
 This single source of truth ensures consistent behavior across all update mechanisms.
+
+Adding a shared file is one line: drop its path in ``_DEFAULT_POLICY_FILES``.
+Only files that must NOT use the default (overwrite + backup) policy need an
+explicit entry in ``_POLICY_OVERRIDES``. ``tests/cli/test_shared_files_completeness.py``
+renders a minimal and a maximal stack and fails if any stack-dependent file
+is missing here, so a forgotten file surfaces as a loud test failure naming
+the file rather than as silently stale config in generated projects.
 """
 
 from typing import TypedDict
@@ -20,125 +27,63 @@ class SharedFilePolicy(TypedDict):
     warn: bool  # Whether to warn user about manual merge needed
 
 
-# Master list of shared template files and their update policies
+# Default: regenerate the file, keeping a ``.backup`` first. Safe because the
+# updater 3-way merges any user edits before overwriting (see issue #715).
+DEFAULT_POLICY: SharedFilePolicy = {"overwrite": True, "backup": True, "warn": False}
+
+# Regenerate, but don't bother keeping a backup — these are derived/transient
+# files users don't hand-edit (health dispatchers, db init hook, .dockerignore).
+_NO_BACKUP: SharedFilePolicy = {"overwrite": True, "backup": False, "warn": False}
+
+# Never overwrite (not even a merge) — only warn. For files users routinely
+# customize with content the template can't reproduce (custom build steps).
+_WARN_ONLY: SharedFilePolicy = {"overwrite": False, "backup": False, "warn": True}
+
+
+# Shared files handled with the default overwrite + backup policy. One line each.
+_DEFAULT_POLICY_FILES: tuple[str, ...] = (
+    # ---- Infrastructure ----
+    "docker-compose.yml",
+    "docker-compose.dev.yml",
+    "docker-compose.prod.yml",
+    "pyproject.toml",
+    "Makefile",
+    # ---- Component/service registration (health checks, routes, cards) ----
+    "app/components/backend/startup/component_health.py",
+    "app/components/frontend/main.py",  # dashboard card imports
+    "app/components/frontend/dashboard/cards/__init__.py",  # card exports
+    "app/components/frontend/dashboard/cards/card_utils.py",  # modal_map entries
+    "app/components/frontend/dashboard/modals/__init__.py",  # modal exports
+    "app/components/backend/api/routing.py",  # conditional router includes
+    "app/components/backend/api/deps.py",  # conditional dependency providers
+    "app/components/backend/api/models.py",  # worker + scheduler API models
+    # ---- Core configuration with component-conditional content ----
+    "app/core/config.py",  # database settings, etc.
+    "app/services/system/health.py",  # component-specific health checks
+    "app/services/system/backup.py",  # database backup functionality
+    "tests/conftest.py",  # component-specific test fixtures
+    ".env.example",  # component configuration env vars
+)
+
+
+# Files needing a non-default policy.
+_POLICY_OVERRIDES: dict[str, SharedFilePolicy] = {
+    # Regenerate without a backup (derived/transient content).
+    ".dockerignore": _NO_BACKUP,
+    "app/services/system/health_db.py": _NO_BACKUP,  # db health dispatcher
+    "app/services/system/health_db_sqlite.py": _NO_BACKUP,
+    "app/services/system/health_db_postgres.py": _NO_BACKUP,
+    "app/components/backend/startup/database_init.py": _NO_BACKUP,
+    # Warn instead of touching — users add custom build steps here.
+    "Dockerfile": _WARN_ONLY,
+}
+
+
+# Master mapping consumed by the updater. Built from the two declarations above
+# so adding a file is a one-line change in the right list.
 SHARED_TEMPLATE_FILES: dict[str, SharedFilePolicy] = {
-    # ==========================================
-    # Infrastructure Files
-    # ==========================================
-    # These files configure the project infrastructure and should be
-    # automatically regenerated when components change.
-    "docker-compose.yml": {"overwrite": True, "backup": True, "warn": False},
-    "docker-compose.dev.yml": {"overwrite": True, "backup": True, "warn": False},
-    "docker-compose.prod.yml": {"overwrite": True, "backup": True, "warn": False},
-    "pyproject.toml": {"overwrite": True, "backup": True, "warn": False},
-    "Makefile": {"overwrite": True, "backup": True, "warn": False},
-    ".dockerignore": {"overwrite": True, "backup": False, "warn": False},
-    # ==========================================
-    # Component Registration Files
-    # ==========================================
-    # These files register components and services with the application.
-    # They MUST be regenerated when components are added to include
-    # the new component's health checks, routes, etc.
-    "app/components/backend/startup/component_health.py": {
-        "overwrite": True,
-        "backup": True,
-        "warn": False,
-    },
-    "app/components/frontend/main.py": {
-        "overwrite": True,
-        "backup": True,
-        "warn": False,
-    },  # Frontend dashboard card imports
-    "app/components/frontend/dashboard/cards/__init__.py": {
-        "overwrite": True,
-        "backup": True,
-        "warn": False,
-    },  # Card exports
-    "app/components/frontend/dashboard/cards/card_utils.py": {
-        "overwrite": True,
-        "backup": True,
-        "warn": False,
-    },  # Contains modal_map with conditional component entries
-    "app/components/frontend/dashboard/modals/__init__.py": {
-        "overwrite": True,
-        "backup": True,
-        "warn": False,
-    },  # Modal exports (conditional)
-    "app/components/backend/api/routing.py": {
-        "overwrite": True,
-        "backup": True,
-        "warn": False,
-    },  # Contains conditional router includes for services (auth, AI, etc.)
-    "app/components/backend/api/deps.py": {
-        "overwrite": True,
-        "backup": True,
-        "warn": False,
-    },  # Contains conditional dependency providers for services
-    "app/services/system/health_db.py": {
-        "overwrite": True,
-        "backup": False,
-        "warn": False,
-    },  # Database health check dispatcher (conditional on database engine)
-    "app/services/system/health_db_sqlite.py": {
-        "overwrite": True,
-        "backup": False,
-        "warn": False,
-    },  # SQLite health check (conditional on include_database)
-    "app/services/system/health_db_postgres.py": {
-        "overwrite": True,
-        "backup": False,
-        "warn": False,
-    },  # Postgres health check (conditional on include_database)
-    "app/components/backend/startup/database_init.py": {
-        "overwrite": True,
-        "backup": False,
-        "warn": False,
-    },  # Database init hook (conditional on include_database)
-    "app/components/backend/api/models.py": {
-        "overwrite": True,
-        "backup": True,
-        "warn": False,
-    },  # Contains worker and scheduler API models
-    # ==========================================
-    # Core Configuration Files
-    # ==========================================
-    # These files contain conditional logic for components (database settings,
-    # health checks, etc.) and must be regenerated when components change.
-    "app/core/config.py": {
-        "overwrite": True,
-        "backup": True,
-        "warn": False,
-    },  # Contains database settings (DATABASE_URL, etc.)
-    "app/services/system/health.py": {
-        "overwrite": True,
-        "backup": True,
-        "warn": False,
-    },  # Contains component-specific health checks (database, etc.)
-    "app/services/system/backup.py": {
-        "overwrite": True,
-        "backup": True,
-        "warn": False,
-    },  # Contains database backup functionality
-    "tests/conftest.py": {
-        "overwrite": True,
-        "backup": True,
-        "warn": False,
-    },  # Contains component-specific test fixtures (database, etc.)
-    # ==========================================
-    # User-Customizable Files
-    # ==========================================
-    # These files may be customized by users, so we warn instead of
-    # overwriting. Users must manually merge changes.
-    "Dockerfile": {
-        "overwrite": False,
-        "backup": False,
-        "warn": True,
-    },  # Users may add custom build steps
-    ".env.example": {
-        "overwrite": True,
-        "backup": True,
-        "warn": False,
-    },  # Contains component configuration (regenerated when components change)
+    **dict.fromkeys(_DEFAULT_POLICY_FILES, DEFAULT_POLICY),
+    **_POLICY_OVERRIDES,
 }
 
 

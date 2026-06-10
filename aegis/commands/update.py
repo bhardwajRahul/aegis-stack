@@ -63,29 +63,20 @@ def _detect_existing_features(target_path: Path) -> dict[str, bool]:
     only via ``data=`` and ``cleanup_components`` then re-read the stale
     answers and deleted service files anyway.
     """
+    from ..core.components import COMPONENTS
+    from ..core.services import SERVICES
+
     app = target_path / "app"
 
-    # Service directory presence → include_<service>
-    service_flags = {
-        "include_auth": app / "services" / "auth",
-        "include_ai": app / "services" / "ai",
-        "include_comms": app / "services" / "comms",
-        "include_insights": app / "services" / "insights",
-        "include_payment": app / "services" / "payment",
-    }
-
-    # Component directory/file presence → include_<component>
-    component_flags = {
-        "include_database": app / "core" / "db.py",
-        "include_redis": app / "components" / "redis",
-        "include_worker": app / "components" / "worker",
-        "include_scheduler": app / "components" / "scheduler",
-    }
-
+    # Marker presence → include_<name>, derived from each spec's
+    # ``marker_path`` (single source of truth — a new component/service with
+    # a marker is detectable on update automatically). Only ever sets True:
+    # an absent marker leaves the flag out so the caller's merge doesn't
+    # clobber an existing answer.
     detected: dict[str, bool] = {}
-    for flag, path in {**service_flags, **component_flags}.items():
-        if path.exists():
-            detected[flag] = True
+    for spec in [*SERVICES.values(), *COMPONENTS.values()]:
+        if spec.marker_path and (target_path / spec.marker_path).exists():
+            detected[AnswerKeys.include_key(spec.name)] = True
 
     # Insights sub-flags — the collector files alone aren't a reliable
     # signal because older template versions shipped them all
@@ -187,7 +178,7 @@ def _advance_copier_tracking(
     """
     import yaml
 
-    answers_file = project_path / ".copier-answers.yml"
+    answers_file = project_path / AnswerKeys.ANSWERS_FILENAME
     if not answers_file.exists():
         return
 
@@ -435,7 +426,7 @@ def update_command(
         # This is necessary because Copier's git detection only works reliably
         # when reading _src_path from the answers file, not when passed as src_path.
         if effective_template_path:
-            answers_file = target_path / ".copier-answers.yml"
+            answers_file = target_path / AnswerKeys.ANSWERS_FILENAME
             if answers_file.exists():
                 with open(answers_file) as f:
                     answers = yaml.safe_load(f) or {}
@@ -452,7 +443,7 @@ def update_command(
                 # Commit the updated answers (Copier requires clean repo)
                 try:
                     subprocess.run(
-                        ["git", "add", ".copier-answers.yml"],
+                        ["git", "add", AnswerKeys.ANSWERS_FILENAME],
                         cwd=target_path,
                         check=True,
                         capture_output=True,
@@ -494,7 +485,7 @@ def update_command(
         # See ``_detect_existing_features`` for full reasoning + scope.
         detected_flags = _detect_existing_features(target_path)
         if detected_flags:
-            answers_path = target_path / ".copier-answers.yml"
+            answers_path = target_path / AnswerKeys.ANSWERS_FILENAME
             if answers_path.exists():
                 with open(answers_path) as f:
                     current_answers = yaml.safe_load(f) or {}
@@ -522,7 +513,7 @@ def update_command(
                     # post-commit and abort with a clear message if not.
                     try:
                         subprocess.run(
-                            ["git", "add", ".copier-answers.yml"],
+                            ["git", "add", AnswerKeys.ANSWERS_FILENAME],
                             cwd=target_path,
                             check=True,
                             capture_output=True,
@@ -543,7 +534,12 @@ def update_command(
                         # nothing to commit too — that's harmless. Only
                         # abort if the answers file is actually dirty.
                         status = subprocess.run(
-                            ["git", "status", "--porcelain", ".copier-answers.yml"],
+                            [
+                                "git",
+                                "status",
+                                "--porcelain",
+                                AnswerKeys.ANSWERS_FILENAME,
+                            ],
                             cwd=target_path,
                             capture_output=True,
                             text=True,

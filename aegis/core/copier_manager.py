@@ -458,7 +458,7 @@ def generate_with_copier(
     # git+file:// URL. Manually overwriting _commit breaks Copier's 3-way merge
     # algorithm for updates. See: https://copier.readthedocs.io/en/stable/updating/
     try:
-        answers_file = project_path / ".copier-answers.yml"
+        answers_file = project_path / AnswerKeys.ANSWERS_FILENAME
         if answers_file.exists():
             with open(answers_file) as f:
                 answers = yaml.safe_load(f)
@@ -491,7 +491,7 @@ def generate_with_copier(
             # Commit the updated .copier-answers.yml
             try:
                 subprocess.run(
-                    ["git", "add", ".copier-answers.yml"],
+                    ["git", "add", AnswerKeys.ANSWERS_FILENAME],
                     cwd=project_path,
                     check=True,
                     capture_output=True,
@@ -529,7 +529,7 @@ def is_copier_project(project_path: Path) -> bool:
     Returns:
         True if project has .copier-answers.yml file
     """
-    answers_file = project_path / ".copier-answers.yml"
+    answers_file = project_path / AnswerKeys.ANSWERS_FILENAME
     return answers_file.exists()
 
 
@@ -547,7 +547,7 @@ def load_copier_answers(project_path: Path) -> dict[str, Any]:
         FileNotFoundError: If .copier-answers.yml doesn't exist
         yaml.YAMLError: If answers file is corrupted
     """
-    answers_file = project_path / ".copier-answers.yml"
+    answers_file = project_path / AnswerKeys.ANSWERS_FILENAME
 
     if not answers_file.exists():
         raise FileNotFoundError(

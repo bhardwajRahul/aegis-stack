@@ -5,6 +5,41 @@
   The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-06-08
+
+### Added
+
+- **Rolling deploys**: zero-downtime, code-only `aegis deploy --rolling`. The
+  webserver rolls over while still serving traffic and the worker queue is
+  paused so in-flight jobs drain cleanly before workers restart.
+- **Free-port auto-discovery for `make serve`**: picks an open host port instead
+  of failing with "address already in use" when the default is taken.
+- **CI/CD scaffolding in generated projects**: a GitHub Actions deploy workflow
+  generated out of the box.
+- **Scheduler**: run a scheduled job on demand from the project CLI, plus
+  scheduler fixes.
+- **Payment service**: Stripe-backed payment capability, with end-to-end tests.
+- **Performance middleware** in generated projects.
+
+### Changed
+
+- **`aegis update` is now idempotent**: after a clean update it advances the
+  copier baseline (`_commit` / `_template_version`) so a re-run is a no-op and
+  future updates don't re-apply changes that are already present.
+- `aegis update --to-version` accepts both PEP 440 (`0.7.0`) and tag (`v0.7.0`)
+  forms.
+- Dependency: typer bumped to 0.26.7.
+
+### Fixed
+
+- Rolling deploy no longer rolls back a slow-but-healthy webserver: the
+  docker-rollout wait is sized to the container's own healthcheck budget
+  (`-t`), not a fixed 60s wall clock.
+- `make serve` port detection no longer reports a busy port as free under load
+  (a timed-out probe is treated as in-use, not free).
+
+---
+
 ## [0.4.0] - 2025-12-07
 
 ### Added

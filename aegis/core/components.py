@@ -76,6 +76,9 @@ COMPONENTS: dict[str, ComponentSpec] = {
         description="Redis cache and message broker",
         docker_services=["redis"],
         pyproject_deps=["redis==5.0.8"],
+        # Redis ships no app/components/redis directory (it's docker config +
+        # dashboard widgets), so its always-generated card is the marker.
+        marker_path="app/components/frontend/dashboard/cards/redis_card.py",
         files=FileManifest(
             primary=[
                 "app/components/frontend/dashboard/cards/redis_card.py",
@@ -91,6 +94,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         pyproject_deps=["arq==0.25.0"],
         docker_services=["worker-system", "worker-load-test"],
         template_files=["app/components/worker/"],
+        marker_path="app/components/worker",
         files=FileManifest(
             # Mirrors cleanup_components() lines 316-333 (worker NOT enabled).
             # task_history_section.py is intentionally NOT here — cleanup
@@ -98,6 +102,9 @@ COMPONENTS: dict[str, ComponentSpec] = {
             primary=[
                 "app/components/worker",
                 "app/cli/load_test.py",
+                # Canonical name Pattern D renames the chosen backend's
+                # ``load_test_<backend>.py`` to at generation; it only exists
+                # in a generated project, not the template tree.
                 "app/services/load_test.py",
                 "app/services/load_test_models.py",
                 "app/services/load_test_workloads.py",
@@ -116,6 +123,9 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "tests/api/test_worker_endpoints.py",
                 "app/components/frontend/dashboard/cards/worker_card.py",
                 "app/components/frontend/dashboard/modals/worker_modal.py",
+                # Worker-only modal section (imported solely by worker_modal);
+                # part of the worker footprint so add/remove cover it.
+                "app/components/frontend/dashboard/modals/task_history_section.py",
             ],
         ),
     ),
@@ -126,6 +136,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         pyproject_deps=["apscheduler==3.10.4"],
         docker_services=["scheduler"],
         template_files=["app/components/scheduler.py", "app/entrypoints/scheduler.py"],
+        marker_path="app/components/scheduler",
         # job_execution history table (Postgres ``scheduler`` schema). Only
         # generated when scheduler_backend != memory — see
         # get_services_needing_migrations().
@@ -146,9 +157,28 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/components/frontend/dashboard/modals/scheduler_history_section.py",
                 "tests/services/test_scheduled_task_manager.py",
             ],
-            # scheduler persistence cleanup is option-driven
-            # (scheduler_backend == MEMORY), not a simple AnswerKey toggle —
-            # it stays inline in cleanup_components() for R1.
+            # Persistence files render empty when scheduler_backend == memory,
+            # so they are kept out of the always-on `primary` add base and
+            # added only for the sqlite backend (see get_component_files).
+            # They are part of the full footprint, so `aegis remove scheduler`
+            # deletes them. Init-time memory-backend cleanup stays inline in
+            # cleanup_components() (gated on scheduler_backend, not a toggle).
+            extras={
+                # Every file gated by ``scheduler_backend != "memory"``.
+                # Excluded from the memory add base (they would render empty),
+                # added for the sqlite backend, and always part of the full
+                # remove footprint. ``app/services/scheduler`` covers
+                # ``execution_log.py`` (also memory-gated) via dir expansion.
+                "scheduler_persistence": [
+                    "app/services/scheduler",
+                    "app/cli/tasks.py",
+                    "app/components/backend/api/scheduler.py",
+                    "tests/api/test_scheduler_endpoints.py",
+                    "tests/services/test_scheduled_task_manager.py",
+                    "tests/services/test_scheduler_execution_log.py",
+                    "tests/services/test_scheduler_executions_read.py",
+                ],
+            },
         ),
     ),
     "database": ComponentSpec(
@@ -158,6 +188,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         pyproject_deps=["sqlmodel>=0.0.14", "sqlalchemy>=2.0.0"],
         # Note: async driver (aiosqlite or asyncpg) selected based on database_type in copier.yml
         template_files=["app/core/db.py"],
+        marker_path="app/core/db.py",
         files=FileManifest(
             primary=[
                 "app/core/db.py",
@@ -172,6 +203,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         description="Traefik reverse proxy and load balancer",
         docker_services=["traefik"],
         recommended_components=["backend"],
+        marker_path="traefik",
         files=FileManifest(
             primary=[
                 "traefik",
@@ -186,6 +218,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         description="Logfire observability, tracing, and metrics",
         pyproject_deps=["logfire[fastapi,httpx]"],
         template_files=["app/components/backend/middleware/logfire_tracing.py"],
+        marker_path="app/components/backend/middleware/logfire_tracing.py",
         files=FileManifest(
             primary=[
                 "app/components/backend/middleware/logfire_tracing.py",

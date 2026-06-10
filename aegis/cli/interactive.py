@@ -6,7 +6,10 @@ used by CLI commands.
 """
 
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Protocol
 
 import questionary
 import typer
@@ -23,7 +26,12 @@ from ..constants import (
     WorkerBackends,
 )
 from ..core.components import COMPONENTS, CORE_COMPONENTS, ComponentSpec, ComponentType
-from ..core.services import SERVICES, ServiceType, get_services_by_type
+from ..core.services import (
+    SERVICE_TYPE_I18N_KEYS,
+    SERVICES,
+    ServiceType,
+    get_services_by_type,
+)
 from ..i18n import t
 
 
@@ -186,260 +194,330 @@ def get_interactive_infrastructure_components() -> list[ComponentSpec]:
     return sorted(infra_components, key=lambda x: x.name)
 
 
+@dataclass
+class ProjectSelection:
+    """Mutable selection state threaded through the init-flow steps.
+
+    Replaces the loose locals (and the positional 4-tuple they fed) so a
+    future wizard renderer (issue #487) can re-render, preview, or revisit
+    selections from one object instead of module globals.
+    """
+
+    components: list[str] = field(default_factory=list)
+    services: list[str] = field(default_factory=list)
+    scheduler_backend: str = StorageBackends.MEMORY
+    database_engine: str | None = None
+    database_added_by_scheduler: bool = False
+
+
+class SelectionUI(Protocol):
+    """Presentation seam for the init-flow selection engine.
+
+    Steps hold the selection rules and talk only to this protocol; the
+    renderer decides how a question looks. ``TyperSelectionUI`` is the
+    quick-setup renderer (one-line confirms); issue #487's guided wizard
+    is a second implementation (panels, learn-more) over the same steps.
+    """
+
+    def section(self, title: str, *, newline_before: bool = False) -> None: ...
+
+    def confirm(self, prompt: str, *, default: bool = True) -> bool: ...
+
+    def echo(self, message: str = "") -> None: ...
+
+    def success(self, message: str) -> None: ...
+
+    def choose_worker_backend(self) -> str: ...
+
+    def choose_database_engine(self, context: str) -> str: ...
+
+    def configure_auth(self, service_name: str) -> str: ...
+
+    def configure_ai(
+        self, service_name: str
+    ) -> tuple[str, str, list[str], bool, bool]: ...
+
+
+class TyperSelectionUI:
+    """Quick-setup renderer: plain Typer prompts, one line per question.
+
+    Delegates to the module-level prompt helpers via call-time global
+    lookup so existing test patches (``typer.confirm``,
+    ``select_worker_backend``, ...) keep working unchanged.
+    """
+
+    def section(self, title: str, *, newline_before: bool = False) -> None:
+        Messages.print_section_header(title, newline_before=newline_before)
+
+    def confirm(self, prompt: str, *, default: bool = True) -> bool:
+        return typer.confirm(prompt, default=default)
+
+    def echo(self, message: str = "") -> None:
+        typer.echo(message)
+
+    def success(self, message: str) -> None:
+        typer.secho(message, fg="green")
+
+    def choose_worker_backend(self) -> str:
+        return select_worker_backend()
+
+    def choose_database_engine(self, context: str) -> str:
+        return select_database_engine(context=context)
+
+    def configure_auth(self, service_name: str) -> str:
+        return interactive_auth_service_config(service_name)
+
+    def configure_ai(self, service_name: str) -> tuple[str, str, list[str], bool, bool]:
+        return interactive_ai_service_config(service_name)
+
+
+def _step_worker(spec: ComponentSpec, state: ProjectSelection, ui: SelectionUI) -> None:
+    """Worker prompt; bundles redis (hard dependency) when not yet selected."""
+    desc = _translated_desc(spec.name, spec.description)
+    redis_selected = ComponentNames.REDIS in state.components
+    prompt_key = (
+        "interactive.add_prompt" if redis_selected else "interactive.add_with_redis"
+    )
+    if not ui.confirm(f"  {t(prompt_key, description=desc)}"):
+        return
+
+    backend = ui.choose_worker_backend()
+    worker = (
+        ComponentNames.WORKER
+        if backend == WorkerBackends.ARQ
+        else f"{ComponentNames.WORKER}[{backend}]"
+    )
+    if not redis_selected:
+        state.components.append(ComponentNames.REDIS)
+    state.components.append(worker)
+    ui.success(t("interactive.worker_configured", backend=backend))
+
+
+def _step_scheduler(
+    spec: ComponentSpec, state: ProjectSelection, ui: SelectionUI
+) -> None:
+    """Scheduler prompt with the persistence mini-wizard (engine + database)."""
+    desc = _translated_desc(spec.name, spec.description)
+    if not ui.confirm(f"  {t('interactive.add_prompt', description=desc)}"):
+        return
+
+    state.components.append(ComponentNames.SCHEDULER)
+
+    ui.echo(f"\n{t('interactive.scheduler_persistence')}")
+    if ui.confirm(f"  {t('interactive.persist_prompt')}"):
+        engine = ui.choose_database_engine("Scheduler")
+        if engine == StorageBackends.POSTGRES:
+            state.components.append(
+                f"{ComponentNames.DATABASE}[{StorageBackends.POSTGRES}]"
+            )
+        else:
+            state.components.append(ComponentNames.DATABASE)
+        state.database_engine = engine
+        state.database_added_by_scheduler = True
+        state.scheduler_backend = engine
+        ui.success(t("interactive.scheduler_db_configured", engine=engine.upper()))
+
+        # Bonus backup job only applies once a database is in the mix.
+        ui.echo(f"\n{t('interactive.bonus_backup')}")
+        ui.success(t("interactive.backup_desc"))
+
+    ui.echo()  # Extra spacing after scheduler section
+
+
+def _step_database(
+    spec: ComponentSpec, state: ProjectSelection, ui: SelectionUI
+) -> None:
+    """Database prompt; skipped when the scheduler step already added one."""
+    if state.database_added_by_scheduler:
+        return
+
+    desc = _translated_desc(spec.name, spec.description)
+    if not ui.confirm(f"  {t('interactive.add_prompt', description=desc)}"):
+        return
+
+    state.components.append(ComponentNames.DATABASE)
+    if ComponentNames.SCHEDULER in state.components:
+        ui.echo(f"\n{t('interactive.bonus_backup')}")
+        ui.success(t("interactive.backup_desc"))
+
+
+def _step_generic_component(
+    spec: ComponentSpec, state: ProjectSelection, ui: SelectionUI
+) -> None:
+    """Plain confirm-and-add for components without special rules."""
+    desc = _translated_desc(spec.name, spec.description)
+    if ui.confirm(f"  {t('interactive.add_prompt', description=desc)}"):
+        state.components.append(spec.name)
+
+
+ComponentStep = Callable[[ComponentSpec, ProjectSelection, SelectionUI], None]
+
+# Components with selection rules beyond confirm-and-add. Anything not
+# listed gets the generic step.
+_COMPONENT_STEPS: dict[str, ComponentStep] = {
+    ComponentNames.WORKER: _step_worker,
+    ComponentNames.SCHEDULER: _step_scheduler,
+    ComponentNames.DATABASE: _step_database,
+}
+
+
+def run_project_selection(ui: SelectionUI) -> ProjectSelection:
+    """Drive the init-flow selection steps against the given renderer.
+
+    Holds all selection rules; ``ui`` decides presentation only. Returns
+    the populated ``ProjectSelection`` (components carry bracket syntax,
+    e.g. ``scheduler[sqlite]``, exactly as the resolvers expect).
+    """
+    state = ProjectSelection()
+
+    ui.section(t("interactive.component_selection"))
+    ui.success(
+        t("interactive.core_included", components=" + ".join(CORE_COMPONENTS)) + "\n"
+    )
+    ui.echo(t("interactive.infra_header"))
+
+    # Process components in registry order to handle dependencies.
+    for component_name in ComponentNames.INFRASTRUCTURE_ORDER:
+        spec = COMPONENTS.get(component_name)
+        if spec is None or spec.type != ComponentType.INFRASTRUCTURE:
+            continue
+        step = _COMPONENT_STEPS.get(component_name, _step_generic_component)
+        step(spec, state, ui)
+
+    # Rewrite plain names with engine/backend bracket info for display
+    # and downstream resolution.
+    if ComponentNames.DATABASE in state.components and state.database_engine:
+        db_index = state.components.index(ComponentNames.DATABASE)
+        state.components[db_index] = (
+            f"{ComponentNames.DATABASE}[{state.database_engine}]"
+        )
+    if (
+        ComponentNames.SCHEDULER in state.components
+        and state.scheduler_backend != StorageBackends.MEMORY
+    ):
+        scheduler_index = state.components.index(ComponentNames.SCHEDULER)
+        state.components[scheduler_index] = (
+            f"{ComponentNames.SCHEDULER}[{state.scheduler_backend}]"
+        )
+
+    # Service selection
+    if SERVICES:  # Only show services if any are available
+        ui.section(t("interactive.service_selection"), newline_before=True)
+        ui.echo(t("interactive.services_intro") + "\n")
+        _step_auth_services(state, ui)
+        _step_ai_services(state, ui)
+        _step_content_services(state, ui)
+
+    return state
+
+
+def _step_auth_services(state: ProjectSelection, ui: SelectionUI) -> None:
+    """Auth prompts: level configuration plus the database confirmation."""
+    auth_services = get_services_by_type(ServiceType.AUTH)
+    if not auth_services:
+        return
+
+    ui.echo(t("interactive.auth_header"))
+    for service_name, service_spec in auth_services.items():
+        desc = _translated_desc(service_name, service_spec.description)
+        if not ui.confirm(f"  {t('interactive.add_prompt', description=desc)}"):
+            continue
+
+        # Prompt for auth level first
+        level = ui.configure_auth(service_name)
+
+        # Auth service requires database - provide explicit confirmation
+        ui.echo(f"\n{t('interactive.auth_db_required')}")
+        ui.echo(f"  {t('interactive.auth_db_reason')}")
+        ui.echo(f"  {t('interactive.auth_db_details')}")
+
+        # Substring check on purpose: catches "database[postgres]" too.
+        database_already_selected = any(
+            ComponentNames.DATABASE in comp for comp in state.components
+        )
+        if database_already_selected:
+            ui.success(t("interactive.auth_db_already"))
+        elif not ui.confirm(f"  {t('interactive.auth_db_confirm')}"):
+            ui.echo(t("interactive.auth_cancelled"))
+            continue
+
+        state.services.append(f"{service_name}[{level}]")
+
+        # Note: Database will be auto-added by service resolution in init.py
+        if not database_already_selected:
+            ui.success(t("interactive.auth_db_configured"))
+
+
+def _step_ai_services(state: ProjectSelection, ui: SelectionUI) -> None:
+    """AI prompts: full configuration plus database auto-add for db backends."""
+    ai_services = get_services_by_type(ServiceType.AI)
+    if not ai_services:
+        return
+
+    ui.echo(f"\n{t('interactive.ai_header')}")
+    for service_name, service_spec in ai_services.items():
+        desc = _translated_desc(service_name, service_spec.description)
+        if not ui.confirm(f"  {t('interactive.add_prompt', description=desc)}"):
+            continue
+
+        backend, framework, providers, rag_enabled, voice_enabled = ui.configure_ai(
+            service_name
+        )
+
+        # Handle database auto-add for database backends
+        if backend in (StorageBackends.SQLITE, StorageBackends.POSTGRES):
+            database_already_selected = any(
+                ComponentNames.DATABASE in comp for comp in state.components
+            )
+            if database_already_selected:
+                ui.success(f"  {t('interactive.ai_db_already')}")
+            else:
+                state.components.append(f"{ComponentNames.DATABASE}[{backend}]")
+                ui.success(f"  {t('interactive.ai_db_added', backend=backend)}")
+
+        # Bracket syntax for TemplateGenerator:
+        # ai[backend,framework,provider1,...,rag,voice]
+        options = [backend, framework] + providers
+        if rag_enabled:
+            options.append("rag")
+        if voice_enabled:
+            options.append("voice")
+        state.services.append(f"{service_name}[{','.join(options)}]")
+        ui.success(t("interactive.ai_configured"))
+
+
+def _step_content_services(state: ProjectSelection, ui: SelectionUI) -> None:
+    """Plain confirm-and-add for content services."""
+    content_services = get_services_by_type(ServiceType.CONTENT)
+    if not content_services:
+        return
+
+    ui.echo(f"\n{t('services.type_content')}")
+    for service_name, service_spec in content_services.items():
+        desc = _translated_desc(service_name, service_spec.description)
+        if ui.confirm(f"  {t('interactive.add_prompt', description=desc)}"):
+            state.services.append(service_name)
+
+
 def interactive_project_selection() -> tuple[list[str], str, list[str], bool]:
     """
     Interactive project selection with component and service options.
 
+    Thin Typer-rendered wrapper over ``run_project_selection`` — the
+    selection rules live in the step functions, shared with any other
+    ``SelectionUI`` renderer.
+
     Returns:
         Tuple of (selected_components, scheduler_backend, selected_services, skip_llm_sync)
     """
-
-    Messages.print_section_header(t("interactive.component_selection"))
-    typer.secho(
-        t("interactive.core_included", components=" + ".join(CORE_COMPONENTS)) + "\n",
-        fg="green",
+    state = run_project_selection(TyperSelectionUI())
+    # skip_llm_sync is recorded in module state during AI configuration.
+    return (
+        state.components,
+        state.scheduler_backend,
+        state.services,
+        get_skip_llm_sync_selection(),
     )
-
-    selected = []
-    database_engine = None  # Track database engine selection
-    database_added_by_scheduler = False  # Track if database was added by scheduler
-    scheduler_backend = StorageBackends.MEMORY
-
-    # Get all infrastructure components from registry
-    infra_components = get_interactive_infrastructure_components()
-
-    typer.echo(t("interactive.infra_header"))
-
-    # Process components in a specific order to handle dependencies
-    component_order = ComponentNames.INFRASTRUCTURE_ORDER
-
-    for component_name in component_order:
-        # Find the component spec
-        component_spec = next(
-            (c for c in infra_components if c.name == component_name), None
-        )
-        if not component_spec:
-            continue  # Skip if component doesn't exist in registry
-
-        # Handle special worker dependency logic
-        if component_name == ComponentNames.WORKER:
-            if ComponentNames.REDIS in selected:
-                # Redis already selected, simple worker prompt
-                desc = _translated_desc(component_name, component_spec.description)
-                prompt = f"  {t('interactive.add_prompt', description=desc)}"
-                if typer.confirm(prompt, default=True):
-                    backend = select_worker_backend()
-                    if backend == WorkerBackends.ARQ:
-                        selected.append(ComponentNames.WORKER)
-                    else:
-                        selected.append(f"{ComponentNames.WORKER}[{backend}]")
-                    typer.secho(
-                        t("interactive.worker_configured", backend=backend),
-                        fg="green",
-                    )
-            else:
-                # Redis not selected, offer to add both
-                desc = _translated_desc(component_name, component_spec.description)
-                prompt = f"  {t('interactive.add_with_redis', description=desc)}"
-                if typer.confirm(prompt, default=True):
-                    backend = select_worker_backend()
-                    if backend == WorkerBackends.ARQ:
-                        selected.extend([ComponentNames.REDIS, ComponentNames.WORKER])
-                    else:
-                        selected.extend(
-                            [
-                                ComponentNames.REDIS,
-                                f"{ComponentNames.WORKER}[{backend}]",
-                            ]
-                        )
-                    typer.secho(
-                        t("interactive.worker_configured", backend=backend),
-                        fg="green",
-                    )
-        elif component_name == ComponentNames.SCHEDULER:
-            # Enhanced scheduler selection with persistence and database options
-            desc = _translated_desc(component_name, component_spec.description)
-            prompt = f"  {t('interactive.add_prompt', description=desc)}"
-            if typer.confirm(prompt, default=True):
-                selected.append(ComponentNames.SCHEDULER)
-
-                # Follow-up: persistence question
-                typer.echo(f"\n{t('interactive.scheduler_persistence')}")
-                persistence_prompt = f"  {t('interactive.persist_prompt')}"
-                if typer.confirm(persistence_prompt, default=True):
-                    # Database engine selection with arrow keys
-                    database_engine = select_database_engine(context="Scheduler")
-
-                    if database_engine == StorageBackends.POSTGRES:
-                        selected.append(
-                            f"{ComponentNames.DATABASE}[{StorageBackends.POSTGRES}]"
-                        )
-                    else:
-                        selected.append(ComponentNames.DATABASE)
-
-                    database_added_by_scheduler = True
-                    scheduler_backend = database_engine
-                    typer.secho(
-                        t(
-                            "interactive.scheduler_db_configured",
-                            engine=database_engine.upper(),
-                        ),
-                        fg="green",
-                    )
-
-                    # Show bonus backup job message only when database is added
-                    typer.echo(f"\n{t('interactive.bonus_backup')}")
-                    typer.secho(
-                        t("interactive.backup_desc"),
-                        fg="green",
-                    )
-
-                typer.echo()  # Extra spacing after scheduler section
-        elif component_name == ComponentNames.DATABASE:
-            # Skip generic database prompt if already added by scheduler
-            if database_added_by_scheduler:
-                continue
-
-            # Standard database prompt (when not added by scheduler)
-            desc = _translated_desc(component_name, component_spec.description)
-            prompt = f"  {t('interactive.add_prompt', description=desc)}"
-            if typer.confirm(prompt, default=True):
-                selected.append(ComponentNames.DATABASE)
-
-                # Show bonus backup job message when database added with scheduler
-                if ComponentNames.SCHEDULER in selected:
-                    typer.echo(f"\n{t('interactive.bonus_backup')}")
-                    typer.secho(
-                        t("interactive.backup_desc"),
-                        fg="green",
-                    )
-        else:
-            # Standard prompt for other components
-            desc = _translated_desc(component_name, component_spec.description)
-            prompt = f"  {t('interactive.add_prompt', description=desc)}"
-            if typer.confirm(prompt, default=True):
-                selected.append(component_name)
-
-    # Update selected list with engine info for display
-    if ComponentNames.DATABASE in selected and database_engine:
-        # Replace "database" with formatted version for display
-        db_index = selected.index(ComponentNames.DATABASE)
-        selected[db_index] = f"{ComponentNames.DATABASE}[{database_engine}]"
-
-    # Update scheduler with backend info if not memory
-    if (
-        ComponentNames.SCHEDULER in selected
-        and scheduler_backend != StorageBackends.MEMORY
-    ):
-        scheduler_index = selected.index(ComponentNames.SCHEDULER)
-        selected[scheduler_index] = f"{ComponentNames.SCHEDULER}[{scheduler_backend}]"
-
-    # Service selection
-    selected_services = []
-
-    if SERVICES:  # Only show services if any are available
-        Messages.print_section_header(
-            t("interactive.service_selection"), newline_before=True
-        )
-        typer.echo(t("interactive.services_intro") + "\n")
-
-        # Group services by type for better organization
-        auth_services = get_services_by_type(ServiceType.AUTH)
-
-        if auth_services:
-            typer.echo(t("interactive.auth_header"))
-            for service_name, service_spec in auth_services.items():
-                desc = _translated_desc(service_name, service_spec.description)
-                prompt = f"  {t('interactive.add_prompt', description=desc)}"
-                if typer.confirm(prompt, default=True):
-                    # Prompt for auth level first
-                    level = interactive_auth_service_config(service_name)
-
-                    # Auth service requires database - provide explicit confirmation
-                    typer.echo(f"\n{t('interactive.auth_db_required')}")
-                    typer.echo(f"  {t('interactive.auth_db_reason')}")
-                    typer.echo(f"  {t('interactive.auth_db_details')}")
-
-                    # Check if database is already selected
-                    database_already_selected = any(
-                        ComponentNames.DATABASE in comp for comp in selected
-                    )
-
-                    if database_already_selected:
-                        typer.secho(t("interactive.auth_db_already"), fg="green")
-                    else:
-                        auth_confirm_prompt = f"  {t('interactive.auth_db_confirm')}"
-                        if not typer.confirm(auth_confirm_prompt, default=True):
-                            typer.echo(t("interactive.auth_cancelled"))
-                            continue
-
-                    # Build auth service string with bracket syntax
-                    service_string = f"{service_name}[{level}]"
-                    selected_services.append(service_string)
-
-                    # Note: Database will be auto-added by service resolution in init.py
-                    if not database_already_selected:
-                        typer.secho(t("interactive.auth_db_configured"), fg="green")
-
-        # AI & Machine Learning Services
-        ai_services = get_services_by_type(ServiceType.AI)
-
-        if ai_services:
-            typer.echo(f"\n{t('interactive.ai_header')}")
-            for service_name, service_spec in ai_services.items():
-                desc = _translated_desc(service_name, service_spec.description)
-                prompt = f"  {t('interactive.add_prompt', description=desc)}"
-                if typer.confirm(prompt, default=True):
-                    # AI service requires backend (always available) - no dependency issues
-                    # Use the reusable AI configuration function
-                    backend, framework, providers, rag_enabled, voice_enabled = (
-                        interactive_ai_service_config(service_name)
-                    )
-
-                    # Handle database auto-add for database backends
-                    if backend in (StorageBackends.SQLITE, StorageBackends.POSTGRES):
-                        database_already_selected = any(
-                            ComponentNames.DATABASE in comp for comp in selected
-                        )
-
-                        if database_already_selected:
-                            typer.secho(
-                                f"  {t('interactive.ai_db_already')}",
-                                fg="green",
-                            )
-                        else:
-                            selected.append(f"{ComponentNames.DATABASE}[{backend}]")
-                            typer.secho(
-                                f"  {t('interactive.ai_db_added', backend=backend)}",
-                                fg="green",
-                            )
-
-                    # Build AI service string with bracket syntax for TemplateGenerator
-                    # Format: ai[backend,framework,provider1,provider2,...,rag]
-                    options = [backend, framework] + providers
-                    if rag_enabled:
-                        options.append("rag")
-                    if voice_enabled:
-                        options.append("voice")
-                    service_string = f"{service_name}[{','.join(options)}]"
-                    selected_services.append(service_string)
-                    typer.secho(t("interactive.ai_configured"), fg="green")
-
-        # Future service types can be added here as they become available
-        # payment_services = get_services_by_type(ServiceType.PAYMENT)
-        content_services = get_services_by_type(ServiceType.CONTENT)
-        if content_services:
-            typer.echo(f"\n{t('services.type_content')}")
-            for service_name, service_spec in content_services.items():
-                desc = _translated_desc(service_name, service_spec.description)
-                prompt = f"  {t('interactive.add_prompt', description=desc)}"
-                if typer.confirm(prompt, default=True):
-                    selected_services.append(service_name)
-
-    # Get skip_llm_sync from global selection (set during AI service config)
-    skip_llm_sync = get_skip_llm_sync_selection()
-
-    return selected, scheduler_backend, selected_services, skip_llm_sync
 
 
 def get_ai_provider_selection(service_name: str = "ai") -> list[str]:
@@ -1095,6 +1173,20 @@ def interactive_component_remove_selection(project_path: Path) -> list[str]:
     return selected
 
 
+def _configure_auth_service_add(service_name: str) -> str:
+    """Prompt for auth level and return the ``auth[<level>]`` string."""
+    level = interactive_auth_service_config(service_name)
+    return f"{service_name}[{level}]"
+
+
+# Per-service interactive configurators for the add flow. A service listed
+# here gets its options prompted on acceptance and contributes the returned
+# bracket string; unlisted services are added by plain name.
+_SERVICE_ADD_CONFIGURATORS: dict[str, Callable[[str], str]] = {
+    AnswerKeys.SERVICE_AUTH: _configure_auth_service_add,
+}
+
+
 def interactive_service_selection(project_path: Path) -> list[str]:
     """
     Interactive service selection for adding to existing project.
@@ -1141,112 +1233,31 @@ def interactive_service_selection(project_path: Path) -> list[str]:
             typer.secho(f"  {service_name}: {service_spec.description}", fg="green")
         typer.echo()
 
-    # Show available services grouped by type
-    selected_services = []
+    # Show available services grouped by type, in ServiceType declaration
+    # order. Derived from the registry: a new service (or service type) is
+    # offered here automatically instead of needing another copy-pasted
+    # branch — the hand-written branches this replaced covered only
+    # AUTH/AI/PAYMENT/CONTENT, so comms and insights were never offered.
+    selected_services: list[str] = []
+    first_header = True
 
-    # Authentication Services
-    auth_services = get_services_by_type(ServiceType.AUTH)
-    if auth_services:
-        typer.echo("Authentication Services:")
-        for service_name, service_spec in auth_services.items():
+    for service_type in ServiceType:
+        type_services = get_services_by_type(service_type)
+        if not type_services:
+            continue
+
+        if not first_header:
+            typer.echo()
+        typer.echo(f"{t(SERVICE_TYPE_I18N_KEYS[service_type])}:")
+        first_header = False
+
+        for service_name, service_spec in type_services.items():
             # Skip if already enabled
             if service_name in enabled_services:
                 typer.secho(f"  {service_name} - Already enabled", fg="green")
                 continue
 
             # Check component requirements
-            missing_components = [
-                comp
-                for comp in service_spec.required_components
-                if comp not in enabled_components
-            ]
-
-            if missing_components:
-                requirement_text = f" (will auto-add: {', '.join(missing_components)})"
-            else:
-                requirement_text = ""
-
-            prompt = f"  Add {service_spec.description.lower()}{requirement_text}?"
-            if typer.confirm(prompt, default=True):
-                # Prompt for auth level
-                level = interactive_auth_service_config(service_name)
-                service_string = f"{service_name}[{level}]"
-                selected_services.append(service_string)
-
-                if missing_components:
-                    typer.echo(
-                        f"    Required components will be added: {', '.join(missing_components)}"
-                    )
-
-    # AI & Machine Learning Services
-    ai_services = get_services_by_type(ServiceType.AI)
-    if ai_services:
-        typer.echo("\nAI & Machine Learning Services:")
-        for service_name, service_spec in ai_services.items():
-            # Skip if already enabled
-            if service_name in enabled_services:
-                typer.secho(f"  {service_name} - Already enabled", fg="green")
-                continue
-
-            # Check component requirements
-            missing_components = [
-                comp
-                for comp in service_spec.required_components
-                if comp not in enabled_components
-            ]
-
-            if missing_components:
-                requirement_text = f" (will auto-add: {', '.join(missing_components)})"
-            else:
-                requirement_text = ""
-
-            prompt = f"  Add {service_spec.description.lower()}{requirement_text}?"
-            if typer.confirm(prompt, default=True):
-                selected_services.append(service_name)
-
-                if missing_components:
-                    typer.echo(
-                        f"    Required components will be added: {', '.join(missing_components)}"
-                    )
-
-    # Payment Services (when they exist)
-    payment_services = get_services_by_type(ServiceType.PAYMENT)
-    if payment_services:
-        typer.echo("\nPayment Services:")
-        for service_name, service_spec in payment_services.items():
-            if service_name in enabled_services:
-                typer.secho(f"  {service_name} - Already enabled", fg="green")
-                continue
-
-            missing_components = [
-                comp
-                for comp in service_spec.required_components
-                if comp not in enabled_components
-            ]
-
-            requirement_text = (
-                f" (will auto-add: {', '.join(missing_components)})"
-                if missing_components
-                else ""
-            )
-
-            prompt = f"  Add {service_spec.description.lower()}{requirement_text}?"
-            if typer.confirm(prompt, default=True):
-                selected_services.append(service_name)
-
-                if missing_components:
-                    typer.echo(
-                        f"    Required components will be added: {', '.join(missing_components)}"
-                    )
-
-    content_services = get_services_by_type(ServiceType.CONTENT)
-    if content_services:
-        typer.echo("\nContent Services:")
-        for service_name, service_spec in content_services.items():
-            if service_name in enabled_services:
-                typer.secho(f"  {service_name} - Already enabled", fg="green")
-                continue
-
             missing_components = [
                 comp
                 for comp in service_spec.required_components
@@ -1259,13 +1270,20 @@ def interactive_service_selection(project_path: Path) -> list[str]:
             )
 
             prompt = f"  Add {service_spec.description.lower()}{requirement_text}?"
-            if typer.confirm(prompt, default=True):
-                selected_services.append(service_name)
+            if not typer.confirm(prompt, default=True):
+                continue
 
-                if missing_components:
-                    typer.echo(
-                        f"    Required components will be added: {', '.join(missing_components)}"
-                    )
+            # Services with an interactive configurator (auth's level prompt)
+            # contribute a bracket string; everything else its plain name.
+            configure = _SERVICE_ADD_CONFIGURATORS.get(service_name)
+            selected_services.append(
+                configure(service_name) if configure else service_name
+            )
+
+            if missing_components:
+                typer.echo(
+                    f"    Required components will be added: {', '.join(missing_components)}"
+                )
 
     return selected_services
 
