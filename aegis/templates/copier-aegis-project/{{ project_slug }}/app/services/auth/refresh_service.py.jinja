@@ -7,9 +7,15 @@ Rotation invariants:
   sharing the same ``family_id``. All persistence is committed by the
   service methods themselves — callers don't need to commit.
 - A refresh arriving with a row that is **already** revoked
-  (``revoked_at IS NOT NULL``) is a replay. ``rotate`` revokes every
-  other live row in that family and returns ``None`` so the caller
-  can 401 + force re-auth.
+  (``revoked_at IS NOT NULL``) is read two ways. Within
+  ``REUSE_GRACE_SECONDS`` of the revocation it's a benign race —
+  parallel requests from the same browser carrying the same cookie
+  raced rotation (a page fires many fetches at once when the access
+  token expires; without the grace, sibling #2 would "replay" the
+  token sibling #1 just rotated and nuke the session). The racer
+  gets the family's already-minted successor. After the grace it's a
+  replay: ``rotate`` revokes every live row in that family and returns
+  ``None`` so the caller can 401 + force re-auth.
 - An expired row is treated as just "not valid"; no family revocation.
   (Expiration is normal; replay is suspicious.)
 
@@ -36,6 +42,14 @@ from app.models.refresh_token import RefreshToken
 # older than this are deleted; revoked rows stay visible for that grace
 # window so audit / forensic queries ("who-signed-out-when") still work.
 REFRESH_TOKEN_RETENTION_DAYS = 7
+
+# Reuse of a just-revoked token within this window is treated as a benign
+# concurrency race (same browser, parallel requests) rather than theft —
+# the racer is handed the family's live successor. Industry-standard
+# pattern (Auth0 calls it the "reuse interval"); 30s comfortably covers
+# request fan-out + retries without meaningfully widening the replay
+# window an attacker would need to hit.
+REUSE_GRACE_SECONDS = 30
 
 # Minimum interval between opportunistic sweeps from ``rotate`` in
 # scheduler-less builds. One hour is a reasonable upper bound on table
@@ -126,8 +140,16 @@ class RefreshService:
         if row is None:
             return None
 
-        # Replay path: token was previously revoked. Nuke the family.
+        # Already-revoked path. Within the grace window this is the benign
+        # concurrent-rotation race (parallel requests sharing one cookie),
+        # not theft: hand the racer the family's live successor so both
+        # requests converge on the same session. Past the window — or if
+        # no live successor exists — treat as replay and nuke the family.
         if row.revoked_at is not None:
+            if (_now() - row.revoked_at) <= timedelta(seconds=REUSE_GRACE_SECONDS):
+                successor = await self._newest_active_in_family(row.family_id)
+                if successor is not None:
+                    return successor.token, successor.user_id
             await self.revoke_family(row.family_id)
             return None
 
@@ -187,6 +209,24 @@ class RefreshService:
             logger.exception("Lazy refresh-token sweep failed; will retry next interval")
 
 {% endif %}
+    async def _newest_active_in_family(self, family_id: str) -> RefreshToken | None:
+        """Most recently minted live (unrevoked, unexpired) row in a family.
+
+        The grace-window path in ``rotate`` returns this to a request
+        that raced rotation, so concurrent refreshes converge on one
+        successor instead of minting parallel branches.
+        """
+        stmt = (
+            select(RefreshToken)
+            .where(RefreshToken.family_id == family_id)
+            .where(RefreshToken.revoked_at.is_(None))  # type: ignore[union-attr]
+            .where(RefreshToken.expires_at > _now())
+            .order_by(RefreshToken.created_at.desc())  # type: ignore[union-attr]
+            .limit(1)
+        )
+        result = await self.db.exec(stmt)
+        return result.first()
+
     async def revoke(self, token: str) -> None:
         """Revoke a single refresh token.
 

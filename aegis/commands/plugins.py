@@ -33,6 +33,7 @@ from pathlib import Path
 import typer
 from rich.markup import escape as _escape
 
+from ..constants import AnswerKeys
 from ..core.components import COMPONENTS
 from ..core.plugins.compat import CompatStatus, check_compat
 from ..core.plugins.discovery import discover_plugin_cli_apps, discover_plugins
@@ -85,7 +86,7 @@ def _resolve_answers(project_path: Path | None) -> dict | None:
     import yaml
 
     candidate = project_path or Path.cwd()
-    answers_file = candidate / ".copier-answers.yml"
+    answers_file = candidate / AnswerKeys.ANSWERS_FILENAME
     if not answers_file.exists():
         return None
     try:

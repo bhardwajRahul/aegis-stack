@@ -4,7 +4,13 @@ Services command implementation.
 
 import typer
 
-from ..core.services import ServiceType, get_services_by_type
+from ..core.services import (
+    SERVICE_TYPE_I18N_KEYS as _SERVICE_TYPE_KEYS,
+)
+from ..core.services import (
+    ServiceType,
+    get_services_by_type,
+)
 from ..i18n import t
 
 
@@ -15,34 +21,15 @@ def _translated_service_desc(name: str, fallback: str) -> str:
     return result if result != svc_key else fallback
 
 
-# Map ServiceType enum to translation keys
-_SERVICE_TYPE_KEYS: dict[ServiceType, str] = {
-    ServiceType.AUTH: "services.type_auth",
-    ServiceType.PAYMENT: "services.type_payment",
-    ServiceType.AI: "services.type_ai",
-    ServiceType.NOTIFICATION: "services.type_notification",
-    ServiceType.ANALYTICS: "services.type_analytics",
-    ServiceType.STORAGE: "services.type_storage",
-    ServiceType.CONTENT: "services.type_content",
-}
-
-
 def services_command() -> None:
     """List available services and their dependencies."""
 
     typer.echo(f"\n{t('services.title')}")
     typer.echo("=" * 40)
 
-    # Group services by type
-    service_types = [
-        ServiceType.AUTH,
-        ServiceType.PAYMENT,
-        ServiceType.AI,
-        ServiceType.NOTIFICATION,
-        ServiceType.ANALYTICS,
-        ServiceType.STORAGE,
-        ServiceType.CONTENT,
-    ]
+    # Group services by type, in enum-declaration order (single source of
+    # truth — a new ServiceType shows up here automatically).
+    service_types = list(ServiceType)
 
     services_found = False
     for service_type in service_types:

@@ -9,13 +9,14 @@ were scattered through ``aegis/core/post_gen_tasks.py``.
 Consumed by every ``PluginSpec`` (in-tree services and components today;
 third-party plugins under R2+). See ``aegis/core/plugin_spec.py``.
 
+``post_gen_tasks.get_component_file_mapping()`` is now derived from these
+manifests via ``compute_file_mapping()`` below — there is no longer a
+hand-maintained mapping dict to drift against. ``mapping[name]`` is each
+spec's ``primary`` add base; every ``extras`` group is emitted under its own
+key for the option/variant-gated consumers.
+
 What R1 does NOT do (deliberately deferred to R2):
 
-* ``post_gen_tasks.get_component_file_mapping()`` is still a hard-coded
-  dict. ``compute_file_mapping()`` below is a forward-compat helper for
-  the eventual migration; it is not currently called by core code. The
-  legacy dict and each spec's ``files.primary`` can therefore drift —
-  keep them aligned by hand until R2 derives the mapping from manifests.
 * Sub-feature, cross-spec, and worker-backend cleanups remain inline in
   ``cleanup_components`` (their gating predicates are non-uniform).
 
@@ -60,28 +61,34 @@ class FileManifest:
     """
 
     extras: dict[str, list[str]] = field(default_factory=dict)
-    """Sub-feature file groups, keyed by their legacy mapping identifier.
+    """Option/variant-gated file groups, keyed by their mapping identifier.
 
-    Captured on the spec for documentation and forward-compatibility
-    with ``get_component_file_mapping()``. **Not** consumed by the R1
-    cleanup reducer — sub-feature cleanup remains inline in
-    ``cleanup_components`` because each sub-feature has its own gating
-    predicate (some by AnswerKey toggle, some by option value, some
-    only when the parent is also on). R2 unifies the spec model and
-    lights up uniform extras-driven cleanup.
+    These files render empty unless their option is enabled (``ai_rag``,
+    ``ai_voice``) or only exist for a specific backend
+    (``scheduler_persistence``), so they are kept out of the always-on
+    ``primary`` add base. Each group is emitted under its own key by
+    ``compute_file_mapping`` and folded into the full footprint by
+    ``get_component_files(..., full=True)`` for ``aegis remove``.
+
+    **Not** yielded by the R1 init-cleanup reducer (``iter_cleanup_paths``):
+    sub-feature cleanup at init stays inline in ``cleanup_components`` because
+    each predicate is non-uniform (some by AnswerKey toggle, some by option
+    value, some only when the parent is also on).
 
     Example: ``{"ai_rag": [...], "ai_voice": [...]}`` on the AI service.
     """
 
 
 def compute_file_mapping(specs: Iterable[Any]) -> dict[str, list[str]]:
-    """Build the legacy component-file mapping from spec manifests.
+    """Build the component-file mapping from spec manifests.
 
-    Output shape matches ``post_gen_tasks.get_component_file_mapping()``:
-    ``{spec_name: [files...], extra_key: [files...], ...}``.
+    This is the single source for ``get_component_file_mapping()``. Output
+    shape: ``{spec_name: primary, extra_key: extra_files, ...}`` — each spec's
+    ``primary`` keyed by its name, plus every ``extras`` group under its own
+    key.
 
-    Specs without a populated ``FileManifest`` are skipped — non-migrated
-    specs do not break the reducer.
+    Specs without a populated ``FileManifest`` are skipped — CORE components
+    (backend/frontend) and any non-migrated spec do not break the reducer.
     """
     mapping: dict[str, list[str]] = {}
     for spec in specs:

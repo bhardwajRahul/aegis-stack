@@ -5,14 +5,13 @@ This module contains callback functions used to validate and process
 CLI options before command execution.
 """
 
+from collections.abc import Callable
+
 import typer
 
 from ..constants import ComponentNames, Messages, WorkerBackends
-from ..core.ai_service_parser import is_ai_service_with_options, parse_ai_service_config
-from ..core.auth_service_parser import (
-    is_auth_service_with_options,
-    parse_auth_service_config,
-)
+from ..core.ai_service_parser import parse_ai_service_config
+from ..core.auth_service_parser import parse_auth_service_config
 from ..core.component_utils import (
     clean_component_names,
     extract_base_component_name,
@@ -21,10 +20,8 @@ from ..core.component_utils import (
     restore_engine_info,
 )
 from ..core.dependency_resolver import DependencyResolver
-from ..core.insights_service_parser import (
-    is_insights_service_with_options,
-    parse_insights_service_config,
-)
+from ..core.insights_service_parser import parse_insights_service_config
+from ..core.option_spec import is_spec_with_options
 from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES
 from ..i18n import t
@@ -142,6 +139,52 @@ def _split_service_list(value: str) -> list[str]:
     return services
 
 
+def _handle_ai_options(service: str) -> None:
+    """Parse ``ai[...]`` options, store config, echo the selection."""
+    ai_config = parse_ai_service_config(service)
+    set_ai_service_config(
+        service_name="ai",
+        framework=ai_config.framework,
+        backend=ai_config.backend,
+        providers=ai_config.providers,
+    )
+    typer.echo(
+        f"AI service: framework={ai_config.framework}, "
+        f"backend={ai_config.backend}, "
+        f"providers={','.join(ai_config.providers)}"
+    )
+
+
+def _handle_auth_options(service: str) -> None:
+    """Parse ``auth[...]`` options, store level/engine, echo the selection."""
+    auth_config = parse_auth_service_config(service)
+    set_auth_level_selection(service_name="auth", level=auth_config.level)
+    if auth_config.engine:
+        from .interactive import set_database_engine_selection
+
+        set_database_engine_selection(auth_config.engine)
+    typer.echo(f"Auth service: level={auth_config.level}")
+
+
+def _handle_insights_options(service: str) -> None:
+    """Parse ``insights[...]`` options (validation + echo; no stored state)."""
+    insights_config = parse_insights_service_config(service)
+    typer.echo(f"Insights service: sources={','.join(insights_config.sources)}")
+
+
+# Bracket-syntax handlers, keyed by base service name. Each entry is
+# (display label for error messages, handler). A handler parses the
+# service's options, stores any interactive-state config, and echoes the
+# selection; a ValueError surfaces as "Invalid <label> service syntax".
+# Services without an entry accept no bracket handling here (the generic
+# parse in ServiceResolver still validates their options).
+_SERVICE_OPTION_HANDLERS: dict[str, tuple[str, Callable[[str], None]]] = {
+    "ai": ("AI", _handle_ai_options),
+    "auth": ("auth", _handle_auth_options),
+    "insights": ("insights", _handle_insights_options),
+}
+
+
 def validate_and_resolve_services(
     ctx: typer.Context, param: typer.CallbackParam, value: str | None
 ) -> list[str] | None:
@@ -178,55 +221,18 @@ def validate_and_resolve_services(
         typer.echo(f"Available services: {', '.join(available)}", err=True)
         raise typer.Exit(1)
 
-    # Parse AI service bracket syntax and store config
+    # Parse bracket-syntax options and store config, one handler per service
+    # (see _SERVICE_OPTION_HANDLERS above). Handlers run in user-typed order.
     for service in selected_services:
-        if is_ai_service_with_options(service):
-            try:
-                ai_config = parse_ai_service_config(service)
-                set_ai_service_config(
-                    service_name="ai",
-                    framework=ai_config.framework,
-                    backend=ai_config.backend,
-                    providers=ai_config.providers,
-                )
-                typer.echo(
-                    f"AI service: framework={ai_config.framework}, "
-                    f"backend={ai_config.backend}, "
-                    f"providers={','.join(ai_config.providers)}"
-                )
-            except ValueError as e:
-                typer.secho(f"Invalid AI service syntax: {e}", fg="red", err=True)
-                raise typer.Exit(1)
-
-    # Parse Auth service bracket syntax and store config
-    for service in selected_services:
-        if is_auth_service_with_options(service):
-            try:
-                auth_config = parse_auth_service_config(service)
-                set_auth_level_selection(
-                    service_name="auth",
-                    level=auth_config.level,
-                )
-                if auth_config.engine:
-                    from .interactive import set_database_engine_selection
-
-                    set_database_engine_selection(auth_config.engine)
-                typer.echo(f"Auth service: level={auth_config.level}")
-            except ValueError as e:
-                typer.secho(f"Invalid auth service syntax: {e}", fg="red", err=True)
-                raise typer.Exit(1)
-
-    # Parse Insights service bracket syntax
-    for service in selected_services:
-        if is_insights_service_with_options(service):
-            try:
-                insights_config = parse_insights_service_config(service)
-                typer.echo(
-                    f"Insights service: sources={','.join(insights_config.sources)}"
-                )
-            except ValueError as e:
-                typer.secho(f"Invalid insights service syntax: {e}", fg="red", err=True)
-                raise typer.Exit(1)
+        entry = _SERVICE_OPTION_HANDLERS.get(extract_base_service_name(service))
+        if entry is None or not is_spec_with_options(service):
+            continue
+        label, handler = entry
+        try:
+            handler(service)
+        except ValueError as e:
+            typer.secho(f"Invalid {label} service syntax: {e}", fg="red", err=True)
+            raise typer.Exit(1)
 
     # Resolve services to components
     resolved_components, service_added = ServiceResolver.resolve_service_dependencies(

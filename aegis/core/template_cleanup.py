@@ -11,6 +11,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..constants import AnswerKeys
 from .verbosity import verbose_print
 
 
@@ -375,7 +376,7 @@ def _three_way_merge(
 def _should_skip_sync(relative_path: str) -> bool:
     """Check if a file should be skipped during template sync."""
     skip_patterns = [
-        ".copier-answers.yml",
+        AnswerKeys.ANSWERS_FILENAME,
         ".env",
         ".python-version",
         ".venv/",

@@ -12,9 +12,13 @@ stay inline only when a literal email is the test's invariant
 (duplicate-email rejection, registration body contents).
 """
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from app.core.config import settings
 from app.core.security import create_access_token
+from app.models.refresh_token import RefreshToken
+from app.services.auth.refresh_service import REUSE_GRACE_SECONDS
 from app.services.auth.user_service import UserService
 from fastapi import status
 from fastapi.testclient import TestClient
@@ -615,14 +619,50 @@ class TestSessionCookie:
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio
-    async def test_refresh_reuse_triggers_401(
+    async def test_refresh_reuse_within_grace_converges(
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
         user_factory,
     ) -> None:
-        """Replaying a previously-rotated refresh token must 401 — the
-        service revokes the entire family on reuse."""
+        """Immediate replay of a just-rotated token is the benign
+        concurrent-request race, not theft: within ``REUSE_GRACE_SECONDS``
+        the racer gets a 200 carrying the family's live successor instead
+        of a session-nuking 401."""
+        user = await user_factory()
+        async_client_with_db.post(
+            "/api/v1/auth/token",
+            data={"username": user.email, "password": _PASSWORD},
+        )
+        original_refresh = async_client_with_db.cookies.get("aegis_refresh")
+        assert original_refresh
+
+        # First refresh rotates; cookie jar now holds the successor.
+        first = async_client_with_db.post("/api/v1/auth/refresh")
+        assert first.status_code == status.HTTP_200_OK
+        rotated_refresh = async_client_with_db.cookies.get("aegis_refresh")
+        assert rotated_refresh and rotated_refresh != original_refresh
+
+        # Sibling request races in with the original (revoked seconds ago).
+        async_client_with_db.cookies.clear()
+        racer = async_client_with_db.post(
+            "/api/v1/auth/refresh",
+            cookies={"aegis_refresh": original_refresh},
+        )
+        assert racer.status_code == status.HTTP_200_OK
+        # Both requests converge on the same successor — no parallel branch.
+        assert async_client_with_db.cookies.get("aegis_refresh") == rotated_refresh
+
+    @pytest.mark.asyncio
+    async def test_refresh_reuse_past_grace_triggers_401(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+    ) -> None:
+        """Replaying a rotated refresh token past the grace window is
+        theft — the service revokes the entire family and the endpoint
+        401s with cookie-clearing headers."""
         user = await user_factory()
         async_client_with_db.post(
             "/api/v1/auth/token",
@@ -636,6 +676,16 @@ class TestSessionCookie:
         assert first.status_code == status.HTTP_200_OK
         rotated_refresh = async_client_with_db.cookies.get("aegis_refresh")
         assert rotated_refresh and rotated_refresh != original_refresh
+
+        # Age the revocation past the benign-race window so the replay
+        # reads as theft (same technique as the refresh-service unit tests).
+        original_row = await async_db_session.get(RefreshToken, original_refresh)
+        assert original_row is not None
+        original_row.revoked_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(
+            seconds=REUSE_GRACE_SECONDS + 1
+        )
+        async_db_session.add(original_row)
+        await async_db_session.commit()
 
         # Replay the original by sending it as an explicit cookie on the
         # request, which dodges any jar-overwrite quirks.

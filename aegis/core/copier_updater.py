@@ -127,7 +127,7 @@ def update_with_copier_native(
         # Save updated answers
         import yaml
 
-        answers_file = project_path / ".copier-answers.yml"
+        answers_file = project_path / AnswerKeys.ANSWERS_FILENAME
         with open(answers_file, "w") as f:
             yaml.safe_dump(answers, f, default_flow_style=False, sort_keys=False)
 
@@ -136,7 +136,7 @@ def update_with_copier_native(
 
         try:
             subprocess.run(
-                ["git", "add", ".copier-answers.yml"],
+                ["git", "add", AnswerKeys.ANSWERS_FILENAME],
                 cwd=project_path,
                 check=True,
                 capture_output=True,
@@ -196,15 +196,12 @@ def update_with_copier_native(
         # that were excluded during initial generation
 
         # Check for services in components_to_add (they start with 'include_')
-        # Service names with service-specific template directories.
-        service_names = {
-            AnswerKeys.SERVICE_AUTH,
-            AnswerKeys.SERVICE_AI,
-            AnswerKeys.SERVICE_COMMS,
-            AnswerKeys.SERVICE_INSIGHTS,
-            AnswerKeys.SERVICE_PAYMENT,
-            AnswerKeys.SERVICE_BLOG,
-        }
+        # Service names with service-specific template directories. Derived
+        # from the service registry so a new service is picked up automatically
+        # (no second list to keep in sync).
+        from aegis.core.services import SERVICES
+
+        service_names = set(SERVICES)
         newly_added_services = [
             svc for svc in service_names if AnswerKeys.include_key(svc) in update_data
         ]

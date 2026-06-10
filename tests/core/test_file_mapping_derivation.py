@@ -1,0 +1,171 @@
+"""Guards for the spec-derived component/service file mapping.
+
+The hand-maintained ``get_component_file_mapping()`` dict was removed in
+favour of deriving the mapping from each spec's ``FileManifest`` (the single
+source of truth). These tests lock in that contract so the duplication and
+the silent drift it caused can't come back:
+
+* the mapping must stay derived (not re-hand-coded), and
+* every path a manifest claims must actually exist in the template tree
+  (this is what previously rotted: stale ``test_user.py`` / ``insights`` dir
+  entries that no ``aegis init`` would ever match).
+
+They also pin the clean-model add/remove footprint split: the add base never
+includes option/variant-gated files that would render empty stubs, while the
+remove footprint includes the complete set.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from aegis.constants import StorageBackends
+from aegis.core.component_files import (
+    PROJECT_SLUG_PLACEHOLDER,
+    get_component_files,
+    get_template_path,
+)
+from aegis.core.components import COMPONENTS, ComponentType
+from aegis.core.file_manifest import compute_file_mapping
+from aegis.core.post_gen_tasks import get_component_file_mapping
+from aegis.core.services import SERVICES
+
+ALL_SPECS = {**COMPONENTS, **SERVICES}
+NON_CORE_SPECS = {
+    name: spec
+    for name, spec in ALL_SPECS.items()
+    if not (name in COMPONENTS and spec.type == ComponentType.CORE)
+}
+
+
+# Pattern D (post_gen_tasks.cleanup_components) renames the chosen worker
+# backend's ``<name>_<backend>.py`` to a canonical ``<name>.py`` at
+# generation, so the canonical name only exists in a generated project, not
+# the template tree. A manifest path that points at such a canonical resolves
+# if any backend variant of it ships.
+_BACKEND_RENAME_SUFFIXES = ("_dramatiq.py", "_taskiq.py")
+
+
+def _resolves_in_template(rel_path: str) -> bool:
+    """True if a manifest path maps to a real template file/dir/variant.
+
+    A path may ship as a plain file, a ``.jinja`` template, a directory, or
+    (for backend-renamed files) only as its backend variants.
+    """
+    root = get_template_path() / PROJECT_SLUG_PLACEHOLDER
+    base = root / rel_path
+    if base.is_dir() or base.exists() or Path(f"{base}.jinja").exists():
+        return True
+    if rel_path.endswith(".py"):
+        stem = rel_path[: -len(".py")]
+        for suffix in _BACKEND_RENAME_SUFFIXES:
+            variant = root / f"{stem}{suffix}"
+            if variant.exists() or Path(f"{variant}.jinja").exists():
+                return True
+    return False
+
+
+class TestMappingIsDerived:
+    """The mapping must come from the manifests, not a hand-written dict."""
+
+    def test_mapping_equals_compute_file_mapping(self) -> None:
+        expected = compute_file_mapping([*COMPONENTS.values(), *SERVICES.values()])
+        assert get_component_file_mapping() == expected
+
+    def test_core_components_absent(self) -> None:
+        """backend/frontend ship in every project and own no cleanup files."""
+        mapping = get_component_file_mapping()
+        assert "backend" not in mapping
+        assert "frontend" not in mapping
+
+    def test_gated_extras_emitted_as_their_own_keys(self) -> None:
+        mapping = get_component_file_mapping()
+        for key in ("scheduler_persistence", "ai_rag", "ai_voice"):
+            assert key in mapping, f"{key} extra missing from mapping"
+
+
+class TestNoStaleManifestPaths:
+    """Every path a manifest claims must exist in the template tree.
+
+    This is the guard that would have caught the drift the refactor removed.
+    """
+
+    @pytest.mark.parametrize("name", sorted(NON_CORE_SPECS))
+    def test_primary_paths_exist(self, name: str) -> None:
+        for rel in NON_CORE_SPECS[name].files.primary:
+            assert _resolves_in_template(rel), f"{name}: stale primary path {rel!r}"
+
+    @pytest.mark.parametrize("name", sorted(NON_CORE_SPECS))
+    def test_extras_paths_exist(self, name: str) -> None:
+        for group, paths in NON_CORE_SPECS[name].files.extras.items():
+            for rel in paths:
+                assert _resolves_in_template(rel), (
+                    f"{name}.{group}: stale extra path {rel!r}"
+                )
+
+
+class TestMarkerPaths:
+    """Every detectable spec needs a marker that actually ships.
+
+    ``aegis update`` reconstructs ``include_*`` flags from each spec's
+    ``marker_path`` — a stale or missing marker makes the component
+    undetectable and risks update deleting its files (the pre-derivation
+    redis marker pointed at ``app/components/redis``, which no generated
+    project ever contained).
+    """
+
+    @pytest.mark.parametrize("name", sorted(NON_CORE_SPECS))
+    def test_non_core_specs_declare_markers(self, name: str) -> None:
+        assert NON_CORE_SPECS[name].marker_path, f"{name}: no marker_path"
+
+    @pytest.mark.parametrize("name", sorted(NON_CORE_SPECS))
+    def test_markers_resolve_in_template(self, name: str) -> None:
+        marker = NON_CORE_SPECS[name].marker_path
+        assert _resolves_in_template(marker), f"{name}: stale marker {marker!r}"
+
+
+class TestFootprintSplit:
+    """Add base excludes empty-rendering files; remove footprint is complete."""
+
+    def test_ai_remove_includes_rag_and_voice(self) -> None:
+        add_base = set(get_component_files("ai"))
+        full = set(get_component_files("ai", full=True))
+        assert "app/cli/rag.py" not in add_base
+        assert "app/cli/rag.py" in full
+        assert "app/components/frontend/dashboard/modals/voice_settings_tab.py" in full
+
+    def test_scheduler_memory_excludes_persistence(self) -> None:
+        memory = set(get_component_files("scheduler", StorageBackends.MEMORY))
+        # Nothing gated on ``scheduler_backend != memory`` may be present.
+        assert "app/cli/tasks.py" not in memory
+        assert not any(f.startswith("app/services/scheduler/") for f in memory)
+
+    @pytest.mark.parametrize(
+        "backend", [StorageBackends.SQLITE, StorageBackends.POSTGRES]
+    )
+    def test_scheduler_db_backends_include_persistence(self, backend: str) -> None:
+        """Persistence files are gated on ``scheduler_backend != memory``, so
+        every database backend (not just sqlite) must get them."""
+        files = set(get_component_files("scheduler", backend))
+        assert "app/cli/tasks.py" in files
+        assert "app/services/scheduler/execution_log.py" in files
+        assert "app/components/backend/api/scheduler.py" in files
+
+    @pytest.mark.parametrize(
+        "backend", [StorageBackends.SQLITE, StorageBackends.POSTGRES]
+    )
+    def test_scheduler_remove_matches_db_backend_footprint(self, backend: str) -> None:
+        files = set(get_component_files("scheduler", backend))
+        full = set(get_component_files("scheduler", full=True))
+        assert files == full
+
+    def test_non_gated_specs_add_base_equals_full(self) -> None:
+        """Specs with no gated extras have identical add/remove footprints."""
+        for name, spec in NON_CORE_SPECS.items():
+            if spec.files.extras:
+                continue
+            assert set(get_component_files(name)) == set(
+                get_component_files(name, full=True)
+            ), f"{name}: add base and full footprint diverged unexpectedly"

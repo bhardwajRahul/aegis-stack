@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from app.models.refresh_token import RefreshToken
-from app.services.auth.refresh_service import RefreshService
+from app.services.auth.refresh_service import REUSE_GRACE_SECONDS, RefreshService
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 
@@ -91,8 +91,8 @@ class TestRefreshService:
     async def test_reuse_of_revoked_token_nukes_family(
         self, async_db_session: AsyncSession, user_factory
     ):
-        """Replay path: rotate a token successfully, then rotate the original
-        again — service must revoke every live row in the family.
+        """Replay path: reuse of a revoked token *past the grace window*
+        revokes every live row in the family.
         """
         user = await user_factory()
         service = RefreshService(async_db_session)
@@ -103,12 +103,78 @@ class TestRefreshService:
         assert first is not None
         new_token, _ = first
 
+        # Age the revocation past the benign-race grace window so the
+        # replay reads as theft, not a concurrent-request race.
+        original_row = await async_db_session.get(RefreshToken, original)
+        assert original_row is not None
+        original_row.revoked_at = _now() - timedelta(
+            seconds=REUSE_GRACE_SECONDS + 1
+        )
+        async_db_session.add(original_row)
+        await async_db_session.commit()
+
         # Attacker replays the original (already revoked).
         replay_result = await service.rotate(original)
         assert replay_result is None
 
         # The successor token is now also revoked.
         successor_row = await async_db_session.get(RefreshToken, new_token)
+        assert successor_row is not None
+        assert successor_row.revoked_at is not None
+
+    @pytest.mark.asyncio
+    async def test_reuse_within_grace_returns_live_successor(
+        self, async_db_session: AsyncSession, user_factory
+    ):
+        """Concurrent-rotation race: a second rotate with the just-revoked
+        token (inside the grace window) gets the family's live successor
+        back instead of nuking the session. This is the parallel-fetch
+        shape — many requests share one refresh cookie and all hit
+        rotation when the access token expires.
+        """
+        user = await user_factory()
+        service = RefreshService(async_db_session)
+        original = await service.mint(user.id)
+
+        first = await service.rotate(original)
+        assert first is not None
+        successor_token, _ = first
+
+        # Sibling request races in with the same (now revoked) token.
+        racer = await service.rotate(original)
+        assert racer is not None
+        racer_token, racer_uid = racer
+        assert racer_token == successor_token  # converge on one successor
+        assert racer_uid == user.id
+
+        # Family is intact: the successor is still live.
+        successor_row = await async_db_session.get(RefreshToken, successor_token)
+        assert successor_row is not None
+        assert successor_row.revoked_at is None
+
+    @pytest.mark.asyncio
+    async def test_reuse_within_grace_without_live_successor_nukes(
+        self, async_db_session: AsyncSession, user_factory
+    ):
+        """Grace applies only when a live successor exists. A revoked token
+        presented inside the window for an already-dead family is still a
+        replay — return None (family stays dead).
+        """
+        user = await user_factory()
+        service = RefreshService(async_db_session)
+        original = await service.mint(user.id)
+
+        first = await service.rotate(original)
+        assert first is not None
+        successor_token, _ = first
+
+        # Kill the whole family (e.g. explicit logout / prior theft nuke).
+        original_row = await async_db_session.get(RefreshToken, original)
+        assert original_row is not None
+        await service.revoke_family(original_row.family_id)
+
+        assert await service.rotate(original) is None
+        successor_row = await async_db_session.get(RefreshToken, successor_token)
         assert successor_row is not None
         assert successor_row.revoked_at is not None
 

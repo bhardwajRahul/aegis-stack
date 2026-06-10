@@ -15,13 +15,16 @@ import typer
 
 from aegis.constants import (
     AnswerKeys,
-    ComponentNames,
     OllamaMode,
     StorageBackends,
     WorkerBackends,
 )
 from aegis.core.components import COMPONENTS, ComponentType
-from aegis.core.file_manifest import apply_cleanup_path, iter_cleanup_paths
+from aegis.core.file_manifest import (
+    apply_cleanup_path,
+    compute_file_mapping,
+    iter_cleanup_paths,
+)
 from aegis.core.project_map import render_project_map
 from aegis.core.services import SERVICES
 from aegis.i18n import t
@@ -60,210 +63,21 @@ def _truncate_stderr(stderr: str, max_lines: int = POST_GEN_STDERR_MAX_LINES) ->
     return "\n".join(result)
 
 
-# TODO: triple-registration partially resolved by R1 of the plugin refactor.
-# Every new template file currently still requires manual registration in:
-# 1. get_component_file_mapping() below (for add/remove)         -- R2 (legacy)
-# 2. cleanup_components() Pattern A blocks                       -- DONE in R1
-#    (now derived from each spec's `files.primary` manifest;
-#    see aegis/core/file_manifest.py and aegis/core/services.py)
-# 3. shared_files.py SHARED_TEMPLATE_FILES (jinja regeneration)  -- R2 (shared)
-# This dict and each spec's FileManifest can drift silently — they must be
-# kept aligned by hand until R2 derives the mapping from manifests. Long-term
-# goal: auto-discover from the template directory structure or declare once
-# in a single config.
 def get_component_file_mapping() -> dict[str, list[str]]:
-    """
-    Get mapping of components to their files.
+    """Map each component/service to the files it owns.
 
-    Returns a dictionary mapping component names to lists of files/directories
-    that belong to that component. This is used by both cleanup_components()
-    and component_files.py for consistency.
+    Derived from each spec's ``FileManifest`` — the single source of truth.
+    ``mapping[name]`` is the spec's ``primary`` add base, and every ``extras``
+    group is emitted under its own key (e.g. ``scheduler_persistence``,
+    ``ai_rag``, ``ai_voice``) for the option/variant-gated consumers. The full
+    add/remove footprint (``primary`` plus every extra) is assembled by
+    :func:`aegis.core.component_files.get_component_files`.
 
     Returns:
-        Dict mapping component names to file paths (relative to project root)
+        Dict mapping component/service (and extra) names to file paths
+        relative to the project root.
     """
-    return {
-        ComponentNames.SCHEDULER: [
-            "app/entrypoints/scheduler.py",
-            "app/components/scheduler",
-            "tests/components/test_scheduler.py",
-            "docs/components/scheduler.md",
-            "app/components/backend/api/scheduler.py",
-            "tests/api/test_scheduler_endpoints.py",
-            "app/components/frontend/dashboard/cards/scheduler_card.py",
-            "app/components/frontend/dashboard/modals/scheduler_modal.py",
-            "tests/services/test_scheduled_task_manager.py",
-        ],
-        f"{ComponentNames.SCHEDULER}_persistence": [  # Only for sqlite backend
-            "app/services/scheduler",
-            "app/cli/tasks.py",
-            "app/components/backend/api/scheduler.py",
-            "tests/api/test_scheduler_endpoints.py",
-            "tests/services/test_scheduled_task_manager.py",
-        ],
-        ComponentNames.WORKER: [
-            "app/components/worker",
-            "app/cli/load_test.py",
-            "app/services/load_test.py",
-            "app/services/load_test_models.py",
-            "app/services/load_test_workloads.py",
-            "tests/services/test_load_test_models.py",
-            "tests/services/test_load_test_service.py",
-            "tests/services/test_worker_health_registration.py",
-            "app/components/backend/api/worker.py",
-            "tests/api/test_worker_endpoints.py",
-            "app/components/frontend/dashboard/cards/worker_card.py",
-            "app/components/frontend/dashboard/modals/worker_modal.py",
-            "app/components/frontend/dashboard/modals/task_history_section.py",
-        ],
-        ComponentNames.DATABASE: [
-            "app/core/db.py",
-            "app/components/frontend/dashboard/cards/database_card.py",
-            "app/components/frontend/dashboard/modals/database_modal.py",
-        ],
-        ComponentNames.REDIS: [
-            "app/components/frontend/dashboard/cards/redis_card.py",
-            "app/components/frontend/dashboard/modals/redis_modal.py",
-        ],
-        ComponentNames.INGRESS: [
-            "traefik",
-            "app/components/frontend/dashboard/cards/ingress_card.py",
-            "app/components/frontend/dashboard/modals/ingress_modal.py",
-        ],
-        ComponentNames.OBSERVABILITY: [
-            "app/components/backend/middleware/logfire_tracing.py",
-            "app/components/frontend/dashboard/cards/observability_card.py",
-            "app/components/frontend/dashboard/modals/observability_modal.py",
-        ],
-        AnswerKeys.SERVICE_AUTH: [
-            "app/components/backend/api/auth",
-            "app/models/user.py",
-            "app/models/refresh_token.py",
-            "app/services/auth",
-            "app/core/security.py",
-            "app/cli/auth.py",
-            "tests/api/test_auth_endpoints.py",
-            "tests/services/test_auth_integration.py",
-            # Note: alembic is now shared between auth and AI services
-            # Frontend dashboard files
-            "app/components/frontend/dashboard/cards/auth_card.py",
-            "app/components/frontend/dashboard/modals/auth_modal.py",
-            "app/components/frontend/dashboard/modals/auth_users_tab.py",
-            # Frontend auth views + controls. Missing from this list meant
-            # ``aegis add-service auth`` never rendered these on an
-            # existing project — see issue #686 (Failure A).
-            "app/components/frontend/auth",
-            "app/components/frontend/controls/auth",
-            # Org-level files (cleaned up by post_gen if org not selected)
-            "app/models/org.py",
-            "app/components/backend/api/orgs",
-            "app/components/frontend/dashboard/modals/auth_orgs_tab.py",
-            "tests/services/test_org_integration.py",
-            "tests/api/test_org_endpoints.py",
-        ],
-        AnswerKeys.SERVICE_AI: [
-            "app/components/backend/api/ai",
-            "app/services/ai",
-            "app/cli/ai.py",
-            "app/cli/ai_rendering.py",
-            "app/cli/marko_terminal_renderer.py",
-            "app/cli/chat_completer.py",
-            "app/cli/slash_commands.py",
-            "app/cli/llm.py",
-            "app/cli/status_line.py",
-            # ``app/core/formatting.py`` used to live here (AI-only token-
-            # cost helpers) but now also exports ``format_relative_time``
-            # consumed by the always-shipping API load test CLI + dashboard
-            # tab. Keep it on disk regardless of AI selection.
-            "app/models/conversation.py",
-            "tests/services/test_conversation_persistence.py",
-            "tests/cli/test_ai_rendering.py",
-            "tests/cli/test_conversation_memory.py",
-            "tests/cli/test_chat_completer.py",
-            "tests/services/ai",
-            # Frontend dashboard files
-            "app/components/frontend/dashboard/cards/ai_card.py",
-            "app/components/frontend/dashboard/modals/ai_modal.py",
-            "app/components/frontend/dashboard/modals/ai_analytics_tab.py",
-            "app/components/frontend/dashboard/modals/llm_catalog_tab.py",
-            "app/components/frontend/dashboard/modals/rag_tab.py",
-            "tests/components/frontend/test_ai_analytics_utils.py",
-        ],
-        AnswerKeys.SERVICE_COMMS: [
-            "app/components/backend/api/comms",
-            "app/services/comms",
-            "app/cli/comms.py",
-            "tests/api/test_comms_endpoints.py",
-            "tests/services/comms",
-            "docs/services/comms",
-            # Frontend dashboard files
-            "app/components/frontend/dashboard/cards/comms_card.py",
-            "app/components/frontend/dashboard/modals/comms_modal.py",
-        ],
-        AnswerKeys.AI_RAG: [
-            "app/components/backend/api/rag",
-            "app/services/rag",
-            "app/cli/rag.py",
-            "tests/services/rag",
-        ],
-        AnswerKeys.AI_VOICE: [
-            "app/components/backend/api/voice",
-            "app/services/ai/voice",
-            "tests/services/ai/voice",
-            "tests/api/test_voice_endpoints.py",
-            "app/components/frontend/dashboard/modals/voice_settings_tab.py",
-        ],
-        AnswerKeys.SERVICE_INSIGHTS: [
-            "app/components/backend/api/insights.py",
-            "app/services/insights",
-            "app/cli/insights.py",
-            "tests/services/test_insight_service.py",
-            "tests/services/test_insights_collectors.py",
-            "tests/services/test_query_service.py",
-            "tests/services/test_collector_service.py",
-            "tests/services/test_collector_github_traffic.py",
-            "tests/services/test_collector_github_events.py",
-            "tests/services/test_collector_github_stars.py",
-            "tests/services/test_collector_pypi.py",
-            "tests/services/test_collector_plausible.py",
-            "tests/services/test_collector_reddit.py",
-            "tests/api/test_insights_endpoints.py",
-            "tests/test_bulk_response.py",
-            "tests/test_cache_integration.py",
-            # Frontend dashboard files
-            "app/components/frontend/dashboard/cards/insights_card.py",
-            "app/components/frontend/dashboard/modals/insights_modal.py",
-        ],
-        AnswerKeys.SERVICE_PAYMENT: [
-            "app/components/backend/api/payment",
-            "app/services/payment",
-            "app/cli/payment.py",
-            "tests/services/test_payment_service.py",
-            "tests/services/test_payment_models.py",
-            "tests/services/test_payment_catalog.py",
-            "tests/services/test_payment_webhook_forwarder.py",
-            "tests/cli/test_payment_trigger.py",
-            "tests/api/test_payment_endpoints.py",
-            # Backend lifecycle hooks (auto-forward stripe-cli webhooks in dev)
-            "app/components/backend/startup/payment_webhook_forwarder.py",
-            "app/components/backend/shutdown/payment_webhook_forwarder.py",
-            # Frontend dashboard files
-            "app/components/frontend/dashboard/cards/payment_card.py",
-            "app/components/frontend/dashboard/modals/payment_modal.py",
-        ],
-        AnswerKeys.SERVICE_BLOG: [
-            "app/components/backend/api/blog",
-            "app/services/blog",
-            "app/cli/blog.py",
-            "tests/services/test_blog_service.py",
-            "tests/services/test_blog_serialization.py",
-            "tests/api/test_blog_endpoints.py",
-            "docs/services/blog",
-            # Frontend dashboard files
-            "app/components/frontend/dashboard/cards/blog_card.py",
-            "app/components/frontend/dashboard/modals/blog_modal.py",
-        ],
-    }
+    return compute_file_mapping([*COMPONENTS.values(), *SERVICES.values()])
 
 
 def remove_file(project_path: Path, filepath: str) -> None:
@@ -657,19 +471,16 @@ def _render_jinja_template(src: Path, dst: Path, project_path: Path) -> None:
         "project_slug": project_slug,
         "project_name": project_slug.replace("-", " ").title(),
         # Service flags - assume true since we're copying service files
-        "include_auth": True,
-        "include_ai": True,
-        "include_comms": True,
-        "include_insights": True,
-        "include_payment": True,
-        "include_blog": True,
-        # Component flags - check what exists in project
-        "include_scheduler": (project_path / "app/components/scheduler").exists(),
-        "include_worker": (project_path / "app/components/worker").exists(),
-        "include_database": (project_path / "app/core/db.py").exists(),
-        "include_observability": (
-            project_path / "app/components/backend/middleware/logfire_tracing.py"
-        ).exists(),
+        **{AnswerKeys.include_key(name): True for name in SERVICES},
+        # Component flags - detect from each spec's marker_path
+        **{
+            AnswerKeys.include_key(spec.name): (
+                project_path / spec.marker_path
+            ).exists()
+            for spec in COMPONENTS.values()
+            if spec.marker_path
+        },
+        # Legacy flag with no registry spec; sniffed inline.
         "include_cache": (project_path / "app/components/cache").exists(),
         # AI-specific settings (defaults)
         "ai_framework": "anthropic",

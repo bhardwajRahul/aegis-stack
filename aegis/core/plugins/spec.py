@@ -224,6 +224,17 @@ class PluginSpec:
     # File ownership for cleanup (R1)
     files: FileManifest = field(default_factory=FileManifest)
 
+    # Project-relative path whose presence in a generated project means
+    # "this plugin is installed". Drives ``aegis update``'s on-disk feature
+    # detection (reconstructing ``include_*`` flags missing from older
+    # ``.copier-answers.yml`` files) — see
+    # ``aegis.commands.update._detect_existing_features``. Pick a path the
+    # plugin unconditionally owns: a service's ``app/services/<name>``
+    # directory, a component's primary module, or (when a plugin ships no
+    # dedicated directory, like redis) one of its always-generated files.
+    # Empty string means "not detectable from disk" (CORE components).
+    marker_path: str = ""
+
     # Bracket-syntax options (R3) — see aegis/core/option_spec.py.
     # ``list[Any]`` rather than ``list[OptionSpec]`` to avoid a runtime
     # circular import; ``OptionSpec`` is only referenced by parsers.

@@ -11,6 +11,7 @@ from enum import Enum
 from ..constants import (
     AIFrameworks,
     AIProviders,
+    AnswerKeys,
     AuthLevels,
     ComponentNames,
     OllamaMode,
@@ -53,6 +54,20 @@ class ServiceType(Enum):
     CONTENT = "content"  # Content publishing and editorial workflows
 
 
+# Translation key for each service type's display header. Used by the
+# ``aegis services`` listing and the interactive service-selection loops so
+# a new ServiceType needs exactly one label entry per locale.
+SERVICE_TYPE_I18N_KEYS: dict[ServiceType, str] = {
+    ServiceType.AUTH: "services.type_auth",
+    ServiceType.PAYMENT: "services.type_payment",
+    ServiceType.AI: "services.type_ai",
+    ServiceType.NOTIFICATION: "services.type_notification",
+    ServiceType.ANALYTICS: "services.type_analytics",
+    ServiceType.STORAGE: "services.type_storage",
+    ServiceType.CONTENT: "services.type_content",
+}
+
+
 @dataclass(kw_only=True)
 class ServiceSpec(PluginSpec):
     """Service-flavoured PluginSpec — back-compat alias for pre-R2 callers.
@@ -76,6 +91,7 @@ class ServiceSpec(PluginSpec):
 SERVICES: dict[str, ServiceSpec] = {
     "auth": ServiceSpec(
         name="auth",
+        marker_path="app/services/auth",
         type=ServiceType.AUTH,
         description="User authentication and authorization with JWT tokens",
         required_components=[ComponentNames.BACKEND, ComponentNames.DATABASE],
@@ -98,14 +114,14 @@ SERVICES: dict[str, ServiceSpec] = {
                     symbol="router",
                     alias="oauth_router",
                     prefix="/api/v1",
-                    when=lambda opts: bool(opts.get("include_oauth")),
+                    when=lambda opts: bool(opts.get(AnswerKeys.AUTH_OAUTH)),
                 ),
                 RouterWiring(
                     module="app.components.backend.api.orgs.router",
                     symbol="router",
                     alias="org_router",
                     prefix="/api/v1",
-                    when=lambda opts: bool(opts.get("include_auth_org")),
+                    when=lambda opts: bool(opts.get(AnswerKeys.AUTH_ORG)),
                 ),
             ],
             dashboard_cards=[
@@ -162,17 +178,17 @@ SERVICES: dict[str, ServiceSpec] = {
                 SymbolWiring(
                     module="app.services.auth.deps",
                     symbol="get_org_service",
-                    when=lambda opts: bool(opts.get("include_auth_org")),
+                    when=lambda opts: bool(opts.get(AnswerKeys.AUTH_ORG)),
                 ),
                 SymbolWiring(
                     module="app.services.auth.deps",
                     symbol="get_membership_service",
-                    when=lambda opts: bool(opts.get("include_auth_org")),
+                    when=lambda opts: bool(opts.get(AnswerKeys.AUTH_ORG)),
                 ),
                 SymbolWiring(
                     module="app.services.auth.deps",
                     symbol="get_invite_service",
-                    when=lambda opts: bool(opts.get("include_auth_org")),
+                    when=lambda opts: bool(opts.get(AnswerKeys.AUTH_ORG)),
                 ),
             ],
         ),
@@ -252,9 +268,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/core/security.py",
                 "app/cli/auth.py",
                 "tests/api/test_auth_endpoints.py",
-                "tests/services/test_auth_service.py",
                 "tests/services/test_auth_integration.py",
-                "tests/models/test_user.py",
                 # Goal service is auth-coupled (Goal.user_id FK to user table);
                 # cleanup_components removes it on the auth-off path. Note: it
                 # is also removed on the insights-off path (kept consistent
@@ -264,6 +278,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 # Frontend dashboard files
                 "app/components/frontend/dashboard/cards/auth_card.py",
                 "app/components/frontend/dashboard/modals/auth_modal.py",
+                "app/components/frontend/dashboard/modals/auth_users_tab.py",
                 # Frontend auth views + controls (mirrors the template_files
                 # entries above so disabling auth removes them).
                 "app/components/frontend/auth",
@@ -275,14 +290,21 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/models/refresh_token.py",
                 "tests/components/test_frontend_auth_session.py",
                 "tests/services/test_refresh_service.py",
+                # Org sub-feature files. Part of the auth footprint (so
+                # add/remove cover them) and removed on the auth-off init
+                # path. The narrower "auth ON but auth_org OFF" cleanup stays
+                # inline in cleanup_components() (it gates on two answers).
+                "app/models/org.py",
+                "app/components/backend/api/orgs",
+                "app/components/frontend/dashboard/modals/auth_orgs_tab.py",
+                "tests/services/test_org_integration.py",
+                "tests/api/test_org_endpoints.py",
             ],
-            # Auth org-level cleanup (cleanup_components lines 503-514) is
-            # inline because it gates on "auth enabled AND auth_org off",
-            # not just on a single AnswerKey. Move into extras under R2.
         ),
     ),
     "ai": ServiceSpec(
         name="ai",
+        marker_path="app/services/ai",
         type=ServiceType.AI,
         description="AI chatbot service with multi-framework support",
         required_components=[ComponentNames.BACKEND],
@@ -391,11 +413,11 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/components/backend/api/ai/",
         ],
         files=FileManifest(
-            # Mirrors cleanup_components() lines 517-542 (AI NOT enabled).
-            # NOTE: the analytics tab, llm catalog tab, and rag tab are NOT
-            # in this list — cleanup_components() does not remove them on
-            # AI-off (they are removed in other paths: AI memory backend,
-            # ollama=none, AI_RAG off respectively). R1 preserves that.
+            # Mirrors cleanup_components() lines 517-542 (AI NOT enabled),
+            # plus the analytics / llm catalog / rag dashboard tabs: they
+            # belong to the AI footprint, so add/remove and the AI-off init
+            # path all cover them. The narrower sub-feature cleanups (AI
+            # memory backend, ollama=none, rag off) stay inline.
             primary=[
                 "app/components/backend/api/ai",
                 "app/services/ai",
@@ -420,15 +442,36 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/ai",
                 "app/components/frontend/dashboard/cards/ai_card.py",
                 "app/components/frontend/dashboard/modals/ai_modal.py",
+                "app/components/frontend/dashboard/modals/ai_analytics_tab.py",
+                "app/components/frontend/dashboard/modals/llm_catalog_tab.py",
+                "app/components/frontend/dashboard/modals/rag_tab.py",
+                "tests/components/frontend/test_ai_analytics_utils.py",
                 "app/models/conversation.py",
             ],
-            # AI sub-features (ai_rag, ai_voice, AI memory backend, ollama
-            # mode) are gated by various AnswerKeys / option values; their
-            # cleanup remains inline in cleanup_components for R1.
+            # rag/voice files render empty unless their option is enabled, so
+            # they live in `extras` (kept out of the always-on add base) and
+            # are pulled into the full footprint for `aegis remove ai`. The AI
+            # memory backend / ollama mode cleanups stay inline.
+            extras={
+                "ai_rag": [
+                    "app/components/backend/api/rag",
+                    "app/services/rag",
+                    "app/cli/rag.py",
+                    "tests/services/rag",
+                ],
+                "ai_voice": [
+                    "app/components/backend/api/voice",
+                    "app/services/ai/voice",
+                    "tests/services/ai/voice",
+                    "tests/api/test_voice_endpoints.py",
+                    "app/components/frontend/dashboard/modals/voice_settings_tab.py",
+                ],
+            },
         ),
     ),
     "comms": ServiceSpec(
         name="comms",
+        marker_path="app/services/comms",
         type=ServiceType.NOTIFICATION,
         description="Communications service with email (Resend), SMS and voice (Twilio)",
         required_components=[ComponentNames.BACKEND],
@@ -483,6 +526,7 @@ SERVICES: dict[str, ServiceSpec] = {
     ),
     "insights": ServiceSpec(
         name="insights",
+        marker_path="app/services/insights",
         type=ServiceType.ANALYTICS,
         description="Adoption metrics and analytics with automated data collection",
         required_components=[
@@ -576,11 +620,9 @@ SERVICES: dict[str, ServiceSpec] = {
         files=FileManifest(
             # Mirrors cleanup_components() lines 654-683 (insights NOT enabled).
             primary=[
-                "app/components/backend/api/insights",
                 "app/services/insights",
                 "app/components/backend/api/insights.py",
                 "app/cli/insights.py",
-                "tests/services/test_insights_service.py",
                 "tests/services/test_insights_collectors.py",
                 "tests/services/test_insight_service.py",
                 "tests/services/test_query_service.py",
@@ -604,6 +646,7 @@ SERVICES: dict[str, ServiceSpec] = {
     ),
     "payment": ServiceSpec(
         name="payment",
+        marker_path="app/services/payment",
         type=ServiceType.PAYMENT,
         description="Payment processing with Stripe (checkout, subscriptions, webhooks)",
         required_components=[
@@ -683,6 +726,7 @@ SERVICES: dict[str, ServiceSpec] = {
     ),
     "blog": ServiceSpec(
         name="blog",
+        marker_path="app/services/blog",
         type=ServiceType.CONTENT,
         description="Markdown blog with draft/publish workflow and tags",
         required_components=[
@@ -743,7 +787,6 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/api/test_blog_endpoints.py",
                 "app/components/frontend/dashboard/cards/blog_card.py",
                 "app/components/frontend/dashboard/modals/blog_modal.py",
-                "docs/services/blog",
             ],
         ),
     ),

@@ -82,6 +82,11 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
     "base_with_auth_service": ProjectTemplateSpec(services=("auth",)),
     "base_with_ai_service": ProjectTemplateSpec(services=("ai",)),
     "base_with_ai_sqlite_service": ProjectTemplateSpec(services=("ai[sqlite]",)),
+    # AI with the option-gated rag + voice extras enabled — used to verify
+    # `aegis remove ai` deletes the full footprint, not just the add base.
+    "ai_with_rag_voice": ProjectTemplateSpec(
+        components=("database",), services=("ai[sqlite,rag,voice]",)
+    ),
     "base_with_auth_and_ai_services": ProjectTemplateSpec(services=("auth", "ai")),
     # Full-stack matrix entries (mirror STACK_COMBINATIONS service rows so
     # ``make test-stacks-build`` doesn't pay a 30-40s regeneration cost
