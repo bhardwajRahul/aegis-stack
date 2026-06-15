@@ -8,6 +8,7 @@ from pathlib import Path
 
 import typer
 
+from ..cli import brand
 from ..cli.callbacks import _split_service_list
 from ..cli.utils import detect_scheduler_backend
 from ..cli.validation import (
@@ -110,7 +111,7 @@ def add_service_command(
 
     # Validate services argument or interactive mode
     if not interactive and not services:
-        typer.secho(t("add_service.error_no_args"), fg="red", err=True)
+        brand.error(t("add_service.error_no_args"), err=True)
         typer.echo(f"   {t('add_service.usage_hint')}", err=True)
         typer.echo(f"   {t('add_service.interactive_hint')}", err=True)
         raise typer.Exit(1)
@@ -118,14 +119,14 @@ def add_service_command(
     # Interactive mode
     if interactive:
         if services:
-            typer.secho(t("add_service.interactive_ignores_args"), fg="yellow")
+            brand.warn(t("add_service.interactive_ignores_args"))
 
         from ..cli.interactive import interactive_service_selection
 
         selected_services = interactive_service_selection(target_path)
 
         if not selected_services:
-            typer.secho(f"\n{t('add_service.no_selected')}", fg="green")
+            brand.success(f"\n{t('add_service.no_selected')}")
             raise typer.Exit(0)
 
         # Convert to comma-separated string for existing logic
@@ -152,19 +153,19 @@ def add_service_command(
         errors = ServiceResolver.validate_services(selected_services)
         if errors:
             for error in errors:
-                typer.secho(f"{error}", fg="red", err=True)
+                brand.error(f"{error}", err=True)
             raise typer.Exit(1)
     except typer.Exit:
         raise
     except Exception as e:
-        typer.secho(t("add_service.validation_failed", error=e), fg="red", err=True)
+        brand.error(t("add_service.validation_failed", error=e), err=True)
         raise typer.Exit(1)
 
     # Load existing project configuration
     try:
         existing_answers = load_copier_answers(target_path)
     except Exception as e:
-        typer.secho(t("add_service.load_config_failed", error=e), fg="red", err=True)
+        brand.error(t("add_service.load_config_failed", error=e), err=True)
         raise typer.Exit(1)
 
     # Check which services are already enabled
@@ -203,7 +204,7 @@ def add_service_command(
     services_to_add = [s for s in selected_services if s not in already_enabled]
 
     if not services_to_add:
-        typer.secho(t("add_service.all_enabled"), fg="green")
+        brand.success(t("add_service.all_enabled"))
         raise typer.Exit(0)
 
     # Handle AI service interactive configuration
@@ -256,7 +257,7 @@ def add_service_command(
             services_to_add
         )
     except ValueError as e:
-        typer.secho(t("add_service.resolve_failed", error=e), fg="red", err=True)
+        brand.error(t("add_service.resolve_failed", error=e), err=True)
         raise typer.Exit(1)
 
     # If AI service selected SQLite backend, ensure database is in required components
@@ -278,9 +279,7 @@ def add_service_command(
             missing_components.append(component)
 
     # Show what will be added
-    typer.secho(
-        f"\n{t('add_service.services_to_add')}", fg=typer.colors.CYAN, bold=True
-    )
+    brand.accent(f"\n{t('add_service.services_to_add')}", bold=True)
     for service in services_to_add:
         base_service = service_base_map[service]
         if base_service in SERVICES:
@@ -291,7 +290,7 @@ def add_service_command(
 
     # Show component requirements
     if missing_components:
-        typer.secho(f"\n{t('add_service.required_components')}", fg=typer.colors.YELLOW)
+        brand.warn(f"\n{t('add_service.required_components')}")
         for component in missing_components:
             if component in COMPONENTS:
                 desc = _translated_component_desc(
@@ -303,15 +302,14 @@ def add_service_command(
         # Filter out core components from display
         non_core_enabled = [c for c in enabled_components if c not in CORE_COMPONENTS]
         if non_core_enabled:
-            typer.secho(
-                f"\n{t('add_service.already_have_components', components=', '.join(non_core_enabled))}",
-                fg="green",
+            brand.success(
+                f"\n{t('add_service.already_have_components', components=', '.join(non_core_enabled))}"
             )
 
     # Confirm before proceeding
     typer.echo()
     if not yes and not typer.confirm(t("add_service.confirm"), default=True):
-        typer.secho(t("shared.operation_cancelled"), fg="red")
+        brand.error(t("shared.operation_cancelled"))
         raise typer.Exit(0)
 
     # Prepare update data for ManualUpdater
@@ -335,10 +333,7 @@ def add_service_command(
 
         # Add missing components first
         for component in missing_components:
-            typer.secho(
-                f"\n{t('add_service.adding_component', component=component)}",
-                fg=typer.colors.CYAN,
-            )
+            brand.accent(f"\n{t('add_service.adding_component', component=component)}")
 
             # Prepare component-specific data
             component_data: dict[str, bool | str] = {}
@@ -357,44 +352,36 @@ def add_service_command(
             result = updater.add_component(component, component_data)
 
             if not result.success:
-                typer.secho(
+                brand.error(
                     t(
                         "add_service.failed_component",
                         component=component,
                         error=result.error_message,
                     ),
-                    fg="red",
                     err=True,
                 )
                 raise typer.Exit(1)
 
             if result.files_modified:
-                typer.secho(
-                    f"   {t('add_service.added_files', count=len(result.files_modified))}",
-                    fg="green",
+                brand.success(
+                    f"   {t('add_service.added_files', count=len(result.files_modified))}"
                 )
             if result.files_skipped:
-                typer.secho(
-                    f"   {t('add_service.skipped_files', count=len(result.files_skipped))}",
-                    fg="yellow",
+                brand.warn(
+                    f"   {t('add_service.skipped_files', count=len(result.files_skipped))}"
                 )
             if result.files_deleted:
-                typer.secho(
-                    f"   Cleaned {len(result.files_deleted)} empty stub file(s)",
-                    fg="cyan",
+                brand.accent(
+                    f"   Cleaned {len(result.files_deleted)} empty stub file(s)"
                 )
             if result.shared_files_need_manual_merge:
-                typer.secho(
-                    f"   {t('add_service.preserved_files', count=len(result.shared_files_need_manual_merge))}",
-                    fg="yellow",
+                brand.warn(
+                    f"   {t('add_service.preserved_files', count=len(result.shared_files_need_manual_merge))}"
                 )
 
         # Now add each service sequentially
         for service in services_to_add:
-            typer.secho(
-                f"\n{t('add_service.adding_service', service=service)}",
-                fg=typer.colors.CYAN,
-            )
+            brand.accent(f"\n{t('add_service.adding_service', service=service)}")
 
             # Prepare service-specific data
             service_data: dict[str, bool | str] = {}
@@ -456,37 +443,32 @@ def add_service_command(
             result = updater.add_component(base_service, service_data)
 
             if not result.success:
-                typer.secho(
+                brand.error(
                     t(
                         "add_service.failed_service",
                         service=service,
                         error=result.error_message,
                     ),
-                    fg="red",
                     err=True,
                 )
                 raise typer.Exit(1)
 
             # Show results
             if result.files_modified:
-                typer.secho(
-                    f"   {t('add_service.added_files', count=len(result.files_modified))}",
-                    fg="green",
+                brand.success(
+                    f"   {t('add_service.added_files', count=len(result.files_modified))}"
                 )
             if result.files_skipped:
-                typer.secho(
-                    f"   {t('add_service.skipped_files', count=len(result.files_skipped))}",
-                    fg="yellow",
+                brand.warn(
+                    f"   {t('add_service.skipped_files', count=len(result.files_skipped))}"
                 )
             if result.files_deleted:
-                typer.secho(
-                    f"   Cleaned {len(result.files_deleted)} empty stub file(s)",
-                    fg="cyan",
+                brand.accent(
+                    f"   Cleaned {len(result.files_deleted)} empty stub file(s)"
                 )
             if result.shared_files_need_manual_merge:
-                typer.secho(
-                    f"   {t('add_service.preserved_files', count=len(result.shared_files_need_manual_merge))}",
-                    fg="yellow",
+                brand.warn(
+                    f"   {t('add_service.preserved_files', count=len(result.shared_files_need_manual_merge))}"
                 )
 
         # Generate migrations for services that need them
@@ -503,10 +485,7 @@ def add_service_command(
 
             alembic_dir = target_path / "alembic"
             if not alembic_dir.exists():
-                typer.secho(
-                    f"\n{t('add_service.bootstrap_alembic')}",
-                    fg=typer.colors.CYAN,
-                )
+                brand.accent(f"\n{t('add_service.bootstrap_alembic')}")
                 created = bootstrap_alembic(
                     target_path, updater.jinja_env, updater.answers
                 )
@@ -516,9 +495,8 @@ def add_service_command(
             if not service_has_migration(target_path, base_service):
                 migration_path = generate_migration(target_path, base_service)
                 if migration_path:
-                    typer.secho(
-                        f"   {t('add_service.generated_migration', name=migration_path.name)}",
-                        fg="green",
+                    brand.success(
+                        f"   {t('add_service.generated_migration', name=migration_path.name)}"
                     )
 
         # For auth level upgrades, generate any missing level-specific migrations
@@ -531,9 +509,8 @@ def add_service_command(
             ):
                 migration_path = generate_migration(target_path, migration_service)
                 if migration_path:
-                    typer.secho(
-                        f"   {t('add_service.generated_migration', name=migration_path.name)}",
-                        fg="green",
+                    brand.success(
+                        f"   {t('add_service.generated_migration', name=migration_path.name)}"
                     )
 
         # Auto-run migrations for services that need them
@@ -548,17 +525,15 @@ def add_service_command(
             and (service_base_map[s] != AnswerKeys.SERVICE_AI or ai_needs_migrations)
         ]
         if services_with_migrations:
-            typer.secho(
-                f"\n{t('add_service.applying_migrations')}", fg=typer.colors.CYAN
-            )
+            brand.accent(f"\n{t('add_service.applying_migrations')}")
             from ..core.post_gen_tasks import run_migrations
 
             migration_success = run_migrations(target_path, include_migrations=True)
 
             if not migration_success:
-                typer.secho(t("add_service.migration_failed"), fg="yellow")
+                brand.warn(t("add_service.migration_failed"))
 
-        typer.secho(f"\n{t('add_service.success')}", fg="green")
+        brand.success(f"\n{t('add_service.success')}")
 
         # Show project map with newly added services + auto-added components highlighted
         base_services_for_highlight = [service_base_map[s] for s in services_to_add]
@@ -592,9 +567,7 @@ def add_service_command(
 
         if AnswerKeys.SERVICE_AUTH in base_services_added:
             project_slug = existing_answers.get(AnswerKeys.PROJECT_SLUG, "my-project")
-            typer.secho(
-                f"\n{t('add_service.auth_setup')}", fg=typer.colors.CYAN, bold=True
-            )
+            brand.accent(f"\n{t('add_service.auth_setup')}", bold=True)
             cmd = typer.style(f"{project_slug} auth create-test-users", bold=True)
             typer.echo(t("add_service.auth_create_users", cmd=cmd))
             url = typer.style("http://localhost:8000/docs", bold=True)
@@ -602,9 +575,7 @@ def add_service_command(
 
         if AnswerKeys.SERVICE_AI in base_services_added:
             project_slug = existing_answers.get(AnswerKeys.PROJECT_SLUG, "my-project")
-            typer.secho(
-                f"\n{t('add_service.ai_setup')}", fg=typer.colors.CYAN, bold=True
-            )
+            brand.accent(f"\n{t('add_service.ai_setup')}", bold=True)
             typer.echo(
                 t(
                     "add_service.ai_set_provider",
@@ -621,5 +592,5 @@ def add_service_command(
             typer.echo(t("add_service.ai_test_cli", cmd=cmd))
 
     except Exception as e:
-        typer.secho(f"\n{t('add_service.failed', error=e)}", fg="red", err=True)
+        brand.error(f"\n{t('add_service.failed', error=e)}", err=True)
         raise typer.Exit(1)

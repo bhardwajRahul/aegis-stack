@@ -34,6 +34,7 @@ from ..core.services import (
     get_services_by_type,
 )
 from ..i18n import t
+from . import brand
 
 
 def _translated_desc(name: str, fallback: str) -> str:
@@ -92,9 +93,8 @@ def select_database_engine(context: str = "Database") -> str:
 
     # If already selected, reuse that choice
     if _database_engine_selection is not None:
-        typer.secho(
-            f"  {t('interactive.db_reuse', engine=_database_engine_selection.upper())}",
-            fg="green",
+        brand.success(
+            f"  {t('interactive.db_reuse', engine=_database_engine_selection.upper())}"
         )
         return _database_engine_selection
 
@@ -115,6 +115,7 @@ def select_database_engine(context: str = "Database") -> str:
         t("interactive.db_select"),
         choices=choices,
         default=StorageBackends.SQLITE,
+        style=brand.questionary_style(),
     ).ask()
 
     # Handle Ctrl+C or escape
@@ -164,6 +165,7 @@ def select_worker_backend() -> str:
         t("interactive.worker_select"),
         choices=choices,
         default=WorkerBackends.ARQ,
+        style=brand.questionary_style(),
     ).ask()
 
     if result is None:
@@ -275,7 +277,7 @@ class TyperSelectionUI:
         typer.echo(message)
 
     def success(self, message: str) -> None:
-        typer.secho(message, fg="green")
+        brand.success(message)
 
     def note_auto_added(self, name: str, detail: str = "") -> None:
         # A step auto-added a component the user didn't pick directly.
@@ -879,13 +881,14 @@ def interactive_auth_service_config(
         t("interactive.auth_select"),
         choices=choices,
         default=AuthLevels.BASIC,
+        style=brand.questionary_style(),
     ).ask()
 
     if result is None:
         raise typer.Abort()
 
     _auth_level_selection[service_name] = result
-    typer.secho(f"  {t('interactive.auth_selected', level=result)}", fg="green")
+    brand.success(f"  {t('interactive.auth_selected', level=result)}")
 
     return result
 
@@ -926,19 +929,13 @@ def interactive_ai_service_config(
     )
     framework = AIFrameworks.PYDANTIC_AI if use_pydanticai else AIFrameworks.LANGCHAIN
     _ai_framework_selection[service_name] = framework
-    typer.secho(
-        f"  {t('interactive.ai_selected_framework', framework=framework)}",
-        fg="green",
-    )
+    brand.success(f"  {t('interactive.ai_selected_framework', framework=framework)}")
 
     # AI Backend Selection
     typer.echo(f"\n{t('interactive.ai_tracking_label')}")
     if existing_engine is not None:
         backend = existing_engine
-        typer.secho(
-            f"  {t('interactive.db_reuse', engine=existing_engine.upper())}",
-            fg="green",
-        )
+        brand.success(f"  {t('interactive.db_reuse', engine=existing_engine.upper())}")
     elif typer.confirm(
         f"  {t('interactive.ai_tracking_prompt')}",
         default=True,
@@ -961,7 +958,7 @@ def interactive_ai_service_config(
         )
         _skip_llm_sync_selection[service_name] = skip_sync
         if not skip_sync:
-            typer.secho(f"  {t('interactive.ai_sync_will')}", fg="green")
+            brand.success(f"  {t('interactive.ai_sync_will')}")
         else:
             typer.echo(f"  {t('interactive.ai_sync_skipped')}")
 
@@ -995,16 +992,12 @@ def interactive_ai_service_config(
 
     # Handle no providers selected
     if not providers:
-        typer.secho(
-            f"  {t('interactive.ai_no_providers')}",
-            fg="yellow",
-        )
+        brand.warn(f"  {t('interactive.ai_no_providers')}")
         providers = list(AIProviders.INTERACTIVE_DEFAULTS)
 
     # Show selected providers
-    typer.secho(
-        f"\n  {t('interactive.ai_selected_providers', providers=', '.join(providers))}",
-        fg="green",
+    brand.success(
+        f"\n  {t('interactive.ai_selected_providers', providers=', '.join(providers))}"
     )
     typer.echo(f"  {t('interactive.ai_deps_optimized')}")
 
@@ -1026,10 +1019,10 @@ def interactive_ai_service_config(
         _ollama_mode_selection[service_name] = ollama_mode
 
         if ollama_mode == OllamaMode.HOST:
-            typer.secho(f"  {t('interactive.ai_ollama_host_ok')}", fg="green")
+            brand.success(f"  {t('interactive.ai_ollama_host_ok')}")
             typer.echo(f"  {t('interactive.ai_ollama_host_hint')}")
         else:
-            typer.secho(f"  {t('interactive.ai_ollama_docker_ok')}", fg="green")
+            brand.success(f"  {t('interactive.ai_ollama_docker_ok')}")
             typer.echo(f"  {t('interactive.ai_ollama_docker_hint')}")
     else:
         # No Ollama selected - set mode to none
@@ -1038,10 +1031,7 @@ def interactive_ai_service_config(
     # RAG selection with Python 3.14 compatibility check
     typer.echo(f"\n{t('interactive.ai_rag_label')}")
     if sys.version_info >= (3, 14):
-        typer.secho(
-            f"  {t('interactive.ai_rag_warning')}",
-            fg="yellow",
-        )
+        brand.warn(f"  {t('interactive.ai_rag_warning')}")
         typer.echo(f"  {t('interactive.ai_rag_compat_note')}")
         rag_enabled = typer.confirm(
             f"  {t('interactive.ai_rag_compat_prompt')}",
@@ -1054,7 +1044,7 @@ def interactive_ai_service_config(
         )
     _ai_rag_selection[service_name] = rag_enabled
     if rag_enabled:
-        typer.secho(f"  {t('interactive.ai_rag_enabled')}", fg="green")
+        brand.success(f"  {t('interactive.ai_rag_enabled')}")
 
     # Voice (TTS/STT) selection
     typer.echo(f"\n{t('interactive.ai_voice_label')}")
@@ -1064,7 +1054,7 @@ def interactive_ai_service_config(
     )
     _ai_voice_selection[service_name] = voice_enabled
     if voice_enabled:
-        typer.secho(f"  {t('interactive.ai_voice_enabled')}", fg="green")
+        brand.success(f"  {t('interactive.ai_voice_enabled')}")
 
     return backend, framework, providers, rag_enabled, voice_enabled
 
@@ -1088,7 +1078,7 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
     try:
         current_answers = load_copier_answers(project_path)
     except Exception as e:
-        typer.secho(f"Failed to load project configuration: {e}", fg="red", err=True)
+        brand.error(f"Failed to load project configuration: {e}", err=True)
         raise typer.Exit(1)
 
     Messages.print_section_header(
@@ -1102,9 +1092,9 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
             enabled_components.append(component)
 
     if enabled_components:
-        typer.secho(f"Currently enabled: {', '.join(enabled_components)}", fg="green")
+        brand.success(f"Currently enabled: {', '.join(enabled_components)}")
     else:
-        typer.secho("Currently enabled: backend, frontend (core only)", fg="green")
+        brand.success("Currently enabled: backend, frontend (core only)")
 
     typer.echo("\nAvailable Components:\n")
 
@@ -1117,7 +1107,7 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
     for component_name in component_order:
         # Skip if already enabled
         if component_name in enabled_components:
-            typer.secho(f"  {component_name} - Already enabled", fg="green")
+            brand.success(f"  {component_name} - Already enabled")
             continue
 
         # Skip if already selected in this session (e.g., database auto-added by scheduler)
@@ -1143,7 +1133,7 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
                         selected.append(ComponentNames.WORKER)
                     else:
                         selected.append(f"{ComponentNames.WORKER}[{backend}]")
-                    typer.secho(f"Worker with {backend} backend configured", fg="green")
+                    brand.success(f"Worker with {backend} backend configured")
             else:
                 # Need to add redis too
                 prompt = (
@@ -1160,7 +1150,7 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
                                 f"{ComponentNames.WORKER}[{backend}]",
                             ]
                         )
-                    typer.secho(f"Worker with {backend} backend configured", fg="green")
+                    brand.success(f"Worker with {backend} backend configured")
 
         elif component_name == ComponentNames.SCHEDULER:
             prompt = f"  Add {component_spec.description}?"
@@ -1180,10 +1170,7 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
                         "  Enable job persistence with SQLite?", default=True
                     ):
                         scheduler_backend = StorageBackends.SQLITE
-                        typer.secho(
-                            "  Scheduler will use SQLite for job persistence",
-                            fg="green",
-                        )
+                        brand.success("  Scheduler will use SQLite for job persistence")
                     else:
                         typer.echo(
                             "  Scheduler will use memory backend (no persistence)"
@@ -1197,9 +1184,8 @@ def interactive_component_add_selection(project_path: Path) -> tuple[list[str], 
                     ):
                         selected.append(ComponentNames.DATABASE)
                         scheduler_backend = StorageBackends.SQLITE
-                        typer.secho(
-                            "  Database will be added - scheduler will use SQLite",
-                            fg="green",
+                        brand.success(
+                            "  Database will be added - scheduler will use SQLite"
                         )
                     else:
                         typer.echo(
@@ -1241,15 +1227,13 @@ def interactive_component_remove_selection(project_path: Path) -> list[str]:
     try:
         current_answers = load_copier_answers(project_path)
     except Exception as e:
-        typer.secho(f"Failed to load project configuration: {e}", fg="red", err=True)
+        brand.error(f"Failed to load project configuration: {e}", err=True)
         raise typer.Exit(1)
 
     typer.echo()
-    typer.secho(Messages.SECTION_COMPONENT_REMOVAL, fg="yellow")
+    brand.warn(Messages.SECTION_COMPONENT_REMOVAL)
     typer.echo(Messages.SEPARATOR)
-    typer.secho(
-        "WARNING: This will DELETE component files from your project!", fg="yellow"
-    )
+    brand.warn("WARNING: This will DELETE component files from your project!")
     typer.echo()
 
     # Find enabled components
@@ -1315,7 +1299,7 @@ def interactive_service_selection(project_path: Path) -> list[str]:
     try:
         current_answers = load_copier_answers(project_path)
     except Exception as e:
-        typer.secho(f"Failed to load project configuration: {e}", fg="red", err=True)
+        brand.error(f"Failed to load project configuration: {e}", err=True)
         raise typer.Exit(1)
 
     Messages.print_section_header(
@@ -1339,7 +1323,7 @@ def interactive_service_selection(project_path: Path) -> list[str]:
         typer.echo("Currently enabled services:")
         for service_name in enabled_services:
             service_spec = SERVICES[service_name]
-            typer.secho(f"  {service_name}: {service_spec.description}", fg="green")
+            brand.success(f"  {service_name}: {service_spec.description}")
         typer.echo()
 
     # Show available services grouped by type, in ServiceType declaration
@@ -1363,7 +1347,7 @@ def interactive_service_selection(project_path: Path) -> list[str]:
         for service_name, service_spec in type_services.items():
             # Skip if already enabled
             if service_name in enabled_services:
-                typer.secho(f"  {service_name} - Already enabled", fg="green")
+                brand.success(f"  {service_name} - Already enabled")
                 continue
 
             # Check component requirements
@@ -1415,11 +1399,11 @@ def interactive_service_remove_selection(project_path: Path) -> list[str]:
     try:
         current_answers = load_copier_answers(project_path)
     except Exception as e:
-        typer.secho(f"Failed to load project configuration: {e}", fg="red", err=True)
+        brand.error(f"Failed to load project configuration: {e}", err=True)
         raise typer.Exit(1)
 
     Messages.print_section_header(Messages.SECTION_SERVICE_REMOVAL, newline_before=True)
-    typer.secho("WARNING: Removing services deletes files permanently!\n", fg="yellow")
+    brand.warn("WARNING: Removing services deletes files permanently!\n")
 
     # Find enabled services
     enabled_services = []
@@ -1435,7 +1419,7 @@ def interactive_service_remove_selection(project_path: Path) -> list[str]:
     typer.echo("Currently enabled services:")
     for service_name in enabled_services:
         service_spec = SERVICES[service_name]
-        typer.secho(f"  \u2022 {service_name}: {service_spec.description}", fg="cyan")
+        brand.accent(f"  \u2022 {service_name}: {service_spec.description}")
     typer.echo()
 
     # Ask which to remove
@@ -1447,6 +1431,6 @@ def interactive_service_remove_selection(project_path: Path) -> list[str]:
         prompt = f"  Remove {service_name} ({service_spec.description})?"
         if typer.confirm(prompt, default=False):
             selected_services.append(service_name)
-            typer.secho(f"    Will remove: {service_name}", fg="yellow")
+            brand.warn(f"    Will remove: {service_name}")
 
     return selected_services

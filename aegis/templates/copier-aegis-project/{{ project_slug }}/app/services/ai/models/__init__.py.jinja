@@ -37,6 +37,30 @@ class AIProvider(str, Enum):
     OLLAMA = "ollama"  # Local LLM inference via Ollama
     PUBLIC = "public"  # Free public endpoints (no API key required)
 
+    @classmethod
+    def from_name(cls, value: object) -> "AIProvider | None":
+        """Resolve a provider id or vendor display name to an AIProvider.
+
+        Accepts the canonical value ("public"), case-insensitively, plus
+        known vendor display-name aliases ("LLM7.io" -> public). Returns
+        ``None`` when the value maps to no provider, so callers fall back or
+        skip rather than crash. A bad ``AI_PROVIDER`` must never brick boot,
+        and model auto-detect must never persist a non-enum value.
+        """
+        if not value:
+            return None
+        norm = str(value).strip().lower()
+        aliases = {
+            "llm7.io": cls.PUBLIC.value,
+            "llm7": cls.PUBLIC.value,
+            "unknown": cls.PUBLIC.value,
+        }
+        norm = aliases.get(norm, norm)
+        try:
+            return cls(norm)
+        except ValueError:
+            return None
+
 
 class MessageRole(str, Enum):
     """Message roles in a conversation."""

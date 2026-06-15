@@ -202,7 +202,7 @@ class TestLLMSyncServiceModel:
             mock_openrouter.return_value = []
 
             import asyncio
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 service.sync(mode_filter="chat", dry_run=False)
             )
 
@@ -259,7 +259,7 @@ class TestLLMSyncServiceModel:
             mock_openrouter.return_value = []
 
             import asyncio
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 service.sync(mode_filter="chat", dry_run=False)
             )
 
@@ -291,7 +291,7 @@ class TestLLMSyncServiceDeployment:
             mock_openrouter.return_value = []
 
             import asyncio
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 service.sync(mode_filter="chat", dry_run=False)
             )
 
@@ -325,7 +325,7 @@ class TestLLMSyncServicePrice:
             mock_openrouter.return_value = []
 
             import asyncio
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 service.sync(mode_filter="chat", dry_run=False)
             )
 
@@ -359,7 +359,7 @@ class TestLLMSyncServiceModalities:
             mock_openrouter.return_value = [mock_openrouter_model]
 
             import asyncio
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 service.sync(mode_filter="chat", dry_run=False)
             )
 
@@ -398,7 +398,7 @@ class TestLLMSyncServiceDryRun:
             mock_openrouter.return_value = []
 
             import asyncio
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 service.sync(mode_filter="chat", dry_run=True)
             )
 
@@ -476,7 +476,7 @@ class TestLLMSyncServiceModeFilter:
             mock_openrouter.return_value = []
 
             import asyncio
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 service.sync(mode_filter="chat", dry_run=False)
             )
 
@@ -506,7 +506,7 @@ class TestLLMSyncServiceErrorHandling:
             mock_openrouter.return_value = [mock_openrouter_model]
 
             import asyncio
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 service.sync(mode_filter="chat", dry_run=False)
             )
 
@@ -531,7 +531,7 @@ class TestLLMSyncServiceErrorHandling:
             mock_openrouter.side_effect = Exception("OpenRouter API error")
 
             import asyncio
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 service.sync(mode_filter="chat", dry_run=False)
             )
 

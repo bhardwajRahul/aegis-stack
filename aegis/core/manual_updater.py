@@ -21,6 +21,7 @@ from aegis.config.shared_files import SHARED_TEMPLATE_FILES
 from aegis.constants import AnswerKeys, AuthLevels, ComponentNames, StorageBackends
 from aegis.i18n import t
 
+from ..cli import brand
 from .component_files import get_component_files, get_copier_defaults, get_template_path
 from .copier_manager import is_copier_project, load_copier_answers
 from .plugins.template_resolver import get_plugin_template_root
@@ -344,9 +345,8 @@ class ManualUpdater:
                 # Continue to regenerate shared files even if no component files
             else:
                 # Render and copy each file for this component
-                typer.secho(
-                    f"   {t('updater.processing_files', count=len(component_files))}",
-                    fg=typer.colors.CYAN,
+                brand.accent(
+                    f"   {t('updater.processing_files', count=len(component_files))}"
                 )
                 for file_path in component_files:
                     # Convert relative path to template path
@@ -362,10 +362,7 @@ class ManualUpdater:
                         output_path = self.project_path / file_path
                         rendered_files[output_path] = content
                     else:
-                        typer.secho(
-                            f"   Warning: Template not found for: {file_path}",
-                            fg=typer.colors.YELLOW,
-                        )
+                        brand.warn(f"   Warning: Template not found for: {file_path}")
 
                 # Copy files to project
                 for output_path, content in rendered_files.items():
@@ -1405,9 +1402,9 @@ class ManualUpdater:
         except subprocess.CalledProcessError:
             typer.echo(
                 "   "
-                + typer.style("Warning:", fg=typer.colors.YELLOW)
+                + brand.warn_text("Warning:")
                 + " "
-                + typer.style("make fix", fg=typer.colors.CYAN)
+                + brand.accent_text("make fix")
                 + " had issues. Run it manually to see details."
             )
 

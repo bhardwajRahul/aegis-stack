@@ -5,6 +5,42 @@
   The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-06-15
+
+### Added
+
+- **`tasks statistics` CLI command**: report overall scheduler statistics
+  (total, active, and paused tasks) straight from the project CLI, mirroring the
+  data behind the admin-gated `/scheduler/statistics` endpoint.
+- **Authenticated load testing**: `api-load-test run` now authenticates by
+  default so auth-gated routes work without manual login. `--as-admin` mints a
+  bearer token for an `ADMIN_USER_EMAILS` address, `--as-user` for a regular
+  account, and `--anon` opts out.
+- **`HF_TOKEN` setting**: authenticates the RAG embedding-model download from the
+  Hugging Face Hub, silencing the unauthenticated-request warning and raising
+  rate limits. Optional; public models still download without it.
+
+### Changed
+
+- **CLI brand pass**: warnings are now amber (`#F5A623`, matching the frontend)
+  instead of violet; status icons are monochrome text glyphs (`✓ ⚠ ✗ ℹ`) colored
+  by state instead of emoji, so they align to the terminal grid and render
+  consistently everywhere; the load-test report is themed (teal progress bar,
+  dim labels).
+- **Quiet RAG model load**: the embedding model now loads without progress bars
+  or log noise in CLI output.
+
+### Fixed
+
+- **gpt-5 family and o-series models in AI chat**: these reject any non-default
+  `temperature` and returned a 400; temperature is now omitted for them so the
+  streaming chat works.
+- **`llm` CLI commands now run**: `list`, `current`, `use`, and `info` were
+  declared `async def`, which Typer never awaits, so they exited without doing
+  anything; they now execute correctly.
+- **Deprecation warning** in the AI chat streaming path (`result.usage()` is a
+  property in pydantic-ai 1.x, no longer a method).
+
 ## [0.7.0] - 2026-06-08
 
 ### Added

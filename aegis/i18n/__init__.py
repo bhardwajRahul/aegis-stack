@@ -2,10 +2,13 @@
 Internationalization support for Aegis Stack CLI.
 
 Usage:
-    from aegis.i18n import t, lazy_t
+    import typer
+
+    from aegis.cli import brand
+    from aegis.i18n import lazy_t, t
 
     # Runtime strings (resolved immediately):
-    typer.secho(t("init.title"), fg=typer.colors.BLUE, bold=True)
+    brand.accent(t("init.title"), bold=True)
     typer.echo(t("init.location", path=project_path))
 
     # Help text (resolved lazily when displayed):

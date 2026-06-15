@@ -7,12 +7,14 @@ callable, so this module stays agnostic about where auth lives in the
 project.
 """
 
+from collections.abc import Callable
 import re
-from typing import Callable
 
-from app.services.load_test.api.models import RouteInfo
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
+
+from app.core.route_auth import route_requires_auth
+from app.services.load_test.api.models import RouteInfo
 
 _EXCLUDED_PATHS = frozenset(
     {"/openapi.json", "/docs", "/redoc", "/docs/oauth2-redirect"}
@@ -44,11 +46,7 @@ def list_routes(
             continue
         if route.path in _EXCLUDED_PATHS:
             continue
-        requires_auth = (
-            _route_uses_dependency(route, auth_dependency)
-            if auth_dependency is not None
-            else False
-        )
+        requires_auth = _route_requires_auth(route, auth_dependency)
         tags = list(route.tags) if route.tags else []
         path_params = extract_path_params(route.path)
         for method in route.methods or ():
@@ -64,6 +62,20 @@ def list_routes(
                 )
             )
     return results
+
+
+def _route_requires_auth(route: APIRoute, auth_dependency: Callable | None) -> bool:
+    """Whether a route is auth-protected.
+
+    Primary signal: any security scheme in the route's dependant tree (see
+    ``app.core.route_auth``), which catches direct, role-based, and
+    router-level auth uniformly. The explicit ``auth_dependency`` callable, if
+    given, is kept as a fallback for cookie-only deps that use no scheme.
+    """
+    return route_requires_auth(route) or (
+        auth_dependency is not None
+        and _route_uses_dependency(route, auth_dependency)
+    )
 
 
 def _route_uses_dependency(route: APIRoute, target: Callable) -> bool:

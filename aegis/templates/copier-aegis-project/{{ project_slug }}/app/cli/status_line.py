@@ -11,6 +11,7 @@ import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from app.cli import theme
 from app.i18n import t
 from prompt_toolkit.formatted_text import HTML
 
@@ -77,17 +78,17 @@ class ChatSessionState:
         # Separator (middle dot)
         sep = " <style bg='default' fg='ansibrightblack'>\u00b7</style> "
 
-        # Build parts with colors
+        # Build parts: values neutral, enabled states teal, off/chrome dim.
         parts = [
-            f"<style fg='ansicyan'>{model_str}</style>",
-            f"<style fg='ansigreen'>{rag_str}</style>"
+            model_str,
+            f"<style fg='{theme.ACCENT}'>{rag_str}</style>"
             if self.rag_enabled
             else f"<style fg='ansibrightblack'>{rag_str}</style>",
-            f"<style fg='ansimagenta'>{sources_str}</style>"
+            f"<style fg='{theme.ACCENT}'>{sources_str}</style>"
             if self.show_sources
             else f"<style fg='ansibrightblack'>{sources_str}</style>",
-            f"<style fg='ansiyellow'>{tokens_str}</style>",
-            f"<style fg='ansigreen'>{cost_str}</style>",
+            tokens_str,
+            cost_str,
             f"<style fg='ansibrightblack'>{version_str}</style>",
         ]
 
@@ -95,9 +96,9 @@ class ChatSessionState:
         if term_width < 60:
             # Abbreviated format: model | tokens | cost
             parts = [
-                f"<style fg='ansicyan'>{self.model or t('status.na')}</style>",
-                f"<style fg='ansiyellow'>{tokens_str}</style>",
-                f"<style fg='ansigreen'>{cost_str}</style>",
+                self.model or t("status.na"),
+                tokens_str,
+                cost_str,
             ]
         elif term_width < 80:
             # Skip version

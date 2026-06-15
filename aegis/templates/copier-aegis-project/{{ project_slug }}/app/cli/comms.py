@@ -7,15 +7,15 @@ Command-line interface for email, SMS, and voice call functionality.
 import asyncio
 
 import typer
+from app.cli import theme
 from app.i18n import lazy_t, t
-from rich.console import Console
 from rich.table import Table
 
 # Default TwiML URL for testing voice calls
 TWILIO_DEMO_TWIML_URL = "http://demo.twilio.com/docs/voice.xml"
 
 app = typer.Typer(help=lazy_t("comms.help"))
-console = Console()
+console = theme.console()
 
 # Known service-layer warnings mapped to i18n keys
 _WARNING_KEYS: dict[str, str] = {
@@ -64,119 +64,130 @@ def status() -> None:
     from app.services.comms.email import get_email_status, validate_email_config
     from app.services.comms.sms import get_sms_status, validate_sms_config
 
-    typer.secho(t("comms.service_status_title"), fg=typer.colors.BLUE, bold=True)
+    theme.title(t("comms.service_status_title"))
 
     # Email status
     email_status = get_email_status()
     email_errors = validate_email_config()
 
-    typer.secho(f"\n{t('comms.email_resend_header')}", fg=typer.colors.CYAN, bold=True)
-    status_color = (
-        typer.colors.GREEN if email_status["configured"] else typer.colors.RED
-    )
+    theme.title(f"\n{t('comms.email_resend_header')}")
     status_label = t("comms.status_label")
     status_text = (
         t("comms.configured")
         if email_status["configured"]
         else t("comms.not_configured")
     )
-    typer.echo(f"  {status_label} {typer.style(status_text, fg=status_color)}")
+    status_styled = (
+        theme.good_text(status_text)
+        if email_status["configured"]
+        else theme.bad_text(status_text)
+    )
+    typer.echo(f"  {status_label} {status_styled}")
     api_key_label = t("comms.api_key_label")
     api_key_text = t("comms.set") if email_status["api_key_set"] else t("comms.not_set")
-    api_key_color = (
-        typer.colors.GREEN if email_status["api_key_set"] else typer.colors.RED
+    api_key_styled = (
+        theme.good_text(api_key_text)
+        if email_status["api_key_set"]
+        else theme.bad_text(api_key_text)
     )
-    typer.echo(f"  {api_key_label} {typer.style(api_key_text, fg=api_key_color)}")
+    typer.echo(f"  {api_key_label} {api_key_styled}")
     from_label = t("comms.from_email_label")
-    from_value = email_status["from_email"] or typer.style(
-        t("comms.not_set"), fg=typer.colors.RED
-    )
+    from_value = email_status["from_email"] or theme.bad_text(t("comms.not_set"))
     typer.echo(f"  {from_label} {from_value}")
 
     if email_errors:
         for error in email_errors:
-            typer.secho(
+            theme.warn(
                 f"  {t('comms.warning', message=_translate_warning(error))}",
-                fg=typer.colors.YELLOW,
             )
 
     # SMS status
     sms_status = get_sms_status()
     sms_errors = validate_sms_config()
 
-    typer.secho(f"\n{t('comms.sms_twilio_header')}", fg=typer.colors.CYAN, bold=True)
-    status_color = typer.colors.GREEN if sms_status["configured"] else typer.colors.RED
+    theme.title(f"\n{t('comms.sms_twilio_header')}")
     status_label = t("comms.status_label")
     status_text = (
         t("comms.configured") if sms_status["configured"] else t("comms.not_configured")
     )
-    typer.echo(f"  {status_label} {typer.style(status_text, fg=status_color)}")
+    status_styled = (
+        theme.good_text(status_text)
+        if sms_status["configured"]
+        else theme.bad_text(status_text)
+    )
+    typer.echo(f"  {status_label} {status_styled}")
     sid_label = t("comms.account_sid_label")
     sid_text = t("comms.set") if sms_status["account_sid_set"] else t("comms.not_set")
-    sid_color = (
-        typer.colors.GREEN if sms_status["account_sid_set"] else typer.colors.RED
+    sid_styled = (
+        theme.good_text(sid_text)
+        if sms_status["account_sid_set"]
+        else theme.bad_text(sid_text)
     )
-    typer.echo(f"  {sid_label} {typer.style(sid_text, fg=sid_color)}")
+    typer.echo(f"  {sid_label} {sid_styled}")
     auth_label = t("comms.auth_token_label")
     auth_text = t("comms.set") if sms_status["auth_token_set"] else t("comms.not_set")
-    auth_color = (
-        typer.colors.GREEN if sms_status["auth_token_set"] else typer.colors.RED
+    auth_styled = (
+        theme.good_text(auth_text)
+        if sms_status["auth_token_set"]
+        else theme.bad_text(auth_text)
     )
-    typer.echo(f"  {auth_label} {typer.style(auth_text, fg=auth_color)}")
+    typer.echo(f"  {auth_label} {auth_styled}")
     msg_label = t("comms.messaging_service_label")
     msg_set = sms_status.get("messaging_service_sid_set")
     msg_text = t("comms.set") if msg_set else t("comms.not_set")
-    msg_color = typer.colors.GREEN if msg_set else typer.colors.RED
-    typer.echo(f"  {msg_label} {typer.style(msg_text, fg=msg_color)}")
+    msg_styled = theme.good_text(msg_text) if msg_set else theme.bad_text(msg_text)
+    typer.echo(f"  {msg_label} {msg_styled}")
     phone_label = t("comms.phone_number_label")
-    phone_value = sms_status["phone_number"] or typer.style(
-        t("comms.not_set"), fg=typer.colors.RED
-    )
+    phone_value = sms_status["phone_number"] or theme.bad_text(t("comms.not_set"))
     typer.echo(f"  {phone_label} {phone_value}")
 
     if sms_errors:
         for error in sms_errors:
-            typer.secho(
+            theme.warn(
                 f"  {t('comms.warning', message=_translate_warning(error))}",
-                fg=typer.colors.YELLOW,
             )
 
     # Voice status
     call_status = get_call_status()
     call_errors = validate_call_config()
 
-    typer.secho(f"\n{t('comms.voice_twilio_header')}", fg=typer.colors.CYAN, bold=True)
-    status_color = typer.colors.GREEN if call_status["configured"] else typer.colors.RED
+    theme.title(f"\n{t('comms.voice_twilio_header')}")
     status_label = t("comms.status_label")
     status_text = (
         t("comms.configured")
         if call_status["configured"]
         else t("comms.not_configured")
     )
-    typer.echo(f"  {status_label} {typer.style(status_text, fg=status_color)}")
+    status_styled = (
+        theme.good_text(status_text)
+        if call_status["configured"]
+        else theme.bad_text(status_text)
+    )
+    typer.echo(f"  {status_label} {status_styled}")
     sid_label = t("comms.account_sid_label")
     sid_text = t("comms.set") if call_status["account_sid_set"] else t("comms.not_set")
-    sid_color = (
-        typer.colors.GREEN if call_status["account_sid_set"] else typer.colors.RED
+    sid_styled = (
+        theme.good_text(sid_text)
+        if call_status["account_sid_set"]
+        else theme.bad_text(sid_text)
     )
-    typer.echo(f"  {sid_label} {typer.style(sid_text, fg=sid_color)}")
+    typer.echo(f"  {sid_label} {sid_styled}")
     auth_label = t("comms.auth_token_label")
     auth_text = t("comms.set") if call_status["auth_token_set"] else t("comms.not_set")
-    auth_color = (
-        typer.colors.GREEN if call_status["auth_token_set"] else typer.colors.RED
+    auth_styled = (
+        theme.good_text(auth_text)
+        if call_status["auth_token_set"]
+        else theme.bad_text(auth_text)
     )
-    typer.echo(f"  {auth_label} {typer.style(auth_text, fg=auth_color)}")
+    typer.echo(f"  {auth_label} {auth_styled}")
     phone_label = t("comms.phone_number_label")
-    phone_value = call_status["phone_number"] or typer.style(
-        t("comms.not_set"), fg=typer.colors.RED
-    )
+    phone_value = call_status["phone_number"] or theme.bad_text(t("comms.not_set"))
     typer.echo(f"  {phone_label} {phone_value}")
 
     if call_errors:
         for error in call_errors:
-            typer.secho(
+            theme.warn(
                 f"  {t('comms.warning', message=_translate_warning(error))}",
-                fg=typer.colors.YELLOW,
             )
 
     # Summary
@@ -188,24 +199,18 @@ def status() -> None:
             call_status["configured"],
         ]
     )
-    summary_color = (
-        typer.colors.GREEN if services_configured == 3 else typer.colors.YELLOW
-    )
-    typer.secho(
-        t("comms.services_configured_summary", count=services_configured),
-        fg=summary_color,
-        bold=True,
-    )
+    summary_text = t("comms.services_configured_summary", count=services_configured)
+    if services_configured == 3:
+        theme.good(summary_text, bold=True)
+    else:
+        theme.warn(summary_text, bold=True)
 
     if services_configured < 3:
-        typer.secho(f"\n{t('comms.quick_start')}", dim=True)
+        theme.label(f"\n{t('comms.quick_start')}")
         if not email_status["configured"]:
-            typer.secho(f"  {t('comms.email_signup_hint')}", dim=True)
+            theme.label(f"  {t('comms.email_signup_hint')}")
         if not sms_status["configured"] or not call_status["configured"]:
-            typer.secho(
-                f"  {t('comms.twilio_signup_hint')}",
-                dim=True,
-            )
+            theme.label(f"  {t('comms.twilio_signup_hint')}")
 
 
 @email_app.command("send", help=lazy_t("comms.help_email_send"))
@@ -236,7 +241,7 @@ async def _email_send(
     )
 
     if not text and not html:
-        typer.secho(t("comms.text_or_html_required"), fg=typer.colors.RED)
+        theme.bad(t("comms.text_or_html_required"))
         raise typer.Exit(1)
 
     try:
@@ -247,22 +252,21 @@ async def _email_send(
             html=html,
         )
 
-        typer.secho(t("comms.email_sent"), fg=typer.colors.GREEN, bold=True)
-        msg_id_label = typer.style(t("comms.message_id_label"), fg=typer.colors.CYAN)
+        theme.good(t("comms.email_sent"), bold=True)
+        msg_id_label = theme.label_text(t("comms.message_id_label"))
         typer.echo(f"{msg_id_label} {result.id}")
-        to_label = typer.style(t("comms.to_label"), fg=typer.colors.CYAN)
+        to_label = theme.label_text(t("comms.to_label"))
         typer.echo(f"{to_label} {', '.join(result.to)}")
-        subject_label = typer.style(t("comms.subject_label"), fg=typer.colors.CYAN)
+        subject_label = theme.label_text(t("comms.subject_label"))
         typer.echo(f"{subject_label} {subject}")
 
     except EmailConfigurationError as e:
-        typer.secho(
+        theme.bad(
             t("comms.configuration_error", error=_translate_warning(str(e))),
-            fg=typer.colors.RED,
         )
         raise typer.Exit(1)
     except EmailError as e:
-        typer.secho(t("comms.email_send_failed", error=e), fg=typer.colors.RED)
+        theme.bad(t("comms.email_send_failed", error=e))
         raise typer.Exit(1)
 
 
@@ -281,22 +285,21 @@ async def _sms_send(to: str, body: str) -> None:
     try:
         result = await send_sms_simple(to=to, body=body)
 
-        typer.secho(t("comms.sms_sent"), fg=typer.colors.GREEN, bold=True)
-        sid_label = typer.style(t("comms.message_sid_label"), fg=typer.colors.CYAN)
+        theme.good(t("comms.sms_sent"), bold=True)
+        sid_label = theme.label_text(t("comms.message_sid_label"))
         typer.echo(f"{sid_label} {result.sid}")
-        to_label = typer.style(t("comms.to_label"), fg=typer.colors.CYAN)
+        to_label = theme.label_text(t("comms.to_label"))
         typer.echo(f"{to_label} {result.to}")
-        seg_label = typer.style(t("comms.segments_label"), fg=typer.colors.CYAN)
+        seg_label = theme.label_text(t("comms.segments_label"))
         typer.echo(f"{seg_label} {result.segments}")
 
     except SMSConfigurationError as e:
-        typer.secho(
+        theme.bad(
             t("comms.configuration_error", error=_translate_warning(str(e))),
-            fg=typer.colors.RED,
         )
         raise typer.Exit(1)
     except SMSError as e:
-        typer.secho(t("comms.sms_send_failed", error=e), fg=typer.colors.RED)
+        theme.bad(t("comms.sms_send_failed", error=e))
         raise typer.Exit(1)
 
 
@@ -322,32 +325,31 @@ async def _call_make(to: str, twiml_url: str, timeout: int) -> None:
         request = MakeCallRequest(to=to, twiml_url=twiml_url, timeout=timeout)
         result = await make_call(request)
 
-        typer.secho(t("comms.call_initiated"), fg=typer.colors.GREEN, bold=True)
-        sid_label = typer.style(t("comms.call_sid_label"), fg=typer.colors.CYAN)
+        theme.good(t("comms.call_initiated"), bold=True)
+        sid_label = theme.label_text(t("comms.call_sid_label"))
         typer.echo(f"{sid_label} {result.sid}")
-        to_label = typer.style(t("comms.to_label"), fg=typer.colors.CYAN)
+        to_label = theme.label_text(t("comms.to_label"))
         typer.echo(f"{to_label} {result.to}")
-        status_label = typer.style(t("comms.call_status_label"), fg=typer.colors.CYAN)
+        status_label = theme.label_text(t("comms.call_status_label"))
         typer.echo(f"{status_label} {result.status}")
 
     except CallConfigurationError as e:
-        typer.secho(
+        theme.bad(
             t("comms.configuration_error", error=_translate_warning(str(e))),
-            fg=typer.colors.RED,
         )
         raise typer.Exit(1)
     except CallError as e:
-        typer.secho(t("comms.call_failed", error=e), fg=typer.colors.RED)
+        theme.bad(t("comms.call_failed", error=e))
         raise typer.Exit(1)
 
 
 @app.command("providers", help=lazy_t("comms.help_providers"))
 def providers() -> None:
     table = Table(title=t("comms.providers_title"), width=70)
-    table.add_column(t("comms.channel_column"), style="cyan", width=10)
-    table.add_column(t("comms.provider_column"), style="green", width=10)
-    table.add_column(t("comms.free_tier_column"), style="yellow", width=12)
-    table.add_column(t("comms.notes_column"), style="blue", width=30)
+    table.add_column(t("comms.channel_column"), style=theme.ACCENT, width=10)
+    table.add_column(t("comms.provider_column"), width=10)
+    table.add_column(t("comms.free_tier_column"), style="dim", width=12)
+    table.add_column(t("comms.notes_column"), style="dim", width=30)
 
     table.add_row(
         t("comms.email"),
@@ -370,9 +372,9 @@ def providers() -> None:
 
     console.print(table)
 
-    typer.secho(f"\n{t('comms.signup_links')}", dim=True)
-    typer.secho("  Resend: https://resend.com", dim=True)
-    typer.secho("  Twilio: https://twilio.com/try-twilio", dim=True)
+    theme.label(f"\n{t('comms.signup_links')}")
+    theme.label("  Resend: https://resend.com")
+    theme.label("  Twilio: https://twilio.com/try-twilio")
 
 
 if __name__ == "__main__":

@@ -15,7 +15,6 @@ import typer
 
 from aegis.constants import (
     AnswerKeys,
-    OllamaMode,
     StorageBackends,
     WorkerBackends,
 )
@@ -29,6 +28,8 @@ from aegis.core.file_manifest import (
 from aegis.core.project_map import render_project_map
 from aegis.core.services import SERVICES
 from aegis.i18n import t
+
+from ..cli import brand
 
 # Task configuration constants (following tests/cli/test_utils.py pattern)
 POST_GEN_TIMEOUT_INSTALL = 300  # 5 minutes for dependency installation
@@ -366,20 +367,15 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
             project_path, "tests/components/frontend/test_ai_analytics_utils.py"
         )
 
-    # ETL / LLM catalog depend transitively on Ollama: they import from
-    # ``app.services.ai.ollama`` (which is a stub when ``ollama_mode=none``)
-    # and from ``app.services.ai.etl``. When Ollama is off the whole
-    # chain must come out so the module graph stays importable.
-    ollama_mode = context.get(AnswerKeys.OLLAMA_MODE, OllamaMode.NONE)
-    if ollama_mode == OllamaMode.NONE:
-        remove_dir(project_path, "tests/services/ai/etl")
-        remove_dir(project_path, "app/services/ai/etl")
-        # llm router + API imports ``app.services.ai.etl`` at module load.
-        remove_dir(project_path, "app/components/backend/api/llm")
-        remove_file(project_path, "tests/api/test_llm_endpoints.py")
-        # LLM CLI also touches etl models.
-        remove_file(project_path, "app/cli/llm.py")
-        remove_file(project_path, "tests/cli/test_llm_cli.py")
+    # NOTE: the LLM catalog / ETL is provider-agnostic — it syncs model data
+    # for whatever providers are configured (public, OpenAI, OpenRouter, …),
+    # not just Ollama. Its only Ollama touch point is a single import in
+    # ``llm_sync_service`` guarded by ``try/except`` (and a runtime
+    # ``OllamaClient is None`` skip), so the chain stays importable with
+    # Ollama off. The catalog therefore depends only on PERSISTENCE, removed
+    # above when ``ai_backend == memory``. It is intentionally NOT gated on
+    # ``ollama_mode`` here: choosing a non-Ollama provider must not strip the
+    # ``llm`` command or catalog sync.
 
     # Remove RAG service if not enabled
     if not is_enabled(AnswerKeys.AI_RAG):
@@ -535,25 +531,17 @@ def copy_service_files(
     # Get the file mapping for this service
     file_mapping = get_component_file_mapping()
     if service_name not in file_mapping:
-        typer.secho(
-            f"Unknown service '{service_name}' - skipping file copy",
-            fg=typer.colors.YELLOW,
-        )
+        brand.warn(f"Unknown service '{service_name}' - skipping file copy")
         return
 
     service_files = file_mapping[service_name]
-    typer.secho(
-        f"Copying {service_name} service files from template...", fg=typer.colors.CYAN
-    )
+    brand.accent(f"Copying {service_name} service files from template...")
 
     # The template is at: aegis-stack/aegis/templates/copier-aegis-project/{{ project_slug }}/
     # We need to find the template content directory
     template_content = template_path / "{{ project_slug }}"
     if not template_content.exists():
-        typer.secho(
-            f"Warning: Template content directory not found: {template_content}",
-            fg=typer.colors.YELLOW,
-        )
+        brand.warn(f"Warning: Template content directory not found: {template_content}")
         return
 
     copied_count = 0
@@ -593,9 +581,7 @@ def copy_service_files(
             copied_count += 1
 
     if copied_count > 0:
-        typer.secho(
-            f"Copied {copied_count} {service_name} service files", fg=typer.colors.GREEN
-        )
+        brand.success(f"Copied {copied_count} {service_name} service files")
     else:
         typer.echo(
             f"No {service_name} files copied (may already exist or be templates)"
@@ -624,7 +610,7 @@ def install_dependencies(project_path: Path, python_version: str | None = None) 
         allowing uv to auto-detect a compatible Python version.
     """
     try:
-        typer.secho(t("postgen.deps_installing"), fg=typer.colors.CYAN)
+        typer.echo(t("postgen.deps_installing"))
 
         # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
         env = os.environ.copy()
@@ -645,27 +631,27 @@ def install_dependencies(project_path: Path, python_version: str | None = None) 
         )
 
         if result.returncode == 0:
-            typer.secho(t("postgen.deps_success"), fg=typer.colors.GREEN)
+            typer.echo(t("postgen.deps_success"))
             return True
         else:
-            typer.secho(t("postgen.deps_warn_failed"), fg=typer.colors.YELLOW)
+            brand.warn(t("postgen.deps_warn_failed"))
             if result.stderr:
                 truncated = _truncate_stderr(result.stderr)
                 for line in truncated.split("\n"):
                     typer.echo(f"   {line}")
-            typer.secho(t("postgen.deps_manual"), dim=True)
+            brand.muted(t("postgen.deps_manual"))
             return False
 
     except subprocess.TimeoutExpired:
-        typer.secho(t("postgen.deps_timeout"), fg=typer.colors.YELLOW)
+        brand.warn(t("postgen.deps_timeout"))
         return False
     except FileNotFoundError:
-        typer.secho(t("postgen.deps_uv_missing"), fg=typer.colors.YELLOW)
-        typer.secho(t("postgen.deps_uv_install"), dim=True)
+        brand.warn(t("postgen.deps_uv_missing"))
+        brand.muted(t("postgen.deps_uv_install"))
         return False
     except Exception as e:
-        typer.secho(t("postgen.deps_warn_error", error=e), fg=typer.colors.YELLOW)
-        typer.secho(t("postgen.deps_manual"), dim=True)
+        brand.warn(t("postgen.deps_warn_error", error=e))
+        brand.muted(t("postgen.deps_manual"))
         return False
 
 
@@ -680,24 +666,24 @@ def setup_env_file(project_path: Path) -> bool:
         True if setup succeeded or .env already exists, False on error
     """
     try:
-        typer.secho(t("postgen.env_setup"), fg=typer.colors.CYAN)
+        typer.echo(t("postgen.env_setup"))
         env_example = project_path / ".env.example"
         env_file = project_path / ".env"
 
         if env_example.exists() and not env_file.exists():
             shutil.copy(env_example, env_file)
-            typer.secho(t("postgen.env_created"), fg=typer.colors.GREEN)
+            typer.echo(t("postgen.env_created"))
             return True
         elif env_file.exists():
             typer.echo(t("postgen.env_exists"))
             return True
         else:
-            typer.secho(t("postgen.env_missing"), fg=typer.colors.YELLOW)
+            brand.warn(t("postgen.env_missing"))
             return False
 
     except Exception as e:
-        typer.secho(t("postgen.env_error", error=e), fg=typer.colors.YELLOW)
-        typer.secho(t("postgen.env_manual"), dim=True)
+        brand.warn(t("postgen.env_error", error=e))
+        brand.muted(t("postgen.env_manual"))
         return False
 
 
@@ -725,7 +711,7 @@ def run_migrations(
         return True  # No migrations needed
 
     try:
-        typer.secho(t("postgen.db_setup"), fg=typer.colors.CYAN)
+        typer.echo(t("postgen.db_setup"))
 
         # Ensure data directory exists
         data_dir = project_path / "data"
@@ -734,11 +720,8 @@ def run_migrations(
         # Verify alembic config exists before running migration
         alembic_ini_path = project_path / "alembic" / "alembic.ini"
         if not alembic_ini_path.exists():
-            typer.secho(
-                t("postgen.db_alembic_missing", path=alembic_ini_path),
-                fg=typer.colors.YELLOW,
-            )
-            typer.secho(t("postgen.db_alembic_hint"), dim=True)
+            brand.warn(t("postgen.db_alembic_missing", path=alembic_ini_path))
+            brand.muted(t("postgen.db_alembic_hint"))
             return False
 
         # Run alembic migrations using uv run (ensures correct environment)
@@ -766,23 +749,23 @@ def run_migrations(
         )
 
         if result.returncode == 0:
-            typer.secho(t("postgen.db_success"), fg=typer.colors.GREEN)
+            typer.echo(t("postgen.db_success"))
             return True
         else:
-            typer.secho(t("postgen.db_failed"), fg=typer.colors.YELLOW)
+            brand.warn(t("postgen.db_failed"))
             if result.stderr:
                 truncated = _truncate_stderr(result.stderr)
                 for line in truncated.split("\n"):
                     typer.echo(f"   {line}")
-            typer.secho(t("postgen.db_manual"), dim=True)
+            brand.muted(t("postgen.db_manual"))
             return False
 
     except subprocess.TimeoutExpired:
-        typer.secho(t("postgen.db_timeout"), fg=typer.colors.YELLOW)
+        brand.warn(t("postgen.db_timeout"))
         return False
     except Exception as e:
-        typer.secho(t("postgen.db_error", error=e), fg=typer.colors.YELLOW)
-        typer.secho(t("postgen.db_manual"), dim=True)
+        brand.warn(t("postgen.db_error", error=e))
+        brand.muted(t("postgen.db_manual"))
         return False
 
 
@@ -797,7 +780,7 @@ def format_code(project_path: Path) -> bool:
         True if formatting succeeded, False otherwise
     """
     try:
-        typer.secho(t("postgen.format_start"), fg=typer.colors.CYAN)
+        typer.echo(t("postgen.format_start"))
 
         # Call make fix to auto-format the generated project
         # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
@@ -814,22 +797,22 @@ def format_code(project_path: Path) -> bool:
         )
 
         if result.returncode == 0:
-            typer.secho(t("postgen.format_success"), fg=typer.colors.GREEN)
+            typer.echo(t("postgen.format_success"))
             return True
         else:
-            typer.secho(t("postgen.format_partial"), fg=typer.colors.YELLOW)
-            typer.secho(t("postgen.format_manual"), dim=True)
+            brand.warn(t("postgen.format_partial"))
+            brand.muted(t("postgen.format_manual"))
             return False
 
     except FileNotFoundError:
-        typer.secho(t("postgen.format_hint"), dim=True)
+        brand.muted(t("postgen.format_hint"))
         return False
     except subprocess.TimeoutExpired:
-        typer.secho(t("postgen.format_timeout"), fg=typer.colors.YELLOW)
+        brand.warn(t("postgen.format_timeout"))
         return False
     except Exception as e:
-        typer.secho(t("postgen.format_error", error=e), fg=typer.colors.YELLOW)
-        typer.secho(t("postgen.format_error_manual"), dim=True)
+        brand.warn(t("postgen.format_error", error=e))
+        brand.muted(t("postgen.format_error_manual"))
         return False
 
 
@@ -854,7 +837,7 @@ def seed_llm_fixtures(project_path: Path, python_version: str | None = None) -> 
         True if seeding succeeded, False otherwise
     """
     try:
-        typer.secho(t("postgen.llm_seeding"), fg=typer.colors.CYAN)
+        typer.echo(t("postgen.llm_seeding"))
 
         # Run the seeding script using uv run
         # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
@@ -887,23 +870,23 @@ def seed_llm_fixtures(project_path: Path, python_version: str | None = None) -> 
         )
 
         if result.returncode == 0:
-            typer.secho(t("postgen.llm_seed_success"), fg=typer.colors.GREEN)
+            typer.echo(t("postgen.llm_seed_success"))
             return True
         else:
-            typer.secho(t("postgen.llm_seed_failed"), fg=typer.colors.YELLOW)
+            brand.warn(t("postgen.llm_seed_failed"))
             if result.stderr:
                 # Show truncated error output
                 truncated = result.stderr[:500]
                 for line in truncated.split("\n"):
                     typer.echo(f"   {line}")
-            typer.secho(t("postgen.llm_seed_manual"), dim=True)
+            brand.muted(t("postgen.llm_seed_manual"))
             return False
 
     except subprocess.TimeoutExpired:
-        typer.secho(t("postgen.llm_seed_timeout"), fg=typer.colors.YELLOW)
+        brand.warn(t("postgen.llm_seed_timeout"))
         return False
     except Exception as e:
-        typer.secho(t("postgen.llm_seed_error", error=e), fg=typer.colors.YELLOW)
+        brand.warn(t("postgen.llm_seed_error", error=e))
         return False
 
 
@@ -926,7 +909,7 @@ def sync_llm_catalog(
         True if sync succeeded, False otherwise (non-critical)
     """
     try:
-        typer.secho(t("postgen.llm_syncing"), fg=typer.colors.CYAN)
+        typer.echo(t("postgen.llm_syncing"))
 
         # Unset VIRTUAL_ENV to avoid conflicts with parent project's venv
         env = os.environ.copy()
@@ -950,33 +933,24 @@ def sync_llm_catalog(
         )
 
         if result.returncode == 0:
-            typer.secho(t("postgen.llm_sync_success"), fg=typer.colors.GREEN)
+            typer.echo(t("postgen.llm_sync_success"))
             return True
         else:
-            typer.secho(t("postgen.llm_sync_failed"), fg=typer.colors.YELLOW)
+            brand.warn(t("postgen.llm_sync_failed"))
             if result.stderr:
                 truncated = _truncate_stderr(result.stderr)
                 for line in truncated.split("\n"):
                     typer.echo(f"   {line}")
-            typer.secho(
-                t("postgen.llm_sync_manual", slug=project_slug),
-                dim=True,
-            )
+            brand.muted(t("postgen.llm_sync_manual", slug=project_slug))
             return False
 
     except subprocess.TimeoutExpired:
-        typer.secho(t("postgen.llm_sync_timeout"), fg=typer.colors.YELLOW)
-        typer.secho(
-            f"Run '{project_slug} llm sync' manually to populate the catalog",
-            dim=True,
-        )
+        brand.warn(t("postgen.llm_sync_timeout"))
+        brand.muted(f"Run '{project_slug} llm sync' manually to populate the catalog")
         return False
     except Exception as e:
-        typer.secho(t("postgen.llm_sync_error", error=e), fg=typer.colors.YELLOW)
-        typer.secho(
-            f"Run '{project_slug} llm sync' manually to populate the catalog",
-            dim=True,
-        )
+        brand.warn(t("postgen.llm_sync_error", error=e))
+        brand.muted(f"Run '{project_slug} llm sync' manually to populate the catalog")
         return False
 
 
@@ -1016,7 +990,7 @@ def run_post_generation_tasks(
         non-critical and won't cause hard failures.
     """
     typer.echo()
-    typer.secho(t("postgen.setup_start"), fg=typer.colors.BLUE, bold=True)
+    brand.accent(t("postgen.setup_start"), bold=True)
 
     # Task 1: Install dependencies (CRITICAL - fails entire generation if this fails)
     if reporter is not None:
@@ -1025,14 +999,10 @@ def run_post_generation_tasks(
 
     if not deps_success:
         typer.echo()
-        typer.secho(
-            t("postgen.deps_failed"),
-            fg=typer.colors.RED,
-            bold=True,
-        )
+        brand.error(t("postgen.deps_failed"), bold=True)
         typer.echo()
-        typer.secho(t("postgen.deps_failed_detail"), dim=True)
-        typer.secho(t("postgen.deps_failed_hint"), dim=True)
+        brand.muted(t("postgen.deps_failed_detail"))
+        brand.muted(t("postgen.deps_failed_hint"))
         raise DependencyInstallationError(
             f"Failed to install dependencies for project at {project_path}"
         )
@@ -1065,15 +1035,15 @@ def run_post_generation_tasks(
         fixtures_loaded = seed_llm_fixtures(project_path, python_version)
 
         if skip_llm_sync:
-            typer.secho(t("postgen.llm_sync_skipped"), fg=typer.colors.CYAN)
+            brand.accent(t("postgen.llm_sync_skipped"))
             if fixtures_loaded:
-                typer.secho(t("postgen.llm_fixtures_outdated"), dim=True)
-            typer.secho(t("postgen.llm_sync_hint", slug=slug), dim=True)
+                brand.muted(t("postgen.llm_fixtures_outdated"))
+            brand.muted(t("postgen.llm_sync_hint", slug=slug))
         else:
             # Try to sync from live APIs for up-to-date data
             sync_success = sync_llm_catalog(project_path, slug, python_version)
             if not sync_success and fixtures_loaded:
-                typer.secho(t("postgen.llm_fixtures_fallback"), dim=True)
+                brand.muted(t("postgen.llm_fixtures_fallback"))
         if reporter is not None:
             reporter.done("llm")
 
@@ -1086,14 +1056,14 @@ def run_post_generation_tasks(
 
     # Print final status (only reached if deps succeeded)
     typer.echo()
-    typer.secho(t("postgen.ready"), fg=typer.colors.GREEN, bold=True)
+    brand.success(t("postgen.ready"), bold=True)
 
     # Show project structure map
     typer.echo()
     render_project_map(project_path)
 
     typer.echo()
-    typer.secho(t("postgen.next_steps"), fg=typer.colors.CYAN, bold=True)
+    brand.muted(t("postgen.next_steps"), bold=True)
     typer.echo(t("postgen.next_cd", path=project_path))
     typer.echo(t("postgen.next_serve"))
     typer.echo(t("postgen.next_dashboard"))

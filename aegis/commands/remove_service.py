@@ -8,6 +8,7 @@ from pathlib import Path
 
 import typer
 
+from ..cli import brand
 from ..cli.validation import (
     parse_comma_separated_list,
     validate_copier_project,
@@ -93,7 +94,7 @@ def remove_service_command(
 
     # Validate services argument or interactive mode
     if not interactive and not services:
-        typer.secho(t("remove_service.error_no_args"), fg="red", err=True)
+        brand.error(t("remove_service.error_no_args"), err=True)
         typer.echo(f"   {t('remove_service.usage_hint')}", err=True)
         typer.echo(f"   {t('remove_service.interactive_hint')}", err=True)
         raise typer.Exit(1)
@@ -101,14 +102,14 @@ def remove_service_command(
     # Interactive mode
     if interactive:
         if services:
-            typer.secho(t("remove_service.interactive_ignores_args"), fg="yellow")
+            brand.warn(t("remove_service.interactive_ignores_args"))
 
         from ..cli.interactive import interactive_service_remove_selection
 
         selected_services = interactive_service_remove_selection(target_path)
 
         if not selected_services:
-            typer.secho(f"\n{t('remove_service.no_selected')}", fg="green")
+            brand.success(f"\n{t('remove_service.no_selected')}")
             raise typer.Exit(0)
 
         # Convert to comma-separated string for existing logic
@@ -126,20 +127,20 @@ def remove_service_command(
         errors = ServiceResolver.validate_services(selected_services)
         if errors:
             for error in errors:
-                typer.secho(f"{error}", fg="red", err=True)
+                brand.error(f"{error}", err=True)
             raise typer.Exit(1)
 
     except typer.Exit:
         raise
     except Exception as e:
-        typer.secho(t("remove_service.validation_failed", error=e), fg="red", err=True)
+        brand.error(t("remove_service.validation_failed", error=e), err=True)
         raise typer.Exit(1)
 
     # Load existing project configuration
     try:
         existing_answers = load_copier_answers(target_path)
     except Exception as e:
-        typer.secho(t("remove_service.load_config_failed", error=e), fg="red", err=True)
+        brand.error(t("remove_service.load_config_failed", error=e), err=True)
         raise typer.Exit(1)
 
     # Check which services are currently enabled
@@ -158,11 +159,11 @@ def remove_service_command(
         typer.echo(t("remove_service.not_enabled", services=", ".join(not_enabled)))
 
     if not services_to_remove:
-        typer.secho(t("remove_service.nothing_to_remove"), fg="green")
+        brand.success(t("remove_service.nothing_to_remove"))
         raise typer.Exit(0)
 
     # Show what will be removed
-    typer.secho(f"\n{t('remove_service.services_to_remove')}", fg="yellow")
+    brand.warn(f"\n{t('remove_service.services_to_remove')}")
     for service in services_to_remove:
         if service in SERVICES:
             desc = _translated_service_desc(service, SERVICES[service].description)
@@ -170,7 +171,7 @@ def remove_service_command(
 
     # Warn about auth-specific data
     if AnswerKeys.SERVICE_AUTH in services_to_remove:
-        typer.secho(f"\n{t('remove_service.auth_warning')}", fg="yellow")
+        brand.warn(f"\n{t('remove_service.auth_warning')}")
         typer.echo(f"   {t('remove_service.auth_delete_intro')}")
         typer.echo(f"   • {t('remove_service.auth_delete_endpoints')}")
         typer.echo(f"   • {t('remove_service.auth_delete_models')}")
@@ -180,10 +181,10 @@ def remove_service_command(
 
     # Confirm before proceeding
     typer.echo()
-    typer.secho(t("remove_service.warning_delete"), fg="yellow")
+    brand.warn(t("remove_service.warning_delete"))
 
     if not yes and not typer.confirm(t("remove_service.confirm")):
-        typer.secho(t("shared.operation_cancelled"), fg="red")
+        brand.error(t("shared.operation_cancelled"))
         raise typer.Exit(0)
 
     # Remove services using ManualUpdater
@@ -197,25 +198,23 @@ def remove_service_command(
             result = updater.remove_component(service)
 
             if not result.success:
-                typer.secho(
+                brand.error(
                     t(
                         "remove_service.failed_service",
                         service=service,
                         error=result.error_message,
                     ),
-                    fg="red",
                     err=True,
                 )
                 raise typer.Exit(1)
 
             # Show results
             if result.files_deleted:
-                typer.secho(
-                    f"   {t('remove_service.removed_files', count=len(result.files_deleted))}",
-                    fg="green",
+                brand.success(
+                    f"   {t('remove_service.removed_files', count=len(result.files_deleted))}"
                 )
 
-        typer.secho(f"\n{t('remove_service.success')}", fg="green")
+        brand.success(f"\n{t('remove_service.success')}")
 
         # Provide next steps
         Messages.print_review_changes()
@@ -226,5 +225,5 @@ def remove_service_command(
         typer.echo(t("remove_service.deps_remove_hint"))
 
     except Exception as e:
-        typer.secho(f"\n{t('remove_service.failed', error=e)}", fg="red", err=True)
+        brand.error(f"\n{t('remove_service.failed', error=e)}", err=True)
         raise typer.Exit(1)

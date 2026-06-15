@@ -180,7 +180,10 @@ class Settings(
 {% if include_redis %}
     # Redis settings for arq background tasks
     REDIS_URL: str = "redis://redis:6379"  # Docker service name by default
-    REDIS_URL_LOCAL: str | None = None  # Override for local CLI usage
+    REDIS_URL_LOCAL: str | None = None  # Manual override for local CLI usage
+    # Host publish port chosen by `make serve` (loaded from .env.ports).
+    # None = use the container port. See `_localhost_url`.
+    REDIS_HOST_PORT: int | None = None
     REDIS_DB: int = 0
     # Logical Redis DB for the application cache (view caches, bulk
     # caches, etc.). Separate from REDIS_DB so ``cache.clear()`` can't
@@ -191,28 +194,10 @@ class Settings(
     @property
     def redis_url_effective(self) -> str:
         """Get effective Redis URL, preferring local override when not in Docker."""
-        # If explicitly overridden for local use
         if self.REDIS_URL_LOCAL and not self.is_docker:
             return self.REDIS_URL_LOCAL
-
-        # Auto-translate Docker hostname to localhost when running outside Docker
         if not self.is_docker:
-            from urllib.parse import urlparse, urlunparse
-
-            parsed = urlparse(self.REDIS_URL)
-            # Only translate the default Docker service hostname "redis"
-            if parsed.hostname == "redis":
-                # Reconstruct URL with localhost, preserving auth, port, path, etc.
-                netloc = "localhost"
-                if parsed.username:
-                    if parsed.password:
-                        netloc = f"{parsed.username}:{parsed.password}@localhost"
-                    else:
-                        netloc = f"{parsed.username}@localhost"
-                if parsed.port:
-                    netloc = f"{netloc}:{parsed.port}"
-                return urlunparse(parsed._replace(netloc=netloc))
-
+            return self._localhost_url(self.REDIS_URL, {"redis"}, self.REDIS_HOST_PORT)
         return self.REDIS_URL
 {% endif %}
 
@@ -241,34 +226,21 @@ class Settings(
     # Database settings
 {% if database_engine == "postgres" %}
     DATABASE_URL: str = "postgresql://postgres:postgres@postgres:5432/{{ project_slug }}"
-    DATABASE_URL_LOCAL: str | None = None  # Override for local CLI usage
+    DATABASE_URL_LOCAL: str | None = None  # Manual override for local CLI usage
+    # Host publish port chosen by `make serve` (loaded from .env.ports).
+    # None = use the container port. See `_localhost_url`.
+    POSTGRES_HOST_PORT: int | None = None
     DATABASE_ENGINE_ECHO: bool = False
 
     @property
     def database_url_effective(self) -> str:
         """Get effective database URL, preferring local override when not in Docker."""
-        # If explicitly overridden for local use
         if self.DATABASE_URL_LOCAL and not self.is_docker:
             return self.DATABASE_URL_LOCAL
-
-        # Auto-translate Docker hostname to localhost when running outside Docker
         if not self.is_docker:
-            from urllib.parse import urlparse, urlunparse
-
-            parsed = urlparse(self.DATABASE_URL)
-            # Only translate the default Docker service hostname "postgres"
-            if parsed.hostname == "postgres":
-                # Reconstruct URL with localhost, preserving auth, port, path, etc.
-                netloc = "localhost"
-                if parsed.username:
-                    if parsed.password:
-                        netloc = f"{parsed.username}:{parsed.password}@localhost"
-                    else:
-                        netloc = f"{parsed.username}@localhost"
-                if parsed.port:
-                    netloc = f"{netloc}:{parsed.port}"
-                return urlunparse(parsed._replace(netloc=netloc))
-
+            return self._localhost_url(
+                self.DATABASE_URL, {"postgres"}, self.POSTGRES_HOST_PORT
+            )
         return self.DATABASE_URL
 {% else %}
     DATABASE_URL: str = "sqlite:///./data/app.db"
@@ -303,7 +275,10 @@ class Settings(
 {% else %}
     OLLAMA_BASE_URL: str = "http://localhost:11434"  # Default for local testing
 {% endif %}
-    OLLAMA_BASE_URL_LOCAL: str | None = None  # Override for local CLI usage
+    OLLAMA_BASE_URL_LOCAL: str | None = None  # Manual override for local CLI usage
+    # Host publish port chosen by `make serve` (loaded from .env.ports).
+    # None = use the container port. See `_localhost_url`.
+    OLLAMA_HOST_PORT: int | None = None
     OLLAMA_API_KEY: str | None = None  # Optional, usually not needed
 
     # Conversation settings
@@ -460,7 +435,10 @@ class Settings(
 {% if include_ingress %}
     # Traefik Ingress settings
     TRAEFIK_API_URL: str = "http://traefik:8080"  # Docker service name
-    TRAEFIK_API_URL_LOCAL: str | None = None  # Override for local CLI usage
+    TRAEFIK_API_URL_LOCAL: str | None = None  # Manual override for local CLI usage
+    # Host publish port chosen by `make serve` (loaded from .env.ports).
+    # None = use the container port. See `_localhost_url`.
+    INGRESS_DASHBOARD_PORT: int | None = None
 {% endif %}
 
 {% if ai_rag %}
@@ -469,6 +447,10 @@ class Settings(
     RAG_PERSIST_DIRECTORY: str = "./data/chromadb"
     RAG_EMBEDDING_PROVIDER: str = "sentence-transformers"  # or "openai"
     RAG_EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"  # Better default
+    # Hugging Face read token: authenticates the embedding-model download so
+    # RAG drops the "unauthenticated requests" warning and gets higher rate
+    # limits. Optional — public models download without it.
+    HF_TOKEN: str | None = None
     RAG_MODEL_CACHE_DIR: str | None = None  # None = system default, "./data/models" for local dev
     RAG_CHUNK_SIZE: int = 2000
     RAG_CHUNK_OVERLAP: int = 400
@@ -485,29 +467,52 @@ class Settings(
             os.path.exists("/.dockerenv") or
             bool(os.getenv("DOCKER_CONTAINER"))
         )
+
+    @staticmethod
+    def _localhost_url(
+        url: str, docker_hostnames: set[str], host_port: int | None = None
+    ) -> str:
+        """Rewrite a Docker-network URL for access from the host.
+
+        Swaps a Docker service hostname (e.g. ``postgres``) for
+        ``localhost`` and, when ``make serve`` chose a non-default host
+        publish port (a ``*_HOST_PORT`` loaded from ``.env.ports``), swaps
+        the container port for it. ``make serve`` shifts only the host
+        publish port when the default is taken by another stack, so a
+        host-side CLI command must use that chosen port, not the container
+        port. Returns ``url`` unchanged when its host is not one of
+        ``docker_hostnames`` (already host-reachable). Auth and path are
+        preserved.
+        """
+        from urllib.parse import urlparse, urlunparse
+
+        parsed = urlparse(url)
+        if parsed.hostname not in docker_hostnames:
+            return url
+        netloc = "localhost"
+        if parsed.username:
+            if parsed.password:
+                netloc = f"{parsed.username}:{parsed.password}@localhost"
+            else:
+                netloc = f"{parsed.username}@localhost"
+        port = host_port or parsed.port
+        if port:
+            netloc = f"{netloc}:{port}"
+        return urlunparse(parsed._replace(netloc=netloc))
 {% endif %}
 
 {% if include_ai and ollama_mode != "none" %}
     @property
     def ollama_base_url_effective(self) -> str:
         """Get effective Ollama URL, preferring local override when not in Docker."""
-        # If explicitly overridden for local use
         if self.OLLAMA_BASE_URL_LOCAL and not self.is_docker:
             return self.OLLAMA_BASE_URL_LOCAL
-
-        # Auto-translate Docker hostnames to localhost when running outside Docker
         if not self.is_docker:
-            from urllib.parse import urlparse, urlunparse
-
-            parsed = urlparse(self.OLLAMA_BASE_URL)
-            # Translate Docker-specific hostnames to localhost
-            docker_hosts = {"ollama", "host.docker.internal"}
-            if parsed.hostname in docker_hosts:
-                netloc = "localhost"
-                if parsed.port:
-                    netloc = f"{netloc}:{parsed.port}"
-                return urlunparse(parsed._replace(netloc=netloc))
-
+            return self._localhost_url(
+                self.OLLAMA_BASE_URL,
+                {"ollama", "host.docker.internal"},
+                self.OLLAMA_HOST_PORT,
+            )
         return self.OLLAMA_BASE_URL
 {% endif %}
 
@@ -519,26 +524,21 @@ class Settings(
 
         Prefers local override when not in Docker.
         """
-        # If explicitly overridden for local use
         if self.TRAEFIK_API_URL_LOCAL and not self.is_docker:
             return self.TRAEFIK_API_URL_LOCAL
-
-        # Auto-translate Docker hostnames to localhost when running outside Docker
         if not self.is_docker:
-            from urllib.parse import urlparse, urlunparse
-
-            parsed = urlparse(self.TRAEFIK_API_URL)
-            # Translate Docker-specific hostnames to localhost
-            if parsed.hostname == "traefik":
-                netloc = "localhost"
-                if parsed.port:
-                    netloc = f"{netloc}:{parsed.port}"
-                return urlunparse(parsed._replace(netloc=netloc))
-
+            return self._localhost_url(
+                self.TRAEFIK_API_URL, {"traefik"}, self.INGRESS_DASHBOARD_PORT
+            )
         return self.TRAEFIK_API_URL
 {% endif %}
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    # ``.env.ports`` carries the host publish ports `make serve` chose for
+    # this run (gitignored, regenerated each run). Listed after ``.env`` so
+    # its values win for the keys it defines; both are optional at load time.
+    model_config = SettingsConfigDict(
+        env_file=(".env", ".env.ports"), env_file_encoding="utf-8"
+    )
 
     @model_validator(mode="after")
     def _guard_against_placeholder_secret_in_prod(self) -> "Settings":

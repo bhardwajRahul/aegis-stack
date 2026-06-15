@@ -5,6 +5,7 @@ Provides consistent, beautiful output formatting across streaming
 and non-streaming modes using marko markdown parser with terminal rendering.
 """
 
+from app.cli import theme
 from app.cli.marko_terminal_renderer import TerminalRenderer
 from app.i18n import t
 from marko import Markdown
@@ -143,9 +144,9 @@ def render_ai_header(console: Console, inline: bool = True) -> None:
         >>> render_ai_header(console, inline=False) # Outputs: "Illiana:"
     """
     if inline:
-        console.print(t("ai.header_inline"), style="bright_magenta", end="")
+        console.print(t("ai.header_inline"), style=theme.ACCENT, end="")
     else:
-        console.print(t("ai.header"), style="bright_magenta bold")
+        console.print(t("ai.header"), style=f"{theme.ACCENT} bold")
 
 
 def render_markdown_response(console: Console, content: str) -> None:
@@ -267,9 +268,9 @@ def render_error_message(
         >>> render_error_message(console, "Connection failed")
         >>> render_error_message(console, "API key invalid", "Check your .env file")
     """
-    console.print(f"{t('shared.error')} {error}", style="red")
+    console.print(f"{t('shared.error')} {error}", style=theme.ERROR)
     if suggestion:
-        console.print(f"{t('ai.tip_label')} {suggestion}", style="yellow dim")
+        console.print(f"{t('ai.tip_label')} {suggestion}", style="dim")
 
 
 def render_thinking_spinner(console: Console) -> tuple:
@@ -288,6 +289,6 @@ def render_thinking_spinner(console: Console) -> tuple:
     from rich.live import Live
     from rich.spinner import Spinner
 
-    spinner = Spinner("dots", text=t("ai.thinking"), style="bright_blue")
+    spinner = Spinner("dots", text=t("ai.thinking"), style="dim")
     live = Live(spinner, console=console, refresh_per_second=12)
     return spinner, live

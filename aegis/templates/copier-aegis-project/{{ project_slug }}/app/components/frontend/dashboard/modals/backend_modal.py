@@ -86,6 +86,17 @@ def _has_auth_dependencies(dependencies: list[str]) -> bool:
     )
 
 
+def _route_has_auth(route_info: dict[str, object]) -> bool:
+    """Whether a route is auth-protected.
+
+    Prefers the accurate ``requires_auth`` flag from route metadata (security
+    scheme detection); falls back to dependency-name matching only for older
+    payloads that lack it.
+    """
+    deps = list(route_info.get("dependencies", []))
+    return bool(route_info.get("requires_auth", _has_auth_dependencies(deps)))
+
+
 class RouteTableRow(ft.Container):
     """Expandable table row for a single route."""
 
@@ -101,9 +112,8 @@ class RouteTableRow(ft.Container):
         methods = list(route_info.get("methods", []))
         summary = str(route_info.get("summary", ""))
         deprecated = bool(route_info.get("deprecated", False))
-        dependencies = list(route_info.get("dependencies", []))
 
-        has_auth = _has_auth_dependencies(dependencies)
+        has_auth = _route_has_auth(route_info)
 
         # Truncate summary for display
         summary_display = summary[:40] + "..." if len(summary) > 40 else summary
@@ -378,6 +388,21 @@ class RouteGroupSection(ft.Container):
             color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
+        # Group-level auth marker: lock the tag if ANY route in it is
+        # protected, so you can see a group contains protected routes without
+        # expanding it. Same lock/icon as the per-route Auth column.
+        group_has_auth = any(_route_has_auth(r) for r in routes)
+        group_lock = (
+            ft.Icon(
+                ft.Icons.LOCK,
+                size=12,
+                color=Theme.Colors.WARNING,
+                tooltip="Contains protected routes",
+            )
+            if group_has_auth
+            else ft.Container(width=0)
+        )
+
         group_header = ft.GestureDetector(
             content=ft.Container(
                 content=ft.Row(
@@ -385,6 +410,7 @@ class RouteGroupSection(ft.Container):
                         self.arrow_icon,
                         PrimaryText(f"{group_name}"),
                         SecondaryText(f"({len(routes)} routes)"),
+                        group_lock,
                     ],
                     spacing=8,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,

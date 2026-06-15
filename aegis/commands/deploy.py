@@ -15,6 +15,7 @@ from pathlib import Path
 import typer
 import yaml
 
+from ..cli import brand
 from ..i18n import lazy_t, t
 
 _BACKUP_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}$")
@@ -202,7 +203,7 @@ def _create_backup(
     ]
     result = _run_remote_capture(host, user, " && ".join(commands))
     if result.returncode != 0:
-        typer.secho(t("deploy.backup_failed", error=result.stderr), fg="red", err=True)
+        brand.error(t("deploy.backup_failed", error=result.stderr), err=True)
         return None
 
     # Database backup if PostgreSQL is running
@@ -221,10 +222,7 @@ def _create_backup(
             )
             db_result = _run_remote_capture(host, user, db_cmd)
             if db_result.returncode != 0:
-                typer.secho(
-                    t("deploy.backup_db_failed"),
-                    fg="yellow",
-                )
+                brand.warn(t("deploy.backup_db_failed"))
 
     # Write manifest
     manifest = (
@@ -236,7 +234,7 @@ def _create_backup(
         host, user, f"echo -e {shlex.quote(manifest)} > {safe_backup}/manifest.yml"
     )
 
-    typer.secho(t("deploy.backup_created", timestamp=timestamp), fg="green")
+    brand.success(t("deploy.backup_created", timestamp=timestamp))
     return timestamp
 
 
@@ -271,10 +269,8 @@ def _rollback_to_backup(
     # Verify backup exists
     check = _run_remote_capture(host, user, f"test -d {safe_backup}")
     if check.returncode != 0:
-        typer.secho(
-            t("deploy.rollback_not_found", timestamp=backup_timestamp),
-            fg="red",
-            err=True,
+        brand.error(
+            t("deploy.rollback_not_found", timestamp=backup_timestamp), err=True
         )
         return False
 
@@ -290,10 +286,8 @@ def _rollback_to_backup(
         f"rsync -a --delete --exclude backups {safe_backup}/files/ {safe_path}/",
     )
     if restore_result.returncode != 0:
-        typer.secho(
-            t("deploy.rollback_restore_failed", error=restore_result.stderr),
-            fg="red",
-            err=True,
+        brand.error(
+            t("deploy.rollback_restore_failed", error=restore_result.stderr), err=True
         )
         return False
 
@@ -314,10 +308,7 @@ def _rollback_to_backup(
                 break
             time.sleep(2)
         else:
-            typer.secho(
-                t("deploy.rollback_pg_timeout"),
-                fg="yellow",
-            )
+            brand.warn(t("deploy.rollback_pg_timeout"))
         db_restore = _run_remote_capture(
             host,
             user,
@@ -326,12 +317,12 @@ def _rollback_to_backup(
             f" sh -c 'psql -U $POSTGRES_USER $POSTGRES_DB'",
         )
         if db_restore.returncode != 0:
-            typer.secho(t("deploy.rollback_db_failed"), fg="yellow")
+            brand.warn(t("deploy.rollback_db_failed"))
 
     typer.echo(t("deploy.rollback_starting"))
     start_result = _run_remote(host, user, f"{compose_prefix} up -d --build")
     if start_result.returncode != 0:
-        typer.secho(t("deploy.rollback_start_failed"), fg="red", err=True)
+        brand.error(t("deploy.rollback_start_failed"), err=True)
         return False
 
     return True
@@ -360,14 +351,14 @@ def _run_health_check(
             "curl -sf --max-time 10 http://localhost/health/ -o /dev/null",
         )
         if result.returncode == 0:
-            typer.secho(t("deploy.health_passed"), fg="green")
+            brand.success(t("deploy.health_passed"))
             return True
 
         if attempt < retries:
             typer.echo(t("deploy.health_retry", interval=interval))
             time.sleep(interval)
 
-    typer.secho(t("deploy.health_all_failed"), fg="red", err=True)
+    brand.error(t("deploy.health_all_failed"), err=True)
     return False
 
 
@@ -487,7 +478,7 @@ def _run_rolling_deploy(
 
     Skips DB migrations — use the standard ``aegis deploy`` for those.
     """
-    typer.secho(t("deploy.rolling_starting", host=host), fg="blue", bold=True)
+    brand.accent(t("deploy.rolling_starting", host=host), bold=True)
 
     # Step 1: rsync working tree
     typer.echo(t("deploy.syncing"))
@@ -524,7 +515,7 @@ def _run_rolling_deploy(
         ]
     )
     if rsync_result.returncode != 0:
-        typer.secho(t("deploy.sync_failed"), fg="red", err=True)
+        brand.error(t("deploy.sync_failed"), err=True)
         raise typer.Exit(1)
 
     # Step 2: scp .env (prefer .env.deploy)
@@ -543,7 +534,7 @@ def _run_rolling_deploy(
             ["scp", str(env_file), f"{user}@{host}:{safe_path}"]
         )
         if env_result.returncode != 0:
-            typer.secho(t("deploy.env_copy_failed"), fg="red", err=True)
+            brand.error(t("deploy.env_copy_failed"), err=True)
             raise typer.Exit(1)
 
     prefix = _rolling_compose_prefix(deploy_path)
@@ -558,7 +549,7 @@ def _run_rolling_deploy(
         typer.echo(t("deploy.rolling_building"))
         build_result = _run_remote(host, user, f"{prefix} build webserver")
         if build_result.returncode != 0:
-            typer.secho(t("deploy.start_failed"), fg="red", err=True)
+            brand.error(t("deploy.start_failed"), err=True)
             raise typer.Exit(1)
 
     # Step 4 + 5: pause the queue and wait for in-flight jobs to drain
@@ -572,13 +563,13 @@ def _run_rolling_deploy(
         )
         pause_set = pause_result.returncode == 0
         if not pause_set:
-            typer.secho(t("deploy.rolling_pause_failed"), fg="yellow")
+            brand.warn(t("deploy.rolling_pause_failed"))
 
     try:
         if pause_set:
             typer.echo(t("deploy.rolling_draining", seconds=drain_timeout))
             if not _rolling_wait_for_drain(host, user, deploy_path, drain_timeout):
-                typer.secho(t("deploy.rolling_drain_timeout"), fg="red", err=True)
+                brand.error(t("deploy.rolling_drain_timeout"), err=True)
                 raise typer.Exit(1)
 
         # Step 6: recreate scheduler + workers (no --deps so deps stay up)
@@ -592,7 +583,7 @@ def _run_rolling_deploy(
                 f"{prefix} up -d --force-recreate --no-deps {' '.join(worker_services)}",
             )
             if recreate.returncode != 0:
-                typer.secho(t("deploy.start_failed"), fg="red", err=True)
+                brand.error(t("deploy.start_failed"), err=True)
                 raise typer.Exit(1)
 
         # Step 7: rolling-restart the webserver via docker-rollout
@@ -604,7 +595,7 @@ def _run_rolling_deploy(
                 _rolling_rollout_command(deploy_path, rollout_timeout),
             )
             if rollout.returncode != 0:
-                typer.secho(t("deploy.rolling_rollout_failed"), fg="red", err=True)
+                brand.error(t("deploy.rolling_rollout_failed"), err=True)
                 raise typer.Exit(1)
     finally:
         # Step 8: always clear the pause flag — never wedge workers
@@ -615,10 +606,10 @@ def _run_rolling_deploy(
     if health_check:
         healthy = _run_health_check(host, user, retries=health_cfg["retries"])
         if not healthy:
-            typer.secho(t("deploy.health_failed_hint"), fg="yellow")
+            brand.warn(t("deploy.health_failed_hint"))
             raise typer.Exit(1)
 
-    typer.secho(f"\n{t('deploy.rolling_complete')}", fg="green", bold=True)
+    brand.success(f"\n{t('deploy.rolling_complete')}", bold=True)
     typer.echo(t("deploy.app_running", host=host))
 
 
@@ -673,7 +664,7 @@ def deploy_init_command(
 
     _save_deploy_config(config)
 
-    typer.secho(f"\n{t('deploy.init_saved', file=DEPLOY_CONFIG_FILE)}", fg="green")
+    brand.success(f"\n{t('deploy.init_saved', file=DEPLOY_CONFIG_FILE)}")
     typer.echo(t("deploy.init_host", host=host))
     typer.echo(t("deploy.init_user", user=user))
     typer.echo(t("deploy.init_path", path=path))
@@ -684,10 +675,7 @@ def deploy_init_command(
     if gitignore_path.exists():
         content = gitignore_path.read_text()
         if ".aegis/" not in content and ".aegis" not in content:
-            typer.secho(
-                t("deploy.init_gitignore"),
-                fg="yellow",
-            )
+            brand.warn(t("deploy.init_gitignore"))
 
 
 def deploy_setup_command(
@@ -712,11 +700,7 @@ def deploy_setup_command(
     """
     config = _load_deploy_config(project_path)
     if not config:
-        typer.secho(
-            t("deploy.no_config"),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("deploy.no_config"), err=True)
         raise typer.Exit(1)
 
     host = config["server"]["host"]
@@ -726,15 +710,11 @@ def deploy_setup_command(
     setup_script = project_root / "scripts" / "server-setup.sh"
 
     if not setup_script.exists():
-        typer.secho(
-            t("deploy.setup_script_missing", path=setup_script),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("deploy.setup_script_missing", path=setup_script), err=True)
         typer.echo(t("deploy.setup_script_hint"))
         raise typer.Exit(1)
 
-    typer.secho(t("deploy.setup_title", target=f"{user}@{host}"), fg="blue", bold=True)
+    brand.accent(t("deploy.setup_title", target=f"{user}@{host}"), bold=True)
 
     # Add host key to known_hosts if needed
     typer.echo(t("deploy.checking_ssh"))
@@ -761,9 +741,8 @@ def deploy_setup_command(
                 text=True,
             )
             if keyscan_result.returncode != 0:
-                typer.secho(
+                brand.error(
                     t("deploy.ssh_keyscan_failed", error=keyscan_result.stderr),
-                    fg="red",
                     err=True,
                 )
                 raise typer.Exit(1)
@@ -771,7 +750,7 @@ def deploy_setup_command(
             with open(known_hosts, "a") as f:
                 f.write(keyscan_result.stdout)
         else:
-            typer.secho(t("deploy.ssh_failed", error=result.stderr), fg="red", err=True)
+            brand.error(t("deploy.ssh_failed", error=result.stderr), err=True)
             raise typer.Exit(1)
 
     # Copy and run setup script
@@ -780,7 +759,7 @@ def deploy_setup_command(
         ["scp", str(setup_script), f"{user}@{host}:/tmp/server-setup.sh"]
     )
     if scp_result.returncode != 0:
-        typer.secho(t("deploy.copy_failed"), fg="red", err=True)
+        brand.error(t("deploy.copy_failed"), err=True)
         raise typer.Exit(1)
 
     typer.echo(t("deploy.running_setup"))
@@ -792,7 +771,7 @@ def deploy_setup_command(
         ]
     )
     if ssh_result.returncode != 0:
-        typer.secho(t("deploy.setup_failed"), fg="red", err=True)
+        brand.error(t("deploy.setup_failed"), err=True)
         raise typer.Exit(1)
 
     # Verify installation on remote server
@@ -810,25 +789,19 @@ def deploy_setup_command(
     if public_key:
         pubkey_path = Path(public_key).expanduser()
         if not pubkey_path.exists():
-            typer.secho(
-                t("deploy.pubkey_missing", path=str(pubkey_path)),
-                fg="red",
-                err=True,
-            )
+            brand.error(t("deploy.pubkey_missing", path=str(pubkey_path)), err=True)
             raise typer.Exit(1)
         pubkey_body = pubkey_path.read_text().strip()
         typer.echo(t("deploy.installing_pubkey", user=user))
         install_result = _install_pubkey_on_server(pubkey_body, host, user)
         if install_result.returncode != 0:
-            typer.secho(
-                t("deploy.pubkey_install_failed", error=install_result.stderr),
-                fg="red",
-                err=True,
+            brand.error(
+                t("deploy.pubkey_install_failed", error=install_result.stderr), err=True
             )
             raise typer.Exit(1)
-        typer.secho(t("deploy.pubkey_installed"), fg="green")
+        brand.success(t("deploy.pubkey_installed"))
 
-    typer.secho(f"\n{t('deploy.setup_complete')}", fg="green", bold=True)
+    brand.success(f"\n{t('deploy.setup_complete')}", bold=True)
     typer.echo(t("deploy.setup_next"))
 
 
@@ -884,11 +857,7 @@ def deploy_command(
     """
     config = _load_deploy_config(project_path)
     if not config:
-        typer.secho(
-            t("deploy.no_config"),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("deploy.no_config"), err=True)
         raise typer.Exit(1)
 
     host = config["server"]["host"]
@@ -913,7 +882,7 @@ def deploy_command(
         )
         return
 
-    typer.secho(t("deploy.deploying", host=host), fg="blue", bold=True)
+    brand.accent(t("deploy.deploying", host=host), bold=True)
 
     # Step 1: Create backup before deploying
     backup_timestamp: str | None = None
@@ -940,11 +909,7 @@ def deploy_command(
         ["ssh", f"{user}@{host}", f"mkdir -p {shlex.quote(deploy_path)}"]
     )
     if mkdir_result.returncode != 0:
-        typer.secho(
-            t("deploy.mkdir_failed", path=deploy_path),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("deploy.mkdir_failed", path=deploy_path), err=True)
         raise typer.Exit(1)
 
     rsync_result = subprocess.run(
@@ -980,7 +945,7 @@ def deploy_command(
         ]
     )
     if rsync_result.returncode != 0:
-        typer.secho(t("deploy.sync_failed"), fg="red", err=True)
+        brand.error(t("deploy.sync_failed"), err=True)
         raise typer.Exit(1)
 
     # Step 3: Copy .env file (prefer .env.deploy for production values)
@@ -1000,7 +965,7 @@ def deploy_command(
             ["scp", str(env_file), f"{user}@{host}:{safe_path}"]
         )
         if env_result.returncode != 0:
-            typer.secho(t("deploy.env_copy_failed"), fg="red", err=True)
+            brand.error(t("deploy.env_copy_failed"), err=True)
             raise typer.Exit(1)
 
     # Step 4: Stop existing services
@@ -1014,9 +979,9 @@ def deploy_command(
     compose_cmd = f"{compose_prefix} up -d {build_flag}"
     compose_result = subprocess.run(["ssh", f"{user}@{host}", compose_cmd])
     if compose_result.returncode != 0:
-        typer.secho(t("deploy.start_failed"), fg="red", err=True)
+        brand.error(t("deploy.start_failed"), err=True)
         if backup_timestamp and health_cfg["auto_rollback"]:
-            typer.secho(t("deploy.auto_rollback"), fg="yellow")
+            brand.warn(t("deploy.auto_rollback"))
             _rollback_to_backup(host, user, deploy_path, backup_timestamp)
         raise typer.Exit(1)
 
@@ -1038,32 +1003,18 @@ def deploy_command(
         )
         if not healthy:
             if backup_timestamp and health_cfg["auto_rollback"]:
-                typer.secho(
-                    t("deploy.auto_rollback"),
-                    fg="yellow",
-                    bold=True,
-                )
+                brand.warn(t("deploy.auto_rollback"), bold=True)
                 success = _rollback_to_backup(host, user, deploy_path, backup_timestamp)
                 if success:
-                    typer.secho(
-                        t("deploy.rolled_back", timestamp=backup_timestamp),
-                        fg="green",
-                    )
+                    brand.success(t("deploy.rolled_back", timestamp=backup_timestamp))
                 else:
-                    typer.secho(
-                        t("deploy.rollback_failed"),
-                        fg="red",
-                        err=True,
-                    )
+                    brand.error(t("deploy.rollback_failed"), err=True)
                 raise typer.Exit(1)
             else:
-                typer.secho(
-                    t("deploy.health_failed_hint"),
-                    fg="yellow",
-                )
+                brand.warn(t("deploy.health_failed_hint"))
                 raise typer.Exit(1)
 
-    typer.secho(f"\n{t('deploy.complete')}", fg="green", bold=True)
+    brand.success(f"\n{t('deploy.complete')}", bold=True)
     typer.echo(t("deploy.app_running", host=host))
     typer.echo(t("deploy.overseer", host=host))
     typer.echo(t("deploy.view_logs"))
@@ -1086,11 +1037,7 @@ def deploy_backup_command(
     """
     config = _load_deploy_config(project_path)
     if not config:
-        typer.secho(
-            t("deploy.no_config"),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("deploy.no_config"), err=True)
         raise typer.Exit(1)
 
     host = config["server"]["host"]
@@ -1098,7 +1045,7 @@ def deploy_backup_command(
     deploy_path = config["server"]["path"]
     backup_cfg = _get_backup_config(config)
 
-    typer.secho(t("deploy.creating_backup_on", host=host), fg="blue", bold=True)
+    brand.accent(t("deploy.creating_backup_on", host=host), bold=True)
 
     timestamp = _create_backup(
         host,
@@ -1110,7 +1057,7 @@ def deploy_backup_command(
         raise typer.Exit(1)
 
     _prune_backups(host, user, deploy_path, backup_cfg["keep_count"])
-    typer.secho(f"\n{t('deploy.backup_complete')}", fg="green", bold=True)
+    brand.success(f"\n{t('deploy.backup_complete')}", bold=True)
 
 
 def deploy_backups_command(
@@ -1128,11 +1075,7 @@ def deploy_backups_command(
     """
     config = _load_deploy_config(project_path)
     if not config:
-        typer.secho(
-            t("deploy.no_config"),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("deploy.no_config"), err=True)
         raise typer.Exit(1)
 
     host = config["server"]["host"]
@@ -1148,10 +1091,8 @@ def deploy_backups_command(
 
     backups = [b.strip() for b in result.stdout.strip().splitlines() if b.strip()]
 
-    typer.secho(
-        f"{t('deploy.backups_header', host=host, count=len(backups))}\n",
-        fg="blue",
-        bold=True,
+    brand.accent(
+        f"{t('deploy.backups_header', host=host, count=len(backups))}\n", bold=True
     )
     ts = t("deploy.col_timestamp")
     sz = t("deploy.col_size")
@@ -1198,11 +1139,7 @@ def deploy_rollback_command(
     """
     config = _load_deploy_config(project_path)
     if not config:
-        typer.secho(
-            t("deploy.no_config"),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("deploy.no_config"), err=True)
         raise typer.Exit(1)
 
     host = config["server"]["host"]
@@ -1216,15 +1153,11 @@ def deploy_rollback_command(
             host, user, f"ls -1t {safe_path} 2>/dev/null | head -1"
         )
         if result.returncode != 0 or not result.stdout.strip():
-            typer.secho(t("deploy.no_backups_available"), fg="red", err=True)
+            brand.error(t("deploy.no_backups_available"), err=True)
             raise typer.Exit(1)
         backup = result.stdout.strip()
 
-    typer.secho(
-        t("deploy.rolling_back", backup=backup, host=host),
-        fg="yellow",
-        bold=True,
-    )
+    brand.warn(t("deploy.rolling_back", backup=backup, host=host), bold=True)
 
     success = _rollback_to_backup(host, user, deploy_path, backup)
     if success:
@@ -1237,11 +1170,11 @@ def deploy_rollback_command(
         if traefik_check.returncode == 0:
             _run_remote(host, user, f"{prefix} restart traefik")
 
-        typer.secho(f"\n{t('deploy.rollback_complete')}", fg="green", bold=True)
+        brand.success(f"\n{t('deploy.rollback_complete')}", bold=True)
         typer.echo(t("deploy.check_status"))
         typer.echo(t("deploy.view_logs"))
     else:
-        typer.secho(t("deploy.rollback_failed_final"), fg="red", err=True)
+        brand.error(t("deploy.rollback_failed_final"), err=True)
         raise typer.Exit(1)
 
 
@@ -1266,11 +1199,7 @@ def deploy_logs_command(
     """
     config = _load_deploy_config(project_path)
     if not config:
-        typer.secho(
-            t("deploy.no_config"),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("deploy.no_config"), err=True)
         raise typer.Exit(1)
 
     host = config["server"]["host"]
@@ -1296,18 +1225,14 @@ def deploy_status_command(
     """
     config = _load_deploy_config(project_path)
     if not config:
-        typer.secho(
-            t("deploy.no_config"),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("deploy.no_config"), err=True)
         raise typer.Exit(1)
 
     host = config["server"]["host"]
     user = config["server"]["user"]
     deploy_path = config["server"]["path"]
 
-    typer.secho(t("deploy.status_header", host=host), fg="blue", bold=True)
+    brand.accent(t("deploy.status_header", host=host), bold=True)
     _run_remote(host, user, f"{_compose_prefix(deploy_path)} ps")
 
 
@@ -1324,23 +1249,19 @@ def deploy_stop_command(
     """
     config = _load_deploy_config(project_path)
     if not config:
-        typer.secho(
-            t("deploy.no_config"),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("deploy.no_config"), err=True)
         raise typer.Exit(1)
 
     host = config["server"]["host"]
     user = config["server"]["user"]
     deploy_path = config["server"]["path"]
 
-    typer.secho(t("deploy.stop_stopping"), fg="yellow")
+    brand.warn(t("deploy.stop_stopping"))
     result = _run_remote(host, user, f"{_compose_prefix(deploy_path)} down")
     if result.returncode == 0:
-        typer.secho(t("deploy.stop_success"), fg="green")
+        brand.success(t("deploy.stop_success"))
     else:
-        typer.secho(t("deploy.stop_failed"), fg="red", err=True)
+        brand.error(t("deploy.stop_failed"), err=True)
         raise typer.Exit(1)
 
 
@@ -1357,23 +1278,19 @@ def deploy_restart_command(
     """
     config = _load_deploy_config(project_path)
     if not config:
-        typer.secho(
-            t("deploy.no_config"),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("deploy.no_config"), err=True)
         raise typer.Exit(1)
 
     host = config["server"]["host"]
     user = config["server"]["user"]
     deploy_path = config["server"]["path"]
 
-    typer.secho(t("deploy.restart_restarting"), fg="yellow")
+    brand.warn(t("deploy.restart_restarting"))
     result = _run_remote(host, user, f"{_compose_prefix(deploy_path)} restart")
     if result.returncode == 0:
-        typer.secho(t("deploy.restart_success"), fg="green")
+        brand.success(t("deploy.restart_success"))
     else:
-        typer.secho(t("deploy.restart_failed"), fg="red", err=True)
+        brand.error(t("deploy.restart_failed"), err=True)
         raise typer.Exit(1)
 
 
@@ -1394,11 +1311,7 @@ def deploy_shell_command(
     """
     config = _load_deploy_config(project_path)
     if not config:
-        typer.secho(
-            t("deploy.no_config"),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("deploy.no_config"), err=True)
         raise typer.Exit(1)
 
     host = config["server"]["host"]
@@ -1451,18 +1364,18 @@ def _check_gh_cli() -> None:
     try:
         version = subprocess.run(["gh", "--version"], capture_output=True)
     except FileNotFoundError:
-        typer.secho(t("deploy.cd_gh_not_installed"), fg="red", err=True)
+        brand.error(t("deploy.cd_gh_not_installed"), err=True)
         raise typer.Exit(1) from None
     if version.returncode != 0:
-        typer.secho(t("deploy.cd_gh_not_installed"), fg="red", err=True)
+        brand.error(t("deploy.cd_gh_not_installed"), err=True)
         raise typer.Exit(1)
     try:
         auth = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
     except FileNotFoundError:
-        typer.secho(t("deploy.cd_gh_not_installed"), fg="red", err=True)
+        brand.error(t("deploy.cd_gh_not_installed"), err=True)
         raise typer.Exit(1) from None
     if auth.returncode != 0:
-        typer.secho(t("deploy.cd_gh_not_authed"), fg="red", err=True)
+        brand.error(t("deploy.cd_gh_not_authed"), err=True)
         raise typer.Exit(1)
 
 
@@ -1646,7 +1559,7 @@ def deploy_cd_setup_command(
     # Preflight: deploy config
     config = _load_deploy_config(project_path)
     if not config:
-        typer.secho(t("deploy.no_config"), fg="red", err=True)
+        brand.error(t("deploy.no_config"), err=True)
         raise typer.Exit(1)
     host = config["server"]["host"]
     user = config["server"]["user"]
@@ -1654,7 +1567,7 @@ def deploy_cd_setup_command(
     # Preflight: repo
     repo_slug = repo or _detect_github_repo(project_root)
     if not repo_slug:
-        typer.secho(t("deploy.cd_repo_not_detected"), fg="red", err=True)
+        brand.error(t("deploy.cd_repo_not_detected"), err=True)
         raise typer.Exit(1)
 
     workflow_path = project_root / ".github" / "workflows" / "deploy.yml"
@@ -1665,12 +1578,11 @@ def deploy_cd_setup_command(
         config.get("ci", {}).get("github") if isinstance(config, dict) else None
     )
     if existing_ci and not force:
-        typer.secho(
+        brand.error(
             t(
                 "deploy.cd_already_configured",
                 fingerprint=existing_ci.get("deploy_key_fingerprint", "unknown"),
             ),
-            fg="red",
             err=True,
         )
         raise typer.Exit(1)
@@ -1683,26 +1595,18 @@ def deploy_cd_setup_command(
             _GH_DEPLOY_USER_SECRET,
         }
         if clash:
-            typer.secho(
-                t("deploy.cd_secret_exists", names=", ".join(sorted(clash))),
-                fg="red",
-                err=True,
+            brand.error(
+                t("deploy.cd_secret_exists", names=", ".join(sorted(clash))), err=True
             )
             raise typer.Exit(1)
 
     if workflow_path.exists() and not force:
-        typer.secho(
-            t("deploy.cd_workflow_exists", path=str(workflow_path)),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("deploy.cd_workflow_exists", path=str(workflow_path)), err=True)
         raise typer.Exit(1)
 
     # Plan
-    typer.secho(
-        t("deploy.cd_title", repo=repo_slug, target=f"{user}@{host}"),
-        fg="blue",
-        bold=True,
+    brand.accent(
+        t("deploy.cd_title", repo=repo_slug, target=f"{user}@{host}"), bold=True
     )
     typer.echo(t("deploy.cd_plan_header"))
     typer.echo(t("deploy.cd_plan_keygen"))
@@ -1713,7 +1617,7 @@ def deploy_cd_setup_command(
     )
 
     if dry_run:
-        typer.secho(t("deploy.cd_dry_run"), fg="yellow")
+        brand.warn(t("deploy.cd_dry_run"))
         return
 
     # Generate key
@@ -1738,11 +1642,7 @@ def deploy_cd_setup_command(
     )
     if keygen.returncode != 0:
         shutil.rmtree(tempdir, ignore_errors=True)
-        typer.secho(
-            t("deploy.cd_keygen_failed", error=keygen.stderr),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("deploy.cd_keygen_failed", error=keygen.stderr), err=True)
         raise typer.Exit(1)
 
     pubkey_body = (key_path.with_suffix(".pub")).read_text().strip()
@@ -1758,11 +1658,7 @@ def deploy_cd_setup_command(
     install = _install_pubkey_on_server(pubkey_body, host, user)
     if install.returncode != 0:
         shutil.rmtree(tempdir, ignore_errors=True)
-        typer.secho(
-            t("deploy.cd_install_failed", error=install.stderr),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("deploy.cd_install_failed", error=install.stderr), err=True)
         raise typer.Exit(1)
 
     # Push secrets
@@ -1789,10 +1685,8 @@ def deploy_cd_setup_command(
             # Rollback: remove the pubkey we just installed
             _remove_pubkey_from_server(marker, host, user)
             shutil.rmtree(tempdir, ignore_errors=True)
-            typer.secho(
-                t("deploy.cd_secret_failed", name=name, error=result.stderr),
-                fg="red",
-                err=True,
+            brand.error(
+                t("deploy.cd_secret_failed", name=name, error=result.stderr), err=True
             )
             raise typer.Exit(1)
 
@@ -1844,7 +1738,7 @@ def deploy_cd_setup_command(
                 pass
     shutil.rmtree(tempdir, ignore_errors=True)
 
-    typer.secho(f"\n{t('deploy.cd_complete')}", fg="green", bold=True)
+    brand.success(f"\n{t('deploy.cd_complete')}", bold=True)
     typer.echo(t("deploy.cd_fingerprint", fingerprint=fingerprint))
     typer.echo(
         t("deploy.cd_next_commit", path=str(workflow_path.relative_to(project_root)))
@@ -1852,5 +1746,5 @@ def deploy_cd_setup_command(
     typer.echo(t("deploy.cd_next_run"))
     if not keep_key:
         typer.echo("")
-        typer.secho(t("deploy.cd_key_discarded"), fg="yellow")
+        brand.warn(t("deploy.cd_key_discarded"))
         typer.echo(t("deploy.cd_key_recover_hint"))

@@ -11,6 +11,7 @@ import typer
 
 from ..core.copier_manager import is_copier_project
 from ..i18n import t
+from . import brand
 
 
 def validate_copier_project(target_path: Path, command_name: str) -> None:
@@ -25,11 +26,7 @@ def validate_copier_project(target_path: Path, command_name: str) -> None:
         typer.Exit: If project is not a Copier project
     """
     if not is_copier_project(target_path):
-        typer.secho(
-            t("shared.not_copier_project", path=target_path),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("shared.not_copier_project", path=target_path), err=True)
         from ..constants import Messages
 
         typer.echo(
@@ -55,7 +52,7 @@ def validate_git_repository(target_path: Path) -> None:
     """
     git_dir = target_path / ".git"
     if not git_dir.exists():
-        typer.secho(f"\n{t('shared.git_not_initialized')}", fg="red", err=True)
+        brand.error(f"\n{t('shared.git_not_initialized')}", err=True)
         typer.echo(f"   {t('shared.git_required')}", err=True)
         typer.echo(f"   {t('shared.git_init_hint')}", err=True)
         typer.echo(f"   {t('shared.git_manual_init')}", err=True)
@@ -80,11 +77,11 @@ def parse_comma_separated_list(value: str, item_type: str = "item") -> list[str]
 
     if any(not item for item in items):
         if item_type == "component":
-            typer.secho(t("shared.empty_component"), fg="red", err=True)
+            brand.error(t("shared.empty_component"), err=True)
         elif item_type == "service":
-            typer.secho(t("shared.empty_service"), fg="red", err=True)
+            brand.error(t("shared.empty_service"), err=True)
         else:
-            typer.secho(f"Empty {item_type} name is not allowed", fg="red", err=True)
+            brand.error(f"Empty {item_type} name is not allowed", err=True)
         raise typer.Exit(1)
 
     return [item for item in items if item]

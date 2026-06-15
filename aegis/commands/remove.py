@@ -8,6 +8,7 @@ from pathlib import Path
 
 import typer
 
+from ..cli import brand
 from ..cli.validation import (
     parse_comma_separated_list,
     validate_copier_project,
@@ -47,7 +48,7 @@ def _uninstall_plugin(
     """
     plugin_spec = _resolve_plugin_for_remove(name)
     if plugin_spec is None:
-        typer.secho(f"Plugin not found: {name!r}", fg="red", err=True)
+        brand.error(f"Plugin not found: {name!r}", err=True)
         raise typer.Exit(1)
 
     answers = load_copier_answers(target_path)
@@ -63,10 +64,9 @@ def _uninstall_plugin(
     )
     dependents = reverse_dependents(plugin_spec.name, candidates, answers)
     if dependents and not force:
-        typer.secho(
+        brand.error(
             f"Cannot remove {plugin_spec.name!r}: still required by "
             f"{', '.join(repr(d) for d in dependents)}",
-            fg="red",
             err=True,
         )
         typer.echo(
@@ -75,34 +75,26 @@ def _uninstall_plugin(
         )
         raise typer.Exit(1)
     if dependents and force:
-        typer.secho(
+        brand.warn(
             f"Forcing removal despite reverse dependents: "
-            f"{', '.join(repr(d) for d in dependents)}",
-            fg="yellow",
+            f"{', '.join(repr(d) for d in dependents)}"
         )
 
     typer.echo(f"\n{t('remove.plugin_removing', name=plugin_spec.name)}")
     if not yes and not typer.confirm(
         t("remove.plugin_confirm", name=plugin_spec.name), default=False
     ):
-        typer.secho(t("shared.operation_cancelled"), fg="red")
+        brand.error(t("shared.operation_cancelled"))
         raise typer.Exit(0)
 
     updater = ManualUpdater(target_path)
     result = updater.remove_plugin(plugin_spec)
 
     if not result.success:
-        typer.secho(
-            f"\nPlugin remove failed: {result.error_message}",
-            fg="red",
-            err=True,
-        )
+        brand.error(f"\nPlugin remove failed: {result.error_message}", err=True)
         raise typer.Exit(1)
 
-    typer.secho(
-        f"\n{t('remove.plugin_success', name=plugin_spec.name)}",
-        fg="green",
-    )
+    brand.success(f"\n{t('remove.plugin_success', name=plugin_spec.name)}")
     if plugin_spec.migrations:
         typer.echo(
             "   Note: plugin database tables remain in your database. "
@@ -176,7 +168,7 @@ def remove_command(
 
     # Validate components argument or interactive mode
     if not interactive and not components:
-        typer.secho(t("remove.error_no_args"), fg="red", err=True)
+        brand.error(t("remove.error_no_args"), err=True)
         typer.echo(f"   {t('remove.usage_hint')}", err=True)
         typer.echo(f"   {t('remove.interactive_hint')}", err=True)
         raise typer.Exit(1)
@@ -208,14 +200,14 @@ def remove_command(
     # Interactive mode
     if interactive:
         if components:
-            typer.secho(t("shared.interactive_ignores_args"), fg="yellow")
+            brand.warn(t("shared.interactive_ignores_args"))
 
         from ..cli.interactive import interactive_component_remove_selection
 
         selected_components = interactive_component_remove_selection(target_path)
 
         if not selected_components:
-            typer.secho(f"\n{t('remove.no_selected')}", fg="green")
+            brand.success(f"\n{t('remove.no_selected')}")
             raise typer.Exit(0)
 
         # Convert to comma-separated string for existing logic
@@ -234,18 +226,18 @@ def remove_command(
         errors = DependencyResolver.validate_components(selected_components)
         if errors:
             for error in errors:
-                typer.secho(f"{error}", fg="red", err=True)
+                brand.error(f"{error}", err=True)
             raise typer.Exit(1)
 
     except Exception as e:
-        typer.secho(t("remove.validation_failed", error=e), fg="red", err=True)
+        brand.error(t("remove.validation_failed", error=e), err=True)
         raise typer.Exit(1)
 
     # Load existing project configuration
     try:
         existing_answers = load_copier_answers(target_path)
     except Exception as e:
-        typer.secho(t("remove.load_config_failed", error=e), fg="red", err=True)
+        brand.error(t("remove.load_config_failed", error=e), err=True)
         raise typer.Exit(1)
 
     # Check which components are currently enabled
@@ -255,9 +247,7 @@ def remove_command(
     for component in selected_components:
         # Check if component is core (cannot be removed)
         if component in CORE_COMPONENTS:
-            typer.secho(
-                t("remove.cannot_remove_core", component=component), fg="yellow"
-            )
+            brand.warn(t("remove.cannot_remove_core", component=component))
             continue
 
         # Check if component is enabled
@@ -271,7 +261,7 @@ def remove_command(
         typer.echo(t("remove.not_enabled", components=", ".join(not_enabled)))
 
     if not components_to_remove:
-        typer.secho(t("remove.nothing_to_remove"), fg="green")
+        brand.success(t("remove.nothing_to_remove"))
         raise typer.Exit(0)
 
     # Auto-remove redis if worker is being removed (redis has no standalone functionality)
@@ -291,7 +281,7 @@ def remove_command(
     if ComponentNames.SCHEDULER in components_to_remove:
         scheduler_backend = existing_answers.get(AnswerKeys.SCHEDULER_BACKEND)
         if scheduler_backend == StorageBackends.SQLITE:
-            typer.secho(f"\n{t('remove.scheduler_persistence_warn')}", fg="yellow")
+            brand.warn(f"\n{t('remove.scheduler_persistence_warn')}")
             typer.echo(f"   {t('remove.scheduler_persistence_detail')}")
             typer.echo(f"   {t('remove.scheduler_db_remains')}")
             typer.echo()
@@ -300,7 +290,7 @@ def remove_command(
             typer.echo()
 
     # Show what will be removed
-    typer.secho(f"\n{t('remove.components_to_remove')}", fg="yellow")
+    brand.warn(f"\n{t('remove.components_to_remove')}")
     for component in components_to_remove:
         if component in COMPONENTS:
             desc = _translated_desc(component, COMPONENTS[component].description)
@@ -308,12 +298,12 @@ def remove_command(
 
     # Confirm before proceeding
     typer.echo()
-    typer.secho(t("remove.warning_delete"), fg="yellow")
+    brand.warn(t("remove.warning_delete"))
     typer.echo(f"   {t('remove.commit_hint')}")
     typer.echo()
 
     if not yes and not typer.confirm(t("remove.confirm")):
-        typer.secho(t("shared.operation_cancelled"), fg="red")
+        brand.error(t("shared.operation_cancelled"))
         raise typer.Exit(0)
 
     # Run manual removal for each component
@@ -328,27 +318,25 @@ def remove_command(
             result = updater.remove_component(component)
 
             if not result.success:
-                typer.secho(
+                brand.error(
                     t(
                         "remove.failed_component",
                         component=component,
                         error=result.error_message,
                     ),
-                    fg="red",
                     err=True,
                 )
                 raise typer.Exit(1)
 
             # Show results
             if result.files_deleted:
-                typer.secho(
-                    f"   {t('remove.removed_files', count=len(result.files_deleted))}",
-                    fg="green",
+                brand.success(
+                    f"   {t('remove.removed_files', count=len(result.files_deleted))}"
                 )
 
-        typer.secho(f"\n{t('remove.success')}", fg="green")
+        brand.success(f"\n{t('remove.success')}")
         Messages.print_next_steps()
 
     except Exception as e:
-        typer.secho(f"\n{t('remove.failed', error=e)}", fg="red", err=True)
+        brand.error(f"\n{t('remove.failed', error=e)}", err=True)
         raise typer.Exit(1)

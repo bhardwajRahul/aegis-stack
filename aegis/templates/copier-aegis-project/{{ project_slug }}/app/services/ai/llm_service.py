@@ -5,6 +5,7 @@ Provides business logic for listing, viewing, and switching LLM models.
 
 from app.core.config import settings
 from app.core.db import engine, get_async_session
+from app.services.ai.models import AIProvider
 from app.services.ai.models.llm import (
     LargeLanguageModel,
     LLMModality,
@@ -284,11 +285,15 @@ async def set_active_model(model_id: str, force: bool = False) -> SetModelResult
     # Prepare updates
     updates: dict[str, str] = {"AI_MODEL": model_id}
 
-    # Always update provider based on model's vendor (auto-detect)
+    # Auto-detect provider from the model's vendor, but only persist a value
+    # that resolves to a real AIProvider. A vendor display name like "LLM7.io"
+    # must become "public", never a bogus AI_PROVIDER that would crash config
+    # loading on the next boot.
     if vendor_name:
-        vendor_lower = vendor_name.lower()
-        updates["AI_PROVIDER"] = vendor_lower
-        provider_updated = True
+        resolved_provider = AIProvider.from_name(vendor_name)
+        if resolved_provider is not None:
+            updates["AI_PROVIDER"] = resolved_provider.value
+            provider_updated = True
 
     # Apply updates
     update_env_file(updates)

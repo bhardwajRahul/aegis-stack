@@ -9,6 +9,7 @@ import time
 from typing import Annotated
 
 import typer
+from app.cli import theme
 from app.core.db import engine
 from app.core.log import suppress_logs
 from app.i18n import lazy_t, t
@@ -29,14 +30,13 @@ from app.services.ai.models.llm import (
     LLMPrice,
     LLMVendor,
 )
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.tree import Tree
 from sqlmodel import Session, delete
 
 app = typer.Typer(help=lazy_t("llm.help"))
-console = Console()
+console = theme.console()
 
 
 def _get_modalities_help() -> str:
@@ -115,20 +115,20 @@ def sync(
     ] = False,
 ) -> None:
     if dry_run:
-        console.print(f"[yellow]{t('llm.dry_run_mode')}[/yellow]\n")
+        console.print(f"[{theme.WARNING}]{t('llm.dry_run_mode')}[/]\n")
 
     if refresh and dry_run:
-        console.print(f"[yellow]{t('llm.refresh_dry_run')}[/yellow]\n")
+        console.print(f"[{theme.WARNING}]{t('llm.refresh_dry_run')}[/]\n")
 
     start_time = time.time()
 
     # Build status message based on source
     if source == "ollama":
-        status_msg = f"[bold green]{t('llm.syncing_ollama')}..."
+        status_msg = f"[bold {theme.ACCENT}]{t('llm.syncing_ollama')}..."
     elif source == "all":
-        status_msg = f"[bold green]{t('llm.syncing_catalog_all', mode=mode)}..."
+        status_msg = f"[bold {theme.ACCENT}]{t('llm.syncing_catalog_all', mode=mode)}..."
     else:
-        status_msg = f"[bold green]{t('llm.syncing_catalog', mode=mode)}..."
+        status_msg = f"[bold {theme.ACCENT}]{t('llm.syncing_catalog', mode=mode)}..."
 
     with (
         suppress_logs(),
@@ -166,12 +166,12 @@ def vendors() -> None:
     results = list_vendors()
 
     if not results:
-        console.print(f"[yellow]{t('llm.no_vendors')}[/yellow]")
+        console.print(f"[dim]{t('llm.no_vendors')}[/dim]")
         return
 
     table = Table(title=t("llm.vendors_title", count=len(results)))
-    table.add_column(t("llm.vendor_column"), style="cyan")
-    table.add_column(t("llm.models_column"), style="green", justify="right")
+    table.add_column(t("llm.vendor_column"), style=theme.ACCENT)
+    table.add_column(t("llm.models_column"), justify="right")
 
     for vendor in results:
         table.add_row(vendor.name, str(vendor.model_count))
@@ -184,12 +184,12 @@ def modalities() -> None:
     results = list_modalities()
 
     if not results:
-        console.print(f"[yellow]{t('llm.no_modalities')}[/yellow]")
+        console.print(f"[dim]{t('llm.no_modalities')}[/dim]")
         return
 
     table = Table(title=t("llm.modalities_title", count=len(results)))
-    table.add_column(t("llm.modality_column"), style="cyan")
-    table.add_column(t("llm.models_column"), style="green", justify="right")
+    table.add_column(t("llm.modality_column"), style=theme.ACCENT)
+    table.add_column(t("llm.models_column"), justify="right")
 
     for item in results:
         table.add_row(item.modality, str(item.model_count))
@@ -198,7 +198,7 @@ def modalities() -> None:
 
 
 @app.command("list", help=lazy_t("llm.help_list"))
-async def list_cmd(
+def list_cmd(
     ctx: typer.Context,
     pattern: Annotated[
         str | None,
@@ -242,24 +242,28 @@ async def list_cmd(
     if not pattern and not vendor and not modality:
         console.print(ctx.get_help())
         console.print()
-        console.print(f"[red]{t('shared.error')}[/red] {t('llm.provide_filter')}")
+        console.print(
+            f"[{theme.ERROR}]{t('shared.error')}[/] {t('llm.provide_filter')}"
+        )
         raise typer.Exit(2)
 
-    results = await list_models(
-        pattern=pattern,
-        vendor=vendor,
-        modality=modality,
-        limit=limit,
-        include_disabled=include_all,
+    results = asyncio.run(
+        list_models(
+            pattern=pattern,
+            vendor=vendor,
+            modality=modality,
+            limit=limit,
+            include_disabled=include_all,
+        )
     )
 
     if not results:
-        console.print(f"[yellow]{t('llm.no_models_found')}[/yellow]")
+        console.print(f"[dim]{t('llm.no_models_found')}[/dim]")
         return
 
     table = Table(title=t("llm.models_title", count=len(results)))
-    table.add_column(t("llm.model_id_column"), style="cyan", no_wrap=True)
-    table.add_column(t("llm.vendor_column"), style="green")
+    table.add_column(t("llm.model_id_column"), style=theme.ACCENT, no_wrap=True)
+    table.add_column(t("llm.vendor_column"), style="dim")
     table.add_column(t("llm.context_column"), justify="right")
     table.add_column(t("llm.input_price_column"), justify="right")
     table.add_column(t("llm.output_price_column"), justify="right")
@@ -279,15 +283,15 @@ async def list_cmd(
 
 
 @app.command(help=lazy_t("llm.help_current"))
-async def current() -> None:
-    config = await get_current_config()
+def current() -> None:
+    config = asyncio.run(get_current_config())
 
     # Build tree for configuration
     tree = Tree(f"[bold]{t('llm.current_config')}[/bold]")
-    tree.add(f"{t('llm.provider_label')} [cyan]{config.provider}[/cyan]")
-    tree.add(f"{t('llm.model_label')} [cyan]{config.model}[/cyan]")
-    tree.add(f"{t('llm.temperature_label')} [green]{config.temperature}[/green]")
-    tree.add(f"{t('llm.max_tokens_label')} [green]{config.max_tokens:,}[/green]")
+    tree.add(f"[dim]{t('llm.provider_label')}[/dim] {config.provider}")
+    tree.add(f"[dim]{t('llm.model_label')}[/dim] {config.model}")
+    tree.add(f"[dim]{t('llm.temperature_label')}[/dim] {config.temperature}")
+    tree.add(f"[dim]{t('llm.max_tokens_label')}[/dim] {config.max_tokens:,}")
 
     console.print(tree)
     console.print()
@@ -296,22 +300,22 @@ async def current() -> None:
     if config.context_window:
         catalog_tree = Tree(f"[bold]{t('llm.model_details')}[/bold]")
         catalog_tree.add(
-            f"{t('llm.context_window_label')} [green]{config.context_window:,}[/green]"
+            f"[dim]{t('llm.context_window_label')}[/dim] {config.context_window:,}"
         )
 
         if config.input_price is not None:
             catalog_tree.add(
-                f"{t('llm.input_price_label')} [green]${config.input_price:.2f}[/green] {t('llm.per_million_tokens')}"
+                f"[dim]{t('llm.input_price_label')}[/dim] ${config.input_price:.2f} {t('llm.per_million_tokens')}"
             )
 
         if config.output_price is not None:
             catalog_tree.add(
-                f"{t('llm.output_price_label')} [green]${config.output_price:.2f}[/green] {t('llm.per_million_tokens')}"
+                f"[dim]{t('llm.output_price_label')}[/dim] ${config.output_price:.2f} {t('llm.per_million_tokens')}"
             )
 
         if config.modalities:
             catalog_tree.add(
-                f"{t('llm.modalities_label')} [green]{', '.join(config.modalities)}[/green]"
+                f"[dim]{t('llm.modalities_label')}[/dim] {', '.join(config.modalities)}"
             )
 
         console.print(catalog_tree)
@@ -320,7 +324,7 @@ async def current() -> None:
 
 
 @app.command(help=lazy_t("llm.help_use"))
-async def use(
+def use(
     model_id: Annotated[
         str,
         typer.Argument(
@@ -337,21 +341,21 @@ async def use(
     ] = False,
 ) -> None:
     with console.status(
-        f"[bold green]{t('llm.switching_model', model_id=model_id)}..."
+        f"[bold {theme.ACCENT}]{t('llm.switching_model', model_id=model_id)}..."
     ):
-        result = await set_active_model(model_id, force=force)
+        result = asyncio.run(set_active_model(model_id, force=force))
 
     if result.success:
-        console.print(f"[green]\u2713[/green] {result.message}")
+        console.print(f"[{theme.ACCENT}]\u2713[/] {result.message}")
         if result.vendor:
-            console.print(f"  {t('llm.vendor_label')} [cyan]{result.vendor}[/cyan]")
+            console.print(f"  [dim]{t('llm.vendor_label')}[/dim] {result.vendor}")
     else:
-        console.print(f"[red]\u2717[/red] {result.message}")
+        console.print(f"[{theme.ERROR}]\u2717[/] {result.message}")
         raise typer.Exit(1)
 
 
 @app.command(help=lazy_t("llm.help_info"))
-async def info(
+def info(
     model_id: Annotated[
         str,
         typer.Argument(
@@ -359,18 +363,18 @@ async def info(
         ),
     ],
 ) -> None:
-    details = await get_model_info(model_id)
+    details = asyncio.run(get_model_info(model_id))
 
     if not details:
         console.print(
-            f"[red]{t('shared.error')}[/red] {t('llm.model_not_found', model_id=model_id)}\n"
+            f"[{theme.ERROR}]{t('shared.error')}[/] {t('llm.model_not_found', model_id=model_id)}\n"
             f"{t('llm.run_sync_hint')}"
         )
         raise typer.Exit(1)
 
     # Build info panel
     info_lines = [
-        f"[bold cyan]{details.title}[/bold cyan]",
+        f"[bold {theme.ACCENT}]{details.title}[/]",
         "",
         f"[dim]{t('llm.model_id_label')}[/dim] {details.model_id}",
         f"[dim]{t('llm.vendor_label')}[/dim] {details.vendor}",
@@ -413,7 +417,7 @@ async def info(
     panel = Panel(
         "\n".join(info_lines),
         title=f"[bold]{model_id}[/bold]",
-        border_style="cyan",
+        border_style="dim",
     )
     console.print(panel)
 
@@ -426,8 +430,8 @@ def _display_catalog_stats(stats: CatalogStats) -> None:
     """
     # Summary table
     summary_table = Table(title=t("llm.catalog_summary"))
-    summary_table.add_column(t("llm.metric_column"), style="cyan")
-    summary_table.add_column(t("llm.count_column"), style="green", justify="right")
+    summary_table.add_column(t("llm.metric_column"), style="dim")
+    summary_table.add_column(t("llm.count_column"), justify="right")
 
     summary_table.add_row(t("llm.vendors_row"), str(stats.vendor_count))
     summary_table.add_row(t("llm.models_row"), str(stats.model_count))
@@ -440,8 +444,8 @@ def _display_catalog_stats(stats: CatalogStats) -> None:
     # Top vendors table
     if stats.top_vendors:
         vendor_table = Table(title=t("llm.top_vendors"))
-        vendor_table.add_column(t("llm.vendor_column"), style="cyan")
-        vendor_table.add_column(t("llm.models_column"), style="green", justify="right")
+        vendor_table.add_column(t("llm.vendor_column"), style=theme.ACCENT)
+        vendor_table.add_column(t("llm.models_column"), justify="right")
 
         for vendor_name, count in stats.top_vendors:
             vendor_table.add_row(vendor_name, str(count))
@@ -459,8 +463,8 @@ def _display_sync_result(result: SyncResult, dry_run: bool, duration: float) -> 
     """
     title = t("llm.sync_results_dry_run") if dry_run else t("llm.sync_results")
     table = Table(title=title)
-    table.add_column(t("llm.metric_column"), style="cyan")
-    table.add_column(t("llm.count_column"), style="green", justify="right")
+    table.add_column(t("llm.metric_column"), style="dim")
+    table.add_column(t("llm.count_column"), justify="right")
 
     table.add_row(t("llm.vendors_added"), str(result.vendors_added))
     table.add_row(t("llm.vendors_updated"), str(result.vendors_updated))
@@ -472,12 +476,14 @@ def _display_sync_result(result: SyncResult, dry_run: bool, duration: float) -> 
     table.add_row(t("llm.duration_row"), f"{duration:.2f}s")
 
     if result.errors:
-        table.add_row(t("llm.errors_row"), f"[red]{len(result.errors)}[/red]")
+        table.add_row(
+            t("llm.errors_row"), f"[{theme.ERROR}]{len(result.errors)}[/]"
+        )
 
     console.print(table)
 
     if result.errors:
-        console.print(f"\n[red]{t('llm.errors_header')}[/red]")
+        console.print(f"\n[{theme.ERROR}]{t('llm.errors_header')}[/]")
         for error in result.errors[:10]:  # Show first 10 errors
             console.print(f"  \u2022 {error}")
         if len(result.errors) > 10:

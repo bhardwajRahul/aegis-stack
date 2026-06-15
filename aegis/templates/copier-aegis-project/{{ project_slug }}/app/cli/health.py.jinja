@@ -11,10 +11,10 @@ import sys
 from typing import Any
 
 import httpx
-from rich.console import Console
 from rich.panel import Panel
 import typer
 
+from app.cli import theme
 from app.core.config import settings
 from app.core.constants import CLI, APIEndpoints, Defaults
 from app.core.log import setup_logging
@@ -27,7 +27,7 @@ from app.services.system.models import (
 from app.services.system.ui import get_status_color_name, get_status_icon
 
 app = typer.Typer(name="health", help=lazy_t("health.help"))
-console = Console()
+console = theme.console()
 
 # Pattern-based translation for health API response messages.
 # Maps English substrings/prefixes to i18n keys for display-time translation.
@@ -140,9 +140,22 @@ def _translate_health_msg(msg: str) -> str:
     return msg
 
 
+def _theme_status_style(semantic_color: str) -> str:
+    """Map a semantic status color name to a brand Rich markup style.
+
+    Color encodes state: teal=healthy, amber=warning, red=error; info and
+    anything else is a non-problem sub-state, rendered dim.
+    """
+    return {
+        "green": theme.ACCENT,
+        "yellow": theme.WARNING,
+        "red": theme.ERROR,
+    }.get(semantic_color, "dim")
+
+
 def _get_status_icon_and_color(status: ComponentStatusType) -> tuple[str, str]:
     """Get the appropriate icon and color for a component status (shared mapping)."""
-    return get_status_icon(status), get_status_color_name(status)
+    return get_status_icon(status), _theme_status_style(get_status_color_name(status))
 
 
 def _count_status_types(components: dict[str, Any]) -> dict[str, int]:
@@ -198,15 +211,15 @@ def _format_status_breakdown(counts: dict[str, int]) -> str:
 
 
 def _get_status_color(counts: dict[str, int]) -> str:
-    """Get color based on status breakdown."""
+    """Get brand markup style based on status breakdown."""
     if counts["unhealthy"] > 0:
-        return "red"
+        return theme.ERROR
     elif counts["warning"] > 0:
-        return "yellow"
+        return theme.WARNING
     elif counts["info"] > 0:
-        return "blue"
+        return "dim"
     else:
-        return "green"
+        return theme.ACCENT
 
 
 def _is_scheduler_metadata(metadata: dict[str, Any]) -> bool:
@@ -382,7 +395,9 @@ def health_status(
             error_data = {"error": str(e), "status": "error"}
             print(json.dumps(error_data, indent=2))
         else:
-            console.print(f"[red]{t('health.status_failed', error=e)}[/red]")
+            console.print(
+                f"[{theme.ERROR}]{t('health.status_failed', error=e)}[/]"
+            )
         # Exit 1 only on actual errors (connection failures, etc), not unhealthy status
         sys.exit(1)
 
@@ -395,14 +410,14 @@ def health_probe() -> None:
         healthy = asyncio.run(is_system_healthy())
 
         if healthy:
-            console.print(f"[green]{t('health.system_healthy')}[/green]")
+            console.print(f"[{theme.ACCENT}]{t('health.system_healthy')}[/]")
             sys.exit(0)
         else:
-            console.print(f"[red]{t('health.system_unhealthy_msg')}[/red]")
+            console.print(f"[{theme.ERROR}]{t('health.system_unhealthy_msg')}[/]")
             sys.exit(1)
 
     except Exception as e:
-        console.print(f"[red]{t('health.probe_failed', error=e)}[/red]")
+        console.print(f"[{theme.ERROR}]{t('health.probe_failed', error=e)}[/]")
         sys.exit(1)
 
 
@@ -509,7 +524,7 @@ def _display_health_status(
             total_count = 0
             health_percentage = 0.0
 
-    overall_color = "green" if overall_healthy else "red"
+    overall_color = theme.ACCENT if overall_healthy else theme.ERROR
 
     status_label = t("health.healthy") if overall_healthy else t("health.unhealthy")
     title = f"{t('health.title')} - {status_label}"
@@ -580,7 +595,7 @@ def _display_health_status(
     tree_title = t("health.component_tree")
     if hasattr(health_data, "has_services") and health_data.has_services:
         tree_title = t("health.component_service_tree")
-    console.print(f"\n[bold magenta]{tree_title}:[/bold magenta]")
+    console.print(f"\n[bold]{tree_title}:[/bold]")
 
     # Sort components: unhealthy first, then by name
     sorted_components = sorted(components.items(), key=lambda x: (x[1].healthy, x[0]))
@@ -628,7 +643,7 @@ def _display_health_status(
                 Panel(
                     "\n".join(sys_info_content),
                     title=t("health.system_info"),
-                    border_style="blue",
+                    border_style="dim",
                 )
             )
 

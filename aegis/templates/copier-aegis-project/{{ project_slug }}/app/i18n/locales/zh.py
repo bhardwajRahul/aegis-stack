@@ -487,6 +487,11 @@ MESSAGES: dict[str, str] = {
     "tasks.stat_success_rate": "成功率",
     "tasks.stat_avg_duration": "平均耗时",
     "tasks.stat_last_run": "最近一次运行",
+    "tasks.statistics_title": "调度器统计",
+    "tasks.statistics_failed": "获取调度器统计失败：",
+    "tasks.stat_total_tasks": "任务总数",
+    "tasks.stat_active_tasks": "运行中",
+    "tasks.stat_paused_tasks": "已暂停",
     "tasks.history_title": "执行历史",
     "tasks.started_column": "开始时间",
     "tasks.duration_column": "耗时",
@@ -497,6 +502,7 @@ MESSAGES: dict[str, str] = {
     "tasks.help_list": "列出所有已调度任务及状态信息。",
     "tasks.help_trigger": "立即运行某个定时任务并记录执行结果。",
     "tasks.help_stats": "显示某个定时任务的执行统计汇总。",
+    "tasks.help_statistics": "显示调度器的整体统计（任务总数、运行中和已暂停的任务）。",
     "tasks.help_history": "显示最近的任务执行历史。",
     # ── 迁移 ─────────────────────────────────────────────────────────
     "migrate.table_missing_warning": (

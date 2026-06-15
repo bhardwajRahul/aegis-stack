@@ -23,23 +23,22 @@ The default record type is ``A`` and the default IP is read from
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 import re
+from pathlib import Path
 
-from rich.console import Console
-from rich.table import Table
 import typer
-
+from app.cli import theme
 from app.core.config import settings
 from app.services.ops.adapters.porkbun import PorkbunAdapter
 from app.services.ops.types import DnsRecord, RetrievedRecord
+from rich.table import Table
 
 app = typer.Typer(
     name="dns",
     help="Manage DNS records on the configured BASE_DOMAIN.",
     no_args_is_help=True,
 )
-console = Console()
+console = theme.console()
 
 
 # ----------------------------------------------------------------------
@@ -52,10 +51,9 @@ def _resolve_domain(override: str | None) -> str:
     if override:
         return override.strip().lower()
     if not settings.BASE_DOMAIN:
-        typer.secho(
+        theme.bad(
             "BASE_DOMAIN is not set. Either set it in .env "
             "(e.g. BASE_DOMAIN=example.com) or pass -d/--domain.",
-            fg=typer.colors.RED,
             err=True,
         )
         raise typer.Exit(1)
@@ -99,8 +97,8 @@ def _print_records(domain: str, records: list[RetrievedRecord]) -> None:
         show_lines=False,
         header_style="bold",
     )
-    table.add_column("Type", style="cyan", width=8)
-    table.add_column("Host", style="magenta")
+    table.add_column("Type", width=8)
+    table.add_column("Host")
     table.add_column("Value")
     table.add_column("TTL", justify="right", width=6)
     table.add_column("Prio", justify="right", width=6)
@@ -180,18 +178,16 @@ def dns_set(
     if record_type_norm == "A":
         value = ip or _resolve_default_ip()
         if not value:
-            typer.secho(
+            theme.bad(
                 "No IP available. Pass --ip explicitly, or run from a "
                 "project with .aegis/deploy.yml present.",
-                fg=typer.colors.RED,
                 err=True,
             )
             raise typer.Exit(1)
     else:
         if not content:
-            typer.secho(
+            theme.bad(
                 f"--content is required for {record_type_norm} records.",
-                fg=typer.colors.RED,
                 err=True,
             )
             raise typer.Exit(1)
@@ -212,12 +208,12 @@ def dns_set(
         label = host or "@"
         if result.provider_id in ("", "(existing)"):
             console.print(
-                f"[yellow]reused[/yellow] {record_type_norm} {label} → {value} "
+                f"[{theme.WARNING}]reused[/{theme.WARNING}] {record_type_norm} {label} → {value} "
                 f"(already on {apex})"
             )
         else:
             console.print(
-                f"[green]created[/green] {record_type_norm} {label} → {value} "
+                f"[{theme.ACCENT}]created[/{theme.ACCENT}] {record_type_norm} {label} → {value} "
                 f"on {apex} (id={result.provider_id})"
             )
 
@@ -319,13 +315,13 @@ def dns_delete(
         for r in matches:
             if not r.provider_id:
                 console.print(
-                    f"[yellow]skipped[/yellow] {r.type} {r.host or '@'} — "
+                    f"[{theme.WARNING}]skipped[/{theme.WARNING}] {r.type} {r.host or '@'} — "
                     "registrar did not return an id"
                 )
                 continue
             await adapter.delete_dns_record(apex, r.provider_id)
             console.print(
-                f"[green]deleted[/green] {r.type} {r.host or '@'} (id={r.provider_id})"
+                f"[{theme.ACCENT}]deleted[/{theme.ACCENT}] {r.type} {r.host or '@'} (id={r.provider_id})"
             )
 
     asyncio.run(_run())

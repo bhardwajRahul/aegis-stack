@@ -13,6 +13,7 @@ from pathlib import Path
 import typer
 
 from .. import __version__ as aegis_version
+from ..cli import brand
 from ..constants import AnswerKeys, StorageBackends
 from ..core.copier_manager import is_copier_project, load_copier_answers
 from ..core.copier_updater import (
@@ -259,11 +260,7 @@ def update_command(
 
     # Validate it's a Copier project
     if not is_copier_project(target_path):
-        typer.secho(
-            t("update.not_copier", path=target_path),
-            fg="red",
-            err=True,
-        )
+        brand.error(t("update.not_copier", path=target_path), err=True)
         typer.echo(
             f"   {t('update.copier_only')}",
             err=True,
@@ -279,7 +276,7 @@ def update_command(
     # Check git status
     is_clean, git_message = validate_clean_git_tree(target_path)
     if not is_clean:
-        typer.secho(git_message, fg="red", err=True)
+        brand.error(git_message, err=True)
         typer.echo(
             f"   {t('update.commit_or_stash')}",
             err=True,
@@ -287,12 +284,12 @@ def update_command(
         typer.echo(f"   {t('update.clean_required')}", err=True)
         raise typer.Exit(1)
 
-    typer.secho(t("update.git_clean"), fg="green")
+    brand.success(t("update.git_clean"))
 
     # Get current template version
     current_commit = get_current_template_commit(target_path)
     if not current_commit:
-        typer.secho(t("update.unknown_version"), fg="yellow")
+        brand.warn(t("update.unknown_version"))
         typer.echo(f"   {t('update.untagged_commit')}")
 
     current_version = get_project_template_version(target_path)
@@ -306,7 +303,7 @@ def update_command(
     try:
         template_root = get_template_root(effective_template_path)
     except ValueError as e:
-        typer.secho(str(e), fg="red", err=True)
+        brand.error(str(e), err=True)
         raise typer.Exit(1)
 
     if effective_template_path:
@@ -346,7 +343,7 @@ def update_command(
     # Check if already up to date (version-based)
     if current_version and to_version and current_version == to_version:
         typer.echo("")
-        typer.secho(t("update.already_at_version"), fg="green")
+        brand.success(t("update.already_at_version"))
         return
 
     # Check if already at target commit (for HEAD/branch updates)
@@ -355,7 +352,7 @@ def update_command(
 
         if target_commit and current_commit == target_commit:
             typer.echo("")
-            typer.secho(t("update.already_at_commit"), fg="green")
+            brand.success(t("update.already_at_commit"))
             typer.echo(t("update.current_commit", commit=current_commit[:8]))
             typer.echo(t("update.target_commit", commit=target_commit[:8]))
             return
@@ -365,7 +362,7 @@ def update_command(
             current_commit, target_commit, template_root
         ):
             typer.echo("")
-            typer.secho(t("update.downgrade_blocked"), fg="red", err=True)
+            brand.error(t("update.downgrade_blocked"), err=True)
             typer.echo(t("update.current_commit", commit=current_commit[:8]), err=True)
             typer.echo(t("update.target_commit", commit=target_commit[:8]), err=True)
             typer.echo(
@@ -386,7 +383,7 @@ def update_command(
     # Dry run mode
     if dry_run:
         typer.echo("")
-        typer.secho(t("update.dry_run"), fg="cyan")
+        brand.accent(t("update.dry_run"))
         typer.echo("")
         typer.echo(t("update.dry_run_hint"))
         if to_version:
@@ -399,7 +396,7 @@ def update_command(
     if not yes:
         typer.echo("")
         if not typer.confirm(t("update.confirm"), default=True):
-            typer.secho(t("update.cancelled"), fg="red")
+            brand.error(t("update.cancelled"))
             raise typer.Exit(0)
 
     # Create backup point before update
@@ -409,7 +406,7 @@ def update_command(
     if backup_tag:
         typer.echo(t("update.backup_created", tag=backup_tag))
     else:
-        typer.secho(t("update.backup_failed"), fg="yellow")
+        brand.warn(t("update.backup_failed"))
 
     # Perform update using Copier
     typer.echo("")
@@ -550,10 +547,9 @@ def update_command(
                                 .decode("utf-8", errors="replace")
                                 .strip()
                             )
-                            typer.secho(
+                            brand.error(
                                 "Failed to commit backfilled .copier-answers.yml; "
                                 "aborting because copier requires a clean git tree.",
-                                fg="red",
                                 err=True,
                             )
                             if stderr:
@@ -675,12 +671,9 @@ def update_command(
         # Show update result
         typer.echo("")
         if tasks_success:
-            typer.secho(t("update.success"), fg="green")
+            brand.success(t("update.success"))
         else:
-            typer.secho(
-                t("update.partial_success"),
-                fg="yellow",
-            )
+            brand.warn(t("update.partial_success"))
             typer.echo(t("update.partial_detail"))
         typer.echo("")
         typer.echo(t("update.next_steps"))
@@ -694,7 +687,7 @@ def update_command(
         if conflicts:
             typer.echo("")
             report = format_conflict_report(conflicts)
-            typer.secho(report, fg="yellow")
+            brand.warn(report)
 
         # Cleanup backup tag on a fully clean update only. With
         # ``sync_result.conflicts`` outstanding, the user still has work
@@ -709,7 +702,7 @@ def update_command(
 
     except Exception as e:
         typer.echo("")
-        typer.secho(t("update.failed", error=e), fg="red", err=True)
+        brand.error(t("update.failed", error=e), err=True)
 
         # Offer rollback if backup exists
         if backup_tag:
@@ -717,10 +710,10 @@ def update_command(
             if yes or typer.confirm(t("update.rollback_prompt"), default=True):
                 success, message = rollback_to_backup(target_path, backup_tag)
                 if success:
-                    typer.secho(message, fg="green")
+                    brand.success(message)
                     cleanup_backup_tag(target_path, backup_tag)
                 else:
-                    typer.secho(message, fg="red", err=True)
+                    brand.error(message, err=True)
                     typer.echo(f"   {t('update.manual_rollback', tag=backup_tag)}")
             else:
                 typer.echo(t("update.manual_rollback", tag=backup_tag))

@@ -10,6 +10,7 @@ Usage:
 
 import typer
 
+from .cli import brand
 from .commands.add import add_command
 from .commands.add_service import add_service_command
 from .commands.components import components_command
@@ -59,16 +60,20 @@ def _resolve_locale_callback(value: str | None) -> str | None:
         # so check if the input actually maps to a real locale.
         base = value.lower().replace("-", "_").split(".")[0].split("@")[0]
         if resolved == "en" and not base.startswith("en"):
-            typer.secho(
+            brand.error(
                 f"Unsupported language '{value}'. Available: "
                 f"{', '.join(sorted(AVAILABLE_LOCALES))}",
-                fg="red",
                 err=True,
             )
             raise typer.Exit(1)
     set_locale(value if value else detect_locale())
     return value
 
+
+# Brand the rich ``--help`` output (teal = typeable tokens, neutral = prose,
+# dim = annotations/chrome). Single source in brand.py; must run before the
+# Typer app is built so its help panels pick up the styling.
+brand.apply_help_theme()
 
 # Create the main Typer application
 app = typer.Typer(

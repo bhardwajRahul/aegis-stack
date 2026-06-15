@@ -12,13 +12,14 @@ from rich.console import Console
 from rich.table import Table
 import typer
 
+from app.cli import theme
 from app.i18n import lazy_t, t
 
 if TYPE_CHECKING:
     from app.services.insights.collectors.base import CollectionResult
 
 app = typer.Typer(help=lazy_t("insights.help"))
-console = Console()
+console = theme.console()
 
 # Sub-groups
 reddit_app = typer.Typer(help=lazy_t("insights.help_reddit"))
@@ -38,18 +39,26 @@ async def _status() -> None:
         service = InsightService(session)
         summary = await service.get_status_summary()
 
-    typer.secho(t("insights.status_title"), fg=typer.colors.BLUE, bold=True)
+    theme.title(t("insights.status_title"))
     typer.echo()
 
     source_table = Table(title=t("insights.sources_title"), width=70)
-    source_table.add_column(t("insights.col_source"), style="cyan", width=20)
+    source_table.add_column(t("insights.col_source"), style="dim", width=20)
     source_table.add_column(t("insights.col_enabled"), width=8)
     source_table.add_column(t("insights.col_last_collected"), width=20)
     source_table.add_column(t("insights.col_metrics"), width=10, justify="right")
 
     for src in summary["sources"]:
-        enabled = f"[green]{t('insights.yes')}[/]" if src["enabled"] else f"[red]{t('insights.no')}[/]"
-        last = str(src["last_collected"])[:19] if src["last_collected"] else f"[dim]{t('insights.never')}[/]"
+        enabled = (
+            f"[{theme.ACCENT}]{t('insights.yes')}[/]"
+            if src["enabled"]
+            else f"[dim]{t('insights.no')}[/]"
+        )
+        last = (
+            str(src["last_collected"])[:19]
+            if src["last_collected"]
+            else f"[dim]{t('insights.never')}[/]"
+        )
         source_table.add_row(
             src["display_name"], enabled, last, str(src["metric_count"])
         )
@@ -59,7 +68,7 @@ async def _status() -> None:
     if summary["records"]:
         typer.echo()
         record_table = Table(title=t("insights.records_title"), width=70)
-        record_table.add_column(t("insights.col_metric"), style="cyan", width=20)
+        record_table.add_column(t("insights.col_metric"), style="dim", width=20)
         record_table.add_column(t("insights.col_value"), width=12, justify="right")
         record_table.add_column(t("insights.col_date"), width=12)
         record_table.add_column(t("insights.col_previous"), width=12, justify="right")
@@ -76,9 +85,8 @@ async def _status() -> None:
         console.print(record_table)
 
     typer.echo()
-    typer.secho(
+    theme.good(
         t("insights.total_metrics", count=summary["total_metrics"]),
-        fg=typer.colors.GREEN,
         bold=True,
     )
 
@@ -122,29 +130,25 @@ def _print_collection_result(result: "CollectionResult") -> None:
         # Source ran successfully but did nothing because it isn't
         # configured for this project. Yellow, not red — the user
         # didn't ask for it.
-        typer.secho(
+        theme.warn(
             f"  {result.source_key}: SKIPPED — {result.error or 'not configured'}",
-            fg=typer.colors.YELLOW,
         )
         return
     if result.success:
-        typer.secho(
+        theme.good(
             t("insights.collect_success",
               source=result.source_key,
               written=result.rows_written,
               skipped=result.rows_skipped),
-            fg=typer.colors.GREEN,
         )
         if result.records_broken:
-            typer.secho(
+            theme.warn(
                 t("insights.collect_records", records=", ".join(result.records_broken)),
-                fg=typer.colors.YELLOW,
                 bold=True,
             )
     else:
-        typer.secho(
+        theme.bad(
             t("insights.collect_failed", source=result.source_key, error=result.error),
-            fg=typer.colors.RED,
         )
 
 
@@ -169,7 +173,7 @@ async def _stars(limit: int) -> None:
 
     table = Table(title=t("insights.stars_title"), width=90)
     table.add_column(t("insights.col_star_num"), style="bold", width=5, justify="right")
-    table.add_column(t("insights.col_username"), style="cyan", width=20)
+    table.add_column(t("insights.col_username"), style=theme.ACCENT, width=20)
     table.add_column(t("insights.col_name"), width=20)
     table.add_column(t("insights.col_location"), width=20)
     table.add_column(t("insights.col_company"), width=15)
@@ -205,7 +209,7 @@ async def _records() -> None:
         return
 
     table = Table(title=t("insights.all_time_records_title"), width=70)
-    table.add_column(t("insights.col_metric"), style="cyan", width=20)
+    table.add_column(t("insights.col_metric"), style=theme.ACCENT, width=20)
     table.add_column(t("insights.col_value"), width=12, justify="right")
     table.add_column(t("insights.col_date"), width=12)
     table.add_column(t("insights.col_previous"), width=12, justify="right")
@@ -239,7 +243,7 @@ async def _sources() -> None:
         source_list = await service.get_sources()
 
     table = Table(title=t("insights.insight_sources_title"), width=70)
-    table.add_column(t("insights.col_key"), style="cyan", width=18)
+    table.add_column(t("insights.col_key"), style=theme.ACCENT, width=18)
     table.add_column(t("insights.col_display_name"), width=18)
     table.add_column(t("insights.col_interval"), width=10, justify="right")
     table.add_column(t("insights.col_auth"), width=6)
@@ -247,8 +251,12 @@ async def _sources() -> None:
 
     for src in source_list:
         interval = f"{src.collection_interval_hours}h" if src.collection_interval_hours else t("insights.manual")
-        auth = f"[yellow]{t('insights.yes')}[/]" if src.requires_auth else t("insights.no")
-        enabled = f"[green]{t('insights.yes')}[/]" if src.enabled else f"[red]{t('insights.no')}[/]"
+        auth = f"[dim]{t('insights.yes')}[/]" if src.requires_auth else t("insights.no")
+        enabled = (
+            f"[{theme.ACCENT}]{t('insights.yes')}[/]"
+            if src.enabled
+            else f"[dim]{t('insights.no')}[/]"
+        )
         table.add_row(src.key, src.display_name, interval, auth, enabled)
 
     console.print(table)
@@ -270,14 +278,12 @@ async def _reddit_add(url: str) -> None:
         result = await collector.add_post(url)
 
     if result.success:
-        typer.secho(
+        theme.good(
             t("insights.reddit_added", count=result.rows_written),
-            fg=typer.colors.GREEN,
         )
     else:
-        typer.secho(
+        theme.bad(
             t("insights.reddit_failed", error=result.error),
-            fg=typer.colors.RED,
         )
 
 
@@ -306,9 +312,8 @@ async def _log_event(
         try:
             event_date = date_type.fromisoformat(date_str)
         except ValueError:
-            typer.secho(
+            theme.bad(
                 t("insights.invalid_date_format", date=date_str),
-                fg=typer.colors.RED,
             )
             raise typer.Exit(1)
 
@@ -327,14 +332,13 @@ async def _log_event(
         await session.commit()
 
     date_display = date_str or t("insights.today")
-    typer.secho(
+    theme.good(
         t(
             "insights.event_logged_with_date",
             event_type=event_type,
             description=description,
             date=date_display,
         ),
-        fg=typer.colors.GREEN,
     )
 
 
