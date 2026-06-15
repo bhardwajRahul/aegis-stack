@@ -108,6 +108,21 @@ class VectorStoreManager:
             )
         else:
             # Default: sentence-transformers
+            import logging
+            import os
+
+            from app.core.config import settings
+
+            # Keep the embedding-model load quiet for clean CLI/RAG output:
+            # disable the HF/transformers download progress bar (must be set
+            # before those libs import, below), authenticate the download if a
+            # token is configured (drops the "unauthenticated requests"
+            # warning), and silence sentence-transformers' INFO load line.
+            os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+            if settings.HF_TOKEN:
+                os.environ.setdefault("HF_TOKEN", settings.HF_TOKEN)
+            logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+
             from chromadb.utils.embedding_functions import (
                 SentenceTransformerEmbeddingFunction,
             )

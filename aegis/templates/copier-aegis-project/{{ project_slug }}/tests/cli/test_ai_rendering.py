@@ -251,7 +251,7 @@ class TestRenderThinkingSpinner:
         assert spinner is not None
         assert live is not None
         assert str(spinner.text) == "Thinking..."
-        assert spinner.style == "bright_blue"
+        assert spinner.style == "dim"  # thinking spinner is transient chrome -> dim
 
     def test_spinner_lifecycle(self):
         """Test spinner start and stop."""

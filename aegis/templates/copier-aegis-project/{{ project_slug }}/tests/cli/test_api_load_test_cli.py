@@ -10,10 +10,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.cli.main import app
 from app.services.load_test.api.models import (
-    ErrorSample,
     APILoadTestConfiguration,
     APILoadTestMetrics,
     APILoadTestResult,
+    ErrorSample,
     RouteInfo,
 )
 from typer.testing import CliRunner
@@ -335,12 +335,63 @@ class TestRunCommand:
                 "--header", "X-Custom=hello",
                 "--header", "X-Other=world",
                 "--requests", "5", "--clients", "1",
-                "--in-process",
+                "--in-process", "--anon",
             ],
         )
         assert result.exit_code == 0
         call_config = mock_service.run.call_args.args[0]
         assert call_config.headers == {"X-Custom": "hello", "X-Other": "world"}
+
+    @patch(
+        "app.cli.api_load_test._ensure_active_verified_user", new_callable=AsyncMock
+    )
+    @patch("app.cli.api_load_test.APILoadTestService")
+    @patch("app.cli.api_load_test._get_fastapi_app")
+    def test_run_auto_authenticates_by_default(
+        self, mock_get_app, mock_service_cls, _mock_ensure_user
+    ):
+        """With no auth flag, requests are auto-authenticated when the auth
+        service is installed, so gated routes work without manual login."""
+        mock_get_app.return_value = MagicMock()
+        mock_service = MagicMock()
+        mock_service.run = AsyncMock(return_value=_make_result())
+        mock_service_cls.return_value = mock_service
+        result = runner.invoke(
+            app,
+            ["api-load-test", "run", "/health", "-n", "2", "-c", "1", "--in-process"],
+        )
+        assert result.exit_code == 0
+        call_config = mock_service.run.call_args.args[0]
+        try:
+            from app.core.security import create_access_token  # noqa: F401
+
+            auth_installed = True
+        except ImportError:
+            auth_installed = False
+        if auth_installed:
+            assert call_config.headers.get("Authorization", "").startswith("Bearer ")
+            assert call_config.auth_as in {"admin", "user"}
+        else:
+            assert "Authorization" not in call_config.headers
+            assert call_config.auth_as is None
+
+    @patch("app.cli.api_load_test.APILoadTestService")
+    @patch("app.cli.api_load_test._get_fastapi_app")
+    def test_run_anon_disables_auth(self, mock_get_app, mock_service_cls):
+        """``--anon`` sends unauthenticated requests regardless of stack."""
+        mock_get_app.return_value = MagicMock()
+        mock_service = MagicMock()
+        mock_service.run = AsyncMock(return_value=_make_result())
+        mock_service_cls.return_value = mock_service
+        result = runner.invoke(
+            app,
+            ["api-load-test", "run", "/health", "-n", "2", "-c", "1",
+             "--in-process", "--anon"],
+        )
+        assert result.exit_code == 0
+        call_config = mock_service.run.call_args.args[0]
+        assert "Authorization" not in call_config.headers
+        assert call_config.auth_as is None
 
     @patch("app.cli.api_load_test.APILoadTestService")
     @patch("app.cli.api_load_test._get_fastapi_app")

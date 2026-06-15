@@ -9,6 +9,7 @@ from pathlib import Path
 
 import typer
 
+from ..cli import brand
 from ..cli.validation import validate_copier_project, validate_git_repository
 from ..constants import AnswerKeys, ComponentNames
 from ..core.copier_manager import load_copier_answers
@@ -74,26 +75,22 @@ def ingress_enable_command(
     if not ingress_enabled:
         typer.echo(f"\n{t('ingress.not_found')}")
         if not yes and not typer.confirm(t("ingress.add_confirm"), default=True):
-            typer.secho(t("shared.operation_cancelled"), fg="red")
+            brand.error(t("shared.operation_cancelled"))
             raise typer.Exit(0)
 
         updater = ManualUpdater(target_path)
         result = updater.add_component(ComponentNames.INGRESS)
         if not result.success:
-            typer.secho(
-                t("ingress.add_failed", error=result.error_message),
-                fg="red",
-                err=True,
-            )
+            brand.error(t("ingress.add_failed", error=result.error_message), err=True)
             raise typer.Exit(1)
 
-        typer.secho(t("ingress.added"), fg="green")
+        brand.success(t("ingress.added"))
         # Reload answers after component addition
         answers = load_copier_answers(target_path)
 
     # Step 2: Check if TLS is already enabled
     if answers.get("ingress_tls") is True:
-        typer.secho(f"\n{t('ingress.tls_already')}", fg="green")
+        brand.success(f"\n{t('ingress.tls_already')}")
         current_domain = answers.get("ingress_domain", "")
         current_email = answers.get("author_email", "")
         if current_domain:
@@ -122,11 +119,7 @@ def ingress_enable_command(
         elif not yes:
             email = typer.prompt(t("ingress.email_prompt"))
         else:
-            typer.secho(
-                t("ingress.email_required"),
-                fg="red",
-                err=True,
-            )
+            brand.error(t("ingress.email_required"), err=True)
             raise typer.Exit(1)
 
     # Step 4: Confirm
@@ -138,7 +131,7 @@ def ingress_enable_command(
     typer.echo(t("ingress.acme_email", email=email))
 
     if not yes and not typer.confirm(f"\n{t('ingress.tls_confirm')}", default=True):
-        typer.secho(t("shared.operation_cancelled"), fg="red")
+        brand.error(t("shared.operation_cancelled"))
         raise typer.Exit(0)
 
     # Step 5: Update answers and regenerate files
@@ -178,7 +171,7 @@ def ingress_enable_command(
     updater._save_answers(updated_answers)
 
     # Success output
-    typer.secho(f"\n{t('ingress.success')}", fg="green", bold=True)
+    brand.success(f"\n{t('ingress.success')}", bold=True)
     if domain:
         typer.echo(t("ingress.available_at", domain=domain))
     else:

@@ -2,10 +2,13 @@
 Internationalization support for the project CLI.
 
 Usage:
-    from app.i18n import t, lazy_t
+    import typer
+
+    from app.cli import theme
+    from app.i18n import lazy_t, t
 
     # Runtime strings (resolved immediately):
-    typer.secho(t("health.title"), fg=typer.colors.BLUE, bold=True)
+    theme.accent(t("health.title"), bold=True)
 
     # Help text (resolved lazily when displayed):
     app = typer.Typer(help=lazy_t("health.help"))

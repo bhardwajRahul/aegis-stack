@@ -25,6 +25,7 @@ from ..core.option_spec import is_spec_with_options
 from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES
 from ..i18n import t
+from . import brand
 from .interactive import set_ai_service_config, set_auth_level_selection
 from .utils import expand_scheduler_dependencies
 
@@ -46,7 +47,7 @@ def validate_and_resolve_components(
 
     # Check for empty components before filtering
     if any(not c for c in components_raw):
-        typer.secho(Messages.EMPTY_COMPONENT_NAME, fg="red", err=True)
+        brand.error(Messages.EMPTY_COMPONENT_NAME, err=True)
         raise typer.Exit(1)
 
     selected = [c for c in components_raw if c]
@@ -60,10 +61,9 @@ def validate_and_resolve_components(
         if base_name == ComponentNames.WORKER:
             backend = extract_engine_info(component)
             if backend and backend not in WorkerBackends.ALL:
-                typer.secho(
+                brand.error(
                     f"Invalid worker backend '{backend}'. "
                     f"Available: {', '.join(WorkerBackends.ALL)}",
-                    fg="red",
                     err=True,
                 )
                 raise typer.Exit(1)
@@ -73,7 +73,7 @@ def validate_and_resolve_components(
     errors = DependencyResolver.validate_components(clean_selected)
     if errors:
         for error in errors:
-            typer.secho(error, fg="red", err=True)
+            brand.error(error, err=True)
         raise typer.Exit(1)
 
     # Resolve dependencies (using clean names)
@@ -202,7 +202,7 @@ def validate_and_resolve_services(
 
     # Check for empty services before filtering
     if any(not s for s in services_raw):
-        typer.secho(Messages.EMPTY_SERVICE_NAME, fg="red", err=True)
+        brand.error(Messages.EMPTY_SERVICE_NAME, err=True)
         raise typer.Exit(1)
 
     selected_services = [s for s in services_raw if s]
@@ -212,9 +212,8 @@ def validate_and_resolve_services(
         s for s in selected_services if extract_base_service_name(s) not in SERVICES
     ]
     if unknown_services:
-        typer.secho(
+        brand.error(
             t("validation.unknown_services", names=", ".join(unknown_services)),
-            fg="red",
             err=True,
         )
         available = list(SERVICES.keys())
@@ -231,7 +230,7 @@ def validate_and_resolve_services(
         try:
             handler(service)
         except ValueError as e:
-            typer.secho(f"Invalid {label} service syntax: {e}", fg="red", err=True)
+            brand.error(f"Invalid {label} service syntax: {e}", err=True)
             raise typer.Exit(1)
 
     # Resolve services to components

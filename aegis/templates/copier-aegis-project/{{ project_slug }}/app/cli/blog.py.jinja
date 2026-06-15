@@ -9,6 +9,7 @@ taxonomy from scripts. Authoring (post body editing) stays in the dashboard.
 import asyncio
 
 import typer
+from app.cli import theme
 from app.i18n import lazy_t, t
 from app.services.blog.constants import ImportConflictPolicy
 from rich.console import Console
@@ -35,7 +36,7 @@ BLOG_EPILOG = _ex(
 )
 
 app = typer.Typer(help=lazy_t("blog.help"), epilog=BLOG_EPILOG)
-console = Console()
+console = theme.console()
 
 _PAGE_SIZE_MAX = 100
 _RESOLVE_PAGE_SIZE = 100
@@ -53,10 +54,10 @@ def _format_dt(value: object) -> str:
 
 def _status_color(status: str) -> str:
     return {
-        "draft": "yellow",
-        "published": "green",
+        "draft": theme.WARNING,
+        "published": theme.ACCENT,
         "archived": "dim",
-    }.get(status, "white")
+    }.get(status, "dim")
 
 
 async def _resolve_post_id(service: object, slug: str) -> int | None:
@@ -120,11 +121,11 @@ async def _status() -> None:
     table.add_row(t("blog.col_total_posts"), str(summary.total_posts))
     table.add_row(
         t("blog.col_drafts"),
-        f"[yellow]{summary.draft_posts}[/yellow]",
+        f"[{theme.WARNING}]{summary.draft_posts}[/{theme.WARNING}]",
     )
     table.add_row(
         t("blog.col_published"),
-        f"[green]{summary.published_posts}[/green]",
+        f"[{theme.ACCENT}]{summary.published_posts}[/{theme.ACCENT}]",
     )
     table.add_row(
         t("blog.col_archived"),
@@ -134,7 +135,7 @@ async def _status() -> None:
     if summary.stale_draft_count:
         table.add_row(
             t("blog.col_stale_drafts"),
-            f"[red]{summary.stale_draft_count}[/red]",
+            f"[{theme.ERROR}]{summary.stale_draft_count}[/{theme.ERROR}]",
         )
 
     latest = summary.latest_published_post
@@ -241,12 +242,16 @@ async def _post_show(slug: str) -> None:
         service = BlogService(session)
         post_id = await _resolve_post_id(service, slug)
         if post_id is None:
-            console.print(f"[red]{t('blog.post_not_found', slug=slug)}[/red]")
+            console.print(
+                f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
+            )
             raise typer.Exit(1)
         post = await service.get_post(post_id)
 
     if post is None:
-        console.print(f"[red]{t('blog.post_not_found', slug=slug)}[/red]")
+        console.print(
+            f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
+        )
         raise typer.Exit(1)
 
     color = _status_color(post.status)
@@ -348,16 +353,20 @@ async def _publish(slug: str) -> None:
         service = BlogService(session)
         post_id = await _resolve_post_id(service, slug)
         if post_id is None:
-            console.print(f"[red]{t('blog.post_not_found', slug=slug)}[/red]")
+            console.print(
+                f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
+            )
             raise typer.Exit(1)
         post = await service.publish_post(post_id)
 
     if post is None:
-        console.print(f"[red]{t('blog.post_not_found', slug=slug)}[/red]")
+        console.print(
+            f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
+        )
         raise typer.Exit(1)
 
     console.print(
-        f"[green]{t('blog.published', slug=post.slug)}[/green]"
+        f"[{theme.ACCENT}]{t('blog.published', slug=post.slug)}[/{theme.ACCENT}]"
     )
 
 
@@ -385,15 +394,21 @@ async def _archive(slug: str) -> None:
         service = BlogService(session)
         post_id = await _resolve_post_id(service, slug)
         if post_id is None:
-            console.print(f"[red]{t('blog.post_not_found', slug=slug)}[/red]")
+            console.print(
+                f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
+            )
             raise typer.Exit(1)
         post = await service.archive_post(post_id)
 
     if post is None:
-        console.print(f"[red]{t('blog.post_not_found', slug=slug)}[/red]")
+        console.print(
+            f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
+        )
         raise typer.Exit(1)
 
-    console.print(f"[yellow]{t('blog.archived', slug=post.slug)}[/yellow]")
+    console.print(
+        f"[{theme.WARNING}]{t('blog.archived', slug=post.slug)}[/{theme.WARNING}]"
+    )
 
 
 @app.command(
@@ -432,15 +447,21 @@ async def _delete(slug: str, yes: bool) -> None:
         service = BlogService(session)
         post_id = await _resolve_post_id(service, slug)
         if post_id is None:
-            console.print(f"[red]{t('blog.post_not_found', slug=slug)}[/red]")
+            console.print(
+                f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
+            )
             raise typer.Exit(1)
         ok = await service.delete_post(post_id)
 
     if not ok:
-        console.print(f"[red]{t('blog.post_not_found', slug=slug)}[/red]")
+        console.print(
+            f"[{theme.ERROR}]{t('blog.post_not_found', slug=slug)}[/{theme.ERROR}]"
+        )
         raise typer.Exit(1)
 
-    console.print(f"[red]{t('blog.deleted', slug=slug)}[/red]")
+    console.print(
+        f"[{theme.ACCENT}]{t('blog.deleted', slug=slug)}[/{theme.ACCENT}]"
+    )
 
 
 # Tag CRUD
@@ -480,11 +501,11 @@ async def _tag_create(name: str, slug: str | None) -> None:
         try:
             tag = await service.create_tag(BlogTagCreate(name=name, slug=slug))
         except ValueError as e:
-            console.print(f"[red]{e}[/red]")
+            console.print(f"[{theme.ERROR}]{e}[/{theme.ERROR}]")
             raise typer.Exit(1) from e
 
     console.print(
-        f"[green]{t('blog.tag_created', name=tag.name, slug=tag.slug)}[/green]"
+        f"[{theme.ACCENT}]{t('blog.tag_created', name=tag.name, slug=tag.slug)}[/{theme.ACCENT}]"
     )
 
 
@@ -513,7 +534,9 @@ def tag_update(
         {{ project_slug }} blog tag-update releases --new-slug release-notes
     """
     if name is None and new_slug is None:
-        console.print(f"[red]{t('blog.tag_update_no_changes')}[/red]")
+        console.print(
+            f"[{theme.ERROR}]{t('blog.tag_update_no_changes')}[/{theme.ERROR}]"
+        )
         raise typer.Exit(2)
     asyncio.run(_tag_update(slug, name, new_slug))
 
@@ -527,22 +550,26 @@ async def _tag_update(slug: str, name: str | None, new_slug: str | None) -> None
         service = BlogService(session)
         tag_id = await _resolve_tag_id(service, slug)
         if tag_id is None:
-            console.print(f"[red]{t('blog.tag_not_found', slug=slug)}[/red]")
+            console.print(
+                f"[{theme.ERROR}]{t('blog.tag_not_found', slug=slug)}[/{theme.ERROR}]"
+            )
             raise typer.Exit(1)
         try:
             tag = await service.update_tag(
                 tag_id, BlogTagUpdate(name=name, slug=new_slug)
             )
         except ValueError as e:
-            console.print(f"[red]{e}[/red]")
+            console.print(f"[{theme.ERROR}]{e}[/{theme.ERROR}]")
             raise typer.Exit(1) from e
 
     if tag is None:
-        console.print(f"[red]{t('blog.tag_not_found', slug=slug)}[/red]")
+        console.print(
+            f"[{theme.ERROR}]{t('blog.tag_not_found', slug=slug)}[/{theme.ERROR}]"
+        )
         raise typer.Exit(1)
 
     console.print(
-        f"[green]{t('blog.tag_updated', name=tag.name, slug=tag.slug)}[/green]"
+        f"[{theme.ACCENT}]{t('blog.tag_updated', name=tag.name, slug=tag.slug)}[/{theme.ACCENT}]"
     )
 
 
@@ -583,15 +610,21 @@ async def _tag_delete(slug: str, yes: bool) -> None:
         service = BlogService(session)
         tag_id = await _resolve_tag_id(service, slug)
         if tag_id is None:
-            console.print(f"[red]{t('blog.tag_not_found', slug=slug)}[/red]")
+            console.print(
+                f"[{theme.ERROR}]{t('blog.tag_not_found', slug=slug)}[/{theme.ERROR}]"
+            )
             raise typer.Exit(1)
         ok = await service.delete_tag(tag_id)
 
     if not ok:
-        console.print(f"[red]{t('blog.tag_not_found', slug=slug)}[/red]")
+        console.print(
+            f"[{theme.ERROR}]{t('blog.tag_not_found', slug=slug)}[/{theme.ERROR}]"
+        )
         raise typer.Exit(1)
 
-    console.print(f"[red]{t('blog.tag_deleted', slug=slug)}[/red]")
+    console.print(
+        f"[{theme.ACCENT}]{t('blog.tag_deleted', slug=slug)}[/{theme.ACCENT}]"
+    )
 
 
 # Export / Import
@@ -629,7 +662,9 @@ async def _export(path: str, fmt: str, status_filter: str | None) -> None:
     )
 
     if fmt not in ("markdown", "json"):
-        console.print(f"[red]{t('blog.export_bad_format', fmt=fmt)}[/red]")
+        console.print(
+            f"[{theme.ERROR}]{t('blog.export_bad_format', fmt=fmt)}[/{theme.ERROR}]"
+        )
         raise typer.Exit(2)
 
     async with get_async_session() as session:
@@ -644,7 +679,7 @@ async def _export(path: str, fmt: str, status_filter: str | None) -> None:
     if fmt == "json":
         target.write_text(posts_to_json(posts), encoding="utf-8")
         console.print(
-            f"[green]{t('blog.exported_json', count=len(posts), path=target)}[/green]"
+            f"[{theme.ACCENT}]{t('blog.exported_json', count=len(posts), path=target)}[/{theme.ACCENT}]"
         )
         return
 
@@ -661,7 +696,7 @@ async def _export(path: str, fmt: str, status_filter: str | None) -> None:
         (target / name).write_text(post_to_markdown(post), encoding="utf-8")
 
     console.print(
-        f"[green]{t('blog.exported_markdown', count=len(posts), path=target)}[/green]"
+        f"[{theme.ACCENT}]{t('blog.exported_markdown', count=len(posts), path=target)}[/{theme.ACCENT}]"
     )
 
 
@@ -700,7 +735,9 @@ async def _import(path: str, on_conflict: "ImportConflictPolicy") -> None:
 
     source = Path(path)
     if not source.exists():
-        console.print(f"[red]{t('blog.import_path_missing', path=path)}[/red]")
+        console.print(
+            f"[{theme.ERROR}]{t('blog.import_path_missing', path=path)}[/{theme.ERROR}]"
+        )
         raise typer.Exit(1)
 
     posts: list[ImportedPost] = []
@@ -720,7 +757,7 @@ async def _import(path: str, on_conflict: "ImportConflictPolicy") -> None:
         ]
     else:
         console.print(
-            f"[red]{t('blog.import_bad_type', path=path)}[/red]"
+            f"[{theme.ERROR}]{t('blog.import_bad_type', path=path)}[/{theme.ERROR}]"
         )
         raise typer.Exit(2)
 
@@ -735,13 +772,24 @@ async def _import(path: str, on_conflict: "ImportConflictPolicy") -> None:
     table = Table(title=t("blog.import_summary_title"))
     table.add_column(t("blog.col_kind"), style="dim")
     table.add_column(t("blog.col_count"), justify="right")
-    table.add_row(t("blog.col_created"), f"[green]{result.created}[/green]")
-    table.add_row(t("blog.col_updated"), f"[cyan]{result.updated}[/cyan]")
-    table.add_row(t("blog.col_skipped"), f"[yellow]{result.skipped}[/yellow]")
-    table.add_row(t("blog.col_failed"), f"[red]{result.failed}[/red]")
+    table.add_row(
+        t("blog.col_created"),
+        f"[{theme.ACCENT}]{result.created}[/{theme.ACCENT}]",
+    )
+    table.add_row(t("blog.col_updated"), str(result.updated))
+    table.add_row(
+        t("blog.col_skipped"),
+        f"[{theme.WARNING}]{result.skipped}[/{theme.WARNING}]",
+    )
+    table.add_row(
+        t("blog.col_failed"),
+        f"[{theme.ERROR}]{result.failed}[/{theme.ERROR}]",
+    )
     console.print(table)
 
     if result.errors:
         console.print()
         for err in result.errors:
-            console.print(f"  [red]{err.slug or '(unknown)'}[/red]: {err.message}")
+            console.print(
+                f"  [{theme.ERROR}]{err.slug or '(unknown)'}[/{theme.ERROR}]: {err.message}"
+            )

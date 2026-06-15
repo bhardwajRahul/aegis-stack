@@ -14,13 +14,14 @@ from rich.console import Console
 from rich.table import Table
 import typer
 
+from app.cli import theme
 from app.i18n import lazy_t, t
 from app.services.scheduler import (
     ScheduledTaskManager,
     import_job_function,
     run_triggered_job,
 )
-from app.services.scheduler.models import ScheduledTask
+from app.services.scheduler.models import ScheduledTask, TaskStatistics
 
 app = typer.Typer(
     name="tasks",
@@ -28,33 +29,35 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-console = Console()
+console = theme.console()
 
 
 @app.command("list", help=lazy_t("tasks.help_list"))
 def list_jobs() -> None:
-    rprint(f"[bold blue]{t('tasks.listing_jobs')}[/bold blue]")
+    rprint(f"[bold]{t('tasks.listing_jobs')}[/bold]")
 
     try:
         tasks = asyncio.run(_get_scheduled_tasks())
 
         if not tasks:
-            rprint(f"[yellow]{t('tasks.no_jobs_found')}[/yellow]")
+            rprint(f"[{theme.WARNING}]{t('tasks.no_jobs_found')}[/]")
             return
 
         table = Table(
             title=t("tasks.scheduled_jobs_title"),
             show_header=True,
-            header_style="bold magenta",
+            header_style="dim",
         )
-        table.add_column(t("tasks.job_id_column"), style="cyan", no_wrap=True)
-        table.add_column(t("tasks.name_column"), style="green")
+        table.add_column(
+            t("tasks.job_id_column"), style=theme.ACCENT, no_wrap=True
+        )
+        table.add_column(t("tasks.name_column"))
         table.add_column(t("tasks.status_column"), style="bold")
-        table.add_column(t("tasks.next_run_column"), style="yellow")
+        table.add_column(t("tasks.next_run_column"))
         table.add_column(t("tasks.trigger_column"), style="dim")
 
         for task in tasks:
-            status_color = "green" if task.is_active else "red"
+            status_color = theme.ACCENT if task.is_active else theme.ERROR
             next_run = (
                 task.next_run_time.strftime("%Y-%m-%d %H:%M:%S")
                 if task.next_run_time
@@ -67,17 +70,17 @@ def list_jobs() -> None:
                 (
                     f"[{status_color}]"
                     f"{t('tasks.active') if task.is_active else t('tasks.paused')}"
-                    f"[/{status_color}]"
+                    f"[/]"
                 ),
                 next_run,
                 task.trigger_type or t("shared.unknown"),
             )
 
         console.print(table)
-        rprint(f"\n[cyan]{t('tasks.total_jobs')}[/cyan] {len(tasks)}")
+        rprint(f"\n[dim]{t('tasks.total_jobs')}[/dim] {len(tasks)}")
 
     except Exception as e:
-        rprint(f"[red]{t('tasks.list_failed')}[/red] {e}")
+        rprint(f"[{theme.ERROR}]{t('tasks.list_failed')}[/] {e}")
         raise typer.Exit(1)
 
 
@@ -104,25 +107,25 @@ async def _trigger_job(job_id: str, force: bool) -> bool:
 
     task = await manager.get_task(job_id)
     if task is None:
-        rprint(f"[red]{t('tasks.job_not_found')}[/red] {job_id}")
+        rprint(f"[{theme.ERROR}]{t('tasks.job_not_found')}[/] {job_id}")
         return False
 
     if not force and await manager.is_job_running(job_id):
-        rprint(f"[yellow]{t('tasks.job_already_running')}[/yellow] {job_id}")
+        rprint(f"[{theme.WARNING}]{t('tasks.job_already_running')}[/] {job_id}")
         return False
 
     func = import_job_function(task.function)
     if func is None:
-        rprint(f"[red]{t('tasks.job_not_runnable')}[/red] {task.function}")
+        rprint(f"[{theme.ERROR}]{t('tasks.job_not_runnable')}[/] {task.function}")
         return False
 
     name = task.name or job_id
-    rprint(f"[blue]{t('tasks.triggering')}[/blue] {name}")
+    rprint(f"[dim]{t('tasks.triggering')}[/dim] {name}")
     succeeded = await run_triggered_job(func, job_id, name)
     if succeeded:
-        rprint(f"[green]{t('tasks.trigger_success')}[/green] {name}")
+        rprint(f"[{theme.ACCENT}]{t('tasks.trigger_success')}[/] {name}")
     else:
-        rprint(f"[red]{t('tasks.trigger_failed')}[/red] {name}")
+        rprint(f"[{theme.ERROR}]{t('tasks.trigger_failed')}[/] {name}")
     return succeeded
 
 
@@ -133,19 +136,19 @@ def job_stats(
     try:
         stats = asyncio.run(_get_job_stats(job_id))
     except Exception as e:
-        rprint(f"[red]{t('tasks.stats_failed')}[/red] {e}")
+        rprint(f"[{theme.ERROR}]{t('tasks.stats_failed')}[/] {e}")
         raise typer.Exit(1)
 
     if stats["total_runs"] == 0:
-        rprint(f"[yellow]{t('tasks.no_executions')}[/yellow] {job_id}")
+        rprint(f"[{theme.WARNING}]{t('tasks.no_executions')}[/] {job_id}")
         return
 
     table = Table(
         title=f"{t('tasks.stats_title')}: {job_id}",
         show_header=False,
     )
-    table.add_column("metric", style="cyan", no_wrap=True)
-    table.add_column("value", style="bold")
+    table.add_column("metric", style="dim", no_wrap=True)
+    table.add_column("value")
     table.add_row(t("tasks.stat_total_runs"), str(stats["total_runs"]))
     table.add_row(t("tasks.stat_success"), str(stats["success_count"]))
     table.add_row(t("tasks.stat_failed"), str(stats["failure_count"]))
@@ -187,31 +190,31 @@ def job_history(
     try:
         records, total = asyncio.run(_get_history(job, limit))
     except Exception as e:
-        rprint(f"[red]{t('tasks.history_failed')}[/red] {e}")
+        rprint(f"[{theme.ERROR}]{t('tasks.history_failed')}[/] {e}")
         raise typer.Exit(1)
 
     if not records:
-        rprint(f"[yellow]{t('tasks.no_history')}[/yellow]")
+        rprint(f"[{theme.WARNING}]{t('tasks.no_history')}[/]")
         return
 
     table = Table(
         title=t("tasks.history_title"),
         show_header=True,
-        header_style="bold magenta",
+        header_style="dim",
     )
-    table.add_column(t("tasks.started_column"), style="yellow")
-    table.add_column(t("tasks.name_column"), style="green")
+    table.add_column(t("tasks.started_column"), style="dim")
+    table.add_column(t("tasks.name_column"))
     table.add_column(t("tasks.status_column"), style="bold")
     table.add_column(t("tasks.duration_column"), style="dim", justify="right")
 
     status_colors = {
-        "success": "green",
-        "failed": "red",
-        "running": "blue",
-        "missed": "yellow",
+        "success": theme.ACCENT,
+        "failed": theme.ERROR,
+        "running": theme.WARNING,
+        "missed": theme.WARNING,
     }
     for record in records:
-        color = status_colors.get(record["status"], "white")
+        color = status_colors.get(record["status"], "dim")
         started = record["started_at"]
         when = (
             started.strftime("%Y-%m-%d %H:%M:%S")
@@ -222,12 +225,12 @@ def job_history(
         table.add_row(
             when,
             record["job_name"] or record["job_id"],
-            f"[{color}]{record['status']}[/{color}]",
+            f"[{color}]{record['status']}[/]",
             f"{duration:.0f} ms" if duration is not None else "-",
         )
 
     console.print(table)
-    rprint(f"\n[cyan]{t('tasks.total_executions')}[/cyan] {total}")
+    rprint(f"\n[dim]{t('tasks.total_executions')}[/dim] {total}")
 
 
 async def _get_history(
@@ -236,6 +239,30 @@ async def _get_history(
     """Fetch recent execution records, optionally filtered to one job."""
     manager = ScheduledTaskManager()
     return await manager.list_executions(job_id=job, limit=limit)
+
+
+@app.command("statistics", help=lazy_t("tasks.help_statistics"))
+def scheduler_statistics() -> None:
+    try:
+        stats = asyncio.run(_get_statistics())
+    except Exception as e:
+        rprint(f"[{theme.ERROR}]{t('tasks.statistics_failed')}[/] {e}")
+        raise typer.Exit(1)
+
+    theme.title(t("tasks.statistics_title"))
+    table = Table(show_header=False)
+    table.add_column("metric", style="dim", no_wrap=True)
+    table.add_column("value")
+    table.add_row(t("tasks.stat_total_tasks"), str(stats.total_tasks))
+    table.add_row(t("tasks.stat_active_tasks"), str(stats.active_tasks))
+    table.add_row(t("tasks.stat_paused_tasks"), str(stats.paused_tasks))
+    console.print(table)
+
+
+async def _get_statistics() -> TaskStatistics:
+    """Overall scheduler statistics (same data as GET /scheduler/statistics)."""
+    manager = ScheduledTaskManager()
+    return await manager.get_statistics()
 
 
 if __name__ == "__main__":

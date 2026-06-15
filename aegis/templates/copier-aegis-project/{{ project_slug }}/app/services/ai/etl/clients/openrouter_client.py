@@ -28,7 +28,7 @@ class OpenRouterModel:
     cache_read_cost_per_token: float | None
     cache_write_cost_per_token: float | None
     is_moderated: bool
-    created: int | None  # Unix timestamp of when model was added
+    created: int | None = None  # Unix timestamp of when model was added (optional)
 
 
 class OpenRouterClient:

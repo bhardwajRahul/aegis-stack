@@ -17,6 +17,7 @@ from packaging.version import Version
 from aegis import __version__
 from aegis.i18n import t
 
+from ..cli import brand
 from ..config.defaults import (
     DEFAULT_PYTHON_VERSION,
     GITHUB_TEMPLATE_URL,
@@ -458,9 +459,9 @@ def generate_with_copier(
 
     # Show docs/star links
     typer.echo()
-    typer.secho(t("postgen.docs_link"), dim=True)
+    brand.muted(t("postgen.docs_link"))
     typer.echo()
-    star = typer.style("\u2605", fg=typer.colors.BRIGHT_YELLOW, bold=True)
+    star = brand.accent_text("\u2605", bold=True)
     typer.echo(
         f"{star} {t('postgen.star_prompt')}\n  https://github.com/lbedner/aegis-stack"
     )

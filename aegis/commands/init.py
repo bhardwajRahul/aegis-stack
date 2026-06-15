@@ -7,6 +7,7 @@ from typing import cast
 
 import typer
 
+from ..cli import brand
 from ..cli.build_plan import BuildPlan, resolve_build_plan
 from ..cli.callbacks import (
     validate_and_resolve_components,
@@ -126,12 +127,12 @@ def _print_guided_receipt(plan: BuildPlan, project_path: Path) -> None:
     from ..cli.brand import AEGIS_TEAL
 
     typer.echo()
-    typer.secho(t("postgen.ready"), fg=typer.colors.GREEN, bold=True)
+    brand.success(t("postgen.ready"), bold=True)
     typer.echo(t("postgen.next_cd", path=project_path))
     typer.echo(t("postgen.next_serve"))
     typer.echo(t("postgen.next_dashboard"))
     typer.echo()
-    typer.secho(t("init.replay_hint"), fg=typer.colors.CYAN, bold=True)
+    brand.muted(t("init.replay_hint"))
     replay = build_replay_command(plan.project_name, plan.components, plan.services)
     # soft_wrap: emit one logical line. Rich would otherwise hard-wrap to
     # the terminal width with REAL newlines, breaking copy-paste of the
@@ -155,12 +156,10 @@ def _show_config_and_confirm(
     skips this entirely.
     """
     typer.echo()
-    typer.secho(t("init.config_title"), fg=typer.colors.CYAN, bold=True)
+    brand.muted(t("init.config_title"), bold=True)
+    typer.echo(f"   {brand.muted_text(t('init.config_name'))} {project_name}")
     typer.echo(
-        f"   {typer.style(t('init.config_name'), fg=typer.colors.CYAN)} {project_name}"
-    )
-    typer.echo(
-        f"   {typer.style(t('init.config_core'), fg=typer.colors.CYAN)} {', '.join(CORE_COMPONENTS)}"
+        f"   {brand.muted_text(t('init.config_core'))} {', '.join(CORE_COMPONENTS)}"
     )
 
     # Show infrastructure components
@@ -176,47 +175,47 @@ def _show_config_and_confirm(
 
     if infra_components:
         typer.echo(
-            f"   {typer.style(t('init.config_infra'), fg=typer.colors.CYAN)} {', '.join(infra_components)}"
+            f"   {brand.muted_text(t('init.config_infra'))} {', '.join(infra_components)}"
         )
 
     # Show selected services
     if selected_services:
         typer.echo(
-            f"   {typer.style(t('init.config_services'), fg=typer.colors.CYAN)} {', '.join(selected_services)}"
+            f"   {brand.muted_text(t('init.config_services'))} {', '.join(selected_services)}"
         )
 
     # Show template files that will be generated
     template_files = template_gen.get_template_files()
     if template_files:
-        typer.secho("\n" + t("init.component_files"), fg=typer.colors.CYAN, bold=True)
+        brand.muted("\n" + t("init.component_files"), bold=True)
         for file_path in template_files:
             typer.echo(f"   • {file_path}")
 
     # Show entrypoints that will be created
     entrypoints = template_gen.get_entrypoints()
     if entrypoints:
-        typer.secho("\n" + t("init.entrypoints"), fg=typer.colors.CYAN, bold=True)
+        brand.muted("\n" + t("init.entrypoints"), bold=True)
         for entrypoint in entrypoints:
             typer.echo(f"   • {entrypoint}")
 
     # Show worker queues that will be created
     worker_queues = template_gen.get_worker_queues()
     if worker_queues:
-        typer.secho("\n" + t("init.worker_queues"), fg=typer.colors.CYAN, bold=True)
+        brand.muted("\n" + t("init.worker_queues"), bold=True)
         for queue in worker_queues:
             typer.echo(f"   • {queue}")
 
     # Show dependency information using template generator
     deps = template_gen._get_pyproject_deps()
     if deps:
-        typer.secho("\n" + t("init.dependencies"), fg=typer.colors.CYAN, bold=True)
+        brand.muted("\n" + t("init.dependencies"), bold=True)
         for dep in deps:
             typer.echo(f"   • {dep}")
 
     # Confirm before proceeding
     typer.echo()
     if not yes and not typer.confirm(t("init.confirm_create"), default=True):
-        typer.secho(t("init.cancelled"), fg="red")
+        brand.error(t("init.cancelled"))
         raise typer.Exit(0)
 
 
@@ -299,40 +298,35 @@ def init_command(
 
     # Validate Python version
     if python_version not in SUPPORTED_PYTHON_VERSIONS:
-        typer.secho(
+        brand.error(
             t(
                 "validation.invalid_python",
                 version=python_version,
                 supported=", ".join(SUPPORTED_PYTHON_VERSIONS),
             ),
-            fg="red",
             err=True,
         )
         raise typer.Exit(1)
 
-    typer.secho(t("init.title"), fg=typer.colors.BLUE, bold=True)
+    brand.accent(t("init.title"), bold=True)
 
     # Determine output directory
     base_output_dir = Path(output_dir) if output_dir else Path.cwd()
     project_path = base_output_dir / project_name
 
-    typer.echo(
-        f"{typer.style(t('init.location'), fg=typer.colors.CYAN)} {project_path.resolve()}"
-    )
+    typer.echo(f"{brand.muted_text(t('init.location'))} {project_path.resolve()}")
 
     if to_version:
-        typer.echo(
-            f"{typer.style(t('init.template_version'), fg=typer.colors.CYAN)} {to_version}"
-        )
+        typer.echo(f"{brand.muted_text(t('init.template_version'))} {to_version}")
 
     # Check if directory already exists
     if project_path.exists():
         if not force:
-            typer.secho(t("init.dir_exists", path=project_path), fg="red", err=True)
+            brand.error(t("init.dir_exists", path=project_path), err=True)
             typer.echo(f"   {t('init.dir_exists_hint')}", err=True)
             raise typer.Exit(1)
         else:
-            typer.secho(t("init.overwriting", path=project_path), fg="yellow")
+            brand.warn(t("init.overwriting", path=project_path))
 
     # Interactive component selection
     # Note: components is list[str] after callback, despite str annotation
@@ -354,7 +348,7 @@ def init_command(
                 selected_services, components_for_validation
             )
             if errors:
-                typer.secho(t("init.compat_errors"), fg="red", err=True)
+                brand.error(t("init.compat_errors"), err=True)
                 for error in errors:
                     typer.echo(f"   • {error}", err=True)
 
@@ -389,12 +383,11 @@ def init_command(
                 selected_services
             )
             if service_components:
-                typer.secho(
+                brand.warn(
                     t(
                         "init.services_require",
                         components=", ".join(sorted(service_components)),
-                    ),
-                    fg=typer.colors.YELLOW,
+                    )
                 )
             selected_components = service_components
 
@@ -410,10 +403,7 @@ def init_command(
     if selected_components:
         scheduler_backend = detect_scheduler_backend(selected_components)
         if scheduler_backend != StorageBackends.MEMORY:
-            typer.secho(
-                t("init.auto_detected_scheduler", backend=scheduler_backend),
-                fg=typer.colors.YELLOW,
-            )
+            brand.warn(t("init.auto_detected_scheduler", backend=scheduler_backend))
 
     if interactive and not components and not services:
         import shutil as _shutil
@@ -474,7 +464,7 @@ def init_command(
                 # the error into persistent scrollback.
                 if exc.log.strip():
                     typer.echo(exc.log)
-                typer.secho(t("init.error", error=exc.__cause__), fg="red", err=True)
+                brand.error(t("init.error", error=exc.__cause__), err=True)
                 raise typer.Exit(1) from exc
 
             _print_guided_receipt(plan, project_path)
@@ -501,23 +491,19 @@ def init_command(
             selected_services = plan.services
 
             if plan.auto_added_components:
-                typer.secho(
+                brand.warn(
                     "\n"
                     + t(
                         "init.auto_added_deps",
                         deps=", ".join(plan.auto_added_components),
-                    ),
-                    fg=typer.colors.YELLOW,
+                    )
                 )
             if plan.service_component_map:
-                typer.secho(
-                    "\n" + t("init.auto_added_by_services"),
-                    fg=typer.colors.YELLOW,
-                )
+                brand.warn("\n" + t("init.auto_added_by_services"))
                 for comp, requiring_services in plan.service_component_map.items():
                     services_str = ", ".join(requiring_services)
                     typer.echo(
-                        f"   • {comp} {typer.style(t('init.required_by', services=services_str), dim=True)}"
+                        f"   • {comp} {brand.muted_text(t('init.required_by', services=services_str))}"
                     )
         template_gen = plan.template_gen
         assert template_gen is not None
@@ -544,7 +530,7 @@ def init_command(
 
     # Create project using Copier template engine
     typer.echo()
-    typer.secho(t("init.creating", name=project_name), fg=typer.colors.BLUE, bold=True)
+    brand.accent(t("init.creating", name=project_name), bold=True)
 
     try:
         from ..core.copier_manager import generate_with_copier
@@ -570,7 +556,7 @@ def init_command(
             project_name, list(selected_components), selected_services
         )
         typer.echo()
-        typer.secho(t("init.replay_hint"), fg=typer.colors.CYAN, bold=True)
+        brand.muted(t("init.replay_hint"))
         # Text, not markup interpolation: bracket syntax like worker[taskiq]
         # would be parsed (and swallowed) as rich markup tags.
         from rich.text import Text as _RichText
@@ -581,5 +567,5 @@ def init_command(
         )
 
     except Exception as e:
-        typer.secho(t("init.error", error=e), fg="red", err=True)
+        brand.error(t("init.error", error=e), err=True)
         raise typer.Exit(1)

@@ -11,6 +11,7 @@ from fastapi.routing import APIRoute
 __all__ = ["RouteMetadata", "FastAPIRouteInspector"]
 
 from app.core.log import logger
+from app.core.route_auth import route_requires_auth
 from app.services.backend.models import RouteInfo, RouteMetadata
 
 
@@ -44,6 +45,7 @@ class FastAPIRouteInspector:
                         deprecated=bool(getattr(route, "deprecated", False)),
                         path_params=self._extract_path_params(route.path),
                         dependencies=self._extract_dependency_names(route),
+                        requires_auth=route_requires_auth(route),
                         response_model=(
                             str(route.response_model) if route.response_model else None
                         ),

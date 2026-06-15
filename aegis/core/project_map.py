@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 import yaml
 
+from ..cli import brand
 from ..constants import AnswerKeys, WorkerBackends
 from ..i18n import t
 
@@ -64,14 +65,10 @@ def _render_line(
 
     # Build the line with consistent 18-char name column
     if is_new:
-        typer.secho(
-            f"{prefix}{padded_name}← {t('projectmap.new')}",
-            fg=typer.colors.GREEN,
-            bold=True,
-        )
+        brand.success(f"{prefix}{padded_name}← {t('projectmap.new')}", bold=True)
     elif uses_marker:
         typer.echo(f"{prefix}{padded_name}", nl=False)
-        typer.secho(f"← {uses_marker}", fg=typer.colors.CYAN)
+        brand.accent(f"← {uses_marker}")
     else:
         typer.echo(f"{prefix}{padded_name}← {desc}")
 
@@ -111,7 +108,7 @@ def render_project_map(
 
     project_name = project_path.name
 
-    typer.secho(t("projectmap.title"), fg=typer.colors.CYAN, bold=True)
+    brand.muted(t("projectmap.title"), bold=True)
     typer.echo(f"{project_name}/")
 
     # app/ section

@@ -310,6 +310,7 @@ ORG_MIGRATION = ServiceMigrationSpec(
                 ),
                 ColumnSpec("token", "sa.String()", nullable=False),
                 ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("expires_at", "sa.DateTime()", nullable=True),
             ],
             indexes=[
                 IndexSpec("ix_org_invite_email", ["email"]),
@@ -1195,6 +1196,7 @@ BLOG_MIGRATION = ServiceMigrationSpec(
                 ColumnSpec("seo_title", "sa.String(200)", nullable=True),
                 ColumnSpec("seo_description", "sa.String(320)", nullable=True),
                 ColumnSpec("hero_image_url", "sa.String(1024)", nullable=True),
+                ColumnSpec("syndicate_targets", "sa.JSON()", nullable=True),
             ],
             indexes=[
                 IndexSpec("ix_blog_post_slug", ["slug"], unique=True),

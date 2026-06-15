@@ -778,16 +778,27 @@ class GuidedSelectionUI:
         grid.add_row(Text(plan.project_name, style="bold", justify="center"))
         grid.add_row(Text())
 
+        # Core stack ships with every project; list it first so the build
+        # summary is the whole project, not just what was chosen on top of it.
+        core = Text()
+        core.append(f"{_g('review.core', 'Core:')}            ", style=LABEL)
+        core.append(" · ".join(CORE_COMPONENTS), style=BODY)
+        grid.add_row(core)
+        grid.add_row(Text())
+
         auto = set(plan.service_component_map) | set(plan.auto_added_components)
-        infra = Text()
-        infra.append(f"{_g('review.infrastructure', 'Infrastructure:')}  ", style=LABEL)
-        for i, comp in enumerate(plan.infrastructure):
-            if i:
-                infra.append(" · ", style=RULE_STYLE)
-            infra.append(comp, style=BODY)
-            if comp.split("[", 1)[0] in auto or comp in auto:
-                infra.append(f" {_g('review.auto', 'auto')}", style=MUTED)
-        grid.add_row(infra)
+        if plan.infrastructure:
+            infra = Text()
+            infra.append(
+                f"{_g('review.infrastructure', 'Infrastructure:')}  ", style=LABEL
+            )
+            for i, comp in enumerate(plan.infrastructure):
+                if i:
+                    infra.append(" · ", style=RULE_STYLE)
+                infra.append(comp, style=BODY)
+                if comp.split("[", 1)[0] in auto or comp in auto:
+                    infra.append(f" {_g('review.auto', 'auto')}", style=MUTED)
+            grid.add_row(infra)
         if plan.services:
             grid.add_row(Text())
             grid.add_row(

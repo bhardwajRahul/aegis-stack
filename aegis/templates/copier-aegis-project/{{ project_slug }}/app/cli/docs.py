@@ -5,14 +5,13 @@ Displays documentation URLs for installed components and services.
 
 from pathlib import Path
 
-from rich.console import Console
-from rich.panel import Panel
 import typer
-
+from app.cli import theme
 from app.i18n import lazy_t, t
+from rich.panel import Panel
 
 app = typer.Typer(name="docs", help=lazy_t("docs.help"), invoke_without_command=True)
-console = Console()
+console = theme.console()
 
 # Base URL for Aegis Stack documentation
 AEGIS_BASE = "https://docs.aegis-stack.io"
@@ -136,14 +135,14 @@ def _format_docs_section(
         List of formatted lines.
     """
     lines: list[str] = []
-    lines.append(f"[bold cyan]{title}:[/bold cyan]")
+    lines.append(f"[bold]{title}:[/bold]")
 
     for item in items:
         if item not in docs_config:
             continue
 
         aegis_path, external_url, description = docs_config[item]
-        lines.append(f"  [bold]{item}[/bold] ({description})")
+        lines.append(f"  [{theme.ACCENT}]{item}[/{theme.ACCENT}] ({description})")
         lines.append(f"    {t('docs.guide_label')} {AEGIS_BASE}{aegis_path}")
         if external_url:
             lines.append(f"    {t('docs.docs_label')}  {external_url}")
@@ -169,7 +168,7 @@ def show() -> None:
         lines.extend(_format_docs_section(t("docs.services"), services, SERVICE_DOCS))
 
     if not lines:
-        console.print(f"[yellow]{t('docs.no_detected')}[/yellow]")
+        console.print(f"[{theme.WARNING}]{t('docs.no_detected')}[/{theme.WARNING}]")
         return
 
     # Get project name from directory
@@ -178,7 +177,7 @@ def show() -> None:
     panel = Panel(
         "\n".join(lines).rstrip(),
         title=f"[bold]{project_name} {t('docs.documentation')}[/bold]",
-        border_style="cyan",
+        border_style="dim",
     )
     console.print(panel)
 

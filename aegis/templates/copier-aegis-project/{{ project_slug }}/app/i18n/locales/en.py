@@ -487,6 +487,11 @@ MESSAGES: dict[str, str] = {
     "tasks.stat_success_rate": "Success rate",
     "tasks.stat_avg_duration": "Average duration",
     "tasks.stat_last_run": "Last run",
+    "tasks.statistics_title": "Scheduler Statistics",
+    "tasks.statistics_failed": "Failed to load scheduler statistics:",
+    "tasks.stat_total_tasks": "Total tasks",
+    "tasks.stat_active_tasks": "Active",
+    "tasks.stat_paused_tasks": "Paused",
     "tasks.history_title": "Execution History",
     "tasks.started_column": "Started",
     "tasks.duration_column": "Duration",
@@ -497,6 +502,9 @@ MESSAGES: dict[str, str] = {
     "tasks.help_list": "List all scheduled jobs with their current status and details.",
     "tasks.help_trigger": "Run a scheduled job immediately and record the result.",
     "tasks.help_stats": "Show aggregate execution statistics for a scheduled job.",
+    "tasks.help_statistics": (
+        "Show overall scheduler statistics (total, active, and paused tasks)."
+    ),
     "tasks.help_history": "Show recent job execution history.",
     # ── Migrate ──────────────────────────────────────────────────────
     "migrate.table_missing_warning": (

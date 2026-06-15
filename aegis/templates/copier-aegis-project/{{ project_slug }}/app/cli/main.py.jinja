@@ -13,13 +13,17 @@ from typing import TYPE_CHECKING
 import app.cli._i18n_click  # noqa: F401 — translate Click's built-in --help text
 import click
 import typer
-
-from app.cli import dns, docs, health
+from app.cli import dns, docs, health, theme
 from app.i18n import detect_locale, lazy_t, set_locale, t
 from app.i18n.locales import AVAILABLE_LOCALES
 
 if TYPE_CHECKING:
     pass
+
+# Theme the rich ``--help`` output to the brand palette (teal = typeable tokens,
+# neutral = prose, dim = annotations/chrome). Must run before the Typer app is
+# built so every help panel — this CLI and all subcommands — inherits it.
+theme.apply_help_theme()
 
 app = typer.Typer(
     name="{{ project_slug }}",
@@ -41,9 +45,8 @@ def main_callback(
 ) -> None:
     normalized = lang.lower().replace("-", "_").split("_")[0] if lang else None
     if normalized and normalized not in AVAILABLE_LOCALES:
-        typer.secho(
+        theme.bad(
             t("main.unsupported_lang", lang=lang, available=", ".join(sorted(AVAILABLE_LOCALES))),
-            fg="red",
             err=True,
         )
         raise typer.Exit(1)
@@ -161,7 +164,7 @@ def main() -> None:
     except click.exceptions.Exit as e:
         # Normal exit requested (e.g., after showing error message)
         sys.exit(e.exit_code)
-    except SystemExit as e:
+    except SystemExit:
         # Re-raise system exits (normal exit codes)
         raise
 

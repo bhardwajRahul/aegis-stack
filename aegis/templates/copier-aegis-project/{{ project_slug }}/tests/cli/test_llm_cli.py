@@ -1,5 +1,6 @@
 """Tests for LLM catalog CLI commands."""
 
+import re
 from unittest.mock import MagicMock, patch
 
 from app.cli.main import app
@@ -8,6 +9,20 @@ from app.services.ai.llm_service import ModalityListResult, VendorListResult
 from typer.testing import CliRunner
 
 runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(text: str) -> str:
+    """Strip ANSI styling from CLI output.
+
+    Typer's themed ``--help`` highlights a flag like ``--mode`` as two
+    overlapping spans (the ``--mode`` option and the ``-mode`` switch),
+    so the colorized bytes carry a reset between the dashes and the literal
+    ``--mode`` substring is absent. Stripping ANSI lets flag assertions
+    check the rendered text rather than its presentation.
+    """
+    return _ANSI_RE.sub("", text)
 
 
 class TestLLMVendorsCommand:
@@ -107,17 +122,19 @@ class TestLLMSyncCommand:
         result = runner.invoke(app, ["llm", "sync", "--help"])
         assert result.exit_code == 0
         assert "Sync LLM catalog" in result.output
-        assert "--mode" in result.output
-        assert "--dry-run" in result.output
-        assert "--refresh" in result.output
+        plain = _plain(result.output)
+        assert "--mode" in plain
+        assert "--dry-run" in plain
+        assert "--refresh" in plain
 
     def test_sync_source_flag_in_help(self) -> None:
         """Test that --source flag appears in help text."""
         result = runner.invoke(app, ["llm", "sync", "--help"])
         assert result.exit_code == 0
-        assert "--source" in result.output
-        assert "cloud" in result.output
-        assert "ollama" in result.output
+        plain = _plain(result.output)
+        assert "--source" in plain
+        assert "cloud" in plain
+        assert "ollama" in plain
 
     @patch("app.cli.llm.sync_llm_catalog")
     @patch("app.cli.llm.Session")
@@ -268,8 +285,9 @@ class TestLLMListCommand:
         result = runner.invoke(app, ["llm", "list", "--help"])
         assert result.exit_code == 0
         assert "List LLM models" in result.output
-        assert "--vendor" in result.output
-        assert "--modality" in result.output
+        plain = _plain(result.output)
+        assert "--vendor" in plain
+        assert "--modality" in plain
 
 
 class TestLLMUseCommand:
@@ -280,7 +298,7 @@ class TestLLMUseCommand:
         result = runner.invoke(app, ["llm", "use", "--help"])
         assert result.exit_code == 0
         assert "Switch to a different LLM model" in result.output
-        assert "--force" in result.output
+        assert "--force" in _plain(result.output)
 
 
 class TestLLMInfoCommand:

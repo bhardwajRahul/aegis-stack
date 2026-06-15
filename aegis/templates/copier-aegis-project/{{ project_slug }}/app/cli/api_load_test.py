@@ -15,18 +15,19 @@ that's what users are testing.
 import asyncio
 import json as json_lib
 import sys
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, TypeVar
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import typer
+from app.cli import theme
 from app.core.formatting import format_relative_time
-from app.services.load_test.common.storage import RedisResultStore
 from app.services.load_test.api.discovery import list_routes
 from app.services.load_test.api.models import (
     APILoadTestConfiguration,
     APILoadTestResult,
 )
 from app.services.load_test.api.service import APILoadTestService
-from rich.console import Console
+from app.services.load_test.common.storage import RedisResultStore
 from rich.progress import (
     BarColumn,
     MofNCompleteColumn,
@@ -47,9 +48,30 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-console = Console()
+console = theme.console()
 
 T = TypeVar("T")
+
+
+def _progress_console() -> Any:
+    """Rich console themed for the progress bar: brand-teal bar/spinner so
+    completion reads as good-state, dim timers so the chrome stays quiet."""
+    from rich.console import Console
+    from rich.theme import Theme
+
+    return Console(
+        highlight=False,
+        theme=Theme(
+            {
+                "bar.complete": theme.ACCENT,
+                "bar.finished": theme.ACCENT,
+                "bar.pulse": theme.ACCENT,
+                "progress.spinner": theme.ACCENT,
+                "progress.elapsed": "dim",
+                "progress.remaining": "dim",
+            }
+        ),
+    )
 
 
 def _get_fastapi_app() -> "FastAPI":
@@ -148,20 +170,110 @@ def _get_auth_dependency() -> object | None:
         return None
 
 
-# Rich color names mapped to HTTP methods. Mirrors the dashboard
-# ``METHOD_COLORS`` palette as closely as Rich's named colors allow
-# (blue / green / yellow / magenta / red).
+_LOAD_TEST_USER_EMAIL = "loadtest@example.com"
+
+
+def _apply_auto_auth(
+    headers: dict[str, str],
+    *,
+    as_admin: bool,
+    as_user: bool,
+    anon: bool,
+    quiet: bool,
+) -> str | None:
+    """Inject a bearer token into ``headers`` so auth-gated routes work
+    without manual login, and return the role used (for the result record).
+
+    Auth is automatic by default: ``admin`` when ``ADMIN_USER_EMAILS`` is
+    configured (so it clears ``require_admin``), otherwise a regular user,
+    otherwise anonymous when the auth service isn't installed. ``--anon``
+    disables it; ``--as-admin`` / ``--as-user`` force a role. An explicit
+    ``--header Authorization`` always wins and is never overwritten. The token
+    is signed with the project ``SECRET_KEY`` and the user lives in the project
+    DB, so it validates against in-process and locally running servers sharing
+    this ``.env``.
+    """
+    if sum((as_admin, as_user, anon)) > 1:
+        console.print(
+            "Pass only one of --as-admin / --as-user / --anon.", style=theme.ERROR
+        )
+        sys.exit(2)
+    if anon or any(k.lower() == "authorization" for k in headers):
+        return None
+
+    try:
+        from app.core.config import settings
+        from app.core.security import create_access_token
+    except ImportError:
+        if as_admin or as_user:
+            console.print(
+                "Auth is not installed in this stack; --as-admin/--as-user "
+                "are unavailable.",
+                style=theme.ERROR,
+            )
+            sys.exit(2)
+        return None
+
+    has_allowlist = bool(settings.ADMIN_USER_EMAILS)
+    if as_admin and not has_allowlist:
+        console.print(
+            "--as-admin needs ADMIN_USER_EMAILS set in .env, e.g. "
+            'ADMIN_USER_EMAILS=["you@example.com"].',
+            style=theme.ERROR,
+        )
+        sys.exit(2)
+
+    use_admin = as_admin or (not as_user and has_allowlist)
+    email = settings.ADMIN_USER_EMAILS[0] if use_admin else _LOAD_TEST_USER_EMAIL
+    role = "admin" if use_admin else "user"
+
+    asyncio.run(_ensure_active_verified_user(email))
+    headers["Authorization"] = f"Bearer {create_access_token({'sub': email})}"
+    if not quiet:
+        theme.label(f"Authenticating as {role} ({email}); pass --anon to disable")
+    return role
+
+
+async def _ensure_active_verified_user(email: str) -> None:
+    """Create the load-test user if absent, and ensure it is active and
+    verified so it satisfies ``get_current_active_user`` and ``require_admin``.
+    """
+    import secrets
+
+    from app.core.db import get_async_session
+    from app.models.user import UserCreate
+    from app.services.auth.user_service import UserService
+
+    async with get_async_session() as session:
+        user_service = UserService(session)
+        user = await user_service.get_user_by_email(email)
+        if user is None:
+            user = await user_service.create_user(
+                UserCreate(
+                    email=email,
+                    full_name="Load Test",
+                    password=secrets.token_urlsafe(16),
+                )
+            )
+        user.is_active = True
+        user.is_verified = True
+        session.add(user)
+        await session.commit()
+
+
+# The HTTP method is metadata in the route listing, not a state, so it
+# renders dim (annotation) rather than carrying its own hue.
 _METHOD_COLORS_CLI: dict[str, str] = {
-    "GET": "blue",
-    "POST": "green",
-    "PUT": "yellow",
-    "PATCH": "magenta",
-    "DELETE": "red",
+    "GET": "dim",
+    "POST": "dim",
+    "PUT": "dim",
+    "PATCH": "dim",
+    "DELETE": "dim",
 }
 
 
 def _method_color(method: str) -> str:
-    return _METHOD_COLORS_CLI.get(method, "white")
+    return _METHOD_COLORS_CLI.get(method, "dim")
 
 
 @app.command(name="list")
@@ -184,18 +296,20 @@ def list_command(
 
     table = Table(
         title=f"Discovered {len(routes)} routes",
-        header_style="bold magenta",
+        header_style="bold",
     )
     table.add_column("METHOD")
-    table.add_column("PATH", style="cyan")
+    table.add_column("PATH", style=theme.ACCENT)
     table.add_column("AUTH")
     if has_params:
-        table.add_column("PARAMS", style="yellow")
+        table.add_column("PARAMS", style="dim")
     table.add_column("TAGS", style="dim")
     for r in routes:
         method_color = _method_color(r.method)
         auth_cell = (
-            "[green]yes[/green]" if r.requires_auth else "[dim]no[/dim]"
+            f"[{theme.ACCENT}]yes[/{theme.ACCENT}]"
+            if r.requires_auth
+            else "[dim]no[/dim]"
         )
         cells: list[str] = [
             f"[{method_color}]{r.method}[/{method_color}]",
@@ -232,6 +346,23 @@ def run(
         "-p",
         help="Substitute {placeholders} in the path: KEY=VALUE (repeatable)",
     ),
+    as_admin: bool = typer.Option(
+        False,
+        "--as-admin",
+        help="Force admin auth (default auto-picks admin when "
+        "ADMIN_USER_EMAILS is set, else a regular user)",
+    ),
+    as_user: bool = typer.Option(
+        False,
+        "--as-user",
+        help="Force regular non-admin auth instead of the auto default",
+    ),
+    anon: bool = typer.Option(
+        False,
+        "--anon",
+        help="Send unauthenticated requests; by default requests are "
+        "auto-authenticated so auth-gated routes work without setup",
+    ),
     base_url: str = typer.Option(
         "http://localhost:8000", "--base-url", help="Base URL for out-of-process runs"
     ),
@@ -248,6 +379,9 @@ def run(
 ) -> None:
     """Run a load test against an endpoint."""
     headers = _parse_headers(header)
+    auth_as = _apply_auto_auth(
+        headers, as_admin=as_admin, as_user=as_user, anon=anon, quiet=json
+    )
     path_params = _parse_kv_flag(path_param, "--path-param")
 
     parsed_payload: dict | str | None = None
@@ -264,6 +398,7 @@ def run(
         clients=clients,
         payload=parsed_payload,
         headers=headers,
+        auth_as=auth_as,
         path_params=path_params,
         base_url=base_url,
         in_process=in_process,
@@ -284,11 +419,11 @@ def run(
             TextColumn("[progress.description]{task.description}"),
             BarColumn(),
             MofNCompleteColumn(),
-            TextColumn("•"),
+            TextColumn("[dim]•[/dim]"),
             TimeElapsedColumn(),
-            TextColumn("•"),
+            TextColumn("[dim]•[/dim]"),
             TimeRemainingColumn(),
-            console=console,
+            console=_progress_console(),
             transient=False,
         )
         progress.start()
@@ -320,7 +455,7 @@ def run(
         # rather than typer.Exit because the project's CLI wrapper
         # (app/cli/main.py) runs ``standalone_mode=False`` and doesn't
         # always surface click-level exits as a process exit code.
-        console.print(str(exc), style="red")
+        console.print(str(exc), style=theme.ERROR)
         sys.exit(2)
 
     if json:
@@ -346,7 +481,7 @@ def results(
 
     result = asyncio.run(_with_store(_do_get))
     if result is None:
-        console.print(f"No result found for test_id={test_id!r}", style="red")
+        console.print(f"No result found for test_id={test_id!r}", style=theme.ERROR)
         sys.exit(1)
 
     if json:
@@ -409,43 +544,47 @@ def _render_result(r: APILoadTestResult) -> None:
     m = r.metrics
 
     console.print()
-    console.print(f"[bold]Test ID:[/bold] {r.test_id}")
-    console.print(f"[bold]Target:[/bold]  {config.method} {config.path}")
+    console.print(f"[dim]Test ID:[/dim] {r.test_id}")
+    console.print(f"[dim]Target:[/dim]  {config.method} {config.path}")
 
     # Colored success / errors so the stats density reads at a glance,
     # but with no verdict implied.
     if m.tasks_completed == m.tasks_sent:
-        success_markup = f"[green]{m.tasks_completed}  (100.0%)[/green]"
+        success_markup = (
+            f"[{theme.ACCENT}]{m.tasks_completed}  (100.0%)[/{theme.ACCENT}]"
+        )
     elif m.tasks_completed == 0:
-        success_markup = f"[red]{m.tasks_completed}  (0.0%)[/red]"
+        success_markup = f"[{theme.ERROR}]{m.tasks_completed}  (0.0%)[/{theme.ERROR}]"
     else:
         success_markup = (
-            f"[yellow]{m.tasks_completed}  "
-            f"({m.completion_percentage:.1f}%)[/yellow]"
+            f"[{theme.WARNING}]{m.tasks_completed}  "
+            f"({m.completion_percentage:.1f}%)[/{theme.WARNING}]"
         )
     errors_markup = (
-        f"[red]{m.tasks_failed}[/red]" if m.tasks_failed else str(m.tasks_failed)
+        f"[{theme.ERROR}]{m.tasks_failed}[/{theme.ERROR}]"
+        if m.tasks_failed
+        else str(m.tasks_failed)
     )
 
     console.print()
     console.print("[bold]Results[/bold]")
-    console.print(f"  Throughput        {m.overall_throughput:.1f} req/s")
-    console.print(f"  Total duration    {m.total_duration_seconds:.3f}s")
-    console.print(f"  Success           {success_markup}")
-    console.print(f"  Errors            {errors_markup}")
+    console.print(f"  [dim]Throughput[/dim]        {m.overall_throughput:.1f} req/s")
+    console.print(f"  [dim]Total duration[/dim]    {m.total_duration_seconds:.3f}s")
+    console.print(f"  [dim]Success[/dim]           {success_markup}")
+    console.print(f"  [dim]Errors[/dim]            {errors_markup}")
     console.print()
     console.print("[bold]Latency (ms)[/bold]")
-    console.print(f"  p50    {m.latency_ms_p50:.1f}")
-    console.print(f"  p95    {m.latency_ms_p95:.1f}")
-    console.print(f"  p99    {m.latency_ms_p99:.1f}")
-    console.print(f"  max    {m.latency_ms_max:.1f}")
+    console.print(f"  [dim]p50[/dim]    {m.latency_ms_p50:.1f}")
+    console.print(f"  [dim]p95[/dim]    {m.latency_ms_p95:.1f}")
+    console.print(f"  [dim]p99[/dim]    {m.latency_ms_p99:.1f}")
+    console.print(f"  [dim]max[/dim]    {m.latency_ms_max:.1f}")
     if m.status_codes:
         console.print()
         console.print("[bold]Status codes[/bold]")
         for status, count in sorted(m.status_codes.items()):
             color = (
-                "green" if 200 <= status < 400
-                else "yellow" if 400 <= status < 500
-                else "red"
+                theme.ACCENT if 200 <= status < 400
+                else theme.WARNING if 400 <= status < 500
+                else theme.ERROR
             )
             console.print(f"  [{color}]{status}[/{color}]    {count}")

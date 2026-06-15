@@ -91,6 +91,32 @@ class ProviderNotInstalledError(ProviderError):
         super().__init__(f"{provider} provider is not installed")
 
 
+def _supports_custom_temperature(model: str | None) -> bool:
+    """Whether a model accepts a non-default ``temperature``.
+
+    OpenAI reasoning models (o1/o3/o4) and the gpt-5 family reject any
+    temperature other than the default (1) — sending one returns a 400. Omit
+    temperature for those; every other model accepts a custom value.
+    """
+    if not model:
+        return True
+    name = model.split("/")[-1].lower()  # strip any "provider/" prefix
+    return not name.startswith(("o1", "o3", "o4", "gpt-5"))
+
+
+def _model_settings(config: Any) -> ModelSettings:
+    """Build ModelSettings for the agent, omitting ``temperature`` for models
+    that only accept the default so they don't 400 (see
+    ``_supports_custom_temperature``)."""
+    kwargs: dict[str, Any] = {
+        "max_tokens": config.max_tokens,
+        "timeout": config.timeout_seconds,
+    }
+    if _supports_custom_temperature(config.model):
+        kwargs["temperature"] = config.temperature
+    return ModelSettings(**kwargs)
+
+
 def get_agent(
     config: AIServiceConfig,
     settings: Any,
@@ -162,11 +188,7 @@ def get_agent(
         # Create agent with system prompt and model settings
         agent = Agent(
             model=model,
-            model_settings=ModelSettings(
-                temperature=config.temperature,
-                max_tokens=config.max_tokens,
-                timeout=config.timeout_seconds,
-            ),
+            model_settings=_model_settings(config),
             system_prompt=system_prompt,
         )
 
@@ -286,11 +308,7 @@ def _create_public_agent(
         # Create agent with system prompt and model settings
         agent = Agent(
             model=model,
-            model_settings=ModelSettings(
-                temperature=config.temperature,
-                max_tokens=config.max_tokens,
-                timeout=config.timeout_seconds,
-            ),
+            model_settings=_model_settings(config),
             system_prompt=system_prompt,
         )
 
@@ -355,11 +373,7 @@ def _create_ollama_agent(
         # Create agent with system prompt and model settings
         agent = Agent(
             model=model,
-            model_settings=ModelSettings(
-                temperature=config.temperature,
-                max_tokens=config.max_tokens,
-                timeout=config.timeout_seconds,
-            ),
+            model_settings=_model_settings(config),
             system_prompt=system_prompt,
         )
 

@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.table import Table
 import typer
 
+from app.cli import theme
 from app.i18n import lazy_t, t
 
 if TYPE_CHECKING:
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
     from app.services.payment.models import PaymentSubscription, PaymentTransaction
 
 app = typer.Typer(help=lazy_t("payment.help"))
-console = Console()
+console = theme.console()
 
 
 @app.command(help=lazy_t("payment.help_status"))
@@ -40,14 +41,14 @@ async def _status() -> None:
         summary = await service.get_status_summary()
 
     mode = (
-        f"[yellow]{t('payment.mode_test')}[/yellow]"
+        f"[{theme.WARNING}]{t('payment.mode_test')}[/]"
         if summary.is_test_mode
-        else f"[green]{t('payment.mode_live')}[/green]"
+        else f"[{theme.ACCENT}]{t('payment.mode_live')}[/]"
     )
     health = (
-        f"[green]{t('payment.connected')}[/green]"
+        f"[{theme.ACCENT}]{t('payment.connected')}[/]"
         if summary.healthy
-        else f"[red]{t('payment.disconnected')}[/red]"
+        else f"[{theme.ERROR}]{t('payment.disconnected')}[/]"
     )
 
     console.print()
@@ -71,7 +72,8 @@ async def _status() -> None:
     table.add_row(t("payment.col_active_subs"), str(summary.active_subscriptions))
     if summary.open_disputes:
         table.add_row(
-            t("payment.col_open_disputes"), f"[red]{summary.open_disputes}[/red]"
+            t("payment.col_open_disputes"),
+            f"[{theme.ERROR}]{summary.open_disputes}[/]",
         )
 
     console.print(table)
@@ -79,7 +81,7 @@ async def _status() -> None:
 
     if not summary.healthy and summary.health_message:
         console.print(
-            f"[yellow]{t('payment.warning')}[/yellow] {summary.health_message}"
+            f"[{theme.WARNING}]{t('payment.warning')}[/] {summary.health_message}"
         )
         console.print()
 
@@ -119,19 +121,20 @@ async def _transactions(limit: int, status_filter: str | None) -> None:
     table.add_column(t("payment.col_date"))
 
     status_colors = {
-        "succeeded": "green",
-        "pending": "yellow",
-        "failed": "red",
-        "refunded": "blue",
-        "partially_refunded": "cyan",
+        "succeeded": theme.ACCENT,
+        "pending": theme.WARNING,
+        "failed": theme.ERROR,
+        "refunded": "dim",
+        "partially_refunded": "dim",
     }
 
     for txn in txns:
-        color = status_colors.get(txn.status, "white")
+        color = status_colors.get(txn.status)
+        status_cell = f"[{color}]{txn.status}[/]" if color else txn.status
         table.add_row(
             str(txn.id),
             txn.type,
-            f"[{color}]{txn.status}[/{color}]",
+            status_cell,
             f"${txn.amount / 100:,.2f}",
             txn.currency.upper(),
             txn.created_at.strftime("%Y-%m-%d %H:%M"),
@@ -181,17 +184,18 @@ async def _disputes(status_filter: str | None) -> None:
     table.add_column(t("payment.col_created"))
 
     status_colors = {
-        "warning_issued": "yellow",
-        "warning_closed": "green",
-        "needs_response": "red",
-        "under_review": "cyan",
-        "won": "green",
-        "lost": "red",
-        "charge_refunded": "blue",
+        "warning_issued": theme.WARNING,
+        "warning_closed": theme.ACCENT,
+        "needs_response": theme.ERROR,
+        "under_review": "dim",
+        "won": theme.ACCENT,
+        "lost": theme.ERROR,
+        "charge_refunded": "dim",
     }
 
     for d in rows:
-        color = status_colors.get(d.status, "white")
+        color = status_colors.get(d.status)
+        status_cell = f"[{color}]{d.status}[/]" if color else d.status
         due_cell = (
             d.evidence_due_by.strftime("%Y-%m-%d")
             if d.evidence_due_by
@@ -201,7 +205,7 @@ async def _disputes(status_filter: str | None) -> None:
             str(d.id),
             str(d.transaction_id),
             d.provider_dispute_id,
-            f"[{color}]{d.status}[/{color}]",
+            status_cell,
             d.reason or "-",
             f"${d.amount / 100:,.2f}",
             due_cell,
@@ -240,7 +244,7 @@ async def _seed(reset: bool, clear: bool) -> None:
     async with get_async_session() as session:
         if reset or clear:
             await clear_fake_data(session)
-            console.print(f"[yellow]{t('payment.wiped_rows')}[/yellow]")
+            console.print(f"[{theme.WARNING}]{t('payment.wiped_rows')}[/]")
 
         if clear:
             return
@@ -250,11 +254,11 @@ async def _seed(reset: bool, clear: bool) -> None:
         try:
             summary = await seed_fake_data(session, provider)
         except RuntimeError as e:
-            console.print(f"[yellow]{t('payment.nothing_to_do')}[/yellow] {e}")
+            console.print(f"[{theme.WARNING}]{t('payment.nothing_to_do')}[/] {e}")
             raise typer.Exit(0) from e
 
     console.print()
-    console.print(f"[bold green]{t('payment.seed_success')}[/bold green]")
+    console.print(f"[bold {theme.ACCENT}]{t('payment.seed_success')}[/]")
     console.print()
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column(t("payment.col_kind"), style="dim")
@@ -264,8 +268,8 @@ async def _seed(reset: bool, clear: bool) -> None:
     console.print(table)
     console.print()
     console.print(f"[dim]{t('payment.seed_view_via_dashboard')}[/dim]")
-    console.print("  [bold]my-app payment transactions[/bold]")
-    console.print("  [bold]my-app payment disputes[/bold]")
+    console.print(f"  [{theme.ACCENT}]my-app payment transactions[/]")
+    console.print(f"  [{theme.ACCENT}]my-app payment disputes[/]")
 
 
 @app.command(help=lazy_t("payment.help_webhook"))
@@ -283,14 +287,14 @@ def webhook(
     import shutil
 
     if not shutil.which("stripe"):
-        console.print(f"[red]{t('payment.stripe_cli_not_found')}[/red]\n")
+        console.print(f"[{theme.ERROR}]{t('payment.stripe_cli_not_found')}[/]\n")
         system = platform.system()
         if system == "Darwin":
             console.print(t("payment.install_homebrew"))
-            console.print("  [bold]brew install stripe/stripe-cli/stripe[/bold]")
+            console.print(f"  [{theme.ACCENT}]brew install stripe/stripe-cli/stripe[/]")
         elif system == "Windows":
             console.print(t("payment.install_scoop"))
-            console.print("  [bold]scoop install stripe[/bold]")
+            console.print(f"  [{theme.ACCENT}]scoop install stripe[/]")
         else:
             console.print(t("payment.install_other"))
         console.print(f"\n{t('payment.then_authenticate')}")
@@ -346,17 +350,17 @@ def trigger(
     from app.core.config import settings
 
     if not shutil.which("stripe"):
-        console.print(f"[red]{t('payment.stripe_cli_not_found')}[/red]")
+        console.print(f"[{theme.ERROR}]{t('payment.stripe_cli_not_found')}[/]")
         console.print(t("payment.stripe_install_brief"))
         raise typer.Exit(1)
 
     api_key = settings.STRIPE_SECRET_KEY or ""
     if not api_key:
-        console.print(f"[red]{t('payment.stripe_secret_missing')}[/red]")
+        console.print(f"[{theme.ERROR}]{t('payment.stripe_secret_missing')}[/]")
         raise typer.Exit(1)
 
     if not api_key.startswith("sk_test_"):
-        console.print(f"[red]{t('payment.refuse_live_key')}[/red]")
+        console.print(f"[{theme.ERROR}]{t('payment.refuse_live_key')}[/]")
         raise typer.Exit(1)
 
     console.print(t("payment.triggering", event=event))
@@ -366,7 +370,7 @@ def trigger(
     )
     if result.returncode != 0:
         console.print(
-            f"[red]{t('payment.trigger_exited', code=result.returncode)}[/red]"
+            f"[{theme.ERROR}]{t('payment.trigger_exited', code=result.returncode)}[/]"
         )
         # Still attempt cleanup — partial failures can leave partial
         # fixtures in place.
@@ -422,7 +426,7 @@ def _archive_fixtures(api_key: str) -> dict[str, int]:
                     archived_prices += 1
                 except Exception as e:
                     console.print(
-                        f"[yellow]{t('payment.could_not_archive_price', id=price.id, error=e)}[/yellow]"
+                        f"[{theme.WARNING}]{t('payment.could_not_archive_price', id=price.id, error=e)}[/]"
                     )
 
             try:
@@ -430,11 +434,11 @@ def _archive_fixtures(api_key: str) -> dict[str, int]:
                 archived_products += 1
             except Exception as e:
                 console.print(
-                    f"[yellow]{t('payment.could_not_archive_product', id=product.id, error=e)}[/yellow]"
+                    f"[{theme.WARNING}]{t('payment.could_not_archive_product', id=product.id, error=e)}[/]"
                 )
     except Exception as e:
         console.print(
-            f"[yellow]{t('payment.fixture_cleanup_aborted', error=e)}[/yellow]"
+            f"[{theme.WARNING}]{t('payment.fixture_cleanup_aborted', error=e)}[/]"
         )
 
     return {"products": archived_products, "prices": archived_prices}
@@ -561,7 +565,7 @@ async def _e2e(
     secondary = secondary_price
     if not primary or not secondary or primary == secondary:
         console.print(
-            "[red]FAIL[/red] need two distinct price ids "
+            f"[{theme.ERROR}]FAIL[/] need two distinct price ids "
             "(--primary-price and --secondary-price are required)."
         )
         raise typer.Exit(1)
@@ -573,10 +577,10 @@ async def _e2e(
     # the line of defence between "smoke test" and "incident".
     api_key = settings.STRIPE_SECRET_KEY or ""
     if not api_key:
-        console.print(f"[red]{t('payment.stripe_secret_missing')}[/red]")
+        console.print(f"[{theme.ERROR}]{t('payment.stripe_secret_missing')}[/]")
         raise typer.Exit(1)
     if not api_key.startswith("sk_test_"):
-        console.print(f"[red]{t('payment.refuse_live_key')}[/red]")
+        console.print(f"[{theme.ERROR}]{t('payment.refuse_live_key')}[/]")
         raise typer.Exit(1)
 
     stripe.api_key = api_key
@@ -585,7 +589,7 @@ async def _e2e(
     results: list[tuple[str, str, str]] = []  # (leg, status, detail)
 
     def _step(leg: str, ok: bool, detail: str = "") -> None:
-        status = "[green]PASS[/green]" if ok else "[red]FAIL[/red]"
+        status = f"[{theme.ACCENT}]PASS[/]" if ok else f"[{theme.ERROR}]FAIL[/]"
         results.append((leg, status, detail))
         console.print(f"  {status} {leg}{(' - ' + detail) if detail else ''}")
 
@@ -596,7 +600,7 @@ async def _e2e(
         )
         user = user_row.first()
         if user is None:
-            console.print(f"[red]FAIL[/red] no user with email {user_email}")
+            console.print(f"[{theme.ERROR}]FAIL[/] no user with email {user_email}")
             raise typer.Exit(1)
 
         cust_row = await session.exec(
@@ -605,7 +609,7 @@ async def _e2e(
         customer = cust_row.first()
         if customer is None:
             console.print(
-                f"[red]FAIL[/red] user {user_email} has no PaymentCustomer row. "
+                f"[{theme.ERROR}]FAIL[/] user {user_email} has no PaymentCustomer row. "
                 "Run one real checkout in the browser first to create it."
             )
             raise typer.Exit(1)

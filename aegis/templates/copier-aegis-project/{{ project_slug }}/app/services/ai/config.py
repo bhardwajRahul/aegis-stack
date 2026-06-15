@@ -16,6 +16,26 @@ from .models import (
 )
 
 
+def _resolve_provider(value: object) -> AIProvider:
+    """Coerce a configured AI_PROVIDER to a valid AIProvider, never crashing.
+
+    A bad ``.env`` value (e.g. a vendor display name like ``llm7.io`` written
+    by model auto-detect) must not crash-loop the webserver. Falls back to
+    ``public`` with a warning when the value does not resolve.
+    """
+    resolved = AIProvider.from_name(value)
+    if resolved is None:
+        from app.core.log import logger
+
+        logger.warning(
+            "Unknown AI_PROVIDER %r; falling back to 'public'. Valid: %s",
+            value,
+            ", ".join(p.value for p in AIProvider),
+        )
+        return AIProvider.PUBLIC
+    return resolved
+
+
 class AIServiceConfig(BaseModel):
     """
     AI service configuration that integrates with main app settings.
@@ -43,7 +63,7 @@ class AIServiceConfig(BaseModel):
         """Create configuration from main application settings."""
         return cls(
             enabled=getattr(settings, "AI_ENABLED", True),
-            provider=AIProvider(getattr(settings, "AI_PROVIDER", "public")),
+            provider=_resolve_provider(getattr(settings, "AI_PROVIDER", "public")),
             model=getattr(settings, "AI_MODEL", "gpt-3.5-turbo"),
             temperature=getattr(settings, "AI_TEMPERATURE", 0.7),
             max_tokens=getattr(settings, "AI_MAX_TOKENS", 1000),

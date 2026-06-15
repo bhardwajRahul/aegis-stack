@@ -21,6 +21,8 @@ from aegis.core.copier_updater import (
     get_template_root,
 )
 
+from ..cli import brand
+
 
 class VersionCompatibility(Enum):
     """Version compatibility status between CLI and project."""
@@ -260,8 +262,7 @@ def validate_version_compatibility(
             raise typer.Exit(1)
         else:
             # Show warning but allow through with --force
-            typer.secho(
+            brand.warn(
                 f"\nWarning: Forcing through version mismatch "
-                f"(CLI: {cli_version}, Project: {project_version})\n",
-                fg="yellow",
+                f"(CLI: {cli_version}, Project: {project_version})\n"
             )

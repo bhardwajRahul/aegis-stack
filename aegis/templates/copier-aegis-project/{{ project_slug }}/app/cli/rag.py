@@ -10,12 +10,12 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from app.cli import theme
 from app.core.config import settings
 from app.core.log import suppress_logs
 from app.i18n import lazy_t, t
 from app.services.rag.config import get_rag_config
 from app.services.rag.service import RAGService
-from rich.console import Console
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
@@ -27,7 +27,7 @@ from rich.progress import (
 from rich.table import Table
 
 app = typer.Typer(help=lazy_t("rag.help"))
-console = Console()
+console = theme.console()
 
 
 def get_rag_service() -> RAGService:
@@ -79,7 +79,7 @@ def _ensure_model_ready() -> None:
         api_key = getattr(settings, "OPENAI_API_KEY", None)
         if not api_key:
             console.print()
-            console.print(f"[red]{t('rag.openai_key_missing')}[/red]")
+            console.print(f"[{theme.ERROR}]{t('rag.openai_key_missing')}[/]")
             console.print(f"[dim]{t('rag.openai_key_hint')}[/dim]")
             raise typer.Exit(code=1)
         return
@@ -92,14 +92,14 @@ def _ensure_model_ready() -> None:
     cache_dir = settings.RAG_MODEL_CACHE_DIR
 
     console.print()
-    console.print(f"[yellow]{t('rag.model_not_found')}[/yellow]")
+    console.print(f"[{theme.WARNING}]{t('rag.model_not_found')}[/]")
     console.print(f"[dim]{t('rag.model_info', model=model_name)}[/dim]")
     console.print()
 
     try:
         from sentence_transformers import SentenceTransformer
 
-        console.print(f"[bold cyan]{t('rag.downloading_model')}[/bold cyan]")
+        console.print(f"[{theme.ACCENT}]{t('rag.downloading_model')}[/]")
         console.print()  # Blank line before tqdm progress bars
 
         if cache_dir:
@@ -108,10 +108,10 @@ def _ensure_model_ready() -> None:
             SentenceTransformer(model_name)
 
         console.print()  # Blank line after progress bars
-        console.print(f"[green]{t('rag.model_downloaded')}[/green]")
+        console.print(f"[{theme.ACCENT}]{t('rag.model_downloaded')}[/]")
         console.print()
     except Exception as e:
-        console.print(f"[red]{t('rag.model_download_failed', error=e)}[/red]")
+        console.print(f"[{theme.ERROR}]{t('rag.model_download_failed', error=e)}[/]")
         console.print(f"[dim]{t('rag.model_download_hint')}[/dim]")
         raise typer.Exit(code=1)
 
@@ -144,11 +144,11 @@ def index_documents(
         # Ensure extensions start with dot
         ext_list = [e if e.startswith(".") else f".{e}" for e in ext_list]
 
-    console.print(f"\n[bold blue]{t('rag.indexing_label')}[/bold blue] {path}")
-    console.print(f"[bold blue]{t('rag.collection_label')}[/bold blue] {collection}")
+    console.print(f"\n[dim]{t('rag.indexing_label')}[/dim] {path}")
+    console.print(f"[dim]{t('rag.collection_label')}[/dim] {collection}")
     if ext_list:
         console.print(
-            f"[bold blue]{t('rag.extensions_label')}[/bold blue] {', '.join(ext_list)}"
+            f"[dim]{t('rag.extensions_label')}[/dim] {', '.join(ext_list)}"
         )
     console.print()
 
@@ -160,7 +160,7 @@ def index_documents(
                 TextColumn("[progress.description]{task.description}"),
                 BarColumn(),
                 TaskProgressColumn(),
-                TextColumn("[cyan]{task.fields[status]}"),
+                TextColumn("[dim]{task.fields[status]}"),
                 console=console,
             ) as progress,
         ):
@@ -210,26 +210,26 @@ def index_documents(
         # Display results with phase breakdown
         console.print(
             Panel(
-                f"[green]{t('rag.index_success', chunks=f'{stats.documents_added:,}', files=f'{stats.source_files:,}')}[/green]\n\n"
-                f"[bold]{t('rag.extensions_label')}[/bold] {ext_display}\n"
-                f"[bold]{t('rag.duration_label')}[/bold] {total_str}\n"
+                f"[{theme.ACCENT}]{t('rag.index_success', chunks=f'{stats.documents_added:,}', files=f'{stats.source_files:,}')}[/]\n\n"
+                f"[dim]{t('rag.extensions_label')}[/dim] {ext_display}\n"
+                f"[dim]{t('rag.duration_label')}[/dim] {total_str}\n"
                 f"  [dim]{t('rag.loading_phase')}[/dim]  {format_duration(stats.load_ms)} ({pct(stats.load_ms)})\n"
                 f"  [dim]{t('rag.chunking_phase')}[/dim] {format_duration(stats.chunk_ms)} ({pct(stats.chunk_ms)})\n"
                 f"  [dim]{t('rag.indexing_phase')}[/dim] {format_duration(stats.duration_ms)} ({pct(stats.duration_ms)})\n"
-                f"[bold]{t('rag.throughput_label')}[/bold] {chunks_per_sec:.1f} {t('rag.chunks_per_sec')}\n"
-                f"[bold]{t('rag.collection_size_label')}[/bold] {stats.total_documents:,} {t('rag.chunks_unit')}",
+                f"[dim]{t('rag.throughput_label')}[/dim] {chunks_per_sec:.1f} {t('rag.chunks_per_sec')}\n"
+                f"[dim]{t('rag.collection_size_label')}[/dim] {stats.total_documents:,} {t('rag.chunks_unit')}",
                 title=f"{t('rag.collection_title')}: {collection}",
-                border_style="green",
+                border_style=theme.ACCENT,
             )
         )
 
     except FileNotFoundError as e:
         console.print(
-            f"[bold red]{t('shared.error')}[/bold red] {t('rag.path_not_found', path=getattr(e, 'filename', str(e)))}"
+            f"[{theme.ERROR}]{t('shared.error')}[/] {t('rag.path_not_found', path=getattr(e, 'filename', str(e)))}"
         )
         raise typer.Exit(code=1)
     except Exception as e:
-        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
+        console.print(f"[{theme.ERROR}]{t('shared.error')}[/] {e}")
         raise typer.Exit(code=1)
 
 
@@ -254,8 +254,8 @@ def add_file(
 
     rag_service = get_rag_service()
 
-    console.print(f"\n[bold blue]{t('rag.adding_label')}[/bold blue] {path}")
-    console.print(f"[bold blue]{t('rag.collection_label')}[/bold blue] {collection}")
+    console.print(f"\n[dim]{t('rag.adding_label')}[/dim] {path}")
+    console.print(f"[dim]{t('rag.collection_label')}[/dim] {collection}")
     console.print()
 
     try:
@@ -269,7 +269,7 @@ def add_file(
         # Display result
         file_name = Path(result.file_path).name
         output = (
-            f"[green]{t('rag.added_updated')}[/green] {file_name}\n"
+            f"[{theme.ACCENT}]{t('rag.added_updated')}[/] {file_name}\n"
             f"{t('rag.chunks_label')} {result.chunk_count}\n"
             f"{t('rag.hash_label')} {result.file_hash}"
         )
@@ -281,17 +281,17 @@ def add_file(
             Panel(
                 output,
                 title=f"{t('rag.collection_title')}: {collection}",
-                border_style="green",
+                border_style=theme.ACCENT,
             )
         )
 
     except FileNotFoundError as e:
         console.print(
-            f"[bold red]{t('shared.error')}[/bold red] {t('rag.file_not_found', path=e)}"
+            f"[{theme.ERROR}]{t('shared.error')}[/] {t('rag.file_not_found', path=e)}"
         )
         raise typer.Exit(code=1)
     except Exception as e:
-        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
+        console.print(f"[{theme.ERROR}]{t('shared.error')}[/] {e}")
         raise typer.Exit(code=1)
 
 
@@ -318,7 +318,7 @@ def remove_file(
             t("rag.confirm_remove", source=source_path, collection=collection)
         )
         if not confirm:
-            console.print(f"[yellow]{t('shared.cancelled')}[/yellow]")
+            console.print(f"[dim]{t('shared.cancelled')}[/dim]")
             return
 
     try:
@@ -331,14 +331,14 @@ def remove_file(
 
         if result.chunk_count > 0:
             console.print(
-                f"[green]{t('rag.removed_chunks', count=result.chunk_count)}[/green] {source_path}"
+                f"[{theme.ACCENT}]{t('rag.removed_chunks', count=result.chunk_count)}[/] {source_path}"
             )
         else:
-            console.print(f"[yellow]{t('rag.no_chunks_found')}[/yellow] {source_path}")
+            console.print(f"[dim]{t('rag.no_chunks_found')}[/dim] {source_path}")
             console.print(f"[dim]{t('rag.files_hint')}[/dim]")
 
     except Exception as e:
-        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
+        console.print(f"[{theme.ERROR}]{t('shared.error')}[/] {e}")
         raise typer.Exit(code=1)
 
 
@@ -356,7 +356,7 @@ def list_files(
 
         if not files:
             console.print(
-                f"[yellow]{t('rag.no_files_in_collection')}[/yellow] {collection}"
+                f"[dim]{t('rag.no_files_in_collection')}[/dim] {collection}"
             )
             console.print(f"\n[dim]{t('rag.index_hint')}[/dim]")
             return
@@ -366,8 +366,8 @@ def list_files(
             title=t("rag.indexed_files_title", collection=collection),
             show_header=True,
         )
-        table.add_column(t("rag.file_column"), style="cyan")
-        table.add_column(t("rag.chunks_column"), justify="right", style="green")
+        table.add_column(t("rag.file_column"), style=theme.ACCENT)
+        table.add_column(t("rag.chunks_column"), justify="right")
 
         total_chunks = 0
         for file in files:
@@ -377,12 +377,12 @@ def list_files(
         console.print()
         console.print(table)
         console.print(
-            f"\n[bold]{t('rag.total_label')}[/bold] {t('rag.files_and_chunks', files=len(files), chunks=total_chunks)}"
+            f"\n[dim]{t('rag.total_label')}[/dim] {t('rag.files_and_chunks', files=len(files), chunks=total_chunks)}"
         )
         console.print()
 
     except Exception as e:
-        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
+        console.print(f"[{theme.ERROR}]{t('shared.error')}[/] {e}")
         raise typer.Exit(code=1)
 
 
@@ -411,8 +411,8 @@ def search_documents(
 
     rag_service = get_rag_service()
 
-    console.print(f"\n[bold blue]{t('rag.searching_label')}[/bold blue] {query}")
-    console.print(f"[bold blue]{t('rag.collection_label')}[/bold blue] {collection}")
+    console.print(f"\n[dim]{t('rag.searching_label')}[/dim] {query}")
+    console.print(f"[dim]{t('rag.collection_label')}[/dim] {collection}")
     console.print()
 
     try:
@@ -425,12 +425,12 @@ def search_documents(
         )
 
         if not results:
-            console.print(f"[yellow]{t('rag.no_results')}[/yellow]")
+            console.print(f"[dim]{t('rag.no_results')}[/dim]")
             console.print(f"\n[dim]{t('rag.search_hint')}[/dim]")
             return
 
         # Display results
-        console.print(f"[green]{t('rag.found_results', count=len(results))}[/green]\n")
+        console.print(f"[{theme.ACCENT}]{t('rag.found_results', count=len(results))}[/]\n")
 
         for result in results:
             source = result.metadata.get("source", t("shared.unknown"))
@@ -458,13 +458,13 @@ def search_documents(
                     panel_content,
                     title=f"[bold]#{result.rank}[/bold] {file_name}",
                     subtitle=f"[dim]{source}[/dim]",
-                    border_style="blue",
+                    border_style="dim",
                 )
             )
             console.print()
 
     except Exception as e:
-        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
+        console.print(f"[{theme.ERROR}]{t('shared.error')}[/] {e}")
         raise typer.Exit(code=1)
 
 
@@ -476,14 +476,14 @@ def list_collections() -> None:
         collections = asyncio.run(rag_service.list_collections())
 
         if not collections:
-            console.print(f"[yellow]{t('rag.no_collections')}[/yellow]")
+            console.print(f"[dim]{t('rag.no_collections')}[/dim]")
             console.print(f"\n[dim]{t('rag.create_collection_hint')}[/dim]")
             return
 
         # Create table
         table = Table(title=t("rag.collections_title"), show_header=True)
-        table.add_column(t("rag.collection_column"), style="cyan")
-        table.add_column(t("rag.documents_column"), justify="right", style="green")
+        table.add_column(t("rag.collection_column"), style=theme.ACCENT)
+        table.add_column(t("rag.documents_column"), justify="right")
 
         for name in collections:
             stats = asyncio.run(rag_service.get_collection_stats(name))
@@ -495,7 +495,7 @@ def list_collections() -> None:
         console.print()
 
     except Exception as e:
-        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
+        console.print(f"[{theme.ERROR}]{t('shared.error')}[/] {e}")
         raise typer.Exit(code=1)
 
 
@@ -516,21 +516,21 @@ def delete_collection(
     if not force:
         confirm = typer.confirm(t("rag.confirm_delete", collection=collection))
         if not confirm:
-            console.print(f"[yellow]{t('shared.cancelled')}[/yellow]")
+            console.print(f"[dim]{t('shared.cancelled')}[/dim]")
             return
 
     try:
         deleted = asyncio.run(rag_service.delete_collection(collection))
 
         if deleted:
-            console.print(f"[green]{t('rag.deleted_collection')}[/green] {collection}")
+            console.print(f"[{theme.ACCENT}]{t('rag.deleted_collection')}[/] {collection}")
         else:
             console.print(
-                f"[yellow]{t('rag.collection_not_found')}[/yellow] {collection}"
+                f"[dim]{t('rag.collection_not_found')}[/dim] {collection}"
             )
 
     except Exception as e:
-        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
+        console.print(f"[{theme.ERROR}]{t('shared.error')}[/] {e}")
         raise typer.Exit(code=1)
 
 
@@ -545,26 +545,26 @@ def show_status() -> None:
         # Check if embedding model is installed
         model_cached = _is_model_cached()
         if model_cached:
-            model_status = f"[green]{t('rag.model_installed')}[/green]"
+            model_status = f"[{theme.ACCENT}]{t('rag.model_installed')}[/]"
         else:
-            model_status = f"[yellow]{t('rag.model_not_installed')}[/yellow] [dim]({t('rag.run_install_model')})[/dim]"
+            model_status = f"[{theme.WARNING}]{t('rag.model_not_installed')}[/] [dim]({t('rag.run_install_model')})[/dim]"
 
         # Create status panel
         yes_no = t("shared.yes") if status.get("enabled") else t("shared.no")
         status_lines = [
-            f"[bold]{t('rag.enabled_label')}[/bold] {yes_no}",
-            f"[bold]{t('rag.persist_dir_label')}[/bold] {status.get('persist_directory')}",
-            f"[bold]{t('rag.embedding_model_label')}[/bold] {status.get('embedding_model')}",
-            f"[bold]{t('rag.model_status_label')}[/bold] {model_status}",
-            f"[bold]{t('rag.chunk_size_label')}[/bold] {status.get('chunk_size')}",
-            f"[bold]{t('rag.chunk_overlap_label')}[/bold] {status.get('chunk_overlap')}",
-            f"[bold]{t('rag.default_top_k_label')}[/bold] {status.get('default_top_k')}",
-            f"[bold]{t('rag.collections_count_label')}[/bold] {len(collections)}",
+            f"[dim]{t('rag.enabled_label')}[/dim] {yes_no}",
+            f"[dim]{t('rag.persist_dir_label')}[/dim] {status.get('persist_directory')}",
+            f"[dim]{t('rag.embedding_model_label')}[/dim] {status.get('embedding_model')}",
+            f"[dim]{t('rag.model_status_label')}[/dim] {model_status}",
+            f"[dim]{t('rag.chunk_size_label')}[/dim] {status.get('chunk_size')}",
+            f"[dim]{t('rag.chunk_overlap_label')}[/dim] {status.get('chunk_overlap')}",
+            f"[dim]{t('rag.default_top_k_label')}[/dim] {status.get('default_top_k')}",
+            f"[dim]{t('rag.collections_count_label')}[/dim] {len(collections)}",
         ]
 
         if status.get("last_activity"):
             status_lines.append(
-                f"[bold]{t('rag.last_activity_label')}[/bold] {status.get('last_activity')}"
+                f"[dim]{t('rag.last_activity_label')}[/dim] {status.get('last_activity')}"
             )
 
         console.print()
@@ -572,13 +572,13 @@ def show_status() -> None:
             Panel(
                 "\n".join(status_lines),
                 title=t("rag.status_title"),
-                border_style="blue",
+                border_style="dim",
             )
         )
         console.print()
 
     except Exception as e:
-        console.print(f"[bold red]{t('shared.error')}[/bold red] {e}")
+        console.print(f"[{theme.ERROR}]{t('shared.error')}[/] {e}")
         raise typer.Exit(code=1)
 
 
@@ -603,7 +603,7 @@ def install_model(
 ) -> None:
     # OpenAI embeddings don't require local model download
     if settings.RAG_EMBEDDING_PROVIDER == "openai":
-        console.print(f"\n[yellow]{t('rag.openai_no_download')}[/yellow]")
+        console.print(f"\n[dim]{t('rag.openai_no_download')}[/dim]")
         console.print(f"[dim]{t('rag.openai_key_hint')}[/dim]\n")
         return
 
@@ -618,14 +618,14 @@ def install_model(
     # Check if model is already cached before downloading
     was_cached = _is_model_cached()
 
-    console.print(f"\n[bold blue]{t('rag.model_label')}[/bold blue] {model_name}")
+    console.print(f"\n[dim]{t('rag.model_label')}[/dim] {model_name}")
     if target_dir:
         console.print(
-            f"[bold blue]{t('rag.cache_dir_label')}[/bold blue] {Path(target_dir).resolve()}"
+            f"[dim]{t('rag.cache_dir_label')}[/dim] {Path(target_dir).resolve()}"
         )
     else:
         console.print(
-            f"[bold blue]{t('rag.cache_dir_label')}[/bold blue] [dim]({t('rag.system_hf_cache')})[/dim]"
+            f"[dim]{t('rag.cache_dir_label')}[/dim] [dim]({t('rag.system_hf_cache')})[/dim]"
         )
     console.print()
 
@@ -640,7 +640,7 @@ def install_model(
             console.print(f"[dim]{t('rag.loading_from_cache')}[/dim]")
         else:
             console.print(
-                f"[bold cyan]{t('rag.downloading_named_model', model=model_name)}[/bold cyan]"
+                f"[{theme.ACCENT}]{t('rag.downloading_named_model', model=model_name)}[/]"
             )
             console.print()  # Blank line before tqdm progress bars
 
@@ -654,33 +654,33 @@ def install_model(
 
         # Build result message
         if was_cached:
-            status_msg = f"[green]{t('rag.model_found_in_cache')}[/green]"
+            status_msg = f"[{theme.ACCENT}]{t('rag.model_found_in_cache')}[/]"
             title = t("rag.model_ready_title")
         else:
-            status_msg = f"[green]{t('rag.model_downloaded')}[/green]"
+            status_msg = f"[{theme.ACCENT}]{t('rag.model_downloaded')}[/]"
             title = t("rag.model_install_complete_title")
 
         if target_dir:
             location_msg = (
-                f"[bold]{t('rag.location_label')}[/bold] {Path(target_dir).resolve()}"
+                f"[dim]{t('rag.location_label')}[/dim] {Path(target_dir).resolve()}"
             )
             hint_msg = f"\n\n[dim]{t('rag.cache_dir_hint', dir=target_dir)}[/dim]"
         else:
-            location_msg = f"[bold]{t('rag.location_label')}[/bold] [dim]({t('rag.system_hf_cache')})[/dim]"
+            location_msg = f"[dim]{t('rag.location_label')}[/dim] [dim]({t('rag.system_hf_cache')})[/dim]"
             hint_msg = ""
 
         console.print(
             Panel(
                 f"{status_msg}\n\n"
-                f"[bold]{t('rag.model_label')}[/bold] {model_name}\n"
+                f"[dim]{t('rag.model_label')}[/dim] {model_name}\n"
                 f"{location_msg}{hint_msg}",
                 title=title,
-                border_style="green",
+                border_style=theme.ACCENT,
             )
         )
 
     except Exception as e:
         console.print(
-            f"[bold red]{t('shared.error')}[/bold red] {t('rag.model_download_failed', error=e)}"
+            f"[{theme.ERROR}]{t('shared.error')}[/] {t('rag.model_download_failed', error=e)}"
         )
         raise typer.Exit(code=1)

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import typer
 
+from ..cli import brand
 from ..cli.utils import detect_scheduler_backend
 from ..cli.validation import (
     parse_comma_separated_list,
@@ -122,10 +123,8 @@ def _install_plugin(
     resolved = _resolve_plugin(spec_str)
     if resolved is None:
         # Caller should have checked first; defensive guard.
-        typer.secho(
-            f"Plugin not found: {extract_base_component_name(spec_str)!r}",
-            fg="red",
-            err=True,
+        brand.error(
+            f"Plugin not found: {extract_base_component_name(spec_str)!r}", err=True
         )
         raise typer.Exit(1)
 
@@ -138,12 +137,9 @@ def _install_plugin(
     compatible, error_msg = check_aegis_version_compat(plugin_spec)
     if not compatible:
         if force:
-            typer.secho(
-                f"Forcing install despite version mismatch: {error_msg}",
-                fg="yellow",
-            )
+            brand.warn(f"Forcing install despite version mismatch: {error_msg}")
         else:
-            typer.secho(error_msg, fg="red", err=True)
+            brand.error(error_msg, err=True)
             typer.echo(
                 "   Pass --force to install anyway (incompatible plugins "
                 "may render broken templates).",
@@ -157,7 +153,7 @@ def _install_plugin(
         try:
             parsed_options = parse_options(spec_str, plugin_spec)
         except ValueError as e:
-            typer.secho(f"Invalid options: {e}", fg="red", err=True)
+            brand.error(f"Invalid options: {e}", err=True)
             raise typer.Exit(1) from e
 
     # Forward dependency resolution (#776). Walks the plugin's
@@ -180,26 +176,21 @@ def _install_plugin(
     try:
         existing_answers = load_copier_answers(target_path)
     except FileNotFoundError as e:
-        typer.secho(str(e), fg="red", err=True)
+        brand.error(str(e), err=True)
         raise typer.Exit(1) from e
 
     try:
         plan = resolve_dependencies(plugin_spec, existing_answers)
     except CircularDependencyError as e:
-        typer.secho(
-            f"Circular plugin dependency: {e}",
-            fg="red",
-            err=True,
-        )
+        brand.error(f"Circular plugin dependency: {e}", err=True)
         raise typer.Exit(1) from e
     except UnknownDependencyError as e:
-        typer.secho(str(e), fg="red", err=True)
+        brand.error(str(e), err=True)
         raise typer.Exit(1) from e
 
     if plan.unresolved_plugins:
-        typer.secho(
+        brand.error(
             f"\n{plugin_spec.name!r} requires plugin packages that aren't installed:",
-            fg="red",
             err=True,
         )
         for missing in plan.unresolved_plugins:
@@ -229,7 +220,7 @@ def _install_plugin(
     if not yes and not typer.confirm(
         t("add.plugin_confirm", name=plugin_spec.name), default=True
     ):
-        typer.secho(t("shared.operation_cancelled"), fg="red")
+        brand.error(t("shared.operation_cancelled"))
         raise typer.Exit(0)
 
     # Apply the plan in topological order. In-tree components share
@@ -259,10 +250,9 @@ def _install_plugin(
             continue
 
         if not dep_result.success:
-            typer.secho(
+            brand.error(
                 f"Dependency {dep.name!r} failed to install: "
                 f"{dep_result.error_message}",
-                fg="red",
                 err=True,
             )
             raise typer.Exit(1)
@@ -276,11 +266,7 @@ def _install_plugin(
     )
 
     if not result.success:
-        typer.secho(
-            f"\nPlugin install failed: {result.error_message}",
-            fg="red",
-            err=True,
-        )
+        brand.error(f"\nPlugin install failed: {result.error_message}", err=True)
         raise typer.Exit(1)
 
     # One sync + format pass for the entire dependency tree. Recursive
@@ -291,10 +277,7 @@ def _install_plugin(
     if run_post_gen:
         updater.run_post_generation_tasks()
 
-    typer.secho(
-        f"\n{t('add.plugin_success', name=plugin_spec.name)}",
-        fg="green",
-    )
+    brand.success(f"\n{t('add.plugin_success', name=plugin_spec.name)}")
     typer.echo()
     render_project_map(target_path, highlight=[plugin_spec.name])
     Messages.print_next_steps()
@@ -376,7 +359,7 @@ def add_command(
 
     # Validate components argument or interactive mode
     if not interactive and not components:
-        typer.secho(t("add.error_no_args"), fg="red", err=True)
+        brand.error(t("add.error_no_args"), err=True)
         typer.echo(f"   {t('add.usage_hint')}", err=True)
         typer.echo(f"   {t('add.interactive_hint')}", err=True)
         raise typer.Exit(1)
@@ -410,7 +393,7 @@ def add_command(
     # Interactive mode
     if interactive:
         if components:
-            typer.secho(t("shared.interactive_ignores_args"), fg="yellow")
+            brand.warn(t("shared.interactive_ignores_args"))
 
         from ..cli.interactive import interactive_component_add_selection
 
@@ -419,7 +402,7 @@ def add_command(
         )
 
         if not selected_components:
-            typer.secho(f"\n{t('shared.no_components_selected')}", fg="green")
+            brand.success(f"\n{t('shared.no_components_selected')}")
             raise typer.Exit(0)
 
         # Convert to comma-separated string for existing logic
@@ -445,13 +428,12 @@ def add_command(
                 engine = extract_engine_info(comp)
                 if engine:
                     if backend and backend != engine:
-                        typer.secho(
-                            t("add.bracket_override", engine=engine, backend=backend),
-                            fg="yellow",
+                        brand.warn(
+                            t("add.bracket_override", engine=engine, backend=backend)
                         )
                     backend = engine
         except ValueError as e:
-            typer.secho(t("add.invalid_format", error=e), fg="red", err=True)
+            brand.error(t("add.invalid_format", error=e), err=True)
             raise typer.Exit(1)
 
     # Extract base component names for validation (removes bracket syntax)
@@ -461,7 +443,7 @@ def add_command(
             base_name = extract_base_component_name(comp)
             base_components.append(base_name)
         except ValueError as e:
-            typer.secho(t("add.invalid_format", error=e), fg="red", err=True)
+            brand.error(t("add.invalid_format", error=e), err=True)
             raise typer.Exit(1)
 
     # Validate components exist and resolve dependencies
@@ -470,7 +452,7 @@ def add_command(
         errors = DependencyResolver.validate_components(base_components)
         if errors:
             for error in errors:
-                typer.secho(f"{error}", fg="red", err=True)
+                brand.error(f"{error}", err=True)
             raise typer.Exit(1)
 
         # Resolve dependencies
@@ -484,14 +466,14 @@ def add_command(
     except typer.Exit:
         raise
     except Exception as e:
-        typer.secho(t("add.validation_failed", error=e), fg="red", err=True)
+        brand.error(t("add.validation_failed", error=e), err=True)
         raise typer.Exit(1)
 
     # Load existing project configuration
     try:
         existing_answers = load_copier_answers(target_path)
     except Exception as e:
-        typer.secho(t("add.load_config_failed", error=e), fg="red", err=True)
+        brand.error(t("add.load_config_failed", error=e), err=True)
         raise typer.Exit(1)
 
     # Check which components are already enabled
@@ -513,7 +495,7 @@ def add_command(
     ]
 
     if not components_to_add:
-        typer.secho(t("add.all_enabled"), fg="green")
+        brand.success(t("add.all_enabled"))
         raise typer.Exit(0)
 
     # Detect scheduler backend if adding scheduler
@@ -529,10 +511,8 @@ def add_command(
             StorageBackends.POSTGRES,
         ]
         if scheduler_backend not in valid_backends:
-            typer.secho(
-                t("add.invalid_scheduler_backend", backend=scheduler_backend),
-                fg="red",
-                err=True,
+            brand.error(
+                t("add.invalid_scheduler_backend", backend=scheduler_backend), err=True
             )
             typer.echo(
                 f"   {t('add.valid_backends', options=', '.join(valid_backends))}",
@@ -555,13 +535,12 @@ def add_command(
             and existing_db_engine
             and existing_db_engine != scheduler_backend
         ):
-            typer.secho(
+            brand.error(
                 t(
                     "add.scheduler_db_engine_mismatch",
                     backend=scheduler_backend,
                     engine=existing_db_engine,
                 ),
-                fg="red",
                 err=True,
             )
             raise typer.Exit(1)
@@ -592,7 +571,7 @@ def add_command(
     # Confirm before proceeding
     typer.echo()
     if not yes and not typer.confirm(t("add.confirm"), default=True):
-        typer.secho(t("shared.operation_cancelled"), fg="red")
+        brand.error(t("shared.operation_cancelled"))
         raise typer.Exit(0)
 
     # Prepare update data for Copier
@@ -653,27 +632,24 @@ def add_command(
             result = updater.add_component(component, component_data)
 
             if not result.success:
-                typer.secho(
+                brand.error(
                     t(
                         "add.failed_component",
                         component=component,
                         error=result.error_message,
                     ),
-                    fg="red",
                     err=True,
                 )
                 raise typer.Exit(1)
 
             # Show results
             if result.files_modified:
-                typer.secho(
-                    f"   {t('add.added_files', count=len(result.files_modified))}",
-                    fg="green",
+                brand.success(
+                    f"   {t('add.added_files', count=len(result.files_modified))}"
                 )
             if result.files_skipped:
-                typer.secho(
-                    f"   {t('add.skipped_files', count=len(result.files_skipped))}",
-                    fg="yellow",
+                brand.warn(
+                    f"   {t('add.skipped_files', count=len(result.files_skipped))}"
                 )
 
         # Generate migrations for newly-added components that own tables.
@@ -697,12 +673,11 @@ def add_command(
                     target_path, ComponentNames.SCHEDULER
                 )
                 if migration_path:
-                    typer.secho(
-                        f"   {t('add.generated_migration', name=migration_path.name)}",
-                        fg="green",
+                    brand.success(
+                        f"   {t('add.generated_migration', name=migration_path.name)}"
                     )
 
-        typer.secho(f"\n{t('add.success')}", fg="green")
+        brand.success(f"\n{t('add.success')}")
 
         # Show project map with newly added components highlighted
         typer.echo()
@@ -717,5 +692,5 @@ def add_command(
         Messages.print_next_steps()
 
     except Exception as e:
-        typer.secho(f"\n{t('add.failed', error=e)}", fg="red", err=True)
+        brand.error(f"\n{t('add.failed', error=e)}", err=True)
         raise typer.Exit(1)

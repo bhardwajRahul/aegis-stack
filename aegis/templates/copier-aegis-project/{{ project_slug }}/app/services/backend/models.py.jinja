@@ -22,6 +22,7 @@ class RouteInfo(BaseModel):
     deprecated: bool = False
     path_params: list[str] = []
     dependencies: list[str] = []
+    requires_auth: bool = False
     response_model: str | None = None
 
 

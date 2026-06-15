@@ -68,7 +68,7 @@ class LiteLLMClient:
             try:
                 model = self._parse_model(model_id, raw)
                 models[model_id] = model
-            except (KeyError, ValueError, TypeError) as e:
+            except (KeyError, ValueError, TypeError, AttributeError) as e:
                 logger.warning(f"Failed to parse LiteLLM model {model_id}: {e}")
                 continue
 

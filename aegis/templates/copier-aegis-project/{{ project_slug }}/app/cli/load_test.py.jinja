@@ -18,6 +18,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 import typer
 
+from app.cli import theme
 from app.components.worker.constants import LoadTestTypes
 from app.core.config import get_load_test_queue
 from app.core.log import logger
@@ -36,7 +37,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-console = Console()
+console = theme.console()
 
 
 class QueueChoice(str, Enum):
@@ -149,7 +150,7 @@ def run_load_test(
     _display_test_configuration(config, task_type.value)
 
     # Enqueue the load test
-    rprint(f"[bold blue]{t('loadtest.starting')}[/bold blue]")
+    rprint(f"[bold]{t('loadtest.starting')}[/bold]")
 
     try:
         # Use single asyncio.run() for both enqueue and wait to avoid
@@ -158,28 +159,28 @@ def run_load_test(
             _run_load_test_and_wait(config, target_queue.value, timeout, wait)
         )
 
-        rprint(f"[green]{t('loadtest.enqueued')}[/green]")
-        rprint(f"[cyan]{t('loadtest.task_id_label')}[/cyan] {task_id}")
+        rprint(f"[{theme.ACCENT}]{t('loadtest.enqueued')}[/{theme.ACCENT}]")
+        rprint(f"[dim]{t('loadtest.task_id_label')}[/dim] {task_id}")
 
         if wait:
             if result is None:
-                rprint(f"\n[red]{t('loadtest.timeout_reached', timeout=timeout)}[/red]")
+                rprint(f"\n[{theme.ERROR}]{t('loadtest.timeout_reached', timeout=timeout)}[/{theme.ERROR}]")
                 rprint(
-                    f"[yellow]{t('loadtest.check_results_manual')}[/yellow] "
+                    f"[dim]{t('loadtest.check_results_manual')}[/dim] "
                     f"{{ project_slug }} load-test results {task_id}"
                 )
             else:
-                rprint(f"\n [bold green]{t('loadtest.completed')}[/bold green]")
+                rprint(f"\n [bold {theme.ACCENT}]{t('loadtest.completed')}[/bold {theme.ACCENT}]")
                 _display_load_test_results(result, detailed=True)
         else:
-            rprint(f"\n[yellow]{t('loadtest.check_results_later')}[/yellow]")
+            rprint(f"\n[dim]{t('loadtest.check_results_later')}[/dim]")
             rprint(
                 f"   [bold]{{ project_slug }} load-test results "
                 f"{task_id}[/bold]"
             )
 
     except Exception as e:
-        rprint(f"[red]{t('loadtest.start_failed')}[/red] {e}")
+        rprint(f"[{theme.ERROR}]{t('loadtest.start_failed')}[/{theme.ERROR}] {e}")
         raise typer.Exit(1)
 
 
@@ -190,13 +191,13 @@ def quick_cpu_test_cmd(
     ),
     wait: bool = typer.Option(True, "--wait/--no-wait", help=lazy_t("loadtest.opt_wait_short")),
 ) -> None:
-    rprint(f"[bold blue]{t('loadtest.quick_cpu_title')}[/bold blue]")
+    rprint(f"[bold]{t('loadtest.quick_cpu_title')}[/bold]")
     tasks_label = t("loadtest.tasks_label")
     tasks_msg = t("loadtest.quick_cpu_tasks", count=num_tasks)
     work_label = t("loadtest.work_type_label")
     work_msg = t("loadtest.quick_cpu_work")
-    rprint(f"[cyan]{tasks_label}[/cyan] {tasks_msg}")
-    rprint(f"[cyan]{work_label}[/cyan] {work_msg}")
+    rprint(f"[dim]{tasks_label}[/dim] {tasks_msg}")
+    rprint(f"[dim]{work_label}[/dim] {work_msg}")
 
     try:
         # Use single asyncio.run() for both enqueue and wait to avoid
@@ -206,26 +207,26 @@ def quick_cpu_test_cmd(
         )
         started_msg = t("loadtest.cpu_started")
         id_label = t("loadtest.task_id_label")
-        rprint(f"[green]{started_msg}[/green] {id_label} {task_id}")
+        rprint(f"[{theme.ACCENT}]{started_msg}[/{theme.ACCENT}] [dim]{id_label}[/dim] {task_id}")
 
         if wait:
             if result is None:
-                rprint(f"\n[red]{t('loadtest.timeout_progress')}[/red]")
+                rprint(f"\n[{theme.ERROR}]{t('loadtest.timeout_progress')}[/{theme.ERROR}]")
                 rprint(
-                    f"[yellow]{t('loadtest.check_results')}[/yellow] "
+                    f"[dim]{t('loadtest.check_results')}[/dim] "
                     f"{{ project_slug }} load-test results {task_id}"
                 )
             else:
-                rprint(f"\n [bold green]{t('loadtest.completed')}[/bold green]")
+                rprint(f"\n [bold {theme.ACCENT}]{t('loadtest.completed')}[/bold {theme.ACCENT}]")
                 _display_load_test_results(result, detailed=True)
         else:
             rprint(
-                f"[yellow]{t('loadtest.check_results')}[/yellow] "
+                f"[dim]{t('loadtest.check_results')}[/dim] "
                 f"{{ project_slug }} load-test results {task_id}"
             )
 
     except Exception as e:
-        rprint(f"[red]{t('loadtest.cpu_failed')}[/red] {e}")
+        rprint(f"[{theme.ERROR}]{t('loadtest.cpu_failed')}[/{theme.ERROR}] {e}")
         raise typer.Exit(1)
 
 
@@ -236,13 +237,13 @@ def quick_io_test_cmd(
     ),
     wait: bool = typer.Option(True, "--wait/--no-wait", help=lazy_t("loadtest.opt_wait_short")),
 ) -> None:
-    rprint(f"[bold blue]{t('loadtest.quick_io_title')}[/bold blue]")
+    rprint(f"[bold]{t('loadtest.quick_io_title')}[/bold]")
     tasks_label = t("loadtest.tasks_label")
     tasks_msg = t("loadtest.quick_io_tasks", count=num_tasks)
     work_label = t("loadtest.work_type_label")
     work_msg = t("loadtest.quick_io_work")
-    rprint(f"[cyan]{tasks_label}[/cyan] {tasks_msg}")
-    rprint(f"[cyan]{work_label}[/cyan] {work_msg}")
+    rprint(f"[dim]{tasks_label}[/dim] {tasks_msg}")
+    rprint(f"[dim]{work_label}[/dim] {work_msg}")
 
     try:
         # Use single asyncio.run() for both enqueue and wait to avoid
@@ -252,26 +253,26 @@ def quick_io_test_cmd(
         )
         started_msg = t("loadtest.io_started")
         id_label = t("loadtest.task_id_label")
-        rprint(f"[green]{started_msg}[/green] {id_label} {task_id}")
+        rprint(f"[{theme.ACCENT}]{started_msg}[/{theme.ACCENT}] [dim]{id_label}[/dim] {task_id}")
 
         if wait:
             if result is None:
-                rprint(f"\n[red]{t('loadtest.timeout_progress')}[/red]")
+                rprint(f"\n[{theme.ERROR}]{t('loadtest.timeout_progress')}[/{theme.ERROR}]")
                 rprint(
-                    f"[yellow]{t('loadtest.check_results')}[/yellow] "
+                    f"[dim]{t('loadtest.check_results')}[/dim] "
                     f"{{ project_slug }} load-test results {task_id}"
                 )
             else:
-                rprint(f"\n [bold green]{t('loadtest.completed')}[/bold green]")
+                rprint(f"\n [bold {theme.ACCENT}]{t('loadtest.completed')}[/bold {theme.ACCENT}]")
                 _display_load_test_results(result, detailed=True)
         else:
             rprint(
-                f"[yellow]{t('loadtest.check_results')}[/yellow] "
+                f"[dim]{t('loadtest.check_results')}[/dim] "
                 f"{{ project_slug }} load-test results {task_id}"
             )
 
     except Exception as e:
-        rprint(f"[red]{t('loadtest.io_failed')}[/red] {e}")
+        rprint(f"[{theme.ERROR}]{t('loadtest.io_failed')}[/{theme.ERROR}] {e}")
         raise typer.Exit(1)
 
 
@@ -282,13 +283,13 @@ def quick_memory_test_cmd(
     ),
     wait: bool = typer.Option(True, "--wait/--no-wait", help=lazy_t("loadtest.opt_wait_short")),
 ) -> None:
-    rprint(f"[bold blue]{t('loadtest.quick_memory_title')}[/bold blue]")
+    rprint(f"[bold]{t('loadtest.quick_memory_title')}[/bold]")
     tasks_label = t("loadtest.tasks_label")
     tasks_msg = t("loadtest.quick_memory_tasks", count=num_tasks)
     work_label = t("loadtest.work_type_label")
     work_msg = t("loadtest.quick_memory_work")
-    rprint(f"[cyan]{tasks_label}[/cyan] {tasks_msg}")
-    rprint(f"[cyan]{work_label}[/cyan] {work_msg}")
+    rprint(f"[dim]{tasks_label}[/dim] {tasks_msg}")
+    rprint(f"[dim]{work_label}[/dim] {work_msg}")
 
     try:
         # Use single asyncio.run() for both enqueue and wait to avoid
@@ -298,26 +299,26 @@ def quick_memory_test_cmd(
         )
         started_msg = t("loadtest.memory_started")
         id_label = t("loadtest.task_id_label")
-        rprint(f"[green]{started_msg}[/green] {id_label} {task_id}")
+        rprint(f"[{theme.ACCENT}]{started_msg}[/{theme.ACCENT}] [dim]{id_label}[/dim] {task_id}")
 
         if wait:
             if result is None:
-                rprint(f"\n[red]{t('loadtest.timeout_progress')}[/red]")
+                rprint(f"\n[{theme.ERROR}]{t('loadtest.timeout_progress')}[/{theme.ERROR}]")
                 rprint(
-                    f"[yellow]{t('loadtest.check_results')}[/yellow] "
+                    f"[dim]{t('loadtest.check_results')}[/dim] "
                     f"{{ project_slug }} load-test results {task_id}"
                 )
             else:
-                rprint(f"\n [bold green]{t('loadtest.completed')}[/bold green]")
+                rprint(f"\n [bold {theme.ACCENT}]{t('loadtest.completed')}[/bold {theme.ACCENT}]")
                 _display_load_test_results(result, detailed=True)
         else:
             rprint(
-                f"[yellow]{t('loadtest.check_results')}[/yellow] "
+                f"[dim]{t('loadtest.check_results')}[/dim] "
                 f"{{ project_slug }} load-test results {task_id}"
             )
 
     except Exception as e:
-        rprint(f"[red]{t('loadtest.memory_failed')}[/red] {e}")
+        rprint(f"[{theme.ERROR}]{t('loadtest.memory_failed')}[/{theme.ERROR}] {e}")
         raise typer.Exit(1)
 
 
@@ -340,8 +341,8 @@ def show_results(
         )
 
         if not result:
-            rprint(f"[red]{t('loadtest.no_results')}[/red] {task_id}")
-            rprint(f"[yellow]{t('loadtest.check_task_hint')}[/yellow]")
+            rprint(f"[{theme.ERROR}]{t('loadtest.no_results')}[/{theme.ERROR}] {task_id}")
+            rprint(f"[dim]{t('loadtest.check_task_hint')}[/dim]")
             raise typer.Exit(1)
 
         if json_output:
@@ -351,7 +352,7 @@ def show_results(
         _display_load_test_results(result, detailed)
 
     except Exception as e:
-        rprint(f"[red]{t('loadtest.results_failed')}[/red] {e}")
+        rprint(f"[{theme.ERROR}]{t('loadtest.results_failed')}[/{theme.ERROR}] {e}")
         raise typer.Exit(1)
 
 
@@ -368,17 +369,17 @@ def show_test_type_info(
             info = _get_test_type_info_i18n(test_type_enum)
             _display_test_type_info(test_type, info)
         except ValueError:
-            rprint(f"[red]{t('loadtest.unknown_type')}[/red] {test_type}")
+            rprint(f"[{theme.ERROR}]{t('loadtest.unknown_type')}[/{theme.ERROR}] {test_type}")
             types_label = t("loadtest.available_types_list")
             rprint(
-                f"[yellow]{types_label}[/yellow] "
+                f"[dim]{types_label}[/dim] "
                 "cpu_intensive, io_simulation, "
                 "memory_operations, failure_testing"
             )
             raise typer.Exit(1)
     else:
         # Show overview of all test types
-        rprint(f"[bold blue]{t('loadtest.available_types')}[/bold blue]\n")
+        rprint(f"[bold]{t('loadtest.available_types')}[/bold]\n")
 
         for load_test_type in [
             LoadTestTypes.CPU_INTENSIVE,
@@ -388,7 +389,7 @@ def show_test_type_info(
         ]:
             info = _get_test_type_info_i18n(load_test_type)
             rprint(
-                f"  [bold cyan]{load_test_type}[/bold cyan] - "
+                f"  [bold {theme.ACCENT}]{load_test_type}[/bold {theme.ACCENT}] - "
                 f"{info.get('name', '')}"
             )
             rprint(f"   {info.get('description', '')}")
@@ -397,8 +398,8 @@ def show_test_type_info(
                 f"{info.get('typical_duration_ms', '')}[/dim]\n"
             )
 
-        rprint(f"[yellow]{t('loadtest.use_help_hint')}[/yellow]")
-        rprint(f"[cyan]{t('loadtest.examples_label')}[/cyan]")
+        rprint(f"[dim]{t('loadtest.use_help_hint')}[/dim]")
+        rprint(f"[dim]{t('loadtest.examples_label')}[/dim]")
         rprint("   {{ project_slug }} load-test info cpu_intensive")
         rprint("   {{ project_slug }} load-test info io_simulation")
         rprint("   {{ project_slug }} load-test info memory_operations")
@@ -425,24 +426,24 @@ def _display_test_configuration(config: LoadTestConfiguration, test_type: str) -
     info_perf = test_info.get("performance_signature", "")
     info_conc = test_info.get("concurrency_impact", "")
     config_text = (
-        f"[bold cyan]{t('loadtest.config_title')}[/bold cyan]\n\n"
-        f"[cyan]{t('loadtest.config_tasks')}[/cyan] {tasks_detail}\n"
-        f"[cyan]{t('loadtest.config_batching')}[/cyan] {batch_detail}\n"
-        f"[cyan]{t('loadtest.config_delay')}[/cyan] {delay_detail}\n"
-        f"[cyan]{t('loadtest.config_queue')}[/cyan]"
+        f"[bold]{t('loadtest.config_title')}[/bold]\n\n"
+        f"[dim]{t('loadtest.config_tasks')}[/dim] {tasks_detail}\n"
+        f"[dim]{t('loadtest.config_batching')}[/dim] {batch_detail}\n"
+        f"[dim]{t('loadtest.config_delay')}[/dim] {delay_detail}\n"
+        f"[dim]{t('loadtest.config_queue')}[/dim]"
         f" {config.target_queue}\n\n"
-        f"[bold yellow]{t('loadtest.type_details_title')}[/bold yellow]\n"
-        f"[yellow]{t('loadtest.type_name')}[/yellow] {info_name}\n"
-        f"[yellow]{t('loadtest.type_description')}[/yellow] {info_desc}\n"
-        f"[yellow]{t('loadtest.type_performance')}[/yellow] {info_perf}\n"
-        f"[yellow]{t('loadtest.type_concurrency')}[/yellow] {info_conc}"
+        f"[bold]{t('loadtest.type_details_title')}[/bold]\n"
+        f"[dim]{t('loadtest.type_name')}[/dim] {info_name}\n"
+        f"[dim]{t('loadtest.type_description')}[/dim] {info_desc}\n"
+        f"[dim]{t('loadtest.type_performance')}[/dim] {info_perf}\n"
+        f"[dim]{t('loadtest.type_concurrency')}[/dim] {info_conc}"
     )
 
     console.print(
         Panel(
             config_text,
             title=t("loadtest.panel_setup"),
-            border_style="blue",
+            border_style="dim",
         )
     )
 
@@ -456,17 +457,17 @@ def _display_test_type_info(test_type: str, info: dict[str, Any]) -> None:
     info_duration = info.get("typical_duration_ms", "")
     info_conc = info.get("concurrency_impact", "")
     info_text = (
-        f"[bold cyan]{info_name}[/bold cyan]\n\n"
-        f"[bold yellow]{t('loadtest.type_description')}[/bold yellow]\n"
+        f"[bold]{info_name}[/bold]\n\n"
+        f"[bold]{t('loadtest.type_description')}[/bold]\n"
         f"{info_desc}\n\n"
-        f"[bold yellow]{t('loadtest.type_performance')}[/bold yellow]\n"
+        f"[bold]{t('loadtest.type_performance')}[/bold]\n"
         f"{info_perf}\n"
-        f"[yellow]{t('loadtest.typical_duration')}[/yellow] {info_duration}\n"
-        f"[yellow]{t('loadtest.type_concurrency')}[/yellow] {info_conc}"
+        f"[dim]{t('loadtest.typical_duration')}[/dim] {info_duration}\n"
+        f"[dim]{t('loadtest.type_concurrency')}[/dim] {info_conc}"
     )
 
     console.print(
-        Panel(info_text, title=f"{test_type}", border_style="green")
+        Panel(info_text, title=f"{test_type}", border_style="dim")
     )
 
 
@@ -537,8 +538,8 @@ async def _run_load_test_and_wait(
             return task_id, None
 
         rprint(
-            f"\n[yellow]{t('loadtest.waiting', timeout=timeout)}"
-            f"[/yellow]"
+            f"\n[dim]{t('loadtest.waiting', timeout=timeout)}"
+            f"[/dim]"
         )
         result = await _poll_for_result_with_progress(task_id, target_queue, timeout)
         return task_id, result
@@ -574,8 +575,8 @@ async def _run_quick_test_and_wait(
             return task_id, None
 
         rprint(
-            f"\n[yellow]{t('loadtest.waiting', timeout=timeout)}"
-            f"[/yellow]"
+            f"\n[dim]{t('loadtest.waiting', timeout=timeout)}"
+            f"[/dim]"
         )
         result = await _poll_for_result_with_progress(
             task_id, get_load_test_queue(), timeout
@@ -607,10 +608,10 @@ def _display_load_test_results(result: dict[str, Any], detailed: bool = False) -
     table = Table(
         title=t("loadtest.results_title"),
         show_header=True,
-        header_style="bold magenta",
+        header_style="bold",
     )
-    table.add_column(t("loadtest.metric_column"), style="cyan", no_wrap=True)
-    table.add_column(t("loadtest.value_column"), style="green")
+    table.add_column(t("loadtest.metric_column"), style="dim", no_wrap=True)
+    table.add_column(t("loadtest.value_column"))
     table.add_column(t("loadtest.details_column"), style="dim")
 
     # Add basic metrics
@@ -653,14 +654,14 @@ def _display_load_test_results(result: dict[str, Any], detailed: bool = False) -
 
     # Show performance summary
     perf_summary = result.get("performance_summary", t("loadtest.no_summary"))
-    console.print(f"\n[bold yellow]{t('loadtest.perf_summary')}[/bold yellow]")
+    console.print(f"\n[bold]{t('loadtest.perf_summary')}[/bold]")
     console.print(f"   {perf_summary}")
 
     # Show recommendations if available
     recommendations = analysis.get("recommendations", []) if analysis else []
     if recommendations:
         translated_recs = _t_recommendations(recommendations)
-        console.print(f"\n[bold blue]{t('loadtest.recommendations')}[/bold blue]")
+        console.print(f"\n[bold]{t('loadtest.recommendations')}[/bold]")
         for i, rec in enumerate(translated_recs, 1):
             console.print(f"   {i}. {rec}")
 
@@ -675,17 +676,17 @@ def _display_error_result(result: dict[str, Any], status: str) -> None:
     if status == "timed_out":
         console.print(
             Panel(
-                f"[bold red]{t('loadtest.timed_out_title')}[/bold red]\n\n"
-                f"[cyan]{t('loadtest.test_id_label')}[/cyan] {test_id}\n"
-                f"[cyan]{t('loadtest.error_label')}[/cyan] {error}\n\n"
-                f"[yellow]{t('loadtest.what_this_means')}[/yellow]\n"
+                f"[bold {theme.ERROR}]{t('loadtest.timed_out_title')}[/bold {theme.ERROR}]\n\n"
+                f"[dim]{t('loadtest.test_id_label')}[/dim] {test_id}\n"
+                f"[dim]{t('loadtest.error_label')}[/dim] {error}\n\n"
+                f"[bold]{t('loadtest.what_this_means')}[/bold]\n"
                 f"{t('loadtest.timeout_explanation')}\n\n"
-                f"[blue]{t('loadtest.to_investigate')}[/blue]\n"
+                f"[bold]{t('loadtest.to_investigate')}[/bold]\n"
                 f"• {t('loadtest.tip_check_logs')}\n"
                 f"• {t('loadtest.tip_smaller_batch')}\n"
                 f"• {t('loadtest.tip_check_metrics')}",
                 title=t("loadtest.analysis_panel"),
-                border_style="red",
+                border_style=theme.ERROR,
             )
         )
 
@@ -695,20 +696,20 @@ def _display_error_result(result: dict[str, Any], status: str) -> None:
     elif status == "failed":
         console.print(
             Panel(
-                f"[bold red]{t('loadtest.failed_title')}[/bold red]\n\n"
-                f"[cyan]{t('loadtest.test_id_label')}[/cyan] {test_id}\n"
-                f"[cyan]{t('loadtest.error_label')}[/cyan] {error}\n\n"
-                f"[blue]{t('loadtest.next_steps')}[/blue]\n"
+                f"[bold {theme.ERROR}]{t('loadtest.failed_title')}[/bold {theme.ERROR}]\n\n"
+                f"[dim]{t('loadtest.test_id_label')}[/dim] {test_id}\n"
+                f"[dim]{t('loadtest.error_label')}[/dim] {error}\n\n"
+                f"[bold]{t('loadtest.next_steps')}[/bold]\n"
                 f"• {t('loadtest.tip_check_worker_logs')}\n"
                 f"• {t('loadtest.tip_verify_queue')}\n"
                 f"• {t('loadtest.tip_try_smaller')}",
                 title=t("loadtest.analysis_panel"),
-                border_style="red",
+                border_style=theme.ERROR,
             )
         )
 
     # Show basic troubleshooting info
-    console.print(f"\n[bold yellow]{t('loadtest.troubleshooting')}[/bold yellow]")
+    console.print(f"\n[bold]{t('loadtest.troubleshooting')}[/bold]")
     console.print(f"   1. {t('loadtest.troubleshoot_1')}")
     console.print(f"   2. {t('loadtest.troubleshoot_2', app='{{ project_slug }}')}")
     console.print(f"   3. {t('loadtest.troubleshoot_3', app='{{ project_slug }}')}")
@@ -724,9 +725,9 @@ def _display_performance_analysis(analysis: dict[str, Any]) -> None:
     perf_table = Table(
         title=t("loadtest.perf_analysis_title"),
         show_header=True,
-        header_style="bold blue",
+        header_style="bold",
     )
-    perf_table.add_column(t("loadtest.aspect_column"), style="cyan")
+    perf_table.add_column(t("loadtest.aspect_column"), style="dim")
     perf_table.add_column(t("loadtest.rating_column"), style="bold")
     perf_table.add_column(t("loadtest.description_column"), style="dim")
 
@@ -749,11 +750,11 @@ def _display_performance_analysis(analysis: dict[str, Any]) -> None:
 
     queue_pressure = perf_analysis.get("queue_pressure", "unknown")
     pressure_color = (
-        "red"
+        theme.ERROR
         if queue_pressure == "high"
-        else "yellow"
+        else theme.WARNING
         if queue_pressure == "medium"
-        else "green"
+        else theme.ACCENT
     )
     perf_table.add_row(
         t("loadtest.aspect_queue_pressure"),
@@ -765,7 +766,7 @@ def _display_performance_analysis(analysis: dict[str, Any]) -> None:
 
     # Validation status
     if validation:
-        console.print(f"\n[bold green]{t('loadtest.test_validation')}[/bold green]")
+        console.print(f"\n[bold]{t('loadtest.test_validation')}[/bold]")
         console.print(
             f"   {t('loadtest.validation_type')} "
             f"{_t_validation(validation.get('test_type_verified', 'unknown'))}"
@@ -783,10 +784,10 @@ def _display_performance_analysis(analysis: dict[str, Any]) -> None:
 def _get_rating_color(rating: str) -> str:
     """Get color for performance rating."""
     color_map = {
-        "excellent": "green",
-        "good": "blue",
-        "fair": "yellow",
-        "poor": "red",
+        "excellent": theme.ACCENT,
+        "good": theme.ACCENT,
+        "fair": theme.WARNING,
+        "poor": theme.ERROR,
         "unknown": "dim",
     }
     return color_map.get(rating, "dim")
