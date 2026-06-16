@@ -9,6 +9,11 @@
 
 ### Added
 
+- **Guided `aegis init`**: a full-screen, interactive setup is now the default
+  for `aegis init`, walking through components and services with a live review
+  screen before generating. `--quick` keeps the classic one-line prompts, and
+  tiny terminals fall back to quick mode automatically. `--no-interactive` is
+  unchanged.
 - **`tasks statistics` CLI command**: report overall scheduler statistics
   (total, active, and paused tasks) straight from the project CLI, mirroring the
   data behind the admin-gated `/scheduler/statistics` endpoint.
@@ -40,6 +45,15 @@
   anything; they now execute correctly.
 - **Deprecation warning** in the AI chat streaming path (`result.usage()` is a
   property in pydantic-ai 1.x, no longer a method).
+
+### Documentation
+
+- **Installation guide clarity**: explain what `uvx` is and that it ships with
+  uv, distinguish `uvx` (ephemeral run) from `uv tool install` (persistent
+  install), and correct the uvx version note (latest on first run, cached
+  thereafter; `uvx aegis-stack@latest` to refresh). The CLI language section now
+  lists all 9 supported locales (`en`, `de`, `es`, `fr`, `ja`, `ko`, `ru`, `zh`,
+  `zh_Hant`) in a table instead of only Simplified Chinese.
 
 ## [0.7.0] - 2026-06-08
 
