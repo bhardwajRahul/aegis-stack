@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       UV_PYTHON: "3.11"  # Pin every uv command (sync/run/build) to 3.11
+      UV_LINK_MODE: "copy"  # Avoid broken cache hardlinks (partial-install errors)
     steps:
       - name: Checkout code
         uses: actions/checkout@v6

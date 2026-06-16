@@ -28,6 +28,14 @@ concurrency:
   group: stack-matrix-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Deliberately NO UV_PYTHON here. This workflow generates and installs real
+  # stacks, and generated projects require Python >=3.13. A global UV_PYTHON
+  # would force their `uv sync` onto the tool's 3.11 and fail with
+  # "incompatible with the project's Python requirement: >=3.13". Each project
+  # must resolve its own interpreter.
+  UV_LINK_MODE: "copy"  # Avoid broken cache hardlinks (partial-install errors)
+
 jobs:
   stack-matrix:
     runs-on: ubuntu-latest

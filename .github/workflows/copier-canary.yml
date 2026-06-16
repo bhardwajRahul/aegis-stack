@@ -1,0 +1,50 @@
+name: Copier Drift Canary
+
+# Why this exists:
+# `aegis` ships a loose `copier` spec, so a fresh `pip install aegis-stack`
+# resolves whatever copier is newest at install time. Copier 9.15 moved
+# `.copier-answers.yml` out of the generated project dir, which silently
+# breaks `aegis update` for every fresh install. pyproject.toml caps
+# `copier<9.15` to dodge it, but the normal test suite runs against the
+# pinned (good) copier and therefore CANNOT see a new breaking release.
+#
+# This canary runs the placement guard against the LATEST copier (ignoring
+# the cap) on a schedule:
+#   - FAILS  -> the newest copier still misplaces the file; keep the cap.
+#   - PASSES -> upstream fixed it; safe to raise/remove the `copier<9.15` cap.
+#
+# It is intentionally schedule/manual only so it never blocks PRs on an
+# upstream issue we don't control.
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"  # Mondays 09:00 UTC
+  workflow_dispatch:
+
+env:
+  UV_PYTHON: "3.11"
+
+jobs:
+  placement:
+    name: .copier-answers.yml placement vs latest copier
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Report latest copier version
+        run: uv run --with "copier>=9.15" python -c "import copier; print('latest copier:', copier.__version__)"
+
+      - name: Placement guard against the latest copier (ignores the <9.15 cap)
+        run: uv run --with "copier>=9.15" pytest tests/core/test_copier_answers_placement.py -v

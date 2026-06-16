@@ -8,6 +8,11 @@ on:
 
 env:
   UV_PYTHON: "3.11"  # Pin every uv command to 3.11 (matches release.yml)
+  # Copy packages into the venv instead of hardlinking from uv's cache.
+  # setup-uv's cache restore can leave broken hardlinks, so a package
+  # imports at top level but is missing submodules/entry points (e.g.
+  # "Can't load plugin: sqlalchemy.dialects:sqlite"). Copy mode avoids it.
+  UV_LINK_MODE: "copy"
 
 jobs:
   lint:
