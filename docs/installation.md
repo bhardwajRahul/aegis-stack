@@ -34,6 +34,8 @@ Choose the method that works best for your workflow:
 
 === "uvx (Recommended)"
 
+    `uvx` ships with [uv](https://docs.astral.sh/uv/getting-started/installation/) (Astral's Python package manager) and runs a tool in a temporary, isolated environment without installing it first. If you don't have uv yet, install it once and `uvx` becomes available automatically.
+
     The fastest way to use Aegis Stack without any installation:
 
     ```bash
@@ -50,7 +52,7 @@ Choose the method that works best for your workflow:
     **Benefits:**
 
     - No installation required
-    - Always uses latest version
+    - Uses the latest version on first run, then a fast cached copy (run `uvx aegis-stack@latest` to refresh)
     - Zero setup, works immediately
     - Isolated execution environment
     - Perfect for trying Aegis Stack or one-off usage
@@ -58,6 +60,8 @@ Choose the method that works best for your workflow:
     **Best for:** Quick start, experimentation, CI/CD, one-off usage
 
 === "uv tool"
+
+    Saw uvx above? `uvx` runs Aegis Stack without installing it; `uv tool install` installs it permanently so you can just type `aegis`.
 
     Install Aegis Stack as a persistent CLI tool with uv:
 
@@ -135,15 +139,29 @@ Choose the method that works best for your workflow:
 
 ## CLI Language Support
 
-Aegis Stack CLI supports Simplified Chinese (简体中文). Set your language with a flag or environment variable:
+The Aegis Stack CLI is fully localized in 9 languages. Set your language with a flag or an environment variable:
 
 ```bash
 # Via flag
-aegis --lang zh init my-project
+aegis --lang fr init my-project
 
 # Via environment variable
-export AEGIS_LANG=zh
+export AEGIS_LANG=fr
 aegis init my-project
 ```
 
-Supported languages: `en` (English, default), `zh` (简体中文)
+Supported languages:
+
+| Code | Language |
+| --- | --- |
+| `en` | English (default) |
+| `de` | Deutsch |
+| `es` | Español |
+| `fr` | Français |
+| `ja` | 日本語 |
+| `ko` | 한국어 |
+| `ru` | Русский |
+| `zh` | 简体中文 (Simplified Chinese) |
+| `zh_Hant` | 繁體中文 (Traditional Chinese) |
+
+If you don't set a language, Aegis Stack detects it from your system locale and falls back to English.
