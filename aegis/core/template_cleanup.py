@@ -16,27 +16,54 @@ from ..constants import AnswerKeys
 from .verbosity import verbose_print
 
 
+def _killed_by_signal(returncode: int) -> bool:
+    """True when a process was killed by a signal rather than exiting normally.
+
+    Under memory pressure the OS OOM-kills child processes (e.g. ``ruff``),
+    which surfaces as a negative return code (POSIX ``-SIGKILL``) or the
+    shell-style ``128 + signal`` (137 = SIGKILL, 139 = SIGSEGV). That's a
+    transient resource failure, NOT a genuine tool error (ruff/git use small
+    exit codes like 1/2), so it's safe to retry.
+    """
+    return returncode < 0 or returncode >= 128
+
+
 def run_resilient(
-    args: list[str], *, retries: int = 2, backoff: float = 0.5, **kwargs: object
+    args: list[str],
+    *,
+    retries: int = 3,
+    backoff: float = 0.5,
+    retry_on_signal_kill: bool = False,
+    **kwargs: object,
 ) -> subprocess.CompletedProcess[bytes]:
-    """``subprocess.run`` that retries only transient OS/timeout failures.
+    """``subprocess.run`` that retries transient failures under heavy load.
 
     Fork failures (``OSError`` — e.g. EAGAIN / too many open files) and
-    timeouts happen under heavy machine load (many parallel ``uv``/``git``/
-    ``ruff`` subprocesses); a brief backoff usually clears them. Genuine tool
-    errors (a non-zero return code) are NOT retried — they come back as a
-    normal ``CompletedProcess`` for the caller to interpret, so behavior on
-    the happy path is unchanged. Re-raises the last transient error if every
-    attempt fails.
+    timeouts happen when many parallel ``uv``/``git``/``ruff`` subprocesses
+    contend for a starved machine; a brief backoff usually clears them. With
+    ``retry_on_signal_kill=True``, a process killed by a signal (OOM-kill etc.)
+    is also retried. Genuine tool errors (a small non-zero return code) are
+    NEVER retried — they come back as a normal ``CompletedProcess`` for the
+    caller to interpret, so happy-path behavior is unchanged. Re-raises the
+    last transient exception if every attempt fails.
     """
     last_exc: Exception | None = None
     for attempt in range(retries + 1):
         try:
-            return subprocess.run(args, **kwargs)  # type: ignore[call-overload]
+            proc = subprocess.run(args, **kwargs)  # type: ignore[call-overload]
         except (OSError, subprocess.SubprocessError) as exc:
             last_exc = exc
             if attempt < retries:
                 time.sleep(backoff * (attempt + 1))
+            continue
+        if (
+            retry_on_signal_kill
+            and _killed_by_signal(proc.returncode)
+            and attempt < retries
+        ):
+            time.sleep(backoff * (attempt + 1))
+            continue
+        return proc
     assert last_exc is not None
     raise last_exc
 
@@ -334,6 +361,7 @@ def merge_three_way_text(current: str, base: str, other: str) -> tuple[int, str]
                 ],
                 capture_output=True,
                 check=False,
+                retry_on_signal_kill=True,
             )
         except (OSError, subprocess.SubprocessError):
             return (-1, "")

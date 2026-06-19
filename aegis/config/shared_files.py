@@ -62,6 +62,7 @@ _DEFAULT_POLICY_FILES: tuple[str, ...] = (
     "app/components/backend/api/routing.py",  # conditional router includes
     "app/components/backend/api/deps.py",  # conditional dependency providers
     "app/components/backend/api/models.py",  # worker + scheduler API models
+    "app/components/backend/api/traffic.py",  # traffic-monitor endpoint (conditional content)
     # ---- Core configuration with component-conditional content ----
     "app/core/config.py",  # database settings, etc.
     "app/services/system/health.py",  # component-specific health checks

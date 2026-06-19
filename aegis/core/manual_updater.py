@@ -722,7 +722,11 @@ class ManualUpdater:
             steps.append([ruff, "format", "--quiet", tmp_path])
             for args in steps:
                 proc = run_resilient(
-                    args, cwd=str(self.project_path), capture_output=True, timeout=30
+                    args,
+                    cwd=str(self.project_path),
+                    capture_output=True,
+                    timeout=30,
+                    retry_on_signal_kill=True,
                 )
                 # ``ruff check --fix`` exits 1 when fixable issues remain after
                 # fixing (normal — e.g. unfixable lint rules); only >=2 is a
