@@ -46,12 +46,6 @@ INTENTIONALLY_NOT_REGENERATED: frozenset[str] = frozenset(
         "app/cli/main.py",  # conditional subcommand registration
         "app/cli/migrate_fix.py",
         "app/i18n/registry.py",  # conditional translation-module registration
-        "app/components/frontend/core/routing.py",
-        "app/components/frontend/core/routes.py",
-        "app/components/frontend/core/events.py",
-        "app/components/frontend/state/session_state.py",
-        "app/components/frontend/dashboard/status_overview.py",
-        "app/services/system/ui.py",
         "app/components/backend/api/load_test_api.py",
         "app/components/backend/api/metrics.py",
         "app/components/backend/api/task_history.py",

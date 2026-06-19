@@ -11,7 +11,7 @@ keywords = [
     "scaffold",
     "generator",
     "fastapi",
-    "cookiecutter",
+    "copier",
     "python",
     "template",
     "boilerplate",
@@ -56,7 +56,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://docs.aegis-stack.io/"
+Homepage = "https://aegis-stack.io"
 Documentation = "https://docs.aegis-stack.io/"
 Repository = "https://github.com/lbedner/aegis-stack.git"
 Issues = "https://github.com/lbedner/aegis-stack/issues"

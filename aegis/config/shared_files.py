@@ -54,12 +54,18 @@ _DEFAULT_POLICY_FILES: tuple[str, ...] = (
     "app/components/frontend/dashboard/cards/__init__.py",  # card exports
     "app/components/frontend/dashboard/cards/card_utils.py",  # modal_map entries
     "app/components/frontend/dashboard/modals/__init__.py",  # modal exports
+    "app/components/frontend/dashboard/status_overview.py",  # auth status surface
+    "app/components/frontend/core/routes.py",  # auth route constants (login/register)
+    "app/components/frontend/core/routing.py",  # auth redirect-to-login guard
+    "app/components/frontend/core/events.py",  # auth check on page reconnect
+    "app/components/frontend/state/session_state.py",  # auth session state
     "app/components/backend/api/routing.py",  # conditional router includes
     "app/components/backend/api/deps.py",  # conditional dependency providers
     "app/components/backend/api/models.py",  # worker + scheduler API models
     # ---- Core configuration with component-conditional content ----
     "app/core/config.py",  # database settings, etc.
     "app/services/system/health.py",  # component-specific health checks
+    "app/services/system/ui.py",  # service title/subtitle labels (auth, etc.)
     "app/services/system/backup.py",  # database backup functionality
     "tests/conftest.py",  # component-specific test fixtures
     ".env.example",  # component configuration env vars

@@ -25,7 +25,7 @@ from ..cli import brand
 from .component_files import get_component_files, get_copier_defaults, get_template_path
 from .copier_manager import is_copier_project, load_copier_answers
 from .plugins.template_resolver import get_plugin_template_root
-from .template_cleanup import merge_three_way_text
+from .template_cleanup import merge_three_way_text, run_resilient
 from .verbosity import verbose_print
 
 # Constants
@@ -42,6 +42,19 @@ REGENERATE_ON_COMPONENT_CHANGE = {
     "app/components/backend/api/deps.py",
     "app/components/backend/api/routing.py",
 }
+
+# Service flags that gate the cross-spec ``ServicesCard``. It is shown whenever
+# ANY business service is enabled (mirrors the removal in
+# ``post_gen_tasks.cleanup_components``).
+_SERVICE_ANSWER_KEYS = (
+    AnswerKeys.AUTH,
+    AnswerKeys.AI,
+    AnswerKeys.COMMS,
+    AnswerKeys.INSIGHTS,
+    AnswerKeys.PAYMENT,
+    AnswerKeys.BLOG,
+)
+_SERVICES_CARD_FILE = "app/components/frontend/dashboard/cards/services_card.py"
 
 
 def _is_empty_stub(path: Path) -> bool:
@@ -412,6 +425,13 @@ class ManualUpdater:
                 shared_files_need_manual_merge,
             ) = self._regenerate_shared_files(updated_answers)
 
+            # Cross-spec: the shared cards/__init__.py just regenerated to
+            # import ServicesCard if a service is now present — make sure the
+            # module it points at exists (it's removed at init when 0 services).
+            created_card = self._ensure_services_card(updated_answers)
+            if created_card:
+                files_modified.append(created_card)
+
             # Update .copier-answers.yml
             self._save_answers(updated_answers)
 
@@ -701,7 +721,7 @@ class ManualUpdater:
                 )
             steps.append([ruff, "format", "--quiet", tmp_path])
             for args in steps:
-                proc = subprocess.run(
+                proc = run_resilient(
                     args, cwd=str(self.project_path), capture_output=True, timeout=30
                 )
                 # ``ruff check --fix`` exits 1 when fixable issues remain after
@@ -935,6 +955,34 @@ class ManualUpdater:
             shared_files_backed_up,
             shared_files_need_manual_merge,
         )
+
+    def _ensure_services_card(self, answers: dict[str, Any]) -> str | None:
+        """Create ``services_card.py`` when an add brings the first service.
+
+        ``ServicesCard`` is rendered at init and removed by post-gen cleanup
+        when zero services are selected. On ``add-service`` the first service
+        flips that condition back on, and the shared ``cards/__init__.py``
+        regenerates to import ``ServicesCard`` — so the module must exist or the
+        frontend import chain breaks (``ModuleNotFoundError`` on boot). The
+        removal direction lives in ``post_gen_tasks.cleanup_components``; this is
+        its add-side mirror.
+
+        Returns the project-relative path if it created the file, else None.
+        """
+        if not any(answers.get(key) for key in _SERVICE_ANSWER_KEYS):
+            return None
+        output_path = self.project_path / _SERVICES_CARD_FILE
+        if output_path.exists():
+            return None
+        content = self._render_template_file(
+            f"{PROJECT_SLUG_PLACEHOLDER}/{_SERVICES_CARD_FILE}", answers
+        )
+        if content is None:
+            return None
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(content)
+        verbose_print(f"   Created cross-spec file: {_SERVICES_CARD_FILE}")
+        return _SERVICES_CARD_FILE
 
     def _render_template_file(
         self, template_file: str, context: dict[str, Any]
