@@ -818,11 +818,11 @@ MESSAGES: dict[str, str] = {
     ),
     "deploy.rolling_recreating": "Recreating: {services}",
     "deploy.rolling_webserver": (
-        "Rolling-restarting webserver (waiting up to {seconds}s for healthy)..."
+        "Rolling webserver: starting a new replica and polling health "
+        "(up to {seconds}s)..."
     ),
     "deploy.rolling_rollout_failed": (
-        "docker rollout failed. Is the plugin installed under ~/.docker/cli-plugins/ "
-        "on the deploy host?"
+        "Rolling webserver swap failed; the previous container is still serving."
     ),
     "deploy.rolling_complete": "Rolling deploy complete!",
     "deploy.app_running": ("   Application running at: http://{host}"),
@@ -940,19 +940,19 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_backup": "Create backup before deploying",
     "deploy.help_opt_health": "Run health check after deploying",
     "deploy.help_opt_rolling": (
-        "Zero-HTTP-downtime code-only deploy. Rolls the webserver via "
-        "docker-rollout and pauses the worker queue so in-flight jobs "
-        "finish cleanly. Skips DB migrations."
+        "Zero-HTTP-downtime code-only deploy. Rolls the webserver by "
+        "health-polling a new replica and pauses the worker queue so "
+        "in-flight jobs finish cleanly. Skips DB migrations."
     ),
     "deploy.help_opt_drain_timeout": (
         "Seconds to wait for workers to drain after pausing the queue "
         "during a rolling deploy (default: 90)."
     ),
     "deploy.help_opt_rollout_timeout": (
-        "Seconds docker-rollout waits for the new webserver to become "
-        "healthy during a rolling deploy. Size this to the container's "
-        "HEALTHCHECK budget (start_period + retries x interval), not a "
-        "60s wall clock (default: 900)."
+        "Runaway-guard ceiling in seconds for the new webserver to become "
+        "healthy during a rolling deploy. The container's own HEALTHCHECK "
+        "budget (start_period + retries x interval) normally decides the "
+        "outcome; this is just a hard cap (default: 900)."
     ),
     "deploy.help_opt_rollback_backup": (
         "Backup timestamp to rollback to (default: latest)"
