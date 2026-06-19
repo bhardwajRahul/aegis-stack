@@ -22,7 +22,9 @@ from aegis.commands.deploy import (
     _detect_github_repo,
     _project_python_minor,
     _render_deploy_workflow,
-    _rolling_rollout_command,
+    _rolling_health_verdict,
+    _rolling_inspect_health_command,
+    _rolling_scale_command,
 )
 
 
@@ -107,25 +109,65 @@ def test_render_deploy_workflow_references_required_secrets() -> None:
     assert "${{ secrets.DEPLOY_HOST }}" in out
 
 
-def test_rolling_rollout_command_passes_timeout_flag() -> None:
-    cmd = _rolling_rollout_command("/srv/app", 900)
-    # ``-t`` is the healthcheck timeout knob; without it docker-rollout
-    # defaults to 60s and can roll back a still-``starting`` healthy container.
-    assert "docker rollout -t 900 " in cmd
-    assert "webserver" in cmd
+def test_rolling_scale_command_builds_scale_up() -> None:
+    # Brings up a 2nd webserver replica alongside the old one without
+    # recreating the old container or touching dependencies, so HTTP keeps
+    # flowing through Traefik during the swap.
+    cmd = _rolling_scale_command("/srv/app", 2)
+    assert "cd /srv/app &&" in cmd
     assert "-f docker-compose.yml -f docker-compose.prod.yml" in cmd
+    assert "--no-deps" in cmd
+    assert "--no-recreate" in cmd
+    assert "--scale webserver=2" in cmd
+    assert cmd.rstrip().endswith("webserver")
 
 
-def test_rolling_rollout_command_quotes_deploy_path() -> None:
-    cmd = _rolling_rollout_command("/srv/my app", 120)
+def test_rolling_scale_command_quotes_deploy_path() -> None:
+    cmd = _rolling_scale_command("/srv/my app", 1)
     assert "cd '/srv/my app'" in cmd
-    assert "docker rollout -t 120 " in cmd
+    assert "--scale webserver=1" in cmd
+
+
+def test_rolling_inspect_health_command_reads_health_status() -> None:
+    cmd = _rolling_inspect_health_command("abc123def456")
+    assert "docker inspect" in cmd
+    # Falls back to container State.Status when no HEALTHCHECK is defined.
+    assert ".State.Health.Status" in cmd
+    assert ".State.Status" in cmd
+    assert "abc123def456" in cmd
+
+
+def test_rolling_inspect_health_command_quotes_container_id() -> None:
+    cmd = _rolling_inspect_health_command("weird id")
+    assert "'weird id'" in cmd
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("healthy", "healthy"),
+        ('"healthy"', "healthy"),
+        ("running", "healthy"),
+        ("unhealthy", "unhealthy"),
+        ("exited", "unhealthy"),
+        ("dead", "unhealthy"),
+        ("starting", "starting"),
+        ("created", "starting"),
+        ("", "starting"),
+        ("<no value>", "starting"),
+    ],
+)
+def test_rolling_health_verdict_maps_status(raw: str, expected: str) -> None:
+    # The container's own HEALTHCHECK drives the outcome: only an explicit
+    # unhealthy/exited verdict rolls back; anything still settling keeps
+    # polling, so a slow-but-healthy boot is never killed by a wall clock.
+    assert _rolling_health_verdict(raw) == expected
 
 
 def test_rolling_rollout_timeout_default_is_generous() -> None:
-    # A long ceiling so the container's own HEALTHCHECK budget
-    # (start_period + retries x interval) decides the outcome, not a
-    # 60s wall clock.
+    # A long runaway-guard ceiling so the container's own HEALTHCHECK
+    # budget (start_period + retries x interval) decides the outcome, not
+    # a short wall clock.
     assert ROLLING_ROLLOUT_TIMEOUT_DEFAULT >= 600
 
 

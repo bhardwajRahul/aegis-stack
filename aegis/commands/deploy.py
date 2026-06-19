@@ -369,11 +369,13 @@ def _run_health_check(
 ROLLING_PAUSE_KEY = "aegis:queue:paused"
 ROLLING_DRAIN_TIMEOUT_DEFAULT = 90  # seconds
 ROLLING_DRAIN_POLL_SECONDS = 1
-# docker-rollout's healthcheck timeout (its ``-t``). Default to a long
-# ceiling so the webserver's own HEALTHCHECK budget (start_period +
-# retries x interval) decides the outcome. docker-rollout's built-in
-# default is only 60s, which rolls back a still-``starting`` but
-# perfectly healthy container.
+ROLLING_HEALTH_POLL_SECONDS = 2
+# Runaway-guard ceiling for the webserver health-poll swap. The
+# container's own HEALTHCHECK budget (start_period + retries x interval)
+# normally decides success (healthy) or failure (unhealthy); this is only
+# a hard cap against a container that never settles either way. It is
+# deliberately long so a slow-but-healthy boot is never killed by a wall
+# clock — the bug that made docker-rollout's 60s default fickle.
 ROLLING_ROLLOUT_TIMEOUT_DEFAULT = 900  # seconds
 
 
@@ -389,20 +391,44 @@ def _rolling_compose_prefix(deploy_path: str) -> str:
     )
 
 
-def _rolling_rollout_command(deploy_path: str, timeout_seconds: int) -> str:
-    """Build the ``docker rollout`` shell command for the webserver.
+def _rolling_scale_command(deploy_path: str, replicas: int) -> str:
+    """Build the ``docker compose up --scale webserver=N`` command.
 
-    Passes ``-t`` (docker-rollout's healthcheck timeout) so the rollout
-    waits out the container's own HEALTHCHECK budget (``start_period +
-    retries x interval``) instead of docker-rollout's 60s default, which
-    can roll back a container that is still ``starting`` but on track to
-    come up healthy.
+    ``--no-recreate`` keeps the existing (old) container untouched so HTTP
+    keeps flowing through Traefik while the new replica boots; ``--no-deps``
+    leaves database / redis / traefik alone. Scaling up to 2 starts a
+    second replica from the freshly-built image; scaling back to 1 settles
+    on the survivor.
     """
-    safe_deploy = shlex.quote(deploy_path)
+    prefix = _rolling_compose_prefix(deploy_path)
     return (
-        f"cd {safe_deploy} && docker rollout -t {timeout_seconds} "
-        "-f docker-compose.yml -f docker-compose.prod.yml webserver"
+        f"{prefix} up -d --no-deps --no-recreate --scale webserver={replicas} webserver"
     )
+
+
+def _rolling_inspect_health_command(container_id: str) -> str:
+    """Build the ``docker inspect`` command that prints a container's
+    health status, falling back to its run state when no HEALTHCHECK is
+    defined (``healthy``/``unhealthy``/``starting`` vs ``running``/``exited``).
+    """
+    fmt = "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}"
+    return f"docker inspect --format {shlex.quote(fmt)} {shlex.quote(container_id)}"
+
+
+def _rolling_health_verdict(raw_status: str) -> str:
+    """Map raw ``docker inspect`` output to ``healthy``/``unhealthy``/``starting``.
+
+    Only an explicit ``unhealthy``/``exited``/``dead`` verdict rolls a deploy
+    back; everything still settling (``starting``, ``created``, empty,
+    ``<no value>``) keeps polling, so a slow-but-healthy boot is never
+    killed by a wall clock.
+    """
+    status = raw_status.strip().strip('"').lower()
+    if status in ("healthy", "running"):
+        return "healthy"
+    if status in ("unhealthy", "exited", "dead"):
+        return "unhealthy"
+    return "starting"
 
 
 def _rolling_running_services(host: str, user: str, deploy_path: str) -> set[str]:
@@ -455,6 +481,99 @@ def _rolling_wait_for_drain(
     return result.returncode == 0
 
 
+def _rolling_webserver_ids(host: str, user: str, deploy_path: str) -> list[str]:
+    """Return the container IDs currently backing the ``webserver`` service."""
+    prefix = _rolling_compose_prefix(deploy_path)
+    result = _run_remote_capture(host, user, f"{prefix} ps -q webserver")
+    if result.returncode != 0:
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def _rolling_container_health(host: str, user: str, container_id: str) -> str:
+    """Inspect a container and return ``healthy``/``unhealthy``/``starting``."""
+    result = _run_remote_capture(
+        host, user, _rolling_inspect_health_command(container_id)
+    )
+    return _rolling_health_verdict(result.stdout)
+
+
+def _rolling_remove_container(host: str, user: str, container_id: str) -> None:
+    """Stop and remove a single container, best-effort.
+
+    ``docker rm -f`` sends SIGTERM (uvicorn drains in-flight requests) then
+    SIGKILL after the grace period. Safe to call on an already-gone id.
+    """
+    safe = shlex.quote(container_id)
+    _run_remote(host, user, f"docker rm -f {safe} >/dev/null 2>&1 || true")
+
+
+def _rolling_swap_webserver(
+    host: str, user: str, deploy_path: str, ceiling_seconds: int
+) -> bool:
+    """Zero-downtime webserver swap driven by HEALTHCHECK status polling.
+
+    Brings up a second replica from the freshly-built image alongside the
+    old one (Traefik load-balances both), polls the new container's health
+    until it reports ``healthy``, then drains the old container and scales
+    back to one. If the new container goes ``unhealthy`` (driven by the
+    compose HEALTHCHECK's own ``retries x interval`` budget) or never
+    settles within ``ceiling_seconds`` (a runaway guard), the new replica
+    is removed and the old one keeps serving.
+
+    Replaces the external ``docker-rollout`` plugin: the container's own
+    HEALTHCHECK is the single source of truth for "is it up?", so a
+    slow-but-healthy boot is no longer rolled back by a wall clock, and no
+    extra tooling needs to be installed on the deploy host.
+
+    The old container(s) are never touched until the new replica reports
+    healthy, so on any failure path the previous version keeps serving.
+    Returns True on a successful swap, False otherwise.
+    """
+    before = _rolling_webserver_ids(host, user, deploy_path)
+    if not before:
+        return False
+    before_set = set(before)
+
+    # Add exactly one new replica from the freshly-built image, keeping the
+    # old container(s) running (--no-recreate). Scaling relative to the
+    # current count avoids a no-op when the service is already past one.
+    scale_up = _run_remote(
+        host, user, _rolling_scale_command(deploy_path, len(before) + 1)
+    )
+    if scale_up.returncode != 0:
+        return False
+
+    after = _rolling_webserver_ids(host, user, deploy_path)
+    new_ids = [cid for cid in after if cid not in before_set]
+    if len(new_ids) != 1:
+        # Couldn't isolate a single new replica — undo and bail. The old
+        # container(s) were never touched, so HTTP keeps serving.
+        for cid in new_ids:
+            _rolling_remove_container(host, user, cid)
+        _run_remote(host, user, _rolling_scale_command(deploy_path, len(before)))
+        return False
+    new_id = new_ids[0]
+
+    # Poll the new replica's health until healthy / unhealthy / ceiling.
+    deadline = time.monotonic() + ceiling_seconds
+    while True:
+        verdict = _rolling_container_health(host, user, new_id)
+        if verdict == "healthy":
+            break
+        if verdict == "unhealthy" or time.monotonic() >= deadline:
+            _rolling_remove_container(host, user, new_id)
+            _run_remote(host, user, _rolling_scale_command(deploy_path, len(before)))
+            return False
+        time.sleep(ROLLING_HEALTH_POLL_SECONDS)
+
+    # New replica healthy: drain the old container(s), settle back to one.
+    for old_id in before:
+        _rolling_remove_container(host, user, old_id)
+    scale_down = _run_remote(host, user, _rolling_scale_command(deploy_path, 1))
+    return scale_down.returncode == 0
+
+
 def _run_rolling_deploy(
     host: str,
     user: str,
@@ -468,10 +587,10 @@ def _run_rolling_deploy(
 ) -> None:
     """Zero-HTTP-downtime deploy of code-only changes.
 
-    Webserver rolls via ``docker-rollout`` (with ``-t rollout_timeout`` so
-    the container's own HEALTHCHECK budget, not a 60s wall clock, decides
-    success) so HTTP keeps serving the old container until the new one is
-    healthy. Scheduler and workers hard-
+    The webserver rolls by starting a second replica and health-polling it
+    (``rollout_timeout`` is only a runaway-guard ceiling; the container's
+    own HEALTHCHECK budget decides success) so HTTP keeps serving the old
+    container until the new one is healthy. Scheduler and workers hard-
     restart, but the worker queue is paused first so in-flight jobs
     complete cleanly instead of being SIGTERMed. Database, Redis, and
     Traefik are untouched.
@@ -586,15 +705,10 @@ def _run_rolling_deploy(
                 brand.error(t("deploy.start_failed"), err=True)
                 raise typer.Exit(1)
 
-        # Step 7: rolling-restart the webserver via docker-rollout
+        # Step 7: roll the webserver by health-polling a new replica
         if has_webserver:
             typer.echo(t("deploy.rolling_webserver", seconds=rollout_timeout))
-            rollout = _run_remote(
-                host,
-                user,
-                _rolling_rollout_command(deploy_path, rollout_timeout),
-            )
-            if rollout.returncode != 0:
+            if not _rolling_swap_webserver(host, user, deploy_path, rollout_timeout):
                 brand.error(t("deploy.rolling_rollout_failed"), err=True)
                 raise typer.Exit(1)
     finally:
@@ -845,9 +959,9 @@ def deploy_command(
     the previous version.
 
     Pass ``--rolling`` for zero-HTTP-downtime code-only deploys: the
-    webserver rolls over via docker-rollout and the worker queue is
-    paused so in-flight jobs finish cleanly before workers restart.
-    Skips DB migrations — use the standard path for those.
+    webserver rolls over by health-polling a new replica and the worker
+    queue is paused so in-flight jobs finish cleanly before workers
+    restart. Skips DB migrations — use the standard path for those.
 
     Examples:\\n
         - aegis deploy\\n

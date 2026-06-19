@@ -5,6 +5,19 @@
   The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Rolling deploy no longer depends on `docker-rollout`**: `aegis deploy
+  --rolling` now rolls the webserver in-process, starting a second replica
+  and polling its container HEALTHCHECK status (`healthy`/`unhealthy`/
+  `starting`) instead of shelling out to the `docker-rollout` plugin. The
+  container's own HEALTHCHECK budget (`start_period + retries x interval`)
+  is the single source of truth, so a slow-but-healthy boot is never rolled
+  back by a wall clock, and no extra tooling needs to be installed on the
+  deploy host. `--rollout-timeout` is now only a long runaway-guard ceiling.
+
 ## [0.8.0] - 2026-06-15
 
 ### Added
