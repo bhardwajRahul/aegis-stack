@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Traffic monitor ("who's hammering you")**: Overseer's Backend modal gains a
+  **Traffic** tab showing top source IPs by request volume over a rolling
+  window, flagging any single source that dominates traffic (read-time
+  dominance check). A `TrafficMiddleware` tallies requests per client IP
+  (proxy-aware via `get_client_ip`), backed by Redis when the component is
+  present (shared across the webserver/scheduler/worker processes, survives a
+  restart for the bucket TTL) and an in-memory store otherwise (per-process,
+  resets on restart) — the same Redis-or-dict fallback `CacheService` uses, so
+  the live panel works with or without Redis. Recording is fire-and-forget so
+  it never adds latency to the request path. Admin-gated `GET
+  /api/v1/traffic/sources` (open on auth-less stacks, matching `/health/`).
+  Tunable via `TRAFFIC_MONITOR_ENABLED`, `TRAFFIC_WINDOW_HOURS`,
+  `TRAFFIC_DOMINANCE_SHARE`, `TRAFFIC_DOMINANCE_FLOOR`.
+
 ### Changed
 
 - **Rolling deploy no longer depends on `docker-rollout`**: `aegis deploy

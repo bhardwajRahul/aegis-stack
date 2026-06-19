@@ -150,6 +150,18 @@ class Settings(
     # Proxy trust settings
     TRUST_PROXY_HEADERS: bool = False  # Set to True only behind a trusted reverse proxy
 
+    # Traffic monitor: per-source request-volume visibility ("who's hammering
+    # you") rendered in Overseer. Counts requests per client IP, bucketed
+    # hourly; backed by Redis when present (shared across processes), in-memory
+    # otherwise (per-process, resets on restart).
+    TRAFFIC_MONITOR_ENABLED: bool = True
+    # Trailing window the Overseer panel ranks sources over (hours).
+    TRAFFIC_WINDOW_HOURS: int = 24
+    # Read-time dominance flag: a single source over this share of windowed
+    # traffic (and clearing the absolute floor) is highlighted as "hammering."
+    TRAFFIC_DOMINANCE_SHARE: float = 0.5
+    TRAFFIC_DOMINANCE_FLOOR: int = 100
+
     # HttpOnly session cookie holding the JWT after login / register /
     # OAuth callback. None = auto (off in dev, on otherwise). Set to
     # False to run prod over HTTP without TLS — browsers refuse Secure
