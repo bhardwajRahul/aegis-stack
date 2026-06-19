@@ -161,7 +161,7 @@ Copilot should NOT:
 
 ## Quick Reference Paths
 - CLI entry: aegis/__main__.py
-- Template root: aegis/templates/cookiecutter-aegis-project/
+- Template root: aegis/templates/copier-aegis-project/
 - Generated project sample component: app/components/
 - Scheduler logic: app/components/scheduler/main.py
 - Logging setup: app/core/log.py

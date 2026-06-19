@@ -287,6 +287,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/frontend/dashboard/cards/auth_card.py",
                 "app/components/frontend/dashboard/modals/auth_modal.py",
                 "app/components/frontend/dashboard/modals/auth_users_tab.py",
+                "app/components/frontend/dashboard/modals/auth_sessions_tab.py",
                 # Frontend auth views + controls (mirrors the template_files
                 # entries above so disabling auth removes them).
                 "app/components/frontend/auth",

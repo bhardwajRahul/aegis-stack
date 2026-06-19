@@ -3,6 +3,16 @@ from typing import Any
 
 import pytest
 
+# Pin SQLAlchemy's sqlite dialect into ``sys.modules`` at worker startup.
+# ``create_engine("sqlite://...")`` lazily ``__import__``s the dialect on first
+# use; under heavy parallel load (xdist workers + many subprocess-spawning
+# tests) that import can transiently fail on resource pressure, which
+# SQLAlchemy reports as the misleading
+# ``NoSuchModuleError: Can't load plugin: sqlalchemy.dialects:sqlite``.
+# Importing it now means the lazy import always resolves from cache (no
+# filesystem I/O), so it can never fail mid-run.
+import sqlalchemy.dialects.sqlite  # noqa: E402, F401
+
 
 def pytest_configure(config: Any) -> None:
     """Configure git for CI environments.

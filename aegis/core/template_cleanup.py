@@ -8,11 +8,37 @@ dealing with nested directory structures created during template updates.
 import shutil
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..constants import AnswerKeys
 from .verbosity import verbose_print
+
+
+def run_resilient(
+    args: list[str], *, retries: int = 2, backoff: float = 0.5, **kwargs: object
+) -> subprocess.CompletedProcess[bytes]:
+    """``subprocess.run`` that retries only transient OS/timeout failures.
+
+    Fork failures (``OSError`` — e.g. EAGAIN / too many open files) and
+    timeouts happen under heavy machine load (many parallel ``uv``/``git``/
+    ``ruff`` subprocesses); a brief backoff usually clears them. Genuine tool
+    errors (a non-zero return code) are NOT retried — they come back as a
+    normal ``CompletedProcess`` for the caller to interpret, so behavior on
+    the happy path is unchanged. Re-raises the last transient error if every
+    attempt fails.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            return subprocess.run(args, **kwargs)  # type: ignore[call-overload]
+        except (OSError, subprocess.SubprocessError) as exc:
+            last_exc = exc
+            if attempt < retries:
+                time.sleep(backoff * (attempt + 1))
+    assert last_exc is not None
+    raise last_exc
 
 
 @dataclass
@@ -291,7 +317,7 @@ def merge_three_way_text(current: str, base: str, other: str) -> tuple[int, str]
         bas.write_text(base, encoding="utf-8")
         oth.write_text(other, encoding="utf-8")
         try:
-            merge = subprocess.run(
+            merge = run_resilient(
                 [
                     "git",
                     "merge-file",
