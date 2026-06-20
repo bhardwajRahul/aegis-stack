@@ -1031,3 +1031,142 @@ class TestAdvanceCopierTracking:
         assert _template_version_for_ref("vfeature") == "vfeature"
         assert _template_version_for_ref("HEAD") == "HEAD"
         assert _template_version_for_ref("main") == "main"
+
+    def test_falls_back_to_remote_when_local_resolve_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Production (pip/uvx): ``_commit`` must advance via the remote.
+
+        In production ``template_root`` is the installed package dir, not a
+        git repo, so the local ``resolve_ref_to_commit`` (``git rev-parse``)
+        returns None. ``_advance_copier_tracking`` must then resolve the ref
+        against the remote the update pulled from and stamp that SHA, rather
+        than leaving ``_commit`` frozen at the original generation commit.
+        """
+        import yaml
+
+        import aegis.commands.update as upd
+
+        answers = tmp_path / ".copier-answers.yml"
+        answers.write_text(
+            "_commit: oldsha\n"
+            "_src_path: gh:lbedner/aegis-stack\n"
+            "_template_version: 0.7.0\n"
+            "project_slug: demo\n"
+        )
+        # Local resolution fails (installed package isn't a git repo).
+        monkeypatch.setattr(upd, "resolve_ref_to_commit", lambda ref, root: None)
+        captured: dict[str, str] = {}
+
+        def fake_remote(ref: str, repo_url: str) -> str:
+            captured["ref"] = ref
+            captured["repo_url"] = repo_url
+            return "remotesha456"
+
+        monkeypatch.setattr(upd, "resolve_ref_to_commit_remote", fake_remote)
+
+        upd._advance_copier_tracking(tmp_path, "v0.8.0", tmp_path)
+
+        data = yaml.safe_load(answers.read_text())
+        assert data["_commit"] == "remotesha456"
+        assert data["_template_version"] == "0.8.0"
+        assert captured["ref"] == "v0.8.0"
+        # ``gh:`` shorthand translated to a URL ``git ls-remote`` can clone.
+        assert captured["repo_url"] == "https://github.com/lbedner/aegis-stack"
+
+    def test_remote_not_consulted_when_local_resolve_succeeds(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Dev checkout: local resolution wins, remote is never queried."""
+        import aegis.commands.update as upd
+
+        answers = tmp_path / ".copier-answers.yml"
+        answers.write_text("_commit: oldsha\n_template_version: v0.7.0\n")
+        monkeypatch.setattr(upd, "resolve_ref_to_commit", lambda ref, root: "localsha")
+
+        def fail_remote(ref: str, repo_url: str) -> str:
+            raise AssertionError("remote must not be consulted in dev mode")
+
+        monkeypatch.setattr(upd, "resolve_ref_to_commit_remote", fail_remote)
+
+        upd._advance_copier_tracking(tmp_path, "v0.8.0", tmp_path)
+
+        import yaml
+
+        data = yaml.safe_load(answers.read_text())
+        assert data["_commit"] == "localsha"
+
+
+class TestResolveRefToCommitRemote:
+    """``resolve_ref_to_commit_remote`` resolves refs against a remote repo.
+
+    This is the production fallback for ``_commit`` advancement when the
+    template root isn't a local git repo (issue: stale ``_commit`` after
+    ``aegis update`` on a pip/uvx-installed CLI).
+    """
+
+    def test_prefers_peeled_commit_for_annotated_tag(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+
+        from aegis.core import copier_updater
+
+        def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+            # Annotated tag: ls-remote emits the tag-object line AND the
+            # peeled "^{}" commit line. We must return the peeled commit.
+            stdout = "tagobjsha\trefs/tags/v0.8.0\ncommitsha\trefs/tags/v0.8.0^{}\n"
+            return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        result = copier_updater.resolve_ref_to_commit_remote(
+            "v0.8.0", "https://github.com/lbedner/aegis-stack"
+        )
+        assert result == "commitsha"
+
+    def test_lightweight_ref_returns_plain_sha(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+
+        from aegis.core import copier_updater
+
+        def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout="branchsha\trefs/heads/main\n", stderr=""
+            )
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        result = copier_updater.resolve_ref_to_commit_remote(
+            "main", "https://github.com/lbedner/aegis-stack"
+        )
+        assert result == "branchsha"
+
+    def test_full_commit_sha_passed_through_without_remote_call(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+
+        from aegis.core import copier_updater
+
+        def fail_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+            raise AssertionError("ls-remote must not run for a full SHA")
+
+        monkeypatch.setattr(subprocess, "run", fail_run)
+
+        sha = "a" * 40
+        assert copier_updater.resolve_ref_to_commit_remote(sha, "irrelevant") == sha
+
+    def test_returns_none_on_git_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import subprocess
+
+        from aegis.core import copier_updater
+
+        def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess:
+            raise subprocess.CalledProcessError(128, cmd)
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+        assert copier_updater.resolve_ref_to_commit_remote("v0.8.0", "bad-url") is None
