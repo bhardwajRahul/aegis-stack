@@ -14,6 +14,7 @@ import typer
 
 from .. import __version__ as aegis_version
 from ..cli import brand
+from ..config.defaults import GITHUB_TEMPLATE_URL
 from ..constants import AnswerKeys, StorageBackends
 from ..core.copier_manager import is_copier_project, load_copier_answers
 from ..core.copier_updater import (
@@ -26,8 +27,10 @@ from ..core.copier_updater import (
     get_template_root,
     is_version_downgrade,
     resolve_ref_to_commit,
+    resolve_ref_to_commit_remote,
     resolve_version_to_ref,
     rollback_to_backup,
+    src_path_to_git_url,
     validate_clean_git_tree,
 )
 from ..core.post_gen_tasks import cleanup_components, run_post_generation_tasks
@@ -185,7 +188,19 @@ def _advance_copier_tracking(
 
     answers = yaml.safe_load(answers_file.read_text()) or {}
 
+    # Resolve the commit the update actually applied. In a dev checkout the
+    # template_root is a git repo and ``git rev-parse`` resolves the ref. In
+    # production (pip/uvx) template_root is the installed package directory —
+    # not a git repo — so the local resolve returns None and we fall back to
+    # resolving the ref against the remote the update pulled from (the
+    # ``_src_path`` copier cloned). Without this fallback ``_commit`` stays
+    # frozen at the original generation commit while ``_template_version``
+    # advances, so the NEXT update diffs from a stale baseline and can
+    # resurface already-applied changes / spurious conflicts.
     target_commit = resolve_ref_to_commit(target_ref, template_root)
+    if not target_commit:
+        repo_url = src_path_to_git_url(answers.get("_src_path") or GITHUB_TEMPLATE_URL)
+        target_commit = resolve_ref_to_commit_remote(target_ref, repo_url)
     if target_commit:
         answers["_commit"] = target_commit
 

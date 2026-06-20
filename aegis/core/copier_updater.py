@@ -436,6 +436,75 @@ def resolve_ref_to_commit(ref: str, repo_path: Path) -> str | None:
         return None
 
 
+def src_path_to_git_url(src_path: str) -> str:
+    """Translate a copier ``_src_path`` into a URL ``git`` can clone.
+
+    Copier accepts shorthands like ``gh:owner/repo`` and a ``git+`` VCS
+    prefix that ``git ls-remote`` doesn't understand. Expand the common
+    shorthands and strip the prefix; pass anything already URL-shaped
+    through unchanged.
+    """
+    if src_path.startswith("gh:"):
+        return f"https://github.com/{src_path[3:]}"
+    if src_path.startswith("gl:"):
+        return f"https://gitlab.com/{src_path[3:]}"
+    if src_path.startswith("git+"):
+        return src_path[4:]
+    return src_path
+
+
+def resolve_ref_to_commit_remote(ref: str, repo_url: str) -> str | None:
+    """Resolve a git ref to a commit SHA against a remote repository.
+
+    The production (pip/uvx) fallback for ``resolve_ref_to_commit``: when
+    the template root is the installed package directory rather than a git
+    checkout, ``git rev-parse`` can't resolve the ref locally. Query the
+    remote the update pulled from with ``git ls-remote`` instead.
+
+    Returns the dereferenced commit SHA — the peeled ``^{}`` value for
+    annotated tags, matching ``git rev-parse`` semantics so the stamped
+    ``_commit`` is the same SHA a dev-checkout update would record — or
+    None if the ref can't be resolved.
+
+    Args:
+        ref: Git reference (tag, branch, ``HEAD``, or a full commit SHA)
+        repo_url: Clonable URL of the template remote
+
+    Returns:
+        Full commit SHA or None on failure
+    """
+    # A full commit SHA is already resolved; ls-remote can't match a bare
+    # commit (it matches refs), so return it verbatim.
+    if len(ref) == 40 and all(c in "0123456789abcdef" for c in ref.lower()):
+        return ref
+
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", repo_url, ref],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return None
+
+    # Parse "<sha>\t<refname>" lines. Prefer the peeled commit ("^{}") that
+    # annotated tags emit; fall back to the first plain ref line otherwise
+    # (lightweight tags, branches, HEAD).
+    plain: str | None = None
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 2:
+            continue
+        sha, refname = parts
+        if refname.endswith("^{}"):
+            return sha
+        if plain is None:
+            plain = sha
+    return plain
+
+
 def resolve_version_to_ref(
     version: str | None, template_root: Path | None = None
 ) -> str:
