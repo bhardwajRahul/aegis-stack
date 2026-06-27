@@ -727,6 +727,13 @@ class ManualUpdater:
                     capture_output=True,
                     timeout=30,
                     retry_on_signal_kill=True,
+                    # A merged .py file spawns ~6 ruff subprocesses; under a
+                    # parallel test/CI run that contends with uv/git/copier,
+                    # fork failures (EAGAIN) and timeouts spike briefly. A
+                    # wider retry budget rides out the spike instead of
+                    # silently degrading the merge to preserve+warn.
+                    retries=5,
+                    backoff=1.0,
                 )
                 # ``ruff check --fix`` exits 1 when fixable issues remain after
                 # fixing (normal — e.g. unfixable lint rules); only >=2 is a

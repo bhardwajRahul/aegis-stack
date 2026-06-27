@@ -27,7 +27,7 @@ Aegis Stack scaffolds complete FastAPI applications with auth, payments, workers
 ## Quick Start
 
 ```bash
-uvx aegis-stack init my-api && cd my-api && make serve
+uvx aegis-stack init my-api
 ```
 
 `init` opens a full-screen guided setup that walks through every component and service with explanations. Prefer the classic one-line prompts? Pass `--quick`.
@@ -36,6 +36,9 @@ uvx aegis-stack init my-api && cd my-api && make serve
 <summary><strong>More examples</strong></summary>
 
 ```bash
+# Skip the guided setup, use the classic one-line prompts
+uvx aegis-stack init my-api --quick
+
 # Add user authentication out of the box
 uvx aegis-stack init user-app --services auth
 
@@ -48,7 +51,7 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 
 </details>
 
-> **CLI in 9 languages:** English, German, Spanish, French, Japanese, Korean, Russian, Simplified Chinese, Traditional Chinese. Use `aegis --lang <code>` or set `AEGIS_LANG`.
+> **CLI in 9 languages:** English, German, Spanish, French, Japanese, Korean, Russian, Simplified Chinese, Traditional Chinese. Run e.g. `uvx aegis-stack --lang zh init my-api`, or set `AEGIS_LANG=zh`.
 
 **Installation alternatives:** See the [Installation Guide](https://docs.aegis-stack.io/installation/) for `uv tool install`, `pip install`, and development setup.
 

@@ -994,7 +994,7 @@ def run_post_generation_tasks(
 
     # Task 1: Install dependencies (CRITICAL - fails entire generation if this fails)
     if reporter is not None:
-        reporter.step("deps", "Installing dependencies", "uv sync")
+        reporter.step("deps", t("build.step.deps"), "uv sync")
     deps_success = install_dependencies(project_path, python_version)
 
     if not deps_success:
@@ -1012,14 +1012,14 @@ def run_post_generation_tasks(
 
     # Task 2: Setup .env file (non-critical)
     if reporter is not None:
-        reporter.step("env", "Environment configuration")
+        reporter.step("env", t("build.step.env"))
     setup_env_file(project_path)
     if reporter is not None:
         reporter.done("env")
 
     # Task 3: Run migrations if needed (non-critical)
     if reporter is not None and include_migrations:
-        reporter.step("migrate", "Applying migrations", "alembic upgrade head")
+        reporter.step("migrate", t("build.step.migrate"), "alembic upgrade head")
     run_migrations(project_path, include_migrations, python_version)
     if reporter is not None and include_migrations:
         reporter.done("migrate")
@@ -1027,7 +1027,7 @@ def run_post_generation_tasks(
     # Task 4: Seed LLM fixtures and optionally sync from APIs (non-critical)
     if seed_ai:
         if reporter is not None:
-            reporter.step("llm", "Syncing LLM catalog")
+            reporter.step("llm", t("build.step.llm"))
         # Derive project_slug from path if not provided
         slug = project_slug or project_path.name
 
@@ -1049,7 +1049,7 @@ def run_post_generation_tasks(
 
     # Task 5: Format code (non-critical)
     if reporter is not None:
-        reporter.step("format", "Formatting code", "ruff")
+        reporter.step("format", t("build.step.format"), "ruff")
     format_code(project_path)
     if reporter is not None:
         reporter.done("format")
