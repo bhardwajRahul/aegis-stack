@@ -362,6 +362,11 @@ def merge_three_way_text(current: str, base: str, other: str) -> tuple[int, str]
                 capture_output=True,
                 check=False,
                 retry_on_signal_kill=True,
+                # Ride out brief fork-failure/timeout spikes under parallel
+                # CI load rather than reporting a spurious merge failure
+                # that degrades the caller to preserve+warn.
+                retries=5,
+                backoff=1.0,
             )
         except (OSError, subprocess.SubprocessError):
             return (-1, "")

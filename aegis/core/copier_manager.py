@@ -242,7 +242,7 @@ def generate_with_copier(
     # NOTE: _tasks removed from copier.yml - we run them ourselves below
     # Suppress Copier output unless --verbose flag is passed
     if reporter is not None:
-        reporter.step("render", "Rendering project files")
+        reporter.step("render", t("build.step.render"))
     try:
         run_copy(
             template_source,

@@ -418,18 +418,26 @@ class GuidedSelectionUI:
         choices = [
             _Choice(
                 StorageBackends.MEMORY,
-                "In-memory",
-                "No persistence. Jobs reset on restart — skip if unsure.",
+                _g("choice.name.in_memory", "In-memory"),
+                _g(
+                    "choice.scheduler.memory",
+                    "No persistence. Jobs reset on restart — skip if unsure.",
+                ),
             ),
             _Choice(
                 StorageBackends.SQLITE,
                 "SQLite",
-                "Persist job history in a file database.",
+                _g(
+                    "choice.scheduler.sqlite", "Persist job history in a file database."
+                ),
             ),
             _Choice(
                 StorageBackends.POSTGRES,
                 "PostgreSQL",
-                "Persist job history, production-grade.",
+                _g(
+                    "choice.scheduler.postgres",
+                    "Persist job history, production-grade.",
+                ),
             ),
         ]
         return choices[
@@ -448,20 +456,29 @@ class GuidedSelectionUI:
             _Choice(
                 WorkerBackends.ARQ,
                 "arq",
-                "Simple, well-tested async worker with minimal "
-                "configuration. Best for I/O-bound tasks. The default.",
+                _g(
+                    "choice.worker.arq",
+                    "Simple, well-tested async worker with minimal "
+                    "configuration. Best for I/O-bound tasks. The default.",
+                ),
             ),
             _Choice(
                 WorkerBackends.DRAMATIQ,
                 "Dramatiq",
-                "Multi-process actor model. Best for CPU-bound tasks that "
-                "benefit from multiple OS processes.",
+                _g(
+                    "choice.worker.dramatiq",
+                    "Multi-process actor model. Best for CPU-bound tasks that "
+                    "benefit from multiple OS processes.",
+                ),
             ),
             _Choice(
                 WorkerBackends.TASKIQ,
                 "TaskIQ",
-                "Async-native with per-queue brokers and Redis Streams "
-                "transport with acknowledgements.",
+                _g(
+                    "choice.worker.taskiq",
+                    "Async-native with per-queue brokers and Redis Streams "
+                    "transport with acknowledgements.",
+                ),
             ),
         ]
         return choices[
@@ -477,12 +494,15 @@ class GuidedSelectionUI:
             _Choice(
                 StorageBackends.SQLITE,
                 "SQLite",
-                "Zero-config file database. Great for development.",
+                _g(
+                    "choice.db.sqlite",
+                    "Zero-config file database. Great for development.",
+                ),
             ),
             _Choice(
                 StorageBackends.POSTGRES,
                 "PostgreSQL",
-                "Production-grade, pooled connections.",
+                _g("choice.db.postgres", "Production-grade, pooled connections."),
             ),
         ]
         return choices[
@@ -499,9 +519,15 @@ class GuidedSelectionUI:
 
     def configure_auth(self, service_name: str) -> str:
         choices = [
-            _Choice("basic", "Basic", "Email and password with JWT sessions."),
-            _Choice("rbac", "RBAC", "Adds roles and permissions."),
-            _Choice("org", "Org", "Multi-tenant organizations."),
+            _Choice(
+                "basic",
+                "Basic",
+                _g("choice.auth.basic", "Email and password with JWT sessions."),
+            ),
+            _Choice(
+                "rbac", "RBAC", _g("choice.auth.rbac", "Adds roles and permissions.")
+            ),
+            _Choice("org", "Org", _g("choice.auth.org", "Multi-tenant organizations.")),
         ]
         return choices[
             self._select(
@@ -514,9 +540,18 @@ class GuidedSelectionUI:
     ) -> tuple[str, str, list[str], bool, bool]:
         framework = [
             _Choice(
-                "pydantic-ai", "Pydantic AI", "Typed and lightweight. The default."
+                "pydantic-ai",
+                "Pydantic AI",
+                _g(
+                    "choice.framework.pydantic_ai",
+                    "Typed and lightweight. The default.",
+                ),
             ),
-            _Choice("langchain", "LangChain", "Large ecosystem, many integrations."),
+            _Choice(
+                "langchain",
+                "LangChain",
+                _g("choice.framework.langchain", "Large ecosystem, many integrations."),
+            ),
         ]
         fw = framework[
             self._select(
@@ -529,17 +564,22 @@ class GuidedSelectionUI:
             return self._configure_ai_extras(fw, existing_engine)
         backend = [
             _Choice(
-                StorageBackends.MEMORY, "In-memory", "No history, nothing to set up."
+                StorageBackends.MEMORY,
+                _g("choice.name.in_memory", "In-memory"),
+                _g("choice.storage.memory", "No history, nothing to set up."),
             ),
             _Choice(
                 StorageBackends.SQLITE,
                 "SQLite",
-                "Persistent chat history in a file database.",
+                _g(
+                    "choice.storage.sqlite",
+                    "Persistent chat history in a file database.",
+                ),
             ),
             _Choice(
                 StorageBackends.POSTGRES,
                 "PostgreSQL",
-                "Persistent and production-grade.",
+                _g("choice.storage.postgres", "Persistent and production-grade."),
             ),
         ]
         be = backend[
@@ -555,7 +595,12 @@ class GuidedSelectionUI:
         self, fw: str, be: str
     ) -> tuple[str, str, list[str], bool, bool]:
         provider_choices = [
-            _Choice(provider_id, name, f"{description}. {pricing}.")
+            _Choice(
+                provider_id,
+                name,
+                f"{_g(f'choice.provider.{provider_id}.desc', description)}. "
+                f"{_g(f'choice.provider.{provider_id}.pricing', pricing)}.",
+            )
             for provider_id, name, description, pricing, _ in AIProviders.PROVIDER_INFO
         ]
         preselected = {
