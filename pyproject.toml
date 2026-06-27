@@ -47,7 +47,7 @@ dependencies = [
     # 9.15.x relocates .copier-answers.yml out of the generated project dir
     # (with _subdirectory + {{ project_slug }} wrapper), which breaks
     # `aegis update`. Pin below it until the placement is handled.
-    "copier>=9.11.2,<9.15",
+    "copier>=9.11.2,<9.16",
     "rich>=13.0.0",
     "pillow>=12.2.0",
     "packaging>=24.0",
