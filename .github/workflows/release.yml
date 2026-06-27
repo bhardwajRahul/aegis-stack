@@ -15,7 +15,7 @@ jobs:
       UV_LINK_MODE: "copy"  # Avoid broken cache hardlinks (partial-install errors)
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -104,7 +104,7 @@ jobs:
       url: https://pypi.org/project/aegis-stack/
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Download distribution artifacts
         uses: actions/download-artifact@v8
