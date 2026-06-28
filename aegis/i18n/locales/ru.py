@@ -98,6 +98,13 @@ MESSAGES: dict[str, str] = {
         "PostgreSQL — продакшн, поддержка нескольких контейнеров"
     ),
     "interactive.db_reuse": "Используется ранее выбранная БД: {engine}",
+    "interactive.db_provider_select": "Выберите хост PostgreSQL:",
+    "interactive.db_provider_container": (
+        "Локальный контейнер - postgres:16 в Docker (dev и prod)"
+    ),
+    "interactive.db_provider_neon": (
+        "Neon - бессерверный Postgres (облако для prod, локальный контейнер в dev)"
+    ),
     # ── Интерактив: backend воркера ────────────────────────────────────
     "interactive.worker_label": "Backend воркера:",
     "interactive.worker_select": "Выберите backend воркера:",
@@ -984,6 +991,7 @@ MESSAGES: dict[str, str] = {
     "guided.prompt.worker_backend": "Выберите бэкенд воркера",
     "guided.prompt.scheduler_backend": "Постоянство планировщика: сохранять историю задач между перезапусками?",
     "guided.prompt.database_engine": "Движок базы данных для {context}",
+    "guided.prompt.postgres_provider": "Хост PostgreSQL для {context}",
     "guided.prompt.auth_level": "Уровень аутентификации",
     "guided.prompt.ai_framework": "AI-фреймворк",
     "guided.prompt.ai_providers": "AI-провайдеры: выберите любые для подключения",
@@ -1060,6 +1068,10 @@ MESSAGES: dict[str, str] = {
     "guided.choice.worker.taskiq": "Асинхронный по природе, с брокерами на каждую очередь и транспортом Redis Streams с подтверждениями.",
     "guided.choice.db.sqlite": "Файловая база данных без настройки. Отлично для разработки.",
     "guided.choice.db.postgres": "Уровень продакшена, пул соединений.",
+    "guided.choice.db_provider.container": "Локальный контейнер postgres:16, dev и prod.",
+    "guided.choice.db_provider.neon": (
+        "Бессерверный Postgres: облако для prod, локальный контейнер в dev."
+    ),
     "guided.choice.auth.basic": "Email и пароль с JWT-сессиями.",
     "guided.choice.auth.rbac": "Добавляет роли и права.",
     "guided.choice.auth.org": "Мультитенантные организации.",

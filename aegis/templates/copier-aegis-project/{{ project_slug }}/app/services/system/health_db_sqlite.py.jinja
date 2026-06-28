@@ -403,7 +403,14 @@ async def check_database_health() -> ComponentStatus:
                         # Parse migration files once, cache forever
                         if _migration_cache is None:
                             _migration_cache = []
-                            alembic_versions_path = Path("alembic/versions")
+                            # Absolute path anchored to the project root (this file
+                            # is app/services/system/...), so the scan doesn't
+                            # depend on the process CWD.
+                            alembic_versions_path = (
+                                Path(__file__).resolve().parents[3]
+                                / "alembic"
+                                / "versions"
+                            )
                             if alembic_versions_path.exists():
                                 migration_files = (
                                     alembic_versions_path.glob("*.py")

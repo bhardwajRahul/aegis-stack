@@ -72,6 +72,14 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
     "base_with_database_postgres": ProjectTemplateSpec(
         components=("database[postgres]",)
     ),
+    # Neon = postgres provider; dev uses the same local container, prod is cloud.
+    "base_with_database_neon": ProjectTemplateSpec(components=("database[neon]",)),
+    # Neon + auth (migration-needing, so alembic/ is generated) + ingress (the
+    # .env.deploy.example production template is gated on ingress). Exercises the
+    # full Neon production surface: direct migration URL and cloud deploy URLs.
+    "neon_full": ProjectTemplateSpec(
+        components=("database[neon]", "ingress"), services=("auth",)
+    ),
     "base_with_scheduler": ProjectTemplateSpec(components=("scheduler",)),
     "base_with_scheduler_sqlite": ProjectTemplateSpec(
         components=("database", "scheduler"), scheduler_backend="sqlite"

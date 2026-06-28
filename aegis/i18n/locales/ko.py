@@ -93,6 +93,13 @@ MESSAGES: dict[str, str] = {
     "interactive.db_sqlite": "SQLite - 간단한 파일 기반 (개발용에 적합)",
     "interactive.db_postgres": ("PostgreSQL - 프로덕션용, 멀티 컨테이너 지원"),
     "interactive.db_reuse": "이전에 선택한 데이터베이스 사용: {engine}",
+    "interactive.db_provider_select": "PostgreSQL 호스트 선택:",
+    "interactive.db_provider_container": (
+        "로컬 컨테이너 - Docker에서 실행되는 postgres:16 (개발 및 운영)"
+    ),
+    "interactive.db_provider_neon": (
+        "Neon - 서버리스 Postgres (운영은 클라우드, 개발은 로컬 컨테이너)"
+    ),
     # ── Interactive: worker backend ────────────────────────────────────
     "interactive.worker_label": "Worker 백엔드:",
     "interactive.worker_select": "Worker 백엔드를 선택하세요:",
@@ -967,6 +974,7 @@ MESSAGES: dict[str, str] = {
     "guided.prompt.worker_backend": "워커 백엔드 선택",
     "guided.prompt.scheduler_backend": "스케줄러 영속성: 재시작 후에도 작업 기록을 유지할까요?",
     "guided.prompt.database_engine": "{context}의 데이터베이스 엔진",
+    "guided.prompt.postgres_provider": "{context}의 PostgreSQL 호스트",
     "guided.prompt.auth_level": "인증 수준",
     "guided.prompt.ai_framework": "AI 프레임워크",
     "guided.prompt.ai_providers": "AI 제공자: 연동할 항목을 선택하세요",
@@ -1043,6 +1051,10 @@ MESSAGES: dict[str, str] = {
     "guided.choice.worker.taskiq": "비동기 네이티브. 큐별 브로커와 확인 응답을 지원하는 Redis Streams 전송을 사용합니다.",
     "guided.choice.db.sqlite": "무설정 파일 데이터베이스. 개발에 적합합니다.",
     "guided.choice.db.postgres": "프로덕션급, 커넥션 풀링.",
+    "guided.choice.db_provider.container": "로컬 postgres:16 컨테이너, 개발 및 운영.",
+    "guided.choice.db_provider.neon": (
+        "서버리스 Postgres: 운영은 클라우드, 개발은 로컬 컨테이너."
+    ),
     "guided.choice.auth.basic": "이메일과 비밀번호, JWT 세션 포함.",
     "guided.choice.auth.rbac": "역할과 권한을 추가합니다.",
     "guided.choice.auth.org": "멀티테넌트 조직.",

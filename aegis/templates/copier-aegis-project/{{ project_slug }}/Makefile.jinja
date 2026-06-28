@@ -2,6 +2,11 @@
 # Developer-friendly commands for Docker workflow
 
 COMPOSE_DEV = docker compose -f docker-compose.yml -f docker-compose.dev.yml
+{%- if include_ingress %}
+COMPOSE_PROD = docker compose -f docker-compose.yml -f docker-compose.prod.yml
+{%- else %}
+COMPOSE_PROD = docker compose -f docker-compose.yml
+{%- endif %}
 
 #=============================================================================
 # CORE DOCKER COMMANDS
@@ -22,6 +27,17 @@ serve-bg: ## Run all services in background (auto-selects a free host port if th
 	@ports="$$(bash scripts/resolve-ports.sh{% if include_ingress %} --ingress{% endif %}{% if database_engine == "postgres" %} --postgres{% endif %}{% if include_redis %} --redis{% endif %}{% if ollama_mode == "docker" %} --ollama{% endif %})" && \
 		eval "$$ports" && \
 		$(COMPOSE_DEV) --profile dev up -d --remove-orphans
+
+serve-prod: ## Run all services with the production profile (prod config; no dev mounts/debug ports)
+	@env_file=$$([ -f .env.deploy ] && echo .env.deploy || echo .env); \
+		echo "Starting services (production profile), reading $$env_file..."; \
+		echo "Set APP_ENV=production and a real SECRET_KEY{% if database_engine == "postgres" and postgres_provider == "neon" %}, plus DATABASE_URL/DATABASE_URL_UNPOOLED (Neon){% endif %} there before booting outside dev."; \
+		AEGIS_STACK_ENV_FILE=$$env_file $(COMPOSE_PROD) build webserver && \
+		AEGIS_STACK_ENV_FILE=$$env_file $(COMPOSE_PROD) --profile prod up --remove-orphans
+
+stop-prod: ## Stop the production-profile services
+	@echo "Stopping production services..."
+	@$(COMPOSE_PROD) --profile prod down --remove-orphans
 
 stop: ## Gracefully stop all services
 	@echo "Stopping services..."
@@ -248,7 +264,7 @@ help: ## Show this help message
 	@echo
 	@echo "TIP: Use 'make refresh' when everything is broken!"
 
-.PHONY: build serve stop clean rebuild refresh restart logs logs-web logs-worker logs-redis{% if include_scheduler %} logs-scheduler{% endif %} shell shell-worker ps redis-cli redis-stats redis-keys redis-reset health health-detailed health-json health-probe test test-verbose lint fix format typecheck check install deps-update clean-cache docs-serve docs-build{% if include_database %} migrate migrate-check migrate-history migrate-reset{% if database_engine == "postgres" %} db-clean db-fresh{% endif %}{% endif %} worker-test status help
+.PHONY: build serve serve-bg serve-prod stop-prod stop clean rebuild refresh restart logs logs-web logs-worker logs-redis{% if include_scheduler %} logs-scheduler{% endif %} shell shell-worker ps redis-cli redis-stats redis-keys redis-reset health health-detailed health-json health-probe test test-verbose lint fix format typecheck check install deps-update clean-cache docs-serve docs-build{% if include_database %} migrate migrate-check migrate-history migrate-reset{% if database_engine == "postgres" %} db-clean db-fresh{% endif %}{% endif %} worker-test status help
 
 # Default target - show help
 .DEFAULT_GOAL := help

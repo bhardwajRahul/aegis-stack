@@ -100,6 +100,13 @@ MESSAGES: dict[str, str] = {
         "PostgreSQL – Produktionsreif, Multi-Container-Unterstützung"
     ),
     "interactive.db_reuse": "Nutze zuvor gewählte Datenbank: {engine}",
+    "interactive.db_provider_select": "PostgreSQL-Host auswählen:",
+    "interactive.db_provider_container": (
+        "Lokaler Container - postgres:16 in Docker (Dev und Prod)"
+    ),
+    "interactive.db_provider_neon": (
+        "Neon - serverloses Postgres (Cloud in Prod, lokaler Container in Dev)"
+    ),
     # ── Interactive: worker backend ────────────────────────────────────
     "interactive.worker_label": "Worker Backend:",
     "interactive.worker_select": "Worker Backend wählen:",
@@ -1017,6 +1024,7 @@ MESSAGES: dict[str, str] = {
     "guided.prompt.worker_backend": "Worker-Backend auswählen",
     "guided.prompt.scheduler_backend": "Scheduler-Persistenz: Job-Verlauf über Neustarts hinweg behalten?",
     "guided.prompt.database_engine": "Datenbank-Engine für {context}",
+    "guided.prompt.postgres_provider": "PostgreSQL-Host für {context}",
     "guided.prompt.auth_level": "Authentifizierungsstufe",
     "guided.prompt.ai_framework": "AI-Framework",
     "guided.prompt.ai_providers": "AI-Anbieter: beliebige zum Einbinden auswählen",
@@ -1093,6 +1101,10 @@ MESSAGES: dict[str, str] = {
     "guided.choice.worker.taskiq": "Async-nativ mit Brokern pro Queue und Redis-Streams-Transport mit Bestätigungen.",
     "guided.choice.db.sqlite": "Konfigurationsfreie Dateidatenbank. Ideal für die Entwicklung.",
     "guided.choice.db.postgres": "Produktionstauglich mit Connection-Pooling.",
+    "guided.choice.db_provider.container": "Lokaler postgres:16-Container, Dev und Prod.",
+    "guided.choice.db_provider.neon": (
+        "Serverloses Postgres: Cloud in Prod, lokaler Container in Dev."
+    ),
     "guided.choice.auth.basic": "E-Mail und Passwort mit JWT-Sitzungen.",
     "guided.choice.auth.rbac": "Fügt Rollen und Berechtigungen hinzu.",
     "guided.choice.auth.org": "Mandantenfähige Organisationen.",

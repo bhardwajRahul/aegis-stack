@@ -30,6 +30,7 @@ from ..constants import (
     AuthLevels,
     OllamaMode,
     PaymentProviders,
+    PostgresProviders,
     StorageBackends,
     WorkerBackends,
 )
@@ -125,6 +126,9 @@ def generate_with_copier(
         AnswerKeys.DATABASE: template_context[AnswerKeys.DATABASE] == "yes",
         AnswerKeys.DATABASE_ENGINE: template_context.get(
             AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE
+        ),
+        AnswerKeys.POSTGRES_PROVIDER: template_context.get(
+            AnswerKeys.POSTGRES_PROVIDER, PostgresProviders.CONTAINER
         ),
         AnswerKeys.CACHE: False,  # Default to no
         AnswerKeys.INGRESS: template_context.get(AnswerKeys.INGRESS, "no") == "yes",

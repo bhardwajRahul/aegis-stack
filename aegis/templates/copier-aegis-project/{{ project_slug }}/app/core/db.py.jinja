@@ -6,6 +6,10 @@ This module provides {% if database_engine == "postgres" %}PostgreSQL{% else %}S
 Includes proper session management with transaction handling{% if database_engine == "sqlite" %} and foreign key support{% endif %}.
 """
 
+{% if postgres_provider == "neon" %}
+import ssl
+import uuid
+{% endif %}
 from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager
 {% if database_engine == "sqlite" %}
@@ -52,6 +56,56 @@ def _extract_database_path(database_url: str) -> str:
 DATABASE_PATH = _extract_database_path(settings.DATABASE_URL)
 {% endif %}
 
+{% if postgres_provider == "neon" %}
+def _is_neon(database_url: str) -> bool:
+    """True when the URL targets Neon's cloud (vs a local dev container).
+
+    Lets one generated codebase apply Neon's pooler/TLS connect args in
+    production while running unchanged against the local postgres container in
+    development.
+    """
+    return ".neon.tech" in database_url
+
+
+def _strip_libpq_ssl_params(database_url: str) -> str:
+    """Drop sslmode/channel_binding query params (asyncpg cannot accept them)."""
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+    parts = urlsplit(database_url)
+    kept = [
+        (key, value)
+        for key, value in parse_qsl(parts.query, keep_blank_values=True)
+        if key not in {"sslmode", "channel_binding"}
+    ]
+    return urlunsplit(parts._replace(query=urlencode(kept)))
+
+
+def _neon_async_connect_args(database_url: str) -> dict[str, Any]:
+    """asyncpg connect args for Neon's pooled (PgBouncer transaction-mode) endpoint.
+
+    Disables the driver-side prepared-statement cache and gives each prepared
+    statement a unique name so pooled backends cannot collide, and configures TLS
+    (asyncpg ignores sslmode in the URL). Empty for a local container so the same
+    code path works in development.
+    """
+    if not _is_neon(database_url):
+        return {}
+    return {
+        "ssl": ssl.create_default_context(),
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+        "prepared_statement_name_func": lambda: f"__asyncpg_{uuid.uuid4()}__",
+    }
+
+
+def _neon_sync_connect_args(database_url: str) -> dict[str, Any]:
+    """psycopg2 connect args for Neon (TLS required); empty for a local container."""
+    if not _is_neon(database_url):
+        return {}
+    return {"sslmode": "require"}
+
+
+{% endif %}
 {% if database_engine == "sqlite" %}
 # Create SQLite engine with proper configuration (sync)
 # NullPool disables connection pooling - each query gets a fresh connection
@@ -67,6 +121,10 @@ engine = create_engine(
 engine = create_engine(
     settings.database_url_effective,
     echo=settings.DATABASE_ENGINE_ECHO,
+{% if postgres_provider == "neon" %}
+    pool_pre_ping=True,
+    connect_args=_neon_sync_connect_args(settings.database_url_effective),
+{% endif %}
 )
 {% endif %}
 
@@ -80,7 +138,16 @@ def _get_async_database_url(database_url: str) -> str:
         return database_url.replace("sqlite://", "sqlite+aiosqlite://")
 {% else %}
     if database_url.startswith("postgresql://"):
-        return database_url.replace("postgresql://", "postgresql+asyncpg://")
+        database_url = database_url.replace(
+            "postgresql://", "postgresql+asyncpg://"
+        )
+{% if postgres_provider == "neon" %}
+        # asyncpg configures TLS via connect_args["ssl"] and ignores
+        # sslmode/channel_binding; strip those libpq-only params so a
+        # console-pasted Neon URL does not reach the driver with them.
+        database_url = _strip_libpq_ssl_params(database_url)
+{% endif %}
+        return database_url
 {% endif %}
     # For other database types, return as-is and let SQLAlchemy handle it
     return database_url
@@ -105,6 +172,11 @@ def set_sqlite_pragma(dbapi_connection: Any, connection_record: Any) -> None:
 async_engine = create_async_engine(
     _get_async_database_url(settings.database_url_effective),
     echo=settings.DATABASE_ENGINE_ECHO,
+{% if postgres_provider == "neon" %}
+    pool_pre_ping=True,
+    pool_recycle=300,
+    connect_args=_neon_async_connect_args(settings.database_url_effective),
+{% endif %}
 )
 {% endif %}
 

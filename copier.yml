@@ -116,6 +116,18 @@ database_engine:
   # NOTE: No `when` clause - we need this value saved even when include_database=false
   # so that templates can conditionally render based on engine type
 
+postgres_provider:
+  type: str
+  help: "PostgreSQL provider"
+  default: "container"
+  choices:
+    - "container"
+    - "neon"
+  # No `when` clause (mirrors database_engine above): always saved so templates
+  # can gate Neon connection handling and the prod compose shape regardless of
+  # include_database / database_engine. "container" = local postgres:16 service;
+  # "neon" = Neon serverless Postgres in production (still a container in dev).
+
 include_cache:
   type: bool
   help: "Include Redis cache component?"

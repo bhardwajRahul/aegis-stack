@@ -18,6 +18,7 @@ from ..constants import (
     ComponentNames,
     OllamaMode,
     PaymentProviders,
+    PostgresProviders,
     StorageBackends,
     WorkerBackends,
 )
@@ -82,6 +83,15 @@ class TemplateGenerator:
                 self.database_engine = extract_engine_info(component)
                 if self.database_engine:
                     break
+
+        # Neon is a Postgres *provider*, not a separate engine: database[neon]
+        # normalizes to engine=postgres + provider=neon so every postgres template
+        # path (and dependent services keying off database_engine) is reused. The
+        # provider only layers on connection handling and the prod compose shape.
+        self.postgres_provider = PostgresProviders.CONTAINER
+        if self.database_engine == PostgresProviders.NEON:
+            self.database_engine = StorageBackends.POSTGRES
+            self.postgres_provider = PostgresProviders.NEON
 
         # Extract scheduler backend from scheduler[backend] format or use passed param
         # If scheduler[backend] syntax is used, it overrides the passed parameter
@@ -211,6 +221,8 @@ class TemplateGenerator:
             else "no",
             # Database engine selection (sqlite or postgres)
             "database_engine": self.database_engine or StorageBackends.SQLITE,
+            # Postgres provider (container vs neon); ignored for sqlite engines
+            AnswerKeys.POSTGRES_PROVIDER: self.postgres_provider,
             # Scheduler backend selection
             AnswerKeys.SCHEDULER_BACKEND: self.scheduler_backend,
             # Worker backend selection

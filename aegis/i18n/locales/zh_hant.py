@@ -82,6 +82,13 @@ MESSAGES: dict[str, str] = {
     "interactive.db_sqlite": "SQLite — 單檔案，適合開發階段",
     "interactive.db_postgres": "PostgreSQL — 生產就緒，支援多容器部署",
     "interactive.db_reuse": "沿用之前的選擇：{engine}",
+    "interactive.db_provider_select": "選擇 PostgreSQL 主機：",
+    "interactive.db_provider_container": (
+        "本機容器 - Docker 中執行的 postgres:16（開發與正式環境）"
+    ),
+    "interactive.db_provider_neon": (
+        "Neon - 無伺服器 Postgres（正式環境用雲端，開發用本機容器）"
+    ),
     # ── 交互：Worker 後端 ────────────────────────────────────────────
     "interactive.worker_label": "Worker 後端：",
     "interactive.worker_select": "請選擇 Worker 後端：",
@@ -852,6 +859,7 @@ MESSAGES: dict[str, str] = {
     "guided.prompt.worker_backend": "選擇 Worker 後端",
     "guided.prompt.scheduler_backend": "排程器持久化：在重新啟動後保留工作歷史？",
     "guided.prompt.database_engine": "{context} 的資料庫引擎",
+    "guided.prompt.postgres_provider": "{context} 的 PostgreSQL 主機",
     "guided.prompt.auth_level": "認證等級",
     "guided.prompt.ai_framework": "AI 框架",
     "guided.prompt.ai_providers": "AI 供應商：任選若干整合",
@@ -928,6 +936,10 @@ MESSAGES: dict[str, str] = {
     "guided.choice.worker.taskiq": "原生非同步，依佇列分配 broker，使用帶確認機制的 Redis Streams 傳輸。",
     "guided.choice.db.sqlite": "零設定的檔案資料庫。非常適合開發。",
     "guided.choice.db.postgres": "正式環境級，連線池化。",
+    "guided.choice.db_provider.container": "本機 postgres:16 容器，開發與正式環境。",
+    "guided.choice.db_provider.neon": (
+        "無伺服器 Postgres：正式環境用雲端，開發用本機容器。"
+    ),
     "guided.choice.auth.basic": "電子郵件和密碼，搭配 JWT 工作階段。",
     "guided.choice.auth.rbac": "新增角色和權限。",
     "guided.choice.auth.org": "多租戶組織。",

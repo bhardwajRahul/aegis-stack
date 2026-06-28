@@ -84,8 +84,9 @@ class TestSchedulerPersistenceTracking:
         finally:
             clear_database_engine_selection()
 
+    @patch("aegis.cli.interactive.select_database_engine", return_value="sqlite")
     @patch("typer.confirm")
-    def test_scheduler_not_selected(self, mock_confirm: Any) -> None:
+    def test_scheduler_not_selected(self, mock_confirm: Any, mock_engine: Any) -> None:
         """Test no scheduler selection keeps scheduler_backend="memory"."""
         try:
             # Simulate: no redis, no worker, no scheduler, yes database, no ingress, no observability, no auth, no AI
@@ -113,9 +114,10 @@ class TestSchedulerPersistenceTracking:
         finally:
             clear_database_engine_selection()
 
+    @patch("aegis.cli.interactive.select_database_engine", return_value="sqlite")
     @patch("typer.confirm")
     def test_database_selected_independently_of_scheduler(
-        self, mock_confirm: Any
+        self, mock_confirm: Any, mock_engine: Any
     ) -> None:
         """Test database selected independently doesn't affect scheduler persistence."""
         try:
@@ -144,8 +146,11 @@ class TestSchedulerPersistenceTracking:
         finally:
             clear_database_engine_selection()
 
+    @patch("aegis.cli.interactive.select_database_engine", return_value="sqlite")
     @patch("typer.confirm")
-    def test_both_scheduler_and_independent_database(self, mock_confirm: Any) -> None:
+    def test_both_scheduler_and_independent_database(
+        self, mock_confirm: Any, mock_engine: Any
+    ) -> None:
         """Test scheduler without persistence + independent database."""
         try:
             # Simulate: no redis, no worker, yes scheduler, no persistence, yes database, no ingress, no observability, no auth, no AI

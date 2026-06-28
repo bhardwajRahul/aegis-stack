@@ -92,6 +92,13 @@ MESSAGES: dict[str, str] = {
     "interactive.db_sqlite": "SQLite — シンプルなファイルベース（開発向け）",
     "interactive.db_postgres": ("PostgreSQL — 本番対応、マルチコンテナ対応"),
     "interactive.db_reuse": "既に選択済みのデータベースを使用：{engine}",
+    "interactive.db_provider_select": "PostgreSQL のホストを選択：",
+    "interactive.db_provider_container": (
+        "ローカルコンテナ - Docker 上の postgres:16（開発・本番）"
+    ),
+    "interactive.db_provider_neon": (
+        "Neon - サーバーレス Postgres（本番はクラウド、開発はローカルコンテナ）"
+    ),
     # ── 対話モード：ワーカーバックエンド ────────────────────────────────
     "interactive.worker_label": "ワーカーバックエンド：",
     "interactive.worker_select": "ワーカーバックエンドを選択：",
@@ -1000,6 +1007,7 @@ MESSAGES: dict[str, str] = {
     "guided.prompt.worker_backend": "ワーカーバックエンドを選択",
     "guided.prompt.scheduler_backend": "スケジューラの永続化：再起動後もジョブ履歴を保持しますか？",
     "guided.prompt.database_engine": "{context} のデータベースエンジン",
+    "guided.prompt.postgres_provider": "{context} の PostgreSQL ホスト",
     "guided.prompt.auth_level": "認証レベル",
     "guided.prompt.ai_framework": "AI フレームワーク",
     "guided.prompt.ai_providers": "AI プロバイダー：組み込むものを選択",
@@ -1076,6 +1084,10 @@ MESSAGES: dict[str, str] = {
     "guided.choice.worker.taskiq": "非同期ネイティブ。キューごとのブローカーと、確認応答付きの Redis Streams トランスポートを使用します。",
     "guided.choice.db.sqlite": "設定不要のファイルデータベース。開発に最適。",
     "guided.choice.db.postgres": "本番グレード、コネクションプール対応。",
+    "guided.choice.db_provider.container": "ローカルの postgres:16 コンテナ。開発・本番。",
+    "guided.choice.db_provider.neon": (
+        "サーバーレス Postgres：本番はクラウド、開発はローカルコンテナ。"
+    ),
     "guided.choice.auth.basic": "メールとパスワード、JWT セッション付き。",
     "guided.choice.auth.rbac": "ロールと権限を追加します。",
     "guided.choice.auth.org": "マルチテナント組織。",

@@ -21,7 +21,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus
-from app.services.system.ui import get_component_title
+from app.services.system.ui import get_component_title, get_database_subtitle
 
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
@@ -624,20 +624,7 @@ class DatabaseDetailDialog(BaseDetailPopup):
         page: ft.Page,
     ) -> None:
         metadata = database_component.metadata or {}
-        implementation = metadata.get("implementation", "sqlite")
-
-        # Get version for subtitle
-        if implementation == "postgresql":
-            version = metadata.get("version_short", "")
-            if not version and "version" in metadata:
-                full_version = metadata["version"]
-                if isinstance(full_version, str) and "PostgreSQL" in full_version:
-                    parts = full_version.split()
-                    version = parts[1] if len(parts) >= 2 else ""
-            subtitle = f"PostgreSQL {version}" if version else "PostgreSQL"
-        else:
-            version = metadata.get("version", "")
-            subtitle = f"SQLite {version}" if version else "SQLite"
+        subtitle = get_database_subtitle(metadata)
 
         # Build tabs
         tabs = ft.Tabs(

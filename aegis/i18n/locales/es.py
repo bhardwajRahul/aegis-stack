@@ -102,6 +102,13 @@ MESSAGES: dict[str, str] = {
         "PostgreSQL - Listo para producción, soporte multi-contenedor"
     ),
     "interactive.db_reuse": "Usando base de datos previamente seleccionada: {engine}",
+    "interactive.db_provider_select": "Selecciona el host de PostgreSQL:",
+    "interactive.db_provider_container": (
+        "Contenedor local - postgres:16 en Docker (dev y prod)"
+    ),
+    "interactive.db_provider_neon": (
+        "Neon - Postgres serverless (cloud en prod, contenedor local en dev)"
+    ),
     # ── Interactive: worker backend ────────────────────────────────────
     "interactive.worker_label": "Backend de Worker:",
     "interactive.worker_select": "Selecciona backend de worker:",
@@ -1019,6 +1026,7 @@ MESSAGES: dict[str, str] = {
     "guided.prompt.worker_backend": "Elige un backend de worker",
     "guided.prompt.scheduler_backend": "Persistencia del programador: ¿conservar el historial de tareas entre reinicios?",
     "guided.prompt.database_engine": "Motor de base de datos para {context}",
+    "guided.prompt.postgres_provider": "Host de PostgreSQL para {context}",
     "guided.prompt.auth_level": "Nivel de autenticación",
     "guided.prompt.ai_framework": "Framework de IA",
     "guided.prompt.ai_providers": "Proveedores de IA: elige los que quieras integrar",
@@ -1095,6 +1103,10 @@ MESSAGES: dict[str, str] = {
     "guided.choice.worker.taskiq": "Asíncrono nativo, con brokers por cola y transporte Redis Streams con confirmaciones.",
     "guided.choice.db.sqlite": "Base de datos en archivo sin configuración. Estupenda para desarrollo.",
     "guided.choice.db.postgres": "De nivel de producción, con conexiones agrupadas.",
+    "guided.choice.db_provider.container": "Contenedor postgres:16 local, dev y prod.",
+    "guided.choice.db_provider.neon": (
+        "Postgres serverless: cloud en prod, contenedor local en dev."
+    ),
     "guided.choice.auth.basic": "Correo y contraseña con sesiones JWT.",
     "guided.choice.auth.rbac": "Añade roles y permisos.",
     "guided.choice.auth.org": "Organizaciones multiinquilino.",

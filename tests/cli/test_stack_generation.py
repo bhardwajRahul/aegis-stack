@@ -163,6 +163,15 @@ STACK_COMBINATIONS = [
     # row (auth_org, ai_service, insights, payment, blog) already exercises the
     # database component end-to-end. The ``base_with_database`` cache entry
     # in conftest.py is still used by 6 other test files, so it stays.
+    #
+    # NOTE: the matrix build step runs each generated project's ``make check``,
+    # and postgres-engine projects (plain ``database[postgres]`` or
+    # ``database[neon]``) cannot run their full test suite without a live
+    # database server — app-startup/health tests connect to postgres, which is
+    # not running in CI. That is why every matrix row uses the sqlite engine.
+    # Neon generation/config/compose is covered by ``TestNeonConfiguration`` in
+    # tests/cli/test_database_config.py; lint+typecheck of the generated Neon
+    # code is verified separately (it needs no database).
     StackCombination(
         name="auth_basic",
         components=[],

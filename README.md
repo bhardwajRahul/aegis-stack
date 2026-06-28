@@ -71,7 +71,7 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 | **[CLI](https://docs.aegis-stack.io/cli-reference/)** | Typer, first-class system interface | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
 | **[Frontend](https://docs.aegis-stack.io/components/frontend/)** | Flet, ships with the Overseer system dashboard | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
 | **[Cache](https://docs.aegis-stack.io/components/)** | Redis for caching, sessions, pub/sub | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Database](https://docs.aegis-stack.io/components/database/)** | Postgres or SQLite + SQLModel ORM | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Database](https://docs.aegis-stack.io/components/database/)** | Postgres (self-hosted or Neon serverless) or SQLite + SQLModel ORM | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Inference](https://docs.aegis-stack.io/components/)** | Local AI models via Ollama | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Ingress](https://docs.aegis-stack.io/components/ingress/)** | Traefik v3 reverse proxy with TLS | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Observability](https://docs.aegis-stack.io/components/observability/)** | Pydantic Logfire tracing + metrics + logging | ![Optional](https://img.shields.io/badge/-optional-blue) |
@@ -110,7 +110,7 @@ Aegis Stack is the orchestration layer. Services and components wire into best-i
 <td align="center" width="16.66%"><a href="https://github.com"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/github-dark.svg"><img src="docs/images/integrations/github.svg" loading="lazy" style="height:32px;width:auto" alt="GitHub" title="GitHub: OAuth provider" /></picture></a></td>
 <td align="center" width="16.66%"><a href="https://www.google.com"><img src="docs/images/integrations/google.svg" loading="lazy" style="height:32px;width:auto" alt="Google" title="Google: AI provider and OAuth" /></a></td>
 <td align="center" width="16.66%"><a href="https://www.langchain.com"><img src="docs/images/integrations/langchain.png" loading="lazy" style="height:32px;width:auto" alt="LangChain" title="LangChain: AI provider abstraction" /></a></td>
-<td align="center" width="16.66%"><a href="https://neon.tech"><img src="docs/images/integrations/neon.svg" loading="lazy" style="height:32px;width:auto" alt="Neon" title="Neon: Serverless Postgres (planned)" /></a></td>
+<td align="center" width="16.66%"><a href="https://neon.tech"><img src="docs/images/integrations/neon.svg" loading="lazy" style="height:32px;width:auto" alt="Neon" title="Neon: Serverless Postgres, database provider" /></a></td>
 <td align="center" width="16.66%"><a href="https://ollama.com"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/ollama-dark.svg"><img src="docs/images/integrations/ollama.svg" loading="lazy" style="height:32px;width:auto" alt="Ollama" title="Ollama: Local LLM runtime" /></picture></a></td>
 <td align="center" width="16.66%"><a href="https://plausible.io"><img src="docs/images/integrations/plausibleanalytics.svg" loading="lazy" style="height:32px;width:auto" alt="Plausible" title="Plausible: Analytics source for Insights service" /></a></td>
 </tr>

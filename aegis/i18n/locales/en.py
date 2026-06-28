@@ -102,6 +102,14 @@ MESSAGES: dict[str, str] = {
         "PostgreSQL - Production-ready, multi-container support"
     ),
     "interactive.db_reuse": "Using previously selected database: {engine}",
+    # ── Interactive: PostgreSQL host (provider) ────────────────────────
+    "interactive.db_provider_select": "Select PostgreSQL host:",
+    "interactive.db_provider_container": (
+        "Local container - postgres:16 in Docker (dev and prod)"
+    ),
+    "interactive.db_provider_neon": (
+        "Neon - serverless Postgres (cloud in prod, local container in dev)"
+    ),
     # ── Interactive: worker backend ────────────────────────────────────
     "interactive.worker_label": "Worker Backend:",
     "interactive.worker_select": "Select worker backend:",
@@ -1120,6 +1128,7 @@ MESSAGES: dict[str, str] = {
     "guided.prompt.worker_backend": "Pick a worker backend",
     "guided.prompt.scheduler_backend": "Scheduler persistence: keep job history across restarts?",
     "guided.prompt.database_engine": "Database engine for {context}",
+    "guided.prompt.postgres_provider": "PostgreSQL host for {context}",
     "guided.prompt.auth_level": "Authentication level",
     "guided.prompt.ai_framework": "AI framework",
     "guided.prompt.ai_providers": "AI providers: pick any to wire in",
@@ -1196,6 +1205,10 @@ MESSAGES: dict[str, str] = {
     "guided.choice.worker.taskiq": "Async-native with per-queue brokers and Redis Streams transport with acknowledgements.",
     "guided.choice.db.sqlite": "Zero-config file database. Great for development.",
     "guided.choice.db.postgres": "Production-grade, pooled connections.",
+    "guided.choice.db_provider.container": "Local postgres:16 container, dev and prod.",
+    "guided.choice.db_provider.neon": (
+        "Serverless Postgres: cloud in prod, local container in dev."
+    ),
     "guided.choice.auth.basic": "Email and password with JWT sessions.",
     "guided.choice.auth.rbac": "Adds roles and permissions.",
     "guided.choice.auth.org": "Multi-tenant organizations.",
