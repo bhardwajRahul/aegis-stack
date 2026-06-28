@@ -192,7 +192,11 @@ extend-exclude = [
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]  # Added UP for pyupgrade (modern Python syntax)
-ignore = []
+ignore = [
+    "E501",  # line too long — handled by the formatter
+    "UP046",  # PEP 695 generic class — not valid on Python 3.11
+    "UP047",  # PEP 695 generic function — not valid on Python 3.11
+]
 fixable = ["ALL"]
 unfixable = []
 

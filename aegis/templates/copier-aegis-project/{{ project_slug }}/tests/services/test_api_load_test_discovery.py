@@ -62,7 +62,7 @@ class TestListRoutes:
         assert ("POST", "/api/users") in paths_methods
         assert ("POST", "/api/login") in paths_methods
 
-    def test_returns_RouteInfo_objects(self):
+    def test_returns_routeinfo_objects(self):
         app = _build_app()
         routes = list_routes(app, auth_dependency=_auth_dep)
         assert all(isinstance(r, RouteInfo) for r in routes)
