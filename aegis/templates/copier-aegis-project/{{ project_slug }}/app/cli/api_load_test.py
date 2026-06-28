@@ -50,7 +50,6 @@ app = typer.Typer(
 
 console = theme.console()
 
-T = TypeVar("T")
 
 
 def _progress_console() -> Any:
@@ -117,6 +116,9 @@ def _make_store() -> RedisResultStore[APILoadTestResult] | None:
         key_prefix="api_load_test",
         result_model=APILoadTestResult,
     )
+
+
+T = TypeVar("T")
 
 
 async def _with_store(

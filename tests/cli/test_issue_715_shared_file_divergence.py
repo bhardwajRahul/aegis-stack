@@ -26,6 +26,12 @@ import pytest
 from aegis.core.manual_updater import ManualUpdater, _ruff_executable
 from tests.cli.conftest import ProjectFactory
 
+# Shares the merge path (``_regenerate_shared_files`` → ruff + git
+# merge-file), so it has the same subprocess-contention flake risk as the
+# 3-way-merge suite. Pin to the same xdist group to serialize it away from
+# the fork-heavy ``generated_stacks`` tests. See the sibling file's note.
+pytestmark = pytest.mark.xdist_group("generated_stacks")
+
 DEPS_FILE = "app/components/backend/api/deps.py"
 CONFIG_FILE = "app/core/config.py"
 MARKER = "PULSE_CUSTOM_get_goal_service"

@@ -126,7 +126,7 @@ class LoadTestsTab(ft.Container):
                 if not isinstance(obj, dict):
                     return default
                 obj = obj.get(key)
-            return float(obj) if isinstance(obj, (int, float)) else default
+            return float(obj) if isinstance(obj, int | float) else default
 
         throughputs = [_metric(r, "metrics", "overall_throughput") for r in runs]
         p95s = [_metric(r, "metrics", "latency_ms_p95") for r in runs]

@@ -20,6 +20,8 @@ from typing import Any, Generic, TypeVar
 
 from app.services.load_test.common.models import BaseLoadTestResult
 
+
+
 ResultT = TypeVar("ResultT", bound=BaseLoadTestResult)
 
 

@@ -28,6 +28,17 @@ from aegis.core import manual_updater as mu
 from aegis.core.manual_updater import ManualUpdater
 from tests.cli.conftest import ProjectFactory
 
+# The 3-way merge shells out to ``ruff`` (3× normalize) and ``git
+# merge-file`` per merged file. Under ``pytest -n auto``, those forks get
+# starved by the subprocess-heavy ``generated_stacks`` tests on sibling
+# workers (copier/uv bursts → EAGAIN), and the merge silently falls back to
+# preserve, flaking these assertions. Pinning to the same xdist group puts
+# them on the same worker as those heavy tests — loadgroup runs a worker's
+# tests serially, so the merge never races the fork bursts; the other
+# workers run lightweight unit tests. See the retry budget in
+# ``manual_updater._run_ruff`` / ``template_cleanup.merge_three_way_text``.
+pytestmark = pytest.mark.xdist_group("generated_stacks")
+
 CONFIG_FILE = "app/core/config.py"
 COMPOSE_FILE = "docker-compose.yml"
 
