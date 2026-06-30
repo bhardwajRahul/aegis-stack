@@ -82,6 +82,13 @@ MESSAGES: dict[str, str] = {
     "interactive.db_sqlite": "SQLite — 单文件，适合开发阶段",
     "interactive.db_postgres": "PostgreSQL — 生产就绪，支持多容器部署",
     "interactive.db_reuse": "沿用之前的选择：{engine}",
+    "interactive.db_provider_select": "选择 PostgreSQL 主机：",
+    "interactive.db_provider_container": (
+        "本地容器 - Docker 中运行的 postgres:16（开发和生产）"
+    ),
+    "interactive.db_provider_neon": (
+        "Neon - 无服务器 Postgres（生产用云端，开发用本地容器）"
+    ),
     # ── 交互：Worker 后端 ────────────────────────────────────────────
     "interactive.worker_label": "Worker 后端：",
     "interactive.worker_select": "请选择 Worker 后端：",
@@ -852,6 +859,7 @@ MESSAGES: dict[str, str] = {
     "guided.prompt.worker_backend": "选择 Worker 后端",
     "guided.prompt.scheduler_backend": "调度器持久化：在重启后保留任务历史？",
     "guided.prompt.database_engine": "{context} 的数据库引擎",
+    "guided.prompt.postgres_provider": "{context} 的 PostgreSQL 主机",
     "guided.prompt.auth_level": "认证级别",
     "guided.prompt.ai_framework": "AI 框架",
     "guided.prompt.ai_providers": "AI 提供商：任选若干接入",
@@ -928,6 +936,10 @@ MESSAGES: dict[str, str] = {
     "guided.choice.worker.taskiq": "原生异步，按队列分配 broker，使用带确认机制的 Redis Streams 传输。",
     "guided.choice.db.sqlite": "零配置的文件数据库。非常适合开发。",
     "guided.choice.db.postgres": "生产级，连接池化。",
+    "guided.choice.db_provider.container": "本地 postgres:16 容器，开发和生产。",
+    "guided.choice.db_provider.neon": (
+        "无服务器 Postgres：生产用云端，开发用本地容器。"
+    ),
     "guided.choice.auth.basic": "邮箱和密码，配合 JWT 会话。",
     "guided.choice.auth.rbac": "增加角色和权限。",
     "guided.choice.auth.org": "多租户组织。",

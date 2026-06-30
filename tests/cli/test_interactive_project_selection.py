@@ -100,12 +100,15 @@ class TestAuthDatabaseDance:
         _, _, services, _ = interactive_project_selection()
         assert services == []
 
+    @patch("aegis.cli.interactive.select_database_engine")
     @patch("aegis.cli.interactive.interactive_auth_service_config")
     @patch("typer.confirm")
     def test_auth_with_database_skips_confirmation(
-        self, mock_confirm: Any, mock_auth_config: Any
+        self, mock_confirm: Any, mock_auth_config: Any, mock_engine: Any
     ) -> None:
         mock_auth_config.return_value = "rbac"
+        # Accepting the database now asks engine; SQLite keeps it plain.
+        mock_engine.return_value = "sqlite"
         # database=yes among components (3rd prompt), auth=yes -> no extra
         # db prompt
         mock_confirm.side_effect = (
@@ -141,6 +144,7 @@ class ScriptedUI:
         worker_backend: str = "arq",
         scheduler_backend: str = "memory",
         database_engine: str = "sqlite",
+        postgres_provider: str = "container",
         auth_level: str = "basic",
         ai_config: tuple[str, str, list[str], bool, bool] = (
             "memory",
@@ -154,6 +158,7 @@ class ScriptedUI:
         self._worker_backend = worker_backend
         self._scheduler_backend = scheduler_backend
         self._database_engine = database_engine
+        self._postgres_provider = postgres_provider
         self._auth_level = auth_level
         self._ai_config = ai_config
         self.transcript: list[str] = []
@@ -181,9 +186,11 @@ class ScriptedUI:
         self.transcript.append("[scheduler backend]")
         return self._scheduler_backend
 
-    def choose_database_engine(self, context: str) -> str:
+    def choose_database_engine(self, context: str) -> tuple[str, str | None]:
         self.transcript.append(f"[engine for {context}]")
-        return self._database_engine
+        if self._database_engine == "postgres":
+            return self._database_engine, self._postgres_provider
+        return self._database_engine, None
 
     def configure_auth(self, service_name: str) -> str:
         return self._auth_level
@@ -241,3 +248,52 @@ class TestEngineWithScriptedUI:
         assert state.services == []
         confirms = [line for line in ui.transcript if line.startswith("[confirm]")]
         assert len(confirms) == 12
+
+
+class TestDatabaseHostSelection:
+    """The standalone database step picks engine and (for postgres) the host.
+
+    Prompt order: worker, scheduler, database, redis, ingress, observability,
+    then the six services. Accepting only the database (3rd confirm) reaches the
+    engine -> host sub-selection.
+    """
+
+    def _accept_only_database(self) -> list[bool]:
+        return [False, False, True, False, False, False] + [False] * 6
+
+    def test_standalone_sqlite_stays_plain(self) -> None:
+        from aegis.cli.interactive import run_project_selection
+
+        ui = ScriptedUI(confirms=self._accept_only_database(), database_engine="sqlite")
+        state = run_project_selection(ui)
+        # SQLite is the implicit default: plain ``database``, engine unpinned.
+        assert state.components == ["database"]
+        assert state.database_engine is None
+
+    def test_standalone_postgres_container(self) -> None:
+        from aegis.cli.interactive import run_project_selection
+
+        ui = ScriptedUI(
+            confirms=self._accept_only_database(),
+            database_engine="postgres",
+            postgres_provider="container",
+        )
+        state = run_project_selection(ui)
+        assert state.components == ["database[postgres]"]
+        assert state.database_engine == "postgres"
+        assert state.postgres_provider == "container"
+
+    def test_standalone_postgres_neon(self) -> None:
+        from aegis.cli.interactive import run_project_selection
+
+        ui = ScriptedUI(
+            confirms=self._accept_only_database(),
+            database_engine="postgres",
+            postgres_provider="neon",
+        )
+        state = run_project_selection(ui)
+        # Neon encodes as database[neon]; the engine normalizes to postgres so a
+        # later AI/scheduler store that reuses it never inherits "neon".
+        assert state.components == ["database[neon]"]
+        assert state.database_engine == "postgres"
+        assert state.postgres_provider == "neon"

@@ -12,7 +12,15 @@ This Aegis Stack project includes the following components:
 - **Scheduler**: APScheduler-based async task scheduling
 {%- endif %}
 {%- if include_database %}
+{%- if database_engine == "postgres" %}
+{%- if postgres_provider == "neon" %}
+- **Database**: Neon serverless Postgres with SQLModel ORM
+{%- else %}
+- **Database**: PostgreSQL with SQLModel ORM
+{%- endif %}
+{%- else %}
 - **Database**: SQLite database with SQLModel ORM
+{%- endif %}
 {%- endif %}
 {%- if include_cache %}
 - **Cache**: Redis-based async caching
@@ -65,11 +73,16 @@ This Aegis Stack project includes the following components:
 
 4. **Set up database:**
    ```bash
+{%- if database_engine == "postgres" %}
+   # The postgres service starts with `make serve` (docker compose).
+   # Tables are created via Alembic migrations on first run.
+{%- else %}
    # Create data directory for SQLite database
    mkdir -p data
 
    # Database will be created automatically on first run
    # Default location: data/app.db
+{%- endif %}
    ```
 
 5. **Run the application:**
@@ -150,6 +163,32 @@ docker compose --profile prod up
 ## Configuration
 
 ### Database Settings
+{%- if database_engine == "postgres" %}
+{%- if postgres_provider == "neon" %}
+
+This project uses Neon serverless Postgres. Development runs a local `postgres:16` container; production points at Neon's cloud (no database container).
+
+```bash
+# Development (.env): local container
+DATABASE_URL=postgresql://postgres:postgres@postgres:5432/{{ project_slug }}
+
+# Production (.env.deploy): Neon cloud. Runtime uses the pooled endpoint;
+# migrations use the direct (unpooled) endpoint.
+# DATABASE_URL=postgresql://user:pass@ep-xxxx-pooler.region.aws.neon.tech/dbname
+# DATABASE_URL_UNPOOLED=postgresql://user:pass@ep-xxxx.region.aws.neon.tech/dbname
+DATABASE_ENGINE_ECHO=false                  # Enable SQL query logging
+```
+{%- else %}
+
+The database component uses PostgreSQL with the following default configuration:
+
+```bash
+# Environment variables (add to .env file)
+DATABASE_URL=postgresql://postgres:postgres@postgres:5432/{{ project_slug }}
+DATABASE_ENGINE_ECHO=false                  # Enable SQL query logging
+```
+{%- endif %}
+{%- else %}
 
 The database component uses SQLite with the following default configuration:
 
@@ -158,6 +197,7 @@ The database component uses SQLite with the following default configuration:
 DATABASE_URL=sqlite:///data/app.db          # Database file location
 DATABASE_ENGINE_ECHO=false                  # Enable SQL query logging
 ```
+{%- endif %}
 
 ### Database Usage
 

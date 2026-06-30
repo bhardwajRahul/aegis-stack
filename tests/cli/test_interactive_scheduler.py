@@ -232,8 +232,11 @@ class TestInteractiveSchedulerFlow:
         finally:
             clear_database_engine_selection()
 
+    @patch("aegis.cli.interactive.select_database_engine", return_value="sqlite")
     @patch("typer.confirm")
-    def test_standalone_database_selection_still_works(self, mock_confirm: Any) -> None:
+    def test_standalone_database_selection_still_works(
+        self, mock_confirm: Any, mock_engine: Any
+    ) -> None:
         """Test that standalone database selection (without scheduler) still works."""
         try:
             # Mock responses: redis=no, worker=no, scheduler=no, database=yes, ingress=no, observability=no, no auth, no AI

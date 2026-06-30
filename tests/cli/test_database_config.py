@@ -175,3 +175,69 @@ class TestPostgreSQLConfiguration:
         # Should have PostgreSQL URL
         assert "postgresql://" in env_content
         assert "DATABASE_URL=" in env_content
+
+
+class TestNeonConfiguration:
+    """Neon reuses the postgres paths and layers on pooled/direct URLs + connect_args.
+
+    Dev runs the same local postgres container as the container provider; only
+    production differs (cloud Neon, no DB container). The Neon-specific code is
+    runtime-gated on the connection target so the one generated codebase works in
+    both environments.
+    """
+
+    def test_neon_db_file_has_pooler_safe_connect_args(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """db.py disables asyncpg's prepared-statement cache for Neon's pooler."""
+        project_path = project_factory("base_with_database_neon")
+
+        db_content = (project_path / "app" / "core" / "db.py").read_text()
+        # PgBouncer transaction-mode safety: no driver-side prepared statements
+        assert "statement_cache_size" in db_content
+        # Runtime gate so the same code runs against a local container in dev
+        assert "neon.tech" in db_content
+
+    def test_neon_config_has_unpooled_migration_url(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """config.py exposes a direct (unpooled) URL for Alembic migrations."""
+        project_path = project_factory("base_with_database_neon")
+
+        config_content = (project_path / "app" / "core" / "config.py").read_text()
+        assert "DATABASE_URL_UNPOOLED" in config_content
+        assert "migration_database_url" in config_content
+
+    def test_neon_alembic_uses_migration_url(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Alembic env.py points at the direct URL, not the pooled runtime URL.
+
+        Uses a Neon stack with auth (a migration-needing service) because a bare
+        database stack never generates an alembic/ tree.
+        """
+        project_path = project_factory("neon_full")
+
+        env_content = (project_path / "alembic" / "env.py").read_text()
+        assert "migration_database_url" in env_content
+
+    def test_neon_prod_compose_has_no_db_container(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Production is cloud Neon: the prod override defines no postgres service."""
+        project_path = project_factory("base_with_database_neon")
+
+        prod_content = (project_path / "docker-compose.prod.yml").read_text()
+        assert "postgres:16-alpine" not in prod_content
+
+    def test_neon_deploy_env_has_pooled_and_unpooled(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """The production env template carries both pooled and direct Neon URLs."""
+        project_path = project_factory("neon_full")
+
+        deploy_content = (project_path / ".env.deploy.example").read_text()
+        assert "DATABASE_URL=" in deploy_content
+        assert "DATABASE_URL_UNPOOLED=" in deploy_content
+        # Production targets Neon's cloud, not a local container.
+        assert "neon.tech" in deploy_content

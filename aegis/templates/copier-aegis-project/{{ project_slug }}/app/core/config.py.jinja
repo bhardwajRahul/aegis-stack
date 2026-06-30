@@ -243,6 +243,12 @@ class Settings(
     # None = use the container port. See `_localhost_url`.
     POSTGRES_HOST_PORT: int | None = None
     DATABASE_ENGINE_ECHO: bool = False
+{% if postgres_provider == "neon" %}
+    # Direct (unpooled) Neon URL for Alembic. Migrations and DDL must avoid the
+    # pooled (-pooler / PgBouncer transaction-mode) endpoint. Empty in dev (the
+    # local container has no pooler); set to the Neon direct host in production.
+    DATABASE_URL_UNPOOLED: str | None = None
+{% endif %}
 
     @property
     def database_url_effective(self) -> str:
@@ -254,6 +260,20 @@ class Settings(
                 self.DATABASE_URL, {"postgres"}, self.POSTGRES_HOST_PORT
             )
         return self.DATABASE_URL
+{% if postgres_provider == "neon" %}
+
+    @property
+    def migration_database_url(self) -> str:
+        """Direct (unpooled) URL for Alembic; pooled endpoints are unsafe for DDL."""
+        if self.DATABASE_URL_UNPOOLED:
+            url = self.DATABASE_URL_UNPOOLED
+            if not self.is_docker:
+                url = self._localhost_url(
+                    url, {"postgres"}, self.POSTGRES_HOST_PORT
+                )
+            return url
+        return self.database_url_effective
+{% endif %}
 {% else %}
     DATABASE_URL: str = "sqlite:///./data/app.db"
     DATABASE_ENGINE_ECHO: bool = False

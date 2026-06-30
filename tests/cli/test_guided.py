@@ -43,11 +43,27 @@ class TestGuidedDrivesEngine:
         assert state.services == []
 
     def test_add_database_only(self) -> None:
-        # yes only on the 3rd confirm (database)
-        keys = ["n", "n", "y"] + ["n"] * 9
+        # yes only on the 3rd confirm (database); engine screen -> enter = SQLite
+        keys = ["n", "n", "y", "\r"] + ["n"] * 9
         state = _drive(keys)
         assert state.components == ["database"]
         assert state.services == []
+
+    def test_add_database_postgres_neon(self) -> None:
+        # database yes -> engine: right+enter = PostgreSQL -> host: right+enter
+        # = Neon. Encodes as database[neon] (engine normalizes to postgres).
+        keys = ["n", "n", "y", "right", "\r", "right", "\r"] + ["n"] * 9
+        state = _drive(keys)
+        assert state.components == ["database[neon]"]
+        assert state.postgres_provider == "neon"
+
+    def test_add_database_postgres_container(self) -> None:
+        # database yes -> engine: right+enter = PostgreSQL -> host: enter =
+        # local container (the default). Encodes as database[postgres].
+        keys = ["n", "n", "y", "right", "\r", "\r"] + ["n"] * 9
+        state = _drive(keys)
+        assert state.components == ["database[postgres]"]
+        assert state.postgres_provider == "container"
 
     def test_worker_bundles_redis_via_engine_rules(self) -> None:
         # Worker leads the order now; accepting it pulls redis in AND
@@ -114,7 +130,7 @@ class TestGuidedDrivesEngine:
         # A plain database selection means the default engine (sqlite); AI
         # persists to it without asking.
         keys = (
-            ["n", "n", "y", "n", "n", "n"]  # database accepted plain
+            ["n", "n", "y", "\r", "n", "n", "n"]  # database accepted, engine=sqlite
             + ["n", "n", "y", "\r", "up", "\r", "n", "n"]  # ai: framework,
             # providers (Continue), rag, voice — no storage screen
             + ["n", "n", "n"]
@@ -237,8 +253,9 @@ class TestReviewScreen:
     """The full flow: questions -> resolved plan -> REVIEW -> confirm/back."""
 
     def test_review_enter_confirms_plan(self) -> None:
-        # database accepted, everything else declined, enter on REVIEW.
-        keys = ["n", "n", "y"] + ["n"] * 9 + ["\r"]
+        # database accepted (engine screen -> enter = SQLite), everything else
+        # declined, enter on REVIEW.
+        keys = ["n", "n", "y", "\r"] + ["n"] * 9 + ["\r"]
         ui = GuidedSelectionUI(keys=keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         assert "database" in plan.components
@@ -262,7 +279,7 @@ class TestReviewScreen:
 
     def test_yes_skips_review(self) -> None:
         # With --yes the review is skipped entirely: no extra key consumed.
-        keys = ["n", "n", "y"] + ["n"] * 9
+        keys = ["n", "n", "y", "\r"] + ["n"] * 9
         ui = GuidedSelectionUI(keys=keys)
         plan, _ = run_guided_init_flow("demo", "3.13", yes=True, ui=ui)
         assert "database" in plan.components
@@ -291,7 +308,7 @@ class TestInExperienceBuild:
             calls.append(plan.project_name)
             return "/tmp/demo"
 
-        keys = ["n", "n", "y"] + ["n"] * 9 + ["\r", "\r"]
+        keys = ["n", "n", "y", "\r"] + ["n"] * 9 + ["\r", "\r"]
         ui = GuidedSelectionUI(keys=keys)
         plan, _ = run_guided_init_flow(
             "demo",

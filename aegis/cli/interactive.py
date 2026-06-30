@@ -22,6 +22,7 @@ from ..constants import (
     ComponentNames,
     Messages,
     OllamaMode,
+    PostgresProviders,
     StorageBackends,
     WorkerBackends,
 )
@@ -132,9 +133,67 @@ def get_database_engine_selection() -> str | None:
 
 
 def clear_database_engine_selection() -> None:
-    """Clear stored database engine selection (useful for testing)."""
-    global _database_engine_selection
+    """Clear the stored database engine and its PostgreSQL host (useful for testing).
+
+    The host is a sub-property of the engine, so clearing the engine must also
+    clear the host or a stale provider could be reused after the engine resets.
+    """
+    global _database_engine_selection, _postgres_provider_selection
     _database_engine_selection = None
+    _postgres_provider_selection = None
+
+
+# Global variable to store the PostgreSQL host (provider) selection. Neon is a
+# provider of the postgres engine, not a separate engine, so it lives alongside
+# the engine choice rather than inside it.
+_postgres_provider_selection: str | None = None
+
+
+def select_postgres_provider(context: str = "Database") -> str:
+    """Interactive PostgreSQL host selection (local container vs Neon, ...).
+
+    Only meaningful once the engine is postgres. Memoized like the engine so a
+    project resolves one host. Returns a ``PostgresProviders`` value.
+    """
+    global _postgres_provider_selection
+
+    if _postgres_provider_selection is not None:
+        return _postgres_provider_selection
+
+    choices = [
+        questionary.Choice(
+            title=t("interactive.db_provider_container"),
+            value=PostgresProviders.CONTAINER,
+        ),
+        questionary.Choice(
+            title=t("interactive.db_provider_neon"),
+            value=PostgresProviders.NEON,
+        ),
+    ]
+
+    result = questionary.select(
+        t("interactive.db_provider_select"),
+        choices=choices,
+        default=PostgresProviders.CONTAINER,
+        style=brand.questionary_style(),
+    ).ask()
+
+    if result is None:
+        raise typer.Abort()
+
+    _postgres_provider_selection = result
+    return result
+
+
+def get_postgres_provider_selection() -> str | None:
+    """Get the current PostgreSQL host (provider) selection."""
+    return _postgres_provider_selection
+
+
+def clear_postgres_provider_selection() -> None:
+    """Clear stored PostgreSQL host selection (useful for testing)."""
+    global _postgres_provider_selection
+    _postgres_provider_selection = None
 
 
 def select_worker_backend() -> str:
@@ -210,6 +269,10 @@ class ProjectSelection:
     services: list[str] = field(default_factory=list)
     scheduler_backend: str = StorageBackends.MEMORY
     database_engine: str | None = None
+    # PostgreSQL host, only meaningful when database_engine is postgres. Neon is
+    # a provider of the postgres engine, encoded into the component bracket
+    # (``database[neon]``) for downstream generation.
+    postgres_provider: str = PostgresProviders.CONTAINER
     database_added_by_scheduler: bool = False
 
 
@@ -240,7 +303,7 @@ class SelectionUI(Protocol):
 
     def choose_worker_backend(self) -> str: ...
 
-    def choose_database_engine(self, context: str) -> str: ...
+    def choose_database_engine(self, context: str) -> tuple[str, str | None]: ...
 
     def choose_scheduler_backend(self) -> str: ...
 
@@ -288,8 +351,11 @@ class TyperSelectionUI:
     def choose_worker_backend(self) -> str:
         return select_worker_backend()
 
-    def choose_database_engine(self, context: str) -> str:
-        return select_database_engine(context=context)
+    def choose_database_engine(self, context: str) -> tuple[str, str | None]:
+        engine = select_database_engine(context=context)
+        if engine == StorageBackends.POSTGRES:
+            return engine, select_postgres_provider(context=context)
+        return engine, None
 
     def choose_scheduler_backend(self) -> str:
         # Quick-mode shape preserved exactly: the persistence yes/no, then
@@ -383,6 +449,15 @@ def _step_database(
         return
 
     state.components.append(ComponentNames.DATABASE)
+
+    # Engine, then (for postgres) the host: SQLite / PostgreSQL, and when
+    # PostgreSQL, a local container vs Neon. Only postgres pins the engine onto
+    # state; SQLite stays the implicit default (plain ``database``).
+    engine, provider = ui.choose_database_engine(context="Database")
+    if engine == StorageBackends.POSTGRES:
+        state.database_engine = StorageBackends.POSTGRES
+        state.postgres_provider = provider or PostgresProviders.CONTAINER
+
     if ComponentNames.SCHEDULER in state.components:
         ui.echo(f"\n{t('interactive.bonus_backup')}")
         ui.success(t("interactive.backup_desc"))
@@ -442,9 +517,16 @@ def run_project_selection(ui: SelectionUI) -> ProjectSelection:
     # and downstream resolution.
     if ComponentNames.DATABASE in state.components and state.database_engine:
         db_index = state.components.index(ComponentNames.DATABASE)
-        state.components[db_index] = (
-            f"{ComponentNames.DATABASE}[{state.database_engine}]"
-        )
+        # Neon is a postgres provider: encode it as database[neon] so the
+        # generator normalizes it back to engine=postgres + provider=neon.
+        if (
+            state.database_engine == StorageBackends.POSTGRES
+            and state.postgres_provider == PostgresProviders.NEON
+        ):
+            token = PostgresProviders.NEON
+        else:
+            token = state.database_engine
+        state.components[db_index] = f"{ComponentNames.DATABASE}[{token}]"
     if (
         ComponentNames.SCHEDULER in state.components
         and state.scheduler_backend != StorageBackends.MEMORY
@@ -547,7 +629,11 @@ def _project_database_engine(state: ProjectSelection) -> str | None:
     for comp in state.components:
         base, _, rest = comp.partition("[")
         if base == ComponentNames.DATABASE:
-            return rest.rstrip("]") if rest else StorageBackends.SQLITE
+            engine = rest.rstrip("]") if rest else StorageBackends.SQLITE
+            # Neon is a postgres provider; engine-flavored reuse sees postgres.
+            if engine == PostgresProviders.NEON:
+                return StorageBackends.POSTGRES
+            return engine
     return None
 
 
@@ -806,6 +892,7 @@ def clear_all_ai_selections() -> None:
     clear_skip_llm_sync_selection()
     clear_ollama_mode_selection()
     clear_database_engine_selection()
+    clear_postgres_provider_selection()
     clear_auth_level_selection()
 
 

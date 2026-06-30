@@ -8,8 +8,52 @@ is available.
 
 from pathlib import Path
 
-from aegis.constants import AuthLevels, StorageBackends
+from aegis.constants import AnswerKeys, AuthLevels, PostgresProviders, StorageBackends
 from aegis.core.template_generator import TemplateGenerator
+
+
+class TestNeonProviderNormalization:
+    """Neon is a Postgres *provider*, not a separate engine.
+
+    ``database[neon]`` must normalize to engine=postgres + provider=neon so every
+    existing postgres template path is reused unchanged; the provider only layers
+    on connection handling (pooled/direct URLs, connect_args) and the prod compose
+    shape (no DB container in production).
+    """
+
+    def test_neon_normalizes_to_postgres_engine(self) -> None:
+        """database[neon] -> engine=postgres, provider=neon in the context."""
+        gen = TemplateGenerator("test-neon", ["database[neon]"])
+        context = gen.get_template_context()
+        assert context["database_engine"] == StorageBackends.POSTGRES
+        assert context[AnswerKeys.POSTGRES_PROVIDER] == PostgresProviders.NEON
+
+    def test_neon_attributes_exposed_on_generator(self) -> None:
+        """The generator normalizes the engine and records the provider."""
+        gen = TemplateGenerator("test-neon", ["database[neon]"])
+        assert gen.database_engine == StorageBackends.POSTGRES
+        assert gen.postgres_provider == PostgresProviders.NEON
+
+    def test_postgres_uses_container_provider(self) -> None:
+        """Plain database[postgres] is the local-container provider."""
+        gen = TemplateGenerator("test-pg", ["database[postgres]"])
+        context = gen.get_template_context()
+        assert context["database_engine"] == StorageBackends.POSTGRES
+        assert context[AnswerKeys.POSTGRES_PROVIDER] == PostgresProviders.CONTAINER
+
+    def test_sqlite_defaults_to_container_provider(self) -> None:
+        """SQLite leaves the (irrelevant) provider at its container default."""
+        gen = TemplateGenerator("test-sqlite", ["database"])
+        context = gen.get_template_context()
+        assert context["database_engine"] == StorageBackends.SQLITE
+        assert context[AnswerKeys.POSTGRES_PROVIDER] == PostgresProviders.CONTAINER
+
+    def test_neon_keeps_database_engine_postgres_for_dependent_services(self) -> None:
+        """AI storage auto-detect keys off database_engine; neon must read as postgres."""
+        gen = TemplateGenerator(
+            "test-neon-ai", ["database[neon]"], selected_services=["ai"]
+        )
+        assert gen.database_engine == StorageBackends.POSTGRES
 
 
 class TestTemplateGeneratorAIAutoDetection:

@@ -49,6 +49,7 @@ from rich.text import Text
 from ..constants import (
     DOCS_BASE_URL,
     AIProviders,
+    PostgresProviders,
     StorageBackends,
     WorkerBackends,
 )
@@ -489,7 +490,7 @@ class GuidedSelectionUI:
             )
         ].value
 
-    def choose_database_engine(self, context: str) -> str:
+    def choose_database_engine(self, context: str) -> tuple[str, str | None]:
         choices = [
             _Choice(
                 StorageBackends.SQLITE,
@@ -505,11 +506,46 @@ class GuidedSelectionUI:
                 _g("choice.db.postgres", "Production-grade, pooled connections."),
             ),
         ]
-        return choices[
+        engine = choices[
             self._select(
                 _g(
                     "prompt.database_engine",
                     "Database engine for {context}",
+                    context=context,
+                ),
+                choices,
+                crumb="amend",
+            )
+        ].value
+        if engine == StorageBackends.POSTGRES:
+            return engine, self._choose_postgres_provider(context)
+        return engine, None
+
+    def _choose_postgres_provider(self, context: str) -> str:
+        """ONE screen for the PostgreSQL host: local container vs Neon (vs ...)."""
+        choices = [
+            _Choice(
+                PostgresProviders.CONTAINER,
+                "Local container",
+                _g(
+                    "choice.db_provider.container",
+                    "Local postgres:16 container, dev and prod.",
+                ),
+            ),
+            _Choice(
+                PostgresProviders.NEON,
+                "Neon",
+                _g(
+                    "choice.db_provider.neon",
+                    "Serverless Postgres: cloud in prod, local container in dev.",
+                ),
+            ),
+        ]
+        return choices[
+            self._select(
+                _g(
+                    "prompt.postgres_provider",
+                    "PostgreSQL host for {context}",
                     context=context,
                 ),
                 choices,

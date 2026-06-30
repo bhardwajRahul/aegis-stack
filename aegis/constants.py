@@ -38,6 +38,23 @@ class StorageBackends:
     POSTGRES = "postgres"
 
 
+class PostgresProviders:
+    """Provider/host for a PostgreSQL database engine.
+
+    Neon is not a separate engine, it is a place to run Postgres. ``container``
+    runs a local postgres:16 service (dev and prod); ``neon`` targets Neon
+    serverless Postgres (cloud) in production while still using the local
+    container for development.
+    """
+
+    CONTAINER = "container"
+    NEON = "neon"
+
+    ALL = [CONTAINER, NEON]
+
+    DEFAULT = CONTAINER
+
+
 class WorkerBackends:
     """Worker backend options for task processing."""
 
@@ -177,6 +194,7 @@ class AnswerKeys:
     SCHEDULER_WITH_PERSISTENCE = "scheduler_with_persistence"
     WORKER_BACKEND = "worker_backend"
     DATABASE_ENGINE = "database_engine"
+    POSTGRES_PROVIDER = "postgres_provider"
     AI_FRAMEWORK = "ai_framework"
     AI_PROVIDERS = "ai_providers"
     AI_BACKEND = "ai_backend"

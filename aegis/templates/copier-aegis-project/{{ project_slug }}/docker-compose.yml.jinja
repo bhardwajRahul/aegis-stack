@@ -37,6 +37,12 @@ services:
 {%- if database_engine == "postgres" %}
       postgres:
         condition: service_healthy
+{%- if postgres_provider == "neon" %}
+        # Neon uses a local DB container only in dev (postgres profile: dev). In
+        # production the app talks to Neon's cloud via DATABASE_URL, so this
+        # dependency is optional and skipped when no local service is started.
+        required: false
+{%- endif %}
 {%- endif %}
 {%- if ollama_mode == "docker" %}
       ollama:
@@ -264,7 +270,9 @@ services:
           cpus: '0.25'
     profiles:
       - dev
+{%- if postgres_provider == "container" %}
       - prod
+{%- endif %}
 {%- endif %}
 
 {%- if ollama_mode == "docker" %}

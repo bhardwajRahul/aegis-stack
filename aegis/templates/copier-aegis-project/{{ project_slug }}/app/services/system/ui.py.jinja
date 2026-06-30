@@ -136,6 +136,8 @@ def get_component_subtitle(
     Uses the base label from ``get_component_label`` and appends the version
     from health-check metadata when available.
     """
+    if component_name == "database":
+        return get_database_subtitle(metadata)
 {% if include_insights %}
     # Insights: build subtitle from enabled sources
     if component_name == "service_insights" and metadata:
@@ -157,6 +159,30 @@ def get_component_subtitle(
         if version and version != "unknown":
             return f"{label} {version}"
     return label
+
+
+def get_database_subtitle(metadata: dict[str, object] | None = None) -> str:
+    """Single source of truth for the Database subtitle (card, modal, diagram).
+
+    Renders ``PostgreSQL <version>`` / ``SQLite <version>`` and appends
+    ``(Neon)`` when connected to a Neon host (``is_neon`` in health metadata).
+    """
+    metadata = metadata or {}
+    implementation = metadata.get("implementation", "sqlite")
+    if implementation == "postgresql":
+        version = metadata.get("version_short", "")
+        if not version and "version" in metadata:
+            full_version = metadata["version"]
+            if isinstance(full_version, str) and "PostgreSQL" in full_version:
+                parts = full_version.split()
+                version = parts[1] if len(parts) >= 2 else ""
+        subtitle = f"PostgreSQL {version}" if version else "PostgreSQL"
+        if metadata.get("is_neon"):
+            subtitle += " (Neon)"
+    else:
+        version = metadata.get("version", "")
+        subtitle = f"SQLite {version}" if version else "SQLite"
+    return subtitle
 
 
 {% if include_insights %}

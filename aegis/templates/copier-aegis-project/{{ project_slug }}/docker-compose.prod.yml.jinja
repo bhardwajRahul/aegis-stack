@@ -42,7 +42,7 @@ services:
       - dev
       - prod
 {% endif %}
-{% if database_type == "postgres" %}
+{% if database_engine == "postgres" and postgres_provider == "container" %}
   postgres:
     ports: []  # No direct DB access in production
     profiles:

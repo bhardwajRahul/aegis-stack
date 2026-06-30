@@ -98,6 +98,13 @@ MESSAGES: dict[str, str] = {
     "interactive.db_sqlite": "SQLite - Simple, fichier local (adapté au développement)",
     "interactive.db_postgres": ("PostgreSQL - Production, support multi-conteneur"),
     "interactive.db_reuse": "Base de données déjà sélectionnée : {engine}",
+    "interactive.db_provider_select": "Choisissez l'hôte PostgreSQL :",
+    "interactive.db_provider_container": (
+        "Conteneur local - postgres:16 sous Docker (dev et prod)"
+    ),
+    "interactive.db_provider_neon": (
+        "Neon - Postgres serverless (cloud en prod, conteneur local en dev)"
+    ),
     # ── Interactive: worker backend ────────────────────────────────────
     "interactive.worker_label": "Backend du worker :",
     "interactive.worker_select": "Sélectionnez le backend du worker :",
@@ -1020,6 +1027,7 @@ MESSAGES: dict[str, str] = {
     "guided.prompt.worker_backend": "Choisissez un backend de worker",
     "guided.prompt.scheduler_backend": "Persistance du planificateur : conserver l'historique des tâches après redémarrage ?",
     "guided.prompt.database_engine": "Moteur de base de données pour {context}",
+    "guided.prompt.postgres_provider": "Hôte PostgreSQL pour {context}",
     "guided.prompt.auth_level": "Niveau d'authentification",
     "guided.prompt.ai_framework": "Framework IA",
     "guided.prompt.ai_providers": "Fournisseurs IA : choisissez ceux à intégrer",
@@ -1096,6 +1104,10 @@ MESSAGES: dict[str, str] = {
     "guided.choice.worker.taskiq": "Asynchrone par nature, avec des brokers par file et un transport Redis Streams avec accusés de réception.",
     "guided.choice.db.sqlite": "Base de données fichier sans configuration. Parfaite pour le développement.",
     "guided.choice.db.postgres": "Niveau production, connexions mutualisées.",
+    "guided.choice.db_provider.container": "Conteneur local postgres:16, dev et prod.",
+    "guided.choice.db_provider.neon": (
+        "Postgres serverless : cloud en prod, conteneur local en dev."
+    ),
     "guided.choice.auth.basic": "E-mail et mot de passe avec sessions JWT.",
     "guided.choice.auth.rbac": "Ajoute des rôles et des permissions.",
     "guided.choice.auth.org": "Organisations multi-locataires.",
