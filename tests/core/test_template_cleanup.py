@@ -738,6 +738,103 @@ class TestThreeWayMerge:
         assert "user-line1" in content
         assert "template-line1" in content
 
+    def test_multi_hunk_conflict_writes_markers_not_overwrite(
+        self, tmp_path: Path
+    ) -> None:
+        """Two or more conflict hunks must still be reported as a conflict.
+
+        git merge-file exits with the NUMBER of conflicts (not a boolean),
+        so a file where user and template diverge in several places returns
+        exit code >= 2. Regression test: this used to fall into the
+        merge-failed branch and silently overwrite the user's file with the
+        template render.
+        """
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        ctx = "ctx1\nctx2\nctx3\nctx4\nctx5\n"
+        base = f"top\n{ctx}bottom\n"
+        user = f"user-top\n{ctx}user-bottom\n"
+        new = f"template-top\n{ctx}template-bottom\n"
+
+        project_file = tmp_path / "app" / "config.py"
+        project_file.parent.mkdir(parents=True)
+        project_file.write_text(user)
+
+        mock = self._make_mock(project_slug, old_content=base, new_content=new)
+
+        with patch("copier.run_copy", side_effect=mock):
+            result = sync_template_changes(
+                tmp_path,
+                answers,
+                "gh:test/repo",
+                "v2.0.0",
+                old_commit="abc123",
+            )
+
+        assert "app/config.py" not in result.synced
+        assert "app/config.py" in result.conflicts
+        content = project_file.read_text()
+        # Both conflict regions surfaced, user's side preserved in each
+        assert content.count("<<<<<<<") == 2
+        assert "user-top" in content
+        assert "user-bottom" in content
+        assert "template-top" in content
+        assert "template-bottom" in content
+
+    def test_merge_file_error_preserves_user_version(self, tmp_path: Path) -> None:
+        """A git merge-file error exit must keep the user's file, not overwrite it.
+
+        ``git merge-file`` returns a negative status on error (surfacing as
+        exit code 255), distinct from the 1..127 conflict-count range. That
+        path must never write the (empty/unreliable) merge stdout over the
+        user's file — it should preserve their version and report a conflict
+        for manual review, matching ``merge_three_way_text`` semantics.
+        """
+        import subprocess
+
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        base = "line1\nline2\nline3\n"
+        user = "user-line1\nline2\nline3\n"
+        new = "line1\nline2\ntemplate-line3\n"
+
+        project_file = tmp_path / "app" / "config.py"
+        project_file.parent.mkdir(parents=True)
+        project_file.write_text(user)
+
+        mock = self._make_mock(project_slug, old_content=base, new_content=new)
+
+        real_run = subprocess.run
+
+        def fake_run(args: list[str], **kwargs: object) -> object:
+            # Simulate git merge-file itself erroring (e.g. unreadable input):
+            # error exit code with no usable merged output.
+            if len(args) >= 2 and args[0] == "git" and args[1] == "merge-file":
+                return subprocess.CompletedProcess(args, 255, stdout=b"", stderr=b"")
+            return real_run(args, **kwargs)  # type: ignore[arg-type]
+
+        with (
+            patch("copier.run_copy", side_effect=mock),
+            patch(
+                "aegis.core.template_cleanup.subprocess.run",
+                side_effect=fake_run,
+            ),
+        ):
+            result = sync_template_changes(
+                tmp_path,
+                answers,
+                "gh:test/repo",
+                "v2.0.0",
+                old_commit="abc123",
+            )
+
+        # Error → preserve user's file, report as conflict, never sync/overwrite.
+        assert "app/config.py" not in result.synced
+        assert "app/config.py" in result.conflicts
+        assert project_file.read_text() == user
+
     def test_old_render_failure_falls_back_to_overwrite(self, tmp_path: Path) -> None:
         """When old template render fails, fall back to overwrite behavior."""
         project_slug = "my-project"
