@@ -101,16 +101,35 @@ async def _drain_and_capture_secret(proc: subprocess.Popen[str]) -> None:
                 "within %.0fs; events may still fail verification.",
                 _SECRET_READ_TIMEOUT_SECONDS,
             )
+            # stripe-cli may still be spewing non-secret lines; keep draining
+            # in the background so a full stdout pipe can't block the
+            # subprocess and a late secret can still be captured.
+            loop.create_task(_background_drain(proc))
             return
 
         # ``readline`` is blocking; push it onto the default executor so
         # the asyncio loop stays free. None guard handles the pipe
         # closing before we read anything.
         assert proc.stdout is not None
-        line = await asyncio.wait_for(
-            loop.run_in_executor(None, proc.stdout.readline),
-            timeout=remaining,
-        )
+        try:
+            line = await asyncio.wait_for(
+                loop.run_in_executor(None, proc.stdout.readline),
+                timeout=remaining,
+            )
+        except TimeoutError:
+            # stripe-cli produced no output at all inside the window
+            # (unauthenticated CLI, no network, ...). This hook is a dev
+            # convenience — it must never take the app down. Keep draining
+            # in the background so the pipe can't fill and so a late
+            # secret still shows up in the logs.
+            logger.warning(
+                "Stripe webhook forwarder produced no output within %.0fs; "
+                "continuing startup without a captured signing secret — "
+                "webhook events may fail verification.",
+                _SECRET_READ_TIMEOUT_SECONDS,
+            )
+            loop.create_task(_background_drain(proc))
+            return
         if not line:
             logger.warning(
                 "Stripe webhook forwarder stdout closed before emitting a "
@@ -148,6 +167,17 @@ async def _background_drain(proc: subprocess.Popen[str]) -> None:
         stripped = line.rstrip()
         if stripped:
             logger.info("stripe-cli: %s", stripped)
+        match = _WHSEC_RE.search(line)
+        if match:
+            # Under boot load the ``stripe listen`` handshake can outlast
+            # the startup capture window; catch a late-arriving secret
+            # here instead of losing it (startup already continued with
+            # a warning in that case).
+            set_runtime_webhook_secret(match.group(1))
+            logger.info(
+                "Stripe webhook signing secret captured from stripe-cli "
+                "(late, after the startup window)"
+            )
 
 
 async def startup_payment_webhook_forwarder() -> None:

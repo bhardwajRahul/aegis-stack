@@ -416,18 +416,22 @@ def _three_way_merge(
             project_file.write_bytes(merge.stdout)
             result.synced.append(str(relative))
             verbose_print(f"   Merged: {relative}")
-        elif merge.returncode == 1:
-            # Conflicts exist — write merged output with conflict markers
-            # directly into the file, just like git merge does
+        elif 1 <= merge.returncode <= 127:
+            # git merge-file exits with the NUMBER of conflicts (truncated
+            # to 127), not a boolean — write merged output with conflict
+            # markers directly into the file, just like git merge does
             project_file.write_bytes(merge.stdout)
             result.conflicts.append(str(relative))
             verbose_print(f"   Conflict (needs manual review): {relative}")
         else:
-            # merge-file failed entirely — fall back to overwrite
-            new_content = new_file.read_bytes()
-            project_file.write_bytes(new_content)
-            result.synced.append(str(relative))
-            verbose_print(f"   Synced (merge failed, overwrote): {relative}")
+            # Anything else (git's -1/255 error exit, or a negative signal
+            # death) means merge-file itself failed and stdout is unreliable.
+            # Never overwrite the user's file on error — keep it and surface
+            # it for manual review, matching merge_three_way_text semantics.
+            result.conflicts.append(str(relative))
+            verbose_print(
+                f"   Merge error (kept user's version, needs manual review): {relative}"
+            )
     except OSError as e:
         verbose_print(f"   Warning: Could not sync {relative}: {e}")
 
