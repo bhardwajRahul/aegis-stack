@@ -148,3 +148,4 @@ demo-*/
 
 # Generated-project artifact if aegis init ever runs at repo root
 /.copier-answers.yml
+test-project/

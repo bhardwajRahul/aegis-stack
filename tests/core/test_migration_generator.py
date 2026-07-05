@@ -89,6 +89,70 @@ class TestGetServicesNeedingMigrations:
         result = get_services_needing_migrations(context)
         assert result == ["blog"]
 
+    def test_finance_needs_migration(self) -> None:
+        """Finance service needs migrations when selected."""
+        context = {
+            "include_finance": True,
+            "include_ai": False,
+            "ai_backend": "memory",
+        }
+        assert get_services_needing_migrations(context) == ["finance"]
+
+    def test_finance_needs_migration_with_yes_string(self) -> None:
+        """Finance service supports Copier-style yes strings."""
+        context = {
+            "include_finance": "yes",
+            "include_ai": False,
+            "ai_backend": "memory",
+        }
+        assert get_services_needing_migrations(context) == ["finance"]
+
+    def test_finance_auth_link_when_both(self) -> None:
+        """finance + auth emits the owner-FK link migration, after auth+finance."""
+        context = {
+            "include_auth": True,
+            "include_finance": True,
+            "include_ai": False,
+            "ai_backend": "memory",
+        }
+        result = get_services_needing_migrations(context)
+        assert "finance_auth_link" in result
+        # auth (user table) and finance base must precede the link.
+        assert result.index("auth") < result.index("finance_auth_link")
+        assert result.index("finance") < result.index("finance_auth_link")
+
+    def test_no_finance_auth_link_without_auth(self) -> None:
+        """Standalone finance emits no link migration."""
+        context = {
+            "include_finance": True,
+            "include_ai": False,
+            "ai_backend": "memory",
+        }
+        assert "finance_auth_link" not in get_services_needing_migrations(context)
+
+    def test_finance_postgres_uses_finance_schema(self, tmp_path: Path) -> None:
+        """On Postgres, finance tables land in a dedicated ``finance`` schema
+        and the owner FK crosses to ``public.user``; SQLite stays unqualified."""
+        (tmp_path / "alembic" / "versions").mkdir(parents=True)
+        pg = {"database_engine": "postgres"}
+        fin = generate_migration(tmp_path, "finance", pg).read_text()
+        assert 'CREATE SCHEMA IF NOT EXISTS "finance"' in fin
+        assert "schema='finance'" in fin
+
+        (tmp_path / "alembic" / "versions2").mkdir(parents=True)
+        link = generate_migration(tmp_path, "finance_auth_link", pg).read_text()
+        assert "schema='finance'" in link
+        assert "referent_schema='public'" in link
+
+    def test_finance_sqlite_has_no_schema(self, tmp_path: Path) -> None:
+        """SQLite has no schemas, so the finance migration is unqualified."""
+        (tmp_path / "alembic" / "versions").mkdir(parents=True)
+        fin = generate_migration(
+            tmp_path, "finance", {"database_engine": "sqlite"}
+        ).read_text()
+        assert "CREATE SCHEMA" not in fin
+        assert "schema='finance'" not in fin
+
     def test_auth_rbac_needs_migration(self) -> None:
         """Test auth_rbac migration needed when rbac level enabled."""
         context = {
@@ -659,6 +723,51 @@ class TestMigrationSpecs:
             "blog_post",
             "blog_tag",
         }
+
+    def test_finance_spec_exists(self) -> None:
+        """Test finance migration spec is defined (reference-data tables)."""
+        from aegis.core.migration_generator import FINANCE_MIGRATION
+
+        assert "finance" in MIGRATION_SPECS
+        assert FINANCE_MIGRATION.service_name == "finance"
+        # Public schema (SQLite + Postgres); no Postgres-only namespacing.
+        assert FINANCE_MIGRATION.schema is None
+
+        table_names = [t.name for t in FINANCE_MIGRATION.tables]
+        assert "finance_currency" in table_names
+        assert "finance_fx_rate" in table_names
+
+        currency = next(
+            t for t in FINANCE_MIGRATION.tables if t.name == "finance_currency"
+        )
+        assert {c.name for c in currency.columns} >= {"code", "decimals", "kind"}
+        assert any(idx.unique for idx in currency.indexes)
+        assert {ck.name for ck in currency.check_constraints} == {
+            "ck_finance_currency_kind",
+            "ck_finance_currency_decimals",
+        }
+
+        fx = next(t for t in FINANCE_MIGRATION.tables if t.name == "finance_fx_rate")
+        # rate_e8 is a BigInteger scaled integer, not a float.
+        rate_col = next(c for c in fx.columns if c.name == "rate_e8")
+        assert rate_col.type == "sa.BigInteger()"
+        assert {fk.ref_table for fk in fx.foreign_keys} == {"finance_currency"}
+
+    def test_generates_finance_migration(self, tmp_path: Path) -> None:
+        """Finance migration file renders with tables, FKs, and constraints."""
+        result = generate_migration(tmp_path, "finance")
+
+        assert result is not None
+        assert result.exists()
+        assert result.name == "001_finance.py"
+
+        content = result.read_text()
+        assert "'finance_currency'" in content
+        assert "'finance_fx_rate'" in content
+        assert "ck_finance_currency_kind" in content
+        assert "ck_finance_fxrate_distinct" in content
+        assert "sa.BigInteger()" in content
+        assert "finance_currency.code" in content
 
 
 class TestOrgMigrationSpec:

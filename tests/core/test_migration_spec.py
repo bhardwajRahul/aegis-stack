@@ -158,6 +158,8 @@ class TestInTreeRegistry:
             "payment_auth_link",
             "insights",
             "blog",
+            "finance",
+            "finance_auth_link",
         }
 
     def test_each_migration_is_a_servicemigrationspec(self) -> None:

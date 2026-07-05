@@ -435,6 +435,7 @@ MESSAGES: dict[str, str] = {
     "services.type_analytics": "数据分析服务",
     "services.type_storage": "存储服务",
     "services.type_content": "内容服务",
+    "services.type_finance": "财务服务",
     "services.requires_components": "依赖组件：{deps}",
     "services.recommends_components": "推荐组件：{deps}",
     "services.requires_services": "依赖服务：{deps}",

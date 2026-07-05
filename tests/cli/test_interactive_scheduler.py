@@ -42,6 +42,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # comms
                 False,  # insights
                 False,  # blog service
+                False,  # finance service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -53,7 +54,7 @@ class TestInteractiveSchedulerFlow:
             assert services == []  # No services selected
 
             # Verify correct calls were made (including blog service prompt)
-            assert mock_confirm.call_count == 12
+            assert mock_confirm.call_count == 13
         finally:
             clear_database_engine_selection()
 
@@ -80,6 +81,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # comms
                 False,  # insights
                 False,  # blog service
+                False,  # finance service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -113,6 +115,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # comms
                 False,  # insights
                 False,  # blog service
+                False,  # finance service
             ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()
@@ -142,6 +145,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # comms
                 False,  # insights
                 False,  # blog service
+                False,  # finance service
             ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()
@@ -177,6 +181,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # comms
                 False,  # insights
                 False,  # blog service
+                False,  # finance service
             ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()
@@ -187,7 +192,7 @@ class TestInteractiveSchedulerFlow:
             assert scheduler_backend == "sqlite"
 
             # Should not have been prompted for generic database (12 confirms total, including blog)
-            assert mock_confirm.call_count == 12
+            assert mock_confirm.call_count == 13
         finally:
             clear_database_engine_selection()
 
@@ -218,6 +223,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # comms
                 False,  # insights
                 False,  # blog service
+                False,  # finance service
             ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()
@@ -253,6 +259,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # comms
                 False,  # insights
                 False,  # blog service
+                False,  # finance service
             ]
 
             components, scheduler_backend, _, _ = interactive_project_selection()

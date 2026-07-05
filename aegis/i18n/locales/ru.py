@@ -537,6 +537,7 @@ MESSAGES: dict[str, str] = {
     "services.type_analytics": "Сервисы аналитики",
     "services.type_storage": "Сервисы хранения",
     "services.type_content": "Контент-сервисы",
+    "services.type_finance": "Финансовые сервисы",
     "services.requires_components": "Требуемые компоненты: {deps}",
     "services.recommends_components": "Рекомендуемые компоненты: {deps}",
     "services.requires_services": "Требуемые сервисы: {deps}",

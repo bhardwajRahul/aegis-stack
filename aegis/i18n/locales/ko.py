@@ -528,6 +528,7 @@ MESSAGES: dict[str, str] = {
     "services.type_analytics": "분석 서비스",
     "services.type_storage": "스토리지 서비스",
     "services.type_content": "콘텐츠 서비스",
+    "services.type_finance": "금융 서비스",
     "services.requires_components": "필수 컴포넌트: {deps}",
     "services.recommends_components": "권장 컴포넌트: {deps}",
     "services.requires_services": "필수 서비스: {deps}",

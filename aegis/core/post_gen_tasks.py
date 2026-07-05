@@ -412,6 +412,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         and not is_enabled(AnswerKeys.INSIGHTS)
         and not is_enabled(AnswerKeys.PAYMENT)
         and not is_enabled(AnswerKeys.BLOG)
+        and not is_enabled(AnswerKeys.FINANCE)
     ):
         remove_file(
             project_path, "app/components/frontend/dashboard/cards/services_card.py"
@@ -426,6 +427,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     include_insights = is_enabled(AnswerKeys.INSIGHTS)
     include_payment = is_enabled(AnswerKeys.PAYMENT)
     include_blog = is_enabled(AnswerKeys.BLOG)
+    include_finance = is_enabled(AnswerKeys.FINANCE)
     ai_backend = context.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
     ai_needs_migrations = include_ai and ai_backend != StorageBackends.MEMORY
     scheduler_backend = context.get(
@@ -441,6 +443,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         or include_insights
         or include_payment
         or include_blog
+        or include_finance
         or scheduler_needs_migrations
     )
 

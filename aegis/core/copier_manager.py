@@ -186,6 +186,7 @@ def generate_with_copier(
         AnswerKeys.PAYMENT_PROVIDER: template_context.get(
             AnswerKeys.PAYMENT_PROVIDER, PaymentProviders.DEFAULT
         ),
+        AnswerKeys.FINANCE: template_context.get(AnswerKeys.FINANCE, "no") == "yes",
     }
 
     # Detect dev vs production mode for template sourcing
@@ -340,6 +341,8 @@ def generate_with_copier(
     is_sqlite = database_engine == StorageBackends.SQLITE
     is_payment_included: bool = copier_data.get(AnswerKeys.PAYMENT, False) is True
     needs_migration_files = needs_migration_files or is_payment_included
+    is_finance_included: bool = copier_data.get(AnswerKeys.FINANCE, False) is True
+    needs_migration_files = needs_migration_files or is_finance_included
     # Scheduler component: job_execution history table. Postgres only — the
     # table lives in a ``scheduler`` schema (CREATE SCHEMA), which SQLite
     # can't run; SQLite scheduler stacks get the table via create_all.
@@ -374,8 +377,12 @@ def generate_with_copier(
             is True,
             AnswerKeys.BLOG: is_blog_included,
             AnswerKeys.PAYMENT: is_payment_included,
+            AnswerKeys.FINANCE: is_finance_included,
             AnswerKeys.SCHEDULER: is_scheduler_included,
             AnswerKeys.SCHEDULER_BACKEND: scheduler_backend_str,
+            # Finance tables live in a dedicated Postgres ``finance`` schema
+            # (dropped on SQLite); the migration variant is engine-resolved.
+            AnswerKeys.DATABASE_ENGINE: database_engine,
         }
         services = get_services_needing_migrations(context)
         if services:
