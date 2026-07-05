@@ -1,6 +1,6 @@
 [project]
 name = "aegis-stack"
-version = "0.9.1rc1"
+version = "0.9.0rc2"
 description = "A production-ready FastAPI platform with modular components and a built-in control plane. Try: uvx aegis-stack init my-project"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
@@ -46,8 +46,10 @@ dependencies = [
     "typer==0.26.8",
     # 9.15.x relocates .copier-answers.yml out of the generated project dir
     # (with _subdirectory + {{ project_slug }} wrapper), which breaks
-    # `aegis update`. Pin below it until the placement is handled.
-    "copier>=9.11.2,<9.17",
+    # `aegis update`. The ceiling MUST stay below 9.15 — `<9.16`/`<9.17`
+    # still resolve 9.15.x/9.16.0 and reintroduce the relocation. Do not let
+    # dependabot widen this until the placement is handled upstream.
+    "copier>=9.11.2,<9.15",
     "rich>=13.0.0",
     "pillow>=12.2.0",
     "packaging>=24.0",
