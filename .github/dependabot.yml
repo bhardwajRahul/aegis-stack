@@ -10,6 +10,14 @@ updates:
     commit-message:
       prefix: "deps"
       include: "scope"
+    # copier 9.15+ relocates .copier-answers.yml out of the generated project
+    # dir (with _subdirectory + {{ project_slug }} wrapper), which breaks
+    # `aegis update`. Dependabot has reverted the pyproject ceiling past 9.15
+    # twice (c671254, 5253e37). Keep it below 9.15 until the placement is
+    # handled upstream — do not remove this ignore.
+    ignore:
+      - dependency-name: "copier"
+        versions: [">=9.15"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
