@@ -12,6 +12,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import yaml
+
 from ..constants import AnswerKeys
 from .verbosity import verbose_print
 
@@ -77,6 +79,72 @@ class SyncResult:
 
     conflicts: list[str] = field(default_factory=list)
     """Files with merge conflict markers that need manual resolution."""
+
+    answers_backfilled: list[str] = field(default_factory=list)
+    """Answer keys added to .copier-answers.yml because the target template
+    version introduced them (e.g. ``postgres_provider`` in 0.9.0)."""
+
+
+def _reconcile_new_answer_keys(project_path: Path, new_rendered_dir: Path) -> list[str]:
+    """Backfill answer keys the target template records but the project lacks.
+
+    aegis preserves the project's existing ``.copier-answers.yml`` across an
+    update — copier's own answer write-back is unreliable for
+    ``{{ project_slug }}``-wrapped projects, so we sync files ourselves. A
+    consequence is that a question ADDED in the target version (e.g.
+    ``postgres_provider`` in 0.9.0) never lands in the project's answers file,
+    even though copier rendered it with its default. The freshly rendered
+    template (``new_rendered_dir``, produced from the real template source at
+    the target ref — GitHub in production) carries the authoritative value, so
+    copy any non-private key that's absent from the project's answers. Without
+    this, downstream steps (``_advance_copier_tracking``, the next
+    ``aegis update``, ``aegis add``) silently re-default the missing question
+    and never gate on the user's real configuration.
+
+    Private (``_``-prefixed) keys are owned by copier tracking and skipped.
+    Backfilling is best-effort: on a read/parse/write failure or a
+    non-mapping answers file (both files are normally copier-rendered
+    mappings, but one may be hand-edited or corrupt), warn and return ``[]``
+    rather than aborting the update.
+    """
+    project_answers_file = project_path / AnswerKeys.ANSWERS_FILENAME
+    new_answers_file = new_rendered_dir / AnswerKeys.ANSWERS_FILENAME
+    if not project_answers_file.exists() or not new_answers_file.exists():
+        return []
+
+    try:
+        project_answers = yaml.safe_load(project_answers_file.read_text())
+        new_answers = yaml.safe_load(new_answers_file.read_text())
+    except (OSError, yaml.YAMLError, ValueError) as e:
+        # ValueError covers UnicodeDecodeError from a non-UTF-8 file.
+        verbose_print(f"   Warning: Could not read answers for backfill: {e}")
+        return []
+
+    # An empty file parses to None; a list/scalar to a non-dict. Either way
+    # there's nothing to reconcile against — don't crash on ``.items()``.
+    project_answers = project_answers or {}
+    if not isinstance(project_answers, dict) or not isinstance(new_answers, dict):
+        return []
+
+    added: list[str] = []
+    for key, value in new_answers.items():
+        if key.startswith("_"):
+            continue
+        if key not in project_answers:
+            project_answers[key] = value
+            added.append(key)
+
+    if added:
+        try:
+            project_answers_file.write_text(
+                yaml.safe_dump(
+                    project_answers, default_flow_style=False, sort_keys=False
+                )
+            )
+        except OSError as e:
+            verbose_print(f"   Warning: Could not write backfilled answers: {e}")
+            return []
+    return added
 
 
 def cleanup_nested_project_directory(
@@ -320,6 +388,15 @@ def sync_template_changes(
 
             except OSError as e:
                 verbose_print(f"   Warning: Could not sync {relative}: {e}")
+
+        # Backfill answer keys the target version added (the answers file
+        # itself is skipped by the content sync above). Must run inside the
+        # temp-dir block while the rendered answers file still exists.
+        result.answers_backfilled = _reconcile_new_answer_keys(
+            project_path, new_rendered_dir
+        )
+        for key in result.answers_backfilled:
+            verbose_print(f"   Backfilled new answer: {key}")
 
     return result
 

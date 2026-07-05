@@ -9,13 +9,14 @@ source = { editable = "tests/fixtures/aegis_plugin_test" }
 
 [[package]]
 name = "aegis-stack"
-version = "0.9.0rc2"
+version = "0.9.0rc3"
 source = { editable = "." }
 dependencies = [
     { name = "copier" },
     { name = "filelock" },
     { name = "packaging" },
     { name = "pillow" },
+    { name = "pyyaml" },
     { name = "rich" },
     { name = "typer" },
     { name = "urllib3" },
@@ -68,6 +69,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.5.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "sqlalchemy", marker = "extra == 'dev'", specifier = ">=2.0.0" },

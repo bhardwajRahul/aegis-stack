@@ -9,11 +9,102 @@ from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
+import yaml
+
 from aegis.core.template_cleanup import (
+    _reconcile_new_answer_keys,
     _should_skip_sync,
     cleanup_nested_project_directory,
     sync_template_changes,
 )
+
+
+class TestReconcileNewAnswerKeys:
+    """Test _reconcile_new_answer_keys — backfilling questions added in the
+    target template version into a project's preserved answers file."""
+
+    def _write(self, path: Path, data: dict) -> None:
+        path.mkdir(parents=True, exist_ok=True)
+        (path / ".copier-answers.yml").write_text(yaml.safe_dump(data))
+
+    def test_backfills_key_added_in_new_version(self, tmp_path: Path) -> None:
+        """A question the new template records but the project lacks (e.g.
+        ``postgres_provider`` added in 0.9.0) is copied in with its value."""
+        project = tmp_path / "proj"
+        new_render = tmp_path / "new"
+        self._write(project, {"database_engine": "postgres", "project_slug": "x"})
+        self._write(
+            new_render,
+            {
+                "database_engine": "postgres",
+                "project_slug": "x",
+                "postgres_provider": "container",
+            },
+        )
+
+        added = _reconcile_new_answer_keys(project, new_render)
+
+        assert added == ["postgres_provider"]
+        result = yaml.safe_load((project / ".copier-answers.yml").read_text())
+        assert result["postgres_provider"] == "container"
+
+    def test_does_not_overwrite_existing_answer(self, tmp_path: Path) -> None:
+        """An answer the user already has is never clobbered by the new render."""
+        project = tmp_path / "proj"
+        new_render = tmp_path / "new"
+        self._write(project, {"postgres_provider": "neon", "project_slug": "x"})
+        self._write(new_render, {"postgres_provider": "container", "project_slug": "x"})
+
+        added = _reconcile_new_answer_keys(project, new_render)
+
+        assert added == []
+        result = yaml.safe_load((project / ".copier-answers.yml").read_text())
+        assert result["postgres_provider"] == "neon"
+
+    def test_skips_private_copier_keys(self, tmp_path: Path) -> None:
+        """Private keys (``_commit``/``_src_path``) are owned by copier tracking
+        and must not be backfilled from the throwaway new render."""
+        project = tmp_path / "proj"
+        new_render = tmp_path / "new"
+        self._write(project, {"project_slug": "x"})
+        self._write(
+            new_render,
+            {"project_slug": "x", "_commit": "deadbeef", "_src_path": "gh:tmp"},
+        )
+
+        added = _reconcile_new_answer_keys(project, new_render)
+
+        assert added == []
+        result = yaml.safe_load((project / ".copier-answers.yml").read_text())
+        assert "_commit" not in result
+
+    def test_no_files_is_safe_noop(self, tmp_path: Path) -> None:
+        """Missing answers files on either side return [] without error."""
+        assert _reconcile_new_answer_keys(tmp_path / "a", tmp_path / "b") == []
+
+    def test_non_dict_answers_file_is_safe_noop(self, tmp_path: Path) -> None:
+        """A hand-edited/corrupt answers file that parses to a non-mapping
+        (list/scalar) returns [] instead of crashing on .items()."""
+        project = tmp_path / "proj"
+        new_render = tmp_path / "new"
+        project.mkdir()
+        new_render.mkdir()
+        # Project file parses to a YAML list; new render is a valid mapping.
+        (project / ".copier-answers.yml").write_text("- not\n- a\n- mapping\n")
+        self._write(new_render, {"postgres_provider": "container"})
+
+        assert _reconcile_new_answer_keys(project, new_render) == []
+
+    def test_malformed_yaml_is_safe_noop(self, tmp_path: Path) -> None:
+        """Unparseable YAML returns [] rather than aborting the update."""
+        project = tmp_path / "proj"
+        new_render = tmp_path / "new"
+        project.mkdir()
+        new_render.mkdir()
+        (project / ".copier-answers.yml").write_text("key: : : broken\n  - [\n")
+        self._write(new_render, {"postgres_provider": "container"})
+
+        assert _reconcile_new_answer_keys(project, new_render) == []
 
 
 class TestCleanupNestedProjectDirectory:
