@@ -1,6 +1,6 @@
 [project]
 name = "aegis-stack"
-version = "0.9.0rc2"
+version = "0.9.0rc3"
 description = "A production-ready FastAPI platform with modular components and a built-in control plane. Try: uvx aegis-stack init my-project"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
@@ -53,6 +53,10 @@ dependencies = [
     "rich>=13.0.0",
     "pillow>=12.2.0",
     "packaging>=24.0",
+    # Imported directly across the CLI (copier_manager, update, template_cleanup,
+    # …). Guaranteed transitively via copier, but declared explicitly since we
+    # ``import yaml`` in ~9 runtime modules.
+    "pyyaml>=6.0",
     "filelock>=3.20.1",
     "urllib3>=2.7.0",
 ]
