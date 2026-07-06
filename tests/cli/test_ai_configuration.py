@@ -56,6 +56,7 @@ class TestAIProviderSelection:
             False,  # comms
             False,  # insights
             False,  # blog service
+            False,  # finance service
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -97,6 +98,7 @@ class TestAIProviderSelection:
             False,  # comms
             False,  # insights
             False,  # blog service
+            False,  # finance service
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -139,6 +141,7 @@ class TestAIProviderSelection:
             False,  # comms
             False,  # insights
             False,  # blog service
+            False,  # finance service
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -169,6 +172,7 @@ class TestAIProviderSelection:
             False,  # comms
             False,  # insights
             False,  # blog service
+            False,  # finance service
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -227,6 +231,7 @@ class TestAIBackendSelection:
                 False,  # comms
                 False,  # insights
                 False,  # blog service
+                False,  # finance service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -283,6 +288,7 @@ class TestAIBackendSelection:
                 False,  # comms
                 False,  # insights
                 False,  # blog service
+                False,  # finance service
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -329,6 +335,7 @@ class TestAIBackendSelection:
             False,  # comms
             False,  # insights
             False,  # blog service
+            False,  # finance service
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -494,6 +501,7 @@ class TestAIConfigurationEndToEnd:
             False,  # comms
             False,  # insights
             False,  # blog service
+            False,  # finance service
         ]
 
         # Run interactive selection
@@ -599,6 +607,7 @@ class TestOllamaModeSelection:
             False,  # comms
             False,  # insights
             False,  # blog service
+            False,  # finance service
         ]
 
         interactive_project_selection()

@@ -16,7 +16,7 @@ Usage:
         generate_migration(project_path, "ai")
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -76,6 +76,11 @@ class ForeignKeySpec:
     # (e.g. payment.payment_customer -> auth.user). When None, the
     # referenced table is assumed to live in the owning spec's schema.
     ref_schema: str | None = None
+    # Explicit constraint name for alter_tables FKs. Auto-derived as
+    # ``fk_<table>_<col>_<ref_table>`` when None, but that can exceed
+    # Postgres' 63-char identifier limit for long table/column names, so
+    # long FKs pass a short explicit name here.
+    name: str | None = None
 
 
 @dataclass
@@ -1173,6 +1178,2220 @@ PAYMENT_AUTH_LINK_MIGRATION = ServiceMigrationSpec(
 )
 
 
+# Finance service tables. Built up incrementally across the finance schema
+# tickets; all live in the default (public) schema so SQLite stacks get the
+# migration too (a Postgres-only ``schema=`` would forfeit that). Money and
+# scaled-integer columns use BigInteger — net worth / brokerage balances and
+# ``*_e8`` quantities/rates overflow int32.
+FINANCE_MIGRATION = ServiceMigrationSpec(
+    service_name="finance",
+    description="Finance service tables (currencies, fx rates)",
+    tables=[
+        # ----- Group F: reference data -------------------------------------
+        TableSpec(
+            name="finance_currency",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                # ISO-4217 or crypto ticker, lowercase (usd, eur, btc, usdc).
+                ColumnSpec("code", "sa.String(16)", nullable=False),
+                ColumnSpec("name", "sa.String(64)", nullable=False),
+                ColumnSpec("symbol", "sa.String(8)", nullable=True),
+                # Minor-unit exponent: usd=2, jpy=0, btc=8.
+                ColumnSpec("decimals", "sa.Integer()", nullable=False, default="2"),
+                ColumnSpec("kind", "sa.String(8)", nullable=False, default="'fiat'"),
+                ColumnSpec("is_active", "sa.Boolean()", nullable=False, default="True"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_currency_code", ["code"], unique=True),
+                IndexSpec("ix_finance_currency_kind", ["kind"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_currency_kind", "kind IN ('fiat', 'crypto')"
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_currency_decimals", "decimals BETWEEN 0 AND 18"
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_fx_rate",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("base_currency", "sa.String(16)", nullable=False),
+                ColumnSpec("quote_currency", "sa.String(16)", nullable=False),
+                ColumnSpec("rate_date", "sa.Date()", nullable=False),
+                # 1 base = rate_e8 / 1e8 quote. BigInteger: crypto rates × 1e8
+                # overflow int32.
+                ColumnSpec("rate_e8", "sa.BigInteger()", nullable=False),
+                ColumnSpec(
+                    "source", "sa.String(16)", nullable=False, default="'manual'"
+                ),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec(
+                    "ix_finance_fxrate_pair_date",
+                    ["base_currency", "quote_currency", "rate_date"],
+                ),
+                IndexSpec(
+                    "uq_finance_fxrate",
+                    ["base_currency", "quote_currency", "rate_date", "source"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                # RESTRICT (default): currencies are reference data, never
+                # deleted out from under a rate.
+                ForeignKeySpec(["base_currency"], "finance_currency", ["code"]),
+                ForeignKeySpec(["quote_currency"], "finance_currency", ["code"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_fxrate_source",
+                    "source IN ('manual', 'ecb', 'exchange_api', 'coingecko', "
+                    "'provider', 'derived')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_fxrate_distinct", "base_currency <> quote_currency"
+                ),
+            ],
+        ),
+        # ----- Group A: connections & sync ---------------------------------
+        TableSpec(
+            name="finance_institution",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("provider", "sa.String(16)", nullable=False),
+                # Plaid ins_xxx / SnapTrade brokerage id. Growing -> TEXT.
+                ColumnSpec("provider_institution_id", "sa.Text()", nullable=True),
+                ColumnSpec("name", "sa.String(128)", nullable=False),
+                ColumnSpec("domain", "sa.String(255)", nullable=True),
+                ColumnSpec("logo_url", "sa.Text()", nullable=True),
+                ColumnSpec("primary_color", "sa.String(16)", nullable=True),
+                ColumnSpec("url", "sa.Text()", nullable=True),
+                ColumnSpec("country", "sa.String(2)", nullable=True),
+                ColumnSpec(
+                    "oauth_required", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec(
+                    "uses_tokenized_account_numbers",
+                    "sa.Boolean()",
+                    nullable=False,
+                    default="False",
+                ),
+                ColumnSpec(
+                    "uses_app_to_app", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec(
+                    "supported_products", "sa.JSON()", nullable=False, default="[]"
+                ),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_institution_provider", ["provider"]),
+                IndexSpec("ix_finance_institution_name", ["name"]),
+                IndexSpec(
+                    "uq_finance_institution_provider_extid",
+                    ["provider", "provider_institution_id"],
+                    unique=True,
+                    where="provider_institution_id IS NOT NULL",
+                ),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_institution_provider",
+                    "provider IN ('plaid', 'snaptrade', 'coinbase', "
+                    "'exchange_key', 'onchain', 'manual')",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_connection",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                # owner_user_id is nullable: finance runs standalone (single
+                # user) without auth. The FK to user.id is added by
+                # finance_auth_link when the auth service is also included.
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                # organization_id is a reserved column (org tenancy not active
+                # yet); no FK until orgs go live.
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("institution_id", "sa.Integer()", nullable=True),
+                ColumnSpec("provider", "sa.String(16)", nullable=False),
+                ColumnSpec("connection_type", "sa.String(20)", nullable=False),
+                ColumnSpec("provider_item_id", "sa.Text()", nullable=True),
+                ColumnSpec("label", "sa.String(255)", nullable=True),
+                ColumnSpec(
+                    "environment",
+                    "sa.String(16)",
+                    nullable=False,
+                    default="'sandbox'",
+                ),
+                # AES-GCM ciphertext, encrypted/decrypted in the service layer.
+                ColumnSpec("access_token_encrypted", "sa.Text()", nullable=True),
+                ColumnSpec("api_key_encrypted", "sa.Text()", nullable=True),
+                ColumnSpec("api_secret_encrypted", "sa.Text()", nullable=True),
+                ColumnSpec("api_passphrase_encrypted", "sa.Text()", nullable=True),
+                ColumnSpec("refresh_token_encrypted", "sa.Text()", nullable=True),
+                # Public on-chain address is not a secret.
+                ColumnSpec("wallet_address", "sa.Text()", nullable=True),
+                ColumnSpec("wallet_chain", "sa.Text()", nullable=True),
+                ColumnSpec("capabilities", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec(
+                    "status", "sa.String(24)", nullable=False, default="'healthy'"
+                ),
+                ColumnSpec("status_detail", "sa.Text()", nullable=True),
+                ColumnSpec("last_error_code", "sa.Text()", nullable=True),
+                ColumnSpec(
+                    "needs_user_action",
+                    "sa.Boolean()",
+                    nullable=False,
+                    default="False",
+                ),
+                ColumnSpec("sync_cursor", "sa.Text()", nullable=True),
+                ColumnSpec("days_requested", "sa.Integer()", nullable=True),
+                ColumnSpec("consent_expiration_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("last_successful_sync_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("last_sync_attempt_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("removed_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_connection_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_connection_org", ["organization_id"]),
+                IndexSpec("ix_finance_connection_institution", ["institution_id"]),
+                IndexSpec("ix_finance_connection_needs_action", ["needs_user_action"]),
+                IndexSpec("ix_finance_connection_deleted", ["deleted_at"]),
+                IndexSpec(
+                    "ix_finance_connection_owner_status",
+                    ["owner_user_id", "status"],
+                ),
+                IndexSpec(
+                    "uq_finance_connection_provider_item",
+                    ["provider", "provider_item_id"],
+                    unique=True,
+                    where="provider_item_id IS NOT NULL AND deleted_at IS NULL",
+                ),
+                IndexSpec(
+                    "uq_finance_connection_wallet",
+                    ["owner_user_id", "provider", "wallet_address"],
+                    unique=True,
+                    where="wallet_address IS NOT NULL",
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["institution_id"],
+                    "finance_institution",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_connection_provider",
+                    "provider IN ('plaid', 'snaptrade', 'coinbase', "
+                    "'exchange_key', 'onchain', 'manual')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_connection_type",
+                    "connection_type IN ('oauth_access_token', 'api_key_secret', "
+                    "'onchain_address', 'aggregator_token', 'manual')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_connection_environment",
+                    "environment IN ('sandbox', 'production')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_connection_status",
+                    "status IN ('healthy', 'login_required', 'pending_expiration', "
+                    "'pending_disconnect', 'consent_expired', 'revoked', 'error', "
+                    "'loading', 'manual')",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_webhook_event",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("connection_id", "sa.Integer()", nullable=True),
+                ColumnSpec("provider", "sa.String(16)", nullable=False),
+                ColumnSpec("provider_item_id", "sa.Text()", nullable=True),
+                ColumnSpec("webhook_type", "sa.Text()", nullable=True),
+                ColumnSpec("webhook_code", "sa.Text()", nullable=True),
+                ColumnSpec("provider_event_id", "sa.Text()", nullable=True),
+                ColumnSpec("payload", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec(
+                    "status", "sa.String(16)", nullable=False, default="'received'"
+                ),
+                ColumnSpec("error", "sa.Text()", nullable=True),
+                ColumnSpec("received_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("processed_at", "sa.DateTime()", nullable=True),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_webhook_connection", ["connection_id"]),
+                IndexSpec("ix_finance_webhook_item", ["provider_item_id"]),
+                IndexSpec(
+                    "ix_finance_webhook_status_received", ["status", "received_at"]
+                ),
+                IndexSpec(
+                    "uq_finance_webhook_event",
+                    ["provider", "provider_event_id"],
+                    unique=True,
+                    where="provider_event_id IS NOT NULL",
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["connection_id"],
+                    "finance_connection",
+                    ["id"],
+                    ondelete="CASCADE",
+                ),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_webhook_provider",
+                    "provider IN ('plaid', 'snaptrade', 'coinbase')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_webhook_status",
+                    "status IN ('received', 'processed', 'ignored', 'error')",
+                ),
+            ],
+        ),
+        # ----- Group B: accounts & balances --------------------------------
+        TableSpec(
+            name="finance_account",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                # NULL connection => a manual asset (real estate, vehicle, etc.).
+                ColumnSpec("connection_id", "sa.Integer()", nullable=True),
+                ColumnSpec("institution_id", "sa.Integer()", nullable=True),
+                ColumnSpec("provider", "sa.String(16)", nullable=False),
+                ColumnSpec("provider_account_id", "sa.Text()", nullable=True),
+                # Stable across relinks (a new Item mints a new provider id).
+                ColumnSpec("persistent_account_id", "sa.Text()", nullable=True),
+                ColumnSpec("name", "sa.String(255)", nullable=False),
+                ColumnSpec("official_name", "sa.String(255)", nullable=True),
+                ColumnSpec("mask", "sa.String(8)", nullable=True),
+                # Plaid top-level type / subtype — growing taxonomy, TEXT.
+                ColumnSpec("type", "sa.Text()", nullable=True),
+                ColumnSpec("subtype", "sa.Text()", nullable=True),
+                # Normalized internal type + classification, STORED for signing.
+                ColumnSpec("account_type", "sa.String(24)", nullable=False),
+                ColumnSpec("classification", "sa.String(12)", nullable=False),
+                ColumnSpec(
+                    "currency", "sa.String(16)", nullable=False, default="'usd'"
+                ),
+                ColumnSpec("current_balance", "sa.BigInteger()", nullable=True),
+                ColumnSpec("available_balance", "sa.BigInteger()", nullable=True),
+                ColumnSpec("credit_limit", "sa.BigInteger()", nullable=True),
+                ColumnSpec("balance_as_of", "sa.DateTime()", nullable=True),
+                ColumnSpec(
+                    "is_manual", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec(
+                    "is_hidden", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec(
+                    "is_closed", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec(
+                    "is_on_budget", "sa.Boolean()", nullable=False, default="True"
+                ),
+                ColumnSpec("linked_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("last_synced_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_account_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_account_org", ["organization_id"]),
+                IndexSpec("ix_finance_account_connection", ["connection_id"]),
+                IndexSpec("ix_finance_account_institution", ["institution_id"]),
+                IndexSpec("ix_finance_account_persistent", ["persistent_account_id"]),
+                IndexSpec("ix_finance_account_deleted", ["deleted_at"]),
+                IndexSpec(
+                    "ix_finance_account_owner_type", ["owner_user_id", "account_type"]
+                ),
+                IndexSpec(
+                    "ix_finance_account_owner_classification",
+                    ["owner_user_id", "classification"],
+                ),
+                IndexSpec(
+                    "uq_finance_account_provider",
+                    ["connection_id", "provider_account_id"],
+                    unique=True,
+                    where="provider_account_id IS NOT NULL AND deleted_at IS NULL",
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["connection_id"],
+                    "finance_connection",
+                    ["id"],
+                    ondelete="CASCADE",
+                ),
+                ForeignKeySpec(
+                    ["institution_id"],
+                    "finance_institution",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_account_type",
+                    "account_type IN ('checking', 'savings', 'credit_card', 'loan', "
+                    "'investment', 'brokerage', 'crypto', 'property', 'vehicle', "
+                    "'cash', 'other_asset', 'other_liability')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_account_classification",
+                    "classification IN ('asset', 'liability')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_account_provider",
+                    "provider IN ('plaid', 'snaptrade', 'coinbase', 'exchange_key', "
+                    "'onchain', 'manual')",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_liability_detail",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("account_id", "sa.Integer()", nullable=False),
+                ColumnSpec("liability_type", "sa.Text()", nullable=True),
+                ColumnSpec("last_statement_balance", "sa.BigInteger()", nullable=True),
+                ColumnSpec("last_statement_issue_date", "sa.Date()", nullable=True),
+                ColumnSpec("last_payment_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec("last_payment_date", "sa.Date()", nullable=True),
+                ColumnSpec("minimum_payment_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec("next_payment_due_date", "sa.Date()", nullable=True),
+                ColumnSpec("origination_date", "sa.Date()", nullable=True),
+                ColumnSpec("origination_principal", "sa.BigInteger()", nullable=True),
+                ColumnSpec("outstanding_balance", "sa.BigInteger()", nullable=True),
+                # basis points (avoids Decimal): 19.99% APR = 1999.
+                ColumnSpec("interest_rate_bps", "sa.Integer()", nullable=True),
+                ColumnSpec("ytd_interest_paid", "sa.BigInteger()", nullable=True),
+                ColumnSpec("ytd_principal_paid", "sa.BigInteger()", nullable=True),
+                ColumnSpec("loan_term_months", "sa.Integer()", nullable=True),
+                ColumnSpec("is_overdue", "sa.Boolean()", nullable=True),
+                ColumnSpec("aprs", "sa.JSON()", nullable=False, default="[]"),
+                ColumnSpec(
+                    "currency", "sa.String(16)", nullable=False, default="'usd'"
+                ),
+                ColumnSpec("raw", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_liability_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_liability_account", ["account_id"]),
+                IndexSpec("uq_finance_liability_account", ["account_id"], unique=True),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["account_id"], "finance_account", ["id"], ondelete="CASCADE"
+                ),
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+        ),
+        TableSpec(
+            name="finance_balance_snapshot",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("account_id", "sa.Integer()", nullable=False),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("balance_date", "sa.Date()", nullable=False),
+                ColumnSpec("balance", "sa.BigInteger()", nullable=False, default="0"),
+                ColumnSpec("available_balance", "sa.BigInteger()", nullable=True),
+                ColumnSpec("cash_balance", "sa.BigInteger()", nullable=True),
+                ColumnSpec("holdings_value", "sa.BigInteger()", nullable=True),
+                ColumnSpec(
+                    "currency", "sa.String(16)", nullable=False, default="'usd'"
+                ),
+                ColumnSpec("base_currency_value", "sa.BigInteger()", nullable=True),
+                ColumnSpec("source", "sa.String(16)", nullable=False, default="'sync'"),
+                ColumnSpec(
+                    "is_estimated", "sa.Boolean()", nullable=False, default="False"
+                ),
+            ],
+            indexes=[
+                IndexSpec(
+                    "ix_finance_balsnap_account_date", ["account_id", "balance_date"]
+                ),
+                IndexSpec(
+                    "ix_finance_balsnap_owner_date", ["owner_user_id", "balance_date"]
+                ),
+                IndexSpec(
+                    "uq_finance_balsnap",
+                    ["account_id", "balance_date"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["account_id"], "finance_account", ["id"], ondelete="CASCADE"
+                ),
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_balsnap_source",
+                    "source IN ('sync', 'provider', 'computed', 'carried_forward', "
+                    "'manual')",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_net_worth_snapshot",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("as_of_date", "sa.Date()", nullable=False),
+                ColumnSpec(
+                    "total_assets_amount",
+                    "sa.BigInteger()",
+                    nullable=False,
+                    default="0",
+                ),
+                ColumnSpec(
+                    "total_liabilities_amount",
+                    "sa.BigInteger()",
+                    nullable=False,
+                    default="0",
+                ),
+                ColumnSpec(
+                    "net_worth_amount", "sa.BigInteger()", nullable=False, default="0"
+                ),
+                ColumnSpec("cash_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec("investments_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec("other_assets_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec(
+                    "currency", "sa.String(16)", nullable=False, default="'usd'"
+                ),
+                ColumnSpec("breakdown", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec(
+                    "is_estimated", "sa.Boolean()", nullable=False, default="False"
+                ),
+            ],
+            indexes=[
+                IndexSpec(
+                    "ix_finance_networth_owner_date", ["owner_user_id", "as_of_date"]
+                ),
+                IndexSpec(
+                    "ix_finance_networth_org_date", ["organization_id", "as_of_date"]
+                ),
+                IndexSpec(
+                    "uq_finance_networth",
+                    ["owner_user_id", "as_of_date", "currency"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+        ),
+        TableSpec(
+            name="finance_valuation",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("account_id", "sa.Integer()", nullable=False),
+                ColumnSpec("as_of_date", "sa.Date()", nullable=False),
+                ColumnSpec("value", "sa.BigInteger()", nullable=False, default="0"),
+                ColumnSpec(
+                    "currency", "sa.String(16)", nullable=False, default="'usd'"
+                ),
+                ColumnSpec(
+                    "source", "sa.String(16)", nullable=False, default="'manual'"
+                ),
+                ColumnSpec("source_ref", "sa.Text()", nullable=True),
+                ColumnSpec(
+                    "is_estimate", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec("fetched_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("is_stale", "sa.Boolean()", nullable=False, default="False"),
+                ColumnSpec("stale_after_days", "sa.Integer()", nullable=True),
+                ColumnSpec("note", "sa.Text()", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec(
+                    "ix_finance_valuation_owner_date", ["owner_user_id", "as_of_date"]
+                ),
+                IndexSpec(
+                    "ix_finance_valuation_account_date", ["account_id", "as_of_date"]
+                ),
+                IndexSpec("ix_finance_valuation_source", ["source"]),
+                IndexSpec(
+                    "uq_finance_valuation",
+                    ["account_id", "as_of_date", "source"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["account_id"], "finance_account", ["id"], ondelete="CASCADE"
+                ),
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_valuation_source",
+                    "source IN ('manual', 'zillow', 'kbb', 'exchange_api', 'onchain', "
+                    "'plaid', 'snaptrade', 'coingecko', 'reconciliation')",
+                ),
+            ],
+        ),
+        # ----- Group C (core): transactions, splits, transfers -------------
+        # forward/circular FK columns (transfer_group_id, category_id,
+        # merchant_id, recurring_stream_id, import_batch_id) are created here
+        # WITHOUT their FK; the constraints are added in FINANCE_MIGRATION's
+        # alter_tables (transfer_group, this ticket) or later tickets'
+        # alter_tables (category/merchant/recurring/import) once the target
+        # tables exist — all in the same generated migration file, so the FKs
+        # apply after every table is created.
+        TableSpec(
+            name="finance_transaction",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("account_id", "sa.Integer()", nullable=False),
+                ColumnSpec("connection_id", "sa.Integer()", nullable=True),
+                ColumnSpec("import_batch_id", "sa.Integer()", nullable=True),
+                # Dedup: LANE 1 = (account_id, source, external_id);
+                # LANE 2 = (account_id, import_hash). ck_dedup_lane forbids both.
+                ColumnSpec("source", "sa.String(16)", nullable=False),
+                ColumnSpec("external_id", "sa.Text()", nullable=True),
+                ColumnSpec("external_id_source", "sa.Text()", nullable=True),
+                ColumnSpec("import_hash", "sa.String(64)", nullable=True),
+                ColumnSpec(
+                    "within_day_ordinal", "sa.Integer()", nullable=False, default="0"
+                ),
+                ColumnSpec(
+                    "dedup_status", "sa.String(16)", nullable=False, default="'unique'"
+                ),
+                ColumnSpec("canonical_transaction_id", "sa.Integer()", nullable=True),
+                ColumnSpec(
+                    "source_precedence", "sa.Integer()", nullable=False, default="0"
+                ),
+                # Sign-normalized (negative = outflow); raw_amount as delivered.
+                ColumnSpec("amount", "sa.BigInteger()", nullable=False, default="0"),
+                ColumnSpec("raw_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec("raw_sign_convention", "sa.Text()", nullable=True),
+                ColumnSpec(
+                    "currency", "sa.String(16)", nullable=False, default="'usd'"
+                ),
+                ColumnSpec("unofficial_currency_code", "sa.Text()", nullable=True),
+                ColumnSpec("date", "sa.Date()", nullable=False),
+                ColumnSpec("authorized_date", "sa.Date()", nullable=True),
+                ColumnSpec("datetime", "sa.DateTime()", nullable=True),
+                ColumnSpec("name", "sa.Text()", nullable=True),
+                ColumnSpec("original_description", "sa.Text()", nullable=True),
+                ColumnSpec("merchant_id", "sa.Integer()", nullable=True),
+                ColumnSpec("merchant_name", "sa.Text()", nullable=True),
+                ColumnSpec("merchant_entity_id", "sa.Text()", nullable=True),
+                ColumnSpec("memo", "sa.Text()", nullable=True),
+                ColumnSpec("check_number", "sa.String(32)", nullable=True),
+                ColumnSpec("payment_channel", "sa.Text()", nullable=True),
+                ColumnSpec("pfc_primary", "sa.Text()", nullable=True),
+                ColumnSpec("pfc_detailed", "sa.Text()", nullable=True),
+                ColumnSpec("pfc_confidence_level", "sa.Text()", nullable=True),
+                ColumnSpec("category_id", "sa.Integer()", nullable=True),
+                ColumnSpec(
+                    "category_source",
+                    "sa.String(12)",
+                    nullable=False,
+                    default="'unset'",
+                ),
+                ColumnSpec(
+                    "is_user_categorized",
+                    "sa.Boolean()",
+                    nullable=False,
+                    default="False",
+                ),
+                ColumnSpec(
+                    "is_reviewed", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec("pending", "sa.Boolean()", nullable=False, default="False"),
+                ColumnSpec("pending_provider_id", "sa.Text()", nullable=True),
+                ColumnSpec("pending_transaction_id", "sa.Integer()", nullable=True),
+                ColumnSpec(
+                    "status", "sa.String(12)", nullable=False, default="'posted'"
+                ),
+                ColumnSpec(
+                    "is_transfer", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec("transfer_group_id", "sa.Integer()", nullable=True),
+                ColumnSpec(
+                    "transfer_pair_transaction_id", "sa.Integer()", nullable=True
+                ),
+                ColumnSpec("is_split", "sa.Boolean()", nullable=False, default="False"),
+                ColumnSpec(
+                    "excluded_from_reports",
+                    "sa.Boolean()",
+                    nullable=False,
+                    default="False",
+                ),
+                ColumnSpec(
+                    "is_reversal", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec("reverses_transaction_id", "sa.Integer()", nullable=True),
+                ColumnSpec("recurring_stream_id", "sa.Integer()", nullable=True),
+                ColumnSpec(
+                    "reconciled_status",
+                    "sa.String(12)",
+                    nullable=False,
+                    default="'uncleared'",
+                ),
+                ColumnSpec("location", "sa.JSON()", nullable=True),
+                ColumnSpec("counterparties", "sa.JSON()", nullable=True),
+                ColumnSpec("raw_payload", "sa.JSON()", nullable=True),
+                ColumnSpec(
+                    "is_removed", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec("removed_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_txn_owner_date", ["owner_user_id", "date"]),
+                IndexSpec("ix_finance_txn_account_date", ["account_id", "date"]),
+                IndexSpec(
+                    "ix_finance_txn_owner_cat_date",
+                    ["owner_user_id", "category_id", "date"],
+                ),
+                IndexSpec("ix_finance_txn_merchant", ["merchant_id"]),
+                IndexSpec("ix_finance_txn_merchant_entity", ["merchant_entity_id"]),
+                IndexSpec("ix_finance_txn_category", ["category_id"]),
+                IndexSpec("ix_finance_txn_connection", ["connection_id"]),
+                IndexSpec("ix_finance_txn_batch", ["import_batch_id"]),
+                IndexSpec("ix_finance_txn_recurring", ["recurring_stream_id"]),
+                IndexSpec("ix_finance_txn_transfer_group", ["transfer_group_id"]),
+                IndexSpec("ix_finance_txn_canonical", ["canonical_transaction_id"]),
+                IndexSpec("ix_finance_txn_pending_link", ["pending_transaction_id"]),
+                IndexSpec("ix_finance_txn_pair", ["transfer_pair_transaction_id"]),
+                IndexSpec("ix_finance_txn_reverses", ["reverses_transaction_id"]),
+                IndexSpec("ix_finance_txn_pending", ["pending"]),
+                IndexSpec("ix_finance_txn_is_transfer", ["is_transfer"]),
+                IndexSpec("ix_finance_txn_deleted", ["deleted_at"]),
+                IndexSpec(
+                    "uq_finance_txn_external",
+                    ["account_id", "source", "external_id"],
+                    unique=True,
+                    where="external_id IS NOT NULL AND deleted_at IS NULL",
+                ),
+                IndexSpec(
+                    "uq_finance_txn_hash",
+                    ["account_id", "import_hash"],
+                    unique=True,
+                    where=(
+                        "external_id IS NULL AND import_hash IS NOT NULL "
+                        "AND deleted_at IS NULL"
+                    ),
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["account_id"], "finance_account", ["id"], ondelete="CASCADE"
+                ),
+                ForeignKeySpec(
+                    ["connection_id"],
+                    "finance_connection",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+                # Self-FKs (nullable) — pending/canonical/pair/reversal linkage.
+                ForeignKeySpec(
+                    ["canonical_transaction_id"],
+                    "finance_transaction",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+                ForeignKeySpec(
+                    ["pending_transaction_id"],
+                    "finance_transaction",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+                ForeignKeySpec(
+                    ["transfer_pair_transaction_id"],
+                    "finance_transaction",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+                ForeignKeySpec(
+                    ["reverses_transaction_id"],
+                    "finance_transaction",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_txn_source",
+                    "source IN ('plaid', 'snaptrade', 'ofx', 'qfx', 'qif', 'csv', "
+                    "'manual', 'coinbase', 'onchain', 'simplefin', 'teller')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_txn_status",
+                    "status IN ('pending', 'posted', 'removed')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_txn_dedup_status",
+                    "dedup_status IN ('unique', 'primary', 'duplicate', 'linked')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_txn_category_source",
+                    "category_source IN ('provider', 'ml', 'rule', 'user', 'unset')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_txn_reconciled",
+                    "reconciled_status IN ('uncleared', 'cleared', 'reconciled')",
+                ),
+                # A row occupies exactly one dedup lane.
+                CheckConstraintSpec(
+                    "ck_finance_txn_dedup_lane",
+                    "NOT (external_id IS NOT NULL AND import_hash IS NOT NULL)",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_transaction_split",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("parent_transaction_id", "sa.Integer()", nullable=False),
+                ColumnSpec("category_id", "sa.Integer()", nullable=True),
+                ColumnSpec("merchant_id", "sa.Integer()", nullable=True),
+                ColumnSpec("amount", "sa.BigInteger()", nullable=False, default="0"),
+                ColumnSpec(
+                    "currency", "sa.String(16)", nullable=False, default="'usd'"
+                ),
+                ColumnSpec("memo", "sa.Text()", nullable=True),
+                ColumnSpec("sort_order", "sa.Integer()", nullable=False, default="0"),
+                ColumnSpec("note", "sa.Text()", nullable=True),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_split_parent", ["parent_transaction_id"]),
+                IndexSpec("ix_finance_split_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_split_category", ["category_id"]),
+                IndexSpec("ix_finance_split_merchant", ["merchant_id"]),
+                IndexSpec(
+                    "uq_finance_split_parent_sort",
+                    ["parent_transaction_id", "sort_order"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["parent_transaction_id"],
+                    "finance_transaction",
+                    ["id"],
+                    ondelete="CASCADE",
+                ),
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+        ),
+        TableSpec(
+            name="finance_transfer",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("from_account_id", "sa.Integer()", nullable=True),
+                ColumnSpec("to_account_id", "sa.Integer()", nullable=True),
+                ColumnSpec("from_transaction_id", "sa.Integer()", nullable=True),
+                ColumnSpec("to_transaction_id", "sa.Integer()", nullable=True),
+                ColumnSpec("amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec(
+                    "currency", "sa.String(16)", nullable=False, default="'usd'"
+                ),
+                ColumnSpec("transfer_date", "sa.Date()", nullable=True),
+                ColumnSpec("transfer_group_key", "sa.Text()", nullable=True),
+                ColumnSpec(
+                    "is_credit_card_payment",
+                    "sa.Boolean()",
+                    nullable=False,
+                    default="False",
+                ),
+                ColumnSpec("match_method", "sa.String(20)", nullable=False),
+                ColumnSpec("confidence", "sa.Integer()", nullable=True),
+                ColumnSpec(
+                    "status", "sa.String(12)", nullable=False, default="'suggested'"
+                ),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_transfer_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_transfer_from_account", ["from_account_id"]),
+                IndexSpec("ix_finance_transfer_to_account", ["to_account_id"]),
+                IndexSpec("ix_finance_transfer_from_txn", ["from_transaction_id"]),
+                IndexSpec("ix_finance_transfer_to_txn", ["to_transaction_id"]),
+                IndexSpec("ix_finance_transfer_group_key", ["transfer_group_key"]),
+                IndexSpec(
+                    "uq_finance_transfer_from",
+                    ["from_transaction_id"],
+                    unique=True,
+                    where="from_transaction_id IS NOT NULL",
+                ),
+                IndexSpec(
+                    "uq_finance_transfer_to",
+                    ["to_transaction_id"],
+                    unique=True,
+                    where="to_transaction_id IS NOT NULL",
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["from_account_id"],
+                    "finance_account",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+                ForeignKeySpec(
+                    ["to_account_id"], "finance_account", ["id"], ondelete="SET NULL"
+                ),
+                ForeignKeySpec(
+                    ["from_transaction_id"],
+                    "finance_transaction",
+                    ["id"],
+                    ondelete="CASCADE",
+                ),
+                ForeignKeySpec(
+                    ["to_transaction_id"],
+                    "finance_transaction",
+                    ["id"],
+                    ondelete="CASCADE",
+                ),
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_transfer_method",
+                    "match_method IN ('auto_amount_date', 'plaid_transfer', "
+                    "'user_manual', 'rule')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_transfer_status",
+                    "status IN ('suggested', 'confirmed', 'rejected')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_transfer_distinct",
+                    "from_transaction_id IS NULL OR to_transaction_id IS NULL "
+                    "OR from_transaction_id <> to_transaction_id",
+                ),
+            ],
+        ),
+        # ----- Group D (ref): categories, merchants, tags, rules ----------
+        # These resolve the category_id / merchant_id forward FKs left as plain
+        # columns on finance_transaction and finance_transaction_split; the FKs
+        # are added below in alter_tables, after these target tables exist.
+        TableSpec(
+            name="finance_category",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                # NULL owner = system/global seed row (Plaid PFC tree).
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("parent_id", "sa.Integer()", nullable=True),
+                ColumnSpec("name", "sa.String(128)", nullable=False),
+                ColumnSpec("slug", "sa.String(96)", nullable=False),
+                ColumnSpec("classification", "sa.String(12)", nullable=False),
+                ColumnSpec("plaid_pfc_primary", "sa.Text()", nullable=True),
+                ColumnSpec("plaid_pfc_detailed", "sa.Text()", nullable=True),
+                ColumnSpec("icon", "sa.String(64)", nullable=True),
+                ColumnSpec("color", "sa.String(16)", nullable=True),
+                ColumnSpec(
+                    "is_system", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec(
+                    "is_archived", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec("sort_order", "sa.Integer()", nullable=False, default="0"),
+                ColumnSpec("tax_line", "sa.Text()", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_category_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_category_parent", ["parent_id"]),
+                IndexSpec("ix_finance_category_pfc", ["plaid_pfc_detailed"]),
+                IndexSpec(
+                    "uq_finance_category_system_slug",
+                    ["slug"],
+                    unique=True,
+                    where="owner_user_id IS NULL",
+                ),
+                IndexSpec(
+                    "uq_finance_category_user_slug",
+                    ["owner_user_id", "slug"],
+                    unique=True,
+                    where="owner_user_id IS NOT NULL",
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["parent_id"], "finance_category", ["id"], ondelete="SET NULL"
+                ),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_category_classification",
+                    "classification IN ('income', 'expense', 'transfer')",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_category_alias",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("category_id", "sa.Integer()", nullable=False),
+                ColumnSpec("alias_text", "sa.Text()", nullable=False),
+                ColumnSpec("normalized_alias", "sa.Text()", nullable=False),
+                ColumnSpec("source", "sa.Text()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_catalias_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_catalias_category", ["category_id"]),
+                IndexSpec("ix_finance_catalias_normalized", ["normalized_alias"]),
+                IndexSpec(
+                    "uq_finance_catalias_owner_norm",
+                    ["owner_user_id", "normalized_alias"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["category_id"], "finance_category", ["id"], ondelete="CASCADE"
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_merchant",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                # NULL owner = global/provider-seeded merchant.
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("name", "sa.String(255)", nullable=False),
+                ColumnSpec("normalized_name", "sa.String(255)", nullable=False),
+                ColumnSpec("source", "sa.String(12)", nullable=False),
+                ColumnSpec("provider_merchant_id", "sa.Text()", nullable=True),
+                ColumnSpec("logo_url", "sa.Text()", nullable=True),
+                ColumnSpec("website_url", "sa.Text()", nullable=True),
+                ColumnSpec("default_category_id", "sa.Integer()", nullable=True),
+                ColumnSpec("service_type", "sa.Text()", nullable=True),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_merchant_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_merchant_org", ["organization_id"]),
+                IndexSpec("ix_finance_merchant_normalized", ["normalized_name"]),
+                IndexSpec("ix_finance_merchant_default_cat", ["default_category_id"]),
+                IndexSpec("ix_finance_merchant_deleted", ["deleted_at"]),
+                IndexSpec(
+                    "uq_finance_merchant_global",
+                    ["normalized_name"],
+                    unique=True,
+                    where="owner_user_id IS NULL AND deleted_at IS NULL",
+                ),
+                IndexSpec(
+                    "uq_finance_merchant_user",
+                    ["owner_user_id", "normalized_name"],
+                    unique=True,
+                    where="owner_user_id IS NOT NULL AND deleted_at IS NULL",
+                ),
+                IndexSpec(
+                    "uq_finance_merchant_provider",
+                    ["source", "provider_merchant_id"],
+                    unique=True,
+                    where="provider_merchant_id IS NOT NULL",
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["default_category_id"],
+                    "finance_category",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_merchant_source",
+                    "source IN ('plaid', 'user', 'system', 'rule', 'snaptrade')",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_tag",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("name", "sa.String(64)", nullable=False),
+                ColumnSpec("normalized_name", "sa.String(64)", nullable=False),
+                ColumnSpec("color", "sa.String(16)", nullable=True),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_tag_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_tag_org", ["organization_id"]),
+                IndexSpec("ix_finance_tag_deleted", ["deleted_at"]),
+                IndexSpec(
+                    "uq_finance_tag_owner_name",
+                    ["owner_user_id", "normalized_name"],
+                    unique=True,
+                    where="deleted_at IS NULL",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_transaction_tag",
+            columns=[
+                # Composite PK (transaction_id, tag_id) — pure join table.
+                ColumnSpec(
+                    "transaction_id", "sa.Integer()", nullable=False, primary_key=True
+                ),
+                ColumnSpec("tag_id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("split_id", "sa.Integer()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_txntag_tag", ["tag_id"]),
+                IndexSpec("ix_finance_txntag_split", ["split_id"]),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["transaction_id"],
+                    "finance_transaction",
+                    ["id"],
+                    ondelete="CASCADE",
+                ),
+                ForeignKeySpec(["tag_id"], "finance_tag", ["id"], ondelete="CASCADE"),
+                ForeignKeySpec(
+                    ["split_id"],
+                    "finance_transaction_split",
+                    ["id"],
+                    ondelete="CASCADE",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_rule",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("name", "sa.String(128)", nullable=False),
+                ColumnSpec("priority", "sa.Integer()", nullable=False, default="100"),
+                ColumnSpec(
+                    "is_enabled", "sa.Boolean()", nullable=False, default="True"
+                ),
+                ColumnSpec("conditions", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("actions", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec(
+                    "stop_processing", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec("match_count", "sa.Integer()", nullable=False, default="0"),
+                ColumnSpec("last_matched_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_rule_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_rule_org", ["organization_id"]),
+                IndexSpec(
+                    "ix_finance_rule_owner_priority", ["owner_user_id", "priority"]
+                ),
+                IndexSpec("ix_finance_rule_deleted", ["deleted_at"]),
+            ],
+        ),
+        # ----- Group E (investments): securities, prices, holdings, trades -
+        TableSpec(
+            name="finance_security",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                # Global catalog — no owner. All taxonomy fields are plain text.
+                ColumnSpec("provider", "sa.Text()", nullable=True),
+                ColumnSpec("provider_security_id", "sa.Text()", nullable=True),
+                ColumnSpec("figi", "sa.Text()", nullable=True),
+                ColumnSpec("cusip", "sa.String(16)", nullable=True),
+                ColumnSpec("isin", "sa.String(16)", nullable=True),
+                ColumnSpec("sedol", "sa.String(16)", nullable=True),
+                ColumnSpec("ticker", "sa.String(32)", nullable=True),
+                ColumnSpec("name", "sa.Text()", nullable=True),
+                ColumnSpec("security_type", "sa.Text()", nullable=True),
+                ColumnSpec("exchange_mic", "sa.String(10)", nullable=True),
+                ColumnSpec("exchange_operating_mic", "sa.String(10)", nullable=True),
+                ColumnSpec("country_code", "sa.String(2)", nullable=True),
+                ColumnSpec("currency", "sa.String(16)", nullable=True),
+                ColumnSpec(
+                    "is_cash_equivalent",
+                    "sa.Boolean()",
+                    nullable=False,
+                    default="False",
+                ),
+                ColumnSpec(
+                    "is_crypto", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec("coingecko_id", "sa.Text()", nullable=True),
+                ColumnSpec("onchain_contract", "sa.Text()", nullable=True),
+                ColumnSpec("onchain_chain", "sa.Text()", nullable=True),
+                ColumnSpec("close_price", "sa.BigInteger()", nullable=True),
+                ColumnSpec("price_scale", "sa.Integer()", nullable=False, default="2"),
+                ColumnSpec("close_price_as_of", "sa.Date()", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_security_ticker", ["ticker"]),
+                IndexSpec("ix_finance_security_cusip", ["cusip"]),
+                IndexSpec("ix_finance_security_isin", ["isin"]),
+                IndexSpec(
+                    "ix_finance_security_provider_secid", ["provider_security_id"]
+                ),
+                IndexSpec("ix_finance_security_type", ["security_type"]),
+                IndexSpec(
+                    "uq_finance_security_provider",
+                    ["provider", "provider_security_id"],
+                    unique=True,
+                    where="provider_security_id IS NOT NULL",
+                ),
+                IndexSpec(
+                    "uq_finance_security_figi",
+                    ["figi"],
+                    unique=True,
+                    where="figi IS NOT NULL",
+                ),
+                IndexSpec(
+                    "uq_finance_security_cusip",
+                    ["cusip"],
+                    unique=True,
+                    where="cusip IS NOT NULL",
+                ),
+                IndexSpec(
+                    "uq_finance_security_isin",
+                    ["isin"],
+                    unique=True,
+                    where="isin IS NOT NULL",
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+        ),
+        TableSpec(
+            name="finance_security_price",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("security_id", "sa.Integer()", nullable=False),
+                ColumnSpec("price_date", "sa.Date()", nullable=False),
+                ColumnSpec("close_price", "sa.BigInteger()", nullable=False),
+                ColumnSpec("price_scale", "sa.Integer()", nullable=False, default="2"),
+                ColumnSpec("currency", "sa.String(16)", nullable=False),
+                ColumnSpec("source", "sa.String(16)", nullable=False),
+            ],
+            indexes=[
+                IndexSpec(
+                    "ix_finance_secprice_security_date",
+                    ["security_id", "price_date"],
+                ),
+                IndexSpec(
+                    "uq_finance_secprice",
+                    ["security_id", "price_date", "source"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["security_id"], "finance_security", ["id"], ondelete="CASCADE"
+                ),
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_secprice_source",
+                    "source IN ('plaid', 'snaptrade', 'exchange_api', 'onchain', "
+                    "'coingecko', 'manual', 'market_data')",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_holding",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("account_id", "sa.Integer()", nullable=False),
+                ColumnSpec("security_id", "sa.Integer()", nullable=False),
+                ColumnSpec("as_of_date", "sa.Date()", nullable=False),
+                # Units x 1e8 (fractional shares + crypto).
+                ColumnSpec("quantity_e8", "sa.BigInteger()", nullable=False),
+                ColumnSpec("cost_basis", "sa.BigInteger()", nullable=True),
+                ColumnSpec("average_cost", "sa.BigInteger()", nullable=True),
+                ColumnSpec("price", "sa.BigInteger()", nullable=True),
+                ColumnSpec("price_scale", "sa.Integer()", nullable=False, default="2"),
+                ColumnSpec("institution_value", "sa.BigInteger()", nullable=True),
+                ColumnSpec("vested_quantity_e8", "sa.BigInteger()", nullable=True),
+                ColumnSpec("currency", "sa.String(16)", nullable=False),
+                ColumnSpec("source", "sa.Text()", nullable=True),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_holding_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_holding_account", ["account_id"]),
+                IndexSpec("ix_finance_holding_security", ["security_id"]),
+                IndexSpec(
+                    "ix_finance_holding_account_date", ["account_id", "as_of_date"]
+                ),
+                IndexSpec("ix_finance_holding_deleted", ["deleted_at"]),
+                IndexSpec(
+                    "uq_finance_holding",
+                    ["account_id", "security_id", "as_of_date"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["account_id"], "finance_account", ["id"], ondelete="CASCADE"
+                ),
+                # RESTRICT: a security with holdings can't be deleted (plain FK
+                # = NO ACTION, same guard, matching the currency-FK convention).
+                ForeignKeySpec(["security_id"], "finance_security", ["id"]),
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+        ),
+        TableSpec(
+            name="finance_trade",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("account_id", "sa.Integer()", nullable=False),
+                ColumnSpec("security_id", "sa.Integer()", nullable=True),
+                ColumnSpec("transaction_id", "sa.Integer()", nullable=True),
+                ColumnSpec("connection_id", "sa.Integer()", nullable=True),
+                # Forward FK (finance_import_batch, FIN-10) — plain column here.
+                ColumnSpec("import_batch_id", "sa.Integer()", nullable=True),
+                # Same dual-lane dedup as cash transactions.
+                ColumnSpec("source", "sa.String(16)", nullable=False),
+                ColumnSpec("external_id", "sa.Text()", nullable=True),
+                ColumnSpec("external_id_source", "sa.Text()", nullable=True),
+                ColumnSpec("import_hash", "sa.String(64)", nullable=True),
+                ColumnSpec("type", "sa.String(16)", nullable=False),
+                ColumnSpec("subtype", "sa.Text()", nullable=True),
+                ColumnSpec("quantity_e8", "sa.BigInteger()", nullable=True),
+                ColumnSpec("price", "sa.BigInteger()", nullable=True),
+                ColumnSpec("price_scale", "sa.Integer()", nullable=False, default="2"),
+                ColumnSpec("amount", "sa.BigInteger()", nullable=False, default="0"),
+                ColumnSpec("raw_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec("fees", "sa.BigInteger()", nullable=True),
+                ColumnSpec("currency", "sa.String(16)", nullable=False),
+                ColumnSpec("trade_date", "sa.Date()", nullable=False),
+                ColumnSpec("settle_date", "sa.Date()", nullable=True),
+                ColumnSpec("datetime", "sa.DateTime()", nullable=True),
+                ColumnSpec("name", "sa.Text()", nullable=True),
+                ColumnSpec("pending", "sa.Boolean()", nullable=False, default="False"),
+                ColumnSpec("raw_payload", "sa.JSON()", nullable=True),
+                ColumnSpec(
+                    "is_removed", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec(
+                    "ix_finance_trade_owner_date", ["owner_user_id", "trade_date"]
+                ),
+                IndexSpec(
+                    "ix_finance_trade_account_date", ["account_id", "trade_date"]
+                ),
+                IndexSpec("ix_finance_trade_security", ["security_id"]),
+                IndexSpec("ix_finance_trade_transaction", ["transaction_id"]),
+                IndexSpec("ix_finance_trade_connection", ["connection_id"]),
+                IndexSpec("ix_finance_trade_batch", ["import_batch_id"]),
+                IndexSpec("ix_finance_trade_deleted", ["deleted_at"]),
+                IndexSpec(
+                    "uq_finance_trade_external",
+                    ["account_id", "source", "external_id"],
+                    unique=True,
+                    where="external_id IS NOT NULL AND deleted_at IS NULL",
+                ),
+                IndexSpec(
+                    "uq_finance_trade_hash",
+                    ["account_id", "import_hash"],
+                    unique=True,
+                    where=(
+                        "external_id IS NULL AND import_hash IS NOT NULL "
+                        "AND deleted_at IS NULL"
+                    ),
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["account_id"], "finance_account", ["id"], ondelete="CASCADE"
+                ),
+                ForeignKeySpec(
+                    ["security_id"], "finance_security", ["id"], ondelete="SET NULL"
+                ),
+                ForeignKeySpec(
+                    ["transaction_id"],
+                    "finance_transaction",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+                ForeignKeySpec(
+                    ["connection_id"],
+                    "finance_connection",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_trade_source",
+                    "source IN ('plaid', 'snaptrade', 'ofx', 'qfx', 'csv', "
+                    "'manual', 'coinbase', 'onchain')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_trade_type",
+                    "type IN ('buy', 'sell', 'dividend', 'interest', 'fee', "
+                    "'tax', 'transfer_in', 'transfer_out', 'deposit', "
+                    "'withdrawal', 'reinvest', 'split', 'cancel', 'other')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_trade_dedup_lane",
+                    "NOT (external_id IS NOT NULL AND import_hash IS NOT NULL)",
+                ),
+            ],
+        ),
+        # ----- Group F (analytics / import): recurring streams, budgets,
+        # baselines, insights, import pipeline, attachments, changelog -----
+        # finance_recurring_stream resolves finance_transaction.recurring_
+        # stream_id; finance_import_batch resolves the import_batch_id forward
+        # FKs on finance_transaction and finance_trade (all added below in
+        # alter_tables once these tables exist).
+        TableSpec(
+            name="finance_recurring_stream",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("account_id", "sa.Integer()", nullable=True),
+                ColumnSpec("merchant_id", "sa.Integer()", nullable=True),
+                ColumnSpec("category_id", "sa.Integer()", nullable=True),
+                ColumnSpec("connection_id", "sa.Integer()", nullable=True),
+                ColumnSpec("provider_stream_id", "sa.Text()", nullable=True),
+                ColumnSpec("name", "sa.String(255)", nullable=False),
+                ColumnSpec("normalized_payee", "sa.Text()", nullable=True),
+                ColumnSpec("direction", "sa.String(8)", nullable=False),
+                ColumnSpec("frequency", "sa.String(16)", nullable=False),
+                ColumnSpec("average_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec("last_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec("expected_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec(
+                    "amount_is_variable",
+                    "sa.Boolean()",
+                    nullable=False,
+                    default="False",
+                ),
+                ColumnSpec("amount_tolerance_bps", "sa.Integer()", nullable=True),
+                ColumnSpec(
+                    "currency", "sa.String(16)", nullable=False, default="'usd'"
+                ),
+                ColumnSpec("first_date", "sa.Date()", nullable=True),
+                ColumnSpec("last_date", "sa.Date()", nullable=True),
+                ColumnSpec("next_expected_date", "sa.Date()", nullable=True),
+                ColumnSpec(
+                    "occurrence_count", "sa.Integer()", nullable=False, default="0"
+                ),
+                ColumnSpec(
+                    "status",
+                    "sa.String(16)",
+                    nullable=False,
+                    default="'early_detection'",
+                ),
+                ColumnSpec("confidence", "sa.Integer()", nullable=True),
+                ColumnSpec(
+                    "is_subscription",
+                    "sa.Boolean()",
+                    nullable=False,
+                    default="False",
+                ),
+                ColumnSpec("is_active", "sa.Boolean()", nullable=False, default="True"),
+                ColumnSpec(
+                    "is_user_confirmed",
+                    "sa.Boolean()",
+                    nullable=False,
+                    default="False",
+                ),
+                ColumnSpec("is_muted", "sa.Boolean()", nullable=False, default="False"),
+                ColumnSpec("service_type", "sa.Text()", nullable=True),
+                ColumnSpec("source", "sa.String(12)", nullable=False),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_recurring_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_recurring_account", ["account_id"]),
+                IndexSpec("ix_finance_recurring_merchant", ["merchant_id"]),
+                IndexSpec("ix_finance_recurring_category", ["category_id"]),
+                IndexSpec("ix_finance_recurring_connection", ["connection_id"]),
+                IndexSpec(
+                    "ix_finance_recurring_next",
+                    ["owner_user_id", "next_expected_date"],
+                ),
+                IndexSpec("ix_finance_recurring_status", ["status"]),
+                IndexSpec("ix_finance_recurring_deleted", ["deleted_at"]),
+                IndexSpec(
+                    "uq_finance_recurring_provider",
+                    ["connection_id", "provider_stream_id"],
+                    unique=True,
+                    where="provider_stream_id IS NOT NULL",
+                ),
+                IndexSpec(
+                    "uq_finance_recurring_detected",
+                    ["owner_user_id", "account_id", "direction", "normalized_payee"],
+                    unique=True,
+                    where="provider_stream_id IS NULL",
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["account_id"], "finance_account", ["id"], ondelete="CASCADE"
+                ),
+                ForeignKeySpec(
+                    ["merchant_id"], "finance_merchant", ["id"], ondelete="SET NULL"
+                ),
+                ForeignKeySpec(
+                    ["category_id"], "finance_category", ["id"], ondelete="SET NULL"
+                ),
+                ForeignKeySpec(
+                    ["connection_id"],
+                    "finance_connection",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_recurring_direction",
+                    "direction IN ('inflow', 'outflow')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_recurring_frequency",
+                    "frequency IN ('weekly', 'biweekly', 'semi_monthly', "
+                    "'monthly', 'bimonthly', 'quarterly', 'semi_annually', "
+                    "'annually', 'irregular', 'unknown')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_recurring_status",
+                    "status IN ('early_detection', 'mature', 'inactive', 'cancelled')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_recurring_source",
+                    "source IN ('plaid', 'derived', 'user')",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_budget",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("name", "sa.String(128)", nullable=False),
+                ColumnSpec("period", "sa.String(16)", nullable=False),
+                ColumnSpec("start_date", "sa.Date()", nullable=False),
+                ColumnSpec("end_date", "sa.Date()", nullable=True),
+                ColumnSpec(
+                    "currency", "sa.String(16)", nullable=False, default="'usd'"
+                ),
+                ColumnSpec("philosophy", "sa.Text()", nullable=True),
+                ColumnSpec("rollover", "sa.Boolean()", nullable=False, default="False"),
+                ColumnSpec("is_active", "sa.Boolean()", nullable=False, default="True"),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_budget_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_budget_org", ["organization_id"]),
+                IndexSpec("ix_finance_budget_deleted", ["deleted_at"]),
+                IndexSpec(
+                    "uq_finance_budget_owner_name_start",
+                    ["owner_user_id", "name", "start_date"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_budget_period",
+                    "period IN ('monthly', 'weekly', 'quarterly', 'yearly', 'custom')",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_budget_category",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("budget_id", "sa.Integer()", nullable=False),
+                # NULL category = the budget's overall line.
+                ColumnSpec("category_id", "sa.Integer()", nullable=True),
+                ColumnSpec("period_month", "sa.Integer()", nullable=True),
+                ColumnSpec(
+                    "allocated_amount", "sa.BigInteger()", nullable=False, default="0"
+                ),
+                ColumnSpec("goal_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec(
+                    "carryover_amount", "sa.BigInteger()", nullable=False, default="0"
+                ),
+                ColumnSpec(
+                    "rollover_enabled",
+                    "sa.Boolean()",
+                    nullable=False,
+                    default="False",
+                ),
+                ColumnSpec(
+                    "currency", "sa.String(16)", nullable=False, default="'usd'"
+                ),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_budgetcat_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_budgetcat_budget", ["budget_id"]),
+                IndexSpec("ix_finance_budgetcat_category", ["category_id"]),
+                IndexSpec("ix_finance_budgetcat_month", ["period_month"]),
+                IndexSpec(
+                    "uq_finance_budgetcat",
+                    ["budget_id", "category_id", "period_month"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["budget_id"], "finance_budget", ["id"], ondelete="CASCADE"
+                ),
+                ForeignKeySpec(
+                    ["category_id"], "finance_category", ["id"], ondelete="CASCADE"
+                ),
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+        ),
+        TableSpec(
+            name="finance_spending_baseline",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("category_id", "sa.Integer()", nullable=True),
+                ColumnSpec("merchant_id", "sa.Integer()", nullable=True),
+                ColumnSpec("window_months", "sa.Integer()", nullable=False),
+                ColumnSpec("period_month", "sa.Integer()", nullable=False),
+                ColumnSpec(
+                    "trailing_avg_amount",
+                    "sa.BigInteger()",
+                    nullable=False,
+                    default="0",
+                ),
+                ColumnSpec(
+                    "currency", "sa.String(16)", nullable=False, default="'usd'"
+                ),
+                ColumnSpec("computed_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_baseline_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_baseline_category", ["category_id"]),
+                IndexSpec("ix_finance_baseline_merchant", ["merchant_id"]),
+                IndexSpec(
+                    "uq_finance_baseline",
+                    [
+                        "owner_user_id",
+                        "category_id",
+                        "merchant_id",
+                        "window_months",
+                        "period_month",
+                    ],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["category_id"], "finance_category", ["id"], ondelete="CASCADE"
+                ),
+                ForeignKeySpec(
+                    ["merchant_id"], "finance_merchant", ["id"], ondelete="CASCADE"
+                ),
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_baseline_window",
+                    "window_months IN (3, 6, 12)",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_insight",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("insight_type", "sa.Text()", nullable=False),
+                ColumnSpec("severity", "sa.String(16)", nullable=False),
+                ColumnSpec("title", "sa.Text()", nullable=False),
+                ColumnSpec("body", "sa.Text()", nullable=True),
+                ColumnSpec("related_account_id", "sa.Integer()", nullable=True),
+                ColumnSpec("related_transaction_id", "sa.Integer()", nullable=True),
+                ColumnSpec("related_category_id", "sa.Integer()", nullable=True),
+                ColumnSpec("related_stream_id", "sa.Integer()", nullable=True),
+                ColumnSpec("detected_amount", "sa.BigInteger()", nullable=True),
+                ColumnSpec("currency", "sa.String(16)", nullable=True),
+                ColumnSpec("dedup_key", "sa.Text()", nullable=False),
+                ColumnSpec("period_start", "sa.Date()", nullable=True),
+                ColumnSpec("period_end", "sa.Date()", nullable=True),
+                ColumnSpec("data", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("status", "sa.String(12)", nullable=False, default="'new'"),
+                ColumnSpec("is_read", "sa.Boolean()", nullable=False, default="False"),
+                ColumnSpec("dismissed_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("metadata", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_insight_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_insight_org", ["organization_id"]),
+                IndexSpec("ix_finance_insight_type", ["insight_type"]),
+                IndexSpec("ix_finance_insight_status", ["status"]),
+                IndexSpec("ix_finance_insight_account", ["related_account_id"]),
+                IndexSpec("ix_finance_insight_transaction", ["related_transaction_id"]),
+                IndexSpec("ix_finance_insight_category", ["related_category_id"]),
+                IndexSpec("ix_finance_insight_stream", ["related_stream_id"]),
+                IndexSpec(
+                    "ix_finance_insight_owner_read", ["owner_user_id", "is_read"]
+                ),
+                IndexSpec(
+                    "uq_finance_insight_dedup",
+                    ["owner_user_id", "dedup_key"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["related_account_id"],
+                    "finance_account",
+                    ["id"],
+                    ondelete="CASCADE",
+                ),
+                ForeignKeySpec(
+                    ["related_transaction_id"],
+                    "finance_transaction",
+                    ["id"],
+                    ondelete="CASCADE",
+                ),
+                ForeignKeySpec(
+                    ["related_category_id"],
+                    "finance_category",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+                ForeignKeySpec(
+                    ["related_stream_id"],
+                    "finance_recurring_stream",
+                    ["id"],
+                    ondelete="SET NULL",
+                    name="fk_finance_insight_stream",
+                ),
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_insight_severity",
+                    "severity IN ('info', 'warning', 'critical')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_insight_status",
+                    "status IN ('new', 'seen', 'dismissed', 'actioned')",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_import_profile",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                # NULL owner = system seed profile (Chase CC, AMEX v2, ...).
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=True),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("institution_id", "sa.Integer()", nullable=True),
+                ColumnSpec("name", "sa.String(128)", nullable=False),
+                ColumnSpec("source_format", "sa.String(8)", nullable=False),
+                ColumnSpec(
+                    "header_signature", "sa.JSON()", nullable=False, default="{}"
+                ),
+                ColumnSpec("column_mapping", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("date_format", "sa.Text()", nullable=True),
+                ColumnSpec("amount_sign_convention", "sa.String(20)", nullable=False),
+                ColumnSpec("decimal_separator", "sa.String(1)", nullable=True),
+                ColumnSpec("thousands_separator", "sa.String(1)", nullable=True),
+                ColumnSpec(
+                    "currency", "sa.String(16)", nullable=False, default="'usd'"
+                ),
+                ColumnSpec(
+                    "is_system", "sa.Boolean()", nullable=False, default="False"
+                ),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_importprofile_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_importprofile_org", ["organization_id"]),
+                IndexSpec("ix_finance_importprofile_institution", ["institution_id"]),
+                IndexSpec("ix_finance_importprofile_deleted", ["deleted_at"]),
+                IndexSpec(
+                    "uq_finance_importprofile_owner_name",
+                    ["owner_user_id", "name"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["institution_id"],
+                    "finance_institution",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+                ForeignKeySpec(["currency"], "finance_currency", ["code"]),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_importprofile_format",
+                    "source_format IN ('csv', 'ofx', 'qfx', 'qif')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_importprofile_sign",
+                    "amount_sign_convention IN ('outflow_negative', "
+                    "'outflow_positive', 'split_debit_credit')",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_import_batch",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("connection_id", "sa.Integer()", nullable=True),
+                ColumnSpec("account_id", "sa.Integer()", nullable=True),
+                ColumnSpec("import_profile_id", "sa.Integer()", nullable=True),
+                ColumnSpec("source_type", "sa.String(16)", nullable=False),
+                ColumnSpec("file_name", "sa.String(255)", nullable=True),
+                ColumnSpec("file_sha256", "sa.Text()", nullable=True),
+                ColumnSpec("sync_cursor_before", "sa.Text()", nullable=True),
+                ColumnSpec("sync_cursor_after", "sa.Text()", nullable=True),
+                ColumnSpec("rows_total", "sa.Integer()", nullable=False, default="0"),
+                ColumnSpec(
+                    "rows_inserted", "sa.Integer()", nullable=False, default="0"
+                ),
+                ColumnSpec("rows_updated", "sa.Integer()", nullable=False, default="0"),
+                ColumnSpec(
+                    "rows_duplicate", "sa.Integer()", nullable=False, default="0"
+                ),
+                ColumnSpec("rows_error", "sa.Integer()", nullable=False, default="0"),
+                ColumnSpec(
+                    "status", "sa.String(16)", nullable=False, default="'pending'"
+                ),
+                ColumnSpec("error", "sa.Text()", nullable=True),
+                ColumnSpec("started_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("finished_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_importbatch_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_importbatch_org", ["organization_id"]),
+                IndexSpec("ix_finance_importbatch_connection", ["connection_id"]),
+                IndexSpec("ix_finance_importbatch_account", ["account_id"]),
+                IndexSpec("ix_finance_importbatch_profile", ["import_profile_id"]),
+                IndexSpec("ix_finance_importbatch_status", ["status"]),
+                IndexSpec(
+                    "ix_finance_importbatch_owner_started",
+                    ["owner_user_id", "started_at"],
+                ),
+                IndexSpec(
+                    "uq_finance_importbatch_file",
+                    ["owner_user_id", "file_sha256"],
+                    unique=True,
+                    where="file_sha256 IS NOT NULL",
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["connection_id"],
+                    "finance_connection",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+                ForeignKeySpec(
+                    ["account_id"], "finance_account", ["id"], ondelete="SET NULL"
+                ),
+                ForeignKeySpec(
+                    ["import_profile_id"],
+                    "finance_import_profile",
+                    ["id"],
+                    ondelete="SET NULL",
+                    name="fk_finance_importbatch_profile",
+                ),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_importbatch_source",
+                    "source_type IN ('plaid_sync', 'snaptrade_sync', 'ofx', "
+                    "'qfx', 'qif', 'csv', 'manual')",
+                ),
+                CheckConstraintSpec(
+                    "ck_finance_importbatch_status",
+                    "status IN ('pending', 'processing', 'committed', 'failed', "
+                    "'rolled_back')",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_import_batch_row",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("import_batch_id", "sa.Integer()", nullable=False),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("account_id", "sa.Integer()", nullable=True),
+                ColumnSpec("row_number", "sa.Integer()", nullable=False),
+                ColumnSpec("raw_line", "sa.Text()", nullable=True),
+                ColumnSpec("parsed", "sa.JSON()", nullable=False, default="{}"),
+                ColumnSpec("content_hash", "sa.String(64)", nullable=True),
+                ColumnSpec("fitid", "sa.Text()", nullable=True),
+                ColumnSpec("parsed_status", "sa.String(12)", nullable=False),
+                ColumnSpec("matched_transaction_id", "sa.Integer()", nullable=True),
+                ColumnSpec("matched_trade_id", "sa.Integer()", nullable=True),
+                ColumnSpec("reason", "sa.Text()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_importrow_batch", ["import_batch_id"]),
+                IndexSpec("ix_finance_importrow_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_importrow_account", ["account_id"]),
+                IndexSpec(
+                    "ix_finance_importrow_matched_txn", ["matched_transaction_id"]
+                ),
+                IndexSpec("ix_finance_importrow_matched_trade", ["matched_trade_id"]),
+                IndexSpec("ix_finance_importrow_hash", ["content_hash"]),
+                IndexSpec(
+                    "uq_finance_importrow_batch_num",
+                    ["import_batch_id", "row_number"],
+                    unique=True,
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["import_batch_id"],
+                    "finance_import_batch",
+                    ["id"],
+                    ondelete="CASCADE",
+                    name="fk_finance_importrow_batch",
+                ),
+                ForeignKeySpec(
+                    ["account_id"], "finance_account", ["id"], ondelete="SET NULL"
+                ),
+                ForeignKeySpec(
+                    ["matched_transaction_id"],
+                    "finance_transaction",
+                    ["id"],
+                    ondelete="SET NULL",
+                    name="fk_finance_importrow_matched_txn",
+                ),
+                ForeignKeySpec(
+                    ["matched_trade_id"],
+                    "finance_trade",
+                    ["id"],
+                    ondelete="SET NULL",
+                    name="fk_finance_importrow_matched_trade",
+                ),
+            ],
+            check_constraints=[
+                CheckConstraintSpec(
+                    "ck_finance_importrow_status",
+                    "parsed_status IN ('parsed', 'inserted', 'updated', "
+                    "'duplicate', 'error', 'matched', 'skipped')",
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_attachment",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("organization_id", "sa.Integer()", nullable=True),
+                ColumnSpec("transaction_id", "sa.Integer()", nullable=True),
+                ColumnSpec("account_id", "sa.Integer()", nullable=True),
+                ColumnSpec("file_name", "sa.Text()", nullable=False),
+                ColumnSpec("content_type", "sa.Text()", nullable=True),
+                ColumnSpec("byte_size", "sa.Integer()", nullable=True),
+                ColumnSpec("storage_key", "sa.Text()", nullable=False),
+                ColumnSpec("sha256", "sa.Text()", nullable=True),
+                ColumnSpec("deleted_at", "sa.DateTime()", nullable=True),
+                ColumnSpec("created_at", "sa.DateTime()", nullable=False),
+                ColumnSpec("updated_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_attachment_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_attachment_org", ["organization_id"]),
+                IndexSpec("ix_finance_attachment_transaction", ["transaction_id"]),
+                IndexSpec("ix_finance_attachment_account", ["account_id"]),
+                IndexSpec("ix_finance_attachment_deleted", ["deleted_at"]),
+                IndexSpec(
+                    "uq_finance_attachment_owner_sha",
+                    ["owner_user_id", "sha256"],
+                    unique=True,
+                    where="sha256 IS NOT NULL",
+                ),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["transaction_id"],
+                    "finance_transaction",
+                    ["id"],
+                    ondelete="CASCADE",
+                ),
+                ForeignKeySpec(
+                    ["account_id"], "finance_account", ["id"], ondelete="CASCADE"
+                ),
+            ],
+        ),
+        TableSpec(
+            name="finance_transaction_changelog",
+            columns=[
+                ColumnSpec("id", "sa.Integer()", nullable=False, primary_key=True),
+                ColumnSpec("transaction_id", "sa.Integer()", nullable=False),
+                ColumnSpec("owner_user_id", "sa.Integer()", nullable=False),
+                ColumnSpec("field", "sa.Text()", nullable=False),
+                ColumnSpec("old_value", "sa.Text()", nullable=True),
+                ColumnSpec("new_value", "sa.Text()", nullable=True),
+                ColumnSpec("change_source", "sa.Text()", nullable=False),
+                ColumnSpec("sync_cursor", "sa.Text()", nullable=True),
+                ColumnSpec("changed_at", "sa.DateTime()", nullable=False),
+            ],
+            indexes=[
+                IndexSpec("ix_finance_changelog_transaction", ["transaction_id"]),
+                IndexSpec("ix_finance_changelog_owner", ["owner_user_id"]),
+                IndexSpec("ix_finance_changelog_changed", ["changed_at"]),
+            ],
+            foreign_keys=[
+                ForeignKeySpec(
+                    ["transaction_id"],
+                    "finance_transaction",
+                    ["id"],
+                    ondelete="CASCADE",
+                    name="fk_finance_changelog_txn",
+                ),
+            ],
+        ),
+    ],
+    alter_tables=[
+        # Circular FK: finance_transaction.transfer_group_id ->
+        # finance_transfer.id (finance_transfer references finance_transaction),
+        # plus the category_id / merchant_id forward FKs now that Group D tables
+        # exist. One batch per table (SQLite recreates the table per batch).
+        AlterTableSpec(
+            name="finance_transaction",
+            add_foreign_keys=[
+                ForeignKeySpec(
+                    ["transfer_group_id"],
+                    "finance_transfer",
+                    ["id"],
+                    ondelete="SET NULL",
+                ),
+                ForeignKeySpec(
+                    ["category_id"], "finance_category", ["id"], ondelete="SET NULL"
+                ),
+                ForeignKeySpec(
+                    ["merchant_id"], "finance_merchant", ["id"], ondelete="SET NULL"
+                ),
+                # Short explicit names: the auto-derived
+                # fk_finance_transaction_recurring_stream_id_finance_recurring_
+                # stream exceeds Postgres' 63-char identifier limit.
+                ForeignKeySpec(
+                    ["recurring_stream_id"],
+                    "finance_recurring_stream",
+                    ["id"],
+                    ondelete="SET NULL",
+                    name="fk_finance_txn_recurring_stream",
+                ),
+                ForeignKeySpec(
+                    ["import_batch_id"],
+                    "finance_import_batch",
+                    ["id"],
+                    ondelete="SET NULL",
+                    name="fk_finance_txn_import_batch",
+                ),
+            ],
+        ),
+        AlterTableSpec(
+            name="finance_transaction_split",
+            add_foreign_keys=[
+                ForeignKeySpec(
+                    ["category_id"], "finance_category", ["id"], ondelete="SET NULL"
+                ),
+                ForeignKeySpec(
+                    ["merchant_id"], "finance_merchant", ["id"], ondelete="SET NULL"
+                ),
+            ],
+        ),
+        AlterTableSpec(
+            name="finance_trade",
+            add_foreign_keys=[
+                ForeignKeySpec(
+                    ["import_batch_id"],
+                    "finance_import_batch",
+                    ["id"],
+                    ondelete="SET NULL",
+                    name="fk_finance_trade_import_batch",
+                ),
+            ],
+        ),
+    ],
+)
+
+
+# Postgres schema finance tables live in (dropped on SQLite, which has none).
+FINANCE_SCHEMA = "finance"
+
+# Every finance table with an ``owner_user_id`` column. The auth-link migration
+# adds an FK from each to ``user.id`` when the auth service is present. Grows as
+# owner-scoped tables land across the schema tickets.
+_FINANCE_OWNED_TABLES: tuple[str, ...] = (
+    "finance_connection",
+    "finance_account",
+    "finance_liability_detail",
+    "finance_balance_snapshot",
+    "finance_net_worth_snapshot",
+    "finance_valuation",
+    "finance_transaction",
+    "finance_transaction_split",
+    "finance_transfer",
+    "finance_category",
+    "finance_category_alias",
+    "finance_merchant",
+    "finance_tag",
+    "finance_rule",
+    "finance_holding",
+    "finance_trade",
+    "finance_recurring_stream",
+    "finance_budget",
+    "finance_budget_category",
+    "finance_spending_baseline",
+    "finance_insight",
+    "finance_import_profile",
+    "finance_import_batch",
+    "finance_import_batch_row",
+    "finance_attachment",
+    "finance_transaction_changelog",
+)
+
+
+def _build_finance_auth_link(
+    *, schema: str | None, user_ref_schema: str | None
+) -> ServiceMigrationSpec:
+    """Owner FK from each owner-scoped finance table to the auth ``user`` table.
+
+    Emitted only when BOTH finance and auth are included (see
+    get_services_needing_migrations), so a standalone (no-auth) finance stack
+    never references a missing table. ON DELETE CASCADE: a deleted user takes
+    their finance data with them.
+
+    On Postgres the finance tables live in the ``finance`` schema while ``user``
+    lives in ``public``, so these are cross-schema FKs: ``schema`` puts the
+    batch-alter on the finance-schema tables and ``user_ref_schema`` qualifies
+    the referent. On SQLite both are None (single unqualified DB).
+    """
+    return ServiceMigrationSpec(
+        service_name="finance_auth_link",
+        description="Link finance owner_user_id columns to user.id (auth + finance)",
+        tables=[],
+        schema=schema,
+        alter_tables=[
+            AlterTableSpec(
+                name=table,
+                add_foreign_keys=[
+                    ForeignKeySpec(
+                        ["owner_user_id"],
+                        "user",
+                        ["id"],
+                        ondelete="CASCADE",
+                        ref_schema=user_ref_schema,
+                    ),
+                ],
+            )
+            for table in _FINANCE_OWNED_TABLES
+        ],
+    )
+
+
+# Static (SQLite / default) variant; the Postgres schema-qualified variant is
+# built on demand in _resolve_spec.
+FINANCE_AUTH_LINK_MIGRATION = _build_finance_auth_link(
+    schema=None, user_ref_schema=None
+)
+
+
 BLOG_MIGRATION = ServiceMigrationSpec(
     service_name="blog",
     description="Blog service tables (posts, tags, post/tag links)",
@@ -1424,7 +3643,7 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column('{{ column.name }}', {{ column.type }}, nullable={{ column.nullable }}{% if column.server_default %}, server_default={{ column.server_default }}{% endif %}))
 {% endfor %}
 {% for fk in alter.add_foreign_keys %}
-        batch_op.create_foreign_key('fk_{{ alter.name }}_{{ fk.columns[0] }}_{{ fk.ref_table }}', '{{ fk.ref_table }}', {{ fk.columns }}, {{ fk.ref_columns }}{% if fk.ondelete %}, ondelete='{{ fk.ondelete }}'{% endif %}{% if fk.ref_schema %}, referent_schema='{{ fk.ref_schema }}'{% endif %})
+        batch_op.create_foreign_key('{{ fk.constraint_name }}', '{{ fk.ref_table }}', {{ fk.columns }}, {{ fk.ref_columns }}{% if fk.ondelete %}, ondelete='{{ fk.ondelete }}'{% endif %}{% if fk.ref_schema %}, referent_schema='{{ fk.ref_schema }}'{% endif %})
 {% endfor %}
 {% for index in alter.add_indexes %}
         batch_op.create_index('{{ index.name }}', {{ index.columns }}{% if index.unique %}, unique=True{% endif %}{% if index.where %}, sqlite_where=sa.text("{{ index.where }}"), postgresql_where=sa.text("{{ index.where }}"){% endif %})
@@ -1447,7 +3666,7 @@ def downgrade() -> None:
         batch_op.drop_index('{{ index.name }}')
 {% endfor %}
 {% for fk in alter.add_foreign_keys|reverse %}
-        batch_op.drop_constraint('fk_{{ alter.name }}_{{ fk.columns[0] }}_{{ fk.ref_table }}', type_='foreignkey')
+        batch_op.drop_constraint('{{ fk.constraint_name }}', type_='foreignkey')
 {% endfor %}
 {% for column in alter.add_columns|reverse %}
         batch_op.drop_column('{{ column.name }}')
@@ -1620,6 +3839,11 @@ def _render_migration(
                 "ref_columns": fk.ref_columns,
                 "ondelete": fk.ondelete,
                 "ref_schema": fk.ref_schema or spec.schema,
+                # Explicit name (short, for the 63-char Postgres limit) or the
+                # auto-derived default. Used identically on create and drop.
+                "constraint_name": (
+                    fk.name or f"fk_{alter.name}_{fk.columns[0]}_{fk.ref_table}"
+                ),
             }
             for fk in alter.add_foreign_keys
         ]
@@ -1686,6 +3910,20 @@ def _resolve_spec(
         per_user = flag == "yes" or flag is True
         if per_user:
             return _build_insights_migration(per_user=True)
+
+    # Finance tables live in a dedicated Postgres ``finance`` schema; SQLite has
+    # no schemas, so there they stay unqualified. Resolve the schema-qualified
+    # variant only for a Postgres target.
+    if service_name in ("finance", "finance_auth_link") and context is not None:
+        engine = context.get(AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE)
+        if engine == StorageBackends.POSTGRES:
+            if service_name == "finance":
+                return replace(migration_specs["finance"], schema=FINANCE_SCHEMA)
+            # user lives in the default (public) schema, finance_connection in
+            # the finance schema — cross-schema FK.
+            return _build_finance_auth_link(
+                schema=FINANCE_SCHEMA, user_ref_schema="public"
+            )
 
     return migration_specs[service_name]
 
@@ -1854,6 +4092,18 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     include_blog_on = include_blog == "yes" or include_blog is True
     if include_blog_on:
         services.append("blog")
+
+    # Finance service (always needs database).
+    include_finance = context.get(AnswerKeys.FINANCE)
+    include_finance_on = include_finance == "yes" or include_finance is True
+    if include_finance_on:
+        services.append("finance")
+
+    # Finance + Auth: add FK from finance_connection.owner_user_id -> user.id.
+    # Only when BOTH are included; runs after both base migrations so `user`
+    # exists. include_auth_on is defined above (payment_auth_link block).
+    if include_finance_on and include_auth_on:
+        services.append("finance_auth_link")
 
     # Scheduler component — the job_execution history table. Postgres ONLY:
     # the table lives in a ``scheduler`` schema, and the migration emits

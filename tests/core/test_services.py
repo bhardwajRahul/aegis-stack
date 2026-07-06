@@ -31,6 +31,7 @@ class TestServiceType:
         assert ServiceType.ANALYTICS.value == "analytics"
         assert ServiceType.STORAGE.value == "storage"
         assert ServiceType.CONTENT.value == "content"
+        assert ServiceType.FINANCE.value == "finance"
 
     def test_service_type_enum_completeness(self):
         """Test that we have all expected service types."""
@@ -42,6 +43,7 @@ class TestServiceType:
             "analytics",
             "storage",
             "content",
+            "finance",
         }
         actual_types = {st.value for st in ServiceType}
         assert actual_types == expected_types
@@ -118,6 +120,7 @@ class TestServicesRegistry:
         assert "auth" in SERVICES
         assert "blog" in SERVICES
         assert "insights" in SERVICES
+        assert "finance" in SERVICES
 
     def test_insights_service_specification(self):
         """Test the insights service specification is properly defined."""
@@ -203,6 +206,38 @@ class TestServicesRegistry:
         spec = SERVICES["payment"]
         assert ComponentNames.BACKEND in spec.required_components
         assert ComponentNames.DATABASE in spec.required_components
+        assert ComponentNames.WORKER in spec.recommended_components
+
+    def test_finance_service_specification(self):
+        """Test the finance service specification is properly defined.
+
+        The spec ships template file paths and its migration specs
+        (FINANCE_MIGRATION + conditional FINANCE_AUTH_LINK_MIGRATION); runtime
+        wiring and pyproject deps are added by later tickets. Assert only what
+        the spec currently establishes.
+        """
+        spec = SERVICES["finance"]
+
+        assert spec.name == "finance"
+        assert spec.type == ServiceType.FINANCE
+        assert spec.description
+        assert "backend" in spec.required_components
+        assert "database" in spec.required_components
+        assert "scheduler" in spec.required_components
+        assert "worker" in spec.recommended_components
+        # Auth is integrated-when-present, not required — finance runs
+        # standalone (single-user) and links owner FKs only when auth ships.
+        assert spec.required_services == []
+        assert len(spec.template_files) > 0
+
+    def test_finance_uses_component_constants(self):
+        """Test that finance spec uses ComponentNames, not magic strings."""
+        from aegis.constants import ComponentNames
+
+        spec = SERVICES["finance"]
+        assert ComponentNames.BACKEND in spec.required_components
+        assert ComponentNames.DATABASE in spec.required_components
+        assert ComponentNames.SCHEDULER in spec.required_components
         assert ComponentNames.WORKER in spec.recommended_components
 
     def test_blog_service_specification(self):

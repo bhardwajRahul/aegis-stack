@@ -170,6 +170,7 @@ class AnswerKeys:
     INSIGHTS = "include_insights"
     PAYMENT = "include_payment"
     BLOG = "include_blog"
+    FINANCE = "include_finance"
 
     # Service names (used for selection/lookup)
     SERVICE_AUTH = "auth"
@@ -178,6 +179,7 @@ class AnswerKeys:
     SERVICE_INSIGHTS = "insights"
     SERVICE_PAYMENT = "payment"
     SERVICE_BLOG = "blog"
+    SERVICE_FINANCE = "finance"
 
     # Insights source flags
     INSIGHTS_GITHUB = "insights_github"
@@ -185,6 +187,11 @@ class AnswerKeys:
     INSIGHTS_PLAUSIBLE = "insights_plausible"
     INSIGHTS_REDDIT = "insights_reddit"
     INSIGHTS_PER_USER = "insights_per_user"
+
+    # Finance source flags
+    FINANCE_PLAID = "finance_plaid"
+    FINANCE_SNAPTRADE = "finance_snaptrade"
+    FINANCE_IMPORT = "finance_import"
 
     # Payment configuration
     PAYMENT_PROVIDER = "payment_provider"

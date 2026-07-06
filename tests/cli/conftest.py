@@ -122,6 +122,9 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
     "blog_with_database": ProjectTemplateSpec(
         components=("database",), services=("blog",)
     ),
+    "finance_with_database": ProjectTemplateSpec(
+        components=("database", "scheduler"), services=("finance",)
+    ),
     "comms_only": ProjectTemplateSpec(services=("comms",)),
     "everything": ProjectTemplateSpec(
         components=("database", "scheduler", "worker", "redis"),

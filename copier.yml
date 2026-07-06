@@ -322,9 +322,32 @@ insights_per_user:
   default: false
   when: "{{ include_insights and include_auth }}"
 
+include_finance:
+  type: bool
+  help: "Include finance service (account aggregation, net worth, Quicken/CSV import)?"
+  default: false
+
+finance_plaid:
+  type: bool
+  help: "Include Plaid connectivity (banks, cards, brokerages)?"
+  default: true
+  when: "{{ include_finance }}"
+
+finance_snaptrade:
+  type: bool
+  help: "Include SnapTrade connectivity (Fidelity and other brokerages)?"
+  default: true
+  when: "{{ include_finance }}"
+
+finance_import:
+  type: bool
+  help: "Include Quicken/OFX/CSV file import?"
+  default: true
+  when: "{{ include_finance }}"
+
 # Internal computed values (using Jinja2)
 _has_additional_components: "{{ include_scheduler or include_redis or include_worker or include_database or include_cache or include_ingress or include_observability }}"
-_include_migrations: "{{ include_auth or include_payment or include_insights or include_blog or (include_ai and ai_backend in ['sqlite', 'postgres']) }}"
+_include_migrations: "{{ include_auth or include_payment or include_insights or include_blog or include_finance or (include_ai and ai_backend in ['sqlite', 'postgres']) }}"
 
 # Component-specific dependencies (computed)
 _scheduler_deps: "{% if include_scheduler %}apscheduler>=3.10.0{% endif %}"

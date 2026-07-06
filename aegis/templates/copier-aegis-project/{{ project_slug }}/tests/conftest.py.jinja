@@ -36,6 +36,44 @@ from app.services.payment.models import (  # noqa: F401
 # Import blog models to register them with SQLModel metadata
 from app.services.blog.models import BlogPost, BlogPostTag, BlogTag  # noqa: F401
 {% endif %}
+{%- if include_finance %}
+# Import finance models to register them with SQLModel metadata
+from app.services.finance.models import (  # noqa: F401
+    FinanceAccount,
+    FinanceAttachment,
+    FinanceBalanceSnapshot,
+    FinanceBudget,
+    FinanceBudgetCategory,
+    FinanceCategory,
+    FinanceCategoryAlias,
+    FinanceConnection,
+    FinanceCurrency,
+    FinanceFxRate,
+    FinanceHolding,
+    FinanceImportBatch,
+    FinanceImportBatchRow,
+    FinanceImportProfile,
+    FinanceInsight,
+    FinanceInstitution,
+    FinanceLiabilityDetail,
+    FinanceMerchant,
+    FinanceNetWorthSnapshot,
+    FinanceRecurringStream,
+    FinanceRule,
+    FinanceSecurity,
+    FinanceSecurityPrice,
+    FinanceSpendingBaseline,
+    FinanceTag,
+    FinanceTrade,
+    FinanceTransaction,
+    FinanceTransactionChangelog,
+    FinanceTransactionSplit,
+    FinanceTransactionTag,
+    FinanceTransfer,
+    FinanceValuation,
+    FinanceWebhookEvent,
+)
+{% endif %}
 {%- if include_scheduler and scheduler_backend != "memory" %}
 # Import scheduler models to register them with SQLModel metadata
 from app.services.scheduler.models import JobExecution  # noqa: F401

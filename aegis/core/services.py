@@ -25,6 +25,8 @@ from .migration_generator import (
     AUTH_RBAC_MIGRATION,
     AUTH_TOKENS_MIGRATION,
     BLOG_MIGRATION,
+    FINANCE_AUTH_LINK_MIGRATION,
+    FINANCE_MIGRATION,
     INSIGHTS_MIGRATION,
     ORG_MIGRATION,
     PAYMENT_AUTH_LINK_MIGRATION,
@@ -52,6 +54,7 @@ class ServiceType(Enum):
     ANALYTICS = "analytics"  # Usage analytics and metrics
     STORAGE = "storage"  # File storage and CDN
     CONTENT = "content"  # Content publishing and editorial workflows
+    FINANCE = "finance"  # Personal finance aggregation and ledger
 
 
 # Translation key for each service type's display header. Used by the
@@ -65,6 +68,7 @@ SERVICE_TYPE_I18N_KEYS: dict[ServiceType, str] = {
     ServiceType.ANALYTICS: "services.type_analytics",
     ServiceType.STORAGE: "services.type_storage",
     ServiceType.CONTENT: "services.type_content",
+    ServiceType.FINANCE: "services.type_finance",
 }
 
 
@@ -830,6 +834,51 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/api/test_blog_endpoints.py",
                 "app/components/frontend/dashboard/cards/blog_card.py",
                 "app/components/frontend/dashboard/modals/blog_modal.py",
+            ],
+        ),
+    ),
+    "finance": ServiceSpec(
+        name="finance",
+        # docs_path is set once the docs/services/finance page ships.
+        docs_path="",
+        marker_path="app/services/finance",
+        type=ServiceType.FINANCE,
+        description="Personal finance aggregation (accounts, transactions, net worth, import)",
+        long_description=(
+            "Aggregates bank, credit-card, and brokerage accounts, imports "
+            "Quicken/OFX/CSV files, tracks net worth over time, and surfaces "
+            "recurring-spend insights. Connectivity ships behind provider "
+            "flags (Plaid, SnapTrade); file import and manual accounts work "
+            "with no third-party service. When the auth service is present, "
+            "finance rows are owned by the app user (FK wired via the "
+            "finance_auth_link migration); standalone finance is single-user."
+        ),
+        required_components=[
+            ComponentNames.BACKEND,
+            ComponentNames.DATABASE,
+            ComponentNames.SCHEDULER,
+        ],
+        recommended_components=[ComponentNames.WORKER],
+        # Auth is integrated-when-present (owner FK via finance_auth_link),
+        # not required — mirrors payment_customer.user_id. Keeping it optional
+        # lets the guided/interactive flows select finance without forcing a
+        # service-to-service dependency they don't resolve.
+        # Wiring (routers/cards/modals/deps) is added by the tickets that
+        # create those modules; the schema tickets grow FINANCE_MIGRATION.
+        wiring=PluginWiring(),
+        migrations=[FINANCE_MIGRATION, FINANCE_AUTH_LINK_MIGRATION],
+        # Alembic is installed via the shared migration gate in
+        # pyproject.toml.jinja; runtime deps (plaid/ofx/...) land with their
+        # provider/import tickets. ``aegis add-service finance`` bootstraps
+        # alembic itself, so no alembic pin is needed here.
+        pyproject_deps=[],
+        template_files=[
+            "app/services/finance/",
+        ],
+        files=FileManifest(
+            primary=[
+                "app/services/finance",
+                "tests/services/test_finance_models.py",
             ],
         ),
     ),
