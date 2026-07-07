@@ -720,7 +720,7 @@ MESSAGES: dict[str, str] = {
     "init.help_opt_template_version": "从指定模板版本生成（标签、提交或分支）",
     "init.help_opt_no_llm_sync": "项目生成后跳过 LLM 目录同步（仅 AI 服务）",
     "init.help_opt_dev": "开发模式：从工作区读取模板（包含未提交改动）",
-    "init.help_opt_services": "服务：auth、ai。AI 选项：ai[framework,backend,providers]，其中 framework={frameworks}、backend={backends}、providers={providers}",
+    "init.help_opt_services": "服务：{services}。AI 选项：ai[framework,backend,providers]，其中 framework={frameworks}、backend={backends}、providers={providers}",
     # ── add CLI help ───────────────────────────────────────────────────
     "add.help_arg_components": "要添加的组件列表，用逗号分隔（scheduler、worker、database）",
     "add.help_opt_scheduler_backend": "调度器后端：「memory」（默认）或「sqlite」（启用持久化）",

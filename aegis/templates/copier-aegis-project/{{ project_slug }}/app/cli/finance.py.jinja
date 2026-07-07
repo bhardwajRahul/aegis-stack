@@ -17,23 +17,35 @@ accounts_app = typer.Typer(help="Manage manual finance accounts.")
 app.add_typer(accounts_app, name="accounts")
 console = theme.console()
 
+# Shared across commands: on auth-enabled stacks finance rows are owned by a
+# user, so CLI writes/reads must be attributed to one. Omit for standalone
+# (single-user) stacks, where the owner is NULL.
+_OWNER_OPT = typer.Option(
+    None,
+    "--owner-user-id",
+    "-u",
+    help="Owner user id (required on auth-enabled stacks; omit for standalone).",
+)
+
 
 def _usd(cents: int | None) -> str:
     return f"${(cents or 0) / 100:,.2f}"
 
 
 @app.command()
-def status() -> None:
+def status(owner_user_id: int | None = _OWNER_OPT) -> None:
     """Show the finance summary (net worth, account/connection counts)."""
-    asyncio.run(_status())
+    asyncio.run(_status(owner_user_id))
 
 
-async def _status() -> None:
+async def _status(owner_user_id: int | None) -> None:
     from app.core.db import get_async_session
     from app.services.finance.finance_service import FinanceService
 
     async with get_async_session() as session:
-        summary = await FinanceService(session).get_status_summary()
+        summary = await FinanceService(session).get_status_summary(
+            owner_user_id=owner_user_id
+        )
     console.print(f"Net worth:   [bold]{_usd(summary.net_worth_amount)}[/]")
     console.print(f"  Assets:      {_usd(summary.total_assets_amount)}")
     console.print(f"  Liabilities: {_usd(summary.total_liabilities_amount)}")
@@ -44,19 +56,21 @@ async def _status() -> None:
 
 
 @accounts_app.command("list")
-def accounts_list() -> None:
+def accounts_list(owner_user_id: int | None = _OWNER_OPT) -> None:
     """List accounts."""
-    asyncio.run(_accounts_list())
+    asyncio.run(_accounts_list(owner_user_id))
 
 
-async def _accounts_list() -> None:
+async def _accounts_list(owner_user_id: int | None) -> None:
     from rich.table import Table
 
     from app.core.db import get_async_session
     from app.services.finance.finance_service import FinanceService
 
     async with get_async_session() as session:
-        accounts, total = await FinanceService(session).list_accounts()
+        accounts, total = await FinanceService(session).list_accounts(
+            owner_user_id=owner_user_id
+        )
 
     table = Table(title=f"Finance Accounts ({total})")
     table.add_column("ID", justify="right")
@@ -88,19 +102,29 @@ def accounts_create(
         "asset", "--class", "-c", help="asset | liability"
     ),
     currency: str = typer.Option("usd", "--currency", help="ISO-4217, lowercase."),
+    owner_user_id: int | None = _OWNER_OPT,
 ) -> None:
     """Create a manual account."""
-    asyncio.run(_accounts_create(name, account_type, classification, currency))
+    asyncio.run(
+        _accounts_create(
+            name, account_type, classification, currency, owner_user_id
+        )
+    )
 
 
 async def _accounts_create(
-    name: str, account_type: str, classification: str, currency: str
+    name: str,
+    account_type: str,
+    classification: str,
+    currency: str,
+    owner_user_id: int | None,
 ) -> None:
     from app.core.db import get_async_session
     from app.services.finance.finance_service import FinanceService
 
     async with get_async_session() as session:
         account = await FinanceService(session).create_manual_account(
+            owner_user_id=owner_user_id,
             name=name,
             account_type=account_type,
             classification=classification,
@@ -146,3 +170,52 @@ async def _recompute_snapshots(days: int) -> None:
         f"[green]Recomputed {total} net-worth day(s) across "
         f"{len(owners)} owner(s).[/]"
     )
+
+
+@app.command("import")
+def import_file(
+    path: str = typer.Argument(..., help="Path to an OFX/QFX/QIF/CSV file."),
+    account_id: int | None = typer.Option(
+        None, "--account-id", "-a", help="Target account (required for QIF/CSV)."
+    ),
+    owner_user_id: int | None = _OWNER_OPT,
+) -> None:
+    """Import a bank / credit-card / Quicken file into an account."""
+    asyncio.run(_import_file(path, account_id, owner_user_id))
+
+
+async def _import_file(
+    path: str, account_id: int | None, owner_user_id: int | None
+) -> None:
+    from pathlib import Path
+
+    from rich.table import Table
+
+    from app.core.db import get_async_session
+    from app.services.finance import import_service
+
+    file_path = Path(path)
+    data = file_path.read_bytes()
+    async with get_async_session() as session:
+        try:
+            result = await import_service.import_file(
+                session,
+                owner_user_id=owner_user_id,
+                file_name=file_path.name,
+                file_bytes=data,
+                account_id=account_id,
+            )
+            await session.commit()
+        except Exception as exc:
+            console.print(f"[red]Import failed:[/] {exc}")
+            raise typer.Exit(code=1) from exc
+
+    table = Table(title=f"Imported {file_path.name}")
+    table.add_column("Result")
+    table.add_column("Count", justify="right")
+    table.add_row("Total rows", str(result.rows_total))
+    table.add_row("Inserted", str(result.rows_inserted))
+    table.add_row("Duplicate", str(result.rows_duplicate))
+    table.add_row("Errors", str(result.rows_error))
+    table.add_row("Batch ID", str(result.batch_id))
+    console.print(table)

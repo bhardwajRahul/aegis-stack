@@ -865,7 +865,7 @@ MESSAGES: dict[str, str] = {
     "init.help_opt_template_version": "指定したテンプレートバージョンから生成（タグ、コミット、ブランチ）",
     "init.help_opt_no_llm_sync": "プロジェクト生成後の LLM カタログ同期をスキップ（AI サービスのみ）",
     "init.help_opt_dev": "開発モード：ワーキングツリーからテンプレートを読み込む（未コミットの変更を含む）",
-    "init.help_opt_services": "サービス：auth、ai。AI オプション：ai[framework,backend,providers]、framework={frameworks}、backend={backends}、providers={providers}",
+    "init.help_opt_services": "サービス：{services}。AI オプション：ai[framework,backend,providers]、framework={frameworks}、backend={backends}、providers={providers}",
     # ── add CLI help ───────────────────────────────────────────────────
     "add.help_arg_components": "追加するコンポーネントのリスト、カンマ区切り（scheduler、worker、database）",
     "add.help_opt_scheduler_backend": "スケジューラのバックエンド：「memory」（デフォルト）または「sqlite」（永続化を有効化）",

@@ -32,12 +32,14 @@ from ..core.components import (
     ComponentType,
 )
 from ..core.service_resolver import ServiceResolver
+from ..core.services import SERVICES
 from ..core.template_generator import TemplateGenerator
 from ..i18n import lazy_t, t
 
 # Build services help text dynamically from constants
 _SERVICES_HELP = lazy_t(
     "init.help_opt_services",
+    services=", ".join(sorted(SERVICES)),
     frameworks="|".join(sorted(FRAMEWORKS)),
     backends="|".join(sorted(BACKENDS)),
     providers="|".join(sorted(PROVIDERS)),

@@ -13,6 +13,9 @@ from app.services.blog.constants import BLOG_COMPONENT_NAME
 {% if include_payment %}
 from app.services.payment.constants import PAYMENT_COMPONENT_NAME
 {% endif %}
+{% if include_finance %}
+from app.services.finance.constants import FINANCE_COMPONENT_NAME
+{% endif %}
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_database_subtitle
 
@@ -118,6 +121,14 @@ def get_component_display_info(
     elif component_name == f"service_{PAYMENT_COMPONENT_NAME}":
         provider = metadata.get("provider_display_name", "") or "Stripe"
         return ("Payment", provider)
+{% endif %}
+{% if include_finance %}
+
+    elif component_name == f"service_{FINANCE_COMPONENT_NAME}":
+        return (
+            "Finance",
+            get_component_subtitle(f"service_{FINANCE_COMPONENT_NAME}", metadata),
+        )
 {% endif %}
 {% if include_blog %}
 
@@ -258,6 +269,9 @@ class StatusOverviewPanel(ft.Container):
 {% endif %}
 {% if include_payment %}
             f"service_{PAYMENT_COMPONENT_NAME}",
+{% endif %}
+{% if include_finance %}
+            f"service_{FINANCE_COMPONENT_NAME}",
 {% endif %}
 {% if include_blog %}
             f"service_{BLOG_COMPONENT_NAME}",

@@ -884,7 +884,7 @@ MESSAGES: dict[str, str] = {
     "init.help_opt_template_version": "Generar desde una versión específica de la plantilla (etiqueta, commit o rama)",
     "init.help_opt_no_llm_sync": "Omitir la sincronización del catálogo de LLM tras generar el proyecto (solo servicio AI)",
     "init.help_opt_dev": "Modo dev: leer plantillas desde el árbol de trabajo (incluye cambios sin commit)",
-    "init.help_opt_services": "Servicios: auth, ai. Opciones de AI: ai[framework,backend,providers] donde framework={frameworks}, backend={backends}, providers={providers}",
+    "init.help_opt_services": "Servicios: {services}. Opciones de AI: ai[framework,backend,providers] donde framework={frameworks}, backend={backends}, providers={providers}",
     # ── add CLI help ───────────────────────────────────────────────────
     "add.help_arg_components": "Lista de componentes a agregar, separada por comas (scheduler,worker,database)",
     "add.help_opt_scheduler_backend": "Backend del scheduler: 'memory' (por defecto) o 'sqlite' (habilita persistencia)",

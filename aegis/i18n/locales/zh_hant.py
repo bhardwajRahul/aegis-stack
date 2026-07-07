@@ -720,7 +720,7 @@ MESSAGES: dict[str, str] = {
     "init.help_opt_template_version": "從指定的範本版本生成（標籤、提交或分支）",
     "init.help_opt_no_llm_sync": "專案生成後跳過 LLM 目錄同步（僅 AI 服務）",
     "init.help_opt_dev": "開發模式：從工作目錄讀取範本（包含未提交的變更）",
-    "init.help_opt_services": "服務：auth、ai。AI 選項：ai[framework,backend,providers],其中 framework={frameworks}、backend={backends}、providers={providers}",
+    "init.help_opt_services": "服務：{services}。AI 選項：ai[framework,backend,providers],其中 framework={frameworks}、backend={backends}、providers={providers}",
     # ── add CLI help ───────────────────────────────────────────────────
     "add.help_arg_components": "要新增的元件清單,以逗號分隔（scheduler、worker、database）",
     "add.help_opt_scheduler_backend": "排程器後端：「memory」（預設）或「sqlite」（啟用持久化）",

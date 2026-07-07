@@ -226,3 +226,111 @@ async def test_import_batch_report(
     assert body["rows_inserted"] == 6
     assert len(body["rows"]) == 6
     assert all(r["parsed_status"] == "inserted" for r in body["rows"])
+
+
+# ---------------------------------------------------------------------------
+# FIN-17 — upload front door + read APIs
+# ---------------------------------------------------------------------------
+
+from pathlib import Path  # noqa: E402
+
+_FIXTURES = (
+    Path(__file__).parent.parent / "services" / "finance" / "fixtures"
+)
+
+
+async def _checking_account(session: AsyncSession) -> int:
+    account = await FinanceService(session).create_manual_account(
+        name="Chase Checking", account_type="checking", classification="asset"
+    )
+    await session.commit()
+    return account.id
+
+
+@pytest.mark.asyncio
+async def test_upload_qif(
+    async_client_with_db: TestClient, async_db_session: AsyncSession
+) -> None:
+    account_id = await _checking_account(async_db_session)
+    data = (_FIXTURES / "sample_quicken.qif").read_bytes()
+    response = async_client_with_db.post(
+        "/api/v1/finance/import",
+        files={"file": ("sample_quicken.qif", data, "text/plain")},
+        params={"account_id": account_id},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["rows_inserted"] == 8
+
+    # transactions read API returns them, newest first, deduped rows excluded
+    txns = async_client_with_db.get(
+        f"/api/v1/finance/transactions?account_id={account_id}"
+    )
+    assert txns.status_code == 200
+    items = txns.json()["items"]
+    assert len(items) == 8
+    assert items[0]["date"] >= items[-1]["date"]
+
+
+@pytest.mark.asyncio
+async def test_upload_reupload_short_circuits(
+    async_client_with_db: TestClient, async_db_session: AsyncSession
+) -> None:
+    account_id = await _checking_account(async_db_session)
+    data = (_FIXTURES / "sample_chase.qfx").read_bytes()
+    files = {"file": ("sample_chase.qfx", data, "application/octet-stream")}
+    first = async_client_with_db.post(
+        "/api/v1/finance/import", files=files, params={"account_id": account_id}
+    )
+    assert first.json()["rows_inserted"] == 6
+    second = async_client_with_db.post(
+        "/api/v1/finance/import",
+        files={"file": ("sample_chase.qfx", data, "application/octet-stream")},
+        params={"account_id": account_id},
+    )
+    body = second.json()
+    assert body["rows_inserted"] == 0
+    assert body["rows_duplicate"] == body["rows_total"] == 6
+
+    batches = async_client_with_db.get("/api/v1/finance/import/batches")
+    assert batches.status_code == 200
+    assert len(batches.json()) >= 1
+
+
+@pytest.mark.asyncio
+async def test_upload_unknown_extension_415(
+    async_client_with_db: TestClient, async_db_session: AsyncSession
+) -> None:
+    account_id = await _checking_account(async_db_session)
+    response = async_client_with_db.post(
+        "/api/v1/finance/import",
+        files={"file": ("statement.pdf", b"%PDF-1.4", "application/pdf")},
+        params={"account_id": account_id},
+    )
+    assert response.status_code == 415
+
+
+@pytest.mark.asyncio
+async def test_upload_missing_account_404(
+    async_client_with_db: TestClient,
+) -> None:
+    response = async_client_with_db.post(
+        "/api/v1/finance/import",
+        files={"file": ("x.qif", b"!Type:Bank\n^\n", "text/plain")},
+        params={"account_id": 999_999},
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_upload_oversized_413(
+    async_client_with_db: TestClient, async_db_session: AsyncSession
+) -> None:
+    account_id = await _checking_account(async_db_session)
+    oversized = b"x" * (10 * 1024 * 1024 + 1)
+    response = async_client_with_db.post(
+        "/api/v1/finance/import",
+        files={"file": ("big.csv", oversized, "text/csv")},
+        params={"account_id": account_id},
+    )
+    assert response.status_code == 413

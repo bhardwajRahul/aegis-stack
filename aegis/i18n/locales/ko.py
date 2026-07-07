@@ -833,7 +833,7 @@ MESSAGES: dict[str, str] = {
     "init.help_opt_template_version": "지정한 템플릿 버전으로부터 생성 (태그, 커밋 또는 브랜치)",
     "init.help_opt_no_llm_sync": "프로젝트 생성 후 LLM 카탈로그 동기화를 건너뜀 (AI 서비스에만 해당)",
     "init.help_opt_dev": "개발 모드: 작업 트리에서 템플릿을 읽음 (커밋되지 않은 변경 포함)",
-    "init.help_opt_services": "서비스: auth, ai. AI 옵션: ai[framework,backend,providers] (framework={frameworks}, backend={backends}, providers={providers})",
+    "init.help_opt_services": "서비스: {services}. AI 옵션: ai[framework,backend,providers] (framework={frameworks}, backend={backends}, providers={providers})",
     # ── add CLI help ───────────────────────────────────────────────────
     "add.help_arg_components": "추가할 컴포넌트 목록, 쉼표로 구분 (scheduler, worker, database)",
     "add.help_opt_scheduler_backend": "스케줄러 백엔드: 'memory' (기본값) 또는 'sqlite' (영속성 활성화)",

@@ -21,6 +21,9 @@ from app.components.frontend.dashboard.cards.insights_card import InsightsCard
 {%- if include_payment %}
 from app.components.frontend.dashboard.cards.payment_card import PaymentCard
 {%- endif %}
+{%- if include_finance %}
+from app.components.frontend.dashboard.cards.finance_card import FinanceCard
+{%- endif %}
 {%- for p in _plugins | default([]) %}
 {%- for c in p.wiring.dashboard_cards %}
 from {{ c.module }} import {{ c.symbol }}
@@ -46,7 +49,7 @@ from .redis_card import RedisCard
 from .scheduler_card import SchedulerCard
 {%- endif %}
 from .server_card import ServerCard
-{%- if include_auth or include_ai or include_blog or include_comms or include_insights or include_payment or _plugins %}
+{%- if include_auth or include_ai or include_blog or include_comms or include_insights or include_payment or include_finance or _plugins %}
 from .services_card import ServicesCard
 {%- endif %}
 {%- if include_worker %}
@@ -73,12 +76,15 @@ __all__ = [
 {%- if include_payment %}
     "PaymentCard",
 {%- endif %}
+{%- if include_finance %}
+    "FinanceCard",
+{%- endif %}
 {%- for p in _plugins | default([]) %}
 {%- for c in p.wiring.dashboard_cards %}
     "{{ c.symbol }}",
 {%- endfor %}
 {%- endfor %}
-{%- if include_auth or include_ai or include_blog or include_comms or include_insights or include_payment or _plugins %}
+{%- if include_auth or include_ai or include_blog or include_comms or include_insights or include_payment or include_finance or _plugins %}
     "ServicesCard",
 {%- endif %}
 {%- if include_database %}

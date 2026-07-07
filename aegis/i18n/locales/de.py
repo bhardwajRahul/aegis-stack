@@ -882,7 +882,7 @@ MESSAGES: dict[str, str] = {
     "init.help_opt_template_version": "Aus einer bestimmten Template-Version generieren (Tag, Commit oder Branch)",
     "init.help_opt_no_llm_sync": "LLM-Katalog-Synchronisation nach der Projekterstellung überspringen (nur AI-Service)",
     "init.help_opt_dev": "Dev-Modus: Templates aus dem Arbeitsbaum lesen (auch nicht-committed Änderungen)",
-    "init.help_opt_services": "Services: auth, ai. AI-Optionen: ai[framework,backend,providers] mit framework={frameworks}, backend={backends}, providers={providers}",
+    "init.help_opt_services": "Services: {services}. AI-Optionen: ai[framework,backend,providers] mit framework={frameworks}, backend={backends}, providers={providers}",
     # ── add CLI help ───────────────────────────────────────────────────
     "add.help_arg_components": "Kommagetrennte Liste hinzuzufügender Komponenten (scheduler,worker,database)",
     "add.help_opt_scheduler_backend": "Scheduler-Backend: 'memory' (Standard) oder 'sqlite' (aktiviert Persistenz)",

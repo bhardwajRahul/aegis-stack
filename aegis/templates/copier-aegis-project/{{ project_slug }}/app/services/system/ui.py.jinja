@@ -81,6 +81,9 @@ def get_component_title(component_name: str) -> str:
         {%- if include_payment %}
         "service_payment": "Payment",
         {%- endif %}
+        {%- if include_finance %}
+        "service_finance": "Finance",
+        {%- endif %}
         {%- if include_ingress %}
         "ingress": "Ingress",
         {%- endif %}
@@ -120,6 +123,9 @@ def get_component_label(component_name: str) -> str:
         {%- endif %}
         {%- if include_payment %}
         "service_payment": "Stripe",
+        {%- endif %}
+        {%- if include_finance %}
+        "service_finance": "Aggregator",
         {%- endif %}
         {%- if include_ingress %}
         "ingress": "Traefik",

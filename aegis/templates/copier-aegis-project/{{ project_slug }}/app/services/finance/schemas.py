@@ -35,19 +35,26 @@ class AccountResponse(BaseModel):
     account_type: str
     classification: str
     current_balance: int | None
+    # Balance derived from the sum of imported transactions (the register
+    # balance Quicken shows). Useful when no valuation/statement balance was
+    # set. Falls back to 0 when there are no transactions.
+    activity_balance: int = 0
     currency: str
     is_manual: bool
     institution_id: int | None = None
     connection_id: int | None = None
 
     @classmethod
-    def from_row(cls, row: FinanceAccount) -> AccountResponse:
+    def from_row(
+        cls, row: FinanceAccount, *, activity_balance: int = 0
+    ) -> AccountResponse:
         return cls(
             id=row.id,
             name=row.name,
             account_type=row.account_type,
             classification=row.classification,
             current_balance=row.current_balance,
+            activity_balance=activity_balance,
             currency=row.currency,
             is_manual=row.is_manual,
             institution_id=row.institution_id,
@@ -185,6 +192,32 @@ class ImportResultResponse(BaseModel):
     rows_updated: int
     rows_duplicate: int
     rows_error: int
+
+
+class ImportBatchSummary(BaseModel):
+    """An import batch without its rows — for the batch list."""
+
+    id: int
+    source_type: str
+    file_name: str | None
+    status: str
+    rows_total: int
+    rows_inserted: int
+    rows_duplicate: int
+    rows_error: int
+
+    @classmethod
+    def from_row(cls, batch: FinanceImportBatch) -> ImportBatchSummary:
+        return cls(
+            id=batch.id,
+            source_type=batch.source_type,
+            file_name=batch.file_name,
+            status=batch.status,
+            rows_total=batch.rows_total,
+            rows_inserted=batch.rows_inserted,
+            rows_duplicate=batch.rows_duplicate,
+            rows_error=batch.rows_error,
+        )
 
 
 class ImportBatchRowResponse(BaseModel):

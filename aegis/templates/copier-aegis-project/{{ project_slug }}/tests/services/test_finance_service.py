@@ -147,6 +147,59 @@ class TestFinanceTransactions:
         assert txns[0].name == "Payroll"  # newest first
 
     @pytest.mark.asyncio
+    async def test_account_transaction_totals(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Per-account register balance = sum of its transactions (one query)."""
+        svc = FinanceService(async_db_session)
+        checking = await svc.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        card = await svc.create_manual_account(
+            owner_user_id=1,
+            name="Card",
+            account_type="credit_card",
+            classification="liability",
+        )
+        await svc.create_transaction(
+            owner_user_id=1,
+            account_id=checking.id,
+            amount=10_000,
+            txn_date=date(2026, 1, 1),
+            name="Deposit",
+        )
+        await svc.create_transaction(
+            owner_user_id=1,
+            account_id=checking.id,
+            amount=-2_500,
+            txn_date=date(2026, 1, 2),
+            name="Groceries",
+        )
+        await svc.create_transaction(
+            owner_user_id=1,
+            account_id=card.id,
+            amount=-5_000,
+            txn_date=date(2026, 1, 2),
+            name="Dining",
+        )
+        totals = await svc.account_transaction_totals(owner_user_id=1)
+        assert totals[checking.id] == 7_500  # 10,000 - 2,500
+        assert totals[card.id] == -5_000
+
+        # Scoped to a page's accounts: only the requested ids are aggregated
+        # (Copilot review — avoid summing every account on a paginated list).
+        scoped = await svc.account_transaction_totals(
+            owner_user_id=1, account_ids=[checking.id]
+        )
+        assert scoped == {checking.id: 7_500}
+        assert await svc.account_transaction_totals(
+            owner_user_id=1, account_ids=[]
+        ) == {}
+
+    @pytest.mark.asyncio
     async def test_two_lane_dedup(self, async_db_session: AsyncSession) -> None:
         svc = FinanceService(async_db_session)
         acct = await svc.create_manual_account(
@@ -224,6 +277,66 @@ class TestFinanceStatusSummary:
         assert summary.account_count == 2
         assert summary.connection_count == 0
         assert summary.currency == "usd"
+
+    @pytest.mark.asyncio
+    async def test_card_path_folds_counts_and_respects_hidden(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The dashboard card path issues two aggregate queries per call (not
+        three), and the account-rollup fold keeps the differing filters: a
+        hidden account is counted but excluded from net worth."""
+        from sqlalchemy import event
+        from sqlalchemy.engine import Engine
+
+        svc = FinanceService(async_db_session)
+        await svc.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+            current_balance=500_000,
+        )
+        await svc.create_manual_account(
+            owner_user_id=1,
+            name="Card",
+            account_type="credit_card",
+            classification="liability",
+            current_balance=50_000,
+        )
+        hidden = await svc.create_manual_account(
+            owner_user_id=1,
+            name="Hidden",
+            account_type="checking",
+            classification="asset",
+            current_balance=999_999,
+        )
+        await svc.update_account(hidden.id, owner_user_id=1, is_hidden=True)
+
+        selects = {"n": 0}
+
+        def _on_exec(conn, cursor, statement, params, context, executemany):
+            if statement.lstrip().upper().startswith("SELECT"):
+                selects["n"] += 1
+
+        event.listen(Engine, "before_cursor_execute", _on_exec)
+        try:
+            selects["n"] = 0
+            summary = await svc.get_status_summary(owner_user_id=1)
+            status_queries = selects["n"]
+            selects["n"] = 0
+            health = await svc.health(owner_user_id=1)
+            health_queries = selects["n"]
+        finally:
+            event.remove(Engine, "before_cursor_execute", _on_exec)
+
+        # Two aggregates each: account rollup + connection rollup (was three).
+        assert status_queries == 2, f"status_summary issued {status_queries} queries"
+        assert health_queries == 2, f"health issued {health_queries} queries"
+
+        # Hidden account counts toward totals but not net worth.
+        assert summary.account_count == 3
+        assert health.accounts == 3
+        assert summary.net_worth_amount == 450_000  # hidden asset excluded
 
 
 class TestFinanceHealth:
@@ -490,3 +603,49 @@ class TestFinanceNetWorth:
             s.is_estimated and s.source == "carried_forward" for s in carried
         )
         assert all(s.balance == 50_000_000 for s in snaps)  # value carried
+
+    @pytest.mark.asyncio
+    async def test_recompute_query_count_is_constant_in_accounts(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """recompute preloads in bulk, so SELECT count does not scale with the
+        number of accounts (guards against the old O(accounts x days) N+1)."""
+        from sqlalchemy import event
+        from sqlalchemy.engine import Engine
+
+        from app.services.finance import networth_service
+
+        selects = {"n": 0}
+
+        def _on_exec(conn, cursor, statement, params, context, executemany):
+            if statement.lstrip().upper().startswith("SELECT"):
+                selects["n"] += 1
+
+        async def _recompute_owner(owner: int, account_count: int) -> int:
+            svc = FinanceService(async_db_session)
+            for i in range(account_count):
+                await svc.create_manual_account(
+                    owner_user_id=owner,
+                    name=f"Acct {owner}-{i}",
+                    account_type="cash",
+                    classification="asset",
+                    current_balance=100_000 + i,
+                )
+            event.listen(Engine, "before_cursor_execute", _on_exec)
+            try:
+                selects["n"] = 0
+                await networth_service.recompute_snapshots(
+                    async_db_session, owner_user_id=owner
+                )
+                return selects["n"]
+            finally:
+                event.remove(Engine, "before_cursor_execute", _on_exec)
+
+        small = await _recompute_owner(owner=101, account_count=2)
+        large = await _recompute_owner(owner=102, account_count=8)
+
+        # 4x the accounts must not mean 4x the queries: bulk preloads keep the
+        # SELECT count flat and small (accounts + valuations + balance snaps +
+        # net-worth snaps).
+        assert small == large, f"query count scaled with accounts: {small} -> {large}"
+        assert large <= 6, f"expected a handful of preload queries, got {large}"

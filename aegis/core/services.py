@@ -863,8 +863,8 @@ SERVICES: dict[str, ServiceSpec] = {
         # not required — mirrors payment_customer.user_id. Keeping it optional
         # lets the guided/interactive flows select finance without forcing a
         # service-to-service dependency they don't resolve.
-        # Wiring grows per ticket: FIN-11 adds the backend router + DI
-        # provider; dashboard cards/modals land in FIN-18.
+        # FIN-11 adds the backend router + DI provider; FIN-18 adds the
+        # dashboard card (net-worth headline) + modal (Accounts / Transactions).
         wiring=PluginWiring(
             routers=[
                 RouterWiring(
@@ -872,6 +872,20 @@ SERVICES: dict[str, ServiceSpec] = {
                     symbol="router",
                     alias="finance_router",
                     prefix="/api/v1",
+                ),
+            ],
+            dashboard_cards=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.cards.finance_card",
+                    symbol="FinanceCard",
+                    modal_id="service_finance",
+                ),
+            ],
+            dashboard_modals=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.modals.finance_modal",
+                    symbol="FinanceDetailDialog",
+                    modal_id="service_finance",
                 ),
             ],
             deps_providers=[
@@ -887,16 +901,20 @@ SERVICES: dict[str, ServiceSpec] = {
         # tickets. ``ofxtools`` backs the OFX/QFX importer (gated on the
         # finance_import sub-flag in pyproject.toml.jinja). ``aegis add-service
         # finance`` bootstraps alembic itself, so no alembic pin is needed here.
-        pyproject_deps=["ofxtools>=0.9.5"],
+        pyproject_deps=["ofxtools>=0.9.5", "python-multipart==0.0.9"],
         template_files=[
             "app/services/finance/",
             "app/components/backend/api/finance/",
+            "app/components/frontend/dashboard/cards/finance_card.py",
+            "app/components/frontend/dashboard/modals/finance_modal.py",
             "app/cli/finance.py",
         ],
         files=FileManifest(
             primary=[
                 "app/services/finance",
                 "app/components/backend/api/finance",
+                "app/components/frontend/dashboard/cards/finance_card.py",
+                "app/components/frontend/dashboard/modals/finance_modal.py",
                 "app/cli/finance.py",
                 "tests/services/test_finance_models.py",
                 "tests/services/test_finance_service.py",

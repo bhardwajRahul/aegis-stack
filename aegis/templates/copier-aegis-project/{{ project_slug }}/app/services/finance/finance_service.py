@@ -17,19 +17,21 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
-from sqlalchemy import func
+from sqlalchemy import and_, case, func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.finance.constants import Provider
 from app.services.finance.models import (
     FinanceAccount,
+    FinanceCategoryAlias,
     FinanceConnection,
     FinanceCurrency,
     FinanceImportBatch,
     FinanceImportBatchRow,
     FinanceInstitution,
     FinanceTransaction,
+    FinanceTransactionSplit,
     FinanceValuation,
 )
 from app.services.finance.schemas import (
@@ -264,6 +266,7 @@ class FinanceService:
         external_id: str | None = None,
         external_id_source: str | None = None,
         import_hash: str | None = None,
+        within_day_ordinal: int = 0,
         import_batch_id: int | None = None,
         raw_amount: int | None = None,
         raw_sign_convention: str | None = None,
@@ -272,6 +275,8 @@ class FinanceService:
         check_number: str | None = None,
         currency: str = _DEFAULT_CURRENCY,
         category_id: int | None = None,
+        category_source: str = "unset",
+        is_split: bool = False,
     ) -> FinanceTransaction:
         txn = FinanceTransaction(
             owner_user_id=owner_user_id,
@@ -283,6 +288,7 @@ class FinanceService:
             external_id=external_id,
             external_id_source=external_id_source,
             import_hash=import_hash,
+            within_day_ordinal=within_day_ordinal,
             import_batch_id=import_batch_id,
             raw_amount=raw_amount,
             raw_sign_convention=raw_sign_convention,
@@ -291,46 +297,137 @@ class FinanceService:
             check_number=check_number,
             currency=currency,
             category_id=category_id,
+            category_source=category_source,
+            is_split=is_split,
         )
         self.db.add(txn)
         await self.db.flush()
         return txn
+
+    async def create_split(
+        self,
+        *,
+        parent_transaction_id: int,
+        amount: int,
+        owner_user_id: int | None = None,
+        category_id: int | None = None,
+        memo: str | None = None,
+        sort_order: int = 0,
+        currency: str = _DEFAULT_CURRENCY,
+    ) -> FinanceTransactionSplit:
+        split = FinanceTransactionSplit(
+            owner_user_id=owner_user_id,
+            parent_transaction_id=parent_transaction_id,
+            amount=amount,
+            category_id=category_id,
+            memo=memo,
+            sort_order=sort_order,
+            currency=currency,
+        )
+        self.db.add(split)
+        await self.db.flush()
+        return split
+
+    async def resolve_category_alias(
+        self, category_hint: str | None
+    ) -> int | None:
+        """Map a free-text category string to a category id via
+        finance_category_alias (normalized lookup). None if unmatched.
+
+        Prefers a user alias over a global (owner NULL) seed when both match.
+        """
+        if not category_hint:
+            return None
+        from app.services.finance.importers.base import normalize_payee
+
+        normalized = normalize_payee(category_hint)
+        if not normalized:
+            return None
+        query = (
+            select(FinanceCategoryAlias.category_id)
+            .where(FinanceCategoryAlias.normalized_alias == normalized)
+            .order_by(FinanceCategoryAlias.owner_user_id.desc())
+        )
+        return (await self.db.exec(query)).first()
 
     async def list_transactions(
         self,
         *,
         owner_user_id: int | None = None,
         account_id: int | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        category_id: int | None = None,
+        query: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[FinanceTransaction], int]:
-        query = select(FinanceTransaction).where(
-            FinanceTransaction.deleted_at.is_(None)
-        )
-        count_query = (
-            select(func.count())
-            .select_from(FinanceTransaction)
-            .where(FinanceTransaction.deleted_at.is_(None))
-        )
+        # Default view: not soft-deleted, and never the losing side of a dedup.
+        filters = [
+            FinanceTransaction.deleted_at.is_(None),
+            FinanceTransaction.dedup_status != "duplicate",
+        ]
         if owner_user_id is not None:
-            query = query.where(FinanceTransaction.owner_user_id == owner_user_id)
-            count_query = count_query.where(
-                FinanceTransaction.owner_user_id == owner_user_id
-            )
+            filters.append(FinanceTransaction.owner_user_id == owner_user_id)
         if account_id is not None:
-            query = query.where(FinanceTransaction.account_id == account_id)
-            count_query = count_query.where(
-                FinanceTransaction.account_id == account_id
-            )
+            filters.append(FinanceTransaction.account_id == account_id)
+        if from_date is not None:
+            filters.append(FinanceTransaction.date_ >= from_date)
+        if to_date is not None:
+            filters.append(FinanceTransaction.date_ <= to_date)
+        if category_id is not None:
+            filters.append(FinanceTransaction.category_id == category_id)
+        if query:
+            filters.append(FinanceTransaction.name.ilike(f"%{query}%"))
+        select_query = select(FinanceTransaction).where(*filters)
+        count_query = (
+            select(func.count()).select_from(FinanceTransaction).where(*filters)
+        )
         total = (await self.db.exec(count_query)).one()
-        query = (
-            query.order_by(
+        query_obj = (
+            select_query.order_by(
                 FinanceTransaction.date_.desc(), FinanceTransaction.id.desc()
             )
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
-        return list((await self.db.exec(query)).all()), total
+        return list((await self.db.exec(query_obj)).all()), total
+
+    async def account_transaction_totals(
+        self,
+        *,
+        owner_user_id: int | None = None,
+        account_ids: list[int] | None = None,
+    ) -> dict[int, int]:
+        """Sum of (non-duplicate, non-deleted) transaction amounts per account.
+
+        The register-style balance shown per account in the UI when no
+        statement balance/valuation is set. One aggregate query, keyed by
+        account id — never one query per account. Pass ``account_ids`` to scope
+        the aggregate to a page's accounts instead of the whole owner.
+        """
+        if account_ids is not None and not account_ids:
+            return {}
+        filters = [
+            FinanceTransaction.deleted_at.is_(None),
+            FinanceTransaction.dedup_status != "duplicate",
+        ]
+        if owner_user_id is not None:
+            filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+        if account_ids is not None:
+            filters.append(FinanceTransaction.account_id.in_(account_ids))
+        query = (
+            select(
+                FinanceTransaction.account_id,
+                func.coalesce(func.sum(FinanceTransaction.amount), 0),
+            )
+            .where(*filters)
+            .group_by(FinanceTransaction.account_id)
+        )
+        return {
+            account_id: int(total or 0)
+            for account_id, total in (await self.db.exec(query)).all()
+        }
 
     # ------------------------------------------------------------------ #
     # Valuations (manual / off-aggregator asset marks)
@@ -360,26 +457,88 @@ class FinanceService:
     # ------------------------------------------------------------------ #
     # Net worth
     # ------------------------------------------------------------------ #
+    async def _account_rollup(
+        self, *, owner_user_id: int | None = None
+    ) -> tuple[int, int, int]:
+        """(assets, liabilities, account_count) in a single aggregate query.
+
+        Assets/liabilities sum only *visible* accounts; the count includes
+        hidden ones — the two filters differ, so they're expressed as
+        conditional sums over one scan rather than three separate queries.
+        """
+        query = (
+            select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                and_(
+                                    FinanceAccount.classification == "asset",
+                                    ~FinanceAccount.is_hidden,
+                                ),
+                                FinanceAccount.current_balance,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                and_(
+                                    FinanceAccount.classification == "liability",
+                                    ~FinanceAccount.is_hidden,
+                                ),
+                                FinanceAccount.current_balance,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ),
+                func.count(),
+            )
+            .select_from(FinanceAccount)
+            .where(FinanceAccount.deleted_at.is_(None))
+        )
+        if owner_user_id is not None:
+            query = query.where(FinanceAccount.owner_user_id == owner_user_id)
+        assets, liabilities, count = (await self.db.exec(query)).one()
+        return int(assets or 0), int(liabilities or 0), int(count or 0)
+
+    async def _connection_rollup(
+        self, *, owner_user_id: int | None = None
+    ) -> tuple[int, int]:
+        """(connection_count, needs_action_count) in a single aggregate query."""
+        query = (
+            select(
+                func.count(),
+                func.coalesce(
+                    func.sum(
+                        case((FinanceConnection.needs_user_action, 1), else_=0)
+                    ),
+                    0,
+                ),
+            )
+            .select_from(FinanceConnection)
+            .where(FinanceConnection.deleted_at.is_(None))
+        )
+        if owner_user_id is not None:
+            query = query.where(
+                FinanceConnection.owner_user_id == owner_user_id
+            )
+        connections, needs_action = (await self.db.exec(query)).one()
+        return int(connections or 0), int(needs_action or 0)
+
     async def _asset_liability_totals(
         self, *, owner_user_id: int | None = None
     ) -> tuple[int, int]:
         """Live (assets, liabilities) totals summed across visible accounts."""
-        query = (
-            select(
-                FinanceAccount.classification,
-                func.coalesce(func.sum(FinanceAccount.current_balance), 0),
-            )
-            .where(FinanceAccount.deleted_at.is_(None), ~FinanceAccount.is_hidden)
-            .group_by(FinanceAccount.classification)
+        assets, liabilities, _ = await self._account_rollup(
+            owner_user_id=owner_user_id
         )
-        if owner_user_id is not None:
-            query = query.where(FinanceAccount.owner_user_id == owner_user_id)
-        assets = liabilities = 0
-        for classification, total in (await self.db.exec(query)).all():
-            if classification == "asset":
-                assets = int(total or 0)
-            elif classification == "liability":
-                liabilities = int(total or 0)
         return assets, liabilities
 
     async def get_net_worth(
@@ -399,26 +558,12 @@ class FinanceService:
         self, *, owner_user_id: int | None = None, currency: str = _DEFAULT_CURRENCY
     ) -> FinanceStatusSummary:
         """Headline numbers for the dashboard card, health check, and CLI."""
-        assets, liabilities = await self._asset_liability_totals(
+        assets, liabilities, account_count = await self._account_rollup(
             owner_user_id=owner_user_id
         )
-        account_q = (
-            select(func.count())
-            .select_from(FinanceAccount)
-            .where(FinanceAccount.deleted_at.is_(None))
+        connection_count, _ = await self._connection_rollup(
+            owner_user_id=owner_user_id
         )
-        connection_q = (
-            select(func.count())
-            .select_from(FinanceConnection)
-            .where(FinanceConnection.deleted_at.is_(None))
-        )
-        if owner_user_id is not None:
-            account_q = account_q.where(FinanceAccount.owner_user_id == owner_user_id)
-            connection_q = connection_q.where(
-                FinanceConnection.owner_user_id == owner_user_id
-            )
-        account_count = int((await self.db.exec(account_q)).one())
-        connection_count = int((await self.db.exec(connection_q)).one())
         return FinanceStatusSummary(
             net_worth_amount=assets - liabilities,
             total_assets_amount=assets,
@@ -434,35 +579,10 @@ class FinanceService:
         Backs ``GET /api/v1/finance/health``. ``status`` is ``"ok"`` unless a
         connection needs the user's attention (re-auth, consent expired, ...).
         """
-        account_q = (
-            select(func.count())
-            .select_from(FinanceAccount)
-            .where(FinanceAccount.deleted_at.is_(None))
+        _, _, accounts = await self._account_rollup(owner_user_id=owner_user_id)
+        connections, needs_action = await self._connection_rollup(
+            owner_user_id=owner_user_id
         )
-        connection_q = (
-            select(func.count())
-            .select_from(FinanceConnection)
-            .where(FinanceConnection.deleted_at.is_(None))
-        )
-        needs_action_q = (
-            select(func.count())
-            .select_from(FinanceConnection)
-            .where(
-                FinanceConnection.deleted_at.is_(None),
-                FinanceConnection.needs_user_action,
-            )
-        )
-        if owner_user_id is not None:
-            account_q = account_q.where(FinanceAccount.owner_user_id == owner_user_id)
-            connection_q = connection_q.where(
-                FinanceConnection.owner_user_id == owner_user_id
-            )
-            needs_action_q = needs_action_q.where(
-                FinanceConnection.owner_user_id == owner_user_id
-            )
-        accounts = int((await self.db.exec(account_q)).one())
-        connections = int((await self.db.exec(connection_q)).one())
-        needs_action = int((await self.db.exec(needs_action_q)).one())
         return FinanceHealth(
             status="ok" if needs_action == 0 else "attention",
             accounts=accounts,
@@ -604,6 +724,23 @@ class FinanceService:
                 )
             )
         ).first()
+
+    async def list_import_batches(
+        self,
+        *,
+        owner_user_id: int | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> list[FinanceImportBatch]:
+        batch_owner = 0 if owner_user_id is None else owner_user_id
+        query = (
+            select(FinanceImportBatch)
+            .where(FinanceImportBatch.owner_user_id == batch_owner)
+            .order_by(FinanceImportBatch.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        return list((await self.db.exec(query)).all())
 
     async def list_import_batch_rows(
         self, batch_id: int

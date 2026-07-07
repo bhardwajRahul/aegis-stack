@@ -903,7 +903,7 @@ MESSAGES: dict[str, str] = {
         "Dev mode: read templates from working tree (uncommitted changes)"
     ),
     "init.help_opt_services": (
-        "Services: auth, ai. AI options: ai[framework,backend,providers] "
+        "Services: {services}. AI options: ai[framework,backend,providers] "
         "where framework={frameworks}, backend={backends}, "
         "providers={providers}"
     ),
