@@ -46,6 +46,9 @@ from app.services.insights.jobs import collect_pypi_job
 from app.services.insights.jobs import collect_plausible_job
 {% endif %}
 {% endif %}
+{% if include_finance %}
+from app.services.finance.jobs import finance_recompute_snapshots_job
+{% endif %}
 
 from app.core.config import settings
 from app.core.log import logger
@@ -292,6 +295,20 @@ def create_scheduler() -> AsyncIOScheduler:
         hours=24,
         id="auth_refresh_token_cleanup",
         name="Auth: Refresh Token Cleanup",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
+{% endif %}
+{% if include_finance %}
+    # Net-worth engine: materialize per-account balance + per-user net-worth
+    # snapshots nightly so the net-worth-over-time chart is a cheap range scan.
+    scheduler.add_job(
+        finance_recompute_snapshots_job,
+        trigger="cron",
+        hour=2,
+        id="finance_recompute_snapshots",
+        name="Finance: Recompute Net-Worth Snapshots",
         max_instances=1,
         coalesce=True,
         replace_existing=True,

@@ -1,0 +1,148 @@
+"""Finance service CLI commands.
+
+``status`` prints the net-worth summary; the ``accounts`` sub-app lists and
+creates manual accounts. Mirrors ``app/cli/payment.py``: sync command wrappers
+call ``asyncio.run`` on an async impl that opens its own session and constructs
+``FinanceService``. Services never commit, so CLI writes commit explicitly.
+"""
+
+import asyncio
+
+import typer
+
+from app.cli import theme
+
+app = typer.Typer(help="Finance service commands.")
+accounts_app = typer.Typer(help="Manage manual finance accounts.")
+app.add_typer(accounts_app, name="accounts")
+console = theme.console()
+
+
+def _usd(cents: int | None) -> str:
+    return f"${(cents or 0) / 100:,.2f}"
+
+
+@app.command()
+def status() -> None:
+    """Show the finance summary (net worth, account/connection counts)."""
+    asyncio.run(_status())
+
+
+async def _status() -> None:
+    from app.core.db import get_async_session
+    from app.services.finance.finance_service import FinanceService
+
+    async with get_async_session() as session:
+        summary = await FinanceService(session).get_status_summary()
+    console.print(f"Net worth:   [bold]{_usd(summary.net_worth_amount)}[/]")
+    console.print(f"  Assets:      {_usd(summary.total_assets_amount)}")
+    console.print(f"  Liabilities: {_usd(summary.total_liabilities_amount)}")
+    console.print(
+        f"Accounts: {summary.account_count}   "
+        f"Connections: {summary.connection_count}"
+    )
+
+
+@accounts_app.command("list")
+def accounts_list() -> None:
+    """List accounts."""
+    asyncio.run(_accounts_list())
+
+
+async def _accounts_list() -> None:
+    from rich.table import Table
+
+    from app.core.db import get_async_session
+    from app.services.finance.finance_service import FinanceService
+
+    async with get_async_session() as session:
+        accounts, total = await FinanceService(session).list_accounts()
+
+    table = Table(title=f"Finance Accounts ({total})")
+    table.add_column("ID", justify="right")
+    table.add_column("Name")
+    table.add_column("Type")
+    table.add_column("Class")
+    table.add_column("Balance", justify="right")
+    for account in accounts:
+        table.add_row(
+            str(account.id),
+            account.name,
+            account.account_type,
+            account.classification,
+            _usd(account.current_balance),
+        )
+    console.print(table)
+
+
+@accounts_app.command("create")
+def accounts_create(
+    name: str = typer.Option(..., "--name", "-n", help="Account name."),
+    account_type: str = typer.Option(
+        ...,
+        "--type",
+        "-t",
+        help="checking | savings | credit_card | property | vehicle | ...",
+    ),
+    classification: str = typer.Option(
+        "asset", "--class", "-c", help="asset | liability"
+    ),
+    currency: str = typer.Option("usd", "--currency", help="ISO-4217, lowercase."),
+) -> None:
+    """Create a manual account."""
+    asyncio.run(_accounts_create(name, account_type, classification, currency))
+
+
+async def _accounts_create(
+    name: str, account_type: str, classification: str, currency: str
+) -> None:
+    from app.core.db import get_async_session
+    from app.services.finance.finance_service import FinanceService
+
+    async with get_async_session() as session:
+        account = await FinanceService(session).create_manual_account(
+            name=name,
+            account_type=account_type,
+            classification=classification,
+            currency=currency,
+        )
+        await session.commit()
+    console.print(f"[green]Created account #{account.id}: {name}[/]")
+
+
+@app.command("recompute-snapshots")
+def recompute_snapshots(
+    days: int = typer.Option(35, "--days", help="Recompute window in days."),
+) -> None:
+    """Rebuild balance + net-worth snapshots over the recent window."""
+    asyncio.run(_recompute_snapshots(days))
+
+
+async def _recompute_snapshots(days: int) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from sqlmodel import select
+
+    from app.core.db import get_async_session
+    from app.services.finance import networth_service
+    from app.services.finance.models import FinanceAccount
+
+    start = datetime.now(UTC).date() - timedelta(days=max(days, 1) - 1)
+    async with get_async_session() as session:
+        owners = (
+            await session.exec(
+                select(FinanceAccount.owner_user_id)
+                .where(FinanceAccount.deleted_at.is_(None))
+                .distinct()
+            )
+        ).all()
+        total = 0
+        for owner_user_id in owners:
+            total += await networth_service.recompute_snapshots(
+                session, owner_user_id=owner_user_id, start_date=start
+            )
+        await session.commit()
+    console.print(
+        f"[green]Recomputed {total} net-worth day(s) across "
+        f"{len(owners)} owner(s).[/]"
+    )

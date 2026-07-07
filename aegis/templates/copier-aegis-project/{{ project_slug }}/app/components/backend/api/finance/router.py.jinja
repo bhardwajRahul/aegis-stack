@@ -1,0 +1,205 @@
+"""
+Finance API endpoints.
+
+Manual account + valuation CRUD and the service liveness endpoint. Owner
+scoping is centralized in the ``get_owner_user_id`` dependency (the caller's
+id when auth is present, else ``None``); ownership failures return **404**
+(not 403) so a row's existence isn't leaked across users. The outer
+``/api/v1`` prefix comes from the router wiring, not from here.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.services.finance import networth_service
+from app.services.finance.deps import get_finance_service, get_owner_user_id
+from app.services.finance.finance_service import FinanceService
+from app.services.finance.schemas import (
+    AccountListResponse,
+    AccountResponse,
+    AccountUpdate,
+    FinanceHealth,
+    ImportBatchResponse,
+    ManualAccountCreate,
+    NetWorthPoint,
+    ValuationCreateRequest,
+    ValuationListResponse,
+    ValuationResponse,
+)
+
+router = APIRouter(prefix="/finance", tags=["finance"])
+
+_NOT_FOUND = "Account not found"
+
+
+@router.get("/health", response_model=FinanceHealth)
+async def finance_health(
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> FinanceHealth:
+    """Liveness + a quick summary (account/connection counts, overall status),
+    scoped to the caller (aggregate across all accounts in standalone mode)."""
+    return await service.health(owner_user_id=owner_user_id)
+
+
+@router.get("/net-worth", response_model=list[NetWorthPoint])
+async def net_worth_series(
+    days: int = 90,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> list[NetWorthPoint]:
+    """Net-worth-over-time series, oldest first, straight off the snapshot
+    table (materialized nightly by the scheduler job)."""
+    rows = await networth_service.get_net_worth_series(
+        service.db, owner_user_id=owner_user_id, days=days
+    )
+    return [NetWorthPoint.from_row(row) for row in rows]
+
+
+# -- Accounts ----------------------------------------------------------------
+
+
+@router.post(
+    "/accounts", response_model=AccountResponse, status_code=status.HTTP_201_CREATED
+)
+async def create_account(
+    body: ManualAccountCreate,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> AccountResponse:
+    """Create a manual account (``is_manual=true``, no provider connection)."""
+    account = await service.create_manual_account(
+        owner_user_id=owner_user_id,
+        name=body.name,
+        account_type=body.account_type,
+        classification=body.classification,
+        current_balance=body.current_balance,
+        currency=body.currency,
+        institution_id=body.institution_id,
+    )
+    return AccountResponse.from_row(account)
+
+
+@router.get("/accounts", response_model=AccountListResponse)
+async def list_accounts(
+    include_hidden: bool = False,
+    page: int = 1,
+    page_size: int = 50,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> AccountListResponse:
+    """List the caller's accounts (soft-deleted rows excluded)."""
+    accounts, total = await service.list_accounts(
+        owner_user_id=owner_user_id,
+        include_hidden=include_hidden,
+        page=page,
+        page_size=page_size,
+    )
+    return AccountListResponse(
+        items=[AccountResponse.from_row(a) for a in accounts], total=total
+    )
+
+
+@router.patch("/accounts/{account_id}", response_model=AccountResponse)
+async def update_account(
+    account_id: int,
+    body: AccountUpdate,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> AccountResponse:
+    """Rename / hide / close an account."""
+    account = await service.update_account(
+        account_id,
+        owner_user_id=owner_user_id,
+        name=body.name,
+        is_hidden=body.is_hidden,
+        is_closed=body.is_closed,
+    )
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return AccountResponse.from_row(account)
+
+
+@router.delete("/accounts/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_account(
+    account_id: int,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> None:
+    """Soft-delete an account (the row survives; it drops from listings)."""
+    deleted = await service.soft_delete_account(
+        account_id, owner_user_id=owner_user_id
+    )
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+
+
+# -- Valuations --------------------------------------------------------------
+
+
+@router.post(
+    "/accounts/{account_id}/valuations",
+    response_model=ValuationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_valuation(
+    account_id: int,
+    body: ValuationCreateRequest,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> ValuationResponse:
+    """Add or update a dated value mark; account ``current_balance`` follows the
+    latest-dated valuation. Repeating a (date, source) updates in place."""
+    account = await service.get_account(account_id, owner_user_id=owner_user_id)
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    valuation = await service.upsert_valuation(
+        account_id=account_id,
+        owner_user_id=owner_user_id,
+        as_of_date=body.as_of_date,
+        value=body.value,
+        source=body.source,
+        note=body.note,
+    )
+    return ValuationResponse.from_row(valuation)
+
+
+@router.get(
+    "/accounts/{account_id}/valuations", response_model=ValuationListResponse
+)
+async def list_valuations(
+    account_id: int,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> ValuationListResponse:
+    """The account's valuation series, oldest first."""
+    account = await service.get_account(account_id, owner_user_id=owner_user_id)
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    valuations = await service.list_valuations(
+        account_id, owner_user_id=owner_user_id
+    )
+    return ValuationListResponse(
+        items=[ValuationResponse.from_row(v) for v in valuations],
+        total=len(valuations),
+    )
+
+
+# -- Imports -----------------------------------------------------------------
+
+
+@router.get(
+    "/import/batches/{batch_id}", response_model=ImportBatchResponse
+)
+async def get_import_batch(
+    batch_id: int,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> ImportBatchResponse:
+    """Batch review: the run's counts plus every parsed row's outcome."""
+    batch = await service.get_import_batch(batch_id, owner_user_id=owner_user_id)
+    if batch is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Import batch not found"
+        )
+    rows = await service.list_import_batch_rows(batch_id)
+    return ImportBatchResponse.from_batch(batch, rows)
