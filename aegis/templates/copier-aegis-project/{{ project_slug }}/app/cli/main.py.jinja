@@ -119,6 +119,14 @@ except ImportError:
     # Payment service not available, skip payment commands
     pass
 
+# Conditionally register finance command if finance service is available
+try:
+    finance_module = importlib.import_module("app.cli.finance")
+    app.add_typer(finance_module.app, name="finance")
+except ImportError:
+    # Finance service not available, skip finance commands
+    pass
+
 # Conditionally register blog command if blog service is available
 try:
     blog_module = importlib.import_module("app.cli.blog")

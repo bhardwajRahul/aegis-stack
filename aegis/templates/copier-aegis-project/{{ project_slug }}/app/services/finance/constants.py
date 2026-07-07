@@ -7,6 +7,9 @@ DB enums) so adding a value is a normal migration on both SQLite and Postgres.
 
 SERVICE_NAME = "finance"
 
+# Dashboard/health component identifier (mirrors PAYMENT_COMPONENT_NAME).
+FINANCE_COMPONENT_NAME = "finance"
+
 
 class Provider:
     """Connection providers. ``manual`` always ships; the rest are flag-gated."""

@@ -863,22 +863,46 @@ SERVICES: dict[str, ServiceSpec] = {
         # not required — mirrors payment_customer.user_id. Keeping it optional
         # lets the guided/interactive flows select finance without forcing a
         # service-to-service dependency they don't resolve.
-        # Wiring (routers/cards/modals/deps) is added by the tickets that
-        # create those modules; the schema tickets grow FINANCE_MIGRATION.
-        wiring=PluginWiring(),
+        # Wiring grows per ticket: FIN-11 adds the backend router + DI
+        # provider; dashboard cards/modals land in FIN-18.
+        wiring=PluginWiring(
+            routers=[
+                RouterWiring(
+                    module="app.components.backend.api.finance.router",
+                    symbol="router",
+                    alias="finance_router",
+                    prefix="/api/v1",
+                ),
+            ],
+            deps_providers=[
+                SymbolWiring(
+                    module="app.services.finance.deps",
+                    symbol="get_finance_service",
+                ),
+            ],
+        ),
         migrations=[FINANCE_MIGRATION, FINANCE_AUTH_LINK_MIGRATION],
         # Alembic is installed via the shared migration gate in
-        # pyproject.toml.jinja; runtime deps (plaid/ofx/...) land with their
-        # provider/import tickets. ``aegis add-service finance`` bootstraps
-        # alembic itself, so no alembic pin is needed here.
-        pyproject_deps=[],
+        # pyproject.toml.jinja; provider deps (plaid/...) land with their
+        # tickets. ``ofxtools`` backs the OFX/QFX importer (gated on the
+        # finance_import sub-flag in pyproject.toml.jinja). ``aegis add-service
+        # finance`` bootstraps alembic itself, so no alembic pin is needed here.
+        pyproject_deps=["ofxtools>=0.9.5"],
         template_files=[
             "app/services/finance/",
+            "app/components/backend/api/finance/",
+            "app/cli/finance.py",
         ],
         files=FileManifest(
             primary=[
                 "app/services/finance",
+                "app/components/backend/api/finance",
+                "app/cli/finance.py",
                 "tests/services/test_finance_models.py",
+                "tests/services/test_finance_service.py",
+                "tests/services/test_finance_import.py",
+                "tests/services/finance",
+                "tests/api/test_finance_endpoints.py",
             ],
         ),
     ),
