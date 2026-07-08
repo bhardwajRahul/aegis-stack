@@ -27,7 +27,7 @@ from app.services.blog.models import BlogPost, BlogPostTag, BlogTag  # noqa: F40
 from app.services.scheduler.models import JobExecution  # noqa: F401
 {% endif %}
 
-{% set needs_migrations = include_auth or include_blog or include_insights or include_payment or (include_ai and ai_backend != "memory") or (include_scheduler and scheduler_backend != "memory") %}
+{% set needs_migrations = include_auth or include_blog or include_insights or include_payment or include_finance or (include_ai and ai_backend != "memory") or (include_scheduler and scheduler_backend != "memory") %}
 {% if database_engine == "postgres" and needs_migrations %}
 def _check_and_stamp_existing_tables() -> None:
     """
@@ -441,6 +441,21 @@ async def startup_database_init() -> None:
             logger.info("Payment seed data verified")
         except Exception as e:
             logger.warning(f"Payment seed failed: {e}")
+{% endif %}
+
+{% if include_finance %}
+        # Seed finance reference data: currencies + CSV import profiles
+        # (idempotent). Import profiles are what CSV header-detection matches
+        # against, so a fresh DB can import Chase/AMEX files immediately.
+        try:
+            from app.core.db import db_session as get_db_session
+            from app.services.finance.seed import seed_finance_tables
+
+            with get_db_session() as session:
+                seed_finance_tables(session)
+            logger.info("Finance seed data verified")
+        except Exception as e:
+            logger.warning(f"Finance seed failed: {e}")
 {% endif %}
 
 {% if include_ai and database_engine == "postgres" %}

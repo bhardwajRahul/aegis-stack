@@ -24,6 +24,9 @@ from app.components.frontend.dashboard.modals.insights_modal import InsightsDeta
 {%- if include_payment %}
 from app.components.frontend.dashboard.modals.payment_modal import PaymentDetailDialog
 {%- endif %}
+{%- if include_finance %}
+from app.components.frontend.dashboard.modals.finance_modal import FinanceDetailDialog
+{%- endif %}
 {%- for p in _plugins | default([]) %}
 {%- for m in p.wiring.dashboard_modals %}
 from {{ m.module }} import {{ m.symbol }}
@@ -72,6 +75,9 @@ __all__ = [
 {%- endif %}
 {%- if include_payment %}
     "PaymentDetailDialog",
+{%- endif %}
+{%- if include_finance %}
+    "FinanceDetailDialog",
 {%- endif %}
 {%- for p in _plugins | default([]) %}
 {%- for m in p.wiring.dashboard_modals %}

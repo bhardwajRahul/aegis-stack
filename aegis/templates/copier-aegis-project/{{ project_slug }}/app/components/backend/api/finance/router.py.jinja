@@ -8,19 +8,26 @@ id when auth is present, else ``None``); ownership failures return **404**
 ``/api/v1`` prefix comes from the router wiring, not from here.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import date
 
-from app.services.finance import networth_service
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+
+from app.services.finance import import_service, networth_service
 from app.services.finance.deps import get_finance_service, get_owner_user_id
 from app.services.finance.finance_service import FinanceService
+from app.services.finance.importers import csv_profiles
 from app.services.finance.schemas import (
     AccountListResponse,
     AccountResponse,
     AccountUpdate,
     FinanceHealth,
     ImportBatchResponse,
+    ImportBatchSummary,
+    ImportResultResponse,
     ManualAccountCreate,
     NetWorthPoint,
+    TransactionListResponse,
+    TransactionResponse,
     ValuationCreateRequest,
     ValuationListResponse,
     ValuationResponse,
@@ -29,6 +36,7 @@ from app.services.finance.schemas import (
 router = APIRouter(prefix="/finance", tags=["finance"])
 
 _NOT_FOUND = "Account not found"
+_MAX_IMPORT_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 @router.get("/health", response_model=FinanceHealth)
@@ -94,8 +102,17 @@ async def list_accounts(
         page=page,
         page_size=page_size,
     )
+    # Scope the balance aggregate to just this page's accounts.
+    totals = await service.account_transaction_totals(
+        owner_user_id=owner_user_id,
+        account_ids=[account.id for account in accounts],
+    )
     return AccountListResponse(
-        items=[AccountResponse.from_row(a) for a in accounts], total=total
+        items=[
+            AccountResponse.from_row(a, activity_balance=totals.get(a.id, 0))
+            for a in accounts
+        ],
+        total=total,
     )
 
 
@@ -187,6 +204,77 @@ async def list_valuations(
 # -- Imports -----------------------------------------------------------------
 
 
+@router.post("/import", response_model=ImportResultResponse)
+async def import_file(
+    file: UploadFile = File(...),
+    account_id: int | None = None,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> ImportResultResponse:
+    """Upload an OFX/QFX/QIF/CSV file and ingest it under a reversible batch.
+
+    Dispatch is by file extension. QIF/CSV need an ``account_id`` (they carry no
+    account info); OFX can resolve its own. Duplicate rows are deduped; an
+    identical re-upload short-circuits via the file hash.
+    """
+    data = await file.read()
+    if len(data) > _MAX_IMPORT_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File too large (max 10 MB).",
+        )
+    if account_id is not None:
+        account = await service.get_account(
+            account_id, owner_user_id=owner_user_id
+        )
+        if account is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND
+            )
+    try:
+        result = await import_service.import_file(
+            service.db,
+            owner_user_id=owner_user_id,
+            file_name=file.filename,
+            file_bytes=data,
+            account_id=account_id,
+        )
+    except import_service.UnsupportedFileTypeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail=str(exc)
+        ) from exc
+    except csv_profiles.UnknownCsvLayoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+    except ValueError as exc:  # e.g. QIF/CSV without an account_id
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+    return ImportResultResponse(
+        batch_id=result.batch_id,
+        rows_total=result.rows_total,
+        rows_inserted=result.rows_inserted,
+        rows_updated=result.rows_updated,
+        rows_duplicate=result.rows_duplicate,
+        rows_error=result.rows_error,
+    )
+
+
+@router.get("/import/batches", response_model=list[ImportBatchSummary])
+async def list_import_batches(
+    page: int = 1,
+    page_size: int = 20,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> list[ImportBatchSummary]:
+    """The caller's import batches, newest first."""
+    batches = await service.list_import_batches(
+        owner_user_id=owner_user_id, page=page, page_size=page_size
+    )
+    return [ImportBatchSummary.from_row(b) for b in batches]
+
+
 @router.get(
     "/import/batches/{batch_id}", response_model=ImportBatchResponse
 )
@@ -203,3 +291,36 @@ async def get_import_batch(
         )
     rows = await service.list_import_batch_rows(batch_id)
     return ImportBatchResponse.from_batch(batch, rows)
+
+
+# -- Transactions ------------------------------------------------------------
+
+
+@router.get("/transactions", response_model=TransactionListResponse)
+async def list_transactions(
+    account_id: int | None = None,
+    from_date: date | None = Query(default=None, alias="from"),
+    to_date: date | None = Query(default=None, alias="to"),
+    category_id: int | None = None,
+    q: str | None = None,
+    page: int = 1,
+    page_size: int = 50,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> TransactionListResponse:
+    """Transaction feed, newest first. Excludes soft-deleted and
+    duplicate-marked rows. Filter by account, date range, category, or payee."""
+    transactions, total = await service.list_transactions(
+        owner_user_id=owner_user_id,
+        account_id=account_id,
+        from_date=from_date,
+        to_date=to_date,
+        category_id=category_id,
+        query=q,
+        page=page,
+        page_size=page_size,
+    )
+    return TransactionListResponse(
+        items=[TransactionResponse.from_row(t) for t in transactions],
+        total=total,
+    )

@@ -884,7 +884,7 @@ MESSAGES: dict[str, str] = {
     "init.help_opt_template_version": "Générer depuis une version spécifique du modèle (tag, commit ou branche)",
     "init.help_opt_no_llm_sync": "Ignorer la synchronisation du catalogue LLM après la génération (service AI uniquement)",
     "init.help_opt_dev": "Mode dev : lire les modèles depuis l'arbre de travail (modifications non committées incluses)",
-    "init.help_opt_services": "Services : auth, ai. Options AI : ai[framework,backend,providers] avec framework={frameworks}, backend={backends}, providers={providers}",
+    "init.help_opt_services": "Services : {services}. Options AI : ai[framework,backend,providers] avec framework={frameworks}, backend={backends}, providers={providers}",
     # ── add CLI help ───────────────────────────────────────────────────
     "add.help_arg_components": "Liste de composants à ajouter, séparés par des virgules (scheduler,worker,database)",
     "add.help_opt_scheduler_backend": "Backend du scheduler : « memory » (par défaut) ou « sqlite » (active la persistance)",

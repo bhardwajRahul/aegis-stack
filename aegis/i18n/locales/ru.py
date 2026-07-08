@@ -849,7 +849,7 @@ MESSAGES: dict[str, str] = {
     "init.help_opt_template_version": "Сгенерировать из указанной версии шаблона (тег, коммит или ветка)",
     "init.help_opt_no_llm_sync": "Пропустить синхронизацию каталога LLM после генерации (только для сервиса AI)",
     "init.help_opt_dev": "Dev-режим: читать шаблоны из рабочего дерева (включая незакоммиченные изменения)",
-    "init.help_opt_services": "Сервисы: auth, ai. Опции AI: ai[framework,backend,providers], где framework={frameworks}, backend={backends}, providers={providers}",
+    "init.help_opt_services": "Сервисы: {services}. Опции AI: ai[framework,backend,providers], где framework={frameworks}, backend={backends}, providers={providers}",
     # ── add CLI help ───────────────────────────────────────────────────
     "add.help_arg_components": "Список добавляемых компонентов через запятую (scheduler, worker, database)",
     "add.help_opt_scheduler_backend": "Бэкенд планировщика: «memory» (по умолчанию) или «sqlite» (включает персистентность)",
