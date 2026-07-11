@@ -78,12 +78,24 @@ class TestGuidedDrivesEngine:
     def test_scheduler_persistence_sets_engine(self) -> None:
         # decline worker, accept scheduler, then the single backend
         # screen: chips are [In-memory, SQLite, PostgreSQL] — right twice
-        # lands on PostgreSQL. Database is auto-skipped; redis still asks.
-        keys = ["n", "y", "right", "right", "\r"] + ["n"] * 10
+        # lands on PostgreSQL, then the host screen: enter = local
+        # container. Database is auto-skipped; redis still asks.
+        keys = ["n", "y", "right", "right", "\r", "\r"] + ["n"] * 10
         state = _drive(keys)
         assert "scheduler[postgres]" in state.components
         assert "database[postgres]" in state.components
         assert state.scheduler_backend == "postgres"
+        assert state.postgres_provider == "container"
+
+    def test_scheduler_postgres_persistence_offers_neon(self) -> None:
+        # The scheduler is what pulls the database in, so IT must ask the
+        # container-vs-Neon question — right+enter on the host screen picks
+        # Neon and the auto-added database encodes it.
+        keys = ["n", "y", "right", "right", "\r", "right", "\r"] + ["n"] * 10
+        state = _drive(keys)
+        assert "scheduler[postgres]" in state.components
+        assert "database[neon]" in state.components
+        assert state.postgres_provider == "neon"
 
     def test_auth_configures_level(self) -> None:
         # decline all 6 components, accept auth, pick RBAC (right+enter), then
@@ -109,12 +121,31 @@ class TestGuidedDrivesEngine:
         state = _drive(keys)
         assert state.services == ["ai[memory,pydantic-ai,public,rag]"]
 
+    def test_ai_postgres_storage_offers_neon(self) -> None:
+        # AI is what pulls the database in here: storage chips right twice
+        # = PostgreSQL, then after the AI screens the host question fires —
+        # right+enter picks Neon for the auto-added database.
+        keys = (
+            _DECLINE_ALL[:6]
+            + ["n", "n", "y", "\r"]  # auth n, payment n, ai y -> framework
+            + ["right", "right", "\r"]  # storage: PostgreSQL
+            + ["up", "\r"]  # providers: Continue with the default
+            + ["n", "n"]  # rag, voice
+            + ["right", "\r"]  # PostgreSQL host: Neon
+            + ["n", "n", "n", "n"]  # comms, insights, blog, finance
+        )
+        state = _drive(keys)
+        assert state.services == ["ai[postgres,pydantic-ai,public]"]
+        assert "database[neon]" in state.components
+        assert state.postgres_provider == "neon"
+
     def test_ai_storage_question_skipped_with_scheduler_postgres(self) -> None:
         # One datastore, used everywhere: scheduler persistence picked
         # postgres, so AI never asks about storage — conversations persist
         # to the project database, full stop.
         keys = (
-            ["n", "y", "right", "right", "\r"]  # worker n, scheduler -> postgres
+            ["n", "y", "right", "right", "\r", "\r"]  # worker n, scheduler ->
+            # postgres, host -> local container
             + ["n", "n", "n"]  # redis, ingress, observability (db auto-skipped)
             + ["n", "n", "y", "\r", "up", "\r", "n", "n"]  # auth n, payment n,
             # ai y -> framework, providers (Continue), rag n, voice n
@@ -420,9 +451,10 @@ class TestBreadcrumbs:
         assert len(ui.breadcrumbs) == 13
 
     def test_chip_selections_amend_the_owning_crumb(self) -> None:
-        # scheduler accepted, postgres backend: the engine choice attaches
-        # to the Scheduler crumb instead of adding noise.
-        keys = ["n", "y", "right", "right", "\r"] + ["n"] * 10
+        # scheduler accepted, postgres backend (then host: enter = local
+        # container): the engine choice attaches to the Scheduler crumb
+        # instead of adding noise; the host screen leaves it alone.
+        keys = ["n", "y", "right", "right", "\r", "\r"] + ["n"] * 10
         ui = GuidedSelectionUI(keys=keys)
         run_guided_selection(ui)
         assert "Scheduler ✓ postgres" in ui.breadcrumbs
@@ -451,10 +483,18 @@ class TestBreadcrumbs:
     def test_auto_added_database_gets_its_own_crumb(self) -> None:
         # Picking a persistent scheduler backend pulls in Database; the
         # sidebar must show that, not hide it inside the Scheduler crumb.
-        keys = ["n", "y", "right", "right", "\r"] + ["n"] * 10
+        keys = ["n", "y", "right", "right", "\r", "\r"] + ["n"] * 10
         ui = GuidedSelectionUI(keys=keys)
         run_guided_selection(ui)
         assert "Database ✓ postgres" in ui.breadcrumbs
+
+    def test_auto_added_neon_database_crumb_shows_neon(self) -> None:
+        # Same path but picking Neon on the host screen: the auto-added
+        # Database crumb must say so.
+        keys = ["n", "y", "right", "right", "\r", "right", "\r"] + ["n"] * 10
+        ui = GuidedSelectionUI(keys=keys)
+        run_guided_selection(ui)
+        assert "Database ✓ neon" in ui.breadcrumbs
 
     def test_back_from_scheduler_backend_removes_database_crumb(self) -> None:
         # Choose postgres, esc back to the backend screen (which re-focuses
@@ -533,6 +573,188 @@ class TestBreadcrumbs:
         console = Console(width=100, record=True)
         console.print(ui._body("Add?", choices, 0, COMPONENTS["redis"], True))
         assert "docs.aegis-stack.io" not in console.export_text()
+
+    def test_postgres_provider_screen_shows_neon_docs_url(self) -> None:
+        # The docs link rides on the Neon CHOICE, so it only shows while
+        # Neon is focused — the container choice has no Neon page to sell.
+        # The page must exist or every init ships a dead link.
+        from pathlib import Path
+
+        from rich.console import Console
+
+        from aegis.cli.guided import _NEON_DOCS_URL, _Choice
+
+        assert _NEON_DOCS_URL == "https://docs.aegis-stack.io/components/database/neon/"
+        docs_root = Path(__file__).resolve().parents[2] / "docs"
+        assert (docs_root / "components" / "database" / "neon.md").exists()
+
+        ui = GuidedSelectionUI(keys=[])
+        choices = [
+            _Choice("container", "Local container"),
+            _Choice("neon", "Neon", docs_url=_NEON_DOCS_URL),
+        ]
+        console = Console(width=100, record=True)
+        console.print(ui._body("PostgreSQL host", choices, 1, None, False))
+        assert _NEON_DOCS_URL in console.export_text()
+        # Focus on the container chip: no Neon link.
+        console = Console(width=100, record=True)
+        console.print(ui._body("PostgreSQL host", choices, 0, None, False))
+        assert "docs.aegis-stack.io" not in console.export_text()
+
+    def test_docs_url_never_wraps_and_stays_a_valid_url(self) -> None:
+        # The terminal's OWN URL detection is the only link mechanism that
+        # proved reliable, and it only works on visible, complete URLs. So
+        # the display is always a full valid URL: the page itself when it
+        # fits, else the deepest ANCESTOR page that does (mkdocs
+        # directory-URLs make every ancestor a real page). One line, no
+        # wrap, no ellipsis, scheme always present.
+        from rich.console import Console
+
+        from aegis.cli.guided import _NEON_DOCS_URL, _Choice, _fit_url
+
+        assert _fit_url(_NEON_DOCS_URL, 100) == _NEON_DOCS_URL
+        assert _fit_url(_NEON_DOCS_URL, 40) == (
+            "https://docs.aegis-stack.io/components/"
+        )
+        assert _fit_url(_NEON_DOCS_URL, 30) == "https://docs.aegis-stack.io/"
+
+        ui = GuidedSelectionUI(keys=[])
+        choices = [
+            _Choice("container", "Local container"),
+            _Choice("neon", "Neon", docs_url=_NEON_DOCS_URL),
+        ]
+        # Narrow console drives _content_width below the URL's length.
+        console = Console(width=40, record=True)
+        ui._console = console
+        console.print(ui._body("PostgreSQL host", choices, 1, None, False))
+        text = console.export_text(clear=False)
+        lines = [line.strip() for line in text.splitlines()]
+        assert "https://docs.aegis-stack.io/components/" in lines
+        assert "…" not in text
+
+        # Wide terminal: the full URL, verbatim.
+        console = Console(width=100, record=True)
+        ui._console = console
+        console.print(ui._body("PostgreSQL host", choices, 1, None, False))
+        assert _NEON_DOCS_URL in console.export_text()
+
+    def test_context_docs_line_handles_wide_labels(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # CJK locales render the "Docs:" label at two cells per character;
+        # measuring it with len() overflows the row and the column
+        # ellipsizes the URL. When the URL cannot fit beside the label it
+        # gets its own full-width line instead.
+        from rich.console import Console
+
+        import aegis.cli.guided as guided
+        from aegis.cli.guided import _Choice
+        from aegis.core.components import COMPONENTS
+
+        real_g = guided._g
+
+        def wide_g(key: str, default: str, **kwargs: object) -> str:
+            if key == "screen.docs":
+                return "ドキュメント:"
+            return real_g(key, default, **kwargs)
+
+        monkeypatch.setattr(guided, "_g", wide_g)
+        ui = GuidedSelectionUI(keys=[])
+        choices = [_Choice("yes", "Add"), _Choice("no", "Skip")]
+        console = Console(width=40, record=True)
+        ui._console = console
+        console.print(ui._body("Add?", choices, 0, COMPONENTS["worker"], True))
+        text = console.export_text(clear=False)
+        assert "…" not in text
+        assert any(line.strip().startswith("https://") for line in text.splitlines())
+
+    def test_docs_line_emits_no_osc8_hyperlink(self) -> None:
+        # OSC 8 links are actively harmful here: terminals that see one
+        # suppress their own URL detection for that region, and terminals
+        # that don't render OSC 8 then show NO link at all. Plain text is
+        # the only mechanism that worked across terminals — keep it that
+        # way.
+        import io
+
+        from rich.console import Console
+
+        from aegis.cli.guided import _NEON_DOCS_URL, _Choice
+
+        ui = GuidedSelectionUI(keys=[])
+        choices = [
+            _Choice("container", "Local container"),
+            _Choice("neon", "Neon", docs_url=_NEON_DOCS_URL),
+        ]
+        buf = io.StringIO()
+        console = Console(width=80, file=buf, force_terminal=True)
+        ui._console = console
+        console.print(ui._body("PostgreSQL host", choices, 1, None, False))
+        assert "\x1b]8;" not in buf.getvalue()
+        assert _NEON_DOCS_URL in buf.getvalue()
+
+    def test_provider_screen_puts_docs_url_on_neon_choice(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from aegis.cli.guided import _NEON_DOCS_URL, _Choice
+
+        ui = GuidedSelectionUI(keys=[])
+        seen: list[_Choice] = []
+
+        def fake_select(prompt: str, choices: list[_Choice], **kwargs: object) -> int:
+            seen.extend(choices)
+            return 0
+
+        monkeypatch.setattr(ui, "_select", fake_select)
+        ui.choose_postgres_provider("this project")
+        by_value = {c.value: c for c in seen}
+        assert by_value["neon"].docs_url == _NEON_DOCS_URL
+        assert not by_value["container"].docs_url
+
+    def test_body_renders_note_under_prompt(self) -> None:
+        from rich.console import Console
+
+        from aegis.cli.guided import _Choice
+
+        ui = GuidedSelectionUI(keys=[])
+        choices = [_Choice("a", "A"), _Choice("b", "B")]
+        console = Console(width=100, record=True)
+        console.print(
+            ui._body("Pick one", choices, 0, None, False, note="Shared by everything")
+        )
+        assert "Shared by everything" in console.export_text()
+
+    def test_engine_screens_carry_one_datastore_note(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Picking an engine for the scheduler (or AI storage, or the database
+        # itself) implicitly sets the ONE project datastore everything else
+        # reuses — every screen that makes that decision must say so.
+        ui = GuidedSelectionUI(keys=[])
+        notes: list[object] = []
+
+        def fake_select(prompt: str, choices: list[object], **kwargs: object) -> int:
+            notes.append(kwargs.get("note"))
+            return 0
+
+        monkeypatch.setattr(ui, "_select", fake_select)
+
+        notes.clear()
+        ui.choose_scheduler_backend()
+        assert notes[0] and "One datastore per project" in str(notes[0])
+
+        notes.clear()
+        ui.choose_database_engine("Database")  # idx 0 = SQLite, no host screen
+        assert notes[0] and "One datastore per project" in str(notes[0])
+
+        notes.clear()
+        ui.choose_postgres_provider("Scheduler")
+        assert notes[0] and "One database per project" in str(notes[0])
+
+        # AI storage screen (framework screen first, storage second).
+        monkeypatch.setattr(ui, "_multi_select", lambda *a, **k: [])
+        notes.clear()
+        ui.configure_ai("ai")
+        assert any(n and "One datastore per project" in str(n) for n in notes)
 
     def test_back_rewinds_the_trail(self) -> None:
         # Worker accepted then revised to declined via esc on the backend

@@ -55,7 +55,9 @@ nav:
       - Routes: components/backend/routes.md
       - Authentication Integration: components/backend/auth.md
       - API Load Testing: components/backend/load-testing.md
-    - Database: components/database.md
+    - Database:
+      - Getting Started: components/database.md
+      - Neon: components/database/neon.md
     - Frontend:
       - Getting Started: components/frontend/index.md
       - Architecture: components/frontend/architecture.md

@@ -982,6 +982,8 @@ MESSAGES: dict[str, str] = {
     "guided.prompt.ai_storage": "AI 대화 저장",
     "guided.prompt.ai_rag": "RAG 추가: 직접 만든 문서와 코드를 기반으로 대화할까요?",
     "guided.prompt.ai_voice": "음성 추가: 텍스트 음성 변환과 음성 인식?",
+    "guided.note.one_datastore": "데이터 저장소는 프로젝트당 하나: 여기서 선택한 엔진이 프로젝트 데이터베이스가 되며, 데이터를 저장하는 다른 모든 기능이 이를 공유합니다.",
+    "guided.note.one_database_host": "데이터베이스는 프로젝트당 하나: 데이터를 저장하는 모든 기능이 이 호스트를 사용합니다.",
     "guided.multi.hint": "원하는 만큼 선택한 다음 '계속'을 선택하세요.",
     "guided.choice.add": "추가",
     "guided.choice.skip": "건너뛰기",

@@ -513,11 +513,15 @@ class TestLoadTestError:
         """Test that required fields are validated."""
         # Missing test_id
         with pytest.raises(ValidationError, match="Field required"):
-            LoadTestError(status="failed", error="Some error")
+            LoadTestError(  # ty: ignore[missing-argument]
+                status="failed", error="Some error"
+            )
 
         # Missing error
         with pytest.raises(ValidationError, match="Field required"):
-            LoadTestError(status="timed_out", test_id="error-test-123")
+            LoadTestError(  # ty: ignore[missing-argument]
+                status="timed_out", test_id="error-test-123"
+            )
 
 
 # Integration test for real-world data shapes

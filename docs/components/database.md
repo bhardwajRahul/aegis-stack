@@ -94,25 +94,10 @@ Choose your database based on your deployment needs:
     - Per-PR / preview database branches
     - Teams that would rather not operate a database server
 
-    **How it works:**
-
-    - Neon is the **postgres** engine, hosted on Neon's cloud. Models,
-      migrations, and SQLModel code are identical to a self-hosted postgres stack.
-    - **Development** runs the same local `postgres:16` container as a plain
-      postgres stack (zero credentials, fully offline).
-    - **Production** runs no database container at all: the app points
-      `DATABASE_URL` at Neon's pooled endpoint, injected as a secret.
-    - Runtime uses the **pooled** endpoint; migrations use the **direct**
-      (unpooled) endpoint, because Neon's pooler (PgBouncer in transaction mode)
-      is unsafe for DDL and session-level features.
-    - No extra Python dependencies: the standard `asyncpg` and `psycopg2` drivers
-      connect over TCP. There is no Neon-specific Python driver.
-
-    **Requirements:**
-
-    - A Neon account and project (free tier available)
-    - `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` (direct) set as
-      production secrets
+    Neon is the **postgres** engine hosted on Neon's cloud: development
+    still runs the local container, production connects to Neon. See the
+    [Neon page](database/neon.md) for endpoints, setup, and how the
+    generated code adapts at runtime.
 
 ## Choosing a Database
 
@@ -129,7 +114,7 @@ Both `database[postgres]` and `database[neon]` use the same engine; they differ 
 - **Container** (`database[postgres]`): a `postgres:16` service runs in your Docker Compose stack in every environment (`make serve`, `make serve-prod`, and `aegis deploy`). You operate and back up the database.
 - **Neon** (`database[neon]`): development still runs the local container, but production has no database service, the app connects to Neon's cloud via `DATABASE_URL`, and Neon handles autoscaling, scale-to-zero, and branching.
 
-The generated connection code detects a Neon host (`*.neon.tech`) at runtime and applies Neon's pooler-safe connection settings only then, so one codebase runs against the local container in development and Neon in production.
+The generated connection code detects a Neon host (`*.neon.tech`) at runtime and applies Neon's pooler-safe connection settings only then, so one codebase runs against the local container in development and Neon in production. See the [Neon page](database/neon.md) for the full provider guide.
 
 ## Common Patterns
 

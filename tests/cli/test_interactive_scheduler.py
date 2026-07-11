@@ -12,6 +12,7 @@ from aegis.cli.interactive import (
     clear_database_engine_selection,
     interactive_project_selection,
     set_database_engine_selection,
+    set_postgres_provider_selection,
 )
 from aegis.constants import WorkerBackends
 
@@ -61,8 +62,10 @@ class TestInteractiveSchedulerFlow:
     @patch("typer.confirm")
     def test_scheduler_with_postgres_persistence(self, mock_confirm: Any) -> None:
         """Test scheduler selection with PostgreSQL database persistence."""
-        # Pre-set database engine to PostgreSQL
+        # Pre-set database engine to PostgreSQL and its host (the scheduler
+        # step now asks container-vs-Neon when it adds the database).
         set_database_engine_selection("postgres")
+        set_postgres_provider_selection("container")
 
         try:
             # Mock user responses: redis=no, worker=no, scheduler=yes,

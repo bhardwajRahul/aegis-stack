@@ -1015,6 +1015,8 @@ MESSAGES: dict[str, str] = {
     "guided.prompt.ai_storage": "AI 会話の保存",
     "guided.prompt.ai_rag": "RAG を追加：自分のドキュメントやコードに基づくチャット？",
     "guided.prompt.ai_voice": "音声を追加：テキスト読み上げと音声認識？",
+    "guided.note.one_datastore": "データストアはプロジェクトに1つ：ここで選んだエンジンがプロジェクトのデータベースになり、データを保存する他の機能もこれを共有します。",
+    "guided.note.one_database_host": "データベースはプロジェクトに1つ：データを保存するすべての機能がこのホストを使います。",
     "guided.multi.hint": "好きなだけ選んでから「続行」を選んでください。",
     "guided.choice.add": "追加",
     "guided.choice.skip": "スキップ",
