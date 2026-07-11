@@ -867,6 +867,8 @@ MESSAGES: dict[str, str] = {
     "guided.prompt.ai_storage": "AI 对话存储",
     "guided.prompt.ai_rag": "添加 RAG：基于你自己的文档和代码进行对话？",
     "guided.prompt.ai_voice": "添加语音：文字转语音与语音转文字？",
+    "guided.note.one_datastore": "每个项目只有一个数据存储：在这里选定的引擎将成为项目数据库，其他需要存储数据的功能都会共用它。",
+    "guided.note.one_database_host": "每个项目只有一个数据库：所有存储数据的功能都使用这个主机。",
     "guided.multi.hint": "想选多少都可以，然后选择「继续」。",
     "guided.choice.add": "添加",
     "guided.choice.skip": "跳过",

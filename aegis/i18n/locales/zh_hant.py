@@ -867,6 +867,8 @@ MESSAGES: dict[str, str] = {
     "guided.prompt.ai_storage": "AI 對話儲存",
     "guided.prompt.ai_rag": "新增 RAG：以你自己的文件與程式碼為依據進行對話？",
     "guided.prompt.ai_voice": "新增語音：文字轉語音與語音轉文字？",
+    "guided.note.one_datastore": "每個專案只有一個資料儲存：在這裡選定的引擎將成為專案資料庫，其他需要儲存資料的功能都會共用它。",
+    "guided.note.one_database_host": "每個專案只有一個資料庫：所有儲存資料的功能都使用這個主機。",
     "guided.multi.hint": "想選多少都可以，然後選擇「繼續」。",
     "guided.choice.add": "新增",
     "guided.choice.skip": "略過",

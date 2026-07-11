@@ -192,6 +192,10 @@ class ScriptedUI:
             return self._database_engine, self._postgres_provider
         return self._database_engine, None
 
+    def choose_postgres_provider(self, context: str) -> str:
+        self.transcript.append(f"[provider for {context}]")
+        return self._postgres_provider
+
     def configure_auth(self, service_name: str) -> str:
         return self._auth_level
 
@@ -238,6 +242,37 @@ class TestEngineWithScriptedUI:
             "blog",
         ]
         assert sum("database" in c for c in state.components) == 1
+
+    def test_scheduler_postgres_asks_provider_and_encodes_neon(self) -> None:
+        # The scheduler pulls the database in, so IT must ask the
+        # container-vs-Neon question the skipped database step would have.
+        from aegis.cli.interactive import run_project_selection
+
+        ui = ScriptedUI(
+            confirms=[False, True] + [False] * 10,
+            scheduler_backend="postgres",
+            postgres_provider="neon",
+        )
+        state = run_project_selection(ui)
+        assert "scheduler[postgres]" in state.components
+        assert "database[neon]" in state.components
+        assert state.postgres_provider == "neon"
+        assert "[provider for Scheduler]" in ui.transcript
+
+    def test_ai_postgres_storage_asks_provider_and_encodes_neon(self) -> None:
+        # Same rule when AI is what pulls the database in.
+        from aegis.cli.interactive import run_project_selection
+
+        ui = ScriptedUI(
+            confirms=[False] * 8 + [True] + [False] * 4,
+            ai_config=("postgres", "pydantic-ai", ["public"], False, False),
+            postgres_provider="neon",
+        )
+        state = run_project_selection(ui)
+        assert state.services == ["ai[postgres,pydantic-ai,public]"]
+        assert "database[neon]" in state.components
+        assert state.postgres_provider == "neon"
+        assert "[provider for AI]" in ui.transcript
 
     def test_transcript_captures_flow(self) -> None:
         from aegis.cli.interactive import run_project_selection

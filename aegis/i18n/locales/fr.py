@@ -1035,6 +1035,8 @@ MESSAGES: dict[str, str] = {
     "guided.prompt.ai_storage": "Stockage des conversations IA",
     "guided.prompt.ai_rag": "Ajouter le RAG : un chat basé sur vos propres documents et votre code ?",
     "guided.prompt.ai_voice": "Ajouter la voix : synthèse et reconnaissance vocale ?",
+    "guided.note.one_datastore": "Un seul datastore par projet : le moteur choisi ici définit la base de données du projet, partagée par tout ce qui stocke des données.",
+    "guided.note.one_database_host": "Une seule base de données par projet : cet hôte sert tout ce qui stocke des données.",
     "guided.multi.hint": "Cochez autant que vous le souhaitez, puis choisissez Continuer.",
     "guided.choice.add": "Ajouter",
     "guided.choice.skip": "Ignorer",

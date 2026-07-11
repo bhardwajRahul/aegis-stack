@@ -39,6 +39,7 @@ from dataclasses import dataclass
 
 import typer
 from rich.align import Align
+from rich.cells import cell_len
 from rich.console import Console, Group, RenderableType
 from rich.layout import Layout
 from rich.padding import Padding
@@ -171,6 +172,64 @@ def _docs_url(spec: PluginSpec) -> str | None:
     return f"{DOCS_BASE_URL}{spec.docs_path}/"
 
 
+# The postgres provider screen offers Neon by name, so it links the page
+# that explains it. Not a spec ``docs_path``: providers are choices inside
+# the database component, not plugins with pages of their own.
+_NEON_DOCS_URL = f"{DOCS_BASE_URL}components/database/neon/"
+
+
+def _fit_url(url: str, width: int) -> str:
+    """The deepest ancestor of ``url`` that fits in ``width`` cells.
+
+    Terminals without OSC 8 only linkify what they can SEE, so every form
+    this returns must be a complete, valid URL — scheme included, no
+    ellipsis, never wrapped. mkdocs directory-URLs make every ancestor of
+    a docs page a real page, so a narrow terminal degrades to a working
+    link one level up rather than a broken or dead one. Measures with
+    ``cell_len`` (URLs are ASCII today, but the contract is cells). The
+    origin is the floor: callers must give it at least that much room.
+    """
+    if cell_len(url) <= width:
+        return url
+    scheme, _, rest = url.partition("://")
+    host, _, path = rest.partition("/")
+    origin = f"{scheme}://{host}/"
+    segments = [s for s in path.split("/") if s]
+    while segments:
+        candidate = f"{origin}{'/'.join(segments)}/"
+        if cell_len(candidate) <= width:
+            return candidate
+        segments.pop()
+    return origin
+
+
+def _docs_line(url: str, width: int) -> Text:
+    """One-line plain-text URL the terminal's own detection can linkify.
+
+    NO OSC 8 hyperlink, ever: terminals that see one suppress their own
+    URL detection for that region, and terminals that don't render OSC 8
+    then show no link at all — plain text is the only mechanism that
+    proved reliable across terminals. ``_fit_url`` keeps the visible text
+    a complete, valid URL at any width so detection always has a working
+    target.
+    """
+    return Text(_fit_url(url, width), style=MUTED, justify="center", no_wrap=True)
+
+
+def _one_datastore_note() -> str:
+    """Shown on every screen whose engine pick doubles as the project default.
+
+    Picking postgres for the scheduler (or AI storage, or the database
+    itself) fixes the ONE datastore every later question reuses — the user
+    must learn that here, not when the AI storage screen silently skips.
+    """
+    return _g(
+        "note.one_datastore",
+        "One datastore per project: choosing an engine here sets the "
+        "project database, shared by anything else that stores data.",
+    )
+
+
 def _spec_blurb(spec: PluginSpec) -> str:
     """Localizable editorial paragraph for a spec.
 
@@ -222,6 +281,8 @@ class _Choice:
     value: str
     title: str
     body: str = ""
+    # Docs page for THIS choice; rendered only while the choice is focused.
+    docs_url: str = ""
 
 
 @dataclass
@@ -449,6 +510,7 @@ class GuidedSelectionUI:
                 ),
                 choices,
                 crumb="amend",
+                note=_one_datastore_note(),
             )
         ].value
 
@@ -515,14 +577,20 @@ class GuidedSelectionUI:
                 ),
                 choices,
                 crumb="amend",
+                note=_one_datastore_note(),
             )
         ].value
         if engine == StorageBackends.POSTGRES:
-            return engine, self._choose_postgres_provider(context)
+            return engine, self.choose_postgres_provider(context, crumb="amend")
         return engine, None
 
-    def _choose_postgres_provider(self, context: str) -> str:
-        """ONE screen for the PostgreSQL host: local container vs Neon (vs ...)."""
+    def choose_postgres_provider(self, context: str, *, crumb: str = "none") -> str:
+        """ONE screen for the PostgreSQL host: local container vs Neon (vs ...).
+
+        The direct database path amends the Database crumb; indirect paths
+        (scheduler persistence, AI storage) pass no crumb — their
+        ``note_auto_added`` call carries the chosen host into the sidebar.
+        """
         choices = [
             _Choice(
                 PostgresProviders.CONTAINER,
@@ -539,6 +607,7 @@ class GuidedSelectionUI:
                     "choice.db_provider.neon",
                     "Serverless Postgres: cloud in prod, local container in dev.",
                 ),
+                docs_url=_NEON_DOCS_URL,
             ),
         ]
         return choices[
@@ -549,7 +618,12 @@ class GuidedSelectionUI:
                     context=context,
                 ),
                 choices,
-                crumb="amend",
+                crumb=crumb,
+                note=_g(
+                    "note.one_database_host",
+                    "One database per project: this host serves everything "
+                    "that stores data.",
+                ),
             )
         ].value
 
@@ -623,6 +697,7 @@ class GuidedSelectionUI:
                 _g("prompt.ai_storage", "AI conversation storage"),
                 backend,
                 crumb="amend",
+                note=_one_datastore_note(),
             )
         ].value
         return self._configure_ai_extras(fw, be)
@@ -797,7 +872,7 @@ class GuidedSelectionUI:
             docs = _docs_url(spec)
             if docs:
                 grid.add_row(Text())
-                grid.add_row(Text(docs, style=MUTED, justify="center"))
+                grid.add_row(_docs_line(docs, width))
 
         hints = Text.assemble(
             ("enter", ACCENT),
@@ -1144,6 +1219,7 @@ class GuidedSelectionUI:
         compact: bool = False,
         crumb: str = "none",
         label: str = "",
+        note: str | None = None,
     ) -> int:
         # Replay path: hand back the journaled answer, render nothing.
         if self._cursor < len(self._journal):
@@ -1187,7 +1263,10 @@ class GuidedSelectionUI:
                     shortcuts.get("n", default_idx), choices, crumb, label
                 )
             self._paint(
-                self._frame(self._body(prompt, choices, idx, context, compact), hints)
+                self._frame(
+                    self._body(prompt, choices, idx, context, compact, note=note),
+                    hints,
+                )
             )
             key = self._key()
             if key in ("q", "\x03"):
@@ -1492,6 +1571,7 @@ class GuidedSelectionUI:
         cursor: int,
         context: PluginSpec | None,
         compact: bool,
+        note: str | None = None,
     ) -> RenderableType:
         width = self._content_width()
         grid = Table.grid(padding=(0, 0))
@@ -1536,12 +1616,20 @@ class GuidedSelectionUI:
             docs = _docs_url(context)
             if docs:
                 grid.add_row(Text())
-                grid.add_row(
-                    Text.assemble(
-                        (f"{_g('screen.docs', 'Docs:')}  ", LABEL),
-                        (docs, MUTED),
-                    )
-                )
+                # cell_len, not len: CJK locales render the label at two
+                # cells per character and an overflowing row ellipsizes
+                # the URL into a broken link. When even the shortest URL
+                # form can't fit beside the label, the URL gets its own
+                # full-width line instead.
+                label = f"{_g('screen.docs', 'Docs:')}  "
+                available = width - cell_len(label)
+                display = _fit_url(docs, available)
+                if cell_len(display) > available:
+                    grid.add_row(_docs_line(docs, width))
+                else:
+                    docs_line = Text.assemble((label, LABEL), (display, MUTED))
+                    docs_line.no_wrap = True
+                    grid.add_row(docs_line)
             grid.add_row(Text())
             # The engine prompt carries quick-mode hints like "(will
             # auto-add Redis)" that the Requires line already covers here,
@@ -1558,6 +1646,9 @@ class GuidedSelectionUI:
             )
         else:
             grid.add_row(Text(prompt, style="bold", justify="center"))
+            if note:
+                grid.add_row(Text())
+                grid.add_row(Text(note, style=MUTED, justify="center"))
 
         grid.add_row(Text())
         if compact:
@@ -1566,6 +1657,10 @@ class GuidedSelectionUI:
             grid.add_row(self._chip_row(choices, cursor))
             grid.add_row(Text())
             grid.add_row(Text(choices[cursor].body, style=MUTED, justify="center"))
+        docs_url = choices[cursor].docs_url
+        if docs_url:
+            grid.add_row(Text())
+            grid.add_row(_docs_line(docs_url, width))
         return grid
 
     def _choice_line(self, choices: list[_Choice], cursor: int) -> Text:
