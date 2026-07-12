@@ -520,6 +520,19 @@ def sync_template_changes(
     return result
 
 
+def _warn_raw_merge_fallback(relative: Path) -> None:
+    """Warn visibly (not just in verbose mode) that a Python merge degraded.
+
+    Routed to stderr unconditionally: a silent degrade here is exactly what
+    made the 0.9.1rc3 conflicts undiagnosable from the user's terminal.
+    """
+    print(
+        f"   Warning: ruff unavailable/failed for {relative}; "
+        "falling back to raw merge (formatting may read as edits)",
+        file=sys.stderr,
+    )
+
+
 def _sync_python_file(
     project_file: Path,
     old_file: Path,
@@ -551,6 +564,7 @@ def _sync_python_file(
     project_norm = run_ruff_on_text(project_text, project_path, "")
     old_norm = run_ruff_on_text(old_text, project_path, "")
     if project_norm is None or old_norm is None:
+        _warn_raw_merge_fallback(relative)
         return False
 
     if normalize_for_compare(project_norm) == normalize_for_compare(old_norm):
@@ -579,6 +593,7 @@ def _sync_python_file(
     old_safe = run_ruff_on_text(old_text, project_path, "I")
     new_safe = run_ruff_on_text(new_text, project_path, "I")
     if project_safe is None or old_safe is None or new_safe is None:
+        _warn_raw_merge_fallback(relative)
         return False
 
     returncode, merged = merge_three_way_text(project_safe, old_safe, new_safe)

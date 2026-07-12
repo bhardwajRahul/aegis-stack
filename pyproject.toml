@@ -1,6 +1,6 @@
 [project]
 name = "aegis-stack"
-version = "0.9.1rc3"
+version = "0.9.1rc4"
 description = "A production-ready FastAPI platform with modular components and a built-in control plane. Try: uvx aegis-stack init my-project"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
@@ -59,6 +59,11 @@ dependencies = [
     "pyyaml>=6.0",
     "filelock>=3.20.1",
     "urllib3>=2.7.0",
+    # Runtime, not just dev: `aegis update` / add-service 3-way merges shell
+    # out to ruff to look through formatting (template_cleanup.run_ruff_on_text,
+    # issue #715). Without it in the installed env (uvx/pip), merges silently
+    # degrade to raw byte diffs and pristine projects get spurious conflicts.
+    "ruff>=0.9.0",
 ]
 
 [project.urls]
@@ -72,7 +77,6 @@ dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=0.23.0",
     "pytest-xdist>=3.5.0",
-    "ruff>=0.1.0",
     "ty>=0.0.8",  # Type checker
     "pre-commit>=3.7.0",
     "pip-audit>=2.6.0",
