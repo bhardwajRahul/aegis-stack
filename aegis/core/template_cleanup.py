@@ -551,6 +551,10 @@ def _sync_python_file(
     project_norm = run_ruff_on_text(project_text, project_path, "")
     old_norm = run_ruff_on_text(old_text, project_path, "")
     if project_norm is None or old_norm is None:
+        verbose_print(
+            f"   Warning: ruff unavailable/failed for {relative}; "
+            "falling back to raw merge (formatting may read as edits)"
+        )
         return False
 
     if normalize_for_compare(project_norm) == normalize_for_compare(old_norm):
@@ -579,6 +583,10 @@ def _sync_python_file(
     old_safe = run_ruff_on_text(old_text, project_path, "I")
     new_safe = run_ruff_on_text(new_text, project_path, "I")
     if project_safe is None or old_safe is None or new_safe is None:
+        verbose_print(
+            f"   Warning: ruff unavailable/failed for {relative}; "
+            "falling back to raw merge (formatting may read as edits)"
+        )
         return False
 
     returncode, merged = merge_three_way_text(project_safe, old_safe, new_safe)
