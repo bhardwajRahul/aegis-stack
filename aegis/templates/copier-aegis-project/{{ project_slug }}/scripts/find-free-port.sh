@@ -18,23 +18,44 @@ max="${2:-20}"
 
 is_free() {
     python3 - "$1" <<'PY'
+import errno
 import socket
 import sys
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.settimeout(1.0)
-try:
-    sock.connect(("127.0.0.1", int(sys.argv[1])))
-except ConnectionRefusedError:
-    sys.exit(0)  # nothing listening -> port is free
-except OSError:
-    # Timed out / unreachable: we couldn't confirm the port is free, so
-    # treat it as unavailable rather than risk handing out a busy port.
-    sys.exit(1)
-else:
-    sys.exit(1)  # connection accepted -> port is in use
-finally:
-    sock.close()
+port = int(sys.argv[1])
+
+
+def attempt() -> int:
+    """Probe once: 0 = free, 1 = busy, -1 = self-connect collision."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(1.0)
+    try:
+        sock.connect(("127.0.0.1", port))
+    except ConnectionRefusedError:
+        return 0  # nothing listening -> port is free
+    except OSError as exc:
+        # macOS allocates ephemeral SOURCE ports sequentially, so probing
+        # a port just above a recent bind makes connect() pick source ==
+        # destination and fail with EINVAL (Darwin rejects self-connects).
+        # The port is not actually in use; a retry draws a different
+        # source port and gives the real answer.
+        if exc.errno == errno.EINVAL:
+            return -1
+        # Timed out / unreachable: we couldn't confirm the port is free,
+        # so treat it as unavailable rather than risk handing out a busy
+        # port.
+        return 1
+    else:
+        return 1  # connection accepted -> port is in use
+    finally:
+        sock.close()
+
+
+for _ in range(3):
+    verdict = attempt()
+    if verdict >= 0:
+        sys.exit(verdict)
+sys.exit(1)  # persistent EINVAL: treat as unavailable
 PY
 }
 

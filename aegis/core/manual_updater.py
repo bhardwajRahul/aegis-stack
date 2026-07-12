@@ -8,8 +8,6 @@ and copies files to the target project.
 
 import shutil
 import subprocess
-import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +23,11 @@ from ..cli import brand
 from .component_files import get_component_files, get_copier_defaults, get_template_path
 from .copier_manager import is_copier_project, load_copier_answers
 from .plugins.template_resolver import get_plugin_template_root
-from .template_cleanup import merge_three_way_text, run_resilient
+from .template_cleanup import (
+    merge_three_way_text,
+    normalize_for_compare,
+    run_ruff_on_text,
+)
 from .verbosity import verbose_print
 
 # Constants
@@ -76,28 +78,9 @@ def _is_empty_stub(path: Path) -> bool:
         return False
 
 
-def _normalize_for_compare(text: str) -> str:
-    """Canonicalize text for divergence comparison.
-
-    Strips per-line trailing whitespace and trailing blank lines, and
-    normalizes line endings. This absorbs the only difference between a
-    file as Copier wrote it at init and the same file as
-    ``_render_template_file`` re-renders it: blank-line whitespace, which
-    differs because Copier and this module configure Jinja differently.
-    """
-    lines = text.replace("\r\n", "\n").split("\n")
-    return "\n".join(line.rstrip() for line in lines).rstrip("\n")
-
-
-def _ruff_executable() -> str | None:
-    """Locate a ruff binary, preferring the one in the running interpreter's
-    environment. ``ruff`` is a runtime dependency of aegis, so this is
-    normally present; returns None if it cannot be found (callers then bias
-    toward preserving the file rather than overwriting it)."""
-    candidate = Path(sys.executable).parent / "ruff"
-    if candidate.is_file():
-        return str(candidate)
-    return shutil.which("ruff")
+# Canonicalization/ruff helpers live in template_cleanup so the update-sync
+# path can share them; imported above as normalize_for_compare / run_ruff_on_text.
+_normalize_for_compare = normalize_for_compare
 
 
 # Directories that should never be swept. Some contain authored content
@@ -690,68 +673,7 @@ class ManualUpdater:
         The temp file lives in the project so ruff discovers the project's
         ``[tool.ruff]`` config by walking up from the file's location.
         """
-        ruff = _ruff_executable()
-        if ruff is None:
-            return None
-        tmp_path = ""
-        try:
-            with tempfile.NamedTemporaryFile(
-                "w",
-                suffix=".py",
-                dir=str(self.project_path),
-                delete=False,
-                encoding="utf-8",
-            ) as handle:
-                handle.write(src)
-                tmp_path = handle.name
-            steps: list[list[str]] = []
-            if check_select == "":
-                steps.append([ruff, "check", "--fix", "--quiet", tmp_path])
-            elif check_select is not None:
-                steps.append(
-                    [
-                        ruff,
-                        "check",
-                        "--fix",
-                        "--select",
-                        check_select,
-                        "--quiet",
-                        tmp_path,
-                    ]
-                )
-            steps.append([ruff, "format", "--quiet", tmp_path])
-            for args in steps:
-                proc = run_resilient(
-                    args,
-                    cwd=str(self.project_path),
-                    capture_output=True,
-                    timeout=30,
-                    retry_on_signal_kill=True,
-                    # A merged .py file spawns ~6 ruff subprocesses; under a
-                    # parallel test/CI run that contends with uv/git/copier,
-                    # fork failures (EAGAIN) and timeouts spike briefly. A
-                    # wider retry budget rides out the spike instead of
-                    # silently degrading the merge to preserve+warn.
-                    retries=5,
-                    backoff=1.0,
-                )
-                # ``ruff check --fix`` exits 1 when fixable issues remain after
-                # fixing (normal — e.g. unfixable lint rules); only >=2 is a
-                # real error (bad config, unreadable file). ``ruff format``
-                # exits non-zero only on error (e.g. unparseable input). Either
-                # way, bail to None so the caller preserves the file rather than
-                # acting on partially/unformatted output.
-                is_format = args[1] == "format"
-                if (is_format and proc.returncode != 0) or (
-                    not is_format and proc.returncode >= 2
-                ):
-                    return None
-            return Path(tmp_path).read_text()
-        except (OSError, subprocess.SubprocessError):
-            return None
-        finally:
-            if tmp_path:
-                Path(tmp_path).unlink(missing_ok=True)
+        return run_ruff_on_text(src, self.project_path, check_select)
 
     def _ruff_normalize(self, src: str) -> str | None:
         """Return ``src`` run through the project's full ruff (check --fix + format).

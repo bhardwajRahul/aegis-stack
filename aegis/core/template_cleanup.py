@@ -7,6 +7,7 @@ dealing with nested directory structures created during template updates.
 
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -68,6 +69,111 @@ def run_resilient(
         return proc
     assert last_exc is not None
     raise last_exc
+
+
+def normalize_for_compare(text: str) -> str:
+    """Canonicalize text for divergence comparison.
+
+    Strips per-line trailing whitespace and trailing blank lines, and
+    normalizes line endings. This absorbs whitespace-only differences
+    between a file as Copier wrote it and a re-render of the same template
+    (Jinja configuration differences surface as blank-line whitespace).
+    """
+    lines = text.replace("\r\n", "\n").split("\n")
+    return "\n".join(line.rstrip() for line in lines).rstrip("\n")
+
+
+def ruff_executable() -> str | None:
+    """Locate a ruff binary, preferring the one in the running interpreter's
+    environment. ``ruff`` is a runtime dependency of aegis, so this is
+    normally present; returns None if it cannot be found (callers then bias
+    toward preserving the file rather than overwriting it)."""
+    candidate = Path(sys.executable).parent / "ruff"
+    if candidate.is_file():
+        return str(candidate)
+    return shutil.which("ruff")
+
+
+def run_ruff_on_text(
+    src: str, project_path: Path, check_select: str | None
+) -> str | None:
+    """Run ruff over ``src`` and return the result, or None on any failure.
+
+    ``check_select`` controls the ``ruff check --fix`` step that runs
+    before ``ruff format``:
+      - ``""``  → check with the project's configured rule set (used for
+        equality comparison, where matching ``make fix`` exactly matters;
+        the result must never be written to disk because destructive rules
+        like unused-import removal are in play).
+      - a value like ``"I"`` → check with only those rules (used before a
+        merge, where we must NOT delete code — isort never removes).
+      - ``None`` → skip check entirely, format only.
+
+    The temp file lives in the project so ruff discovers the project's
+    ``[tool.ruff]`` config by walking up from the file's location.
+    """
+    ruff = ruff_executable()
+    if ruff is None:
+        return None
+    tmp_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            suffix=".py",
+            dir=str(project_path),
+            delete=False,
+            encoding="utf-8",
+        ) as handle:
+            handle.write(src)
+            tmp_path = handle.name
+        steps: list[list[str]] = []
+        if check_select == "":
+            steps.append([ruff, "check", "--fix", "--quiet", tmp_path])
+        elif check_select is not None:
+            steps.append(
+                [
+                    ruff,
+                    "check",
+                    "--fix",
+                    "--select",
+                    check_select,
+                    "--quiet",
+                    tmp_path,
+                ]
+            )
+        steps.append([ruff, "format", "--quiet", tmp_path])
+        for args in steps:
+            proc = run_resilient(
+                args,
+                cwd=str(project_path),
+                capture_output=True,
+                timeout=30,
+                retry_on_signal_kill=True,
+                # A merged .py file spawns ~6 ruff subprocesses; under a
+                # parallel test/CI run that contends with uv/git/copier,
+                # fork failures (EAGAIN) and timeouts spike briefly. A
+                # wider retry budget rides out the spike instead of
+                # silently degrading the merge to preserve+warn.
+                retries=5,
+                backoff=1.0,
+            )
+            # ``ruff check --fix`` exits 1 when fixable issues remain after
+            # fixing (normal — e.g. unfixable lint rules); only >=2 is a
+            # real error (bad config, unreadable file). ``ruff format``
+            # exits non-zero only on error (e.g. unparseable input). Either
+            # way, bail to None so the caller preserves the file rather than
+            # acting on partially/unformatted output.
+            is_format = args[1] == "format"
+            if (is_format and proc.returncode != 0) or (
+                not is_format and proc.returncode >= 2
+            ):
+                return None
+        return Path(tmp_path).read_text(encoding="utf-8")
+    except (OSError, subprocess.SubprocessError):
+        return None
+    finally:
+        if tmp_path:
+            Path(tmp_path).unlink(missing_ok=True)
 
 
 @dataclass
@@ -375,6 +481,19 @@ def sync_template_changes(
                         # Template didn't change this file — keep user's version
                         verbose_print(f"   Preserved: {relative} (user customized)")
                         continue
+                    elif project_file.name.endswith(".py") and _sync_python_file(
+                        project_file,
+                        old_file,
+                        template_file,
+                        relative,
+                        result,
+                        project_path,
+                    ):
+                        # Handled with formatting awareness: init-time
+                        # ``make fix`` reformats project files, so a byte
+                        # comparison against the raw renders misreads
+                        # formatting as user edits (spurious conflicts).
+                        continue
                     else:
                         # All three differ — 3-way merge
                         _three_way_merge(
@@ -399,6 +518,81 @@ def sync_template_changes(
             verbose_print(f"   Backfilled new answer: {key}")
 
     return result
+
+
+def _sync_python_file(
+    project_file: Path,
+    old_file: Path,
+    new_file: Path,
+    relative: Path,
+    result: SyncResult,
+    project_path: Path,
+) -> bool:
+    """Sync a Python file whose three versions all differ, looking through
+    formatting.
+
+    ``aegis init`` post-gen runs ``make fix``, so project files are
+    ruff-formatted while the old/new template renders are raw Jinja output
+    (blank-line runs from unselected ``{% if %}`` blocks, unsorted imports).
+    Compared byte-wise that formatting reads as user edits, turning a
+    pristine file into a merge with conflicts wherever real template
+    changes land near the formatting differences. Mirrors the add/remove
+    path's fix for issue #715 (``ManualUpdater._merge_shared_file``).
+
+    Returns True when the file was handled (synced, preserved, merged, or
+    genuinely conflicted after a normalized merge); False when ruff or git
+    is unavailable, so the caller falls back to the raw 3-way merge.
+    """
+    project_text = project_file.read_text(encoding="utf-8")
+    old_text = old_file.read_text(encoding="utf-8")
+
+    # Full-rule normalization matches what ``make fix`` did to the project
+    # file at init; comparison only, never written to disk.
+    project_norm = run_ruff_on_text(project_text, project_path, "")
+    old_norm = run_ruff_on_text(old_text, project_path, "")
+    if project_norm is None or old_norm is None:
+        return False
+
+    if normalize_for_compare(project_norm) == normalize_for_compare(old_norm):
+        # Pristine: the project file differs from the old render only by
+        # formatting. Take the new render wholesale; post-gen formatting
+        # reformats it after a conflict-free update.
+        project_file.write_bytes(new_file.read_bytes())
+        result.synced.append(str(relative))
+        verbose_print(f"   Synced: {relative} (pristine, formatting-only drift)")
+        return True
+
+    new_text = new_file.read_text(encoding="utf-8")
+    new_norm = run_ruff_on_text(new_text, project_path, "")
+    if new_norm is not None and normalize_for_compare(old_norm) == (
+        normalize_for_compare(new_norm)
+    ):
+        # The template change is formatting-only noise — keep the user's file.
+        verbose_print(f"   Preserved: {relative} (template change is format-only)")
+        return True
+
+    # Real user edit AND real template change: merge import-sorted and
+    # formatted versions of all three sides so formatting noise cannot
+    # conflict. ``--select I`` never deletes code, so the normalized ours
+    # side is safe to write back to disk.
+    project_safe = run_ruff_on_text(project_text, project_path, "I")
+    old_safe = run_ruff_on_text(old_text, project_path, "I")
+    new_safe = run_ruff_on_text(new_text, project_path, "I")
+    if project_safe is None or old_safe is None or new_safe is None:
+        return False
+
+    returncode, merged = merge_three_way_text(project_safe, old_safe, new_safe)
+    if returncode == 0:
+        project_file.write_text(merged, encoding="utf-8")
+        result.synced.append(str(relative))
+        verbose_print(f"   Merged: {relative}")
+        return True
+    if 1 <= returncode <= 127:
+        project_file.write_text(merged, encoding="utf-8")
+        result.conflicts.append(str(relative))
+        verbose_print(f"   Conflict (needs manual review): {relative}")
+        return True
+    return False  # git merge-file unavailable/errored — raw fallback
 
 
 def merge_three_way_text(current: str, base: str, other: str) -> tuple[int, str]:
