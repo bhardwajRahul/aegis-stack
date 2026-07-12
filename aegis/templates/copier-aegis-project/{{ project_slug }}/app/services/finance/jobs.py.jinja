@@ -11,7 +11,7 @@ from sqlmodel import select
 
 from app.core.db import get_async_session
 from app.services.finance import networth_service
-from app.services.finance.models import FinanceAccount
+from app.services.finance.models import FinanceAccount, FinanceConnection
 
 logger = logging.getLogger(__name__)
 
@@ -45,3 +45,40 @@ async def finance_recompute_snapshots_job() -> None:
         )
     except Exception:
         logger.exception("Finance snapshot recompute failed")
+{%- if finance_plaid %}
+
+
+async def finance_sync_connections_job() -> None:
+    """Periodic: refresh every Plaid connection (accounts, balances, and new
+    transactions) per owner. ``sync_owner_connections`` also recomputes net
+    worth, so the register and Overview trend stay current without a reconnect.
+    """
+    from app.services.finance import connection_service
+
+    try:
+        async with get_async_session() as session:
+            owners = (
+                await session.exec(
+                    select(FinanceConnection.owner_user_id)
+                    .where(
+                        FinanceConnection.provider == "plaid",
+                        FinanceConnection.deleted_at.is_(None),
+                    )
+                    .distinct()
+                )
+            ).all()
+            added = 0
+            for owner_user_id in owners:
+                results = await connection_service.sync_owner_connections(
+                    session, owner_user_id=owner_user_id
+                )
+                added += sum(r.added for r in results)
+            await session.commit()
+        logger.info(
+            "Finance: synced Plaid connections for %d owner(s), %d new txn(s)",
+            len(owners),
+            added,
+        )
+    except Exception:
+        logger.exception("Finance connection sync failed")
+{%- endif %}
