@@ -23,7 +23,8 @@ import subprocess
 
 import pytest
 
-from aegis.core.manual_updater import ManualUpdater, _ruff_executable
+from aegis.core.manual_updater import ManualUpdater
+from aegis.core.template_cleanup import ruff_executable
 from tests.cli.conftest import ProjectFactory
 
 # Shares the merge path (``_regenerate_shared_files`` → ruff + git
@@ -101,7 +102,7 @@ class TestPristineSharedFilesStillRegenerate:
         project has been through ``make fix`` (import merging, quote
         normalization, line wrapping). The detector must look through that.
         """
-        ruff = _ruff_executable()
+        ruff = ruff_executable()
         if ruff is None:
             pytest.skip("ruff not available")
         assert ruff is not None  # narrow for the type checker (skip isn't NoReturn)

@@ -9,6 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import yaml
 
 from aegis.core.template_cleanup import (
@@ -694,6 +695,7 @@ class TestThreeWayMerge:
         project_slug: str,
         old_content: str,
         new_content: str,
+        filename: str = "config.py",
     ) -> Callable[..., None]:
         """Create a mock_run_copy that renders old/new based on dst_path."""
 
@@ -702,9 +704,9 @@ class TestThreeWayMerge:
             rendered_dir = Path(dst_path) / project_slug / "app"
             rendered_dir.mkdir(parents=True)
             if "/old" in dst_path:
-                (rendered_dir / "config.py").write_text(old_content)
+                (rendered_dir / filename).write_text(old_content)
             else:
-                (rendered_dir / "config.py").write_text(new_content)
+                (rendered_dir / filename).write_text(new_content)
 
         return mock_run_copy
 
@@ -766,7 +768,12 @@ class TestThreeWayMerge:
         assert project_file.read_text() == "# user customized content"
 
     def test_clean_three_way_merge(self, tmp_path: Path) -> None:
-        """When all three differ but changes don't overlap, clean merge."""
+        """When all three differ but changes don't overlap, clean merge.
+
+        Uses a non-Python file so this exercises the raw byte-level merge;
+        .py files route through the formatting-aware path covered by
+        TestSyncFormattingNoise.
+        """
         project_slug = "my-project"
         answers = {"project_slug": project_slug}
 
@@ -775,11 +782,13 @@ class TestThreeWayMerge:
         user = "user-changed-line1\nline2\nline3\n"
         new = "line1\nline2\ntemplate-changed-line3\n"
 
-        project_file = tmp_path / "app" / "config.py"
+        project_file = tmp_path / "app" / "config.txt"
         project_file.parent.mkdir(parents=True)
         project_file.write_text(user)
 
-        mock = self._make_mock(project_slug, old_content=base, new_content=new)
+        mock = self._make_mock(
+            project_slug, old_content=base, new_content=new, filename="config.txt"
+        )
 
         with patch("copier.run_copy", side_effect=mock):
             result = sync_template_changes(
@@ -790,14 +799,17 @@ class TestThreeWayMerge:
                 old_commit="abc123",
             )
 
-        assert "app/config.py" in result.synced
+        assert "app/config.txt" in result.synced
         assert result.conflicts == []
         merged = project_file.read_text()
         assert "user-changed-line1" in merged
         assert "template-changed-line3" in merged
 
     def test_conflicting_merge_writes_markers(self, tmp_path: Path) -> None:
-        """When user and template changed the same line, write conflict markers."""
+        """When user and template changed the same line, write conflict markers.
+
+        Non-Python file: exercises the raw merge path directly.
+        """
         project_slug = "my-project"
         answers = {"project_slug": project_slug}
 
@@ -805,11 +817,13 @@ class TestThreeWayMerge:
         user = "user-line1\nline2\nline3\n"
         new = "template-line1\nline2\nline3\n"
 
-        project_file = tmp_path / "app" / "config.py"
+        project_file = tmp_path / "app" / "config.txt"
         project_file.parent.mkdir(parents=True)
         project_file.write_text(user)
 
-        mock = self._make_mock(project_slug, old_content=base, new_content=new)
+        mock = self._make_mock(
+            project_slug, old_content=base, new_content=new, filename="config.txt"
+        )
 
         with patch("copier.run_copy", side_effect=mock):
             result = sync_template_changes(
@@ -821,8 +835,8 @@ class TestThreeWayMerge:
             )
 
         # Conflicting file should be reported as conflict, not synced
-        assert "app/config.py" not in result.synced
-        assert "app/config.py" in result.conflicts
+        assert "app/config.txt" not in result.synced
+        assert "app/config.txt" in result.conflicts
         # File should contain conflict markers with both versions
         content = project_file.read_text()
         assert "<<<<<<<" in content
@@ -848,11 +862,13 @@ class TestThreeWayMerge:
         user = f"user-top\n{ctx}user-bottom\n"
         new = f"template-top\n{ctx}template-bottom\n"
 
-        project_file = tmp_path / "app" / "config.py"
+        project_file = tmp_path / "app" / "config.txt"
         project_file.parent.mkdir(parents=True)
         project_file.write_text(user)
 
-        mock = self._make_mock(project_slug, old_content=base, new_content=new)
+        mock = self._make_mock(
+            project_slug, old_content=base, new_content=new, filename="config.txt"
+        )
 
         with patch("copier.run_copy", side_effect=mock):
             result = sync_template_changes(
@@ -863,8 +879,8 @@ class TestThreeWayMerge:
                 old_commit="abc123",
             )
 
-        assert "app/config.py" not in result.synced
-        assert "app/config.py" in result.conflicts
+        assert "app/config.txt" not in result.synced
+        assert "app/config.txt" in result.conflicts
         content = project_file.read_text()
         # Both conflict regions surfaced, user's side preserved in each
         assert content.count("<<<<<<<") == 2
@@ -987,3 +1003,138 @@ class TestThreeWayMerge:
 
         assert "app/config.py" in result.synced
         assert project_file.read_text() == "# new template content"
+
+
+@pytest.mark.xdist_group("generated_stacks")
+class TestSyncFormattingNoise:
+    """Formatting must not create conflicts during template sync.
+
+    ``aegis init`` post-gen runs ``make fix``, so files in a real project are
+    ruff-formatted (blank-line runs from unselected ``{% if %}`` blocks are
+    collapsed, imports sorted). The old/new template renders used by
+    ``sync_template_changes`` are raw and unformatted. A byte-level 3-way
+    merge therefore sees the pristine project file as "user edits" and
+    raises spurious conflicts wherever real template changes land near the
+    formatting differences. The sync path must look through formatting the
+    same way the add/remove path does (issue #715).
+
+    Pinned to the ``generated_stacks`` xdist group like the issue-715
+    suites: the normalized-merge path spawns ruff subprocesses, and under
+    a fully parallel CI run those transiently fail (fork pressure), which
+    degrades the sync to a raw merge and flakes these strict assertions.
+    Serializing away from the fork-heavy tests keeps ruff reliable.
+    """
+
+    @staticmethod
+    def _make_mock(
+        project_slug: str,
+        old_content: str,
+        new_content: str,
+    ) -> Callable[..., None]:
+        """Create a mock_run_copy that renders old/new based on dst_path."""
+
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
+            rendered_dir = Path(dst_path) / project_slug / "app"
+            rendered_dir.mkdir(parents=True)
+            if "/old" in dst_path:
+                (rendered_dir / "config.py").write_text(old_content)
+            else:
+                (rendered_dir / "config.py").write_text(new_content)
+
+        return mock_run_copy
+
+    # Raw render: an unselected {% if %} block leaves a run of blank lines.
+    OLD_RAW = "A = 1\n\n\n\n\n\nB = 2\n"
+    # What make fix left in the project at init time (blank run collapsed).
+    PROJECT_FORMATTED = "A = 1\n\n\nB = 2\n"
+    # New template: the unselected block grew (more blank lines in the raw
+    # render, overlapping the collapsed region) AND a real setting was added.
+    NEW_RAW = "A = 1\n\n\n\n\n\n\n\n\nB = 2\nNEW_SETTING = 3\n"
+
+    def test_pristine_formatted_project_gets_no_conflicts(self, tmp_path: Path) -> None:
+        """A project file that only differs from the old render by formatting
+        is pristine: the template change must apply cleanly, never conflict."""
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        project_file = tmp_path / "app" / "config.py"
+        project_file.parent.mkdir(parents=True)
+        project_file.write_text(self.PROJECT_FORMATTED)
+
+        mock = self._make_mock(project_slug, self.OLD_RAW, self.NEW_RAW)
+        with patch("copier.run_copy", side_effect=mock):
+            result = sync_template_changes(
+                tmp_path,
+                answers,
+                "gh:test/repo",
+                "v2.0.0",
+                old_commit="abc123",
+            )
+
+        assert result.conflicts == []
+        assert "app/config.py" in result.synced
+        content = project_file.read_text()
+        assert "<<<<<<<" not in content
+        assert "NEW_SETTING = 3" in content
+
+    def test_customized_file_merges_without_formatting_conflicts(
+        self, tmp_path: Path
+    ) -> None:
+        """A real user edit still 3-way merges with the template change, and
+        formatting differences alone must not turn that merge conflicted."""
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        project_file = tmp_path / "app" / "config.py"
+        project_file.parent.mkdir(parents=True)
+        # User genuinely changed A's value in the formatted file.
+        project_file.write_text("A = 111\n\n\nB = 2\n")
+
+        mock = self._make_mock(project_slug, self.OLD_RAW, self.NEW_RAW)
+        with patch("copier.run_copy", side_effect=mock):
+            result = sync_template_changes(
+                tmp_path,
+                answers,
+                "gh:test/repo",
+                "v2.0.0",
+                old_commit="abc123",
+            )
+
+        assert result.conflicts == []
+        assert "app/config.py" in result.synced
+        content = project_file.read_text()
+        assert "<<<<<<<" not in content
+        assert "A = 111" in content
+        assert "NEW_SETTING = 3" in content
+
+    def test_formatting_only_template_change_preserves_custom_file(
+        self, tmp_path: Path
+    ) -> None:
+        """When the template change is formatting-only noise, a customized
+        file is left untouched instead of being churned or conflicted."""
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+
+        project_file = tmp_path / "app" / "config.py"
+        project_file.parent.mkdir(parents=True)
+        user_content = "A = 111\n\n\nB = 2\n"
+        project_file.write_text(user_content)
+
+        # Old and new renders differ only in blank-line runs.
+        mock = self._make_mock(
+            project_slug,
+            "A = 1\n\n\n\n\nB = 2\n",
+            "A = 1\n\n\n\n\n\n\n\nB = 2\n",
+        )
+        with patch("copier.run_copy", side_effect=mock):
+            result = sync_template_changes(
+                tmp_path,
+                answers,
+                "gh:test/repo",
+                "v2.0.0",
+                old_commit="abc123",
+            )
+
+        assert result.conflicts == []
+        assert project_file.read_text() == user_content
