@@ -8,6 +8,8 @@ feature silently degrades in production while every local test passes.
 import tomllib
 from pathlib import Path
 
+from packaging.requirements import Requirement
+
 PYPROJECT = Path(__file__).parent.parent / "pyproject.toml"
 
 
@@ -26,10 +28,7 @@ def test_ruff_is_a_runtime_dependency() -> None:
     byte-level path, and pristine projects get spurious update conflicts —
     exactly what the 0.9.0 -> 0.9.1rc3 TestPyPI upgrade test caught.
     """
-    assert any(
-        dep.split(">=")[0].split("==")[0].strip() == "ruff"
-        for dep in _runtime_dependencies()
-    ), (
+    assert any(Requirement(dep).name == "ruff" for dep in _runtime_dependencies()), (
         "ruff must be declared in [project].dependencies, not only the dev "
         "extra: aegis update / add-service merge correctness depends on it"
     )
