@@ -7,6 +7,72 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-07-12
+
+### Added
+
+- **Finance service (experimental)** (`aegis init --services finance`,
+  `aegis add-service finance`): a personal-finance aggregator service, marked
+  experimental in this release (schema, APIs, and CLI surface may change
+  between releases). Ships a 33-table schema
+  covering currencies and FX rates, institutions and connections (inline
+  AES-GCM-encrypted credentials), accounts, liabilities, valuations, balance
+  and net-worth snapshots, and a transaction ledger with splits, transfer
+  pairing, and two-lane provider/import dedup. Ships file import for CSV
+  (Chase and Quicken profiles), OFX/QFX, and QIF, a net-worth service, API
+  endpoints, seeded demo data, and a full test suite. Optional flags gate
+  Plaid (`finance_plaid`) and SnapTrade (`finance_snaptrade`) integration
+  scaffolding. Requires database and scheduler; recommends worker.
+- **Neon setup guide**: dedicated `components/database/neon.md` page in the
+  tool docs, plus expanded database component docs.
+
+### Fixed
+
+- **`aegis update` no longer invents merge conflicts on pristine projects**:
+  generated projects are ruff-formatted at init while template renders are
+  raw Jinja output, so the byte-level 3-way merge misread formatting as user
+  edits and conflicted wherever real template changes landed nearby. Python
+  files are now compared and merged through ruff normalization, matching
+  what the add/remove path already did, and the fallback path warns instead
+  of degrading silently.
+- **ruff is now a runtime dependency**: installs without dev extras (uvx,
+  pip) previously had no ruff binary, so every Python merge silently fell
+  back to the raw byte-level path. A test now guards the dependency.
+- **`find-free-port.sh` false-busy on macOS**: Darwin allocates ephemeral
+  source ports sequentially, so probing a port near a recent bind made
+  connect() pick source == destination and fail with EINVAL, which read as
+  busy for every candidate. The probe retries on EINVAL, keeping `make
+  serve` port autodiscovery reliable in and near the ephemeral range.
+
+## [0.9.0] - 2026-07-06
+
+### Added
+
+- **Neon Postgres provider**: new `postgres_provider` template question
+  (`container` or `neon`). Local development keeps the Postgres container;
+  production points at Neon, with pooler-safe connection arguments detected
+  from the URL. No new dependencies. Guided and interactive init prompt for
+  the provider on Postgres stacks.
+
+### Fixed
+
+- **`aegis update` backfills new template questions**: questions added by a
+  newer template version (such as `postgres_provider`) are reconciled into
+  the project's preserved answers file during update instead of being lost.
+- **Stripe webhook forwarder no longer stalls on chatty output**: the
+  dev-mode stripe-cli forwarder drains stdout in the background so a full
+  pipe cannot block secret capture, with timeout handling around reads.
+
+### Changed
+
+- **Dependency pins hardened**: `typer` pinned to 0.26.8 (newer releases
+  fail at class-body evaluation on Python 3.11/3.12); `copier` held below
+  9.15 (9.15 relocates the answers file out of the generated project, which
+  breaks `aegis update`), with a dependabot ignore rule so the ceiling is
+  not silently widened.
+
+## [0.8.1] - 2026-06-28
+
 ### Added
 
 - **Traffic monitor ("who's hammering you")**: Overseer's Backend modal gains a
@@ -33,6 +99,13 @@
   is the single source of truth, so a slow-but-healthy boot is never rolled
   back by a wall clock, and no extra tooling needs to be installed on the
   deploy host. `--rollout-timeout` is now only a long runaway-guard ceiling.
+
+### Fixed
+
+- **`aegis update` records the correct template commit**: the commit stamped
+  into the answers file after an update could be wrong, which skewed the
+  starting point of the next update; it is now derived and verified
+  explicitly.
 
 ## [0.8.0] - 2026-06-15
 
