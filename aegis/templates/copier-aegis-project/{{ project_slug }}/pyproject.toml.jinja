@@ -124,6 +124,9 @@ dependencies = [
 {%- if include_finance %}
     "ofxtools>=0.9.5",
 {%- endif %}
+{%- if include_finance and (finance_plaid or finance_snaptrade) %}
+    "cryptography>=42.0.0",  # AES-GCM at-rest encryption for provider credentials
+{%- endif %}
 {%- if include_auth or include_comms %}
     "email-validator==2.2.0",
 {%- endif %}

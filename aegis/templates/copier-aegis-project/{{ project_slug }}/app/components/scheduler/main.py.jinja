@@ -49,6 +49,9 @@ from app.services.insights.jobs import collect_plausible_job
 {% if include_finance %}
 from app.services.finance.jobs import finance_recompute_snapshots_job
 {% endif %}
+{% if include_finance and finance_plaid %}
+from app.services.finance.jobs import finance_sync_connections_job
+{% endif %}
 
 from app.core.config import settings
 from app.core.log import logger
@@ -309,6 +312,21 @@ def create_scheduler() -> AsyncIOScheduler:
         hour=2,
         id="finance_recompute_snapshots",
         name="Finance: Recompute Net-Worth Snapshots",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
+    )
+{% endif %}
+{% if include_finance and finance_plaid %}
+    # Keep linked banks fresh: pull new transactions/balances a few times a day
+    # so the register isn't stale between logins (webhooks handle the real-time
+    # nudge when a public URL is configured).
+    scheduler.add_job(
+        finance_sync_connections_job,
+        trigger="interval",
+        hours=6,
+        id="finance_sync_connections",
+        name="Finance: Sync Bank Connections",
         max_instances=1,
         coalesce=True,
         replace_existing=True,

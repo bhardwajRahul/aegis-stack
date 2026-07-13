@@ -130,6 +130,12 @@ class APIClient:
         """PUT request. Returns parsed JSON or None on error."""
         return await self._request("PUT", endpoint, json=json)
 
+    async def patch(
+        self, endpoint: str, json: dict[str, Any] | None = None
+    ) -> dict | list | None:
+        """PATCH request with a JSON body. Returns parsed JSON or None on error."""
+        return await self._request("PATCH", endpoint, json=json)
+
     async def delete(self, endpoint: str) -> dict | list | None:
         """DELETE request. Returns parsed JSON or None on error."""
         return await self._request("DELETE", endpoint)

@@ -649,3 +649,81 @@ class TestFinanceNetWorth:
         # net-worth snaps).
         assert small == large, f"query count scaled with accounts: {small} -> {large}"
         assert large <= 6, f"expected a handful of preload queries, got {large}"
+
+
+class TestTransactionVisibility:
+    @pytest.mark.asyncio
+    async def test_removed_account_transactions_hidden_from_register(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Soft-deleting an account keeps its transactions in the DB (history +
+        re-link reconciliation) but hides them from the default register view."""
+        svc = FinanceService(async_db_session)
+        account = await svc.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        await svc.create_transaction(
+            owner_user_id=1,
+            account_id=account.id,
+            amount=-500,
+            txn_date=date(2026, 7, 1),
+            name="Coffee",
+        )
+        _txns, total = await svc.list_transactions(owner_user_id=1)
+        assert total == 1
+
+        await svc.soft_delete_account(account.id, owner_user_id=1)
+        _txns, total = await svc.list_transactions(owner_user_id=1)
+        assert total == 0  # hidden once the account is removed (row kept in DB)
+
+
+class TestCategorization:
+    @pytest.mark.asyncio
+    async def test_pfc_category_idempotent_and_classified(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        food = await svc.get_or_create_pfc_category("FOOD_AND_DRINK")
+        again = await svc.get_or_create_pfc_category("food_and_drink")  # same slug
+        assert again.id == food.id
+        assert food.name == "Food And Drink"
+        assert food.classification == "expense"
+        assert (await svc.get_or_create_pfc_category("INCOME")).classification == (
+            "income"
+        )
+        assert (
+            await svc.get_or_create_pfc_category("TRANSFER_IN")
+        ).classification == "transfer"
+
+    @pytest.mark.asyncio
+    async def test_spending_by_category_sums_outflows_largest_first(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        svc = FinanceService(async_db_session)
+        account = await svc.create_manual_account(
+            owner_user_id=1,
+            name="Checking",
+            account_type="checking",
+            classification="asset",
+        )
+        food = await svc.get_or_create_pfc_category("FOOD_AND_DRINK")
+        shopping = await svc.get_or_create_pfc_category("GENERAL_MERCHANDISE")
+        for amount, cat in [
+            (-1200, food),
+            (-800, food),
+            (-5000, shopping),
+            (3000, shopping),  # inflow — must be ignored
+        ]:
+            await svc.create_transaction(
+                owner_user_id=1,
+                account_id=account.id,
+                amount=amount,
+                txn_date=date.today(),
+                name="x",
+                category_id=cat.id,
+            )
+        rows = await svc.spending_by_category(owner_user_id=1, days=30)
+        assert rows == [("General Merchandise", 5000), ("Food And Drink", 2000)]

@@ -439,10 +439,10 @@ async def import_csv(
             finished_at=_utcnow(),
         )
         db.add(failed)
-        # Commit the audit row explicitly: this method raises below, and the
-        # request/CLI transaction rolls back on that exception — without the
-        # commit the failed batch (and the batch_id handed to the caller) would
-        # never persist. Nothing else is pending here, so only this row commits.
+        # Commit the failed batch before raising: get_async_db rolls the session
+        # back on any exception, so a bare flush would discard this row and the
+        # batch_id handed to the caller would reference nothing. Only the failed
+        # batch is pending here, so this commit persists just that row.
         await db.commit()
         raise csv_profiles.UnknownCsvLayoutError(
             header, [p.name for p in profiles], batch_id=failed.id
