@@ -30,12 +30,14 @@ class TestGetModelClass:
 
     def test_ollama_returns_openai_model(self) -> None:
         """Verify Ollama provider uses OpenAIChatModel."""
+        pytest.importorskip("openai")
         model_class = _get_model_class(AIProvider.OLLAMA)
         # Ollama uses OpenAI-compatible API, so it should return OpenAIChatModel
         assert model_class.__name__ == "OpenAIChatModel"
 
     def test_openai_returns_openai_model(self) -> None:
         """Verify OpenAI provider uses OpenAIChatModel."""
+        pytest.importorskip("openai")
         model_class = _get_model_class(AIProvider.OPENAI)
         assert model_class.__name__ == "OpenAIChatModel"
 
@@ -59,16 +61,19 @@ class TestGetModelClass:
 
     def test_mistral_returns_openai_model(self) -> None:
         """Verify Mistral provider uses OpenAIChatModel (OpenAI-compatible)."""
+        pytest.importorskip("openai")
         model_class = _get_model_class(AIProvider.MISTRAL)
         assert model_class.__name__ == "OpenAIChatModel"
 
     def test_cohere_returns_openai_model(self) -> None:
         """Verify Cohere provider uses OpenAIChatModel (OpenAI-compatible)."""
+        pytest.importorskip("openai")
         model_class = _get_model_class(AIProvider.COHERE)
         assert model_class.__name__ == "OpenAIChatModel"
 
     def test_public_returns_openai_model(self) -> None:
         """Verify Public provider uses OpenAIChatModel."""
+        pytest.importorskip("openai")
         model_class = _get_model_class(AIProvider.PUBLIC)
         assert model_class.__name__ == "OpenAIChatModel"
 
@@ -83,6 +88,10 @@ class TestValidateProviderSupport:
 
     def test_ollama_is_supported(self) -> None:
         """Verify Ollama is a supported provider."""
+        # Ollama routes through pydantic-ai's OpenAI model, which needs the
+        # openai SDK — only installed when an OpenAI-compatible provider was
+        # selected at generation time.
+        pytest.importorskip("openai")
         assert validate_provider_support(AIProvider.OLLAMA) is True
 
     def test_all_standard_providers_supported(self) -> None:
@@ -95,6 +104,11 @@ class TestValidateProviderSupport:
         This test checks only the always-available providers plus any
         whose SDK is actually installed in the current env.
         """
+        # The OpenAI-compatible providers below all resolve through
+        # pydantic-ai's OpenAI model, which needs the openai SDK. That SDK is
+        # only installed when an OpenAI-compatible provider was selected at
+        # generation time (e.g. not in an anthropic-only build).
+        pytest.importorskip("openai")
         # Always-available (no extra SDK needed beyond openai-compatible):
         always_available = [
             AIProvider.OPENAI,

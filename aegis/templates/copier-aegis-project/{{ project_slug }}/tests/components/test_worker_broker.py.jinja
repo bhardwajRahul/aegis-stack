@@ -98,4 +98,65 @@ async def test_listen_fetches_when_not_paused(
 
     assert msg.data == b"payload"
     conn.xreadgroup.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Poison-message guard — _is_poison
+# ---------------------------------------------------------------------------
+
+
+def _pending(times_delivered: int) -> list[dict]:
+    """Shape XPENDING range returns: one entry with a delivery counter."""
+    return [{"message_id": b"1-0", "times_delivered": times_delivered}]
+
+
+@pytest.mark.asyncio
+async def test_is_poison_drops_over_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Past the redelivery cap, the message is ACKed (dropped) and skipped."""
+    monkeypatch.setattr(broker_module.settings, "WORKER_MAX_REDELIVERIES", 5)
+    conn = AsyncMock()
+    conn.xpending_range.return_value = _pending(6)  # over cap
+    b = _make_broker()
+
+    assert await b._is_poison(conn, "q", b"1-0") is True
+    conn.xack.assert_awaited_once_with("q", "g", b"1-0")  # xack(stream, group, id)
+
+
+@pytest.mark.asyncio
+async def test_is_poison_keeps_under_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """At or under the cap, the message is kept (no ack, not skipped)."""
+    monkeypatch.setattr(broker_module.settings, "WORKER_MAX_REDELIVERIES", 5)
+    conn = AsyncMock()
+    conn.xpending_range.return_value = _pending(5)  # == cap, still allowed
+    b = _make_broker()
+
+    assert await b._is_poison(conn, "q", b"1-0") is False
+    conn.xack.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_is_poison_disabled_when_cap_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """cap <= 0 disables the guard entirely (no XPENDING call, never drops)."""
+    monkeypatch.setattr(broker_module.settings, "WORKER_MAX_REDELIVERIES", 0)
+    conn = AsyncMock()
+    b = _make_broker()
+
+    assert await b._is_poison(conn, "q", b"1-0") is False
+    conn.xpending_range.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_is_poison_fails_open_on_redis_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Redis error during the check delivers the message (never drops work)."""
+    monkeypatch.setattr(broker_module.settings, "WORKER_MAX_REDELIVERIES", 5)
+    conn = AsyncMock()
+    conn.xpending_range.side_effect = RuntimeError("redis down")
+    b = _make_broker()
+
+    assert await b._is_poison(conn, "q", b"1-0") is False
+    conn.xack.assert_not_awaited()
 {%- endif %}

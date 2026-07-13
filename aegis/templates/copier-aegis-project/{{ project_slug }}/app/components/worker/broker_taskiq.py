@@ -20,6 +20,8 @@ from taskiq import AckableMessage
 from taskiq_redis import RedisStreamBroker
 from taskiq_redis.redis_broker import logger as _broker_logger
 
+from app.core.config import settings
+
 PAUSE_KEY = "aegis:queue:paused"
 PAUSE_POLL_SECONDS = 1.0
 
@@ -93,7 +95,65 @@ class PausableRedisStreamBroker(RedisStreamBroker):
                             count=self.unacknowledged_batch_size,
                         )
                         for msg_id, msg in pending[1]:
+                            if await self._is_poison(redis_conn, stream, msg_id):
+                                continue
                             yield AckableMessage(
                                 data=msg[b"data"],
                                 ack=self._ack_generator(msg_id),
                             )
+
+    async def _is_poison(
+        self,
+        conn: aioredis.Redis,
+        stream: str,
+        msg_id: bytes,
+    ) -> bool:
+        """Drop a message that has been redelivered past the configured cap.
+
+        Poison-message guard. ``xautoclaim`` (above) reclaims any message
+        left unacknowledged longer than ``idle_timeout`` and re-yields it
+        with NO delivery limit, so a task that KILLS its worker every run
+        (OOM / SIGKILL) — and therefore never acks and never raises a
+        catchable error for ``SimpleRetryMiddleware`` — loops forever,
+        re-billing any paid work each lap. ``xautoclaim`` has just
+        incremented this message's delivery counter, so we read it back via
+        ``XPENDING``; once it exceeds ``WORKER_MAX_REDELIVERIES`` we ACK
+        (drop) the message to break the loop and return ``True`` so the
+        caller skips it. ``0`` disables the guard.
+
+        Best-effort: any Redis error here falls through to delivering the
+        message (fail open) rather than silently dropping work.
+        """
+        cap = settings.WORKER_MAX_REDELIVERIES
+        if cap <= 0:
+            return False
+        try:
+            info = await conn.xpending_range(
+                stream,
+                self.consumer_group_name,
+                min=msg_id,
+                max=msg_id,
+                count=1,
+            )
+            delivered = int(info[0]["times_delivered"]) if info else 0
+        except Exception as exc:
+            _broker_logger.debug("poison-check XPENDING failed for %s: %s", msg_id, exc)
+            return False
+
+        if delivered <= cap:
+            return False
+
+        _broker_logger.warning(
+            "Dropping poison message %s on %s after %d deliveries "
+            "(cap=%d) — ACKing to stop the redelivery loop. A task that "
+            "repeatedly kills its worker (e.g. OOM) lands here.",
+            msg_id,
+            stream,
+            delivered,
+            cap,
+        )
+        try:
+            await conn.xack(stream, self.consumer_group_name, msg_id)
+        except Exception as exc:
+            _broker_logger.warning("poison-drop ACK failed for %s: %s", msg_id, exc)
+        return True
