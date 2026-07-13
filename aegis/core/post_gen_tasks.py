@@ -14,6 +14,7 @@ from typing import Any
 import typer
 
 from aegis.constants import (
+    AIFrameworks,
     AnswerKeys,
     StorageBackends,
     WorkerBackends,
@@ -342,6 +343,11 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # Remove LLM tracking models (only needed with persistence)
         # Keep app/services/ai/models/__init__.py - contains core types (AIProvider, ProviderConfig)
         remove_dir(project_path, "app/services/ai/models/llm")
+        # chat_kit + usage_recording ledger the LLM catalog + conversation
+        # tables removed above, so they only work with a persistent backend.
+        remove_dir(project_path, "app/services/ai/chat_kit")
+        remove_file(project_path, "app/services/ai/usage_recording.py")
+        remove_dir(project_path, "tests/services/ai/chat_kit")
         remove_dir(project_path, "app/services/ai/etl")
         remove_dir(project_path, "app/services/ai/fixtures")
         # Remove persistence-related contexts (keep usage_context.py - no DB deps)
@@ -388,6 +394,16 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/services/ai/rag_stats_context.py")
         remove_file(project_path, "tests/services/ai/test_rag_stats_context.py")
         remove_file(project_path, "app/components/frontend/dashboard/modals/rag_tab.py")
+
+    # chat_kit is a pydantic-ai chat engine (imports ``pydantic_ai``); it has
+    # no langchain path, so strip it (and its ledger helper) on langchain.
+    if (
+        is_enabled(AnswerKeys.AI)
+        and context.get(AnswerKeys.AI_FRAMEWORK) != AIFrameworks.PYDANTIC_AI
+    ):
+        remove_dir(project_path, "app/services/ai/chat_kit")
+        remove_file(project_path, "app/services/ai/usage_recording.py")
+        remove_dir(project_path, "tests/services/ai/chat_kit")
 
     # Remove voice (TTS/STT) if not enabled
     if not is_enabled(AnswerKeys.AI_VOICE):

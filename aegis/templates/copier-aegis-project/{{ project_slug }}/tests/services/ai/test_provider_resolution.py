@@ -8,7 +8,9 @@ the boot-bricking ``ValueError: 'llm7.io' is not a valid AIProvider``.
 
 from types import SimpleNamespace
 
-from app.services.ai.config import AIServiceConfig, _resolve_provider
+import pytest
+
+from app.services.ai.config import AIServiceConfig, _resolve_effort, _resolve_provider
 from app.services.ai.models import AIProvider
 from app.services.ai.providers import _model_settings, _supports_custom_temperature
 
@@ -73,3 +75,53 @@ class TestResolveProviderNeverCrashes:
         settings = SimpleNamespace(AI_PROVIDER="llm7.io")
         config = AIServiceConfig.from_settings(settings)
         assert config.provider is AIProvider.PUBLIC
+
+
+class TestResolveEffort:
+    def test_valid_levels_normalized(self) -> None:
+        assert _resolve_effort("LOW") == "low"
+        assert _resolve_effort(" high ") == "high"
+
+    def test_none_and_blank_pass_through(self) -> None:
+        assert _resolve_effort(None) is None
+        assert _resolve_effort("") is None
+
+    def test_unknown_falls_back_to_none(self) -> None:
+        assert _resolve_effort("turbo") is None  # warn-don't-crash
+
+
+class TestEffortSetting:
+    """AI_EFFORT flows to Anthropic as ``anthropic_effort``; other providers
+    never see the key (their APIs would reject it)."""
+
+    def _cfg(self, **overrides: object) -> SimpleNamespace:
+        base: dict[str, object] = {
+            "model": "claude-sonnet-5",
+            "provider": AIProvider.ANTHROPIC,
+            "temperature": 0.7,
+            "effort": "low",
+            "max_tokens": 4096,
+            "timeout_seconds": 120.0,
+        }
+        base.update(overrides)
+        return SimpleNamespace(**base)
+
+    def test_effort_passed_for_anthropic(self) -> None:
+        # Only meaningful when the anthropic extra is installed (the effort
+        # branch builds AnthropicModelSettings, which needs the anthropic SDK).
+        pytest.importorskip("anthropic")
+        # ``_model_settings`` is annotated ``-> ModelSettings``; the effort
+        # branch returns the ``AnthropicModelSettings`` subtype whose extra
+        # ``anthropic_effort`` key the base TypedDict doesn't declare. Read it
+        # through a plain dict so the type checker doesn't reject the key.
+        settings = dict(_model_settings(self._cfg()))
+        assert settings["anthropic_effort"] == "low"
+
+    def test_effort_omitted_when_unset(self) -> None:
+        assert "anthropic_effort" not in _model_settings(self._cfg(effort=None))
+
+    def test_effort_omitted_for_other_providers(self) -> None:
+        settings = _model_settings(
+            self._cfg(model="gpt-4o", provider=AIProvider.OPENAI)
+        )
+        assert "anthropic_effort" not in settings

@@ -8,16 +8,25 @@ Uses LangChain chat models with support for multiple providers.
 {% endif %}
 """
 {% if ai_framework == "pydantic-ai" %}
+{#- The ``openai`` package + pydantic-ai's OpenAI model ship only with the
+    openai extra, which is installed only for OpenAI-compatible providers.
+    Skip these module-level imports otherwise (e.g. an anthropic-only build),
+    or the module fails to import a package that was never installed. #}
+{%- set _has_openai = "openai" in ai_providers or "public" in ai_providers or "openrouter" in ai_providers or "ollama" in ai_providers or "mistral" in ai_providers or "cohere" in ai_providers %}
 
 import json
 import os
 from typing import Any
 
 import httpx
+{%- if _has_openai %}
 from openai import AsyncOpenAI
+{%- endif %}
 from pydantic_ai import Agent
+{%- if _has_openai %}
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
+{%- endif %}
 from pydantic_ai.settings import ModelSettings
 
 from app.core.log import logger
@@ -27,14 +36,27 @@ from app.core.log import logger
 # for clarity in test failure output.
 __all__ = [
     "Agent",
-    "AsyncOpenAI",
     "ModelSettings",
+    "AsyncOpenAI",
     "OpenAIChatModel",
     "OpenAIProvider",
 ]
 
 from .config import AIServiceConfig
 from .models import AIProvider
+
+{%- if not _has_openai %}
+
+# The ``openai`` package + pydantic-ai's OpenAI model ship only with the
+# openai extra, which no configured provider pulled in here (e.g. an
+# anthropic-only build). Bind the names to ``None`` so the module still
+# imports and tests can patch them; the OpenAI-backed paths (public, ollama)
+# are unreachable without one of those providers, and calling one raises a
+# clear ProviderError via the builders' own try/except.
+AsyncOpenAI: Any = None
+OpenAIChatModel: Any = None
+OpenAIProvider: Any = None
+{%- endif %}
 
 
 # Lazy loading of provider model classes to avoid import errors
@@ -114,6 +136,14 @@ def _model_settings(config: Any) -> ModelSettings:
     }
     if _supports_custom_temperature(config.model):
         kwargs["temperature"] = config.temperature
+    # Effort is an Anthropic-only knob (thinking depth / token spend). Lazy
+    # import mirrors ``_get_model_class``: the anthropic extra may not be
+    # installed when another provider is configured.
+    effort = getattr(config, "effort", None)
+    if effort and getattr(config, "provider", None) == AIProvider.ANTHROPIC:
+        from pydantic_ai.models.anthropic import AnthropicModelSettings
+
+        return AnthropicModelSettings(anthropic_effort=effort, **kwargs)
     return ModelSettings(**kwargs)
 
 

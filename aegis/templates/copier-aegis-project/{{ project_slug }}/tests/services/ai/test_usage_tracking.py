@@ -1,7 +1,7 @@
 """Tests for LLM usage tracking service functions."""
 
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -79,7 +79,21 @@ class TestRecordUsage:
         def mock_session_cm() -> Generator[Session, None, None]:
             yield session
 
-        with patch("app.services.ai.service.db_session", mock_session_cm):
+        # ``db_session`` is used from the service module (the LangChain inline
+        # path) and from the shared ``usage_recording`` module (the pydantic-ai
+        # delegation target). Patch it wherever it lives; ``usage_recording`` is
+        # absent in LangChain/memory builds, so tolerate its absence.
+        targets = ["app.services.ai.service.db_session"]
+        try:
+            import app.services.ai.usage_recording  # noqa: F401
+
+            targets.append("app.services.ai.usage_recording.db_session")
+        except ImportError:
+            pass
+
+        with ExitStack() as stack:
+            for target in targets:
+                stack.enter_context(patch(target, mock_session_cm))
             yield
 
     def test_record_usage_success(
@@ -260,7 +274,19 @@ class TestRecordUsage:
             "Database connection failed"
         )
 
-        with patch("app.services.ai.service.db_session", failing_session):
+        # Patch wherever the record path opens a session (service inline for
+        # LangChain, the shared module for the pydantic-ai delegation).
+        targets = ["app.services.ai.service.db_session"]
+        try:
+            import app.services.ai.usage_recording  # noqa: F401
+
+            targets.append("app.services.ai.usage_recording.db_session")
+        except ImportError:
+            pass
+
+        with ExitStack() as stack:
+            for target in targets:
+                stack.enter_context(patch(target, failing_session))
             # Should not raise, just log error
             service._record_usage(
                 action="chat",

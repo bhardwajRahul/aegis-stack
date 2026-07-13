@@ -20,6 +20,13 @@ from sqlmodel import Session, select
 from app.core.db import db_session, engine
 from .llm_catalog_context import get_llm_catalog_context
 from .models.llm import LargeLanguageModel, LLMPrice, LLMUsage, LLMVendor
+{% if ai_framework == "pydantic-ai" %}
+# Single source of truth for LLM usage extraction / pricing / ledger writes.
+# ``usage_recording`` is a module (not the service) so worker and one-shot
+# callers can record without constructing ``ConversationManager``; the chat
+# path below delegates to it so pricing lives in exactly one place.
+from . import usage_recording
+{% endif %}
 {% endif %}
 
 from app.core.log import logger
@@ -1368,6 +1375,7 @@ class AIService:
         Returns:
             list[str]: List of error messages if dependencies are missing
         """
+{%- if ai_backend != "memory" %}
         from .provider_management import check_provider_dependency_installed
 
         errors = []
@@ -1380,6 +1388,12 @@ class AIService:
             )
 
         return errors
+{%- else %}
+        # ``provider_management`` (dependency introspection) ships only with a
+        # persistent AI backend; the memory backend omits it, so there is no
+        # dependency check to run here.
+        return []
+{%- endif %}
 
 {% if ai_backend != "memory" %}
     def _extract_usage(self, result: Any) -> dict[str, int]:
@@ -1393,12 +1407,10 @@ class AIService:
             dict: Token usage with input_tokens and output_tokens
         """
 {% if ai_framework == "pydantic-ai" %}
-        # PydanticAI stores usage in result.usage (attribute, not method)
-        if hasattr(result, "usage") and result.usage and not callable(result.usage):
-            return {
-                "input_tokens": result.usage.request_tokens or 0,
-                "output_tokens": result.usage.response_tokens or 0,
-            }
+        # Delegate to the shared module: it handles every pydantic-ai usage
+        # shape (attribute vs. callable) plus cache-token accounting, and is
+        # the same code the non-chat callers use.
+        return usage_recording.extract_usage(result)
 {% else %}
         # LangChain stores usage in response_metadata
         if hasattr(result, "response_metadata") and result.response_metadata is not None:
@@ -1407,8 +1419,8 @@ class AIService:
                 "input_tokens": token_usage.get("prompt_tokens", 0),
                 "output_tokens": token_usage.get("completion_tokens", 0),
             }
-{% endif %}
         return {"input_tokens": 0, "output_tokens": 0}
+{% endif %}
 
     def calculate_cost(self, input_tokens: int, output_tokens: int) -> float:
         """
@@ -1424,6 +1436,11 @@ class AIService:
         Returns:
             Total cost in USD
         """
+{% if ai_framework == "pydantic-ai" %}
+        return usage_recording.calculate_cost(
+            self.config.model, input_tokens, output_tokens
+        )
+{% else %}
         model_name = self.config.model
 
         # Strip vendor prefix if present (e.g., "openai/gpt-4o" -> "gpt-4o")
@@ -1459,6 +1476,7 @@ class AIService:
         except Exception as e:
             logger.warning("Failed to calculate cost", error=str(e), model=model_name)
             return 0.0
+{% endif %}
 
     def _record_usage(
         self,
@@ -1478,6 +1496,16 @@ class AIService:
             success: Whether the request succeeded
             error_message: Error message if request failed
         """
+{% if ai_framework == "pydantic-ai" %}
+        usage_recording.record_usage(
+            action,
+            self.config.model,
+            usage,
+            user_id,
+            success=success,
+            error_message=error_message,
+        )
+{% else %}
         model_name = self.config.model
 
         # Strip vendor prefix if present (e.g., "openai/gpt-4o" -> "gpt-4o")
@@ -1560,6 +1588,7 @@ class AIService:
         except Exception as e:
             # Don't fail the request if usage tracking fails
             logger.error("Failed to record LLM usage", error=str(e))
+{% endif %}
 
     def get_usage_stats(
         self,

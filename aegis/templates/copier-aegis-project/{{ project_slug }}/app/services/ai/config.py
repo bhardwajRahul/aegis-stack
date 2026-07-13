@@ -5,7 +5,7 @@ Configuration management for AI service providers, models, and settings.
 Integrates with main application settings through app.core.config.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -36,6 +36,31 @@ def _resolve_provider(value: object) -> AIProvider:
     return resolved
 
 
+_EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+
+
+def _resolve_effort(value: object) -> str | None:
+    """Coerce a configured AI_EFFORT to a valid level, never crashing.
+
+    Same contract as ``_resolve_provider``: a typo in ``.env`` must not
+    crash-loop the webserver. Falls back to None (the API default) with a
+    warning. Anthropic-only downstream; other providers ignore it.
+    """
+    if value is None or value == "":
+        return None
+    normalized = str(value).strip().lower()
+    if normalized in _EFFORT_LEVELS:
+        return normalized
+    from app.core.log import logger
+
+    logger.warning(
+        "Unknown AI_EFFORT %r; using the API default. Valid: %s",
+        value,
+        ", ".join(_EFFORT_LEVELS),
+    )
+    return None
+
+
 class AIServiceConfig(BaseModel):
     """
     AI service configuration that integrates with main app settings.
@@ -50,6 +75,9 @@ class AIServiceConfig(BaseModel):
     )  # Default to public endpoints (no API key required)
     model: str = "gpt-3.5-turbo"  # Default to widely supported model
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    # Anthropic-only: thinking depth / output-token spend. None = the API
+    # default. Ignored by non-Anthropic providers.
+    effort: Literal["low", "medium", "high", "xhigh", "max"] | None = None
     max_tokens: int = Field(default=1000, gt=0, le=8000)
     timeout_seconds: float = Field(default=120.0, gt=0)
 
@@ -66,6 +94,7 @@ class AIServiceConfig(BaseModel):
             provider=_resolve_provider(getattr(settings, "AI_PROVIDER", "public")),
             model=getattr(settings, "AI_MODEL", "gpt-3.5-turbo"),
             temperature=getattr(settings, "AI_TEMPERATURE", 0.7),
+            effort=_resolve_effort(getattr(settings, "AI_EFFORT", None)),
             max_tokens=getattr(settings, "AI_MAX_TOKENS", 1000),
             timeout_seconds=getattr(settings, "AI_TIMEOUT_SECONDS", 120.0),
             # RAG-Chat integration settings
