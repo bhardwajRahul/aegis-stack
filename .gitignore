@@ -136,8 +136,9 @@ data/
 # Demos
 demos/recordings
 
-# Claude Stuff
-.claude/
+# Claude Stuff (track shared skills + agents; ignore only local/personal settings)
+.claude/settings.local.json
+.claude/*.local.json
 
 # Typical generated stack folders
 my-app/
