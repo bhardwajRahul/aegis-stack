@@ -36,13 +36,22 @@ from app.services.finance.schemas import (
     ImportBatchResponse,
     ImportBatchSummary,
     ImportResultResponse,
+    InsightListResponse,
+    InsightResponse,
     ManualAccountCreate,
     NetWorthPoint,
+    RecurringListResponse,
+    RecurringStreamResponse,
     SecurityCreate,
     SecurityResponse,
     SpendingCategory,
+    SpendingSummaryResponse,
+    TradeListResponse,
+    TradeResponse,
     TransactionListResponse,
     TransactionResponse,
+    TransferListResponse,
+    TransferResponse,
     ValuationCreateRequest,
     ValuationListResponse,
     ValuationResponse,
@@ -297,6 +306,24 @@ async def list_account_holdings(
     )
 
 
+@router.get("/accounts/{account_id}/trades", response_model=TradeListResponse)
+async def list_account_trades(
+    account_id: int,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> TradeListResponse:
+    """Recent investment activity (buy/sell/dividend/...) for an account,
+    newest first."""
+    account = await service.get_account(account_id, owner_user_id=owner_user_id)
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    trades = await service.list_trades(
+        owner_user_id=owner_user_id, account_id=account_id
+    )
+    items = [TradeResponse.from_row(t) for t in trades]
+    return TradeListResponse(items=items, total=len(items))
+
+
 @router.get("/holdings", response_model=HoldingListResponse)
 async def list_holdings(
     service: FinanceService = Depends(get_finance_service),
@@ -410,13 +437,16 @@ async def list_transactions(
     to_date: date | None = Query(default=None, alias="to"),
     category_id: int | None = None,
     q: str | None = None,
+    include_transfers: bool = False,
     page: int = 1,
     page_size: int = 50,
     service: FinanceService = Depends(get_finance_service),
     owner_user_id: int | None = Depends(get_owner_user_id),
 ) -> TransactionListResponse:
     """Transaction feed, newest first. Excludes soft-deleted and
-    duplicate-marked rows. Filter by account, date range, category, or payee."""
+    duplicate-marked rows, and (by default) paired transfer legs so a card
+    payment doesn't show as two lines. Filter by account, date, category, payee.
+    """
     transactions, total = await service.list_transactions(
         owner_user_id=owner_user_id,
         account_id=account_id,
@@ -424,6 +454,7 @@ async def list_transactions(
         to_date=to_date,
         category_id=category_id,
         query=q,
+        include_transfers=include_transfers,
         page=page,
         page_size=page_size,
     )
@@ -445,6 +476,172 @@ async def spending_by_category(
     return [SpendingCategory(category=name, amount=amount) for name, amount in rows]
 
 
+@router.get("/spending/summary", response_model=SpendingSummaryResponse)
+async def spending_summary(
+    month: str | None = None,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> SpendingSummaryResponse:
+    """Per-category spend for a calendar month (``YYYY-MM``, default current),
+    with internal transfers excluded — the report the insights + UI consume."""
+    try:
+        rows = await service.spending_summary(
+            owner_user_id=owner_user_id, month=month
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="month must be a valid YYYY-MM",
+        ) from exc
+    resolved = month or date.today().strftime("%Y-%m")
+    return SpendingSummaryResponse(
+        month=resolved,
+        categories=[
+            SpendingCategory(category=name, amount=amount) for name, amount in rows
+        ],
+        total=sum(amount for _, amount in rows),
+    )
+
+
+# -- Transfers ---------------------------------------------------------------
+
+
+@router.get("/transfers", response_model=TransferListResponse)
+async def list_transfers(
+    status_filter: str | None = Query(default=None, alias="status"),
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> TransferListResponse:
+    """Matched internal transfers, newest first. Filter by ``status``
+    (suggested/confirmed/rejected) — the UI polls ``?status=suggested``."""
+    transfers = await service.list_transfers(
+        owner_user_id=owner_user_id, status=status_filter
+    )
+    # Enrich each transfer with its two legs' descriptions so the review UI can
+    # show "Starbucks -> INTRST PYMNT", not just account names + amount.
+    leg_ids = [
+        txn_id
+        for transfer in transfers
+        for txn_id in (transfer.from_transaction_id, transfer.to_transaction_id)
+        if txn_id is not None
+    ]
+    legs = await service.transactions_by_ids(leg_ids)
+    items = [
+        TransferResponse.from_row(
+            transfer,
+            from_txn=legs.get(transfer.from_transaction_id),
+            to_txn=legs.get(transfer.to_transaction_id),
+        )
+        for transfer in transfers
+    ]
+    return TransferListResponse(items=items, total=len(transfers))
+
+
+@router.post("/transfers/{transfer_id}/confirm", response_model=TransferResponse)
+async def confirm_transfer(
+    transfer_id: int,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> TransferResponse:
+    """Confirm a suggested transfer: flag both legs out of reports."""
+    transfer = await service.confirm_transfer(transfer_id, owner_user_id=owner_user_id)
+    if transfer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return TransferResponse.from_row(transfer)
+
+
+@router.post("/transfers/{transfer_id}/reject", response_model=TransferResponse)
+async def reject_transfer(
+    transfer_id: int,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> TransferResponse:
+    """Reject a transfer: both legs stay as normal spend/income and the pair is
+    never re-suggested."""
+    transfer = await service.reject_transfer(transfer_id, owner_user_id=owner_user_id)
+    if transfer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return TransferResponse.from_row(transfer)
+
+
+# -- Recurring & insights ----------------------------------------------------
+
+# Frequency -> monthly-equivalent multiplier for the recurring-cost rollup.
+_MONTHLY_FACTOR = {
+    "weekly": 52 / 12,
+    "biweekly": 26 / 12,
+    "semi_monthly": 2.0,
+    "monthly": 1.0,
+    "bimonthly": 0.5,
+    "quarterly": 1 / 3,
+    "semi_annually": 1 / 6,
+    "annually": 1 / 12,
+}
+
+
+@router.get("/recurring", response_model=RecurringListResponse)
+async def list_recurring(
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> RecurringListResponse:
+    """Detected recurring streams, soonest-due first, plus the monthly-cost
+    rollup (monthly-equivalent of all recurring outflows)."""
+    streams = await service.list_recurring(owner_user_id=owner_user_id)
+    monthly = 0.0
+    for stream in streams:
+        if stream.direction == "outflow" and stream.average_amount:
+            monthly += stream.average_amount * _MONTHLY_FACTOR.get(
+                stream.frequency, 0.0
+            )
+    return RecurringListResponse(
+        items=[RecurringStreamResponse.from_row(s) for s in streams],
+        total=len(streams),
+        monthly_cost=int(monthly),
+    )
+
+
+@router.post("/recurring/{stream_id}/mute", response_model=RecurringStreamResponse)
+async def mute_recurring(
+    stream_id: int,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> RecurringStreamResponse:
+    """Mute a stream so it stops raising price-hike insights."""
+    stream = await service.mute_recurring(stream_id, owner_user_id=owner_user_id)
+    if stream is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return RecurringStreamResponse.from_row(stream)
+
+
+@router.get("/insights", response_model=InsightListResponse)
+async def list_insights(
+    status_filter: str | None = Query(default="new", alias="status"),
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> InsightListResponse:
+    """Wasting-money insights, newest first. Defaults to ``status=new``."""
+    insights = await service.list_insights(
+        owner_user_id=owner_user_id, status=status_filter
+    )
+    return InsightListResponse(
+        items=[InsightResponse.from_row(i) for i in insights],
+        total=len(insights),
+    )
+
+
+@router.post("/insights/{insight_id}/dismiss", response_model=InsightResponse)
+async def dismiss_insight(
+    insight_id: int,
+    service: FinanceService = Depends(get_finance_service),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> InsightResponse:
+    """Dismiss an insight; it won't come back (deduped by key on re-run)."""
+    insight = await service.dismiss_insight(insight_id, owner_user_id=owner_user_id)
+    if insight is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_NOT_FOUND)
+    return InsightResponse.from_row(insight)
+
+
 {%- if finance_plaid %}
 # -- Plaid connectivity ------------------------------------------------------
 
@@ -456,6 +653,8 @@ def _sync_dto(result: object) -> SyncResultResponse:
         added=result.added,
         updated=result.updated,
         removed=result.removed,
+        holdings=result.holdings,
+        trades=result.trades,
     )
 
 

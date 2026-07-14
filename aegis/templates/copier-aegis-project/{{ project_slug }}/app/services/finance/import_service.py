@@ -13,9 +13,9 @@ sentinel for those two tables (transactions stay nullable).
 
 from __future__ import annotations
 
-import hashlib
 from collections import defaultdict
 from datetime import UTC, datetime
+import hashlib
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -384,6 +384,20 @@ async def ingest_transactions(
     batch.finished_at = _utcnow()
     db.add(batch)
     await db.flush()
+
+    # Reconcile the freshly imported rows: pair internal transfers (so a
+    # card payment doesn't double-count as spend), detect recurring streams,
+    # and generate "wasting money" insights.
+    if inserted:
+        from app.services.finance.categorize import (
+            detect_recurring,
+            detect_transfers,
+            generate_insights,
+        )
+
+        await detect_transfers(db, owner_user_id=owner_user_id)
+        await detect_recurring(db, owner_user_id=owner_user_id)
+        await generate_insights(db, owner_user_id=owner_user_id)
 
     return ImportResult(
         batch_id=batch.id,

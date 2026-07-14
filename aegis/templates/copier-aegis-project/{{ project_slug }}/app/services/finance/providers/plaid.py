@@ -187,6 +187,32 @@ class PlaidClient:
         )
         return data.get("holdings", []), data.get("securities", [])
 
+    async def get_investment_transactions(
+        self,
+        access_token: str,
+        start_date: str,
+        end_date: str,
+        *,
+        offset: int = 0,
+        count: int = 500,
+    ) -> dict[str, Any]:
+        """One page of ``/investments/transactions/get``.
+
+        Unlike ``/transactions/sync`` this endpoint has no cursor: it pages a
+        date range by ``offset`` and reports ``total_investment_transactions``.
+        Callers re-fetch the window and dedup by ``investment_transaction_id``.
+        Returns the raw payload (``investment_transactions`` + ``securities`` +
+        ``total_investment_transactions``)."""
+        return await self._post(
+            "/investments/transactions/get",
+            {
+                "access_token": access_token,
+                "start_date": start_date,
+                "end_date": end_date,
+                "options": {"offset": offset, "count": count},
+            },
+        )
+
     async def sandbox_public_token(
         self,
         *,

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -70,6 +70,7 @@ class SyncResult:
     updated: int = 0
     removed: int = 0
     holdings: int = 0
+    trades: int = 0
 
 
 async def create_plaid_connection(
@@ -396,6 +397,112 @@ async def _upsert_securities(
     return mapping
 
 
+# How far back to pull investment transactions each sync. Plaid's endpoint has
+# no cursor; we re-window and dedup by ``investment_transaction_id``, so this is
+# just the trailing coverage, not an incremental checkpoint.
+_INVESTMENT_LOOKBACK_DAYS = 730
+
+
+def _map_plaid_trade_type(
+    plaid_type: str, subtype: str | None, amount: float
+) -> str:
+    """Map a Plaid (type, subtype, amount) to a normalized ``FinanceTrade.type``.
+
+    Plaid's coarse ``type`` (buy/sell/cancel/cash/fee/transfer) is often too
+    blunt, so the granular ``subtype`` wins when it's meaningful. Plaid signs
+    ``amount`` positive when cash is debited (money out: a buy) and negative
+    when credited (money in: a sell), which disambiguates the direction of the
+    ``transfer``/``cash`` types. Unknown shapes fall back to ``other`` rather
+    than raising — an unrecognized trade must never break a sync.
+    """
+    sub = (subtype or "").lower()
+    if "reinvest" in sub:
+        return "reinvest"
+    if "dividend" in sub:
+        return "dividend"
+    if "interest" in sub:
+        return "interest"
+    if "tax" in sub:
+        return "tax"
+    if "split" in sub:
+        return "split"
+    if sub in ("deposit", "contribution"):
+        return "deposit"
+    if sub == "withdrawal":
+        return "withdrawal"
+    if sub in ("buy", "buy to cover"):
+        return "buy"
+    if sub in ("sell", "sell short"):
+        return "sell"
+    if "fee" in sub:
+        return "fee"
+    coarse = (plaid_type or "").lower()
+    if coarse in ("buy", "sell", "cancel", "fee"):
+        return coarse
+    if coarse == "transfer":
+        return "transfer_out" if amount > 0 else "transfer_in"
+    if coarse == "cash":
+        return "withdrawal" if amount > 0 else "deposit"
+    return "other"
+
+
+async def _apply_trades(
+    db: AsyncSession,
+    service: FinanceService,
+    plaid_txns: list[dict[str, Any]],
+    account_by_plaid_id: dict[str, int],
+    security_by_plaid_id: dict[str, int],
+    *,
+    connection: FinanceConnection,
+) -> int:
+    """Upsert each Plaid investment transaction as a FinanceTrade, deduped by
+    ``investment_transaction_id`` (the external-id lane). Cash-only rows (fees,
+    dividends, deposits) carry no security and are still recorded."""
+    count = 0
+    for txn in plaid_txns:
+        plaid_account_id = txn.get("account_id")
+        account_id = (
+            account_by_plaid_id.get(plaid_account_id) if plaid_account_id else None
+        )
+        if account_id is None:
+            continue
+        plaid_security_id = txn.get("security_id")
+        security_id = (
+            security_by_plaid_id.get(plaid_security_id) if plaid_security_id else None
+        )
+        plaid_amount = txn.get("amount") or 0.0
+        quantity = txn.get("quantity")
+        price = txn.get("price")
+        fees = txn.get("fees")
+        # Plaid signs ``amount`` positive when cash is debited (a buy). Store it
+        # in the app convention used by cash transactions — negative = money out
+        # of the account — so amounts colorize consistently in the UI. The raw
+        # provider value is preserved in ``raw_payload``.
+        await service.upsert_trade(
+            owner_user_id=connection.owner_user_id,
+            account_id=account_id,
+            security_id=security_id,
+            connection_id=connection.id,
+            source=Provider.PLAID,
+            external_id=txn.get("investment_transaction_id"),
+            external_id_source=Provider.PLAID,
+            trade_type=_map_plaid_trade_type(
+                txn.get("type", ""), txn.get("subtype"), plaid_amount
+            ),
+            subtype=txn.get("subtype"),
+            trade_date=date.fromisoformat(txn["date"]),
+            amount=round(-plaid_amount * 100),
+            quantity_e8=round(quantity * 10**8) if quantity is not None else None,
+            price=round(price * 100) if price is not None else None,
+            fees=round(fees * 100) if fees is not None else None,
+            currency=(txn.get("iso_currency_code") or "usd").lower(),
+            name=txn.get("name"),
+            raw_payload=txn,
+        )
+        count += 1
+    return count
+
+
 async def _apply_holdings(
     db: AsyncSession,
     service: FinanceService,
@@ -478,6 +585,42 @@ async def sync_plaid_connection(
             account_by_plaid_id,
             security_by_plaid_id,
             owner_user_id=connection.owner_user_id,
+        )
+
+    # Investment transactions (trades) — same investments-product gate as
+    # holdings. No cursor: page a trailing date window by offset and dedup on
+    # ``investment_transaction_id``. Securities here can include ones not held
+    # anymore, so re-upsert the catalog from this response too.
+    inv_txns: list[dict[str, Any]] = []
+    inv_securities: list[dict[str, Any]] = []
+    try:
+        end = _utcnow().date()
+        start = end - timedelta(days=_INVESTMENT_LOOKBACK_DAYS)
+        offset = 0
+        while True:
+            page = await client.get_investment_transactions(
+                access_token, start.isoformat(), end.isoformat(), offset=offset
+            )
+            batch = page.get("investment_transactions", [])
+            inv_txns.extend(batch)
+            inv_securities.extend(page.get("securities", []))
+            total = page.get("total_investment_transactions", len(inv_txns))
+            offset += len(batch)
+            if not batch or offset >= total:
+                break
+    except PlaidError:
+        inv_txns, inv_securities = [], []
+    if inv_txns:
+        trade_security_by_plaid_id = await _upsert_securities(
+            db, service, inv_securities
+        )
+        result.trades = await _apply_trades(
+            db,
+            service,
+            inv_txns,
+            account_by_plaid_id,
+            trade_security_by_plaid_id,
+            connection=connection,
         )
 
     cursor = connection.sync_cursor
@@ -592,12 +735,22 @@ async def disconnect_connection(
 async def _recompute_net_worth(
     db: AsyncSession, owner_user_id: int | None, results: list[SyncResult]
 ) -> None:
-    """After a sync writes transactions/balances, refresh the net-worth snapshot
-    series so the Overview trend reflects the new data. No-op if nothing synced."""
+    """Post-sync reconcile: pair internal transfers (so a card payment doesn't
+    double-count as spend), detect recurring streams + "wasting money" insights,
+    then refresh the net-worth snapshot series so the Overview trend reflects
+    the new data. No-op if nothing synced."""
     if not results:
         return
     from app.services.finance import networth_service
+    from app.services.finance.categorize import (
+        detect_recurring,
+        detect_transfers,
+        generate_insights,
+    )
 
+    await detect_transfers(db, owner_user_id=owner_user_id)
+    await detect_recurring(db, owner_user_id=owner_user_id)
+    await generate_insights(db, owner_user_id=owner_user_id)
     await networth_service.recompute_snapshots(db, owner_user_id=owner_user_id)
 
 

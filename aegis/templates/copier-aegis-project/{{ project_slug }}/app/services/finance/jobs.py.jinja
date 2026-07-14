@@ -11,6 +11,7 @@ from sqlmodel import select
 
 from app.core.db import get_async_session
 from app.services.finance import networth_service
+from app.services.finance.categorize import detect_recurring, generate_insights
 from app.services.finance.models import FinanceAccount, FinanceConnection
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,8 @@ async def finance_recompute_snapshots_job() -> None:
             ).all()
             days_written = 0
             for owner_user_id in owners:
+                await detect_recurring(session, owner_user_id=owner_user_id)
+                await generate_insights(session, owner_user_id=owner_user_id)
                 days_written += await networth_service.recompute_snapshots(
                     session, owner_user_id=owner_user_id
                 )

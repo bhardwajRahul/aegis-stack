@@ -4,10 +4,12 @@ Reusable DataTable Components
 Class-based composition for table rendering with consistent styling.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
 import flet as ft
+
 from app.components.frontend.controls.text import BodyText, PrimaryText, SecondaryText
 from app.components.frontend.theme import AegisTheme as Theme
 
@@ -103,6 +105,8 @@ class DataTableRow(ft.Container):
         padding: int = 10,
         bgcolor: str = ft.Colors.SURFACE,
         show_border: bool = True,
+        on_click: Callable[[ft.ControlEvent], None] | None = None,
+        tooltip: str | None = None,
     ) -> None:
         super().__init__()
 
@@ -130,7 +134,14 @@ class DataTableRow(ft.Container):
             if show_border
             else None
         )
+        if tooltip:
+            self.tooltip = tooltip
         self.on_hover = self._on_hover
+        if on_click is not None:
+            # Whole-row affordance: ink ripple + pointer so a row reads as
+            # clickable (used for drill-through to a detail view).
+            self.on_click = on_click
+            self.ink = True
         # Animation disabled for debugging
         # self.animate = ft.Animation(150, ft.AnimationCurve.EASE_OUT)
 
@@ -171,6 +182,8 @@ class DataTable(ft.Container):
         show_header_border: bool = True,
         show_row_borders: bool = True,
         row_bgcolors: list[str | None] | None = None,
+        on_row_click: Callable[[int], None] | None = None,
+        row_tooltips: list[str] | None = None,
         expand: bool = False,
     ) -> None:
         """
@@ -214,6 +227,16 @@ class DataTable(ft.Container):
                         padding=row_padding,
                         bgcolor=bgcolor,
                         show_border=show_row_borders,
+                        on_click=(
+                            (lambda _e, i=idx: on_row_click(i))
+                            if on_row_click is not None
+                            else None
+                        ),
+                        tooltip=(
+                            row_tooltips[idx]
+                            if row_tooltips and idx < len(row_tooltips)
+                            else None
+                        ),
                     )
                 )
 

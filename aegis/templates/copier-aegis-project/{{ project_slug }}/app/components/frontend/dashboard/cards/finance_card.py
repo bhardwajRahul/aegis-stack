@@ -36,6 +36,15 @@ class FinanceCard:
         net_worth = self.metadata.get("net_worth_amount", 0)
         accounts = self.metadata.get("account_count", 0)
         connections = self.metadata.get("connection_count", 0)
+        insights = self.metadata.get("new_insight_count", 0)
+
+        counts = [
+            create_metric_container("Accounts", f"{accounts:,}"),
+            create_metric_container("Connections", f"{connections:,}"),
+        ]
+        # Surface the "wasting money" nudge only when there's something to see.
+        if insights:
+            counts.append(create_metric_container("Insights", f"{insights:,}"))
 
         return ft.Container(
             content=ft.Column(
@@ -45,15 +54,7 @@ class FinanceCard:
                         expand=True,
                     ),
                     ft.Container(height=12),
-                    ft.Row(
-                        [
-                            create_metric_container("Accounts", f"{accounts:,}"),
-                            create_metric_container(
-                                "Connections", f"{connections:,}"
-                            ),
-                        ],
-                        expand=True,
-                    ),
+                    ft.Row(counts, expand=True),
                 ],
                 spacing=0,
             ),

@@ -16,6 +16,7 @@ this layer is manual + import only.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import and_, case, func
 from sqlmodel import select
@@ -31,11 +32,15 @@ from app.services.finance.models import (
     FinanceHolding,
     FinanceImportBatch,
     FinanceImportBatchRow,
+    FinanceInsight,
     FinanceInstitution,
+    FinanceRecurringStream,
     FinanceSecurity,
     FinanceSecurityPrice,
+    FinanceTrade,
     FinanceTransaction,
     FinanceTransactionSplit,
+    FinanceTransfer,
     FinanceValuation,
 )
 from app.services.finance.schemas import (
@@ -429,6 +434,7 @@ class FinanceService:
         filters = [
             FinanceTransaction.deleted_at.is_(None),
             FinanceTransaction.dedup_status != "duplicate",
+            FinanceTransaction.excluded_from_reports.is_(False),
             FinanceTransaction.account_id.in_(live_accounts),
             FinanceTransaction.category_id.is_not(None),
             FinanceTransaction.amount < 0,
@@ -454,6 +460,215 @@ class FinanceService:
         result.sort(key=lambda pair: pair[1], reverse=True)
         return result
 
+    async def spending_summary(
+        self, *, owner_user_id: int | None = None, month: str | None = None
+    ) -> list[tuple[str, int]]:
+        """Per-category spend for one calendar month (default: current month),
+        transfers excluded. ``month`` is ``YYYY-MM``. This is the report the
+        insights + UI consume, so a card payment never inflates a category."""
+        if month:
+            year, mon = (int(part) for part in month.split("-", 1))
+            start = date(year, mon, 1)
+        else:
+            today = date.today()
+            start = date(today.year, today.month, 1)
+        end = (
+            date(start.year + 1, 1, 1)
+            if start.month == 12
+            else date(start.year, start.month + 1, 1)
+        )
+        live_accounts = select(FinanceAccount.id).where(
+            FinanceAccount.deleted_at.is_(None)
+        )
+        filters = [
+            FinanceTransaction.deleted_at.is_(None),
+            FinanceTransaction.dedup_status != "duplicate",
+            FinanceTransaction.excluded_from_reports.is_(False),
+            FinanceTransaction.account_id.in_(live_accounts),
+            FinanceTransaction.category_id.is_not(None),
+            FinanceTransaction.amount < 0,
+            FinanceTransaction.date_ >= start,
+            FinanceTransaction.date_ < end,
+        ]
+        if owner_user_id is not None:
+            filters.append(FinanceTransaction.owner_user_id == owner_user_id)
+        rows = (
+            await self.db.exec(
+                select(FinanceCategory.name, func.sum(FinanceTransaction.amount))
+                .join(
+                    FinanceCategory,
+                    FinanceTransaction.category_id == FinanceCategory.id,
+                )
+                .where(*filters)
+                .group_by(FinanceCategory.name)
+            )
+        ).all()
+        result = [(name, -int(total)) for name, total in rows]
+        result.sort(key=lambda pair: pair[1], reverse=True)
+        return result
+
+    async def _get_transfer(
+        self, transfer_id: int, *, owner_user_id: int | None
+    ) -> FinanceTransfer | None:
+        query = select(FinanceTransfer).where(FinanceTransfer.id == transfer_id)
+        if owner_user_id is not None:
+            query = query.where(FinanceTransfer.owner_user_id == owner_user_id)
+        return (await self.db.exec(query)).first()
+
+    async def list_transfers(
+        self, *, owner_user_id: int | None = None, status: str | None = None
+    ) -> list[FinanceTransfer]:
+        """Transfers for an owner (optionally one ``status``), newest first."""
+        query = select(FinanceTransfer)
+        if owner_user_id is not None:
+            query = query.where(FinanceTransfer.owner_user_id == owner_user_id)
+        if status is not None:
+            query = query.where(FinanceTransfer.status == status)
+        query = query.order_by(
+            FinanceTransfer.transfer_date.desc(), FinanceTransfer.id.desc()
+        )
+        return list((await self.db.exec(query)).all())
+
+    async def transactions_by_ids(
+        self, ids: list[int]
+    ) -> dict[int, FinanceTransaction]:
+        """Fetch transactions by id in one query, keyed by id (for enrichment)."""
+        if not ids:
+            return {}
+        rows = (
+            await self.db.exec(
+                select(FinanceTransaction).where(FinanceTransaction.id.in_(ids))
+            )
+        ).all()
+        return {t.id: t for t in rows}
+
+    # -- Recurring streams ---------------------------------------------------
+
+    async def list_recurring(
+        self, *, owner_user_id: int | None = None
+    ) -> list[FinanceRecurringStream]:
+        """Active recurring streams, soonest-due first."""
+        query = select(FinanceRecurringStream).where(
+            FinanceRecurringStream.deleted_at.is_(None),
+            FinanceRecurringStream.status != "cancelled",
+        )
+        if owner_user_id is not None:
+            query = query.where(
+                FinanceRecurringStream.owner_user_id == owner_user_id
+            )
+        query = query.order_by(FinanceRecurringStream.next_expected_date)
+        return list((await self.db.exec(query)).all())
+
+    async def mute_recurring(
+        self, stream_id: int, *, owner_user_id: int | None = None
+    ) -> FinanceRecurringStream | None:
+        """Mute a stream so it stops raising price-hike insights."""
+        query = select(FinanceRecurringStream).where(
+            FinanceRecurringStream.id == stream_id
+        )
+        if owner_user_id is not None:
+            query = query.where(
+                FinanceRecurringStream.owner_user_id == owner_user_id
+            )
+        stream = (await self.db.exec(query)).first()
+        if stream is None:
+            return None
+        stream.is_muted = True
+        self.db.add(stream)
+        await self.db.flush()
+        return stream
+
+    # -- Insights ------------------------------------------------------------
+
+    async def list_insights(
+        self, *, owner_user_id: int | None = None, status: str | None = "new"
+    ) -> list[FinanceInsight]:
+        """Insights for an owner (default: only ``new``), newest first."""
+        query = select(FinanceInsight)
+        if owner_user_id is not None:
+            query = query.where(FinanceInsight.owner_user_id == owner_user_id)
+        if status is not None:
+            query = query.where(FinanceInsight.status == status)
+        query = query.order_by(FinanceInsight.id.desc())
+        return list((await self.db.exec(query)).all())
+
+    async def count_new_insights(self, *, owner_user_id: int | None = None) -> int:
+        """How many unseen insights — the finance card's badge count."""
+        query = select(func.count()).select_from(FinanceInsight).where(
+            FinanceInsight.status == "new"
+        )
+        if owner_user_id is not None:
+            query = query.where(FinanceInsight.owner_user_id == owner_user_id)
+        return (await self.db.exec(query)).one()
+
+    async def dismiss_insight(
+        self, insight_id: int, *, owner_user_id: int | None = None
+    ) -> FinanceInsight | None:
+        """Dismiss an insight (survives re-runs via its dedup_key)."""
+        query = select(FinanceInsight).where(FinanceInsight.id == insight_id)
+        if owner_user_id is not None:
+            query = query.where(FinanceInsight.owner_user_id == owner_user_id)
+        insight = (await self.db.exec(query)).first()
+        if insight is None:
+            return None
+        insight.status = "dismissed"
+        insight.is_read = True
+        insight.dismissed_at = datetime.now(UTC).replace(tzinfo=None)
+        self.db.add(insight)
+        await self.db.flush()
+        return insight
+
+    async def confirm_transfer(
+        self, transfer_id: int, *, owner_user_id: int | None = None
+    ) -> FinanceTransfer | None:
+        """Confirm a suggested transfer: flip to ``confirmed`` and flag both
+        legs out of reports + cross-link them. Returns None if not found for
+        this owner."""
+        transfer = await self._get_transfer(transfer_id, owner_user_id=owner_user_id)
+        if transfer is None:
+            return None
+        transfer.status = "confirmed"
+        self.db.add(transfer)
+        legs = [
+            await self.db.get(FinanceTransaction, txn_id)
+            for txn_id in (transfer.from_transaction_id, transfer.to_transaction_id)
+            if txn_id is not None
+        ]
+        legs = [leg for leg in legs if leg is not None]
+        for leg in legs:
+            leg.is_transfer = True
+            leg.excluded_from_reports = True
+            leg.transfer_group_id = transfer.id
+            self.db.add(leg)
+        if len(legs) == 2:
+            legs[0].transfer_pair_transaction_id = legs[1].id
+            legs[1].transfer_pair_transaction_id = legs[0].id
+        await self.db.flush()
+        return transfer
+
+    async def reject_transfer(
+        self, transfer_id: int, *, owner_user_id: int | None = None
+    ) -> FinanceTransfer | None:
+        """Reject a transfer: mark ``rejected`` and restore both legs to normal
+        spend/income. The row persists so the pair is never re-suggested."""
+        transfer = await self._get_transfer(transfer_id, owner_user_id=owner_user_id)
+        if transfer is None:
+            return None
+        transfer.status = "rejected"
+        self.db.add(transfer)
+        for txn_id in (transfer.from_transaction_id, transfer.to_transaction_id):
+            if txn_id is None:
+                continue
+            leg = await self.db.get(FinanceTransaction, txn_id)
+            if leg is not None and leg.transfer_group_id == transfer.id:
+                leg.is_transfer = False
+                leg.excluded_from_reports = False
+                leg.transfer_group_id = None
+                leg.transfer_pair_transaction_id = None
+                self.db.add(leg)
+        await self.db.flush()
+        return transfer
+
     async def list_transactions(
         self,
         *,
@@ -463,13 +678,16 @@ class FinanceService:
         to_date: date | None = None,
         category_id: int | None = None,
         query: str | None = None,
+        include_transfers: bool = False,
         page: int = 1,
         page_size: int = 20,
     ) -> tuple[list[FinanceTransaction], int]:
         # Default view: not soft-deleted, and never the losing side of a dedup.
         # Also hide transactions whose account was removed/disconnected — the
         # rows are kept for history + re-link reconciliation, but shouldn't show
-        # in the register once the account is gone.
+        # in the register once the account is gone. Paired transfer legs are
+        # hidden by default (``include_transfers``) so a checking->card payment
+        # doesn't show as two lines of spend/income.
         filters = [
             FinanceTransaction.deleted_at.is_(None),
             FinanceTransaction.dedup_status != "duplicate",
@@ -477,6 +695,8 @@ class FinanceService:
                 select(FinanceAccount.id).where(FinanceAccount.deleted_at.is_(None))
             ),
         ]
+        if not include_transfers:
+            filters.append(FinanceTransaction.is_transfer.is_(False))
         if owner_user_id is not None:
             filters.append(FinanceTransaction.owner_user_id == owner_user_id)
         if account_id is not None:
@@ -674,12 +894,16 @@ class FinanceService:
         connection_count, _ = await self._connection_rollup(
             owner_user_id=owner_user_id
         )
+        new_insight_count = await self.count_new_insights(
+            owner_user_id=owner_user_id
+        )
         return FinanceStatusSummary(
             net_worth_amount=assets - liabilities,
             total_assets_amount=assets,
             total_liabilities_amount=liabilities,
             account_count=account_count,
             connection_count=connection_count,
+            new_insight_count=new_insight_count,
             currency=currency,
         )
 
@@ -1007,6 +1231,112 @@ class FinanceService:
                 account_id, owner_user_id=owner_user_id
             )
         return result
+
+    async def upsert_trade(
+        self,
+        *,
+        owner_user_id: int | None,
+        account_id: int,
+        trade_type: str,
+        trade_date: date,
+        amount: int,
+        security_id: int | None = None,
+        subtype: str | None = None,
+        quantity_e8: int | None = None,
+        price: int | None = None,
+        price_scale: int = 2,
+        fees: int | None = None,
+        currency: str = _DEFAULT_CURRENCY,
+        source: str = Provider.MANUAL,
+        external_id: str | None = None,
+        external_id_source: str | None = None,
+        name: str | None = None,
+        connection_id: int | None = None,
+        raw_payload: dict[str, Any] | None = None,
+    ) -> FinanceTrade:
+        """Insert/update one investment trade (buy/sell/dividend/...).
+
+        Provider rows dedup on the external-id lane ``(account, source,
+        external_id)``; manual/imported rows without an ``external_id`` always
+        insert (the import-hash lane is the importers' job, not this path).
+        ``owner_user_id`` is NOT NULL, so standalone (no-auth) rows use the
+        ``0`` sentinel — same convention as holdings and import batches.
+        """
+        trade_owner = 0 if owner_user_id is None else owner_user_id
+        existing: FinanceTrade | None = None
+        if external_id is not None:
+            existing = (
+                await self.db.exec(
+                    select(FinanceTrade).where(
+                        FinanceTrade.account_id == account_id,
+                        FinanceTrade.source == source,
+                        FinanceTrade.external_id == external_id,
+                        FinanceTrade.deleted_at.is_(None),
+                    )
+                )
+            ).first()
+        await self.get_or_create_currency(currency)  # trade.currency FK
+        if existing is not None:
+            existing.security_id = security_id
+            existing.type = trade_type
+            existing.subtype = subtype
+            existing.quantity_e8 = quantity_e8
+            existing.price = price
+            existing.price_scale = price_scale
+            existing.amount = amount
+            existing.fees = fees
+            existing.currency = currency
+            existing.trade_date = trade_date
+            existing.name = name
+            existing.connection_id = connection_id
+            existing.raw_payload = raw_payload
+            existing.deleted_at = None
+            self.db.add(existing)
+            await self.db.flush()
+            return existing
+        trade = FinanceTrade(
+            owner_user_id=trade_owner,
+            account_id=account_id,
+            security_id=security_id,
+            connection_id=connection_id,
+            source=source,
+            external_id=external_id,
+            external_id_source=external_id_source,
+            type=trade_type,
+            subtype=subtype,
+            quantity_e8=quantity_e8,
+            price=price,
+            price_scale=price_scale,
+            amount=amount,
+            fees=fees,
+            currency=currency,
+            trade_date=trade_date,
+            name=name,
+            raw_payload=raw_payload,
+        )
+        self.db.add(trade)
+        await self.db.flush()
+        return trade
+
+    async def list_trades(
+        self,
+        *,
+        owner_user_id: int | None,
+        account_id: int | None = None,
+        limit: int = 100,
+    ) -> list[FinanceTrade]:
+        """Recent trades for an owner (optionally one account), newest first."""
+        trade_owner = 0 if owner_user_id is None else owner_user_id
+        query = select(FinanceTrade).where(
+            FinanceTrade.owner_user_id == trade_owner,
+            FinanceTrade.deleted_at.is_(None),
+        )
+        if account_id is not None:
+            query = query.where(FinanceTrade.account_id == account_id)
+        query = query.order_by(
+            FinanceTrade.trade_date.desc(), FinanceTrade.id.desc()
+        ).limit(limit)
+        return list((await self.db.exec(query)).all())
 
     async def _sync_account_balance_from_holdings(
         self, account_id: int, *, owner_user_id: int | None = None
