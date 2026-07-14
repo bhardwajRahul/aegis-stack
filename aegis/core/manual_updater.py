@@ -55,6 +55,7 @@ _SERVICE_ANSWER_KEYS = (
     AnswerKeys.INSIGHTS,
     AnswerKeys.PAYMENT,
     AnswerKeys.BLOG,
+    AnswerKeys.FINANCE,
 )
 _SERVICES_CARD_FILE = "app/components/frontend/dashboard/cards/services_card.py"
 

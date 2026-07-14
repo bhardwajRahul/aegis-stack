@@ -8,9 +8,10 @@ Plain ``.py`` (only generated when ``finance_plaid`` is selected). No network:
 
 import httpx
 import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.services.finance import connection_service
 from app.services.finance.finance_service import FinanceService
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 # Shapes copied from a real sandbox response (accounts/get, transactions/sync).
 _ACCOUNTS = [
@@ -121,6 +122,40 @@ _HOLDINGS = [
         "iso_currency_code": "USD",
     },
 ]
+# investments/transactions/get shapes (verified against the sandbox). Plaid
+# signs ``amount`` positive when cash leaves the account (a buy) and negative
+# when it arrives (a sell / dividend). ``type`` is coarse; ``subtype`` is the
+# granular intent the mapper keys off.
+_INVESTMENT_TXNS = [
+    {
+        "investment_transaction_id": "inv_buy_1",
+        "account_id": "acc_ira",
+        "security_id": "sec_aapl",
+        "type": "buy",
+        "subtype": "buy",
+        "quantity": 10.0,
+        "amount": 1500.0,
+        "price": 150.0,
+        "fees": 0.0,
+        "date": "2026-06-01",
+        "name": "BUY Apple Inc.",
+        "iso_currency_code": "USD",
+    },
+    {
+        "investment_transaction_id": "inv_div_1",
+        "account_id": "acc_ira",
+        "security_id": "sec_aapl",
+        "type": "cash",
+        "subtype": "dividend",
+        "quantity": 0.0,
+        "amount": -12.5,
+        "price": 0.0,
+        "fees": 0.0,
+        "date": "2026-06-15",
+        "name": "DIVIDEND Apple Inc.",
+        "iso_currency_code": "USD",
+    },
+]
 
 
 class FakePlaidClient:
@@ -134,6 +169,8 @@ class FakePlaidClient:
         always=False,
         holdings=None,
         securities=None,
+        investment_txns=None,
+        investment_securities=None,
         public_tokens=None,
     ):
         self._accounts = accounts
@@ -141,6 +178,8 @@ class FakePlaidClient:
         self._always = always
         self._holdings = holdings or []
         self._securities = securities or []
+        self._investment_txns = investment_txns or []
+        self._investment_securities = investment_securities or []
         self._public_tokens = public_tokens or []
         self.removed_tokens: list[str] = []
 
@@ -175,6 +214,16 @@ class FakePlaidClient:
         if not self._holdings:
             raise PlaidError("NO_INVESTMENT_ACCOUNTS", "item has no investments")
         return self._holdings, self._securities
+
+    async def get_investment_transactions(
+        self, _access_token, _start, _end, *, offset=0, count=500
+    ):
+        page = self._investment_txns[offset : offset + count]
+        return {
+            "investment_transactions": page,
+            "securities": self._investment_securities,
+            "total_investment_transactions": len(self._investment_txns),
+        }
 
 
 class TestPlaidConnection:
@@ -313,6 +362,69 @@ class TestPlaidConnection:
         assert aapl_holding.quantity_e8 == 10 * 10**8
         assert aapl_holding.cost_basis == 120000  # $1,200.00
         assert aapl_value == 150_000  # 10 shares @ $150.00
+
+    @pytest.mark.asyncio
+    async def test_sync_pulls_investment_trades(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        client = FakePlaidClient(
+            _ACCOUNTS,
+            _TXNS,
+            holdings=_HOLDINGS,
+            securities=_SECURITIES,
+            investment_txns=_INVESTMENT_TXNS,
+            investment_securities=_SECURITIES,
+        )
+        conn = await connection_service.create_plaid_connection(
+            async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
+        )
+        result = await connection_service.sync_plaid_connection(
+            async_db_session, conn, client=client
+        )
+        assert result.trades == 2
+
+        svc = FinanceService(async_db_session)
+        accounts, _ = await svc.list_accounts(owner_user_id=1)
+        ira = next(a for a in accounts if a.name == "Plaid IRA")
+        trades = await svc.list_trades(owner_user_id=1, account_id=ira.id)
+        assert len(trades) == 2
+        by_type = {t.type: t for t in trades}
+        # Coarse "buy" maps straight through; "cash"/"dividend" resolves via
+        # subtype, not the blunt coarse type.
+        assert set(by_type) == {"buy", "dividend"}
+        buy = by_type["buy"]
+        assert buy.quantity_e8 == 10 * 10**8
+        assert buy.amount == -150_000  # $1,500.00 cash out -> negative
+        assert buy.price == 15_000  # $150.00
+        assert by_type["dividend"].amount == 1250  # $12.50 cash in -> positive
+
+    @pytest.mark.asyncio
+    async def test_resync_dedups_trades_by_external_id(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        client = FakePlaidClient(
+            _ACCOUNTS,
+            _TXNS,
+            investment_txns=_INVESTMENT_TXNS,
+            investment_securities=_SECURITIES,
+        )
+        conn = await connection_service.create_plaid_connection(
+            async_db_session, owner_user_id=1, access_token="tok", item_id="item-1"
+        )
+        first = await connection_service.sync_plaid_connection(
+            async_db_session, conn, client=client
+        )
+        second = await connection_service.sync_plaid_connection(
+            async_db_session, conn, client=client
+        )
+        assert first.trades == 2
+        assert second.trades == 2  # re-applied every window...
+
+        svc = FinanceService(async_db_session)
+        accounts, _ = await svc.list_accounts(owner_user_id=1)
+        ira = next(a for a in accounts if a.name == "Plaid IRA")
+        trades = await svc.list_trades(owner_user_id=1, account_id=ira.id)
+        assert len(trades) == 2  # ...but deduped by investment_transaction_id
 
     @pytest.mark.asyncio
     async def test_relink_same_bank_dedups_accounts(

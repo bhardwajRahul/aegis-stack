@@ -137,6 +137,18 @@ async def test_unknown_account_returns_404(
 
 
 @pytest.mark.asyncio
+async def test_spending_summary_bad_month_returns_422(
+    async_client_with_db: TestClient,
+) -> None:
+    """A malformed or out-of-range ``month`` is a client error, not a 500."""
+    for bad in ("not-a-month", "2026-13"):
+        response = async_client_with_db.get(
+            "/api/v1/finance/spending/summary", params={"month": bad}
+        )
+        assert response.status_code == 422, bad
+
+
+@pytest.mark.asyncio
 async def test_net_worth_series_after_recompute(
     async_client_with_db: TestClient, async_db_session: AsyncSession
 ) -> None:

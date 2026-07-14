@@ -25,10 +25,13 @@ from app.components.frontend.controls import (
     DataTableColumn,
     ExpandArrow,
     H3Text,
+    PrimaryText,
+    SecondaryText,
     Tag,
 )
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.form_fields import FormDropdown, FormTextField
+from app.components.frontend.controls.record_detail import RecordDetailDialog
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
 from app.components.frontend.controls.table import TableCellText, TableNameText
 from app.components.frontend.theme import AegisTheme as Theme
@@ -166,6 +169,153 @@ def _amount_cell(cents: int) -> ft.Control:
 
 def _type_label(account_type: str | None) -> str:
     return (account_type or "account").replace("_", " ").upper()
+
+
+_TRADE_TYPE_LABELS = {
+    "buy": "Buy",
+    "sell": "Sell",
+    "dividend": "Dividend",
+    "interest": "Interest",
+    "fee": "Fee",
+    "tax": "Tax",
+    "transfer_in": "Transfer in",
+    "transfer_out": "Transfer out",
+    "deposit": "Deposit",
+    "withdrawal": "Withdrawal",
+    "reinvest": "Reinvest",
+    "split": "Split",
+    "cancel": "Cancel",
+    "other": "Other",
+}
+
+
+def _trade_type_label(trade_type: str | None) -> str:
+    if not trade_type:
+        return "-"
+    return _TRADE_TYPE_LABELS.get(trade_type, trade_type.replace("_", " ").title())
+
+
+def _investment_section(title: str, table: ft.Control) -> ft.Control:
+    """A labeled block (section heading + table) in the investment detail view."""
+    return ft.Column([H3Text(title), table], spacing=Theme.Spacing.SM)
+
+
+def _recurring_display_amount(stream: dict) -> int:
+    """Signed cents for a recurring row: outflows negative, inflows positive."""
+    amount = stream.get("average_amount") or 0
+    return -amount if stream.get("direction") == "outflow" else amount
+
+
+def _yn(value: object) -> str | None:
+    """'Yes'/'No' for a set flag, None when falsy (so it drops from detail)."""
+    return "Yes" if value else None
+
+
+# --- Record -> tooltip / detail-section mappers (feed RecordDetailDialog) ----
+# These are the only transaction/trade-specific bits; the dialog + clickable
+# rows are generic and shared across every surface.
+
+
+def transaction_tooltip(txn: dict) -> str:
+    """Compact hover summary for a transaction row."""
+    lines = [txn.get("name") or "Transaction", _usd(txn.get("amount", 0))]
+    merchant = txn.get("merchant_name")
+    if merchant and merchant != txn.get("name"):
+        lines.append(merchant)
+    category = txn.get("pfc_detailed") or txn.get("pfc_primary")
+    if category:
+        lines.append(str(category).replace("_", " ").title())
+    lines.append(str(txn.get("date", "")))
+    if txn.get("pending"):
+        lines.append("Pending")
+    if txn.get("memo"):
+        lines.append(f"Memo: {txn['memo']}")
+    return "\n".join(lines)
+
+
+def transaction_detail_sections(txn: dict) -> list[tuple[str, list[tuple[str, str | None]]]]:
+    """Full grouped label/value view of a transaction for the detail dialog."""
+    category = txn.get("pfc_detailed") or txn.get("pfc_primary")
+    return [
+        (
+            "Transaction",
+            [
+                ("Payee", txn.get("name")),
+                ("Merchant", txn.get("merchant_name")),
+                ("Amount", _usd(txn.get("amount", 0))),
+                ("Date", str(txn.get("date", ""))),
+                ("Authorized", txn.get("authorized_date")),
+                ("Posted", txn.get("posted_at")),
+                ("Status", txn.get("status")),
+                ("Pending", _yn(txn.get("pending"))),
+            ],
+        ),
+        (
+            "Categorization",
+            [
+                ("Category", str(category).replace("_", " ").title() if category else None),
+                ("Category source", txn.get("category_source")),
+            ],
+        ),
+        (
+            "Details",
+            [
+                ("Memo", txn.get("memo")),
+                ("Check number", txn.get("check_number")),
+                ("Payment channel", txn.get("payment_channel")),
+                ("Original description", txn.get("original_description")),
+            ],
+        ),
+        (
+            "Source & reconciliation",
+            [
+                ("Source", txn.get("source")),
+                ("External ID", txn.get("external_id")),
+                ("Dedup status", txn.get("dedup_status")),
+                ("Transfer", _yn(txn.get("is_transfer"))),
+                ("Excluded from reports", _yn(txn.get("excluded_from_reports"))),
+                ("Reversal", _yn(txn.get("is_reversal"))),
+            ],
+        ),
+    ]
+
+
+def trade_tooltip(trade: dict) -> str:
+    """Compact hover summary for a trade (investment activity) row."""
+    lines = [
+        trade.get("name") or _trade_type_label(trade.get("type")),
+        _usd(trade.get("amount", 0)),
+    ]
+    quantity = trade.get("quantity")
+    if quantity:
+        lines.append(f"{_qty(quantity)} @ {_usd(trade.get('price'))}")
+    lines.append(str(trade.get("trade_date", "")))
+    return "\n".join(lines)
+
+
+def trade_detail_sections(trade: dict) -> list[tuple[str, list[tuple[str, str | None]]]]:
+    """Full grouped label/value view of a trade for the detail dialog."""
+    return [
+        (
+            "Activity",
+            [
+                ("Type", _trade_type_label(trade.get("type"))),
+                ("Subtype", trade.get("subtype")),
+                ("Description", trade.get("name")),
+                ("Date", str(trade.get("trade_date", ""))),
+            ],
+        ),
+        (
+            "Amounts",
+            [
+                ("Quantity", _qty(trade.get("quantity")) if trade.get("quantity") else None),
+                ("Price", _usd(trade.get("price")) if trade.get("price") else None),
+                ("Amount", _usd(trade.get("amount", 0))),
+                ("Fees", _usd(trade.get("fees")) if trade.get("fees") else None),
+                ("Currency", (trade.get("currency") or "").upper() or None),
+            ],
+        ),
+    ]
 
 
 class AccountsSidebar(ft.Container):
@@ -703,60 +853,133 @@ class TransactionsPanel(ft.Container):
             ]
             for txn in items
         ]
+
+        def _open(index: int, _items: list = items) -> None:
+            RecordDetailDialog(
+                self.page,
+                "Transaction detail",
+                transaction_detail_sections(_items[index]),
+            ).show()
+
         # Wrap the table so the transaction list scrolls independently within
-        # the panel (the header + search stay pinned above it).
+        # the panel (the header + search stay pinned above it). Hover a row for
+        # a summary; click it for the full detail dialog.
         self._body.content = ft.Column(
-            [DataTable(columns=columns, rows=rows, empty_message="No transactions")],
+            [
+                DataTable(
+                    columns=columns,
+                    rows=rows,
+                    empty_message="No transactions",
+                    on_row_click=_open,
+                    row_tooltips=[transaction_tooltip(txn) for txn in items],
+                )
+            ],
             scroll=ft.ScrollMode.AUTO,
             expand=True,
         )
         self._refresh()
 
     async def _load_holdings(self) -> None:
-        """Positions view for an investment account (ticker, qty, price, value)."""
+        """Investment detail: current positions plus recent activity (trades)."""
         if self._account is None:
             return
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self.page).api_client
-        data = await api.get(f"/api/v1/finance/accounts/{self._account['id']}/holdings")
+        account_id = self._account["id"]
+        data = await api.get(f"/api/v1/finance/accounts/{account_id}/holdings")
         items = data.get("items", []) if isinstance(data, dict) else []
         total = data.get("total", len(items)) if isinstance(data, dict) else len(items)
         portfolio = data.get("portfolio_value", 0) if isinstance(data, dict) else 0
+        activity = await api.get(f"/api/v1/finance/accounts/{account_id}/trades")
+        trades = activity.get("items", []) if isinstance(activity, dict) else []
+
         self._subtitle.value = (
             f"{total:,} holding{'s' if total != 1 else ''}"
             f"  ·  Portfolio value {_usd(portfolio)}"
         )
         if self._subtitle.page is not None:
             self._subtitle.update()
-        if not items:
+
+        if not items and not trades:
             self._body.content = EmptyStatePlaceholder(
-                message="No holdings in this account."
+                message="No holdings or activity in this account."
             )
             self._refresh()
             return
 
-        columns = [
-            DataTableColumn("Ticker", width=90),
-            DataTableColumn("Name"),
-            DataTableColumn("Quantity", width=110, alignment="right"),
-            DataTableColumn("Price", width=120, alignment="right"),
-            DataTableColumn("Market Value", width=150, alignment="right"),
-        ]
-        rows = [
-            [
-                TableNameText(holding.get("ticker") or "?"),
-                TableCellText(holding.get("name") or ""),
-                TableCellText(_qty(holding.get("quantity"))),
-                TableCellText(_usd(holding.get("price"))),
-                _amount_cell(holding.get("market_value", 0)),
+        sections: list[ft.Control] = []
+        if items:
+            holding_columns = [
+                DataTableColumn("Ticker", width=90),
+                DataTableColumn("Name"),
+                DataTableColumn("Quantity", width=110, alignment="right"),
+                DataTableColumn("Price", width=120, alignment="right"),
+                DataTableColumn("Market Value", width=150, alignment="right"),
             ]
-            for holding in items
-        ]
+            holding_rows = [
+                [
+                    TableNameText(holding.get("ticker") or "?"),
+                    TableCellText(holding.get("name") or ""),
+                    TableCellText(_qty(holding.get("quantity"))),
+                    TableCellText(_usd(holding.get("price"))),
+                    _amount_cell(holding.get("market_value", 0)),
+                ]
+                for holding in items
+            ]
+            sections.append(
+                _investment_section(
+                    "Positions",
+                    DataTable(
+                        columns=holding_columns,
+                        rows=holding_rows,
+                        empty_message="No holdings",
+                    ),
+                )
+            )
+        if trades:
+            trade_columns = [
+                DataTableColumn("Date", width=120),
+                DataTableColumn("Activity", width=110),
+                DataTableColumn("Security"),
+                DataTableColumn("Quantity", width=100, alignment="right"),
+                DataTableColumn("Amount", width=140, alignment="right"),
+            ]
+            trade_rows = [
+                [
+                    TableCellText(trade.get("trade_date") or ""),
+                    TableNameText(_trade_type_label(trade.get("type"))),
+                    TableCellText(trade.get("name") or ""),
+                    TableCellText(_qty(trade.get("quantity"))),
+                    _amount_cell(trade.get("amount", 0)),
+                ]
+                for trade in trades
+            ]
+
+            def _open_trade(index: int, _trades: list = trades) -> None:
+                RecordDetailDialog(
+                    self.page,
+                    "Activity detail",
+                    trade_detail_sections(_trades[index]),
+                ).show()
+
+            sections.append(
+                _investment_section(
+                    "Activity",
+                    DataTable(
+                        columns=trade_columns,
+                        rows=trade_rows,
+                        empty_message="No activity",
+                        on_row_click=_open_trade,
+                        row_tooltips=[trade_tooltip(trade) for trade in trades],
+                    ),
+                )
+            )
         self._body.content = ft.Column(
-            [DataTable(columns=columns, rows=rows, empty_message="No holdings")],
+            sections,
             scroll=ft.ScrollMode.AUTO,
             expand=True,
+            spacing=Theme.Spacing.LG,
         )
         self._refresh()
 
@@ -1389,9 +1612,318 @@ class ConnectionsTab(ft.Container):
         await self._load()
 
 
+class ReviewTab(ft.Container):
+    """Review suggested transfers — pairs the detector matched but wasn't sure
+    enough about to auto-hide (so nothing is silently removed from spend).
+
+    Confirm excludes both legs from reports; Reject keeps them as normal
+    spend/income and the pair is never suggested again.
+    """
+
+    def __init__(self, page: ft.Page) -> None:
+        super().__init__()
+        self.page = page
+        self.expand = True
+        self.padding = ft.padding.all(Theme.Spacing.LG)
+        self._body = ft.Column(
+            spacing=Theme.Spacing.MD, scroll=ft.ScrollMode.AUTO, expand=True
+        )
+        self.content = ft.Column(
+            [
+                _refresh_row(
+                    lambda e: e.page.run_task(self._load), "Refresh suggestions"
+                ),
+                self._body,
+            ],
+            spacing=0,
+            expand=True,
+        )
+
+    def did_mount(self) -> None:
+        if self.page:
+            self.page.run_task(self._load)
+
+    async def _load(self) -> None:
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        data = await api.get(
+            "/api/v1/finance/transfers", params={"status": "suggested"}
+        )
+        suggestions = data.get("items", []) if isinstance(data, dict) else []
+        acct_data = await api.get(
+            "/api/v1/finance/accounts", params={"page_size": 200}
+        )
+        accounts = acct_data.get("items", []) if isinstance(acct_data, dict) else []
+        name_by_id = {a["id"]: a.get("name", "Account") for a in accounts}
+
+        self._body.controls.clear()
+        if not suggestions:
+            self._body.controls.append(
+                EmptyStatePlaceholder(
+                    message="No transfers to review. Matches we're confident "
+                    "about are paired automatically."
+                )
+            )
+        else:
+            count = len(suggestions)
+            self._body.controls.append(
+                SecondaryText(
+                    f"{count} possible transfer{'s' if count != 1 else ''} to review"
+                )
+            )
+            self._body.controls.extend(
+                self._row(item, name_by_id) for item in suggestions
+            )
+        if self._body.page is not None:
+            self._body.update()
+
+    def _row(self, item: dict, name_by_id: dict) -> ft.Control:
+        frm = name_by_id.get(item.get("from_account_id"), "Account")
+        to = name_by_id.get(item.get("to_account_id"), "Account")
+        # Lead with the two legs' descriptions — that's what makes a real
+        # transfer ("AMEX EPAYMENT -> PAYMENT RECEIVED") obvious from a
+        # coincidence ("Starbucks -> INTRST PYMNT"). Each leg is clickable and
+        # opens its full transaction detail (same dialog as the register).
+        from_txn = item.get("from_transaction") or {}
+        to_txn = item.get("to_transaction") or {}
+        transfer_date = str(item.get("transfer_date") or "").split("T")[0]
+        confidence = item.get("confidence")
+        meta_bits = [f"{frm} -> {to}", transfer_date]
+        if confidence is not None:
+            meta_bits.append(f"{confidence}% match")
+        if item.get("is_credit_card_payment"):
+            meta_bits.append("card payment")
+        header = ft.Row(
+            [
+                self._leg(from_txn, frm),
+                SecondaryText("→"),
+                self._leg(to_txn, to),
+                ft.Container(expand=True),
+                _amount_cell(item.get("amount") or 0),
+            ],
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=Theme.Spacing.SM,
+        )
+        actions = ft.Row(
+            [
+                PulseButton(
+                    on_click_callable=self._action(item["id"], "confirm"),
+                    text="Confirm",
+                    compact=True,
+                ),
+                PulseButton(
+                    on_click_callable=self._action(item["id"], "reject"),
+                    text="Reject",
+                    variant="stop",
+                    compact=True,
+                ),
+            ],
+            spacing=Theme.Spacing.SM,
+        )
+        return ft.Container(
+            content=ft.Column(
+                [
+                    header,
+                    ft.Row(
+                        [
+                            SecondaryText("  ·  ".join(meta_bits)),
+                            ft.Container(expand=True),
+                            actions,
+                        ],
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                ],
+                spacing=Theme.Spacing.XS,
+            ),
+            padding=ft.padding.all(Theme.Spacing.MD),
+            bgcolor=Theme.Colors.SURFACE_1,
+            border=ft.border.all(1, Theme.Colors.BORDER_SUBTLE),
+            border_radius=Theme.Components.CARD_RADIUS,
+        )
+
+    def _leg(self, txn: dict, account_name: str) -> ft.Control:
+        """A clickable leg description that opens its full transaction detail
+        (same dialog + mapper as the register)."""
+        label = (txn.get("name") if txn else None) or account_name
+        text = PrimaryText(label, weight=Theme.Typography.WEIGHT_SEMIBOLD)
+        if not txn:
+            return text
+        return ft.Container(
+            content=text,
+            on_click=lambda _e, t=txn: RecordDetailDialog(
+                self.page, "Transaction detail", transaction_detail_sections(t)
+            ).show(),
+            ink=True,
+            border_radius=Theme.Components.BUTTON_RADIUS,
+            padding=ft.padding.symmetric(horizontal=Theme.Spacing.XS),
+            tooltip=transaction_tooltip(txn),
+        )
+
+    def _action(self, transfer_id: int, action: str):
+        """No-arg async click handler (PulseButton's contract)."""
+
+        async def _handler() -> None:
+            from app.components.frontend.state.session_state import get_session_state
+
+            api = get_session_state(self.page).api_client
+            await api.post(f"/api/v1/finance/transfers/{transfer_id}/{action}")
+            message = (
+                "Marked as a transfer."
+                if action == "confirm"
+                else "Kept as spending."
+            )
+            SuccessSnackBar(message).launch(self.page)
+            await self._load()
+
+        return _handler
+
+
+class InsightsTab(ft.Container):
+    """Wasting-money surface: actionable insights (price hikes, fees,
+    overspending) plus the recurring-cost rollup and detected subscriptions."""
+
+    _SEVERITY_COLOR = {
+        "info": Theme.Colors.INFO,
+        "warning": Theme.Colors.WARNING,
+        "critical": Theme.Colors.ERROR,
+    }
+
+    def __init__(self, page: ft.Page) -> None:
+        super().__init__()
+        self.page = page
+        self.expand = True
+        self.padding = ft.padding.all(Theme.Spacing.LG)
+        self._body = ft.Column(
+            spacing=Theme.Spacing.LG, scroll=ft.ScrollMode.AUTO, expand=True
+        )
+        self.content = ft.Column(
+            [
+                _refresh_row(
+                    lambda e: e.page.run_task(self._load), "Refresh insights"
+                ),
+                self._body,
+            ],
+            spacing=0,
+            expand=True,
+        )
+
+    def did_mount(self) -> None:
+        if self.page:
+            self.page.run_task(self._load)
+
+    async def _load(self) -> None:
+        from app.components.frontend.state.session_state import get_session_state
+
+        api = get_session_state(self.page).api_client
+        ins_data = await api.get(
+            "/api/v1/finance/insights", params={"status": "new"}
+        )
+        insights = ins_data.get("items", []) if isinstance(ins_data, dict) else []
+        rec_data = await api.get("/api/v1/finance/recurring")
+        streams = rec_data.get("items", []) if isinstance(rec_data, dict) else []
+        monthly = rec_data.get("monthly_cost", 0) if isinstance(rec_data, dict) else 0
+
+        self._body.controls.clear()
+        self._body.controls.append(H3Text("Insights"))
+        if insights:
+            self._body.controls.extend(self._insight_row(i) for i in insights)
+        else:
+            self._body.controls.append(
+                EmptyStatePlaceholder(
+                    message="You're all caught up. No new insights."
+                )
+            )
+
+        subs = sum(1 for s in streams if s.get("is_subscription"))
+        self._body.controls.append(H3Text("Recurring"))
+        self._body.controls.append(
+            SecondaryText(
+                f"{_usd(monthly)}/mo across {subs} subscription"
+                f"{'s' if subs != 1 else ''}"
+            )
+        )
+        if streams:
+            columns = [
+                DataTableColumn("Name"),
+                DataTableColumn("Cadence", width=130),
+                DataTableColumn("Amount", width=130, alignment="right"),
+                DataTableColumn("Next", width=120),
+            ]
+            rows = [
+                [
+                    TableNameText(stream.get("name") or ""),
+                    TableCellText(
+                        (stream.get("frequency") or "").replace("_", " ").title()
+                    ),
+                    _amount_cell(_recurring_display_amount(stream)),
+                    TableCellText(str(stream.get("next_expected_date") or "")),
+                ]
+                for stream in streams
+            ]
+            self._body.controls.append(
+                DataTable(
+                    columns=columns, rows=rows, empty_message="No recurring streams"
+                )
+            )
+        if self._body.page is not None:
+            self._body.update()
+
+    def _insight_row(self, item: dict) -> ft.Control:
+        severity = item.get("severity", "info")
+        return ft.Container(
+            content=ft.Column(
+                [
+                    ft.Row(
+                        [
+                            Tag(
+                                text=severity.upper(),
+                                color=self._SEVERITY_COLOR.get(
+                                    severity, Theme.Colors.INFO
+                                ),
+                            ),
+                            PrimaryText(
+                                item.get("title") or "",
+                                weight=Theme.Typography.WEIGHT_SEMIBOLD,
+                            ),
+                            ft.Container(expand=True),
+                            PulseButton(
+                                on_click_callable=self._dismiss(item["id"]),
+                                text="Dismiss",
+                                variant="muted",
+                                compact=True,
+                            ),
+                        ],
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        spacing=Theme.Spacing.SM,
+                    ),
+                    SecondaryText(item.get("body") or ""),
+                ],
+                spacing=Theme.Spacing.XS,
+            ),
+            padding=ft.padding.all(Theme.Spacing.MD),
+            bgcolor=Theme.Colors.SURFACE_1,
+            border=ft.border.all(1, Theme.Colors.BORDER_SUBTLE),
+            border_radius=Theme.Components.CARD_RADIUS,
+        )
+
+    def _dismiss(self, insight_id: int):
+        """No-arg async click handler (PulseButton's contract)."""
+
+        async def _handler() -> None:
+            from app.components.frontend.state.session_state import get_session_state
+
+            api = get_session_state(self.page).api_client
+            await api.post(f"/api/v1/finance/insights/{insight_id}/dismiss")
+            SuccessSnackBar("Dismissed.").launch(self.page)
+            await self._load()
+
+        return _handler
+
+
 class FinanceDetailDialog(BaseDetailPopup):
     """Finance detail modal — a tabbed workspace (Accounts, Connections,
-    Overview)."""
+    Review, Insights, Overview)."""
 
     def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         tabs = ft.Tabs(
@@ -1400,6 +1932,8 @@ class FinanceDetailDialog(BaseDetailPopup):
             tabs=[
                 ft.Tab(text="Accounts", content=AccountsTab(page)),
                 ft.Tab(text="Connections", content=ConnectionsTab(page)),
+                ft.Tab(text="Review", content=ReviewTab(page)),
+                ft.Tab(text="Insights", content=InsightsTab(page)),
                 ft.Tab(text="Overview", content=OverviewTab(page)),
             ],
             expand=True,

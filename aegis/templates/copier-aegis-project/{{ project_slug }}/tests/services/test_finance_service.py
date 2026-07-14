@@ -282,9 +282,10 @@ class TestFinanceStatusSummary:
     async def test_card_path_folds_counts_and_respects_hidden(
         self, async_db_session: AsyncSession
     ) -> None:
-        """The dashboard card path issues two aggregate queries per call (not
-        three), and the account-rollup fold keeps the differing filters: a
-        hidden account is counted but excluded from net worth."""
+        """The dashboard card path issues one aggregate query per table
+        (account, connection, insight rollups — no N+1), and the
+        account-rollup fold keeps the differing filters: a hidden account
+        is counted but excluded from net worth."""
         from sqlalchemy import event
         from sqlalchemy.engine import Engine
 
@@ -329,8 +330,9 @@ class TestFinanceStatusSummary:
         finally:
             event.remove(Engine, "before_cursor_execute", _on_exec)
 
-        # Two aggregates each: account rollup + connection rollup (was three).
-        assert status_queries == 2, f"status_summary issued {status_queries} queries"
+        # One aggregate per table: accounts + connections + insights for the
+        # card summary; accounts + connections for health.
+        assert status_queries == 3, f"status_summary issued {status_queries} queries"
         assert health_queries == 2, f"health issued {health_queries} queries"
 
         # Hidden account counts toward totals but not net worth.

@@ -23,6 +23,9 @@ from app.services.payment.constants import PAYMENT_COMPONENT_NAME
 {% if include_blog %}
 from app.services.blog.constants import BLOG_COMPONENT_NAME
 {% endif %}
+{% if include_finance %}
+from app.services.finance.constants import FINANCE_COMPONENT_NAME
+{% endif %}
 {% if include_auth %}
 from app.components.frontend.auth.login_view import LoginView
 from app.components.frontend.auth.register_view import RegisterView
@@ -81,6 +84,9 @@ from .dashboard.cards import (
 {% if include_database %}
     DatabaseCard,
 {% endif %}
+{% if include_finance %}
+    FinanceCard,
+{% endif %}
 {% if include_ingress %}
     IngressCard,
 {% endif %}
@@ -103,7 +109,7 @@ from .dashboard.cards import (
     SchedulerCard,
 {% endif %}
     ServerCard,
-{% if include_auth or include_ai or include_blog or include_comms or include_insights or include_payment or _plugins %}
+{% if include_auth or include_ai or include_blog or include_comms or include_insights or include_payment or include_finance or _plugins %}
     ServicesCard,
 {% endif %}
 {% if include_worker %}
@@ -881,7 +887,7 @@ async def setup_dashboard(view: BaseView) -> None:
             elif component_name == "scheduler":
                 return SchedulerCard(component_data).build()
 {% endif %}
-{% if include_auth or include_ai or include_blog or include_comms or include_insights or include_payment %}
+{% if include_auth or include_ai or include_blog or include_comms or include_insights or include_payment or include_finance %}
             elif component_name == "services":
                 return ServicesCard(component_data).build()
 {% endif %}
@@ -910,13 +916,17 @@ async def setup_dashboard(view: BaseView) -> None:
             elif component_name == f"{SERVICE_PREFIX}{PAYMENT_COMPONENT_NAME}":
                 return PaymentCard(component_data).build()
 {% endif %}
+{% if include_finance %}
+            elif component_name == f"{SERVICE_PREFIX}{FINANCE_COMPONENT_NAME}":
+                return FinanceCard(component_data).build()
+{% endif %}
 {%- for p in _plugins | default([]) %}
 {%- for c in p.wiring.dashboard_cards %}
             elif component_name in ("{{ c.modal_id }}", f"{SERVICE_PREFIX}{{ c.modal_id }}"):
                 return {{ c.symbol }}(component_data).build()
 {%- endfor %}
 {%- endfor %}
-{% if include_auth or include_ai or include_blog or include_comms or include_insights or include_payment or _plugins %}
+{% if include_auth or include_ai or include_blog or include_comms or include_insights or include_payment or include_finance or _plugins %}
             elif component_name.startswith("service_"):
                 # For other services, use generic ServicesCard for now
                 return ServicesCard(component_data).build()
