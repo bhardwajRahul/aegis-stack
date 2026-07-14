@@ -289,6 +289,7 @@ MESSAGES: dict[str, str] = {
         "La syntaxe entre crochets « scheduler[{engine}] » remplace --backend {backend}"
     ),
     "add.invalid_scheduler_backend": "Backend de scheduler invalide : « {backend} »",
+    "add.invalid_worker_backend": "Invalid worker backend: '{backend}'",
     "add.valid_backends": "Options valides : {options}",
     "add.postgres_coming": "Note : le support PostgreSQL arrive dans une prochaine version",
     "add.auto_added_db": "Composant base de données ajouté automatiquement pour la persistance du scheduler",

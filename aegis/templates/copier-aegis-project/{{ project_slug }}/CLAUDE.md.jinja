@@ -1,0 +1,96 @@
+# CLAUDE.md
+
+Guidance for coding agents working in {{ project_name }}, an application
+generated with Aegis Stack. This file loads every session; task procedures live
+in `.claude/skills/` and load on demand.
+
+## What this project is
+
+{{ project_name }} (`{{ project_slug }}`) is an Aegis Stack project: an async
+Python application with a FastAPI backend, a full test suite, and Docker
+containerization. Change the stack with the `aegis` CLI, never by hand.
+
+Selected capabilities:
+
+- Backend (FastAPI): the HTTP API and application wiring.
+{% if include_database %}- Database ({{ database_engine }}): SQLModel models and alembic migrations.
+{% endif %}{% if include_worker %}- Worker ({{ worker_backend }}): background job processing.
+{% endif %}{% if include_scheduler %}- Scheduler ({{ scheduler_backend }}): periodic and scheduled jobs.
+{% endif %}{% if include_redis %}- Redis: cache and message broker.
+{% endif %}{% if include_auth %}- Auth ({{ auth_level }}): user accounts and protected endpoints.
+{% endif %}{% if include_ai %}- AI ({{ ai_framework }}): chat and LLM capabilities.
+{% endif %}{% if include_blog %}- Blog: markdown content with a draft and publish workflow.
+{% endif %}{% if include_finance %}- Finance: account and transaction tracking.
+{% endif %}{% if include_comms %}- Comms: email, SMS, and voice.
+{% endif %}{% if include_insights %}- Insights: analytics collection.
+{% endif %}{% if include_payment %}- Payment ({{ payment_provider }}): checkout and billing.
+{% endif %}{% if include_observability %}- Observability: metrics and tracing.
+{% endif %}{% if include_ingress %}- Ingress: reverse proxy and TLS.
+{% endif %}
+## Daily commands
+
+- `make test` - run the test suite
+- `make lint` - lint with ruff
+- `make typecheck` - type-check
+- `make check` - lint, typecheck, and test; run before considering work done
+- `make serve` - run the stack locally
+
+Host-side commands that talk to services resolve dynamic ports through
+`.env.ports`; use the Makefile targets (or source that file) so the CLI reaches
+the right port.
+
+## Layout
+
+- `app/components/` is infrastructure (backend, frontend, worker, scheduler,
+  database, redis) and defines WHEN and WHERE.
+- `app/services/` is business logic (auth, AI, and the rest) and defines WHAT.
+- `tests/` mirrors the app layout: unit tests beside the code they cover, API
+  tests under `tests/api/`.
+
+## Changing the stack: use the CLI
+
+Add or remove capabilities with the `aegis` CLI, never by hand-scaffolding:
+
+- `aegis add <name>` - add a component or service
+- `aegis remove <name>` - remove one
+- `aegis update` - pull framework updates into this project
+
+Hand-rolling a component or service leaves it unregistered and unmanaged; the
+CLI wires routes, tests, health checks, and dependencies for you.
+
+## Working rules
+
+- TDD: write the failing test first, confirm it fails for the right reason, then
+  implement.
+- Types are mandatory: annotate every function's parameters and return type; use
+  `str | None`, `dict[str, Any]`, `list[str]`.
+- No emojis in code, docs, or output.
+- Keep changes minimal and focused; do not scope-creep.
+
+{% if include_database %}## Database
+
+Models are SQLModel classes; every schema change goes through an alembic
+migration. Never query inside a loop (N+1); batch with `WHERE id IN (...)` or
+eager-load with `selectinload()`/`joinedload()`. See the
+`add-model-and-migration` skill.
+
+{% endif %}{% if include_worker %}## Worker
+
+Background jobs run on the {{ worker_backend }} backend. Enqueue long-running
+work instead of blocking a request. See the `add-background-job` skill.
+
+{% endif %}{% if include_scheduler %}## Scheduler
+
+Periodic and scheduled jobs run on the {{ scheduler_backend }} backend, and
+execution history is recorded. See the `add-scheduled-job` skill.
+
+{% endif %}{% if include_auth %}## Authentication
+
+Protect endpoints with the auth dependencies rather than checking sessions by
+hand. See the `protect-an-endpoint` skill.
+
+{% endif %}## Skills
+
+Task procedures live in `.claude/skills/<name>/SKILL.md` and load on demand when
+the task matches. Reach for one when adding an API endpoint, a model, a job, or
+a CLI command, or when changing the stack.

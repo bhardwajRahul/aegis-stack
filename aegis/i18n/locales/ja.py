@@ -279,6 +279,7 @@ MESSAGES: dict[str, str] = {
         "ブラケット構文 'scheduler[{engine}]' は --backend {backend} を上書きします"
     ),
     "add.invalid_scheduler_backend": "不正なスケジューラバックエンド：'{backend}'",
+    "add.invalid_worker_backend": "Invalid worker backend: '{backend}'",
     "add.valid_backends": "有効なオプション：{options}",
     "add.postgres_coming": "注意：PostgreSQL 対応は今後のリリースで追加予定です",
     "add.auto_added_db": "スケジューラ永続化のためデータベースコンポーネントを自動追加",

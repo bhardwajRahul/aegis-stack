@@ -15,7 +15,13 @@ from ..cli.validation import (
     validate_copier_project,
     validate_git_repository,
 )
-from ..constants import AnswerKeys, ComponentNames, Messages, StorageBackends
+from ..constants import (
+    AnswerKeys,
+    ComponentNames,
+    Messages,
+    StorageBackends,
+    WorkerBackends,
+)
 from ..core.component_utils import extract_base_component_name, extract_engine_info
 from ..core.components import COMPONENTS, CORE_COMPONENTS
 from ..core.copier_manager import load_copier_answers
@@ -419,8 +425,10 @@ def add_command(
     selected_components = parse_comma_separated_list(components, "component")
     components_raw = selected_components  # Keep for bracket syntax parsing
 
-    # Parse bracket syntax for scheduler backend (e.g., "scheduler[sqlite]")
-    # Bracket syntax takes precedence over --backend flag
+    # Parse bracket syntax for the scheduler backend (e.g. "scheduler[sqlite]")
+    # and the worker backend (e.g. "worker[dramatiq]"). Bracket syntax takes
+    # precedence over the --backend flag.
+    worker_backend: str | None = None
     for comp in components_raw:
         try:
             base_name = extract_base_component_name(comp)
@@ -432,6 +440,10 @@ def add_command(
                             t("add.bracket_override", engine=engine, backend=backend)
                         )
                     backend = engine
+            elif base_name == ComponentNames.WORKER:
+                engine = extract_engine_info(comp)
+                if engine:
+                    worker_backend = engine
         except ValueError as e:
             brand.error(t("add.invalid_format", error=e), err=True)
             raise typer.Exit(1)
@@ -598,6 +610,17 @@ def add_command(
             else StorageBackends.SQLITE
         )
 
+    # Add worker backend configuration when adding worker with a bracket backend
+    # (e.g. "worker[dramatiq]"); without this the add path falls back to the
+    # copier default (arq) and silently ignores the chosen backend.
+    if ComponentNames.WORKER in components_to_add and worker_backend:
+        if worker_backend not in WorkerBackends.ALL:
+            brand.error(
+                t("add.invalid_worker_backend", backend=worker_backend), err=True
+            )
+            raise typer.Exit(1)
+        update_data[AnswerKeys.WORKER_BACKEND] = worker_backend
+
     # Add components using ManualUpdater
     # This is the standard approach for adding components at the same template version
     # (Copier's run_update is designed for template VERSION upgrades, not component additions)
@@ -626,6 +649,13 @@ def add_command(
             ):
                 component_data[AnswerKeys.DATABASE_ENGINE] = update_data[
                     AnswerKeys.DATABASE_ENGINE
+                ]
+            elif (
+                component == ComponentNames.WORKER
+                and AnswerKeys.WORKER_BACKEND in update_data
+            ):
+                component_data[AnswerKeys.WORKER_BACKEND] = update_data[
+                    AnswerKeys.WORKER_BACKEND
                 ]
 
             # Add the component

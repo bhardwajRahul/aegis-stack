@@ -104,6 +104,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             # leaves it. worker_taskiq.py IS here — cleanup removes it.
             primary=[
                 "app/components/worker",
+                ".claude/skills/add-background-job",
                 "app/cli/load_test.py",
                 # The worker subpackage of the load_test service, including
                 # the ``service_<backend>.py`` variants Pattern D resolves
@@ -159,6 +160,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             primary=[
                 "app/entrypoints/scheduler.py",
                 "app/components/scheduler",
+                ".claude/skills/add-scheduled-job",
                 "app/services/scheduler/execution_log.py",
                 "tests/components/test_scheduler.py",
                 "tests/services/test_scheduler_execution_log.py",

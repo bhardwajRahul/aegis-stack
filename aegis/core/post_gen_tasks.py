@@ -465,6 +465,8 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
 
     if not needs_migrations:
         remove_dir(project_path, "alembic")
+        # The model-and-migration skill only applies where alembic exists.
+        remove_dir(project_path, ".claude/skills/add-model-and-migration")
 
     # Clean up empty docs/components directory if no components selected
     if (

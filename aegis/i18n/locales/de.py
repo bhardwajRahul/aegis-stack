@@ -287,6 +287,7 @@ MESSAGES: dict[str, str] = {
         "Klammersyntax 'scheduler[{engine}]' überschreibt --backend {backend}"
     ),
     "add.invalid_scheduler_backend": "Ungültiges Scheduler Backend: '{backend}'",
+    "add.invalid_worker_backend": "Invalid worker backend: '{backend}'",
     "add.valid_backends": "Gültige Optionen: {options}",
     "add.postgres_coming": "Hinweis: PostgreSQL-Unterstützung kommt in einer zukünftigen Version",
     "add.auto_added_db": "Datenbankkomponente für Scheduler-Persistenz automatisch hinzugefügt",

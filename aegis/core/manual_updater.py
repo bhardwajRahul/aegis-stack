@@ -808,8 +808,22 @@ class ManualUpdater:
             template_file = f"{PROJECT_SLUG_PLACEHOLDER}/{shared_file}"
             output_path = self.project_path / shared_file
 
-            # Skip if file doesn't exist (shouldn't happen for shared files)
+            # Create the file if the project predates it. This is how an older
+            # project gains newly shared files (for example CLAUDE.md and the
+            # always-on .claude/skills on a pre-skills project): render and
+            # write it. Nothing to back up or merge for a file that is new to
+            # the project. Warn-only files are exempt: their policy promises we
+            # never write them, so a user-deleted one stays deleted.
             if not output_path.exists():
+                if not policy.get("overwrite"):
+                    continue
+                content = self._render_template_file(template_file, updated_answers)
+                if content is None:
+                    continue
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text(content)
+                verbose_print(f"   Created: {shared_file}")
+                shared_files_updated.append(shared_file)
                 continue
 
             # For .env.example, extract variables before and after to show diff

@@ -273,6 +273,7 @@ MESSAGES: dict[str, str] = {
         "Синтаксис 'scheduler[{engine}]' переопределяет --backend {backend}"
     ),
     "add.invalid_scheduler_backend": "Недопустимый backend планировщика: «{backend}»",
+    "add.invalid_worker_backend": "Invalid worker backend: '{backend}'",
     "add.valid_backends": "Допустимые варианты: {options}",
     "add.postgres_coming": "Примечание: поддержка PostgreSQL появится в будущих версиях",
     "add.auto_added_db": "Автоматически добавлен компонент БД для хранения данных планировщика",

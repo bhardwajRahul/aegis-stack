@@ -12,6 +12,8 @@
 [![Total Commits](https://img.shields.io/github/commit-activity/t/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
 [![Last Commit](https://img.shields.io/github/last-commit/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
 
+**Aegis Stack is an open-source CLI that scaffolds production-ready FastAPI applications and lets you add, remove, and update components and services on existing projects without rewrites.**
+
 You need to ship reliable software, but management only gave you 2 weeks.
 
 No time for health checks, proper testing, or clean architecture. Just enough time for duct tape and hope.

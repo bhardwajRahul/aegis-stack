@@ -279,6 +279,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/services/auth",
                 "app/core/security.py",
                 "app/cli/auth.py",
+                ".claude/skills/protect-an-endpoint",
                 "tests/api/test_auth_endpoints.py",
                 "tests/services/test_auth_integration.py",
                 # Goal service is auth-coupled (Goal.user_id FK to user table);
