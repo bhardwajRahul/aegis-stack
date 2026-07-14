@@ -1,0 +1,86 @@
+name: Agent task
+description: A task written to be executed by a coding agent via the execute-issue skill.
+title: "[Agent task] "
+labels: ["agent"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write this issue so an agent can execute it end to end without
+        rediscovering the file list. Each field maps onto the execute-issue run
+        contract. Be exact: name real files, restate acceptance as checkable
+        lines, and state what is out of scope.
+
+  - type: dropdown
+    id: task_type
+    attributes:
+      label: Task type
+      description: Determines which workflow skill the agent loads. Pick all that apply.
+      multiple: true
+      options:
+        - New service (add-service)
+        - New component or variant axis (add-component)
+        - i18n / locale strings (i18n)
+        - aegis CLI command (add-cli-command)
+        - Release / version bump (release)
+        - Template change or backport (template-dev)
+        - Other (state which skill, or that none fits)
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why this work exists and any background the agent needs. Link prior work if relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Exact scope
+      description: Precisely what to build or change. Concrete behavior, names, and shapes, not a vague goal.
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Files expected to change
+      description: Repo-relative paths the change should touch, grouped by role (registry, CLI, template, tests, docs, i18n). The loaded skill's file list is authoritative; this is the issue author's expectation to check against.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: One checkable line per criterion. The agent restates these and reports each as met, not met, or blocked, with evidence.
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: gates
+    attributes:
+      label: Gates
+      description: The exact make targets that must pass before the work counts as done (for example `make check`, `make test-stacks-full`). If omitted, the agent uses the loaded skill's gates.
+    validations:
+      required: false
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: What NOT to do, so the agent does not scope-creep. Include anything deliberately deferred.
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        The agent executes this via the execute-issue skill and stops before any
+        git operation. Branching, committing, and PRs stay human-triggered.

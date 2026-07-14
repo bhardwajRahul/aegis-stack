@@ -1,283 +1,79 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with code in this repository.
-
-## ⚠️ CRITICAL: No Git Operations
-
-**DO NOT perform git operations unless explicitly requested.** This includes:
-- No `git add`, `git commit`, or `git push` commands
-- No `git status`, `git diff`, or `git log` for preparation purposes
-- No creating pull requests
-- No staging files
-
-**Wait for explicit user approval before ANY git operations.**
-
----
-
-## Project Architecture
-
-**Aegis Stack is a modular platform for building and evolving production-ready Python applications.**
-
-What you get:
-- **CLI Tool** (`aegis`): Create, modify, and update projects
-- **Component System**: Add/remove building blocks (database, worker, scheduler, redis)
-- **Service System**: Add/remove business capabilities (auth, AI, payment, analytics)
-- **Living Projects**: Generated projects can pull updates, bug fixes, and new features via `aegis update`
-
-Each generated project includes:
-- Project-specific CLI
-- FastAPI backend
-- Full test suite
-- Docker containerization
-
-## Installation
-
-**Current Version**: 0.9.1
-
-```bash
-pip install aegis-stack
-```
-
-**Links**:
-- PyPI: https://pypi.org/project/aegis-stack/
-- GitHub: https://github.com/lbedner/aegis-stack
-
-## Development Commands
-
-This project uses `uv` for dependency management and a `Makefile` for CLI development tasks.
-
-### CLI Development Commands
-- `make test` - Run the CLI test suite with pytest
-- `make lint` - Run linting with ruff
-- `make typecheck` - Run type checking with ty
-- `make check` - Run all checks (lint + typecheck + test) - **run this before committing**
-- `make install` or `uv sync --all-extras` - Install/sync dependencies
-- `make cli-test` - Test CLI commands locally
-- `make docs-serve` - Serve tool documentation locally on port 8001
-
-### Template Development & Testing
-- `make test-template-quick` - Quick template test without validation
-- `make test-template` - Full template test with validation
-- `make test-template-with-components` - Test template with scheduler component
-- `make test-template-auth` - Test auth service template
-- `make test-template-worker` - Test worker component template
-- `make test-template-database` - Test database component template
-- `make test-template-full` - Test template with all components
-- `make clean-test-projects` - Remove generated test projects
-
-**Template testing is critical** - always run `make test-template` after modifying templates to ensure generated projects work correctly.
-
-### Pre-RC verification (REQUIRED before any version bump)
-
-Before suggesting a version/rc bump, run BOTH locally:
-
-1. **`make check`** — the aegis-stack repo's OWN test suite (lint +
-   typecheck + pytest). Catches bugs in the CLI / core code itself,
-   including config tests that gate on constants like
-   ``DEFAULT_PYTHON_VERSION``. Without this, changing a constant
-   without updating its assertion test passes locally but fails CI.
-
-2. **`make test-stacks-full`** — the matrix that runs each generated
-   stack through generation → install → lint → typecheck → pytest.
-   Catches drift in templates / cross-stack issues.
-
-History shows multiple rcs in a row were "green locally" by `aegis init` +
-`make check` (on the GENERATED project) on a single stack, but failed CI
-because either:
-- The matrix was never run (caught template drift on stacks the local
-  test didn't generate), or
-- The aegis-stack repo's own tests were never run (caught constant /
-  config changes without test updates).
-
-Running both targets is the only way to match what CI actually runs.
-
-If the matrix takes too long during iteration, use `make test-stacks-quick`
-for fast feedback (3 representative stacks: base, everything, insights),
-then run the full matrix once at the end.
-
-### TestPyPI Release Testing
-Test upgrade paths using TestPyPI before publishing to PyPI:
-
-```bash
-# 1. Install old version from TestPyPI and create project
-uvx --index-url https://test.pypi.org/simple/ \
-    --extra-index-url https://pypi.org/simple/ \
-    --index-strategy unsafe-best-match \
-    aegis-stack@0.5.3 init test-upgrade-project --no-interactive -y
-
-# 2. Install new RC version and test update
-cd test-upgrade-project
-uvx --index-url https://test.pypi.org/simple/ \
-    --extra-index-url https://pypi.org/simple/ \
-    --index-strategy unsafe-best-match \
-    aegis-stack@0.5.4rc1 update -y
-```
-
-**Key uvx flags:**
-- `--index-url` - Primary source: TestPyPI
-- `--extra-index-url` - Fallback: PyPI (for dependencies not on TestPyPI)
-- `--index-strategy unsafe-best-match` - Allows mixing packages from different indexes
-
-### Updating External Projects with Local Committed Template Changes
-To test local committed template changes against an external Aegis project, use the `--template-path` and `--to-version HEAD` flags:
-
-```bash
-# From the aegis-stack root (where .venv lives):
-aegis update -y -p /path/to/project -t /path/to/aegis-stack --to-version HEAD
-```
-
-**Key flags:**
-- `-p` / `--project-path` - Path to the target Aegis project
-- `-t` / `--template-path` - Points Copier at the local aegis-stack repo instead of the installed package
-- `--to-version HEAD` - Uses the latest commit on the current branch (not the version tag)
-
-**Note:** Template changes must be committed to git first — Copier reads from the git state, not the working tree.
-
-## Code Navigation (LSP-First)
-
-Use the Language Server (Pyright) for code navigation instead of grep/glob:
-
-**Prefer LSP:**
-- `LSP(findReferences)` - Find all usages of a symbol
-- `LSP(goToDefinition)` - Jump to where something is defined
-- `LSP(hover)` - Get type info and docstrings
-- `LSP(documentSymbol)` - List all symbols in a file
-
-**Use grep/glob when:**
-- Searching for text patterns (not symbol names)
-- Searching in non-Python files (yaml, md, json, jinja)
-- LSP server not available
-
-**Why LSP is better:**
-- Semantic understanding - knows actual references, not text matches
-- Type-aware - hover shows full type signatures
-
-## Test Project Location
-
-**When prototyping, check `my-app/` under the aegis-stack root first.**
-
-The user often has a test project at `/Users/leonardbedner/Workspace/house_bedner/aegis-stack/my-app/` for iterating on changes before backporting to templates. When making fixes:
-1. Look in `my-app/` first for the generated project code
-2. Test changes there
-3. Backport working changes to templates in `aegis/templates/`
-
-## Template Development Workflow
-
-### ⚠️ CRITICAL: Always Backport Immediately
-
-**When editing code in `my-app/` or any generated project, ALWAYS backport changes to templates immediately.**
-
-- Edit both `my-app/` AND templates in the same session
-- Copy fixed files: `cp my-app/path/to/file.py "aegis/templates/copier-aegis-project/{{ project_slug }}/path/to/file.py"`
-- Never leave changes only in `my-app/` - they will be lost on next `aegis init`
-
-### Two Approaches
-
-**1. Template-First** (for known changes)
-Edit templates directly, then generate to verify:
-1. Edit template files in `aegis/templates/copier-aegis-project/{{ project_slug }}/`
-2. Generate: `make test-template` or `aegis init test-project`
-3. Verify it works
-4. Clean up: `make clean-test-projects`
-
-**2. Prototype-First** (for exploratory work)
-Get it working in a real project, then backport:
-1. Generate a test project: `aegis init test-project`
-2. Make changes in the generated project until it works
-3. **Backport immediately** - copy working changes to template files
-4. Regenerate fresh to verify templates are correct
-5. Clean up test project
-
-### Key Principle
-Template files are the source of truth. Any changes you want to persist across future `aegis init` commands **must** be backported to templates.
-
-**Remember**: Generated projects are for validation/prototyping. Templates are what ships.
-
-### Important: Template Changes Require Git Commit
-
-**Copier uses `git+file://` in development mode**, which means it reads templates from the **committed git state**, not the working tree. After modifying template files:
-
-1. **Ask the user to commit** the template changes (Claude should NOT commit per the git policy above)
-2. Then regenerate test projects to verify the changes
-
-Without committing, `aegis init` will use the old template content even though the files appear modified locally.
-
-## Design Principles
-
-### Core Philosophy
-- **Composable systems** - Components combine in powerful, sometimes unexpected ways
-- **Small, focused components** - Each does one thing excellently
-- **No abstraction for abstraction's sake** - Direct access to tools, not wrappers
-- **Test-first development** - Comprehensive testing as a core requirement
-
-### Component Combinations
-Components create emergent capabilities when combined:
-- **AI + Auth**: User-specific conversations, protected endpoints
-- **AI + Database**: Persistent history, analytics
-- **AI + Worker**: Background AI processing, batch operations
-- **Scheduler + Database**: Persistent job scheduling
-
-### Development Approach
-1. **Foundation-first** - Build capabilities others can build on
-2. **Battle-tested patterns** - Everything exists because it solved a real problem
-3. **Agent-ready architecture** - Predictable, testable, extendable
-
-## Coding Standards
-
-### Python Style Guidelines
-
-**Type Hints (MANDATORY - Fortress-Level Type Safety):**
-- **NEVER** write untyped functions - all functions MUST have complete type annotations
-- Use `str | None` instead of `Optional[str]` (Union syntax preferred)
-- **ALWAYS** include return type hints on functions (use `-> None` if no return value)
-- **ALWAYS** type function parameters, including `ctx` parameters: `ctx: dict[str, Any]`
-- Use `dict[str, Any]` instead of `Dict[str, Any]` (modern Python syntax)
-- Prefer `list[str]` over `List[str]` (built-in generics)
-
-**Function Design:**
-- Keep functions small and focused (max ~20 lines)
-- Use descriptive names: `get_user_health_status()` not `get_data()`
-- Return early for error conditions (guard clauses)
-- Prefer pure functions when possible
-
-**Error Handling:**
-- Use specific exception types, not bare `except:`
-- Raise meaningful exceptions with context
-- Use `from None` to suppress chaining when appropriate
-- Log errors at appropriate levels
-
-**Database Queries (Avoid N+1):**
-- **NEVER** query inside a loop - this causes N+1 query problems
-- Batch-fetch related data using `WHERE id IN (...)` or JOINs
-- Use `selectinload()` or `joinedload()` for eager loading relationships
-- Example of what NOT to do:
-  ```python
-  # BAD: N+1 queries (1 query + N queries in loop)
-  for model in models:
-      price = session.exec(select(Price).where(Price.model_id == model.id)).first()
-
-  # GOOD: Batch fetch (2 queries total)
-  model_ids = [m.id for m in models]
-  prices = session.exec(select(Price).where(Price.model_id.in_(model_ids))).all()
-  price_map = {p.model_id: p for p in prices}
-  ```
-
-### DRY Principle (Don't Repeat Yourself)
-**Always look for existing code being used in multiple places.** Before writing new code, heavily weigh towards creating a single function imported to other places rather than duplicating logic.
-
-### Scope Control: Stay Focused
-**Keep changes minimal and targeted.** When fixing a specific issue:
-
-1. **Identify the core problem** - Fix exactly what's broken, nothing more
-2. **Avoid scope creep** - Don't add extensive test suites unless specifically requested
-3. **Make minimal viable fixes** - Simple, working solutions over complex architectures
-4. **Test the fix works** - Verify the original issue is resolved
-
-## Components vs Services (in Generated Projects)
-
-When editing templates, understand where code belongs:
-
-**Components** (`app/components/`): Infrastructure - scheduler, worker, database, backend, frontend
-**Services** (`app/services/`): Business logic - auth, AI, payment, etc.
-
-Components define WHEN/WHERE (routes, jobs). Services define WHAT (logic).
+Guidance for Claude Code working in this repository. This file carries only
+always-true rules and a skills index. Task procedures live in `.claude/skills/`
+and load on demand; see the index at the bottom.
+
+## Hard rules
+
+### No git operations without explicit request
+Never run `git add`, `commit`, `push`, or create PRs, and do not run
+`git status`/`diff`/`log` as preparation, unless the user explicitly asks. Wait
+for explicit approval before any git operation.
+
+### TDD: failing test first
+Write the failing test before the implementation, always. Confirm it fails for
+the right reason, then implement.
+
+### Templates are the source of truth; backport immediately
+`aegis/templates/copier-aegis-project/{{ project_slug }}/` is what ships;
+generated projects (often a scratch `my-app/`) are prototypes. Any change made
+in a generated project MUST be backported to its template in the same session,
+or it is lost on the next `aegis init`. Full workflow: the template-dev skill.
+
+### Scope control
+Fix exactly what is asked. No scope creep, no unrequested test suites, minimal
+viable change, and verify it works.
+
+### DRY
+Before writing new code, look for existing logic used elsewhere; prefer a single
+shared function over duplicating it.
+
+## Coding standards
+
+- Types are mandatory: every function fully annotated, including return types
+  (`-> None` if none) and parameters (`ctx: dict[str, Any]`). Use `str | None`,
+  `dict[str, Any]`, `list[str]` (modern generics), never `Optional`/`Dict`/`List`.
+- Functions: small and focused (~20 lines), descriptive names, guard clauses,
+  prefer pure functions.
+- Errors: specific exception types (never bare `except:`), meaningful messages,
+  `from None` where apt, log at the right level. Never silently swallow an error.
+- No N+1 queries: never query inside a loop; batch with `WHERE id IN (...)` or
+  eager-load with `selectinload()`/`joinedload()`.
+
+## Components vs services
+
+Components (`app/components/`) are infrastructure (backend, frontend, worker,
+scheduler, database, redis) and define WHEN/WHERE. Services (`app/services/`)
+are business logic (auth, AI, payment, blog, finance) and define WHAT. Both ride
+the shared plugin-spec machinery.
+
+## Code navigation
+
+Prefer the language server (Pyright) over grep for symbols: `findReferences`,
+`goToDefinition`, `hover`, `documentSymbol`. Use grep/glob for text patterns,
+non-Python files, or when the LSP is unavailable.
+
+## Daily commands
+
+- `make check` - lint + typecheck + test; run before considering work done
+- `make test-template` - generate and validate a project after template changes
+- `make test-stacks-quick` - fast multi-stack smoke (base, everything, insights)
+
+The Makefile documents the rest (per-component template tests, the full stack
+matrix, release targets).
+
+## Skills index
+
+Procedures load on demand from `.claude/skills/<name>/SKILL.md` when the task
+matches the skill's description. Reach for:
+
+- `add-service` - add a new business-capability service to the framework
+- `add-component` - add a new component, or a variant axis on an existing one
+- `i18n` - add or translate locale strings (en.py first, parity across locales)
+- `add-cli-command` - add a command to the `aegis` tool CLI
+- `release` - cut a version or rc release (bump, gates, TestPyPI, tagging)
+- `template-dev` - modify templates, or backport a change from a generated project
+
+See `.claude/skills/README.md` for the skill format; `example-skill` is the
+copy-from template.
