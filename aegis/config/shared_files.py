@@ -42,6 +42,13 @@ _WARN_ONLY: SharedFilePolicy = {"overwrite": False, "backup": False, "warn": Tru
 
 # Shared files handled with the default overwrite + backup policy. One line each.
 _DEFAULT_POLICY_FILES: tuple[str, ...] = (
+    # ---- Agent guidance ----
+    "CLAUDE.md",  # selection-aware agent guidance, regenerated on update
+    # Always-on skills (backend is core). Conditional skills are owned by their
+    # component/service spec and flow through the add/remove/update footprint.
+    ".claude/skills/add-api-endpoint/SKILL.md",
+    ".claude/skills/add-cli-command/SKILL.md",
+    ".claude/skills/change-the-stack/SKILL.md",
     # ---- Infrastructure ----
     "docker-compose.yml",
     "docker-compose.dev.yml",

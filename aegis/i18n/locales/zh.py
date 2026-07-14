@@ -222,6 +222,7 @@ MESSAGES: dict[str, str] = {
     "add.invalid_format": "组件格式不正确：{error}",
     "add.bracket_override": "括号语法 scheduler[{engine}] 将覆盖 --backend {backend}",
     "add.invalid_scheduler_backend": "调度器后端不合法：「{backend}」",
+    "add.invalid_worker_backend": "Invalid worker backend: '{backend}'",
     "add.valid_backends": "可选项：{options}",
     "add.postgres_coming": "注：PostgreSQL 支持将在后续版本提供",
     "add.auto_added_db": "已自动添加数据库组件用于调度器持久化",

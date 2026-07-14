@@ -294,6 +294,7 @@ MESSAGES: dict[str, str] = {
         "Bracket syntax 'scheduler[{engine}]' overrides --backend {backend}"
     ),
     "add.invalid_scheduler_backend": ("Invalid scheduler backend: '{backend}'"),
+    "add.invalid_worker_backend": "Invalid worker backend: '{backend}'",
     "add.valid_backends": "Valid options: {options}",
     "add.postgres_coming": "Note: PostgreSQL support coming in future release",
     "add.auto_added_db": ("Auto-added database component for scheduler persistence"),

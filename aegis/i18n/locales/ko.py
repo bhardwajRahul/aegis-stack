@@ -268,6 +268,7 @@ MESSAGES: dict[str, str] = {
         "대괄호 구문 'scheduler[{engine}]'이(가) --backend {backend}을(를) 덮어씁니다"
     ),
     "add.invalid_scheduler_backend": "유효하지 않은 스케줄러 백엔드: '{backend}'",
+    "add.invalid_worker_backend": "Invalid worker backend: '{backend}'",
     "add.valid_backends": "유효한 옵션: {options}",
     "add.postgres_coming": "참고: PostgreSQL 지원은 향후 릴리스에서 추가 예정",
     "add.auto_added_db": "스케줄러 영속성을 위한 데이터베이스 컴포넌트 자동 추가됨",
